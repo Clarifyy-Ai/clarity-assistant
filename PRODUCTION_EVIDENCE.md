@@ -246,8 +246,8 @@ Honest takeaway: registry approved for **5** pilot exams; **0** full-simulation-
 
 ## 2026-08-13 remaining QA plan (local)
 
-**Branch/commit:** `main` `6e627554` (working tree dirty with this sprint; not committed)  
-**Environment:** Windows 10, Node local, Supabase CLI v1.226.4 (not logged in; `SUPABASE_ACCESS_TOKEN` unset)
+**Branch/commit:** `main` `8963999c` plus local ops artifacts (types regen + Management API helpers)  
+**Environment:** Windows 10, Node local; remote apply used Management API (`--use-system-ca`) because CLI Docker/`--use-api` failed on this machine
 
 | Command | Exit | Result |
 |---------|------|--------|
@@ -261,22 +261,55 @@ Honest takeaway: registry approved for **5** pilot exams; **0** full-simulation-
 | `npm run release:capability-gates` | **0** | 15 AI functions |
 | `npx playwright test e2e/qa-legacy-routes.spec.ts e2e/qa-remaining.spec.ts` | **0** | 14 passed |
 | `npm run build:check` | **0** | Vite prod build + dist bake-in |
-| `npx supabase functions deploy delete-account --use-api` | **1** | CLI v1.226.4: unknown flag `--use-api`; Access token not provided |
-| `npm run rls:spot-check` | not run | Needs `SUPABASE_ACCESS_TOKEN`; User A/B keys wired in script |
+| `npx supabase functions deploy delete-account --use-api` | **1** | CLI v1.226.4: unknown flag `--use-api`; bypassed via Management API script |
+| `npm run rls:spot-check` | **0** | RLS present on core tables + `account_deletion_operations` + `gap_analyses` |
+| `npm run supabase:gen:api` | **0** | Regenerated `types.ts` from live schema |
 
-### Code landed (not deployed)
+### Code landed (then applied remotely)
 
 - Canonical `/app/debriefs`; `/app/rooms*` → Dashboard toast; onboarding → Dashboard
 - Analytics `not_scored` (never coerce to 0); durable `account_deletion_operations`; `gap_analyses`; `profiles.region`
 - India region restored; full-mock fail-closed; Admin Access Denied copy
 - Unit + Playwright coverage for redirects, palette, Access Denied, Interview Day web CTA
 
-### Remote ops still required
+### Remote apply (2026-08-13, Management API)
 
-- Apply `supabase/migrations/20260813100000_account_deletion_and_gap_analyses.sql`
-- Redeploy changed EFs (`delete-account`, `analytics-dashboard`, `gap-analysis`, `select-test-questions`, plus `_shared` importers) after `npx supabase login`
-- Frontend host production release
-- QA password rotation + MFA; Stripe/Resend/Site URL (no localhost in prod)
+| Item | Result |
+|------|--------|
+| Migration `20260813100000_account_deletion_and_gap_analyses` | Applied (HTTP 200) |
+| `npm run rls:spot-check` | **0** — RLS on sessions, transcripts, profiles, credit_transactions, **account_deletion_operations**, **gap_analyses** |
+| Edge deploy (Management API, no Docker) | **201 ACTIVE**: delete-account, analytics-dashboard, gap-analysis, select-test-questions, parse-resume, parse-document, prep-tool, send-email, submit-test, search-exams, create-checkout, create-billing-portal, ping (`verify_jwt=false`), stripe-webhook (`verify_jwt=false`) |
+| `GET /functions/v1/ping` | **200** `{"status":"ok"}` |
+| Generated `src/integrations/supabase/types.ts` | Includes `account_deletion_operations`, `gap_analyses`, `profiles.region` |
+| Full User A/B RLS matrix | Still **IMPLEMENTED_REQUIRES_EXTERNAL_OPS** (seed keys not in this session) |
+| Frontend host production release | Still external |
 
-**Release decision remains CONDITIONAL_GO_CLOSED_BETA / NO_GO for full production** until those ops complete. Never claim `IMPLEMENTED_AND_RUNTIME_VERIFIED` from this session.
+Do not record access tokens. Rotate any PAT that was pasted into chat.
+
+**Still CONDITIONAL_GO_CLOSED_BETA** until Venkata/Sultana finish the 28-case production workbook (Stripe/Resend/OAuth/mic/deletion live). Never claim `IMPLEMENTED_AND_RUNTIME_VERIFIED` for those product flows from deploy HTTP 201 alone.
+
+## 2026-08-14 remaining QA master-prompt close-out (local)
+
+| Command | Exit | Result |
+|---------|------|--------|
+| `npx tsc --noEmit -p tsconfig.app.json` | **0** | Pass |
+| `npx vitest run src/test/lib src/test/hooks` | **0** | 46 files / 348 tests |
+| Focused: gapAnalysisPersist, examTimer, oauthAndPricing, palette, idempotency, canonical | **0** | 25 tests |
+| `SUPABASE_ACCESS_TOKEN` in session | present (gitignored `.env.local` only) | Redeployed `gap-analysis` v140, `parse-document` v46, `prep-tool` v154, `parse-resume` v143, `create-exam-paper` v24, plus AI/auth consumers |
+| Stale gap trigger migration | applied | `20260814100000_gap_analyses_stale_triggers` |
+| Past-due Edge gate | deployed on AI functions | Checkout/portal remain allowed |
+| Frontend host production release | Still external | |
+
+### Code landed (local)
+
+- Gap Analysis: load `gap_analyses` on Resume/JD detail refresh; stale badge; absence copy instead of Unknown; EF stores resume/jd version fingerprints and parse_failed without inventing experience
+- `parse-document`: dedicated text/plain path (UTF-8, reject binary masquerade)
+- Practice Coach wizard: interview company/role/resume required with inline Next blocker
+- Overlay: 12s listening help + Type a question (chat tab)
+- Exam: expiry watcher from `started_at` including pause; `shouldAutoSubmitAttempt`
+- OAuth cancel: `access_denied` → `/login?error=cancelled`
+- PWA prompt: max-height scroll + mobile bottom sheet
+- Dashboard Recent Sessions; palette scroll reset; Rephraser save confirm + sessionStorage idempotency; numbered coding hint cards
+
+**Release decision remains:** CONDITIONAL_GO_CLOSED_BETA
 

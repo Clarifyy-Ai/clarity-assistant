@@ -10,6 +10,40 @@ export interface McqCandidate {
   explanation?: string;
 }
 
+const LETTERS = ["A", "B", "C", "D", "E", "F"] as const;
+
+/** Extract display text from a bank option (string or `{label,text}` object). */
+export function optionText(raw: unknown): string {
+  if (typeof raw === "string") return raw.trim();
+  if (raw && typeof raw === "object") {
+    const rec = raw as Record<string, unknown>;
+    const t = rec.text ?? rec.value;
+    if (typeof t === "string" && t.trim()) return t.trim();
+    if (typeof rec.label === "string" && rec.label.trim().length > 1) {
+      return rec.label.trim();
+    }
+  }
+  return "";
+}
+
+/**
+ * Normalize questions.options JSON into option strings.
+ * Bank rows store `[{label:'A', text:'...'}]`; String(object) is "[object Object]".
+ */
+export function normalizeMcqOptions(raw: unknown, max = 4): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(optionText).filter(Boolean).slice(0, max);
+}
+
+export function optionsForStorage(
+  texts: string[],
+): Array<{ label: string; text: string }> {
+  return texts.slice(0, 4).map((text, i) => ({
+    label: LETTERS[i] ?? String(i + 1),
+    text,
+  }));
+}
+
 export function validateSingleCorrectMcq(
   q: McqCandidate,
 ): { ok: true } | { ok: false; code: string; message: string } {

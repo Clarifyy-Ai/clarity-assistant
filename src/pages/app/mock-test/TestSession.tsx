@@ -32,6 +32,10 @@ import {
   isEnglishLanguage,
   normalizeQuestionLanguage,
 } from "@/lib/gov-exam/questionTranslations";
+import {
+  computeRemainingSeconds as remainingFromStart,
+  shouldAutoSubmitAttempt,
+} from "@/lib/gov-exam/examTimer";
 
 interface QuestionOption {
   label: string;
@@ -125,15 +129,7 @@ function formatTime(seconds: number): string {
 }
 
 function computeRemainingSeconds(test: MockTest): number {
-  const limitMins = Number(test.time_limit_minutes ?? 0);
-  if (limitMins <= 0) return 0;
-  const limitSecs = limitMins * 60;
-
-  if (!test.started_at) return limitSecs;
-
-  const elapsedMs = Date.now() - new Date(test.started_at).getTime();
-  const elapsedSecs = Math.max(0, Math.floor(elapsedMs / 1000));
-  return Math.max(0, limitSecs - elapsedSecs);
+  return remainingFromStart(test.started_at, test.time_limit_minutes);
 }
 
 function MathText({ text }: { text: string }) {
@@ -320,7 +316,6 @@ export default function TestSession() {
   const [startingTest, setStartingTest] = useState(false);
   const [timerWarningAnnouncement, setTimerWarningAnnouncement] = useState("");
 
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastTimerWarnRef = useRef<number | null>(null);
   const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const responsesRef = useRef<Record<string, ResponseState>>({});
@@ -402,6 +397,28 @@ export default function TestSession() {
   }, [hasTimer, timeLeft]);
 
   useEffect(() => {
+    if (!test || test.status !== "IN_PROGRESS") return;
+    if (Number(test.time_limit_minutes ?? 0) <= 0) return;
+
+    const tick = () => {
+      setTimeLeft(computeRemainingSeconds(test));
+      if (
+        shouldAutoSubmitAttempt(test.status, test.started_at, test.time_limit_minutes)
+      ) {
+        queueMicrotask(() => {
+          void handleSubmit(true);
+        });
+      }
+    };
+
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+    // Official clock keeps running while paused; submit is guarded by submittingRef.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [test?.id, test?.status, test?.started_at, test?.time_limit_minutes]);
+
+  useEffect(() => {
     if (!testId || !user?.id) return;
     void loadTest();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -470,8 +487,6 @@ export default function TestSession() {
 
   useEffect(() => {
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-
       const previousQuestionId = prevQuestionIdRef.current;
       if (previousQuestionId) {
         const elapsed = Math.max(
@@ -590,11 +605,6 @@ export default function TestSession() {
       setResponses(restoredResponses);
       setTimeLeft(remainingSeconds);
       timeSpentMapRef.current = restoredTimeMap;
-
-      // Only auto-start the timer if the test is already IN_PROGRESS (resume).
-      if (loadedTest.status === "IN_PROGRESS") {
-        startTimer(loadedTest);
-      }
     } catch (error) {
       console.error("[TestSession] load error:", error);
       toast.error(error instanceof Error ? error.message : "Failed to load test.");
@@ -602,25 +612,6 @@ export default function TestSession() {
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  }
-
-  function startTimer(forTest: MockTest) {
-    if (timerRef.current) clearInterval(timerRef.current);
-    if (Number(forTest.time_limit_minutes ?? 0) <= 0) return;
-
-    timerRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          if (timerRef.current) {
-            clearInterval(timerRef.current);
-            timerRef.current = null;
-          }
-          void handleSubmit(true);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
   }
 
   async function handleStartTest() {
@@ -639,7 +630,6 @@ export default function TestSession() {
       setTimeLeft(computeRemainingSeconds(updated));
       setPaused(false);
       setPausedAt(null);
-      startTimer(updated);
       toast.success("Test started — good luck!");
     } catch (err) {
       console.error("[TestSession] start error:", err);
@@ -651,49 +641,18 @@ export default function TestSession() {
 
   function handlePause() {
     if (!test || paused) return;
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
     setPausedAt(Date.now());
     setPaused(true);
     void saveResponses();
-    toast.message("Test paused. Resume when you're ready.");
+    toast.message("Test paused. Official remaining time still counts down from start.");
   }
 
   async function handleResume() {
     if (!test || !paused) return;
-    const pausedDurationMs = pausedAt ? Date.now() - pausedAt : 0;
-    const pausedSeconds = Math.max(0, Math.round(pausedDurationMs / 1000));
-
-    if (pausedSeconds > 0 && test.started_at) {
-      // Push started_at forward so the math `remaining = limit - (now - started_at)`
-      // continues to be correct after the pause window.
-      const newStartedAt = new Date(
-        new Date(test.started_at).getTime() + pausedDurationMs
-      ).toISOString();
-      try {
-        const { error } = await supabase
-          .from("mock_tests")
-          .update({ started_at: newStartedAt })
-          .eq("id", test.id)
-          .eq("user_id", user!.id);
-        if (error) throw error;
-        const updated: MockTest = { ...test, started_at: newStartedAt };
-        setTest(updated);
-        setTimeLeft(computeRemainingSeconds(updated));
-        setPaused(false);
-        setPausedAt(null);
-        startTimer(updated);
-      } catch (err) {
-        console.error("[TestSession] resume error:", err);
-        toast.error("Failed to resume test.");
-      }
-    } else {
-      setPaused(false);
-      setPausedAt(null);
-      startTimer(test);
-    }
+    setPausedAt(null);
+    setPaused(false);
+    setTimeLeft(computeRemainingSeconds(test));
+    toast.message("Timer resumed from remaining official time.");
   }
 
   async function saveResponses() {
@@ -909,11 +868,11 @@ export default function TestSession() {
       toast.success(autoSubmit ? "Time's up! Test submitted." : "Test submitted.");
       navigate(`/app/mock-test/results/${testId}`);
     } catch (error) {
+      submittingRef.current = false;
       console.error("[TestSession] submit failed:", error);
       toast.error(error instanceof Error ? error.message : "Failed to submit test.");
     } finally {
       setSubmitting(false);
-      submittingRef.current = false;
       setShowSubmitModal(false);
     }
   }
@@ -1490,7 +1449,7 @@ export default function TestSession() {
           <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 text-center shadow-2xl space-y-4">
             <h2 className="text-xl font-black text-foreground">Test Paused</h2>
             <p className="text-sm text-muted-foreground">
-              The timer is on hold. Click resume to continue your test.
+              Answering is paused. Official remaining time still counts down from when the test started.
             </p>
             <Button className="w-full" onClick={() => void handleResume()}>
               Resume Test

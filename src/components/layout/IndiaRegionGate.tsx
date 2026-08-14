@@ -5,7 +5,7 @@ interface IndiaRegionGateProps {
   children: React.ReactNode;
 }
 
-/** Gov exam route gate — currently a pass-through while region gating is disabled. */
+/** Gov exam route gate — India-region users only (profile.region authoritative). */
 export function IndiaRegionGate({
   children,
   fallback = "/app/dashboard",

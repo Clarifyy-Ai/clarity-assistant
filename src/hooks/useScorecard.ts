@@ -117,7 +117,7 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
       };
 
       const questionScores = await scoreQuestions(
-        questionsForScoring,
+        answered,
         sessionMeta
       );
 

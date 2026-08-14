@@ -170,7 +170,7 @@ export async function fetchEdge(
       throw new Error(
         fnName === "delete-account"
           ? "We couldn't complete account deletion right now. Please try again in a moment."
-          : "We couldn't reach the server. Please check your connection and try again.",
+          : "The AI request did not go through. Please try again.",
       );
     }
     throw err;

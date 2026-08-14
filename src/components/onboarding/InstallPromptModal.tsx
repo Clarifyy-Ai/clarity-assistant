@@ -141,7 +141,7 @@ export function InstallPromptModal(): JSX.Element | null {
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && snooze()}>
-      <DialogContent className="sm:max-w-lg gap-0 p-0 overflow-hidden">
+      <DialogContent className="sm:max-w-lg gap-0 p-0 max-h-[min(90dvh,640px)] overflow-y-auto max-sm:top-auto max-sm:bottom-0 max-sm:translate-y-0 max-sm:left-0 max-sm:right-0 max-sm:translate-x-0 max-sm:max-w-none max-sm:rounded-b-none max-sm:rounded-t-2xl">
         <div className="bg-gradient-to-br from-primary/20 via-primary/10 to-blue-600/10 px-6 pt-6 pb-4 border-b border-border">
           <DialogHeader className="text-left space-y-2">
             <div className="flex items-center gap-3">
@@ -214,7 +214,7 @@ export function InstallPromptModal(): JSX.Element | null {
           )}
         </div>
 
-        <DialogFooter className="px-6 py-4 border-t border-border bg-muted/20 flex-col sm:flex-row gap-2 sm:gap-2">
+        <DialogFooter className="px-6 pt-4 flex-wrap pb-[calc(1rem+env(safe-area-inset-bottom,0px))] border-t border-border bg-muted/20 flex-col sm:flex-row gap-2 sm:gap-2">
           <Button
             type="button"
             variant="ghost"

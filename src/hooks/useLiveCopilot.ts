@@ -57,6 +57,7 @@ import {
   getAiUserFacingError,
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
+import { noteProviderFailureFromError } from "@/lib/ai/providerAvailability";
 
 interface UseLiveCopilotOptions {
   config: LiveSessionConfig;
@@ -484,6 +485,7 @@ export function useLiveCopilot({
       },
       onError: (err) => {
         openUpgradeIfInsufficientCredits(err);
+        noteProviderFailureFromError(err);
         useOverlayStore.getState().setError(
           getAiUserFacingError(err) || "Failed to generate full answer",
         );
@@ -571,6 +573,7 @@ export function useLiveCopilot({
           },
           onError: (error) => {
             openUpgradeIfInsufficientCredits(error);
+            noteProviderFailureFromError(error);
             useOverlayStore.getState().setError(getAiUserFacingError(error));
           },
           signal: controller.signal,
@@ -578,6 +581,7 @@ export function useLiveCopilot({
       } catch (err) {
         if (!controller.signal.aborted) {
           openUpgradeIfInsufficientCredits(err);
+          noteProviderFailureFromError(err);
           useOverlayStore.getState().setError(
             getAiUserFacingError(err) || "Hint generation failed",
           );
@@ -684,12 +688,14 @@ export function useLiveCopilot({
       } catch (err) {
         if (!controller.signal.aborted) {
           openUpgradeIfInsufficientCredits(err);
+          noteProviderFailureFromError(err);
           const msg = getAiUserFacingError(err) || "Chat generation failed";
           useOverlayStore.getState().addChatMessage({
             role: "assistant",
             text: `Error: ${msg}`,
             timestamp: Date.now(),
           });
+          useOverlayStore.getState().setError(msg);
         }
       } finally {
         if (chatAbortRef.current === controller) chatAbortRef.current = null;
@@ -807,6 +813,7 @@ export function useLiveCopilot({
         }
       } catch (err) {
         console.error("[useLiveCopilot] Failed to finalize session:", err);
+        toast.error("Session ended, but the summary could not be saved. Your practice still ran.");
       }
     }
 

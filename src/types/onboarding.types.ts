@@ -45,7 +45,7 @@ export interface StepProps {
   data:        OnboardingData;
   onNext:      (data?: Partial<OnboardingData>) => void;
   onBack:      () => void;
-  onSkip:      () => void;
+  onSkip:      (data?: Partial<OnboardingData>) => void;
   /** Live-sync partial step data to the parent (e.g. Essentials → Skip gate). */
   onChange?:   (data: Partial<OnboardingData>) => void;
   isFirstStep: boolean;

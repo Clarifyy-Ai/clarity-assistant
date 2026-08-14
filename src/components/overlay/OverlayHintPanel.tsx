@@ -34,6 +34,8 @@ import { feedbackDB } from "@/lib/supabase/database";
 import type { HintState } from "@/store/overlayStore";
 import { useIsMobile } from "@/hooks/use-mobile";
 
+const LISTENING_NO_SPEECH_MS = 12_000;
+
 /* ─── TYPES ─────────────────────────────────────────────────────────────── */
 
 interface OverlayHintPanelProps {
@@ -51,8 +53,6 @@ interface OverlayHintPanelProps {
   onShorten?: () => void;
   onExpand?: () => void;
 }
-
-/* ─── COMPONENT ─────────────────────────────────────────────────────────── */
 
 function OverlayHintPanelInner({
   text,
@@ -783,7 +783,10 @@ function IdleStateContent() {
             {resumePoints.intro}
           </p>
         ) : (
-          <p className="text-[12px] text-white/25 italic">Listening for questions…</p>
+          <>
+            <p className="text-[12px] text-white/25 italic">Listening for questions…</p>
+            <ListeningTimeoutHelp />
+          </>
         )}
       </div>
     );
@@ -843,6 +846,7 @@ function IdleStateContent() {
             {totalYears ? `, ${totalYears}+ yrs` : ""}
           </span>
         </button>
+        <ListeningTimeoutHelp />
       </div>
     );
   }
@@ -857,6 +861,33 @@ function IdleStateContent() {
         Hints {SERVER_AI_CREDIT_COSTS.hint} cr · Full answer {SERVER_AI_CREDIT_COSTS.fullAnswer} cr · Capture{" "}
         {SERVER_AI_CREDIT_COSTS.screenshotAnswer} cr
       </p>
+      <ListeningTimeoutHelp />
+    </div>
+  );
+}
+
+function ListeningTimeoutHelp() {
+  const [showMicHelp, setShowMicHelp] = useState(false);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setShowMicHelp(true), LISTENING_NO_SPEECH_MS);
+    return () => window.clearTimeout(id);
+  }, []);
+
+  return (
+    <div className="space-y-1.5">
+      {showMicHelp && (
+        <p className="text-[11px] text-white/40 leading-relaxed">
+          No speech detected. Check microphone permission, selected device, and that you are speaking clearly.
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={() => useOverlayStore.getState().setActiveTab("chat")}
+        className="text-[12px] text-indigo-300 hover:text-indigo-200 transition-colors font-medium text-left"
+      >
+        Type a question instead
+      </button>
     </div>
   );
 }

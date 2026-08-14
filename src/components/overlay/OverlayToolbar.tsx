@@ -49,8 +49,14 @@ import { useUIStore } from "@/store/uiStore";
 import {
   MODEL_OPTIONS,
   hasProModelAccess,
-  isModelAvailableForPlan,
 } from "@/lib/ai/modelOptions";
+import {
+  getModelLockReason,
+  providerUnavailableReason,
+  providerForModel,
+  refreshProviderAvailability,
+  useProviderFlags,
+} from "@/lib/ai/providerAvailability";
 
 const HINT_STYLE_LABELS: Record<string, string> = {
   full_answer: "Full",
@@ -111,6 +117,10 @@ export function OverlayToolbar({
   const activeModel = useOverlayStore((s) => s.active_model);
   const planId = useAuthStore((s) => s.planId);
   const canUseProModels = hasProModelAccess(planId);
+  useProviderFlags();
+  useEffect(() => {
+    void refreshProviderAvailability();
+  }, []);
 
   const isMinimal = useOverlayStore((s) => s.is_minimal_mode);
   const simpleLanguage = useOverlayStore((s) => s.simple_language);
@@ -538,25 +548,32 @@ export function OverlayToolbar({
                 </p>
                 <div className="space-y-0.5">
                   {MODEL_OPTIONS.map((m) => {
-                    const locked = !isModelAvailableForPlan(m.value, planId);
+                    const lock = getModelLockReason(m.value, planId);
+                    const locked = lock !== null;
                     return (
                       <button
                         key={m.value}
                         type="button"
                         disabled={locked}
                         onClick={() => {
-                          if (locked) {
+                          if (lock === "plan") {
                             useUIStore.getState().openUpgradeModal("pro");
                             toast.message("Upgrade to Pro to use GPT-4o and Claude.");
+                            return;
+                          }
+                          if (lock === "provider") {
+                            toast.error(providerUnavailableReason(providerForModel(m.value)));
                             return;
                           }
                           useOverlayStore.getState().setActiveModel(m.value);
                           setShowMoreMenu(false);
                         }}
                         aria-label={
-                          locked
-                            ? `${m.label} AI model (Pro)`
-                            : `Select ${m.label} AI model`
+                          lock === "provider"
+                            ? `${m.label} AI model (unavailable)`
+                            : lock === "plan"
+                              ? `${m.label} AI model (Pro)`
+                              : `Select ${m.label} AI model`
                         }
                         aria-pressed={!locked && activeModel === m.value}
                         className={cn(
@@ -569,7 +586,9 @@ export function OverlayToolbar({
                       >
                         <span>{m.label}</span>
                         <div className="flex items-center gap-1.5">
-                          {locked ? (
+                          {lock === "provider" ? (
+                            <span className="text-[10px] text-red-300/80">Unavailable</span>
+                          ) : lock === "plan" ? (
                             <span className="text-[10px] text-amber-300/70">Pro</span>
                           ) : (
                             !canUseProModels && m.badge === "Recommended" && (

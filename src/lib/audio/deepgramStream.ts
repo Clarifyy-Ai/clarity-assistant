@@ -7,8 +7,7 @@
 // - WebSocket subprotocol auth confirmed correct: new WebSocket(url, ["token", token])
 // - RESTART_CLOSE_CODE check in handleClose prevents reconnect on controlled restart
 
-import { EDGE_BASE } from "@/lib/env";
-import { getAuthHeaders } from "@/lib/network/fetchEdge";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useAuthStore } from "@/store/authStore";
 import { useAudioStore } from "@/store/audioStore";
 import { FEATURE_FLAGS, FEATURE_PLAN_GATE } from "@/lib/constants/features";
@@ -265,6 +264,14 @@ export class DeepgramStreamClient {
     this.callbacks.onStatusChange("connected");
     this.startMediaRecorder();
     this.startPing();
+    void import("@/lib/overlay/qaDeepgramDisconnect").then((mod) => {
+      if (!mod.isQaDeepgramDisconnectEnabled()) return;
+      window.setTimeout(() => {
+        if (this.destroyed || !this.ws) return;
+        this.callbacks.onStatusChange("reconnecting");
+        this.ws.close(1001, "qa_simulated_disconnect");
+      }, 1500);
+    });
   }
 
   private handleClose(event: CloseEvent): void {
@@ -462,64 +469,24 @@ export class DeepgramStreamClient {
 
 /* ─── HELPERS ────────────────────────────────────────────────────────────── */
 
-function buildEdgeFunctionUrl(fnName: string): string {
-  const base = String(EDGE_BASE ?? "").replace(/\/+$/, "");
-
-  // ✅ FIX: Removed double-escaped backslashes (\\/ → \/) — these were JS string
-  // escape artifacts that made the regex match literal backslash-slash sequences
-  // rather than forward slashes. The regex was never matching in practice.
-  if (base.endsWith("/functions/v1")) return `${base}/${fnName}`;
-  if (base.includes("/functions/v1/")) {
-    return `${base.replace(/\/functions\/v1\/.*/, "/functions/v1")}/${fnName}`;
-  }
-
-  return `${base}/functions/v1/${fnName}`;
-}
-
 async function fetchDeepgramToken(): Promise<TokenResponse> {
-  const headers = await getAuthHeaders();
-
-  const response = await fetch(buildEdgeFunctionUrl("deepgram-token"), {
-    method: "POST",
-    headers,
-  });
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    const maybeJson = (() => {
-      try {
-        return JSON.parse(text);
-      } catch {
-        return null;
-      }
-    })();
-
-    const msg =
-      maybeJson?.error ||
-      maybeJson?.message ||
-      text ||
-      `Token fetch failed: ${response.status}`;
-
-    if (response.status === 502 || response.status === 503) {
+  try {
+    const data = await fetchEdgeJson<TokenResponse>("deepgram-token", {});
+    if (!data?.token) {
+      throw new Error("Deepgram token response missing token field");
+    }
+    return data;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err ?? "");
+    if (/503|502|unavailable|misconfigured|SERVICE_UNAVAILABLE|MISSING_PROJECT_ID/i.test(msg)) {
       throw new Error(
-        "Speech recognition is temporarily unavailable. Please try again in a moment.",
+        "Live transcription is unavailable. You can still type questions in Chat.",
       );
     }
-
     throw new Error(
-      typeof msg === "string" && msg.trim()
-        ? msg
-        : "Could not start speech recognition. Please try again.",
+      msg.trim() || "Could not start speech recognition. Please try again.",
     );
   }
-
-  const data = (await response.json()) as TokenResponse;
-
-  if (!data.token) {
-    throw new Error("Deepgram token response missing token field");
-  }
-
-  return data;
 }
 
 function getMajoritySpeaker(words: TranscriptWord[]): number {

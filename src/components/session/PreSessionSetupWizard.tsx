@@ -17,12 +17,13 @@ import { runAudioPreflight, type PreflightReport } from "@/lib/validators/audioV
 import { enumerateAudioDevices, enumerateAudioOutputDevices, playSpeakerTestTone } from "@/lib/audio/audioCapture";
 import type { AudioDevice } from "@/types/audio.types";
 import { useDocuments } from "@/hooks/useDocuments";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { OverlaySetupGuidePanel } from "@/components/overlay/OverlaySetupGuidePanel";
 import { OVERLAY_VISIBILITY_WARNING } from "@/lib/constants/overlaySetupGuide";
 import { CreditExhaustedState, useCreditExhaustedState } from "@/components/billing/CreditExhaustedState";
 import { EmptyState } from "@/components/common/EmptyState";
+import { wizardStepBlocker } from "@/lib/session/wizardValidation";
 import {
   isFreePlan,
   maxSessionMinutesForPlan,
@@ -30,10 +31,16 @@ import {
 import {
   clampPreferredModel,
   hasProModelAccess,
-  isModelAvailableForPlan,
   MODEL_OPTIONS as CANONICAL_MODEL_OPTIONS,
   normalizePreferredModel,
 } from "@/lib/ai/modelOptions";
+import {
+  getModelLockReason,
+  providerForModel,
+  providerUnavailableReason,
+  refreshProviderAvailability,
+  useProviderFlags,
+} from "@/lib/ai/providerAvailability";
 import { useUIStore } from "@/store/uiStore";
 import { toast } from "sonner";
 import {
@@ -104,6 +111,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const { loadError: documentsLoadError } = useDocuments();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const resumes        = useDocumentStore((s) => s.resumes);
   const jds            = useDocumentStore((s) => s.jds);
@@ -113,6 +121,10 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const typedProfile = profile as unknown as UserProfile | null;
   const freePlan = isFreePlan(typedProfile?.plan_id);
   const canUseProModels = hasProModelAccess(typedProfile?.plan_id);
+  useProviderFlags();
+  useEffect(() => {
+    void refreshProviderAvailability();
+  }, []);
   const maxDuration = maxSessionMinutesForPlan(typedProfile?.plan_id);
   const durationOptions = freePlan ? [5] : [15, 30, 45, 60];
 
@@ -239,6 +251,16 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       setShowWizard(true);
       if (companyParam) setCompany(companyParam);
       if (roleParam) setRole(roleParam);
+    }
+    const practicePrompt =
+      typeof (location.state as { practicePrompt?: unknown } | null)?.practicePrompt === "string"
+        ? (location.state as { practicePrompt: string }).practicePrompt.trim()
+        : "";
+    if (practicePrompt) {
+      setShowWizard(true);
+      setInstructions((prev) =>
+        prev.includes(practicePrompt) ? prev : [practicePrompt, prev].filter(Boolean).join("\n\n"),
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- apply once on mount / query change
   }, [searchParams]);
@@ -512,6 +534,17 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
 
   const canProceed = step < totalSteps;
   const isLastStep = step === totalSteps;
+  const stepBlocker = wizardStepBlocker({
+    step,
+    resumeStep,
+    sessionCallType,
+    company,
+    role,
+    hintStyle,
+    model,
+    smartRouting,
+    resumeId,
+  });
 
   useEffect(() => {
     if (isMobile) return;
@@ -519,6 +552,21 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       if (e.key === "Enter" && !e.shiftKey && canProceed) {
         const target = e.target as HTMLElement;
         if (target.tagName === "TEXTAREA" || target.tagName === "SELECT") return;
+        const blocker = wizardStepBlocker({
+          step,
+          resumeStep,
+          sessionCallType,
+          company,
+          role,
+          hintStyle,
+          model,
+          smartRouting,
+          resumeId,
+        });
+        if (blocker) {
+          toast.message(blocker);
+          return;
+        }
         e.preventDefault();
         setStep((p) => p + 1);
       }
@@ -731,7 +779,9 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">Company (optional)</label>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                      Company {sessionCallType === "interview" ? "(required)" : "(optional)"}
+                    </label>
                       <SearchableCombobox
                         value={company}
                         onChange={setCompany}
@@ -742,7 +792,9 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">Role (optional)</label>
+                      <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                      Role {sessionCallType === "interview" ? "(required)" : "(optional)"}
+                    </label>
                       <SearchableCombobox
                         value={role}
                         onChange={setRole}
@@ -862,16 +914,21 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 ) : (
                   <div className="grid grid-cols-2 gap-2">
                     {CANONICAL_MODEL_OPTIONS.map((m) => {
-                      const locked = !isModelAvailableForPlan(m.value, typedProfile?.plan_id);
+                      const lock = getModelLockReason(m.value, typedProfile?.plan_id);
+                      const locked = lock !== null;
                       return (
                         <button
                           key={m.value}
                           type="button"
                           disabled={locked}
                           onClick={() => {
-                            if (locked) {
+                            if (lock === "plan") {
                               useUIStore.getState().openUpgradeModal("pro");
                               toast.message("Upgrade to Pro to use GPT-4o and Claude.");
+                              return;
+                            }
+                            if (lock === "provider") {
+                              toast.error(providerUnavailableReason(providerForModel(m.value)));
                               return;
                             }
                             setModel(m.value);
@@ -886,7 +943,10 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                         >
                           <div className="flex items-center justify-between gap-1">
                             <p className="font-medium text-xs">{m.label}</p>
-                            {locked && (
+                            {lock === "provider" && (
+                              <span className="text-[9px] font-semibold text-red-400">Unavailable</span>
+                            )}
+                            {lock === "plan" && (
                               <span className="text-[9px] font-semibold text-amber-400">Pro</span>
                             )}
                           </div>
@@ -907,7 +967,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
 
               <div>
                 <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-1.5">
-                  <FileText className="w-3.5 h-3.5" /> Resume
+                  <FileText className="w-3.5 h-3.5" /> Resume {sessionCallType === "interview" ? "(required)" : "(optional)"}
                 </label>
                 <select
                   value={resumeId ?? ""}
@@ -1468,6 +1528,11 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
           )}
         {isLastStep && <AudioOkBadge />}
 
+        {stepBlocker && !isLastStep && (
+          <p role="status" className="text-xs text-amber-600 dark:text-amber-400">
+            {stepBlocker}
+          </p>
+        )}
         <div className="flex gap-3">
           {step > 1 && (
             <button
@@ -1508,13 +1573,13 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
           ) : (
             <button
               onClick={() => {
-                if (step === 2 && !role.trim()) {
-                  toast.message("Choose a target role before continuing.");
+                if (stepBlocker) {
+                  toast.message(stepBlocker);
                   return;
                 }
                 setStep((p) => p + 1);
               }}
-              disabled={step === 2 && !role.trim()}
+              disabled={Boolean(stepBlocker)}
               className="flex-1 flex items-center justify-center gap-1.5 py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-foreground font-semibold rounded-xl transition-all text-sm"
             >
               Next

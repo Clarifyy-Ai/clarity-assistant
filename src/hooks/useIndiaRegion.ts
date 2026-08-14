@@ -10,10 +10,14 @@ export function useIndiaRegion(): { isIndia: boolean } {
     () =>
       resolveIsIndiaUser(
         profile
-          ? { timezone: profile.timezone, locale: profile.locale }
+          ? {
+              timezone: profile.timezone,
+              locale: profile.locale,
+              region: profile.region,
+            }
           : null,
       ),
-    [profile?.timezone, profile?.locale],
+    [profile?.timezone, profile?.locale, profile?.region],
   );
 
   return { isIndia };

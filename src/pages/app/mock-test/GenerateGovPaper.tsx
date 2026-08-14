@@ -31,6 +31,7 @@ const JOB_STAGES = [
   "analyzing_pattern",
   "planning_blueprint",
   "selecting_questions",
+  "generating_questions",
   "validating_questions",
   "checking_similarity",
   "assembling",
@@ -42,6 +43,7 @@ const STAGE_LABEL: Record<string, string> = {
   analyzing_pattern: "Analyzing syllabus & pattern",
   planning_blueprint: "Building blueprint",
   selecting_questions: "Selecting reviewed questions",
+  generating_questions: "Generating remaining unique questions with AI",
   validating_questions: "Validating answers",
   checking_similarity: "Checking duplicates",
   assembling: "Assembling paper",
@@ -85,8 +87,11 @@ export default function GenerateGovPaper(): React.ReactElement {
       .then((d) => {
         setExams(d.results);
         if (!examId && d.results[0]) {
-          setExamId(d.results[0].examId);
-          setStageId(d.results[0].stage?.id ?? d.results[0].stages[0]?.id ?? "");
+          const preferred =
+            d.results.find((r) => r.family !== "state_psc" && r.code !== "APPSC_GROUP2") ??
+            d.results[0];
+          setExamId(preferred.examId);
+          setStageId(preferred.stage?.id ?? preferred.stages[0]?.id ?? "");
         }
       })
       .catch((e) => toast.error(e instanceof Error ? e.message : "Search failed"));
@@ -100,17 +105,8 @@ export default function GenerateGovPaper(): React.ReactElement {
       setQuestionCount(selected.pattern.totalQuestions);
       setDurationMinutes(selected.pattern.durationMinutes);
     }
-    if (basis === "topic" && questionCount > 50) {
+    if (basis === "topic" && questionCount > 100) {
       setQuestionCount(20);
-    }
-    if (
-      basis === "full_sim" &&
-      selected.bankReadiness &&
-      !selected.bankReadiness.fullSimulationAvailable
-    ) {
-      setBasis("quick");
-      setQuestionCount(25);
-      setDurationMinutes(30);
     }
   }, [selected, basis]);
 
@@ -151,17 +147,6 @@ export default function GenerateGovPaper(): React.ReactElement {
       toast.error("Select an exam and stage");
       return;
     }
-    if (basis === "full_sim" && !fullSimAvailable) {
-      toast.error(
-        bank
-          ? `Full simulation unavailable — ${formatBankCoverage(
-            bank.approvedPublicCount,
-            bank.requiredQuestions,
-          )}. Use Quick or Custom practice instead.`
-          : "Full simulation unavailable — bank coverage unknown. Use Quick or Custom practice.",
-      );
-      return;
-    }
     if (basis === "topic" && resolvedTopics.length === 0) {
       toast.error("Select or enter at least one topic");
       return;
@@ -175,7 +160,7 @@ export default function GenerateGovPaper(): React.ReactElement {
           examId,
           stageId,
           topics: resolvedTopics,
-          questionCount: Math.min(50, Math.max(5, questionCount)),
+          questionCount: Math.min(100, Math.max(5, questionCount)),
           language,
           difficulty: difficulty || null,
           idempotencyKey,
@@ -213,22 +198,48 @@ export default function GenerateGovPaper(): React.ReactElement {
 
       let current = result;
       let polls = 0;
+      const maxPolls = 120;
       while (
         current.status !== "completed" &&
         current.status !== "failed" &&
-        polls < 30
+        current.status !== "cancelled" &&
+        polls < maxPolls
       ) {
-        await new Promise((r) => setTimeout(r, 800));
+        await new Promise((r) => setTimeout(r, 1500));
         current = await getPaperGenerationJob(result.jobId);
         setJob(current);
         polls += 1;
       }
 
       if (current.status === "completed" && current.mockTestId) {
-        toast.success("Practice paper ready");
+        const expected =
+          basis === "full_sim" ? selected?.pattern?.totalQuestions : questionCount;
+        const actual = current.questionCount;
+        const short =
+          typeof actual === "number" &&
+          typeof expected === "number" &&
+          actual < expected;
+        const custom = current.paperClass === "custom_practice" || (basis !== "full_sim" && short);
+        if (basis === "full_sim" && short) {
+          toast.error(
+            `Full mock needs ${expected} questions but only ${actual ?? 0} were assembled. Try a Custom Practice Set.`,
+          );
+          return;
+        }
+        toast.success(
+          custom
+            ? `Custom Practice Set ready (${actual ?? "available"} questions)`
+            : actual
+              ? `Practice paper ready (${actual} questions)`
+              : "Practice paper ready",
+        );
         navigate(`/app/mock-test/session/${current.mockTestId}`);
       } else if (current.status === "failed") {
         toast.error(current.errorMessage ?? current.errorCode ?? "Failed");
+      } else {
+        toast.message(
+          "Still generating unique questions on the server. This can take a few minutes when the bank is short — refresh Mock Tests shortly.",
+        );
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Generation failed");
@@ -325,22 +336,16 @@ export default function GenerateGovPaper(): React.ReactElement {
                 {
                   id: "full_sim" as const,
                   label: "Full exam simulation (exact pattern count)",
-                  disabled: !fullSimAvailable,
                 },
               ].map((opt) => (
                 <label
                   key={opt.id}
-                  className={`flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm ${
-                    opt.disabled
-                      ? "opacity-60 cursor-not-allowed bg-muted/20"
-                      : "cursor-pointer hover:bg-muted/30"
-                  }`}
+                  className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm cursor-pointer hover:bg-muted/30"
                 >
                   <input
                     type="radio"
                     name="basis"
                     checked={basis === opt.id}
-                    disabled={opt.disabled}
                     onChange={() => {
                       setBasis(opt.id);
                       if (opt.id === "quick") {
@@ -351,6 +356,10 @@ export default function GenerateGovPaper(): React.ReactElement {
                         setQuestionCount(20);
                         setDurationMinutes(25);
                       }
+                      if (opt.id === "full_sim" && selected?.pattern) {
+                        setQuestionCount(selected.pattern.totalQuestions);
+                        setDurationMinutes(selected.pattern.durationMinutes);
+                      }
                     }}
                   />
                   <span>
@@ -358,7 +367,9 @@ export default function GenerateGovPaper(): React.ReactElement {
                     {opt.id === "full_sim" && bank && (
                       <span className="block text-xs text-muted-foreground">
                         {bankCoverageLabel}
-                        {!fullSimAvailable ? " — unavailable until bank is ready" : ""}
+                        {!fullSimAvailable
+                          ? " — bank is short; remaining unique questions will be generated with AI (takes a few minutes)"
+                          : ""}
                       </span>
                     )}
                   </span>
@@ -366,19 +377,20 @@ export default function GenerateGovPaper(): React.ReactElement {
               ))}
               {basis === "topic" && (
                 <p className="text-xs text-muted-foreground">
-                  Calls generate-topic-practice against public verified bank items matching
-                  subject/topic. If the bank is short, you get a smaller Custom Practice Set — never a full simulation label.
+                  Topic practice uses verified bank items first. If coverage is short, unique
+                  AI-generated MCQs fill the rest — this can take a minute. Not an official paper.
                 </p>
               )}
-              {basis === "full_sim" && fullSimAvailable && (
+              {basis === "full_sim" && (
                 <p className="text-xs text-muted-foreground">
-                  Full simulation uses the exact pattern count from public verified bank items. Assembly fails closed if quality filters drop below the total.
+                  Uses the exact pattern count. Unique bank questions are used first; remaining
+                  slots are generated with AI and deduplicated. Not an official or leaked paper.
                 </p>
               )}
               {!fullSimAvailable && (
                 <p className="text-xs text-amber-700 dark:text-amber-400">
-                  Full simulation is disabled — {bankCoverageLabel ?? "bank coverage unknown"}.
-                  create-exam-paper fails closed for full pattern mocks when the bank is short; use Quick or Custom practice instead.
+                  Approved bank coverage is {bankCoverageLabel ?? "unknown"}. Generation will take
+                  longer while AI fills unique remaining questions for this exam.
                 </p>
               )}
             </fieldset>
@@ -402,7 +414,7 @@ export default function GenerateGovPaper(): React.ReactElement {
                 <input
                   type="number"
                   min={5}
-                  max={basis === "topic" ? 50 : (selected?.pattern?.totalQuestions ?? 100)}
+                  max={basis === "topic" ? 100 : (selected?.pattern?.totalQuestions ?? 200)}
                   disabled={basis === "full_sim"}
                   className="w-full rounded-lg border border-border bg-background px-3 py-2"
                   value={questionCount}
@@ -525,7 +537,7 @@ export default function GenerateGovPaper(): React.ReactElement {
                 <dd>
                   {basis === "topic"
                     ? "Topic/subject match · uniqueness · bank approval"
-                    : "Blueprint · uniqueness · bank approval"}
+                    : "Blueprint · uniqueness · bank + AI fill"}
                 </dd>
               </dl>
               <p className="text-xs text-amber-700 dark:text-amber-400">
@@ -570,7 +582,7 @@ export default function GenerateGovPaper(): React.ReactElement {
             ) : (
               <Button
                 onClick={() => void handleGenerate()}
-                disabled={busy || !stageId || (basis === "full_sim" && !fullSimAvailable)}
+                disabled={busy || !stageId}
               >
                 {busy ? (
                   <>

@@ -71,6 +71,15 @@ describe("overlaySessionStates", () => {
     expect(canTransition("transcribing", "question_detected")).toBe(true);
   });
 
+  it("allows listening to surface AI and backend failures", () => {
+    expect(canTransition("listening", "ai_provider_unavailable")).toBe(true);
+    expect(canTransition("listening", "backend_unavailable")).toBe(true);
+    expect(canTransition("listening", "generating_guidance")).toBe(true);
+    expect(transitionOverlayState("listening", "ai_provider_unavailable")).toBe(
+      "ai_provider_unavailable",
+    );
+  });
+
   it("rejects illegal jumps", () => {
     expect(canTransition("idle", "guidance_ready")).toBe(false);
     expect(transitionOverlayState("idle", "guidance_ready")).toBe("idle");

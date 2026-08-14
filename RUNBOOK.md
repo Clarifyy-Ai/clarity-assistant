@@ -121,8 +121,9 @@ Never store passwords in workbooks. Seed with `npm run qa:seed-accounts` → git
 
 ## Aug 13 remote apply (ops)
 
-1. `npx supabase login` (or set `SUPABASE_ACCESS_TOKEN`). CLI v1.226.4 in this repo does **not** accept `--use-api`.
-2. Apply `supabase/migrations/20260813100000_account_deletion_and_gap_analyses.sql` (`npx supabase db push` or `node scripts/apply-sql-migration.mjs <file>`).
-3. Deploy at least: `delete-account`, `analytics-dashboard`, `gap-analysis`, `select-test-questions`, plus any function importing changed `_shared` (see `docs/EDGE_DEPLOY_COMMANDS.txt`).
+1. `SUPABASE_ACCESS_TOKEN` (PAT) in the environment — never commit it.
+2. Apply `supabase/migrations/20260813100000_account_deletion_and_gap_analyses.sql` (`node --use-system-ca scripts/apply-sql-migration.mjs <file>`).
+3. Deploy functions without Docker: `node --use-system-ca scripts/deploy-edge-via-management-api.mjs <slug>` (add `--no-verify-jwt` for ping / stripe-webhook).
 4. `npm run rls:spot-check` after the migration is live.
+5. Regenerate types: `npm run supabase:gen:api` (Management API; requires `SUPABASE_ACCESS_TOKEN`).
 

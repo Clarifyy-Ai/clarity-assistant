@@ -126,7 +126,7 @@ describe("fetchEdgeJson — RPC/edge error handling", () => {
     const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
 
     await expect(fetchEdgeJson("deduct-credits", { action: "generate_hint" })).rejects.toThrow(
-      /couldn't reach the server/i,
+      /AI request did not go through/i,
     );
   });
 

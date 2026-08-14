@@ -106,6 +106,10 @@ const ALLOWED_HEADERS = [
 
   // Optional webhook/signature headers if helper is reused
   "stripe-signature",
+
+  // Client correlation (fetchEdge / apiClient)
+  "x-request-id",
+  "x-correlation-id",
 ].join(", ");
 
 function isValidOrigin(origin: string): boolean {

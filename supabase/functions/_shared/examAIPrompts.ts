@@ -17,6 +17,8 @@ export interface ExamAIContext {
   strongTopics: string[];
   difficultyMix: { EASY: number; MEDIUM: number; HARD: number };
   gapCount: number;
+  avoidStems?: string[];
+  batchIndex?: number;
 }
 
 const EXAM_PROFILES: Record<string, { pattern: string; marking: string; focus: string }> = {
@@ -60,6 +62,16 @@ const EXAM_PROFILES: Record<string, { pattern: string; marking: string; focus: s
     marking: "sectional MCQs with negative marking",
     focus: "domain knowledge, comprehension, analytical ability",
   },
+  GENERAL: {
+    pattern: "RRB NTPC / general recruitment — GK, maths, reasoning, current affairs",
+    marking: "+1 / -0.33 typical CBT MCQs",
+    focus: "arithmetic, general awareness, logical reasoning, current events",
+  },
+  "RRB NTPC": {
+    pattern: "RRB NTPC CBT — GK, mathematics, general intelligence and reasoning",
+    marking: "+1 / -1/3 typical",
+    focus: "railway GK, arithmetic, coding-decoding, current affairs",
+  },
 };
 
 function resolveExamProfile(examType: string): { pattern: string; marking: string; focus: string } {
@@ -94,6 +106,18 @@ export function buildGapFillPrompt(ctx: ExamAIContext): string {
       ? `Avoid over-testing mastered topics: ${ctx.strongTopics.slice(0, 5).join(", ")}.`
       : "";
 
+  const avoidBlock =
+    ctx.avoidStems && ctx.avoidStems.length > 0
+      ? `\nDo NOT repeat or paraphrase these existing stems:\n${ctx.avoidStems
+          .slice(0, 14)
+          .map((s) => `- ${s.slice(0, 160)}`)
+          .join("\n")}\n`
+      : "";
+  const batchNote =
+    typeof ctx.batchIndex === "number"
+      ? `This is generation batch ${ctx.batchIndex + 1}. Cover different syllabus areas than earlier batches.`
+      : "";
+
   return `
 Generate exactly ${ctx.gapCount} original MCQs for Indian competitive exam practice.
 
@@ -104,11 +128,12 @@ Exam focus: ${profile.focus}
 
 Primary subject: ${subj}
 Topic scope: ${topicStr}
+${batchNote}
 
 Learner analytics (prioritise weak areas):
 ${weakLines}
 ${strongLine}
-
+${avoidBlock}
 Difficulty mix target: EASY ${ctx.difficultyMix.EASY}%, MEDIUM ${ctx.difficultyMix.MEDIUM}%, HARD ${ctx.difficultyMix.HARD}%.
 
 Requirements:

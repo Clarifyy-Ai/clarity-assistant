@@ -6,8 +6,9 @@
 - [x] Tests pass (`npm run test:run`) — Evidence: 60 files / 442 tests (2026-08-13)
 - [x] Typecheck passes — Evidence: `tsc --noEmit` exit 0 (2026-08-13)
 - [x] `scan:secrets` — Evidence: exit 0 (1366 files); wired in CI
-- [ ] Additive migration `20260813100000_account_deletion_and_gap_analyses.sql` applied remotely — local file only; PAT/CLI login required
-- [ ] Redeploy Aug 13 Edge Functions (`delete-account`, `analytics-dashboard`, `gap-analysis`, `select-test-questions`) — CLI token missing this session
+- [x] Additive migration `20260813100000_account_deletion_and_gap_analyses.sql` applied remotely — RLS spot-check 2026-08-13
+- [x] Redeploy Aug 13 Edge Functions (`delete-account`, `analytics-dashboard`, `gap-analysis`, `select-test-questions`, plus parse/prep/send-email/submit-test/search-exams/checkout/portal/ping/stripe-webhook) — Management API 201 ACTIVE
+- [x] Regenerated `src/integrations/supabase/types.ts` from live project (includes `account_deletion_operations`, `gap_analyses`, `profiles.region`)
 - [x] Electron build passes (`npm run electron:build`) — Evidence: exit 0
 - [x] Release copy gates pass — Evidence: `npm run release:gates` exit 0
 - [x] Security gates pass — Evidence: `npm run release:security-gates` exit 0

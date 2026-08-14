@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { CodeScratchpad } from "@/components/prep/CodeScratchpad";
 import { CodeHighlight, renderTextWithCodeBlocks } from "@/components/prep/CodeHighlight";
 import { supabase } from "@/lib/supabase/client";
+import { splitCodingHints } from "@/lib/documents/gapAnalysisPersist";
 import type { LucideIcon } from "lucide-react";
 
 const CATEGORIES: Array<{ id: string; label: string; icon: LucideIcon }> = [
@@ -401,22 +402,22 @@ export default function CodingHints() {
                 </Button>
               </div>
 
-              {hintText && (
-                <Card className="border-amber-500/20 bg-amber-500/5">
+              {hintText && splitCodingHints(hintText).map((hint, index) => (
+                <Card key={index} className="border-amber-500/20 bg-amber-500/5">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-xs font-semibold text-amber-400 uppercase tracking-widest flex items-center gap-1.5">
-                      <Lightbulb className="w-3.5 h-3.5" /> Hint
+                      <Lightbulb className="w-3.5 h-3.5" /> Hint {index + 1}
                     </p>
                     <button
-                      onClick={() => { navigator.clipboard.writeText(hintText); toast.success("Copied!"); }}
+                      onClick={() => { navigator.clipboard.writeText(hint); toast.success("Copied!"); }}
                       className="text-muted-foreground hover:text-foreground"
                     >
                       <Copy className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{hintText}</p>
+                  <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{hint}</p>
                 </Card>
-              )}
+              ))}
 
               {solutionText && (
                 <Card className="border-emerald-500/20 bg-emerald-500/5">

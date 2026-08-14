@@ -669,7 +669,7 @@ function RecentActivityFeed() {
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
           <Clock className="w-4 h-4 text-muted-foreground" />
-          Recent Activity
+          Recent Sessions
         </h3>
         <Link
           to="/app/sessions"
@@ -693,7 +693,7 @@ function RecentActivityFeed() {
         <EmptyState
           icon={ClipboardList}
           title="No sessions yet"
-          description="Start a mock interview to see your recent activity here."
+          description="Start a mock interview or Practice Coach session to see them here."
           actionLabel="Start mock interview"
           // FIX Issue 33: use navigate instead of window.location.href
           onAction={() => navigate("/app/mock")}

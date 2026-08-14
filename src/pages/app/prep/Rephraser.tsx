@@ -1,5 +1,6 @@
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
-import { prepToolIdempotencyKey } from "@/lib/network/idempotency";
+import { prepToolContentIdempotencyKey } from "@/lib/network/idempotency";
+import { sha256 } from "@/lib/utils/hashUtils";
 import {
   getAiUserFacingError,
   isInsufficientCreditsError,
@@ -12,7 +13,7 @@ import { useAuthStore } from "@/store/userStore";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { PrepToolShell } from "@/components/prep/PrepToolShell";
+import { PrepToolShell, SaveToAnswerBankConfirm } from "@/components/prep/PrepToolShell";
 import {
   Copy, Save, CheckCircle, Sparkles,
   ArrowRight, Wand2,
@@ -32,6 +33,28 @@ interface Alternatives {
   concise:   string;
 }
 
+const REPHRASE_IDEMPOTENCY_STORAGE_KEY = "clarify-prep-rephrase-idempotency";
+
+function readStoredRephraseKey(): string | null {
+  try {
+    return sessionStorage.getItem(REPHRASE_IDEMPOTENCY_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredRephraseKey(key: string | null): void {
+  try {
+    if (key) {
+      sessionStorage.setItem(REPHRASE_IDEMPOTENCY_STORAGE_KEY, key);
+    } else {
+      sessionStorage.removeItem(REPHRASE_IDEMPOTENCY_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage failures.
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Rephraser — generates 3 style alternatives in one click
 // ─────────────────────────────────────────────────────────────────────────────
@@ -39,12 +62,13 @@ interface Alternatives {
 export default function Rephraser() {
   const credits = useCredits();
   const { user } = useAuthStore();
-  const inflightKeyRef = useRef<string | null>(null);
+  const inflightKeyRef = useRef<string | null>(readStoredRephraseKey());
 
   const [original,     setOriginal]     = useState("");
   const [alternatives, setAlternatives] = useState<Alternatives | null>(null);
   const [loading,      setLoading]      = useState(false);
   const [saved,        setSaved]        = useState<keyof Alternatives | null>(null);
+  const [savedAnswerId, setSavedAnswerId] = useState<string | null>(null);
   const [error,        setError]        = useState<string | null>(null);
 
   const wordCount = original.trim().split(/\s+/).filter(Boolean).length;
@@ -57,10 +81,12 @@ export default function Rephraser() {
     setError(null);
     setAlternatives(null);
     setSaved(null);
+    setSavedAnswerId(null);
 
-    const idempotencyKey =
-      inflightKeyRef.current ?? prepToolIdempotencyKey("rephrase");
+    const contentHash = await sha256(original.trim());
+    const idempotencyKey = prepToolContentIdempotencyKey("rephrase", contentHash);
     inflightKeyRef.current = idempotencyKey;
+    writeStoredRephraseKey(idempotencyKey);
 
     try {
       const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
@@ -74,7 +100,6 @@ export default function Rephraser() {
       const raw = data.result ?? "";
       const parsed: Alternatives = JSON.parse(raw);
       setAlternatives(parsed);
-      inflightKeyRef.current = null;
       await refreshCredits();
     } catch (err) {
       openUpgradeIfInsufficientCredits(err);
@@ -82,12 +107,12 @@ export default function Rephraser() {
         const message = getAiUserFacingError(err);
         setError(message);
         toast.error(message);
-        inflightKeyRef.current = null;
+        // Keep the content-derived key so Retry of the same text does not double-charge.
       } else {
         setError(getAiUserFacingError(err));
         setAlternatives(getOfflineAlternatives(original));
         toast.info("Using offline rephrasing — AI unavailable.");
-        // Keep key so Retry / double-submit replays without a second charge.
+        // Keep key so Retry / double-submit / refresh mid-request replays without a second charge.
       }
     }
     setLoading(false);
@@ -104,11 +129,12 @@ export default function Rephraser() {
       concise:   "Concise",
     };
     try {
-      await answerBankDB.create(user.id, {
+      const inserted = await answerBankDB.create(user.id, {
         question_text: `Rephrased answer (${styleLabels[style]})`,
         answer_text: text,
         source: "prep_lab",
       });
+      setSavedAnswerId(inserted.id);
     } catch {
       toast.error("Failed to save — please try again");
       return;
@@ -140,6 +166,13 @@ export default function Rephraser() {
         error={error}
         onRetry={() => void handleRephrase()}
       >
+        {savedAnswerId && (
+          <SaveToAnswerBankConfirm
+            answerId={savedAnswerId}
+            onDismiss={() => setSavedAnswerId(null)}
+          />
+        )}
+
         {/* Input */}
         <Card>
           <div className="flex items-center justify-between mb-2">

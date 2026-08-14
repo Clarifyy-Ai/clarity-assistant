@@ -2,11 +2,19 @@ const INDIA_TIMEZONES = new Set(["Asia/Kolkata", "Asia/Calcutta"]);
 
 const INDIA_LOCALE_RE = /(^|[\-_])(IN|hi|bn|ta|te|mr|gu|kn|ml|pa|or|as|ur)([\-_]|$)/i;
 
-/** Dev/test override: `true` | `false` | unset */
+/** Dev/test override: `true` | `false` | unset. Ignored in production. */
 function envForceIndia(): boolean | null {
   const raw = import.meta.env.VITE_FORCE_INDIA_REGION;
   if (raw === "true") return true;
   if (raw === "false") return false;
+  return null;
+}
+
+export function honorIndiaForceFlag(
+  forced: boolean | null,
+  isProd: boolean,
+): boolean | null {
+  if (forced !== null && !isProd) return forced;
   return null;
 }
 
@@ -42,11 +50,11 @@ export function resolveIsIndiaUser(profile?: {
   region?: string | null;
   notification_prefs?: { region?: string } | null;
 } | null): boolean {
-  const forced = envForceIndia();
   const isProd =
     import.meta.env.PROD &&
     String(import.meta.env.VITE_APP_ENV ?? "").toLowerCase() === "production";
-  if (forced !== null && !isProd) return forced;
+  const forced = honorIndiaForceFlag(envForceIndia(), isProd);
+  if (forced !== null) return forced;
 
   const storedRegion =
     profile?.region ??

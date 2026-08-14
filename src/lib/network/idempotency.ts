@@ -17,6 +17,13 @@ export function documentParseIdempotencyKey(
   return clampKey(`${action}:${id}:${fp || "nofp"}`);
 }
 
+/** Stable key so re-running the same prep-tool input replays instead of recharging. */
+export function prepToolContentIdempotencyKey(toolId: string, contentSha256: string): string {
+  const tool = toolId.replace(/[^A-Za-z0-9._:-]/g, "").slice(0, 40) || "tool";
+  const hash = contentSha256.replace(/[^a-fA-F0-9]/g, "").slice(0, 64);
+  return clampKey(`prep-tool:${tool}:${hash || "empty"}`);
+}
+
 /** Fresh key for a prep-tool call (send as `x-idempotency-key`). */
 export function prepToolIdempotencyKey(toolId: string): string {
   const tool = toolId.replace(/[^A-Za-z0-9._:-]/g, "").slice(0, 40) || "tool";
@@ -29,6 +36,19 @@ export function prepToolIdempotencyKey(toolId: string): string {
 
 export function isValidClientIdempotencyKey(key: string): boolean {
   return KEY_RE.test(key);
+}
+
+/**
+ * Reuse the in-flight prep-tool key so concurrent/double-submit calls
+ * replay the same request instead of charging twice.
+ */
+export function nextPrepToolIdempotencyKey(
+  inflight: { current: string | null },
+  toolId: string,
+): string {
+  const key = inflight.current ?? prepToolIdempotencyKey(toolId);
+  inflight.current = key;
+  return key;
 }
 
 /** SHA-256 hex of file bytes (browser). */

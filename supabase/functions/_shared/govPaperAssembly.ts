@@ -12,9 +12,10 @@ import {
 } from "./govBlueprint.ts";
 import {
   conflictsWithSelected,
+  findNearDuplicatesInSet,
+  normalizeMcqOptions,
   questionFingerprint,
   resolveCorrectIndex,
-  findNearDuplicatesInSet,
 } from "./govMcqValidator.ts";
 import {
   MIN_BANK_QUESTION_QUALITY,
@@ -22,10 +23,11 @@ import {
   scoreQuestionQuality,
 } from "./govQualityScore.ts";
 import {
-  ENABLE_LLM_GENERATOR,
   runBankMultiAgentValidation,
   validatePaperSimilarity,
 } from "./govMultiAgentValidation.ts";
+import { examBankTypeKeys, mapExamType } from "./examTypeMap.ts";
+import { fillUntilCount, type GapFillRow } from "./govAiGapFill.ts";
 import { adaptiveSoftPriority } from "./masteryEngine.ts";
 import {
   claimPaperGenerationJob,
@@ -397,26 +399,33 @@ export async function assembleClaimedPaperJob(
       return { ok: false, status: "failed", errorCode: "LEASE_LOST", error: "Lost job lease", httpStatus: 409 };
     }
 
-    const legacy = exam.legacy_exam_type as string | null;
-    let qQuery = db
-      .from("questions")
-      .select(
-        "id, question_text, options, correct_answer, subject, topic, difficulty, source, source_year, is_public, is_verified",
-      )
-      .eq("is_public", true)
-      .eq("is_verified", true)
-      .limit(800);
+    const examTypeKeys = examBankTypeKeys({
+      code: exam.code as string | null,
+      name: exam.name as string | null,
+      legacy_exam_type: exam.legacy_exam_type as string | null,
+    });
+    const insertExamType =
+      (exam.legacy_exam_type as string | null) ||
+      mapExamType(String(exam.code ?? exam.name ?? ""));
 
-    if (legacy) {
-      qQuery = qQuery.eq("exam_type", legacy);
+    let bankRows: GapFillRow[] = [];
+    if (examTypeKeys.length > 0) {
+      const { data, error: bankErr } = await db
+        .from("questions")
+        .select(
+          "id, question_text, options, correct_answer, subject, topic, difficulty, source, source_year, is_public, is_verified",
+        )
+        .eq("is_public", true)
+        .eq("is_verified", true)
+        .in("exam_type", examTypeKeys)
+        .limit(800);
+      if (bankErr) {
+        throw new Error(bankErr.message);
+      }
+      bankRows = (data ?? []) as GapFillRow[];
     }
 
-    const { data: bankRows, error: bankErr } = await qQuery;
-    if (bankErr) {
-      throw new Error(bankErr.message);
-    }
-
-    let candidates = seededShuffle(bankRows ?? [], randomSeed);
+    let candidates = seededShuffle(bankRows, randomSeed);
 
     if (mode === "adaptive") {
       try {
@@ -460,23 +469,16 @@ export async function assembleClaimedPaperJob(
       return { ok: false, status: "failed", errorCode: "LEASE_LOST", error: "Lost job lease", httpStatus: 409 };
     }
 
-    if (ENABLE_LLM_GENERATOR) {
-      console.warn(
-        "[govPaperAssembly] ENABLE_LLM_GENERATOR is true but ignored; assembly stays bank-first.",
-      );
-    }
-
-    const selected: typeof candidates = [];
+    const selected: GapFillRow[] = [];
     const seenFp = new Set<string>();
     const rejectedQuality: Array<{ id: string; reason: string; score: number }> = [];
     const reviewQueue: unknown[] = [];
+    const aiQuestionIds = new Set<string>();
 
     for (const row of candidates) {
       if (selected.length >= blueprint.total_questions) break;
       const text = String(row.question_text ?? "");
-      const options = Array.isArray(row.options)
-        ? row.options.map((o: unknown) => String(o))
-        : [];
+      const options = normalizeMcqOptions(row.options);
       const correctIndex = resolveCorrectIndex(row.correct_answer, options.length);
       if (correctIndex == null) {
         rejectedQuality.push({
@@ -567,7 +569,57 @@ export async function assembleClaimedPaperJob(
       selected.push(...filtered);
     }
 
-    const requireExact = mode === "generated_mock" || mode === "official_previous";
+    const allowAiFill = mode !== "official_previous";
+    let aiFilledCount = 0;
+    let aiFillError: string | undefined;
+
+    if (allowAiFill && selected.length < blueprint.total_questions) {
+      st = await stage(db, job.id, workerId, "generating_questions");
+      if (st === "cancelled") {
+        return { ok: false, status: "cancelled", errorCode: "CANCELLED", error: "Cancelled" };
+      }
+      if (st === "lost_lease") {
+        return { ok: false, status: "failed", errorCode: "LEASE_LOST", error: "Lost job lease", httpStatus: 409 };
+      }
+
+      const subjects = [
+        ...new Set(
+          selected
+            .map((r) => String(r.subject ?? "").trim())
+            .filter(Boolean),
+        ),
+      ].slice(0, 8);
+      const topics = [
+        ...new Set(
+          selected
+            .map((r) => String(r.topic ?? "").trim())
+            .filter(Boolean),
+        ),
+      ].slice(0, 12);
+
+      const fill = await fillUntilCount({
+        db,
+        targetCount: blueprint.total_questions,
+        existing: selected,
+        examType: insertExamType,
+        subjects: subjects.length ? subjects : [String(exam.name ?? "General")],
+        topics,
+        marksPositive: blueprint.marks_per_question,
+        marksNegative: blueprint.negative_mark,
+        onBatch: async () => {
+          await heartbeatJobLease(db, job.id, workerId, 180_000);
+        },
+      });
+      aiFillError = fill.error;
+      for (const row of fill.added) {
+        if (selected.length >= blueprint.total_questions) break;
+        aiQuestionIds.add(row.id);
+        selected.push(row);
+      }
+      aiFilledCount = fill.added.length;
+    }
+
+    const requireExact = mode === "official_previous" || mode === "generated_mock";
 
     if (selected.length < blueprint.total_questions) {
       if (requireExact) {
@@ -576,8 +628,7 @@ export async function assembleClaimedPaperJob(
           job,
           workerId,
           "INSUFFICIENT_APPROVED_QUESTIONS",
-          `Need ${blueprint.total_questions} approved questions, found ${selected.length}. ` +
-            "Use custom_mock with a lower questionCount, or import more reviewed bank items.",
+          `Need ${blueprint.total_questions} approved previous-year style questions, found ${selected.length}.`,
           false,
         );
         return {
@@ -597,24 +648,32 @@ export async function assembleClaimedPaperJob(
           job,
           workerId,
           "INSUFFICIENT_APPROVED_QUESTIONS",
-          `Only ${selected.length} approved questions available.`,
+          `Only ${selected.length} questions after bank + AI fill${aiFillError ? ` (${aiFillError})` : ""}.`,
           false,
         );
         return {
           ok: false,
           status: "failed",
           errorCode: "INSUFFICIENT_APPROVED_QUESTIONS",
-          error: "Not enough approved questions for a practice set.",
+          error: aiFillError
+            ? `Not enough questions (${selected.length}). AI fill: ${aiFillError}`
+            : "Not enough questions for a practice set.",
           available: selected.length,
           httpStatus: 422,
         };
       }
       blueprint.total_questions = selected.length;
       blueprint.total_marks = selected.length * blueprint.marks_per_question;
-      blueprint.paper_class = "custom_practice";
+      blueprint.paper_class = aiFilledCount > 0 ? "ai_generated" : "custom_practice";
       blueprint.label =
-        "Custom Practice Set — assembled from available approved bank items. Not a full exam simulation.";
+        aiFilledCount > 0
+          ? `AI-assisted practice set (${selected.length} unique questions). Not an official or leaked examination paper.`
+          : "Custom Practice Set — assembled from available approved bank items. Not a full exam simulation.";
       blueprint.slots = blueprint.slots.slice(0, selected.length);
+    } else if (aiFilledCount > 0 && blueprint.paper_class !== "official_previous") {
+      blueprint.paper_class = "ai_generated";
+      blueprint.label =
+        "AI-generated practice paper based on the selected syllabus, pattern, and historical topic distribution. This is not an official or leaked examination paper.";
     }
 
     st = await stage(db, job.id, workerId, "assembling", { blueprint_json: blueprint });
@@ -629,15 +688,13 @@ export async function assembleClaimedPaperJob(
 
     const paperQuality = scorePaperQuality(
       selected.slice(0, blueprint.total_questions).map((row) => {
-        const options = Array.isArray(row.options)
-          ? row.options.map((o: unknown) => String(o))
-          : [];
+        const options = normalizeMcqOptions(row.options);
         return {
           question_text: String(row.question_text ?? ""),
           options,
           correct_index: resolveCorrectIndex(row.correct_answer, options.length) ?? 0,
           peers: [],
-          sourceConfidence: 0.8,
+          sourceConfidence: aiQuestionIds.has(row.id) ? 0.55 : 0.8,
         };
       }),
     );
@@ -695,7 +752,7 @@ export async function assembleClaimedPaperJob(
         negative_mark: blueprint.negative_mark,
         blueprint_json: blueprint,
         provenance_json: {
-          assembly: "bank_select_v1",
+          assembly: aiFilledCount > 0 ? "bank_plus_ai_fill_v1" : "bank_select_v1",
           seed: randomSeed,
           source_years: sourceYears,
           question_ids: questionIds,
@@ -703,9 +760,13 @@ export async function assembleClaimedPaperJob(
           quality_hard_fail_count: paperQuality.hardFailCount,
           rejected_quality_sample: rejectedQuality.slice(0, 20),
           review_queue: reviewQueue.slice(0, 50),
-          llm_generator: false,
+          llm_generator: aiFilledCount > 0,
+          ai_filled_count: aiFilledCount,
+          exam_type_keys: examTypeKeys,
           note:
-            "Assembled from approved public question bank; not an official paper. LLM fill disabled.",
+            aiFilledCount > 0
+              ? "Assembled from the approved public bank, then unique AI-generated MCQs filled remaining slots. Not an official paper."
+              : "Assembled from approved public question bank; not an official paper.",
         },
         quality_score: paperQuality.score,
         review_state: paperQuality.hardFailCount > 0 || reviewQueue.length > 0
@@ -726,7 +787,7 @@ export async function assembleClaimedPaperJob(
       question_id: qid,
       section_code: blueprint.slots[idx]?.section_code ?? null,
       sort_order: idx,
-      source_class: "bank" as const,
+      source_class: aiQuestionIds.has(qid) ? ("generated" as const) : ("bank" as const),
     }));
 
     if (linkRows.length) {

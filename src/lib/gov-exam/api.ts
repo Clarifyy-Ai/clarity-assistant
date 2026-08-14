@@ -98,7 +98,7 @@ export async function createExamPaper(
 ): Promise<PaperJobResult> {
   // Idempotency lives in the JSON body (create-exam-paper reads body.idempotencyKey).
   // Avoid custom headers here — x-idempotency-key is rejected by older edge CORS allowlists.
-  return fetchEdgeJson("create-exam-paper", body);
+  return fetchEdgeJson("create-exam-paper", body, { timeoutMs: 45_000 });
 }
 
 export async function getPaperGenerationJob(jobId: string): Promise<PaperJobResult> {
@@ -407,6 +407,6 @@ export async function generateTopicPractice(
       difficulty: params.difficulty ?? null,
       idempotencyKey,
     },
-    { headers: { "Idempotency-Key": idempotencyKey } },
+    { headers: { "Idempotency-Key": idempotencyKey }, timeoutMs: 180_000 },
   );
 }

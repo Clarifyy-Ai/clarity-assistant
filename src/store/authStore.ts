@@ -914,6 +914,7 @@ export const useAuthStore = create<AuthStore>()(
 
             const run = async (): Promise<boolean> => {
             const profileStartedAt = Date.now();
+            const correlationId = crypto.randomUUID();
             // Soft-fail recovery: tab focus / TOKEN_REFRESHED must not wipe a
             // working session when a transient profile refetch fails.
             const hadLoadedProfile =
@@ -923,6 +924,7 @@ export const useAuthStore = create<AuthStore>()(
             logger.info(LogEvents.AUTH_PROFILE_LOAD_STARTED, {
               operation: "profile.load",
               attempt: 1,
+              correlationId,
             });
 
             const fetchProfile = () =>
@@ -1045,6 +1047,10 @@ export const useAuthStore = create<AuthStore>()(
                 return false;
               }
 
+              if (get().user?.id !== userId) {
+                return false;
+              }
+
               profileCache = {
                 userId,
                 profile: profile as unknown as ProfileRow,
@@ -1052,6 +1058,7 @@ export const useAuthStore = create<AuthStore>()(
               };
 
               set((state) => {
+                if (get().user?.id !== userId) return;
                 state.profile = profile as unknown as ProfileRow;
                 state.isProfileLoaded = true;
                 if (state.status === "error") state.status = "authenticated";
@@ -1092,6 +1099,7 @@ export const useAuthStore = create<AuthStore>()(
                 operation: "profile.load",
                 durationMs: Date.now() - profileStartedAt,
                 outcome: "succeeded",
+                correlationId,
               });
               return true;
             } catch (err) {

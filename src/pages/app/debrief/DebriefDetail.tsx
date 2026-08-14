@@ -161,11 +161,18 @@ export default function DebriefDetail() {
   const handleShareToken = useCallback(async (token: string) => {
     if (!debrief?.id || !user?.id) return;
     await sessionDebriefsDB.updateShareToken(debrief.id, user.id, token);
+    if (debrief.session_id) {
+      try {
+        await scorecardsDB.markShared(debrief.session_id, token);
+      } catch {
+        /* debrief share still succeeds if scorecard row is missing */
+      }
+    }
     setDebrief((d: any) => ({
       ...d,
       detailed_report: { ...(d.detailed_report ?? {}), share_token: token, is_shared: true },
     }));
-  }, [debrief?.id, user?.id]);
+  }, [debrief?.id, debrief?.session_id, user?.id]);
 
   const debriefTitle = session?.session_type
     ? `${session.session_type.charAt(0).toUpperCase() + session.session_type.slice(1)} Interview`

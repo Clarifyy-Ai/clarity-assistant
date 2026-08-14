@@ -30,10 +30,15 @@ const EXAM_TYPE_MAP: Record<string, string> = {
   JEE_ADV:          "JEE Advanced",
   NEET:             "NEET UG",
   UPSC:             "UPSC CSE",
+  UPSC_CSE:         "UPSC CSE",
+  UPSC_CSE_PRELIMS: "UPSC CSE",
   SSC_CGL:          "SSC Exams (CGL/CHSL)",
+  SSC_CHSL:         "SSC Exams (CGL/CHSL)",
   IBPS_PO:          "Banking (IBPS/SBI/RBI)",
+  RRB_NTPC:         "GENERAL",
   HPCL_ENGINEER:    "HPCL Engineer",
   APPSC_GROUP:      "APPSC (Group 1/2/3/4)",
+  APPSC_GROUP2:     "APPSC (Group 1/2/3/4)",
   TSPSC_GROUP:      "TSPSC (Group 1/2/3/4)",
 
   // ── Passthrough (same in both tables) ─────────────────────────────────
@@ -48,7 +53,31 @@ const EXAM_TYPE_MAP: Record<string, string> = {
  */
 export function mapExamType(input: string): string {
   const trimmed = input.trim();
-  return EXAM_TYPE_MAP[trimmed] ?? trimmed;
+  if (!trimmed) return trimmed;
+  if (EXAM_TYPE_MAP[trimmed]) return EXAM_TYPE_MAP[trimmed];
+  const upper = trimmed.replace(/\s+/g, "_").toUpperCase();
+  return EXAM_TYPE_MAP[upper] ?? trimmed;
+}
+
+/**
+ * Distinct `questions.exam_type` values to query for a gov exam.
+ * Never fall back to the unfiltered global bank — that leaks the same 10–12
+ * items across every exam.
+ */
+export function examBankTypeKeys(exam: {
+  code?: string | null;
+  name?: string | null;
+  legacy_exam_type?: string | null;
+}): string[] {
+  const out = new Set<string>();
+  for (const raw of [exam.legacy_exam_type, exam.code, exam.name]) {
+    const t = String(raw ?? "").trim();
+    if (!t) continue;
+    out.add(t);
+    const mapped = mapExamType(t);
+    if (mapped) out.add(mapped);
+  }
+  return [...out];
 }
 
 // ── Reverse map: questions.exam_type  →  exam_papers.exam_type ───────────

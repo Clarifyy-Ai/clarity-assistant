@@ -37,7 +37,7 @@ Deno.serve(async (req: Request) => {
 
     /* ── ENV VALIDATION ────────────────────────────────────────────────── */
     const DEEPGRAM_API_KEY = Deno.env.get("DEEPGRAM_API_KEY");
-    const DEEPGRAM_PROJECT_ID = Deno.env.get("DEEPGRAM_PROJECT_ID");
+    let DEEPGRAM_PROJECT_ID = (Deno.env.get("DEEPGRAM_PROJECT_ID") ?? "").trim();
 
     if (!DEEPGRAM_API_KEY) {
       console.error("[deepgram-token] DEEPGRAM_API_KEY secret is not set");
@@ -48,7 +48,27 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!DEEPGRAM_PROJECT_ID) {
-      console.error("[deepgram-token] DEEPGRAM_PROJECT_ID secret is not set.");
+      try {
+        const listRes = await fetch("https://api.deepgram.com/v1/projects", {
+          headers: { Authorization: `Token ${DEEPGRAM_API_KEY}`, Accept: "application/json" },
+        });
+        const listText = await listRes.text();
+        if (listRes.ok) {
+          const parsed = JSON.parse(listText) as {
+            projects?: Array<{ project_id?: string; id?: string }>;
+          };
+          const first = parsed.projects?.[0];
+          DEEPGRAM_PROJECT_ID = (first?.project_id ?? first?.id ?? "").trim();
+        } else {
+          console.error("[deepgram-token] Deepgram project list failed:", listRes.status, listText.slice(0, 200));
+        }
+      } catch (listErr) {
+        console.error("[deepgram-token] Deepgram project lookup error:", listErr);
+      }
+    }
+
+    if (!DEEPGRAM_PROJECT_ID) {
+      console.error("[deepgram-token] DEEPGRAM_PROJECT_ID secret is not set and lookup failed.");
       return new Response(
         JSON.stringify({
           error: "Transcription service misconfigured. Contact support.",

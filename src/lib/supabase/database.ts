@@ -636,6 +636,20 @@ export const sessionAnswersDB = {
   ): Promise<void> {
     if (rows.length === 0) return;
 
+    const sessionIds = [...new Set(rows.map((row) => row.session_id).filter(Boolean))];
+    for (const sessionId of sessionIds) {
+      const { error: deleteError } = await supabase
+        .from("session_answers")
+        .delete()
+        .eq("session_id", sessionId);
+      if (deleteError) {
+        throw new DatabaseError(deleteError.message, ErrorCode.DB_QUERY_FAILED, {
+          table: "session_answers",
+          operation: "createMany.replace",
+        });
+      }
+    }
+
     const { error } = await supabase.from("session_answers").insert(
       rows as TablesInsert<"session_answers">[],
     );
@@ -904,6 +918,25 @@ export const resumesDB = {
     );
   },
 
+  async getByContentHash(
+    userId: string,
+    contentHash: string,
+  ): Promise<Tables<"resumes"> | null> {
+    const { data, error } = await supabase
+      .from("resumes")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("content_hash", contentHash)
+      .maybeSingle();
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "resumes",
+        operation: "getByContentHash",
+      });
+    }
+    return data;
+  },
+
   async update(id: string, updates: TablesUpdate<"resumes">): Promise<void> {
     const { error } = await supabase.from("resumes").update(updates).eq("id", id);
     if (error) {
@@ -1021,6 +1054,25 @@ export const jobDescriptionsDB = {
     );
   },
 
+  async getByContentHash(
+    userId: string,
+    contentHash: string,
+  ): Promise<Tables<"job_descriptions"> | null> {
+    const { data, error } = await supabase
+      .from("job_descriptions")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("content_hash", contentHash)
+      .maybeSingle();
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "job_descriptions",
+        operation: "getByContentHash",
+      });
+    }
+    return data;
+  },
+
   async update(id: string, updates: TablesUpdate<"job_descriptions">): Promise<void> {
     const { error } = await supabase.from("job_descriptions").update(updates).eq("id", id);
     if (error) {
@@ -1044,6 +1096,32 @@ export const jobDescriptionsDB = {
         operation: "delete",
       });
     }
+  },
+};
+
+// ─── Gap analyses (Resume ↔ JD, survives refresh) ─────────────────────────────
+
+export const gapAnalysesDB = {
+  async getBySources(
+    userId: string,
+    resumeId: string,
+    jdId: string,
+  ): Promise<Tables<"gap_analyses"> | null> {
+    const { data, error } = await supabase
+      .from("gap_analyses")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("resume_id", resumeId)
+      .eq("jd_id", jdId)
+      .maybeSingle();
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "gap_analyses",
+        operation: "getBySources",
+      });
+    }
+    return data;
   },
 };
 
@@ -2572,7 +2650,26 @@ export const scorecardsDB = {
   },
 
   async create(scorecard: Scorecard): Promise<void> {
-    const row = mapScorecardToInsert(scorecard);
+    const existing = scorecard.session_id
+      ? await this.getBySessionId(scorecard.session_id)
+      : null;
+    const row = mapScorecardToInsert({
+      ...scorecard,
+      id: existing?.id ?? scorecard.id,
+    });
+    if (existing) {
+      const { error } = await supabase
+        .from("scorecards")
+        .update(row as TablesUpdate<"scorecards">)
+        .eq("id", existing.id);
+      if (error) {
+        throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+          table: "scorecards",
+          operation: "create.update",
+        });
+      }
+      return;
+    }
     const { error } = await supabase
       .from("scorecards")
       .insert(row as TablesInsert<"scorecards">);

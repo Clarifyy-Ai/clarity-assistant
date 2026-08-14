@@ -11,6 +11,7 @@ import { useAuthStore } from "@/store/userStore";
 import { callGemini } from "@/lib/ai/geminiClient";
 import { generateId } from "@/lib/utils";
 import { getMimeType } from "@/lib/utils/fileUtils";
+import { sha256, sha256Buffer } from "@/lib/utils/hashUtils";
 import { toast } from "sonner";
 import type {
   ResumeDocument,
@@ -159,6 +160,15 @@ export function useDocuments(options?: UseDocumentsOptions) {
     docStore.setUploadProgress(0);
 
     try {
+      const contentHash = await sha256Buffer(await file.arrayBuffer());
+      const existing = await resumesDB.getByContentHash(user.id, contentHash);
+      if (existing) {
+        const { toast: notify } = await import("sonner");
+        notify.message("This file was already uploaded. Opening the existing document — no extra charge.");
+        await loadDocuments();
+        docStore.setActiveResumeId(existing.id);
+        return { resumeId: existing.id, error: null };
+      }
       const uploaded = await uploadFile(
         STORAGE_BUCKETS.RESUMES,
         path,
@@ -174,6 +184,7 @@ export function useDocuments(options?: UseDocumentsOptions) {
         file_path: path,
         url:       uploaded.url,
         content:   null,
+        content_hash: contentHash,
         is_primary: false,
       });
 
@@ -382,8 +393,21 @@ export function useDocuments(options?: UseDocumentsOptions) {
     if (!user) return { jdId: null, error: "Not authenticated" };
 
     const jdId = generateId();
+    const contentHash = params.rawText.trim()
+      ? await sha256(params.rawText.trim())
+      : null;
 
     try {
+      if (contentHash) {
+        const existing = await jobDescriptionsDB.getByContentHash(user.id, contentHash);
+        if (existing) {
+          const { toast: notify } = await import("sonner");
+          notify.message("This job description was already saved. Opening the existing document.");
+          await loadDocuments();
+          return { jdId: existing.id, error: null };
+        }
+      }
+
       await jobDescriptionsDB.create({
       id:           jdId,
       user_id:      user.id,
@@ -391,6 +415,7 @@ export function useDocuments(options?: UseDocumentsOptions) {
       target_role:  params.roleTitle ?? "Unknown Role",
       company:      params.company   ?? null,
       content:      params.rawText,
+      content_hash: contentHash,
       url:          params.fileUrl   ?? null,
       input_method: params.method,
       file_url:     params.fileUrl   ?? null,
@@ -409,6 +434,82 @@ export function useDocuments(options?: UseDocumentsOptions) {
     parseJobDescription(jdId, params.rawText);
     await loadDocuments();
     return { jdId, error: null };
+  }, [user]);
+
+  const addJobDescriptionFromFile = useCallback(async (params: {
+    file: File;
+    roleTitle?: string;
+    company?: string;
+  }): Promise<{ jdId: string | null; error: string | null }> => {
+    if (!user) return { jdId: null, error: "Not authenticated" };
+
+    const jdId = generateId();
+    const ext = (params.file.name.split(".").pop() ?? "pdf").toLowerCase();
+    const mimeType =
+      (params.file.type && params.file.type !== "application/octet-stream"
+        ? params.file.type
+        : getMimeType(params.file.name)) || "application/pdf";
+    const path = `${user.id}/job-descriptions/${jdId}.${ext}`;
+
+    try {
+      const contentHash = await sha256Buffer(await params.file.arrayBuffer());
+      const existing = await jobDescriptionsDB.getByContentHash(user.id, contentHash);
+      if (existing) {
+        toast.message("This job description was already saved. Opening the existing document.");
+        await loadDocuments();
+        return { jdId: existing.id, error: null };
+      }
+
+      await jobDescriptionsDB.create({
+        id: jdId,
+        user_id: user.id,
+        title: params.roleTitle ?? params.file.name.replace(/\.[^/.]+$/, "") ?? "Unknown Role",
+        target_role: params.roleTitle ?? "Unknown Role",
+        company: params.company ?? null,
+        content: `[Uploaded file: ${params.file.name}]`,
+        content_hash: contentHash,
+        input_method: "upload",
+        file_url: null,
+        is_active: true,
+        parse_status: "parsing",
+        parsed_data: null,
+        parse_error: null,
+      });
+
+      const uploaded = await uploadFile(STORAGE_BUCKETS.DOCUMENTS, path, params.file);
+      if (!uploaded) throw new Error("Upload failed");
+      await jobDescriptionsDB.update(jdId, { file_url: uploaded.url });
+
+      const parsed = await fetchEdgeJson<{ content?: string }>(
+        "parse-document",
+        { jd_id: jdId, mime_type: mimeType },
+        {
+          timeoutMs: 90_000,
+          headers: {
+            "x-idempotency-key": documentParseIdempotencyKey(
+              "parse-document",
+              jdId,
+              contentHash,
+            ),
+          },
+        },
+      );
+
+      const extracted = parsed.content?.trim() ?? "";
+      if (extracted.length >= 20) {
+        parseJobDescription(jdId, extracted);
+      }
+      await loadDocuments();
+      return { jdId, error: null };
+    } catch (err) {
+      return {
+        jdId,
+        error:
+          err instanceof Error
+            ? err.message
+            : "File uploaded but text extraction failed. Paste the job description text if needed.",
+      };
+    }
   }, [user]);
 
   // ── Parse JD via AI ───────────────────────────────────────────
@@ -579,6 +680,7 @@ ${rawText.slice(0, 4000)}`;
     setActiveResume,
 
     addJobDescription,
+    addJobDescriptionFromFile,
     setActiveJD:     docStore.setActiveJDId,
     runGapAnalysis,
 

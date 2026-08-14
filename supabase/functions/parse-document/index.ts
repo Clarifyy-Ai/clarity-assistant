@@ -15,13 +15,32 @@ const PARSE_DOCUMENT_COST = creditCost("parse_document");
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
-const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_MODEL = "gemini-2.5-flash";
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 function safeBase64(bytes: Uint8Array): string {
   let bin = "";
   for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
   return btoa(bin);
+}
+
+function bytesToUtf8(bytes: Uint8Array): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  } catch {
+    let s = "";
+    for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]!);
+    return s;
+  }
+}
+
+function looksBinary(bytes: Uint8Array): boolean {
+  const sample = bytes.subarray(0, Math.min(bytes.length, 2048));
+  let nul = 0;
+  for (let i = 0; i < sample.length; i++) {
+    if (sample[i] === 0) nul++;
+  }
+  return nul > 4;
 }
 
 async function extractWithGemini(
@@ -114,6 +133,144 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({ error: mimeCheck.reason, code: "BAD_REQUEST" }),
         { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+      );
+    }
+
+    const jdId = typeof body?.jd_id === "string" ? body.jd_id.trim() : "";
+    if (jdId) {
+      const { data: jd } = await db
+        .from("job_descriptions")
+        .select("id, user_id")
+        .eq("id", jdId)
+        .maybeSingle();
+
+      if (!jd || jd.user_id !== userId) {
+        return new Response(
+          JSON.stringify({ error: "Document not found", code: "FORBIDDEN" }),
+          { status: 403, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+        );
+      }
+
+      const storagePrefix = `${userId}/job-descriptions`;
+      const { data: objects, error: listError } = await db.storage
+        .from("documents")
+        .list(storagePrefix, { search: jdId, limit: 10 });
+
+      if (listError || !objects?.length) {
+        return new Response(
+          JSON.stringify({ error: "Document file not found in storage", code: "NOT_FOUND" }),
+          { status: 404, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+        );
+      }
+
+      const match = objects.find((obj) => obj.name.includes(jdId));
+      if (!match) {
+        return new Response(
+          JSON.stringify({ error: "Document file not found in storage", code: "NOT_FOUND" }),
+          { status: 404, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+        );
+      }
+
+      const filePath = `${storagePrefix}/${match.name}`;
+      const { data: fileData, error: downloadError } = await db.storage
+        .from("documents")
+        .download(filePath);
+
+      if (downloadError || !fileData) {
+        return new Response(
+          JSON.stringify({ error: "Failed to download file from storage", code: "SERVICE_UNAVAILABLE" }),
+          { status: 502, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+        );
+      }
+
+      const buf = await fileData.arrayBuffer();
+      if (!buf.byteLength || buf.byteLength > MAX_FILE_BYTES) {
+        return new Response(
+          JSON.stringify({ error: "File empty or too large", code: "BAD_REQUEST" }),
+          { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+        );
+      }
+
+      const creditResult = await deductCreditsAtomic({
+        userId,
+        action: "parse_document",
+        cost: PARSE_DOCUMENT_COST,
+        idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+      });
+      if (!creditResult.success) {
+        return new Response(
+          JSON.stringify({
+            error: "Insufficient credits.",
+            code: "INSUFFICIENT_CREDITS",
+            message: `Document parsing costs ${PARSE_DOCUMENT_COST} credits.`,
+          }),
+          {
+            status: 402,
+            headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+          },
+        );
+      }
+
+      const fileBytes = new Uint8Array(buf);
+      let extracted: { full_text: string; summary: string } | null = null;
+      if (mimeCheck.mimeType === "text/plain") {
+        if (looksBinary(fileBytes)) {
+          await refundCredits({
+            userId,
+            cost: PARSE_DOCUMENT_COST,
+            reason: "refund_parse_document_failed",
+          });
+          return new Response(
+            JSON.stringify({
+              error: "This file is not valid UTF-8 text.",
+              code: "UNSUPPORTED_ENCODING",
+            }),
+            { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+          );
+        }
+        const text = bytesToUtf8(fileBytes).replace(/^\uFEFF/, "").trim();
+        extracted = {
+          full_text: text.slice(0, 50000),
+          summary: text.slice(0, 400),
+        };
+      } else {
+        extracted = await extractWithGemini(
+          safeBase64(fileBytes),
+          mimeCheck.mimeType,
+          "job_description",
+        );
+      }
+
+      if (!extracted) {
+        await refundCredits({
+          userId,
+          cost: PARSE_DOCUMENT_COST,
+          reason: "refund_parse_document_failed",
+        });
+        return new Response(
+          JSON.stringify({ error: "Could not extract text from document", code: "INTERNAL_ERROR" }),
+          { status: 500, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+        );
+      }
+
+      await db
+        .from("job_descriptions")
+        .update({
+          content: extracted.full_text,
+          parse_status: "ready",
+          parse_error: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", jdId);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          content: extracted.full_text,
+          parsed_summary: extracted.summary,
+          content_length: extracted.full_text.length,
+        }),
+        { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
       );
     }
 
@@ -210,11 +367,50 @@ Deno.serve(async (req) => {
       );
     }
 
-    const extracted = await extractWithGemini(
-      safeBase64(new Uint8Array(buf)),
-      mimeCheck.mimeType,
-      doc.type ?? "other"
-    );
+    const fileBytes = new Uint8Array(buf);
+    let extracted: { full_text: string; summary: string } | null = null;
+
+    if (mimeCheck.mimeType === "text/plain") {
+      if (looksBinary(fileBytes)) {
+        await refundCredits({
+          userId,
+          cost: PARSE_DOCUMENT_COST,
+          reason: "refund_parse_document_failed",
+        });
+        return new Response(
+          JSON.stringify({
+            error: "This file is not valid UTF-8 text.",
+            code: "UNSUPPORTED_ENCODING",
+          }),
+          { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+        );
+      }
+      const text = bytesToUtf8(fileBytes).replace(/^\uFEFF/, "").trim();
+      if (text.length < 20) {
+        await refundCredits({
+          userId,
+          cost: PARSE_DOCUMENT_COST,
+          reason: "refund_parse_document_failed",
+        });
+        return new Response(
+          JSON.stringify({
+            error: "Text file is empty or too short to parse.",
+            code: "BAD_REQUEST",
+          }),
+          { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+        );
+      }
+      extracted = {
+        full_text: text.slice(0, 50000),
+        summary: text.slice(0, 400),
+      };
+    } else {
+      extracted = await extractWithGemini(
+        safeBase64(fileBytes),
+        mimeCheck.mimeType,
+        doc.type ?? "other",
+      );
+    }
 
     if (!extracted) {
       await refundCredits({
@@ -240,12 +436,14 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
+        content: extracted.full_text,
         parsed_summary: extracted.summary,
         content_length: extracted.full_text.length,
       }),
       { headers: getCorsHeaders(req) }
     );
   } catch (err) {
+    if (err instanceof Response) return err;
     console.error("[parse-document]", err);
     return new Response(
       JSON.stringify({ error: "Internal error", code: "INTERNAL_ERROR" }),

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
   clampPreferredModel,
   hasProModelAccess,
@@ -6,6 +6,10 @@ import {
   isModelAvailableForPlan,
   normalizePreferredModel,
 } from "@/lib/ai/modelOptions";
+import {
+  getModelLockReason,
+  resetProviderFlagsForTests,
+} from "@/lib/ai/providerAvailability";
 
 describe("modelOptions plan gating", () => {
   it("marks GPT/Claude as Pro-only and Gemini as free", () => {
@@ -33,5 +37,26 @@ describe("modelOptions plan gating", () => {
   it("normalizes legacy Gemini Pro aliases", () => {
     expect(normalizePreferredModel("gemini-1-5-pro")).toBe("gemini-pro");
     expect(normalizePreferredModel("gemini-1.5-pro")).toBe("gemini-pro");
+  });
+});
+
+describe("model provider availability", () => {
+  beforeEach(() => {
+    resetProviderFlagsForTests({
+      gemini: true,
+      openai: false,
+      anthropic: false,
+      deepgram: true,
+    });
+  });
+
+  it("marks GPT as unavailable when the OpenAI key is down", () => {
+    expect(getModelLockReason("gpt-4o", "pro")).toBe("provider");
+    expect(getModelLockReason("gemini-flash", "pro")).toBeNull();
+  });
+
+  it("still plan-locks GPT on free even if the provider is up", () => {
+    resetProviderFlagsForTests({ gemini: true, openai: true, anthropic: true, deepgram: true });
+    expect(getModelLockReason("gpt-4o", "free")).toBe("plan");
   });
 });

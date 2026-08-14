@@ -76,6 +76,14 @@ qa-audit-results/
 Thumbs.db
 
 # =========================
+# 🧪 QA artifacts (may contain plaintext passwords)
+# =========================
+.env.qa.local
+Clarify_AI_QA_Checklist_Basic*.xlsx
+Clarify_AI_QA_Checklist_Basic*.xls
+Clarify_AI_*.xlsx
+
+# =========================
 # 📝 Misc
 # =========================
 *.local

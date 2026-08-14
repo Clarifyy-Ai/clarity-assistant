@@ -972,13 +972,23 @@ function JDManager() {
       let fileUrl: string | undefined = jdMode === "url" ? jdUrl : undefined;
 
       if (jdMode === "upload" && jdFile) {
-        if (jdFile.name.toLowerCase().endsWith(".txt") || jdFile.type === "text/plain") {
+        const isTxt =
+          jdFile.name.toLowerCase().endsWith(".txt") || jdFile.type === "text/plain";
+        if (isTxt) {
           rawText = text.trim() || (await jdFile.text());
         } else {
-          // PDF/DOCX: store a placeholder; user can paste full text later if needed.
-          rawText =
-            text.trim() ||
-            `[Uploaded file: ${jdFile.name}]\n\nPaste the job description text here after upload if automatic extraction is unavailable.`;
+          const { error } = await docMgr.addJobDescriptionFromFile({
+            file: jdFile,
+            roleTitle: title,
+            company,
+          });
+          if (error) toast.error(error);
+          else {
+            toast.success("Job description saved.");
+            setAddOpen(false);
+            setTitle(""); setCompany(""); setText(""); setJdUrl(""); setJdFile(null); setJdMode("paste");
+          }
+          return;
         }
         method = "upload";
       } else if (jdMode === "url") {

@@ -52,7 +52,7 @@ export async function launchMockTest(
     ai_generated_count?: number;
     gap_fill_failed?: boolean;
     error?: string;
-  }>("select-test-questions", { config: normalizedConfig });
+  }>("select-test-questions", { config: normalizedConfig }, { timeoutMs: 180_000 });
 
   if (selectData.error && (!selectData.question_ids || selectData.question_ids.length === 0)) {
     const msg = selectData.error.includes("Pro plan") || selectData.error.includes("upgrade")
@@ -72,9 +72,13 @@ export async function launchMockTest(
     throw new Error(`No questions available for this paper. ${hint}`);
   }
 
-  if (!config.practice_mode && questionIds.length !== config.question_count) {
+  if (
+    !config.practice_mode &&
+    questionIds.length !== config.question_count &&
+    questionIds.length < Math.min(20, config.question_count)
+  ) {
     throw new Error(
-      `Only ${questionIds.length} of ${config.question_count} approved questions are available. Start a Custom Practice Set instead of a full mock.`,
+      `Only ${questionIds.length} of ${config.question_count} questions could be prepared. Try again — generation can take a minute when the bank is short.`,
     );
   }
 

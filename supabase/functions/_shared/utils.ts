@@ -6,6 +6,7 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCors as _handleCorsFn } from "./cors.ts";
 import { deductCreditsAtomic, refundCredits } from "./supabase.ts";
+import { isBillingPastDue, isPastDueAllowedPath } from "./billingPastDue.ts";
 
 import type {
   AuthContext, EdgeSuccess,
@@ -24,7 +25,7 @@ function safeCorsHeaders(req?: Request): Record<string, string> {
   return {
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type, x-app-name, x-app-version, x-csrf-token, idempotency-key, x-idempotency-key",
+      "authorization, x-client-info, apikey, content-type, x-app-name, x-app-version, x-csrf-token, idempotency-key, x-idempotency-key, x-request-id, x-correlation-id",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
   };
@@ -104,7 +105,7 @@ export async function requireAuth(req: Request): Promise<AuthContext> {
 
   const { data: profile, error: profileError } = await admin
     .from("profiles")
-    .select("plan_id, credits, is_banned")
+    .select("plan_id, credits, is_banned, subscription_status, payment_failed_at")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -123,6 +124,21 @@ export async function requireAuth(req: Request): Promise<AuthContext> {
     throw errorResponse(
       "Account suspended. Contact support.",
       "ACCOUNT_BANNED",
+      403,
+      req
+    );
+  }
+
+  if (
+    !isPastDueAllowedPath(req) &&
+    isBillingPastDue(profile as {
+      subscription_status?: string | null;
+      payment_failed_at?: string | null;
+    })
+  ) {
+    throw errorResponse(
+      "Payment failed. Update your payment method to keep using AI features.",
+      "BILLING_PAST_DUE",
       403,
       req
     );

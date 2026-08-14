@@ -10,7 +10,8 @@ const DEFAULT_MODEL = "gemini-2.5-flash";
 const APP_TO_API: Record<string, string> = {
   "gemini-flash": "gemini-2.5-flash",
   "gemini-pro": "gemini-2.5-flash",
-  "gemini-2.0-flash": "gemini-2.0-flash",
+  "gemini-2.0-flash": "gemini-2.5-flash",
+  "gemini-2.0-flash-lite": "gemini-2.5-flash",
   "gemini-2.5-flash": "gemini-2.5-flash",
   "gemini-flash-latest": "gemini-flash-latest",
   "gemini-1.5-pro": "gemini-2.5-flash",
@@ -103,7 +104,6 @@ export function getFallbackModels(primary: string): string[] {
   const chain = [primary];
   if (primary !== "gemini-2.5-flash") chain.push("gemini-2.5-flash");
   if (primary !== "gemini-flash-latest") chain.push("gemini-flash-latest");
-  if (primary !== "gemini-2.0-flash") chain.push("gemini-2.0-flash");
   // When Gemini quota is exhausted (429), fail over to OpenAI/Anthropic if configured.
   if ((Deno.env.get("OPENAI_API_KEY") ?? "").trim()) {
     chain.push("gpt-4o-mini");

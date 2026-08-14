@@ -15,6 +15,7 @@ import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { installOverlayGhostClickGuard } from "@/lib/overlay/ghostClickGuard";
 import { resizeDesktopOverlayWindow } from "@/lib/platform/electronWindowManager";
 import { isElectronApp } from "@/lib/platform/isElectron";
+import { refreshProviderAvailability } from "@/lib/ai/providerAvailability";
 import {
   applyLayoutModeToDesktop,
   layoutModeDimensions,
@@ -162,6 +163,10 @@ export function OverlayWindow({
 
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => setIsMounted(true), []);
+
+  useEffect(() => {
+    void refreshProviderAvailability();
+  }, []);
 
   useEffect(() => installOverlayGhostClickGuard(), []);
 

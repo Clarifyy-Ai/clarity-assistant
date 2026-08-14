@@ -38,7 +38,7 @@ import type { AnalyticsPeriod } from "@/types/analytics.types";
 import { cn } from "@/lib/utils";
 import { format, subDays } from "date-fns";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
-import { formatSessionScore } from "@/lib/analytics/scoreStatus";
+import { formatAggregateScore, formatSessionScore } from "@/lib/analytics/scoreStatus";
 
 // ─────────────────────────────────────────────────────────────────
 // Analytics — progress trends, filler analysis, category scores
@@ -173,7 +173,7 @@ export default function Analytics() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <KPICard
           label={`Avg score (${analytics.filter.period})`}
-          value={`${analytics.avgScore30d ?? 0}`}
+          value={formatAggregateScore(analytics.avgScore30d)}
           delta={analytics.scoreDelta}
           icon={<BarChart2 className="w-4 h-4 text-primary" />}
         />

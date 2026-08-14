@@ -19,6 +19,7 @@ import {
 import { seededShuffle } from "../_shared/govBlueprint.ts";
 import {
   conflictsWithSelected,
+  normalizeMcqOptions,
   questionFingerprint,
   resolveCorrectIndex,
 } from "../_shared/govMcqValidator.ts";
@@ -27,21 +28,25 @@ import {
   scoreQuestionQuality,
 } from "../_shared/govQualityScore.ts";
 import { filterQuestionsByTopics } from "../_shared/govTopicFilter.ts";
+import { examBankTypeKeys, mapExamType } from "../_shared/examTypeMap.ts";
+import { fillUntilCount, type GapFillRow } from "../_shared/govAiGapFill.ts";
 
 const COST = creditCost("create_mock_test");
 
-function customPracticeLabel(count: number, requested: number, topics: string[]): string {
+function customPracticeLabel(count: number, requested: number, topics: string[], aiFilled = 0): string {
   const topicHint =
     topics.length <= 3
       ? topics.join(", ")
       : `${topics.slice(0, 3).join(", ")} (+${topics.length - 3} more)`;
-  const shrinkNote =
-    count < requested
-      ? ` Assembled ${count} of ${requested} requested from available approved bank items.`
-      : " Assembled from available approved bank items.";
+  const fillNote =
+    aiFilled > 0
+      ? ` Bank plus ${aiFilled} unique AI-generated questions.`
+      : count < requested
+        ? ` Assembled ${count} of ${requested} requested from available approved bank items.`
+        : " Assembled from available approved bank items.";
   return (
     `Custom Practice Set (${count} questions) — topic-focused (${topicHint}).` +
-    shrinkNote +
+    fillNote +
     " Not a full official exam simulation."
   );
 }
@@ -118,7 +123,7 @@ Deno.serve(async (req) => {
 
     const questionCountRaw = Number(b.questionCount);
     const questionCount = Number.isFinite(questionCountRaw)
-      ? Math.min(50, Math.max(5, Math.floor(questionCountRaw)))
+      ? Math.min(100, Math.max(5, Math.floor(questionCountRaw)))
       : 10;
 
     const language = String(b.language ?? "en").trim().slice(0, 8) || "en";
@@ -256,38 +261,45 @@ Deno.serve(async (req) => {
     const jobId = job.id as string;
 
     try {
-      const legacy = exam.legacy_exam_type as string | null;
-      let qQuery = db
-        .from("questions")
-        .select(
-          "id, question_text, options, correct_answer, subject, topic, difficulty, source, source_year, is_public, is_verified",
-        )
-        .eq("is_public", true)
-        .eq("is_verified", true)
-        .limit(800);
+      const examTypeKeys = examBankTypeKeys({
+        code: exam.code as string | null,
+        name: exam.name as string | null,
+        legacy_exam_type: exam.legacy_exam_type as string | null,
+      });
+      const insertExamType =
+        (exam.legacy_exam_type as string | null) ||
+        mapExamType(String(exam.code ?? exam.name ?? ""));
 
-      if (legacy) {
-        qQuery = qQuery.eq("exam_type", legacy);
+      let bankRows: GapFillRow[] = [];
+      if (examTypeKeys.length > 0) {
+        let qQuery = db
+          .from("questions")
+          .select(
+            "id, question_text, options, correct_answer, subject, topic, difficulty, source, source_year, is_public, is_verified",
+          )
+          .eq("is_public", true)
+          .eq("is_verified", true)
+          .in("exam_type", examTypeKeys)
+          .limit(800);
+        if (difficulty) {
+          qQuery = qQuery.eq("difficulty", difficulty);
+        }
+        const { data, error: bankErr } = await qQuery;
+        if (bankErr) throw new Error(bankErr.message);
+        bankRows = (data ?? []) as GapFillRow[];
       }
-      if (difficulty) {
-        qQuery = qQuery.eq("difficulty", difficulty);
-      }
 
-      const { data: bankRows, error: bankErr } = await qQuery;
-      if (bankErr) throw new Error(bankErr.message);
-
-      // Match subject OR topic (normalized); prefer smaller labeled set over hard fail.
-      const topicMatched = filterQuestionsByTopics(bankRows ?? [], topics);
+      // Match subject OR topic (normalized); AI-fill remaining unique items.
+      const topicMatched = filterQuestionsByTopics(bankRows, topics);
       const candidates = seededShuffle(topicMatched, randomSeed);
-      const selected: typeof candidates = [];
+      const selected: GapFillRow[] = [];
       const seenFp = new Set<string>();
+      const aiQuestionIds = new Set<string>();
 
       for (const row of candidates) {
         if (selected.length >= questionCount) break;
         const text = String(row.question_text ?? "");
-        const options = Array.isArray(row.options)
-          ? row.options.map((o: unknown) => String(o))
-          : [];
+        const options = normalizeMcqOptions(row.options);
         const correctIndex = resolveCorrectIndex(row.correct_answer, options.length);
         if (correctIndex == null) continue;
 
@@ -310,6 +322,24 @@ Deno.serve(async (req) => {
         selected.push(row);
       }
 
+      if (selected.length < questionCount) {
+        const fill = await fillUntilCount({
+          db,
+          targetCount: questionCount,
+          existing: selected,
+          examType: insertExamType,
+          subjects: topics.slice(0, 4),
+          topics,
+          marksPositive: marksPerQ,
+          marksNegative: negativeMark,
+        });
+        for (const row of fill.added) {
+          if (selected.length >= questionCount) break;
+          aiQuestionIds.add(row.id);
+          selected.push(row);
+        }
+      }
+
       if (selected.length < 5) {
         await db
           .from("gov_paper_generation_jobs")
@@ -317,7 +347,7 @@ Deno.serve(async (req) => {
             status: "failed",
             progress_stage: "failed",
             error_code: "INSUFFICIENT_APPROVED_QUESTIONS",
-            error_message: `Only ${selected.length} topic-matched questions available.`,
+            error_message: `Only ${selected.length} topic-matched questions after bank + AI fill.`,
             completed_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           })
@@ -333,7 +363,7 @@ Deno.serve(async (req) => {
           jobId,
           status: "failed",
           errorCode: "INSUFFICIENT_APPROVED_QUESTIONS",
-          error: `Not enough approved questions for topics (found ${selected.length}).`,
+          error: `Not enough questions for topics (found ${selected.length}). Generation may need a retry.`,
           available: selected.length,
           required: Math.min(5, questionCount),
           paperClass: "custom_practice",
@@ -343,7 +373,9 @@ Deno.serve(async (req) => {
       const finalCount = Math.min(selected.length, questionCount);
       const questionIds = selected.slice(0, finalCount).map((q) => q.id);
       const totalMarks = finalCount * marksPerQ;
-      const disclaimer = customPracticeLabel(finalCount, questionCount, topics);
+      const aiFilled = questionIds.filter((id) => aiQuestionIds.has(id)).length;
+      const paperClass = aiFilled > 0 ? "ai_generated" : "custom_practice";
+      const disclaimer = customPracticeLabel(finalCount, questionCount, topics, aiFilled);
       durationMinutes = Math.max(
         5,
         Math.round((durationMinutes / Math.max(1, questionCount)) * finalCount),
@@ -353,14 +385,14 @@ Deno.serve(async (req) => {
         .from("mock_tests")
         .insert({
           user_id: user.id,
-          test_name: `${exam.name} · Custom Practice Set`,
+          test_name: `${exam.name} · ${aiFilled > 0 ? "Topic practice" : "Custom Practice Set"}`,
           question_ids: questionIds,
           time_limit_minutes: durationMinutes,
           config: {
             exam_type: exam.code,
             gov_exam_id: examId,
             gov_stage_id: stageId,
-            paper_class: "custom_practice",
+            paper_class: paperClass,
             marks_positive: marksPerQ,
             marks_negative: negativeMark,
             duration_minutes: durationMinutes,
@@ -369,7 +401,7 @@ Deno.serve(async (req) => {
             difficulty,
             disclaimer,
             generation_job_id: jobId,
-            label: "Custom Practice Set",
+            label: aiFilled > 0 ? "AI-assisted topic practice" : "Custom Practice Set",
             shuffle_questions: false,
             shuffle_options: false,
           },
@@ -390,8 +422,8 @@ Deno.serve(async (req) => {
           pattern_version_id: patternId,
           job_id: jobId,
           created_by: user.id,
-          title: `${exam.name} · Custom Practice Set`,
-          paper_class: "custom_practice",
+          title: `${exam.name} · ${aiFilled > 0 ? "Topic practice" : "Custom Practice Set"}`,
+          paper_class: paperClass,
           language,
           question_count: questionIds.length,
           total_marks: totalMarks,
@@ -402,16 +434,17 @@ Deno.serve(async (req) => {
             questionCount: finalCount,
             requestedQuestionCount: questionCount,
             difficulty,
-            paper_class: "custom_practice",
+            paper_class: paperClass,
             label: disclaimer,
           },
           provenance_json: {
-            assembly: "topic_practice_v1",
+            assembly: "topic_practice_v2",
             seed: randomSeed,
             topics,
             difficulty,
             question_ids: questionIds,
             shrunk: finalCount < questionCount,
+            ai_filled_count: aiFilled,
           },
           review_state: "machine_validated",
           disclaimer,
@@ -429,7 +462,7 @@ Deno.serve(async (req) => {
         question_id: qid,
         section_code: null,
         sort_order: idx,
-        source_class: "bank" as const,
+        source_class: aiQuestionIds.has(qid) ? ("generated" as const) : ("bank" as const),
       }));
       if (linkRows.length) {
         await db.from("gov_generated_paper_questions").insert(linkRows);
@@ -461,8 +494,8 @@ Deno.serve(async (req) => {
         mockTestId: mockTest.id,
         paperId: paper.id,
         questionCount: questionIds.length,
-        paperClass: "custom_practice",
-        label: "Custom Practice Set",
+        paperClass,
+        label: aiFilled > 0 ? "AI-assisted topic practice" : "Custom Practice Set",
         disclaimer,
         topics,
         creditsCharged: COST,

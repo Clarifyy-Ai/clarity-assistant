@@ -14,19 +14,29 @@ import {
   normalizePreferredModel,
   toDbPreferredModel,
 } from "@/lib/ai/modelOptions";
-import { normalizeToDisplayTier } from "@/lib/constants/pricing";
+import {
+  getModelLockReason,
+  providerForModel,
+  providerUnavailableReason,
+  refreshProviderAvailability,
+  useProviderFlags,
+} from "@/lib/ai/providerAvailability";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 
 export default function SettingsModels() {
   const profile = useAuthStore((s) => s.profile);
   const planId = useAuthStore((s) => s.planId);
   const setProfile = useAuthStore((s) => s.setProfile);
-  const isPro = normalizeToDisplayTier(planId) !== "free";
 
   const [selected, setSelected] = useState<PreferredAIModel>(
     normalizePreferredModel(profile?.preferred_model)
   );
   const [saving, setSaving] = useState(false);
+
+  useProviderFlags();
+  useEffect(() => {
+    void refreshProviderAvailability();
+  }, []);
 
   useEffect(() => {
     if (profile?.preferred_model) {
@@ -36,8 +46,12 @@ export default function SettingsModels() {
 
   async function handleSave() {
     if (!profile?.id) return;
-    if (!isPro && !MODEL_OPTIONS.find((m) => m.value === selected)?.free) {
+    if (getModelLockReason(selected, planId) === "plan") {
       toast.error("Upgrade to Pro to use GPT-4o and Claude.");
+      return;
+    }
+    if (getModelLockReason(selected, planId) === "provider") {
+      toast.error(providerUnavailableReason(providerForModel(selected)));
       return;
     }
     setSaving(true);
@@ -81,14 +95,23 @@ export default function SettingsModels() {
 
         <div className="space-y-2">
           {MODEL_OPTIONS.map((m) => {
-            const locked = !m.free && !isPro;
+            const lock = getModelLockReason(m.value, planId);
+            const locked = lock !== null;
             return (
               <button
                 key={m.value}
                 type="button"
                 disabled={locked}
                 onClick={() => {
-                  if (!locked) setSelected(m.value);
+                  if (lock === "plan") {
+                    toast.error("Upgrade to Pro to use GPT-4o and Claude.");
+                    return;
+                  }
+                  if (lock === "provider") {
+                    toast.error(providerUnavailableReason(providerForModel(m.value)));
+                    return;
+                  }
+                  setSelected(m.value);
                 }}
                 className={cn(
                   "w-full text-left rounded-xl border p-3 transition-all",
@@ -101,7 +124,9 @@ export default function SettingsModels() {
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-sm font-semibold text-foreground">{m.label}</span>
                   <Badge variant="secondary" size="sm" className="gap-1">
-                    {locked ? (
+                    {lock === "provider" ? (
+                      "Unavailable"
+                    ) : lock === "plan" ? (
                       <>
                         <Lock className="w-3 h-3" /> Pro
                       </>

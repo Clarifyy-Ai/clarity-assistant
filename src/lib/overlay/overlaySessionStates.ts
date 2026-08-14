@@ -26,13 +26,19 @@ export type OverlaySessionState =
 
 const TRANSITIONS: Record<OverlaySessionState, readonly OverlaySessionState[]> = {
   idle: ["connecting", "permission_denied"],
-  connecting: ["listening", "permission_denied", "audio_unavailable", "backend_unavailable", "idle"],
+    connecting: ["listening", "generating_guidance", "permission_denied", "audio_unavailable", "backend_unavailable", "idle"],
   listening: [
     "speech_detected",
+    "question_detected",
+    "generating_guidance",
     "paused",
     "reconnecting",
     "permission_denied",
     "audio_unavailable",
+    "backend_unavailable",
+    "ai_provider_unavailable",
+    "rate_limited",
+    "insufficient_credits",
     "session_ending",
   ],
   speech_detected: ["transcribing", "listening", "paused", "session_ending"],
@@ -86,11 +92,22 @@ const TRANSITIONS: Record<OverlaySessionState, readonly OverlaySessionState[]> =
   session_saved: ["idle"],
 };
 
+const FAILURE_STATES: readonly OverlaySessionState[] = [
+  "rate_limited",
+  "insufficient_credits",
+  "permission_denied",
+  "audio_unavailable",
+  "backend_unavailable",
+  "ai_provider_unavailable",
+];
+
 export function canTransition(
   from: OverlaySessionState,
   to: OverlaySessionState,
 ): boolean {
   if (from === to) return true;
+  // Failures must always be visible — do not swallow API / audio errors.
+  if (FAILURE_STATES.includes(to) && from !== "session_saved") return true;
   return TRANSITIONS[from]?.includes(to) ?? false;
 }
 
@@ -131,8 +148,8 @@ export function overlayStateRecovery(state: OverlaySessionState): string {
   const recovery: Partial<Record<OverlaySessionState, string>> = {
     permission_denied: "Allow microphone access in system settings, then retry.",
     audio_unavailable: "Check your audio device and try again.",
-    backend_unavailable: "Check your connection, then resume the session.",
-    ai_provider_unavailable: "Retry guidance generation in a moment.",
+    backend_unavailable: "The AI request did not go through. Check your connection, then retry.",
+    ai_provider_unavailable: "This AI model is unavailable. Switch to Gemini Flash or retry.",
     rate_limited: "Wait briefly, then request guidance again.",
     insufficient_credits: "Add credits or choose a plan, then continue practice.",
     reconnecting: "Stay on this screen; capture will resume when connected.",

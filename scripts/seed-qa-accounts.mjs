@@ -176,8 +176,57 @@ function loadEnvFile(filePath) {
   return out;
 }
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function withAuthRetry(label, fn, attempts = 4) {
+  let last;
+  for (let i = 0; i < attempts; i += 1) {
+    const result = await fn();
+    last = result;
+    const err = result?.error;
+    const retryable =
+      err?.name === "AuthRetryableFetchError" ||
+      err?.status === 500 ||
+      err?.status === 502 ||
+      err?.status === 503;
+    if (!err || !retryable) return result;
+    await sleep(400 * (i + 1));
+  }
+  throw last?.error ?? new Error(`${label} failed`);
+}
+
 function genPassword() {
   return `Qa!${crypto.randomBytes(12).toString("base64url")}`;
+}
+
+function loadExistingQaPasswords() {
+  const filePath = path.join(root, ".env.qa.local");
+  /** @type {Record<string, string>} */
+  const map = {};
+  if (!fs.existsSync(filePath)) return map;
+  for (const line of fs.readFileSync(filePath, "utf8").split(/\r?\n/)) {
+    const match = line.match(/^QA_([A-Z0-9_]+)_PASSWORD=(.*)$/);
+    if (!match) continue;
+    let value = match[2];
+    if (value.startsWith("\"")) {
+      try {
+        value = JSON.parse(value);
+      } catch {
+        // keep raw
+      }
+    }
+    map[match[1]] = String(value);
+  }
+  return map;
+}
+
+function passwordFor(account, existing) {
+  const fromEnv = process.env[`QA_${account.key}_PASSWORD`];
+  if (typeof fromEnv === "string" && fromEnv.trim()) return fromEnv.trim();
+  if (existing[account.key]) return existing[account.key];
+  return genPassword();
 }
 
 function escapeEnv(value) {
@@ -185,28 +234,41 @@ function escapeEnv(value) {
   return value;
 }
 
+async function findUserByEmail(admin, email) {
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
+  if (profile?.id) {
+    const byId = await admin.auth.admin.getUserById(profile.id);
+    if (!byId.error && byId.data?.user) return byId.data.user;
+  }
+  return null;
+}
+
 async function upsertAccount(admin, account, password) {
-  const list = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  if (list.error) throw list.error;
-  let user = (list.data?.users ?? []).find(
-    (u) => (u.email ?? "").toLowerCase() === account.email.toLowerCase(),
-  );
+  let user = await findUserByEmail(admin, account.email);
 
   if (user) {
-    const updated = await admin.auth.admin.updateUserById(user.id, {
-      password,
-      email_confirm: account.emailConfirm !== false,
-      user_metadata: { full_name: account.fullName, qa_seed: true },
-    });
+    const updated = await withAuthRetry("updateUserById", () =>
+      admin.auth.admin.updateUserById(user.id, {
+        password,
+        email_confirm: account.emailConfirm !== false,
+        user_metadata: { full_name: account.fullName, qa_seed: true },
+      }),
+    );
     if (updated.error) throw updated.error;
     user = updated.data.user;
   } else {
-    const created = await admin.auth.admin.createUser({
-      email: account.email,
-      password,
-      email_confirm: account.emailConfirm !== false,
-      user_metadata: { full_name: account.fullName, qa_seed: true },
-    });
+    const created = await withAuthRetry("createUser", () =>
+      admin.auth.admin.createUser({
+        email: account.email,
+        password,
+        email_confirm: account.emailConfirm !== false,
+        user_metadata: { full_name: account.fullName, qa_seed: true },
+      }),
+    );
     if (created.error) throw created.error;
     user = created.data.user;
   }
@@ -295,8 +357,10 @@ async function main() {
 
   console.log(`Seeding ${QA_ACCOUNTS.length} QA accounts → ${url}`);
 
+  const existingPasswords = loadExistingQaPasswords();
+
   for (const account of QA_ACCOUNTS) {
-    const password = genPassword();
+    const password = passwordFor(account, existingPasswords);
     const userId = await upsertAccount(admin, account, password);
     outLines.push(`QA_${account.key}_EMAIL=${account.email}`);
     outLines.push(`QA_${account.key}_PASSWORD=${escapeEnv(password)}`);
@@ -315,6 +379,10 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error("seed-qa-accounts failed:", err?.message || err);
+  const message =
+    err?.message && err.message !== "{}"
+      ? err.message
+      : err?.code || err?.name || JSON.stringify(err);
+  console.error("seed-qa-accounts failed:", message);
   process.exit(1);
 });

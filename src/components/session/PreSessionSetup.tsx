@@ -17,9 +17,15 @@ import { CreditExhaustedState, useCreditExhaustedState } from "@/components/bill
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import {
   clampPreferredModel,
-  isModelAvailableForPlan,
   MODEL_OPTIONS as CANONICAL_MODEL_OPTIONS,
 } from "@/lib/ai/modelOptions";
+import {
+  getModelLockReason,
+  providerForModel,
+  providerUnavailableReason,
+  refreshProviderAvailability,
+  useProviderFlags,
+} from "@/lib/ai/providerAvailability";
 import { useUIStore } from "@/store/uiStore";
 import { toast } from "sonner";
 
@@ -52,6 +58,10 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
   const activeJdId     = useDocumentStore((s) => s.active_jd_id);
 
   const typedProfile = profile as unknown as UserProfile | null;
+  useProviderFlags();
+  useEffect(() => {
+    void refreshProviderAvailability();
+  }, []);
 
   const [step, setStep] = useState<"type" | "settings" | "audio">("type");
   const [interviewType, setInterviewType]   = useState(initialConfig?.interview_type ?? "behavioral");
@@ -295,16 +305,21 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
             {showAdvanced && (
               <div className="mt-3 grid grid-cols-2 gap-2">
                 {CANONICAL_MODEL_OPTIONS.map((m) => {
-                  const locked = !isModelAvailableForPlan(m.value, planId ?? typedProfile?.plan_id);
+                  const lock = getModelLockReason(m.value, planId ?? typedProfile?.plan_id);
+                  const locked = lock !== null;
                   return (
                     <button
                       key={m.value}
                       type="button"
                       disabled={locked}
                       onClick={() => {
-                        if (locked) {
+                        if (lock === "plan") {
                           useUIStore.getState().openUpgradeModal("pro");
                           toast.message("Upgrade to Pro to use GPT-4o and Claude.");
+                          return;
+                        }
+                        if (lock === "provider") {
+                          toast.error(providerUnavailableReason(providerForModel(m.value)));
                           return;
                         }
                         setModel(m.value);
@@ -321,7 +336,11 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
                         <span className={cn("text-xs font-semibold", !locked && model === m.value ? "text-primary" : "text-foreground")}>
                           {m.label}
                         </span>
-                        {locked ? (
+                        {lock === "provider" ? (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 bg-red-500/15 text-red-400 rounded-full">
+                            Unavailable
+                          </span>
+                        ) : lock === "plan" ? (
                           <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-500/15 text-amber-400 rounded-full">
                             Pro
                           </span>

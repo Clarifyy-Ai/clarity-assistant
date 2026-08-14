@@ -64,7 +64,7 @@ Deno.serve(async (req: Request) => {
     ------------------------------------------------------- */
     const { data: resume, error: rErr } = await db
       .from("resumes")
-      .select("name, content, url")
+      .select("name, content, url, content_hash, created_at")
       .eq("id", resume_id)
       .eq("user_id", userId)
       .single();
@@ -78,7 +78,7 @@ Deno.serve(async (req: Request) => {
     ------------------------------------------------------- */
     const { data: jd, error: jErr } = await db
       .from("job_descriptions")
-      .select("title, content, target_role, company, parsed_data")
+      .select("title, content, target_role, company, parsed_data, updated_at, created_at")
       .eq("id", jd_id)
       .eq("user_id", userId)
       .single();
@@ -180,13 +180,21 @@ ${safeJD}
     /* -------------------------------------------------------
        SAFE JSON PARSING (Preserved original fallback)
     ------------------------------------------------------- */
-    let analysis = {
+    let analysis: {
+      match_score: number;
+      matching_skills: string[];
+      missing_skills: string[];
+      recommendations: string[];
+      experience_gap: string;
+      education_fit: string;
+      parse_failed?: boolean;
+    } = {
       match_score: 0,
       matching_skills: [],
       missing_skills: [],
-      recommendations: ["Unable to parse AI response."],
-      experience_gap: "Unknown",
-      education_fit: "Unknown",
+      recommendations: [],
+      experience_gap: "",
+      education_fit: "",
     };
 
     try {
@@ -195,7 +203,10 @@ ${safeJD}
         analysis = { ...analysis, ...parsed };
       }
     } catch (_) {
-      // fallback remains
+      analysis.parse_failed = true;
+      analysis.recommendations = [
+        "The model response could not be parsed. Retry analysis — source selections are kept.",
+      ];
     }
 
     log(FN, "info", "Gap analysis generated", { userId, resume_id, jd_id });
@@ -207,7 +218,9 @@ ${safeJD}
           resume_id,
           jd_id,
           result: analysis,
-          stale: false,
+          stale: Boolean(analysis.parse_failed),
+          resume_updated_at: String(resume.content_hash || resume.created_at || ""),
+          jd_updated_at: String(jd.updated_at || jd.created_at || ""),
           updated_at: new Date().toISOString(),
         },
         { onConflict: "user_id,resume_id,jd_id" },

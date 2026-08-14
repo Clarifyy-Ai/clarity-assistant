@@ -344,8 +344,8 @@ export default function GovExamDetail(): React.ReactElement {
     ? "No stage configured for this exam yet."
     : !fullSimAvailable
       ? bank
-        ? `Full mock needs ${bank.requiredQuestions} approved public questions; bank has ${bank.approvedPublicCount}. Generate a custom paper instead.`
-        : "Full mock unavailable — question bank coverage is unknown."
+        ? `Bank has ${bank.approvedPublicCount} of ${bank.requiredQuestions} approved questions. Remaining unique questions will be generated with AI (takes a few minutes). Not an official paper.`
+        : "Question bank coverage is unknown — remaining questions will be generated with AI."
       : null;
 
   return (
@@ -435,7 +435,7 @@ export default function GovExamDetail(): React.ReactElement {
 
               <div className="flex flex-wrap gap-2 shrink-0">
                 <Button
-                  disabled={!fullSimAvailable || !stage}
+                  disabled={!stage}
                   title={fullMockDisabledReason ?? "Start full pattern mock"}
                   onClick={() =>
                     navigate(`${generateBase}&basis=full_sim`)
@@ -506,7 +506,7 @@ export default function GovExamDetail(): React.ReactElement {
                 <p className="text-xs text-muted-foreground">{customLabel}</p>
               </section>
 
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 items-start">
                 {[
                   { label: "View pattern", tabId: "pattern" as DetailTab },
                   { label: "Syllabus", tabId: "syllabus" as DetailTab },
@@ -519,7 +519,7 @@ export default function GovExamDetail(): React.ReactElement {
                     key={item.label}
                     type="button"
                     onClick={() => setTab(item.tabId)}
-                    className="rounded-xl border border-border px-4 py-3 text-sm font-medium text-left hover:bg-secondary/50 transition-colors"
+                    className="self-start rounded-xl border border-border px-3 py-2 text-sm font-medium text-left hover:bg-secondary/50 transition-colors"
                   >
                     {item.label}
                   </button>

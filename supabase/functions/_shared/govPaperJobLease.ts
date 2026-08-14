@@ -5,7 +5,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { refundCredits } from "./supabase.ts";
 
-export const PAPER_JOB_LEASE_MS = 90_000;
+export const PAPER_JOB_LEASE_MS = 180_000;
 export const PAPER_JOB_MAX_ATTEMPTS = 3;
 
 export const PAPER_JOB_TERMINAL = new Set([

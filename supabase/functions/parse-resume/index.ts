@@ -573,9 +573,10 @@ Deno.serve(async (req) => {
     if (effectiveVersionId) {
       await db.from("resume_versions").update({ parse_status: "error", parse_error: failMsg }).eq("id", effectiveVersionId);
     }
-    return new Response(JSON.stringify({ error: "Resume parsing failed after all attempts.", code: "INTERNAL_ERROR" }), { status: 500, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "Resume parsing failed after all attempts.", code: "PARSE_FAILED" }), { status: 422, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } });
 
   } catch (err) {
+    if (err instanceof Response) return err;
     console.error("parse-resume error:", err);
     return new Response(JSON.stringify({ error: "Internal error", code: "INTERNAL_ERROR" }), { status: 500, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } });
   }

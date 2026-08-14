@@ -20,10 +20,12 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuthStore } from "@/store/authStore";
 import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
+import { isOAuthCancelledError } from "@/lib/auth/oauthProviders";
 
 type CallbackError = {
   message: string;
   description?: string;
+  code: "cancelled" | "auth_failed";
 };
 
 const AUTH_CALLBACK_TIMEOUT_MS = 12_000;
@@ -48,6 +50,14 @@ function getCallbackError(search: string, hash: string): CallbackError | null {
     return null;
   }
 
+  if (isOAuthCancelledError(error, errorDescription ?? errorCode)) {
+    return {
+      message: "Sign-in was cancelled.",
+      description: "Sign-in was cancelled.",
+      code: "cancelled",
+    };
+  }
+
   return {
     message: "Authentication failed.",
     description:
@@ -55,6 +65,7 @@ function getCallbackError(search: string, hash: string): CallbackError | null {
       errorCode ||
       error ||
       "Please try signing in again.",
+    code: "auth_failed",
   };
 }
 
@@ -93,6 +104,11 @@ export default function AuthCallback(): JSX.Element {
 
   useEffect(() => {
     if (callbackError) {
+      if (callbackError.code === "cancelled") {
+        navigate("/login?error=cancelled", { replace: true });
+        return;
+      }
+
       const params = new URLSearchParams({
         error: "auth_failed",
         message: callbackError.description ?? callbackError.message,

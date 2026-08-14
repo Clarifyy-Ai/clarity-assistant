@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
 import { formatHotkeyLabel } from "@/lib/overlay/hotkeys";
 import { X, Keyboard } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export const OVERLAY_HOTKEYS = [
   { keys: ["ctrl", "shift", "h"],   label: "Toggle overlay",       description: "Show or hide the Clarify AI overlay",              group: "visibility" },
@@ -31,6 +32,7 @@ const HOTKEYS = OVERLAY_HOTKEYS;
 
 export function OverlayHotkeyHelp() {
   const isVisible  = useOverlayStore((s) => s.is_hotkey_help_visible);
+  const isMobile = useIsMobile();
   const timerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const progressRef = useRef<HTMLDivElement>(null);
 
@@ -71,7 +73,7 @@ export function OverlayHotkeyHelp() {
     };
   }, [isVisible]);
 
-  if (!isVisible) return null;
+  if (!isVisible || isMobile) return null;
 
   return (
     <>

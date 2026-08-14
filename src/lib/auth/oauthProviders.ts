@@ -49,3 +49,19 @@ export function getEnabledOAuthProviders(): OAuthProviderId[] {
 export function isOAuthProviderEnabled(provider: string): boolean {
   return getEnabledOAuthProviders().includes(provider as OAuthProviderId);
 }
+
+/** True when the user cancelled the OAuth consent screen (not a failed login). */
+export function isOAuthCancelledError(
+  error: string | null | undefined,
+  description?: string | null,
+): boolean {
+  const err = (error ?? "").trim().toLowerCase();
+  const desc = (description ?? "").trim().toLowerCase();
+  if (err === "access_denied") return true;
+  const haystack = `${err} ${desc}`;
+  return (
+    haystack.includes("access_denied") ||
+    haystack.includes("cancelled") ||
+    haystack.includes("canceled")
+  );
+}

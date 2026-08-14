@@ -122,6 +122,13 @@ const COMMANDS: NavCommand[] = [
 
 
 
+function resetCmdkListScroll() {
+  requestAnimationFrame(() => {
+    const list = document.querySelector("[cmdk-list]");
+    if (list instanceof HTMLElement) list.scrollTop = 0;
+  });
+}
+
 export function CommandPalette() {
 
   const open = useUIStore((s) => s.command_palette_open);
@@ -154,10 +161,7 @@ export function CommandPalette() {
 
       setRecentSearches(getRecentSearches());
 
-      requestAnimationFrame(() => {
-        const list = document.querySelector("[cmdk-list]");
-        if (list instanceof HTMLElement) list.scrollTop = 0;
-      });
+      resetCmdkListScroll();
 
     } else {
 
@@ -166,6 +170,11 @@ export function CommandPalette() {
     }
 
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    resetCmdkListScroll();
+  }, [query, open]);
 
 
 

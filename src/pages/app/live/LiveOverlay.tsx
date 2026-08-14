@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/SkeletonLoader";
 import type { LiveSessionConfig } from "@/types/session.types";
 import { notifyOverlayVisibilityOnMobile } from "@/lib/overlay/overlayVisibilityNotice";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { setGenerateAnswerHandler } from "@/lib/overlay/hotkeys";
 import { useHotkeys } from "@/hooks/useHotkeys";
 import { isElectronApp } from "@/lib/platform/isElectron";
@@ -62,6 +63,7 @@ export default function LiveOverlay() {
 function LiveOverlaySession() {
   const navigate = useNavigate();
   const sessionStatus = useSessionStore((s) => s.status);
+  const isMobile = useIsMobile();
 
   const [phase, setPhase] = useState<"setup" | "starting" | "active">("setup");
   const [config, setConfig] = useState<LiveSessionConfig>(DEFAULT_CONFIG);
@@ -413,12 +415,20 @@ function LiveOverlaySession() {
             <>
               <p className="text-lg font-semibold text-foreground">Overlay Mode Active</p>
               <p className="text-sm text-muted-foreground max-w-sm">
-                The overlay is floating on your screen. Use{" "}
-                <kbd className="hotkey-badge">Ctrl+Shift+H</kbd> to toggle visibility/minimize.
+                {isMobile
+                  ? "Live overlay shortcuts and floating desktop overlay are limited on phones. Use a desktop browser or the Clarify desktop app for Ctrl+Shift+H / Ctrl+Shift+P."
+                  : (
+                    <>
+                      The overlay is floating on your screen. Use{" "}
+                      <kbd className="hotkey-badge">Ctrl+Shift+H</kbd> to toggle visibility/minimize.
+                    </>
+                  )}
               </p>
-              <p className="text-xs text-muted-foreground/60">
-                Press <kbd className="hotkey-badge">Ctrl+Shift+P</kbd> for calm coaching steps
-              </p>
+              {!isMobile && (
+                <p className="text-xs text-muted-foreground/60">
+                  Press <kbd className="hotkey-badge">Ctrl+Shift+P</kbd> for calm coaching steps
+                </p>
+              )}
             </>
           ) : (
             <>

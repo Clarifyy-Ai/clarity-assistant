@@ -434,16 +434,11 @@ export default function ResetPassword(): JSX.Element {
 
     try {
       await sendPasswordReset(data.email);
-      setSubmittedEmail(data.email);
-      setMode("success-request");
-    } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to send reset email. Please try again.";
-
-      setGeneralError(message);
+    } catch {
+      // Neutral response: never reveal whether the address is registered.
     }
+    setSubmittedEmail(data.email);
+    setMode("success-request");
   }
 
   async function handleSetPassword(data: UpdatePasswordInput): Promise<void> {

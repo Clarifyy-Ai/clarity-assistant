@@ -7,6 +7,7 @@ import {
   rateLimitResponse,
   RATE_LIMIT_PRESETS,
 } from "../_shared/rateLimit.ts";
+import { resolveIsIndiaProfile } from "../_shared/indiaRegion.ts";
 import {
   computeBankReadinessStatus,
   toBankReadinessPayload,
@@ -52,6 +53,13 @@ Deno.serve(async (req) => {
         }
       }
     }
+
+    const { data: profileRow } = await db
+      .from("profiles")
+      .select("region, timezone, locale")
+      .eq("id", user.id)
+      .maybeSingle();
+    const isIndiaUser = resolveIsIndiaProfile(profileRow);
 
     const { data: exams, error } = await db
       .from("gov_exams")
@@ -111,6 +119,10 @@ Deno.serve(async (req) => {
 
     if (family) {
       results = results.filter((r) => r.family === family);
+    }
+
+    if (!isIndiaUser) {
+      results = results.filter((r) => r.family !== "state_psc" && r.code !== "APPSC_GROUP2");
     }
 
     if (qLower) {
@@ -248,6 +260,7 @@ Deno.serve(async (req) => {
       family: family || null,
       count: enriched.length,
       results: enriched,
+      isIndiaUser,
       disclaimer:
         "Clarify AI is an independent preparation platform and is not affiliated with or endorsed by any government recruiting body. Candidates must verify notifications, eligibility, dates, syllabus, and examination rules on the official website.",
     });

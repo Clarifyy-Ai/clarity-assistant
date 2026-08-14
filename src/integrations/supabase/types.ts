@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_deletion_operations: {
+        Row: {
+          completed_at: string | null
+          correlation_id: string | null
+          created_at: string
+          current_step: string | null
+          error_code: string | null
+          id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          correlation_id?: string | null
+          created_at?: string
+          current_step?: string | null
+          error_code?: string | null
+          id?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          correlation_id?: string | null
+          created_at?: string
+          current_step?: string | null
+          error_code?: string | null
+          id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       achievements: {
         Row: {
           category: string | null
@@ -97,6 +133,318 @@ export type Database = {
           {
             foreignKeyName: "admin_audit_log_admin_id_fkey"
             columns: ["admin_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_acceleration_settings: {
+        Row: {
+          concurrent_request_ceiling: number
+          id: string
+          max_output_tokens_ceiling: number
+          priority_tier: string
+          scope: string
+          scope_id: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          concurrent_request_ceiling?: number
+          id?: string
+          max_output_tokens_ceiling?: number
+          priority_tier?: string
+          scope?: string
+          scope_id?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          concurrent_request_ceiling?: number
+          id?: string
+          max_output_tokens_ceiling?: number
+          priority_tier?: string
+          scope?: string
+          scope_id?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_acceleration_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_free_tier_usage: {
+        Row: {
+          last_reset_at: string
+          model_class: string
+          tokens_limit: number
+          tokens_used: number
+          usage_date: string
+          user_id: string
+        }
+        Insert: {
+          last_reset_at?: string
+          model_class?: string
+          tokens_limit?: number
+          tokens_used?: number
+          usage_date?: string
+          user_id: string
+        }
+        Update: {
+          last_reset_at?: string
+          model_class?: string
+          tokens_limit?: number
+          tokens_used?: number
+          usage_date?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_free_tier_usage_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_hub_settings: {
+        Row: {
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: Json
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_hub_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_routing_policy: {
+        Row: {
+          enabled: boolean
+          fallback_chain: string[]
+          id: string
+          max_output_tokens_default: number
+          preferred_model: string
+          preferred_provider: string
+          task_type: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          enabled?: boolean
+          fallback_chain?: string[]
+          id?: string
+          max_output_tokens_default?: number
+          preferred_model: string
+          preferred_provider: string
+          task_type: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          enabled?: boolean
+          fallback_chain?: string[]
+          id?: string
+          max_output_tokens_default?: number
+          preferred_model?: string
+          preferred_provider?: string
+          task_type?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_routing_policy_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_test_cache: {
+        Row: {
+          cache_key: string
+          created_at: string
+          expires_at: string
+          model: string
+          provider: string
+          response_payload: Json
+        }
+        Insert: {
+          cache_key: string
+          created_at?: string
+          expires_at: string
+          model: string
+          provider: string
+          response_payload: Json
+        }
+        Update: {
+          cache_key?: string
+          created_at?: string
+          expires_at?: string
+          model?: string
+          provider?: string
+          response_payload?: Json
+        }
+        Relationships: []
+      }
+      ai_test_results: {
+        Row: {
+          actual_cost_micro_usd: number
+          cached: boolean
+          created_at: string
+          error_code: string | null
+          error_message: string | null
+          estimated_cost_micro_usd: number
+          finish_reason: string | null
+          free_tier_used: boolean
+          id: string
+          input_tokens: number
+          latency_ms: number
+          model: string
+          output_tokens: number
+          provider: string
+          response_text: string | null
+          routing_reason: string | null
+          success: boolean
+          test_id: string
+          total_tokens: number
+        }
+        Insert: {
+          actual_cost_micro_usd?: number
+          cached?: boolean
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          estimated_cost_micro_usd?: number
+          finish_reason?: string | null
+          free_tier_used?: boolean
+          id?: string
+          input_tokens?: number
+          latency_ms?: number
+          model: string
+          output_tokens?: number
+          provider: string
+          response_text?: string | null
+          routing_reason?: string | null
+          success?: boolean
+          test_id: string
+          total_tokens?: number
+        }
+        Update: {
+          actual_cost_micro_usd?: number
+          cached?: boolean
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          estimated_cost_micro_usd?: number
+          finish_reason?: string | null
+          free_tier_used?: boolean
+          id?: string
+          input_tokens?: number
+          latency_ms?: number
+          model?: string
+          output_tokens?: number
+          provider?: string
+          response_text?: string | null
+          routing_reason?: string | null
+          success?: boolean
+          test_id?: string
+          total_tokens?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_test_results_test_id_fkey"
+            columns: ["test_id"]
+            isOneToOne: false
+            referencedRelation: "ai_test_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_test_runs: {
+        Row: {
+          actual_cost_micro_usd: number
+          completed_at: string | null
+          created_at: string
+          error_code: string | null
+          error_message: string | null
+          estimated_cost_micro_usd: number
+          free_tier_used: boolean
+          id: string
+          mode: string
+          prompt_hash: string
+          prompt_preview: string | null
+          routing_reason: string | null
+          status: string
+          system_prompt_preview: string | null
+          user_id: string
+        }
+        Insert: {
+          actual_cost_micro_usd?: number
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          estimated_cost_micro_usd?: number
+          free_tier_used?: boolean
+          id?: string
+          mode?: string
+          prompt_hash: string
+          prompt_preview?: string | null
+          routing_reason?: string | null
+          status?: string
+          system_prompt_preview?: string | null
+          user_id: string
+        }
+        Update: {
+          actual_cost_micro_usd?: number
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          error_message?: string | null
+          estimated_cost_micro_usd?: number
+          free_tier_used?: boolean
+          id?: string
+          mode?: string
+          prompt_hash?: string
+          prompt_preview?: string | null
+          routing_reason?: string | null
+          status?: string
+          system_prompt_preview?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_test_runs_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -901,6 +1249,7 @@ export type Database = {
         Row: {
           company_name: string | null
           content: string | null
+          content_hash: string | null
           created_at: string
           deleted_at: string | null
           file_name: string | null
@@ -928,6 +1277,7 @@ export type Database = {
         Insert: {
           company_name?: string | null
           content?: string | null
+          content_hash?: string | null
           created_at?: string
           deleted_at?: string | null
           file_name?: string | null
@@ -955,6 +1305,7 @@ export type Database = {
         Update: {
           company_name?: string | null
           content?: string | null
+          content_hash?: string | null
           created_at?: string
           deleted_at?: string | null
           file_name?: string | null
@@ -1242,6 +1593,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      gap_analyses: {
+        Row: {
+          created_at: string
+          id: string
+          jd_id: string
+          jd_updated_at: string | null
+          result: Json
+          resume_id: string
+          resume_updated_at: string | null
+          stale: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          jd_id: string
+          jd_updated_at?: string | null
+          result: Json
+          resume_id: string
+          resume_updated_at?: string | null
+          stale?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          jd_id?: string
+          jd_updated_at?: string | null
+          result?: Json
+          resume_id?: string
+          resume_updated_at?: string | null
+          stale?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       gov_exam_aliases: {
         Row: {
@@ -2308,6 +2698,7 @@ export type Database = {
         Row: {
           company: string | null
           content: string | null
+          content_hash: string | null
           created_at: string
           file_url: string | null
           id: string
@@ -2325,6 +2716,7 @@ export type Database = {
         Insert: {
           company?: string | null
           content?: string | null
+          content_hash?: string | null
           created_at?: string
           file_url?: string | null
           id?: string
@@ -2342,6 +2734,7 @@ export type Database = {
         Update: {
           company?: string | null
           content?: string | null
+          content_hash?: string | null
           created_at?: string
           file_url?: string | null
           id?: string
@@ -2893,6 +3286,7 @@ export type Database = {
           profile_visibility: string
           referral_code: string | null
           referred_by: string | null
+          region: string | null
           response_style: string
           role_type: string | null
           session_reminders: boolean
@@ -2975,6 +3369,7 @@ export type Database = {
           profile_visibility?: string
           referral_code?: string | null
           referred_by?: string | null
+          region?: string | null
           response_style?: string
           role_type?: string | null
           session_reminders?: boolean
@@ -3057,6 +3452,7 @@ export type Database = {
           profile_visibility?: string
           referral_code?: string | null
           referred_by?: string | null
+          region?: string | null
           response_style?: string
           role_type?: string | null
           session_reminders?: boolean
@@ -3560,6 +3956,7 @@ export type Database = {
       resumes: {
         Row: {
           content: string | null
+          content_hash: string | null
           created_at: string
           file_path: string | null
           id: string
@@ -3570,6 +3967,7 @@ export type Database = {
         }
         Insert: {
           content?: string | null
+          content_hash?: string | null
           created_at?: string
           file_path?: string | null
           id?: string
@@ -3580,6 +3978,7 @@ export type Database = {
         }
         Update: {
           content?: string | null
+          content_hash?: string | null
           created_at?: string
           file_path?: string | null
           id?: string
@@ -4655,7 +5054,7 @@ export type Database = {
           body: string
           created_at: string
           id: string
-          sender_id: string
+          sender_id: string | null
           sender_role: string
           thread_id: string
         }
@@ -4664,7 +5063,7 @@ export type Database = {
           body: string
           created_at?: string
           id?: string
-          sender_id: string
+          sender_id?: string | null
           sender_role: string
           thread_id: string
         }
@@ -4673,7 +5072,7 @@ export type Database = {
           body?: string
           created_at?: string
           id?: string
-          sender_id?: string
+          sender_id?: string | null
           sender_role?: string
           thread_id?: string
         }
@@ -4691,6 +5090,9 @@ export type Database = {
         Row: {
           assigned_admin_id: string | null
           created_at: string
+          guest_email: string | null
+          guest_name: string | null
+          guest_token: string | null
           id: string
           last_message_at: string
           last_message_preview: string | null
@@ -4700,11 +5102,14 @@ export type Database = {
           unread_for_admin: boolean
           unread_for_user: boolean
           updated_at: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           assigned_admin_id?: string | null
           created_at?: string
+          guest_email?: string | null
+          guest_name?: string | null
+          guest_token?: string | null
           id?: string
           last_message_at?: string
           last_message_preview?: string | null
@@ -4714,11 +5119,14 @@ export type Database = {
           unread_for_admin?: boolean
           unread_for_user?: boolean
           updated_at?: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           assigned_admin_id?: string | null
           created_at?: string
+          guest_email?: string | null
+          guest_name?: string | null
+          guest_token?: string | null
           id?: string
           last_message_at?: string
           last_message_preview?: string | null
@@ -4728,7 +5136,7 @@ export type Database = {
           unread_for_admin?: boolean
           unread_for_user?: boolean
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: []
       }

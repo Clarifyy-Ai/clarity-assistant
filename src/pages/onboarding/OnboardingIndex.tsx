@@ -199,6 +199,9 @@ export default function OnboardingIndex() {
             ? { interview_anxiety: finalData.interviewAnxiety }
             : {}),
         },
+        ...(finalData.selectedMicId
+          ? { audio_input_device: finalData.selectedMicId }
+          : {}),
       } as Record<string, unknown>);
 
       if (user?.email) {
@@ -261,7 +264,9 @@ export default function OnboardingIndex() {
     data,
     onNext: handleNext,
     onBack: handleBack,
-    onSkip: () => finishOnboarding(),
+    onSkip: (extra?: Partial<OnboardingData>) => {
+      void finishOnboarding(extra);
+    },
     onChange: mergeData,
     isFirstStep: currentStep === 1,
     isLastStep:  currentStep === TOTAL_STEPS,

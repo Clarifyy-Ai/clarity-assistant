@@ -567,7 +567,14 @@ export const useOverlayStore = create<OverlayStore>()(
           else if (msg.includes("rate") || msg.includes("429")) next = "rate_limited";
           else if (msg.includes("permission") || msg.includes("mic"))
             next = "permission_denied";
-          else if (msg.includes("network") || msg.includes("offline"))
+          else if (
+            msg.includes("network") ||
+            msg.includes("offline") ||
+            msg.includes("couldn't reach") ||
+            msg.includes("could not reach") ||
+            msg.includes("connection") ||
+            msg.includes("cors")
+          )
             next = "backend_unavailable";
           return {
             error_message,

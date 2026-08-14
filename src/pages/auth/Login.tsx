@@ -189,6 +189,8 @@ export default function Login(): JSX.Element {
       setAuthError(SESSION_EXPIRED_MESSAGE);
     } else if (reason === SIGNED_OUT_ELSEWHERE_REASON) {
       setAuthError(SIGNED_OUT_ELSEWHERE_MESSAGE);
+    } else if (errorCode === "cancelled") {
+      setAuthError("Sign-in was cancelled. You can try again whenever you are ready.");
     } else if (message) {
       const decoded = decodeURIComponent(message.replace(/\+/g, " "));
       if (isAccountSuspendedAuthError(decoded)) {

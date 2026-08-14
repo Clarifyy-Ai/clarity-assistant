@@ -270,16 +270,23 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       } catch (dgErr) {
         console.warn("[useAudioSession] Deepgram unavailable — mic-only mode:", dgErr);
         store.setDeepgramStatus("disconnected");
-        useOverlayStore.getState().setSessionPipelineState("listening");
+        const dgMsg =
+          dgErr instanceof Error
+            ? dgErr.message
+            : "Live transcription unavailable";
         if (!opts.micOptional) {
           store.setStreamError({
             code: "UNKNOWN",
-            message: "Live transcription unavailable",
+            message: dgMsg,
             recoverable: true,
             suggestion:
-              "You can still practice — answers won't be transcribed until transcription reconnects.",
+              "Type questions in Chat, or retry listening from the toolbar.",
           });
+          useOverlayStore.getState().setError(dgMsg);
           useOverlayStore.getState().setSessionPipelineState("audio_unavailable");
+          toast.error(dgMsg);
+        } else {
+          useOverlayStore.getState().setSessionPipelineState("listening");
         }
       }
 

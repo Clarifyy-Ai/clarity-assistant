@@ -8,7 +8,12 @@ import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { FileText, Download, Trash2, CheckCircle, Clock, Edit, Save, X, Loader2, RefreshCw, History, GitCompare } from "lucide-react";
 import { toast } from "sonner";
-import { resumesDB, resumeVersionsDB, jobDescriptionsDB } from "@/lib/supabase/database";
+import { resumesDB, resumeVersionsDB, jobDescriptionsDB, gapAnalysesDB } from "@/lib/supabase/database";
+import {
+  formatAbsenceLabel,
+  isAnalysisStale,
+  type GapAnalysisResult,
+} from "@/lib/documents/gapAnalysisPersist";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
@@ -22,6 +27,7 @@ import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { cn } from "@/lib/utils";
 import {
   getAiUserFacingError,
+  openUpgradeIfCapabilityRequired,
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
 
@@ -40,6 +46,7 @@ interface Resume {
   file_path: string;
   url: string | null;
   content: string | null;
+  content_hash?: string | null;
   is_primary: boolean;
   created_at: string;
 }
@@ -132,14 +139,9 @@ export default function ResumeDetail() {
   const [jds, setJds] = useState<Array<{ id: string; target_role: string; company: string | null }>>([]);
   const [selectedJdId, setSelectedJdId] = useState("");
   const [gapRunning, setGapRunning] = useState(false);
-  const [gapResult, setGapResult] = useState<{
-    match_score?: number;
-    matching_skills?: string[];
-    missing_skills?: string[];
-    recommendations?: string[];
-    experience_gap?: string;
-    education_fit?: string;
-  } | null>(null);
+  const [gapResult, setGapResult] = useState<GapAnalysisResult | null>(null);
+  const [gapStale, setGapStale] = useState(false);
+  const [gapUpdatedAt, setGapUpdatedAt] = useState<string | null>(null);
 
   const parsed = useMemo(
     () => parseResumeContentString(doc?.content ?? null),
@@ -198,7 +200,16 @@ export default function ResumeDetail() {
           company: j.company ?? null,
         }));
         setJds(mapped);
-        if (mapped.length === 1) setSelectedJdId(mapped[0].id);
+        if (mapped.length === 1) {
+          setSelectedJdId(mapped[0].id);
+        } else if (id) {
+          try {
+            const saved = sessionStorage.getItem(`clarify-gap-jd:${id}`);
+            if (saved && mapped.some((j) => j.id === saved)) setSelectedJdId(saved);
+          } catch {
+            /* ignore */
+          }
+        }
       } catch {
         if (!cancelled) setJds([]);
       }
@@ -206,22 +217,61 @@ export default function ResumeDetail() {
     return () => { cancelled = true; };
   }, [user?.id]);
 
+  useEffect(() => {
+    if (id && selectedJdId) {
+      try {
+        sessionStorage.setItem(`clarify-gap-jd:${id}`, selectedJdId);
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [id, selectedJdId]);
+
+  useEffect(() => {
+    if (!user?.id || !id || !selectedJdId) {
+      setGapResult(null);
+      setGapStale(false);
+      setGapUpdatedAt(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const row = await gapAnalysesDB.getBySources(user.id, id, selectedJdId);
+        if (cancelled) return;
+        if (!row) {
+          setGapResult(null);
+          setGapStale(false);
+          setGapUpdatedAt(null);
+          return;
+        }
+        const result = (row.result ?? {}) as GapAnalysisResult;
+        const stale = isAnalysisStale({
+          staleFlag: row.stale,
+          storedResumeUpdatedAt: row.resume_updated_at,
+          storedJdUpdatedAt: row.jd_updated_at,
+          currentResumeUpdatedAt: doc?.content_hash ?? doc?.created_at ?? null,
+        });
+        setGapResult(result);
+        setGapStale(stale);
+        setGapUpdatedAt(row.updated_at);
+      } catch {
+        if (!cancelled) {
+          setGapResult(null);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id, id, selectedJdId, doc?.content_hash, doc?.created_at]);
+
   async function handleGapAnalysis() {
     if (!id || !selectedJdId) {
       toast.error("Select a job description to compare against this resume.");
       return;
     }
     setGapRunning(true);
-    setGapResult(null);
     try {
-      const result = await fetchEdgeJson<{
-        match_score?: number;
-        matching_skills?: string[];
-        missing_skills?: string[];
-        recommendations?: string[];
-        experience_gap?: string;
-        education_fit?: string;
-      }>(
+      const result = await fetchEdgeJson<GapAnalysisResult>(
         "gap-analysis",
         { resume_id: id, jd_id: selectedJdId },
         {
@@ -234,9 +284,12 @@ export default function ResumeDetail() {
         },
       );
       setGapResult(result);
-      toast.success("Gap analysis ready");
+      setGapStale(Boolean(result.stale));
+      setGapUpdatedAt(new Date().toISOString());
+      toast.success("Gap analysis saved");
     } catch (err) {
       openUpgradeIfInsufficientCredits(err);
+      openUpgradeIfCapabilityRequired(err);
       toast.error(getAiUserFacingError(err));
     } finally {
       setGapRunning(false);
@@ -649,6 +702,29 @@ export default function ResumeDetail() {
           )}
           {gapResult && (
             <div className="mt-4 space-y-3 border-t border-border pt-4">
+              <div className="flex flex-wrap items-center gap-2">
+                {gapUpdatedAt && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Saved {new Date(gapUpdatedAt).toLocaleString()}
+                  </p>
+                )}
+                {gapStale && (
+                  <span className="rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 px-2 py-0.5 text-[10px] font-semibold uppercase">
+                    Stale
+                  </span>
+                )}
+                {gapStale && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleGapAnalysis()}
+                    disabled={gapRunning}
+                  >
+                    Re-run
+                  </Button>
+                )}
+              </div>
               <div className="flex items-center gap-3">
                 <div className="rounded-xl bg-primary/10 px-3 py-2 text-center min-w-[72px]">
                   <p className="text-lg font-bold text-primary tabular-nums">
@@ -657,12 +733,14 @@ export default function ResumeDetail() {
                   <p className="text-[10px] text-muted-foreground uppercase">Match</p>
                 </div>
                 <div className="flex-1 text-sm text-muted-foreground space-y-1">
-                  {gapResult.experience_gap && (
-                    <p><span className="font-medium text-foreground">Experience:</span> {gapResult.experience_gap}</p>
-                  )}
-                  {gapResult.education_fit && (
-                    <p><span className="font-medium text-foreground">Education:</span> {gapResult.education_fit}</p>
-                  )}
+                  <p>
+                    <span className="font-medium text-foreground">Experience:</span>{" "}
+                    {formatAbsenceLabel("experience", gapResult.experience_gap)}
+                  </p>
+                  <p>
+                    <span className="font-medium text-foreground">Education:</span>{" "}
+                    {formatAbsenceLabel("education", gapResult.education_fit)}
+                  </p>
                 </div>
               </div>
               {(gapResult.matching_skills?.length ?? 0) > 0 && (

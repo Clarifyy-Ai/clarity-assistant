@@ -16,25 +16,26 @@ import {
   CheckCircle, Clock, Edit, Save, X, Loader2, GitCompare,
 } from "lucide-react";
 import { toast } from "sonner";
-import { jobDescriptionsDB } from "@/lib/supabase/database";
+import { jobDescriptionsDB, gapAnalysesDB } from "@/lib/supabase/database";
+import {
+  formatAbsenceLabel,
+  isAnalysisStale,
+  type GapAnalysisResult,
+} from "@/lib/documents/gapAnalysisPersist";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { companyProfilePath } from "@/lib/company/slug";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { cn } from "@/lib/utils";
+import {
+  getAiUserFacingError,
+  openUpgradeIfCapabilityRequired,
+  openUpgradeIfInsufficientCredits,
+} from "@/lib/network/aiErrorUx";
 
 interface ResumeOption {
   id: string;
   name: string;
   is_primary: boolean;
-}
-
-interface GapResult {
-  match_score?: number;
-  matching_skills?: string[];
-  missing_skills?: string[];
-  recommendations?: string[];
-  experience_gap?: string;
-  education_fit?: string;
 }
 
 // ─── Matches actual `job_descriptions` table schema ───────────────────────────
@@ -57,6 +58,7 @@ interface JobDescription {
   } | null;
   parse_error: string | null;
   created_at: string;
+  updated_at?: string | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -78,7 +80,9 @@ export default function JDDetail() {
   const [resumes, setResumes] = useState<ResumeOption[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState("");
   const [gapRunning, setGapRunning] = useState(false);
-  const [gapResult, setGapResult] = useState<GapResult | null>(null);
+  const [gapResult, setGapResult] = useState<GapAnalysisResult | null>(null);
+  const [gapStale, setGapStale] = useState(false);
+  const [gapUpdatedAt, setGapUpdatedAt] = useState<string | null>(null);
 
   const loadJd = useCallback(async () => {
     if (!id || !user?.id) return;
@@ -123,15 +127,46 @@ export default function JDDetail() {
     return () => { cancelled = true; };
   }, [user?.id]);
 
+  useEffect(() => {
+    if (!user?.id || !id || !selectedResumeId) {
+      setGapResult(null);
+      setGapStale(false);
+      setGapUpdatedAt(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const row = await gapAnalysesDB.getBySources(user.id, selectedResumeId, id);
+        if (cancelled) return;
+        if (!row) {
+          setGapResult(null);
+          setGapStale(false);
+          setGapUpdatedAt(null);
+          return;
+        }
+        setGapResult((row.result ?? {}) as GapAnalysisResult);
+        setGapStale(isAnalysisStale({
+          staleFlag: row.stale,
+          storedJdUpdatedAt: row.jd_updated_at,
+          currentJdUpdatedAt: jd?.updated_at ?? jd?.created_at ?? null,
+        }));
+        setGapUpdatedAt(row.updated_at);
+      } catch {
+        if (!cancelled) setGapResult(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id, id, selectedResumeId, jd?.updated_at, jd?.created_at]);
+
   async function handleGapAnalysis() {
     if (!id || !selectedResumeId) {
       toast.error("Select a resume to compare against this JD.");
       return;
     }
     setGapRunning(true);
-    setGapResult(null);
     try {
-      const result = await fetchEdgeJson<GapResult>(
+      const result = await fetchEdgeJson<GapAnalysisResult>(
         "gap-analysis",
         {
           resume_id: selectedResumeId,
@@ -147,17 +182,13 @@ export default function JDDetail() {
         },
       );
       setGapResult(result);
-      toast.success("Gap analysis ready");
+      setGapStale(Boolean(result.stale));
+      setGapUpdatedAt(new Date().toISOString());
+      toast.success("Gap analysis saved");
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Gap analysis failed";
-      if (/insufficient|402|credit/i.test(message)) {
-        toast.error(
-          `Insufficient credits. Gap analysis costs ${AI_CREDIT_COSTS.gap_analysis} credits.`,
-        );
-      } else {
-        toast.error(message);
-      }
+      openUpgradeIfInsufficientCredits(err);
+      openUpgradeIfCapabilityRequired(err);
+      toast.error(getAiUserFacingError(err));
     } finally {
       setGapRunning(false);
     }
@@ -477,6 +508,18 @@ export default function JDDetail() {
 
           {gapResult && (
             <div className="mt-4 space-y-3 border-t border-border pt-4">
+              <div className="flex flex-wrap items-center gap-2">
+                {gapUpdatedAt && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Saved {new Date(gapUpdatedAt).toLocaleString()}
+                  </p>
+                )}
+                {gapStale && (
+                  <span className="rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 px-2 py-0.5 text-[10px] font-semibold uppercase">
+                    Stale
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-3">
                 <div className="rounded-xl bg-primary/10 px-3 py-2 text-center min-w-[72px]">
                   <p className="text-lg font-bold text-primary tabular-nums">
@@ -485,12 +528,14 @@ export default function JDDetail() {
                   <p className="text-[10px] text-muted-foreground uppercase">Match</p>
                 </div>
                 <div className="flex-1 text-sm text-muted-foreground space-y-1">
-                  {gapResult.experience_gap && (
-                    <p><span className="font-medium text-foreground">Experience:</span> {gapResult.experience_gap}</p>
-                  )}
-                  {gapResult.education_fit && (
-                    <p><span className="font-medium text-foreground">Education:</span> {gapResult.education_fit}</p>
-                  )}
+                  <p>
+                    <span className="font-medium text-foreground">Experience:</span>{" "}
+                    {formatAbsenceLabel("experience", gapResult.experience_gap)}
+                  </p>
+                  <p>
+                    <span className="font-medium text-foreground">Education:</span>{" "}
+                    {formatAbsenceLabel("education", gapResult.education_fit)}
+                  </p>
                 </div>
               </div>
               {(gapResult.matching_skills?.length ?? 0) > 0 && (

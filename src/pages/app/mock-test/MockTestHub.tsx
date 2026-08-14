@@ -436,7 +436,7 @@ export default function MockTestHub(): React.ReactElement {
             return (
             <div
               key={exam.examId}
-              className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border bg-card/60 px-4 py-3"
+              className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-border bg-card/60 px-3 py-2.5"
             >
               <div className="min-w-0">
                 <p className="font-medium text-foreground">{exam.name}</p>
@@ -458,7 +458,9 @@ export default function MockTestHub(): React.ReactElement {
                   >
                     Bank {formatBankCoverage(bank.approvedPublicCount, bank.requiredQuestions)}
                     {" · "}
-                    {fullSimOk ? "Full simulation available" : "Full simulation unavailable"}
+                    {fullSimOk
+                      ? "Full simulation available"
+                      : "Bank short — AI will fill unique remaining questions"}
                   </p>
                 )}
               </div>
@@ -483,13 +485,12 @@ export default function MockTestHub(): React.ReactElement {
                 <Button
                   size="sm"
                   variant="secondary"
-                  disabled={!fullSimOk}
                   title={
                     fullSimOk
                       ? "Full pattern simulation"
                       : bank
-                        ? `Bank ${formatBankCoverage(bank.approvedPublicCount, bank.requiredQuestions)}`
-                        : "Bank coverage unknown"
+                        ? `Bank ${formatBankCoverage(bank.approvedPublicCount, bank.requiredQuestions)} — AI fills the rest`
+                        : "AI will generate remaining unique questions"
                   }
                   onClick={() =>
                     navigate(
@@ -574,11 +575,11 @@ export default function MockTestHub(): React.ReactElement {
         <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-3">
           Start a Test
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 items-start">
           {EXAM_TYPES.map((exam) => (
             <div
               key={exam.id}
-              className={`rounded-xl border ${exam.border} bg-gradient-to-br ${exam.color} p-4 transition-all hover:shadow-md`}
+              className={`self-start rounded-xl border ${exam.border} bg-gradient-to-br ${exam.color} px-3 py-2.5 transition-all hover:shadow-md`}
             >
               <div className="flex items-center justify-between mb-2">
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${exam.badgeColor}`}>

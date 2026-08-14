@@ -14,6 +14,7 @@ import { networkMonitor } from "@/lib/network/networkMonitor";
 import { useSessionStore } from "@/store/sessionStore";
 import { useAuthStore } from "@/store/authStore";
 import { useAudioStore } from "@/store/audioStore";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { OverlayWindow } from "@/components/overlay/OverlayWindow";
 import { OverlayKeyboardHandler } from "@/components/overlay/OverlayKeyboardHandler";
 import { LiveSessionController } from "@/components/live/LiveSessionController";
@@ -28,6 +29,7 @@ import {
 import { getOrCreateSession, activateSession } from "@/lib/session/sessionLifecycle";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { getLocalMockQuestions } from "@/lib/mock/localQuestionBank";
+import { getAiUserFacingError } from "@/lib/network/aiErrorUx";
 import { isOverlayGhostClickSuppressed } from "@/lib/overlay/ghostClickGuard";
 import { toDbModel } from "@/lib/ai/modelMapping";
 import { Button } from "@/components/ui/Button";
@@ -164,6 +166,7 @@ export default function MockSession() {
   );
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
   const isMuted = useAudioStore((s) => s.is_muted ?? false);
+  const isMobile = useIsMobile();
   const deepgramStatus = useAudioStore((s) => s.deepgram_status ?? "disconnected");
 
   const fillerHook = useFillerWordDetection(interimText);
@@ -261,7 +264,7 @@ export default function MockSession() {
         setIsPaused(false);
         toast.message("Session resumed");
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to resume recording");
+        toast.error(getAiUserFacingError(err));
       }
     } else {
       if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
@@ -530,7 +533,7 @@ export default function MockSession() {
       await loadQuestions(dbSessionId, mockConfig);
     } catch (err) {
       console.error("[MockSession] setup failed:", err);
-      const message = err instanceof Error ? err.message : "Failed to start mock session";
+      const message = getAiUserFacingError(err);
       setQuestionsError(message);
       if (dbSessionId) {
         try {
@@ -623,7 +626,7 @@ export default function MockSession() {
         await handleSetup(config, session.id);
       } catch (err) {
         console.error("[MockSession] failed to restore session:", err);
-        toast.error(err instanceof Error ? err.message : "Failed to restore session");
+        toast.error(getAiUserFacingError(err));
         autoStartedRef.current = false;
         navigate("/app/mock");
       }
@@ -644,7 +647,9 @@ export default function MockSession() {
       ? new Date(startTimeRef.current).getTime()
       : Date.now();
     const timeTakenSeconds = Math.max(1, Math.round((Date.now() - startedMs) / 1000));
-    const questionsAnswered = answersRef.current.filter((a) => !a.skipped).length;
+    const questionsAnswered = answersRef.current.filter(
+      (a) => !a.skipped && (a.answer_text ?? "").trim().length > 0,
+    ).length;
     const creditsUsed = useSessionStore.getState().credits_consumed;
     const sessionId = useSessionStore.getState().session_id;
     const hintsUsed = useOverlayStore.getState().hint_history.length;
@@ -848,9 +853,7 @@ export default function MockSession() {
                     useOverlayStore.getState().showOverlay();
                   })
                   .catch((err: unknown) => {
-                    setQuestionsError(
-                      err instanceof Error ? err.message : "Retry failed",
-                    );
+                    setQuestionsError(getAiUserFacingError(err));
                   })
                   .finally(() => {
                     isStartingRef.current = false;
@@ -1128,12 +1131,18 @@ export default function MockSession() {
         <div className="w-full max-w-md text-center space-y-4">
           <p className="text-lg font-semibold text-foreground">Mock overlay active</p>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Speech, transcript, fillers, and AI hints appear in the floating overlay — not on this
-            page. Use{" "}
-            <kbd className="px-1.5 py-0.5 rounded bg-secondary text-[10px] font-mono">
-              Ctrl+Shift+H
-            </kbd>{" "}
-            to show or hide it.
+            {isMobile
+              ? "Speech, transcript, and AI hints appear in the overlay. Desktop keyboard shortcuts are not available on this device — use on-screen controls."
+              : (
+                <>
+                  Speech, transcript, fillers, and AI hints appear in the floating overlay — not on this
+                  page. Use{" "}
+                  <kbd className="px-1.5 py-0.5 rounded bg-secondary text-[10px] font-mono">
+                    Ctrl+Shift+H
+                  </kbd>{" "}
+                  to show or hide it.
+                </>
+              )}
           </p>
 
           <div className="rounded-2xl border border-border bg-card/60 px-4 py-3 text-left">

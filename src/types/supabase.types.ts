@@ -33,6 +33,8 @@ export interface ProfileRow {
   preferred_model:    string | null;
   preferred_language: string | null;
   timezone:           string | null;
+  locale?:            string | null;
+  region?:            string | null;
   ui_preferences?:    JSONB | null;
   overlay_settings?:  JSONB | null;
   hotkey_overrides?:  JSONB | null;
@@ -92,7 +94,6 @@ export interface ProfileRow {
   last_active_date?:  ISODate | null;
   response_style?:    string;
   domain?:            string | null;
-  locale?:            string | null;
   onboarding_step?:   number;
   is_actively_looking?: boolean | null;
   is_banned?:         boolean;

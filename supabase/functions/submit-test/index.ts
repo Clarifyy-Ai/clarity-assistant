@@ -17,7 +17,7 @@ import {
   RATE_LIMIT_PRESETS,
 } from "../_shared/rateLimit.ts";
 import { recomputeTopicMasteryFromAttempt } from "../_shared/recomputeTopicMastery.ts";
-import type { AttemptSignal } from "../_shared/masteryEngine.ts";
+import { isExamExpired } from "../_shared/examTimer.ts";
 
 /* -------------------------------------------------------------------------- */
 /*                                    TYPES                                   */
@@ -406,7 +406,7 @@ Deno.serve(async (req: Request) => {
     /* -------------------------- FETCH TEST -------------------------- */
     const { data: testRaw, error: testErr } = await db
       .from("mock_tests")
-      .select("id, config, question_ids, status")
+      .select("id, config, question_ids, status, started_at, time_limit_minutes")
       .eq("id", testId)
       .eq("user_id", userId)
       .single();
@@ -414,6 +414,11 @@ Deno.serve(async (req: Request) => {
     if (testErr || !testRaw) {
       return errorResponse("Test not found or access denied", "NOT_FOUND", 404);
     }
+
+    const timedOut = isExamExpired(
+      testRaw.started_at as string | null,
+      testRaw.time_limit_minutes as number | null,
+    );
 
     if (testRaw.status === "COMPLETED") {
       const { data: existing } = await db
@@ -425,6 +430,7 @@ Deno.serve(async (req: Request) => {
       return successResponse({
         success: true,
         already_completed: true,
+        expired: timedOut,
         analysis: existing ?? null,
       });
     }
@@ -694,6 +700,7 @@ Deno.serve(async (req: Request) => {
       return successResponse({
         success: true,
         already_completed: true,
+        expired: timedOut,
         analysis: existing ?? null,
       });
     } else {
@@ -842,6 +849,7 @@ Deno.serve(async (req: Request) => {
     /* -------------------------- FINAL RESPONSE -------------------------- */
     return successResponse({
       success: true,
+      expired: timedOut,
       total_score: boundedTotalScore,
       max_score: maxScore,
       accuracy,

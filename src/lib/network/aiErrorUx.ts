@@ -102,12 +102,21 @@ export function getAiUserFacingError(err: unknown): string {
     return CREDITS_NEEDED_MESSAGE;
   }
 
+  const quotaMsg = errorText(err).toLowerCase();
+  if (
+    quotaMsg.includes("insufficient_quota") ||
+    quotaMsg.includes("credit_balance_exhausted") ||
+    quotaMsg.includes("no credits remaining")
+  ) {
+    return "This AI model has no remaining API credits. Switch to Gemini Flash.";
+  }
+
   if (isAiTemporarilyUnavailableError(err)) {
     return AI_UNAVAILABLE_MESSAGE;
   }
 
   if (isUnreachableOrCorsError(err)) {
-    return "We couldn't reach the server. Please check your connection and try again.";
+    return "The AI request did not go through. Please try again.";
   }
 
   const raw = errorText(err).trim();
@@ -128,6 +137,13 @@ export function getAiUserFacingError(err: unknown): string {
     (rawLower.includes("requires the") && rawLower.includes("plan"))
   ) {
     return "This feature requires a Pro plan or higher. Upgrade to continue.";
+  }
+
+  if (
+    code === "BILLING_PAST_DUE" ||
+    rawLower.includes("update your payment method")
+  ) {
+    return "Payment failed. Update your payment method to keep using AI features.";
   }
 
   if (!raw) {
@@ -158,11 +174,35 @@ export function getAiUserFacingError(err: unknown): string {
   return raw;
 }
 
+/** True when the plan/capability gate blocked the request (not out of credits). */
+export function isCapabilityRequiredError(err: unknown): boolean {
+  const status = errorStatus(err);
+  const code = errorCode(err).toUpperCase();
+  if (code === "CAPABILITY_REQUIRED" || code === "PLAN_REQUIRED" || code === "PLAN_UPGRADE_REQUIRED" || code === "BILLING_PLAN_GATE_BLOCKED") {
+    return true;
+  }
+  if (status === 403) {
+    const msg = errorText(err).toLowerCase();
+    return msg.includes("upgrade") || msg.includes("plan") || msg.includes("capability");
+  }
+  return false;
+}
+
 /** Opens the upgrade modal for credit failures when a UI store is available. */
 export function openUpgradeIfInsufficientCredits(err: unknown): boolean {
   if (!isInsufficientCreditsError(err)) return false;
   try {
     useUIStore.getState().openUpgradeModal("out_of_credits");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function openUpgradeIfCapabilityRequired(err: unknown): boolean {
+  if (!isCapabilityRequiredError(err)) return false;
+  try {
+    useUIStore.getState().openUpgradeModal("plan_feature");
     return true;
   } catch {
     return false;

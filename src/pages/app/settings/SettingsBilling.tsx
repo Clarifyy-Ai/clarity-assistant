@@ -335,7 +335,7 @@ export default function SettingsBilling(): JSX.Element {
 
   async function handleUpgrade(targetPlanId: string): Promise<void> {
     if (!STRIPE_CONFIGURED) {
-      toast.error("Payment processing is not configured. Please contact support.");
+      await handleRazorpayCheckout("pro_monthly");
       return;
     }
 
@@ -623,7 +623,7 @@ export default function SettingsBilling(): JSX.Element {
                   size="sm"
                   onClick={() => void handleUpgrade("pro")}
                   loading={actionLoading === "pro"}
-                  disabled={!STRIPE_CONFIGURED}
+                  disabled={false}
                 >
                   <ArrowUpRight className="w-3.5 h-3.5 mr-1" />
                   Upgrade to Pro
@@ -775,7 +775,7 @@ export default function SettingsBilling(): JSX.Element {
                 subtitle={plan.tagline}
                 size="sm"
                 onUpgrade={
-                  STRIPE_CONFIGURED && !isCurrent
+                  !isCurrent
                     ? () => void handleUpgrade(id)
                     : undefined
                 }
@@ -783,7 +783,7 @@ export default function SettingsBilling(): JSX.Element {
                   isCurrent
                     ? "Current plan"
                     : !STRIPE_CONFIGURED
-                      ? "Unavailable"
+                      ? "Pay with Razorpay"
                       : undefined
                 }
                 loading={actionLoading === id}

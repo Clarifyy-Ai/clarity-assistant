@@ -25,12 +25,24 @@ Deno.serve(async (req) => {
 
   const corsHeaders = getCorsHeaders(req);
 
-  // Public probe: minimal response — no DB/API key presence leaks.
+  // Public probe: status plus which AI providers are configured (booleans only).
   if (!hasServiceRoleAuth(req)) {
-    return new Response(JSON.stringify({ status: "ok" }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" },
-    });
+    const present = (key: string) => Boolean((Deno.env.get(key) ?? "").trim());
+    return new Response(
+      JSON.stringify({
+        status: "ok",
+        providers: {
+          gemini: present("GEMINI_API_KEY") || present("GOOGLE_AI_API_KEY"),
+          openai: present("OPENAI_API_KEY"),
+          anthropic: present("ANTHROPIC_API_KEY"),
+          deepgram: present("DEEPGRAM_API_KEY"),
+        },
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" },
+      },
+    );
   }
 
   const requestId = withRequestId();

@@ -20,6 +20,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { bannedResponse, isUserBanned } from "./banCheck.ts";
+import { isBillingPastDue, isPastDueAllowedPath, pastDueResponse } from "./billingPastDue.ts";
 
 export type AuthenticatedUser = {
   id: string;
@@ -177,6 +178,19 @@ export async function requireAuth(req: Request): Promise<AuthContext> {
     throw banError;
   }
 
+  if (!isPastDueAllowedPath(req)) {
+    const { data: billing } = await admin
+      .from("profiles")
+      .select("subscription_status, payment_failed_at")
+      .eq("id", data.user.id)
+      .maybeSingle();
+    if (isBillingPastDue(billing)) {
+      const dueError = new Error("BILLING_PAST_DUE");
+      dueError.name = "BillingPastDueError";
+      throw dueError;
+    }
+  }
+
   return {
     accessToken,
     user: {
@@ -211,6 +225,15 @@ export async function getAuthContext(
       return {
         context: null,
         error: bannedResponse({}),
+      };
+    }
+    if (
+      err instanceof Error &&
+      (err.name === "BillingPastDueError" || err.message === "BILLING_PAST_DUE")
+    ) {
+      return {
+        context: null,
+        error: pastDueResponse({}),
       };
     }
     return {

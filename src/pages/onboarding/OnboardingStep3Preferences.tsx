@@ -322,7 +322,7 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
         <Button
           variant="ghost"
           size="md"
-          onClick={onSkip}
+          onClick={() => onSkip()}
           className="text-muted-foreground"
         >
           Skip

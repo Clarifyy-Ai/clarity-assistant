@@ -7,7 +7,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Mic, Monitor, Info, Play, RotateCcw, CheckCircle, AlertCircle,
   Upload, FileText, Loader2, Trash2, SkipForward,
-  Brain, Volume2, Settings2,
+  Brain, Settings2, Lightbulb, Hash,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
@@ -40,9 +40,9 @@ import type { PreferredAIModel } from "@/types/user.types";
 const RECORD_SECONDS = 3;
 
 const HINT_STYLES = [
-  { value: "full_answer", label: "Full Answer", sub: "Complete response" },
-  { value: "short_hints", label: "Short Hints", sub: "Talking points" },
-  { value: "keywords",    label: "Keywords",    sub: "Key terms only" },
+  { value: "full_answer", label: "Full Answer", sub: "Complete response", icon: FileText },
+  { value: "short_hints", label: "Short Hints", sub: "Talking points", icon: Lightbulb },
+  { value: "keywords",    label: "Keywords",    sub: "Key terms only", icon: Hash },
 ] as const;
 
 const ANXIETY_LABELS: Record<number, string> = {
@@ -78,6 +78,7 @@ export default function OnboardingStep2OptionalSetup({
   onNext,
   onBack,
   onSkip,
+  onChange,
 }: StepProps) {
   const { user, profile, setProfile, updateProfile, planId } = useAuthStore();
   const audio = useAudioCapture();
@@ -777,22 +778,25 @@ export default function OnboardingStep2OptionalSetup({
             <div>
               <p className="text-xs font-medium text-muted-foreground mb-2">Hint style</p>
               <div className="grid grid-cols-3 gap-2">
-                {HINT_STYLES.map((h) => (
-                  <button
-                    key={h.value}
-                    type="button"
-                    onClick={() => { setHintStyle(h.value); setPrefsSkipped(false); }}
-                    className={cn(
-                      "flex flex-col items-center gap-1 p-2.5 rounded-xl border text-center transition-all",
-                      hintStyle === h.value
-                        ? "bg-primary/20 border-primary/50"
-                        : "bg-secondary/50 border-border hover:border-primary/30",
-                    )}
-                  >
-                    <Volume2 className="h-4 w-4 text-primary" />
-                    <span className="text-[10px] font-semibold">{h.label}</span>
-                  </button>
-                ))}
+                {HINT_STYLES.map((h) => {
+                  const HintIcon = h.icon;
+                  return (
+                    <button
+                      key={h.value}
+                      type="button"
+                      onClick={() => { setHintStyle(h.value); setPrefsSkipped(false); }}
+                      className={cn(
+                        "flex flex-col items-center gap-1 p-2.5 rounded-xl border text-center transition-all",
+                        hintStyle === h.value
+                          ? "bg-primary/20 border-primary/50"
+                          : "bg-secondary/50 border-border hover:border-primary/30",
+                      )}
+                    >
+                      <HintIcon className="h-4 w-4 text-primary" aria-hidden />
+                      <span className="text-[10px] font-semibold">{h.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <div>
@@ -865,7 +869,15 @@ export default function OnboardingStep2OptionalSetup({
         <Button variant="ghost" size="md" onClick={onBack}>
           Back
         </Button>
-        <Button variant="secondary" size="md" onClick={onSkip}>
+        <Button
+          variant="secondary"
+          size="md"
+          onClick={() => {
+            const selectedMicId = selectedDeviceId || "default";
+            onChange?.({ selectedMicId });
+            onSkip({ selectedMicId });
+          }}
+        >
           Skip
         </Button>
         <Button

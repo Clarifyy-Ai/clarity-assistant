@@ -74,12 +74,39 @@ Last updated: 2026-08-13 — remaining QA plan: local gates + Playwright passed;
 | AUG13-WS12 | P0 | Onboarding → Dashboard; Skip; anxiety; audio devices | `OnboardingIndex.tsx`, OptionalSetup | IMPLEMENTED_AND_LOCALLY_VERIFIED | Playwright onboarding Skip |
 | AUG13-WS23 | P0 | Canonical `/app/debriefs` | `App.tsx` + nav/search | IMPLEMENTED_AND_LOCALLY_VERIFIED | Playwright redirects |
 | AUG13-WS29 | P0 | Rooms retired redirect | `RetiredRoomsRedirect` | IMPLEMENTED_AND_LOCALLY_VERIFIED | Playwright `/app/rooms` |
-| AUG13-WS24 | P0 | Analytics not_scored vs zero | `scoreStatus.ts`, Analytics UI, EF | IMPLEMENTED_NOT_DEPLOYED | Redeploy analytics-dashboard |
-| AUG13-WS26 | P0 | Durable deletion operations | migration + `delete-account` | IMPLEMENTED_NOT_DEPLOYED | Apply `20260813100000_*` + redeploy |
-| AUG13-WS25 | P0 | India region + fail-closed paper count | `indiaRegion.ts`, `select-test-questions`, `launchMockTest` | IMPLEMENTED_NOT_DEPLOYED | Redeploy select-test-questions |
+| AUG13-WS24 | P0 | Analytics not_scored vs zero | `scoreStatus.ts`, Analytics UI, EF | Deployed remotely (analytics-dashboard v140 ACTIVE) | Product UAT FP-025 |
+| AUG13-WS26 | P0 | Durable deletion operations | migration + `delete-account` | Migration applied; delete-account v142 ACTIVE | Product UAT FP-012 |
+| AUG13-WS25 | P0 | India region + fail-closed paper count | `indiaRegion.ts`, `select-test-questions`, `launchMockTest` | select-test-questions v141 ACTIVE | Product UAT FP-023/024 |
 | AUG13-WS28 | P1 | Admin Access Denied copy | AdminLayout + ProtectedRoute | IMPLEMENTED_AND_LOCALLY_VERIFIED | Playwright Access Denied |
 | AUG13-WS13 | P1 | More sheet Logout; palette Guide + prep rank | MobileNav, CommandPalette | IMPLEMENTED_AND_LOCALLY_VERIFIED | Playwright |
 | AUG13-WS30 | P1 | Unit + Playwright + RLS fixtures | `src/test/lib/**`, `e2e/qa-*.spec.ts`, `rls-spot-check.mjs` | IMPLEMENTED_AND_LOCALLY_VERIFIED | Full RLS matrix needs live User A/B |
-| AUG13-WS32 | P0 | Gates + build; remote migrate/deploy | lint/typecheck/test/gates/build:check | IMPLEMENTED_REQUIRES_EXTERNAL_OPS | PAT + `db push` + EF `--use-api` + FE host |
+| AUG13-WS32 | P0 | Gates + build; remote migrate/deploy | lint/typecheck/test/gates/build:check | Migration + 14 EFs deployed via Management API | Frontend host release still external |
+
+Last updated: 2026-08-14 — remaining QA master-prompt close-out (local).
+
+| ID | Priority | Requirement | Implementation | Status | Remaining |
+|----|----------|-------------|----------------|--------|-----------|
+| AUG14-WS5 | P0 | OAuth cancel → login, not /app timeout | `isOAuthCancelledError`; AuthCallback `/login?error=cancelled`; Login calm copy | IMPLEMENTED_AND_LOCALLY_VERIFIED | Enable intended providers in Supabase dashboard |
+| AUG14-WS9 | P0 | Practice Coach required fields | `wizardValidation.ts`; Next disabled + inline reason for interview company/role/resume | IMPLEMENTED_AND_LOCALLY_VERIFIED | Playwright setup wizard |
+| AUG14-WS10 | P0 | Overlay not stuck on Listening | `ListeningTimeoutHelp` after 12s + Type a question (chat tab); mobile limitation copy | IMPLEMENTED_AND_LOCALLY_VERIFIED | Interactive mic/Deepgram UAT |
+| AUG14-WS12 | P1 | Prep save confirm + numbered hints | Rephraser `SaveToAnswerBankConfirm`; `splitCodingHints` cards | IMPLEMENTED_AND_LOCALLY_VERIFIED | — |
+| AUG14-WS14 | P0 | parse-document TXT adapter | UTF-8 decode, binary reject, no Gemini inline_data for text/plain | IMPLEMENTED_AND_VERIFIED | Deployed v46 |
+| AUG14-WS15 | P0 | Gap Analysis persist + stale + absence copy | `gapAnalysesDB`; Resume/JD detail load on refresh; EF stores version fingerprints | IMPLEMENTED_AND_VERIFIED | Deployed v140; stale DB triggers applied |
+| AUG14-WS21 | P0 | Exam auto-submit while paused / on reload | `shouldAutoSubmitAttempt`; TestSession tick from `started_at` | IMPLEMENTED_AND_LOCALLY_VERIFIED | Live `submit-test` expiry UAT |
+| AUG14-WS23 | P0 | Rephraser idempotency across refresh | sessionStorage + SHA content key | IMPLEMENTED_AND_VERIFIED | `prep-tool` deployed v154 |
+| AUG14-WS25 | P1 | PWA prompt layout | max-h scroll + mobile bottom sheet + safe-area footer | IMPLEMENTED_AND_LOCALLY_VERIFIED | Visual UAT maximized window |
+| AUG14-WS8 | P1 | Recent Sessions + palette scroll reset | Dashboard heading; cmdk list scrollTop on query | IMPLEMENTED_AND_LOCALLY_VERIFIED | — |
+| AUG14-WS10b | P0 | Overlay listening timeout + chat fallback | `ListeningTimeoutHelp` 12s + Type a question | IMPLEMENTED_AND_LOCALLY_VERIFIED | Interactive mic UAT |
+| AUG14-WS11 | P0 | Scorecard empty answers + mock persist upsert | scoreQuestions on answered only; session_answers replace-by-session; scorecards update-if-exists | IMPLEMENTED_AND_LOCALLY_VERIFIED | Interactive scorecard UAT |
+| AUG14-WS13 | P0 | JD/document content_hash uniqueness | Additive migration applied remote; client hash reuse before create | IMPLEMENTED_AND_VERIFIED | — |
+| AUG14-WS16 | P1 | Practice prompt seeds wizard | PreSessionSetupWizard `location.state.practicePrompt` | IMPLEMENTED_AND_LOCALLY_VERIFIED | — |
+| AUG14-WS19 | P1 | Debrief share also marks scorecard | `scorecardsDB.markShared` in DebriefDetail | IMPLEMENTED_AND_LOCALLY_VERIFIED | — |
+| AUG14-WS22 | P0 | Billing upgrade when Stripe unset | Upgrade CTA routes to Razorpay | IMPLEMENTED_AND_LOCALLY_VERIFIED | Live Razorpay UAT |
+| AUG14-WS23b | P0 | Rephraser SHA content idempotency | `prepToolContentIdempotencyKey` from input hash | IMPLEMENTED_AND_VERIFIED | `prep-tool` v154 |
+| AUG14-WS14b | P0 | JD PDF/DOCX parse via parse-document | `jd_id` branch + `addJobDescriptionFromFile` | IMPLEMENTED_AND_VERIFIED | `parse-document` v46 |
+| AUG14-WS6 | P0 | Edge past-due 403 `BILLING_PAST_DUE` | `billingPastDue.ts` in requireAuth; checkout/portal still allowed | IMPLEMENTED_AND_VERIFIED | Redeploy remaining non-AI EFs as needed |
+| AUG14-WS4 | P0 | Reset password no email enumeration | Always success-request after send | IMPLEMENTED_AND_LOCALLY_VERIFIED | — |
+| AUG14-WS7 | P1 | Onboarding hint icons + persist mic on Skip | Distinct hint icons; `audio_input_device` on skip | IMPLEMENTED_AND_LOCALLY_VERIFIED | — |
+| AUG14-WS1 | P1 | QA seed preserves passwords | `QA_*_PASSWORD` env + `.env.qa.local` reuse | IMPLEMENTED_AND_LOCALLY_VERIFIED | Operator rotation still required |
 
 

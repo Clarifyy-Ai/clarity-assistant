@@ -14,13 +14,9 @@
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient, deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
-import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
 import { mapExamType } from "../_shared/examTypeMap.ts";
-import { requirePlan } from "../_shared/requirePlan.ts";
-import {
-  buildGapFillPrompt,
-  type WeakTopicStat,
-} from "../_shared/examAIPrompts.ts";
+import { fillUntilCount, type GapFillRow } from "../_shared/govAiGapFill.ts";
+import { type WeakTopicStat } from "../_shared/examAIPrompts.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 /* ─── SANITIZATION ───────────────────────────────────────────────────────── */
@@ -67,44 +63,6 @@ function shuffle<T>(array: T[]): T[] {
   }
   return arr;
 }
-
-/* ─── SYSTEM USER ID ─────────────────────────────────────────────────────── */
-//
-// AI-generated questions are inserted with uploaded_by = SYSTEM_USER_ID
-// so they are:
-//   1. Traceable — query WHERE uploaded_by = '<system_uuid>' to find all AI Qs
-//   2. Filterable — exclude them from "official PYP only" test configs
-//   3. Auditable — system questions can be reviewed and promoted to is_public=true
-//
-// To set up:
-//   1. Create a row in auth.users (or profiles directly) for a bot account
-//   2. Copy its UUID
-//   3. Add secret: SYSTEM_USER_ID = <that uuid>
-
-function getSystemUserId(): string | null {
-  const id = Deno.env.get("SYSTEM_USER_ID");
-  if (!id) {
-    console.warn(
-      "[select-test-questions] SYSTEM_USER_ID secret not set. " +
-      "AI-generated questions will be inserted with uploaded_by=null. " +
-      "Add SYSTEM_USER_ID in Supabase Dashboard → Settings → Edge Functions → Secrets.",
-    );
-    return null;
-  }
-  // Basic UUID format validation
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
-    console.error("[select-test-questions] SYSTEM_USER_ID is not a valid UUID:", id);
-    return null;
-  }
-  return id;
-}
-
-/* ─── AI GAP-FILL ────────────────────────────────────────────────────────── */
-//
-// Uses the service-role client (bypasses RLS) for the INSERT — correct behaviour
-// since questions are shared resources not scoped to a single user.
-// uploaded_by is set to SYSTEM_USER_ID (not null) for traceability.
-// is_public = false keeps AI questions out of the official PYQ bank until reviewed.
 
 const PYP_SOURCES = ["OFFICIAL_PYP", "Previous Year Paper", "PYP", "previous_year"];
 
@@ -200,7 +158,7 @@ async function fetchBankQuestions(
 
   // Broader fallback when filters are too tight
   if (
-    questions.length === 0 &&
+    questions.length < 30 &&
     opts.exam_type &&
     opts.exam_type !== "CUSTOM"
   ) {
@@ -210,110 +168,13 @@ async function fetchBankQuestions(
       .eq("exam_type", opts.exam_type)
       .eq("is_public", true)
       .limit(2000);
-    questions = (fallbackData ?? []) as QuestionRow[];
+    for (const row of (fallbackData ?? []) as QuestionRow[]) {
+      merged.set(row.id, row);
+    }
+    questions = [...merged.values()];
   }
 
   return questions;
-}
-
-async function generateGapQuestions(
-  db:       ReturnType<typeof createServiceClient>,
-  gapCount: number,
-  subjects: string[],
-  topics:   string[],
-  examType: string | null,
-  difficultyMix: { EASY: number; MEDIUM: number; HARD: number },
-  weakTopics: WeakTopicStat[],
-  strongTopics: string[],
-): Promise<{ ids: string[]; error?: string }> {  try {
-    const systemUserId = getSystemUserId();
-    if (!Deno.env.get("GEMINI_API_KEY")?.trim()) {
-      return {
-        ids: [],
-        error: "GEMINI_API_KEY not configured on Supabase",
-      };
-    }
-    const subj         = subjects[0] ?? "General Subject";
-    const examStr      = examType && examType !== "CUSTOM"
-      ? examType
-      : "General Competitive Exam";
-
-    const prompt = buildGapFillPrompt({
-      examType: examStr,
-      subjects,
-      topics,
-      weakTopics,
-      strongTopics,
-      difficultyMix,
-      gapCount,
-    });
-    const raw  = await geminiGenerate(prompt, undefined, 0.7, 4000);
-    const data = parseJSON(raw, { questions: [] });
-    const qs   = Array.isArray(data.questions) ? data.questions : [];
-
-    const cleaned = qs
-      .filter((q: unknown) => {
-        if (typeof q !== "object" || q === null) return false;
-        const question = q as Record<string, unknown>;
-        return (
-          typeof question.question_text === "string" &&
-          question.question_text.length > 10
-        );
-      })
-      .map((q: Record<string, unknown>) => {
-        const diffRaw = String(q.difficulty ?? "").toUpperCase();
-        const diff    = ["EASY", "MEDIUM", "HARD"].includes(diffRaw)
-          ? diffRaw
-          : "MEDIUM";
-        return {
-          question_text:  String(q.question_text).slice(0, 1000),
-          question_type:  "MCQ",
-          options:        Array.isArray(q.options) ? q.options.slice(0, 4) : [],
-          correct_answer: ["A", "B", "C", "D"].includes(String(q.correct_answer))
-            ? String(q.correct_answer)
-            : "A",
-          explanation:    q.explanation ? String(q.explanation).slice(0, 1000) : "",
-          subject:        subj,
-          topic:          q.topic ? String(q.topic).slice(0, 100) : "General",
-          difficulty:     diff,
-          exam_type:      examType === "CUSTOM" ? null : examType,
-          source:         "AI_GENERATED",
-          is_verified:    false,
-          is_public:      false,           // kept out of public PYQ bank until reviewed
-          // FIX: was `null` — now uses SYSTEM_USER_ID for traceability.
-          // Filter AI questions: WHERE uploaded_by = '<system_uuid>' AND source = 'AI_GENERATED'
-          uploaded_by:    systemUserId,
-          marks_positive: 4,
-          marks_negative: 1,
-          // FIX: was /[=+\\-*/^]/ — regex literal with \\- matches literal backslash
-          // Corrected to check for LaTeX/math indicator characters
-          latex_present:  /[=+\-*/^]/.test(String(q.question_text)),
-        };
-      });
-
-    if (cleaned.length === 0) {
-      return { ids: [], error: "Gemini returned no valid MCQ questions" };
-    }
-
-    const { data: inserted, error } = await db
-      .from("questions")
-      .insert(cleaned)
-      .select("id");
-
-    if (error) {
-      console.warn(
-        "[select-test-questions] AI gap-fill insert failed:",
-        error.message,
-      );
-      return { ids: [], error: `Database insert failed: ${error.message}` };
-    }
-
-    return { ids: (inserted ?? []).map((row: { id: string }) => row.id) };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Gemini gap-fill failed";
-    console.warn("[select-test-questions] AI gap-fill error:", err);
-    return { ids: [], error: message };
-  }
 }
 
 /* ─── MAIN HANDLER ───────────────────────────────────────────────────────── */
@@ -357,7 +218,7 @@ Deno.serve(async (req: Request) => {
     const topics       = sanitizeList(config.topics       ?? []);
     const source_types = sanitizeList(config.source_types ?? ["OFFICIAL_PYP"]);
 
-    const question_count = sanitizeInt(config.question_count, 30, 1, 100);
+    const question_count = sanitizeInt(config.question_count, 30, 1, 200);
     const allow_shortfall =
       config.allow_shortfall === true || config.practice_mode === true;
 
@@ -396,11 +257,6 @@ Deno.serve(async (req: Request) => {
     const includeUserUploads = source_types.includes("USER_UPLOAD");
     const wantsPYP = source_types.includes("OFFICIAL_PYP");
     const wantsAI = source_types.includes("AI_GENERATED");
-
-    if (wantsAI) {
-      const planGate = requirePlan(planId, "pro", req);
-      if (planGate) return planGate;
-    }
 
     if ((planId) === "free") {
       const startOfMonth = new Date();
@@ -538,13 +394,13 @@ Deno.serve(async (req: Request) => {
       ...pickQuestions(pools.HARD,   countHard),
     ];
 
-    /* ── AI GAP-FILL (Pro+ only, when AI_GENERATED source selected) ─────── */
+    /* ── AI GAP-FILL when the exam-specific bank is short ─────────────── */
     let finalIds         = [...selectedIds];
     const gap            = question_count - finalIds.length;
     let generatedCount   = 0;
     let gapFillError: string | undefined;
 
-    if (gap > 0 && wantsAI) {
+    if (gap > 0) {
       const aiCreditCost = creditCost("mock_test_ai_gap_fill");
       const creditResult = await deductCreditsAtomic({
         userId,
@@ -554,7 +410,7 @@ Deno.serve(async (req: Request) => {
       });
       if (!creditResult.success) {
         gapFillError =
-          `Need ${aiCreditCost} credits to generate ${gap} AI questions (have ${profile?.credits ?? 0}). ` +
+          `Need ${aiCreditCost} credits to generate remaining questions (have ${profile?.credits ?? 0}). ` +
           `Bank provided ${finalIds.length} of ${question_count}.`;
       } else {
         const priorityTopics =
@@ -562,22 +418,35 @@ Deno.serve(async (req: Request) => {
             ? topics
             : weakTopics.slice(0, 5).map((w) => w.topic);
 
-        const gapResult = await generateGapQuestions(
+        let existingRows: GapFillRow[] = [];
+        if (finalIds.length > 0) {
+          const { data: stemRows } = await db
+            .from("questions")
+            .select(
+              "id, question_text, options, correct_answer, subject, topic, difficulty, source, source_year, is_public, is_verified",
+            )
+            .in("id", finalIds);
+          existingRows = (stemRows ?? []) as GapFillRow[];
+        }
+
+        const fill = await fillUntilCount({
           db,
-          gap,
-          subjects.length > 0 ? subjects : ["General Subject"],
-          priorityTopics,
-          exam_type,
-          { EASY: easyPct, MEDIUM: medPct, HARD: hardPct },
+          targetCount: question_count,
+          existing: existingRows,
+          examType: exam_type && exam_type !== "CUSTOM" ? exam_type : "General Competitive Exam",
+          subjects: subjects.length > 0 ? subjects : ["General Subject"],
+          topics: priorityTopics,
+          difficultyMix: { EASY: easyPct, MEDIUM: medPct, HARD: hardPct },
           weakTopics,
           strongTopics,
-        );
+        });
 
-        if (gapResult.ids.length > 0) {
-          finalIds.push(...gapResult.ids);
-          generatedCount = gapResult.ids.length;
-        } else if (gapResult.error) {
-          gapFillError = gapResult.error;
+        if (fill.added.length > 0) {
+          finalIds.push(...fill.added.map((r) => r.id));
+          generatedCount = fill.added.length;
+        }
+        if (fill.error && fill.added.length === 0) {
+          gapFillError = fill.error;
           try {
             await refundCredits({
               userId,
@@ -587,16 +456,10 @@ Deno.serve(async (req: Request) => {
           } catch {
             /* best-effort refund */
           }
+        } else if (fill.error) {
+          gapFillError = fill.error;
         }
       }
-    } else if (gap > 0 && !wantsAI) {
-      console.warn(
-        `[select-test-questions] Bank short by ${gap} for exam_type="${exam_type ?? "any"}". ` +
-        `Enable AI-Generated source (Pro plan) for adaptive gap-fill.`,
-      );
-      gapFillError =
-        `Question bank is short by ${gap}. Select "AI-Generated" (Pro) for mixed papers, ` +
-        `or import more official papers via Admin → Seed Questions.`;
     }
     /* ── FINAL DEDUP, SHUFFLE & TRIM ─────────────────────────────────── */
     finalIds = shuffle([...new Set(finalIds)]).slice(0, question_count);
@@ -608,7 +471,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    if (!allow_shortfall && finalIds.length !== question_count) {
+    if (!allow_shortfall && finalIds.length !== question_count && generatedCount === 0) {
       return new Response(
         JSON.stringify({
           question_ids: finalIds,
@@ -616,7 +479,8 @@ Deno.serve(async (req: Request) => {
           required: question_count,
           code: "INSUFFICIENT_APPROVED_QUESTIONS",
           error:
-            `Only ${finalIds.length} of ${question_count} approved questions are available. Use a Custom Practice Set.`,
+            gapFillError ??
+            `Only ${finalIds.length} of ${question_count} questions are available after bank + AI fill.`,
         }),
         { status: 422, headers },
       );
