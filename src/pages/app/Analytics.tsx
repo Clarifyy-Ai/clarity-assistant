@@ -286,7 +286,49 @@ function KPICard({
 // ScoreTrendChart — simple CSS bar chart
 // ─────────────────────────────────────────────────────────────────
 
-function ScoreTrendChart({ data }: { data: { date: string; score: number }[] }) {
+function isFiniteScore(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function scoreTrendSummary(
+  points: { score: number | null | undefined }[],
+): string {
+  const scored = points.filter((p) => isFiniteScore(p.score));
+  if (scored.length === 0) return "Not scored";
+
+  const first = scored[0].score;
+  const last = scored[scored.length - 1].score;
+  const min = Math.min(...scored.map((p) => p.score));
+  const max = Math.max(...scored.map((p) => p.score));
+  const n = scored.length;
+  const direction = last > first ? "rose" : last < first ? "fell" : "held";
+  const fromTo =
+    direction === "held"
+      ? `held at ${formatSessionScore(first)}`
+      : `${direction} from ${formatSessionScore(first)} to ${formatSessionScore(last)}`;
+
+  return `Score ${fromTo} over ${n} session${n === 1 ? "" : "s"}. Lowest ${formatSessionScore(min)}, highest ${formatSessionScore(max)}.`;
+}
+
+function dimensionRadarSummary(
+  dimensions?: Record<string, number | null | undefined>,
+): string {
+  const scored = Object.entries(dimensions ?? {}).filter(([, v]) =>
+    isFiniteScore(v),
+  ) as [string, number][];
+
+  if (scored.length === 0) return "Not scored";
+
+  const formatDim = (key: string) => key.charAt(0).toUpperCase() + key.slice(1);
+  const list = scored
+    .map(([key, val]) => `${formatDim(key)} ${formatAggregateScore(val)}`)
+    .join(", ");
+  const weakest = scored.reduce((min, cur) => (cur[1] < min[1] ? cur : min));
+
+  return `${list}. Weakest: ${formatDim(weakest[0])}.`;
+}
+
+function ScoreTrendChart({ data }: { data: { date: string; score: number | null | undefined }[] }) {
   if (!data.length) {
     return (
       <Card className="text-center py-10">
@@ -296,10 +338,12 @@ function ScoreTrendChart({ data }: { data: { date: string; score: number }[] }) 
     );
   }
 
-  const chartData = data.slice(-20).map((d) => ({
+  const visible = data.slice(-20);
+  const chartData = visible.map((d) => ({
     label: format(new Date(d.date), "MMM d"),
     score: d.score,
   }));
+  const summary = scoreTrendSummary(visible);
 
   return (
     <Card>
@@ -308,6 +352,7 @@ function ScoreTrendChart({ data }: { data: { date: string; score: number }[] }) 
         <Badge variant="primary" size="sm">Last 30 sessions</Badge>
       </div>
 
+      <p className="sr-only">{summary}</p>
       <div className="h-44 w-full" role="img" aria-label="Score trend chart">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
@@ -337,7 +382,7 @@ function ScoreTrendChart({ data }: { data: { date: string; score: number }[] }) 
 function DimensionRadar({
   dimensions,
 }: {
-  dimensions?: Record<string, number>;
+  dimensions?: Record<string, number | null | undefined>;
 }) {
   const dims = dimensions ?? {
     content:       0,
@@ -345,16 +390,19 @@ function DimensionRadar({
     communication: 0,
     confidence:    0,
   };
+  const summary = dimensionRadarSummary(dimensions);
 
   return (
     <Card>
       <h3 className="text-sm font-semibold text-foreground mb-4">Average by dimension</h3>
+      <p className="sr-only">{summary}</p>
       <div
         className="space-y-3"
         role="img"
         aria-label="Average scores by interview dimension"
       >
         {Object.entries(dims).map(([key, val]) => {
+          if (!isFiniteScore(val)) return null;
           const c =
             val >= 75 ? "emerald" :
             val >= 55 ? "amber"   : "red";

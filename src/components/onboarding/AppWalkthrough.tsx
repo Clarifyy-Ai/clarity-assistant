@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useState, type CSSProperties } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   Mic,
   ClipboardList,
@@ -274,6 +274,8 @@ function cardPosition(
 export function AppWalkthrough(): JSX.Element | null {
   const userId = useAuthStore((s) => s.user?.id);
   const onboardingCompleted = useAuthStore((s) => s.profile?.onboarding_completed);
+  const location = useLocation();
+  const hideOnSettings = location.pathname.includes("/settings");
 
   const setMobileNavOpen = useUIStore((s) => s.setMobileNavOpen);
   const setSidebarCollapsed = useUIStore((s) => s.setSidebarCollapsed);
@@ -298,12 +300,12 @@ export function AppWalkthrough(): JSX.Element | null {
   }, [userId, setActiveTourStep, setMobileNavOpen]);
 
   useEffect(() => {
-    if (!userId || !onboardingCompleted) return;
+    if (!userId || !onboardingCompleted || hideOnSettings) return;
     if (hasCompletedAppWalkthrough(userId)) return;
 
     const timer = window.setTimeout(() => setOpen(true), 700);
     return () => window.clearTimeout(timer);
-  }, [userId, onboardingCompleted]);
+  }, [userId, onboardingCompleted, hideOnSettings]);
 
   useEffect(() => {
     if (!open) {

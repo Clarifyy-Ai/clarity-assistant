@@ -575,11 +575,11 @@ export default function MockTestHub(): React.ReactElement {
         <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-3">
           Start a Test
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 items-start">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-stretch gap-4">
           {EXAM_TYPES.map((exam) => (
             <div
               key={exam.id}
-              className={`self-start rounded-xl border ${exam.border} bg-gradient-to-br ${exam.color} px-3 py-2.5 transition-all hover:shadow-md`}
+              className={`h-full p-4 flex flex-col rounded-xl border ${exam.border} bg-gradient-to-br ${exam.color} transition-all hover:shadow-md`}
             >
               <div className="flex items-center justify-between mb-2">
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${exam.badgeColor}`}>
@@ -587,7 +587,7 @@ export default function MockTestHub(): React.ReactElement {
                 </span>
               </div>
               <p className="font-semibold text-foreground">{exam.name}</p>
-              <p className="text-xs text-muted-foreground mt-0.5 mb-3">{exam.description}</p>
+              <p className="text-xs text-muted-foreground mt-0.5 mb-3 flex-1">{exam.description}</p>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"

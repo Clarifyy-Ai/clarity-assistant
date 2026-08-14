@@ -31,6 +31,9 @@ export function getEffectiveHotkeyCombo(
 export function comboToKeyArray(combo: string): string[] {
   return combo
     .replace(/⌘/g, "Meta")
+    .replace(/⌥/g, "Alt")
+    .replace(/⇧/g, "Shift")
+    .replace(/⌃/g, "Ctrl")
     .split("+")
     .map((p) => p.trim().toLowerCase())
     .filter(Boolean)
@@ -38,6 +41,7 @@ export function comboToKeyArray(combo: string): string[] {
       if (p === "control") return "ctrl";
       // useHotkey treats metaKey as ctrl — normalize Mac ⌘ to ctrl for matching.
       if (p === "cmd" || p === "command" || p === "⌘" || p === "meta") return "ctrl";
+      if (p === "option" || p === "⌥") return "alt";
       return p;
     });
 }
@@ -64,28 +68,21 @@ export type ElectronShortcutBinding = {
   action: string;
 };
 
-/** Global Electron shortcuts derived from overrides (toggle + AI answer). */
+/** Global Electron shortcuts derived from overlay defaults + user overrides. */
 export function buildElectronShortcutBindings(
   overrides: HotkeyOverrides = loadHotkeyOverrides(),
 ): ElectronShortcutBinding[] {
-  const toggle = getEffectiveHotkeyCombo("TOGGLE_OVERLAY", overrides);
-  const ai = getEffectiveHotkeyCombo(
-    "REQUEST_AI_ANSWER" in DEFAULT_HOTKEYS
-      ? ("REQUEST_AI_ANSWER" as HotkeyId)
-      : ("GENERATE_ANSWER" as HotkeyId),
-    overrides,
-  );
+  const pair = (id: HotkeyId, action: string): ElectronShortcutBinding => ({
+    accelerator: comboToElectronAccelerator(getEffectiveHotkeyCombo(id, overrides)),
+    action,
+  });
   const bindings: ElectronShortcutBinding[] = [
-    {
-      accelerator: comboToElectronAccelerator(toggle),
-      action: "toggle-overlay",
-    },
-    {
-      accelerator: comboToElectronAccelerator(ai),
-      action: "request-ai-answer",
-    },
+    pair("TOGGLE_OVERLAY", "toggle-overlay"),
+    pair("TOGGLE_OVERLAY_ALIAS", "toggle-overlay"),
+    pair("MINIMIZE_OVERLAY", "toggle-overlay"),
+    pair("PANIC_CALM", "panic-calm"),
+    pair("REQUEST_AI_ANSWER", "request-ai-answer"),
   ];
-  // de-dupe accelerators
   const seen = new Set<string>();
   return bindings.filter((b) => {
     if (seen.has(b.accelerator)) return false;

@@ -93,6 +93,26 @@ const ACTION_TO_CANONICAL: Record<string, AICreditCostKey> = {
   star_builder: "star_builder",
   rephraser: "rephraser",
   project_builder: "project_builder",
+
+  // Client useCredits() CREDIT_COSTS keys
+  mock_question: "generate_questions",
+  mock_full_answer: "live_answer",
+  scorecard_generate: "session_debrief",
+  star_generate: "star_builder",
+  star_analyse: "polish_star",
+  company_brief: "company_research",
+  screenshot_analyse: "screenshot_answer",
+  coding_solution: "live_answer",
+  rephrase: "rephraser",
+  project_build: "project_builder",
+
+  // prep-tool Edge action strings (ledger / deduct-credits)
+  prep_tool_rephrase: "rephraser",
+  prep_tool_star_method: "star_builder",
+  prep_tool_project_build: "project_builder",
+  prep_tool_system_design: "system_design",
+  prep_tool_coding_hint: "coding_hint",
+  prep_tool_raw_prompt: "live_hint",
 };
 
 /**

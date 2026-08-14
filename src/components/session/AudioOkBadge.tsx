@@ -10,9 +10,11 @@ type BadgeState = "checking" | "ok" | "warn" | "denied" | "error";
 export function AudioOkBadge({
   className,
   autoRun = true,
+  onReady,
 }: {
   className?: string;
   autoRun?: boolean;
+  onReady?: (ready: boolean) => void;
 }) {
   const [state, setState] = useState<BadgeState>("checking");
   const [report, setReport] = useState<PreflightReport | null>(null);
@@ -27,6 +29,7 @@ export function AudioOkBadge({
         .catch(() => null);
       if (perm?.state === "denied") {
         setState("denied");
+        onReady?.(false);
         setDetail("Microphone blocked — allow mic in browser settings, then retry.");
         return;
       }
@@ -34,6 +37,7 @@ export function AudioOkBadge({
       setReport(result);
       if (result.ready) {
         setState(result.warnings.length ? "warn" : "ok");
+        onReady?.(true);
         setDetail(
           result.warnings.length
             ? result.warnings[0]
@@ -41,10 +45,12 @@ export function AudioOkBadge({
         );
       } else {
         setState("error");
+        onReady?.(false);
         setDetail(result.errors[0] ?? "Audio check failed — fix mic, then retry.");
       }
     } catch {
       setState("error");
+      onReady?.(false);
       setDetail("Could not check microphone. Retry or open Settings → Audio.");
     }
   }
@@ -74,8 +80,8 @@ export function AudioOkBadge({
             : "Audio needs fix";
 
   return (
-    <div className={cn("rounded-xl border px-3 py-2.5 space-y-1.5", styles[state], className)}>
-      <div className="flex items-center justify-between gap-2">
+    <div className={cn("rounded-xl border px-3 py-2.5 space-y-1.5 w-fit max-w-full", styles[state], className)}>
+      <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 text-sm font-semibold" role="status" aria-live="polite">
           {state === "checking" && <Loader2 className="w-4 h-4 animate-spin" aria-hidden />}
           {state === "ok" && <CheckCircle2 className="w-4 h-4" aria-hidden />}

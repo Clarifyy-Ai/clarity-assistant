@@ -53,6 +53,7 @@ export function OverlayKeyboardHandler({
   const overrides = useHotkeyOverridesState();
 
   const toggleKeys = useMemo(() => keysFor("TOGGLE_OVERLAY", overrides), [overrides]);
+  const aliasKeys = useMemo(() => keysFor("TOGGLE_OVERLAY_ALIAS", overrides), [overrides]);
   const captureKeys = useMemo(() => keysFor("CAPTURE_CODING", overrides), [overrides]);
   const minimizeKeys = useMemo(() => keysFor("MINIMIZE_OVERLAY", overrides), [overrides]);
   const aiKeys = useMemo(() => keysFor("REQUEST_AI_ANSWER", overrides), [overrides]);
@@ -60,6 +61,7 @@ export function OverlayKeyboardHandler({
   const panicKeys = useMemo(() => keysFor("PANIC_CALM", overrides), [overrides]);
 
   useHotkey(toggleKeys, () => useOverlayStore.getState().toggleMinimize(), enabled);
+  useHotkey(aliasKeys, () => useOverlayStore.getState().toggleMinimize(), enabled);
 
   useHotkey(
     captureKeys,

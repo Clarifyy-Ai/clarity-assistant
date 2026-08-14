@@ -227,16 +227,18 @@ function isSafeAccelerator(accelerator) {
 }
 
 function registerGlobalShortcuts(bindings) {
+  globalShortcut.unregisterAll();
+
+  const allowedActions = new Set(["toggle-overlay", "request-ai-answer", "panic-calm"]);
   const list = Array.isArray(bindings) && bindings.length
     ? bindings
     : [
         { accelerator: "CommandOrControl+Shift+H", action: "toggle-overlay" },
+        { accelerator: "CommandOrControl+Shift+U", action: "toggle-overlay" },
+        { accelerator: "CommandOrControl+Shift+J", action: "toggle-overlay" },
+        { accelerator: "CommandOrControl+Shift+P", action: "panic-calm" },
         { accelerator: "CommandOrControl+Shift+A", action: "request-ai-answer" },
       ];
-
-  globalShortcut.unregisterAll();
-
-  const allowedActions = new Set(["toggle-overlay", "request-ai-answer"]);
   for (const item of list) {
     const accelerator = item?.accelerator;
     const action = item?.action;

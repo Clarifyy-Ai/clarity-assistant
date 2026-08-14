@@ -38,12 +38,25 @@ class Settings(BaseSettings):
     port: int = Field(8000, alias="PORT")
     log_level: str = Field("INFO", alias="LOG_LEVEL")
 
+    # Daily scrape (runs while this process is up; pg_cron covers hosted Edge)
+    scrape_daily_enabled: bool = Field(True, alias="SCRAPE_DAILY_ENABLED")
+    scrape_daily_hour_utc: int = Field(2, alias="SCRAPE_DAILY_HOUR_UTC")
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_csv(cls, v):
         if isinstance(v, str):
             return [s.strip() for s in v.split(",") if s.strip()]
         return v or []
+
+    @field_validator("scrape_daily_hour_utc", mode="before")
+    @classmethod
+    def _clamp_hour(cls, v):
+        try:
+            hour = int(v)
+        except (TypeError, ValueError):
+            return 2
+        return max(0, min(23, hour))
 
 
 @lru_cache

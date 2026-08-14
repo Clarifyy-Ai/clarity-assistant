@@ -130,6 +130,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
 
   const lastSetup = useMemo(() => loadLastPracticeSetup(), []);
   const [showWizard, setShowWizard] = useState(!lastSetup);
+  const [quickAudioReady, setQuickAudioReady] = useState(false);
 
   const [step, setStep] = useState(1);
 
@@ -187,7 +188,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   }, [step, company, role, interviewType, resumeId, jdId]);
 
   // Step 4 — Auto-Generate
-  const [autoGenerate,     setAutoGenerate]     = useState(true);
+  const [autoGenerate,     setAutoGenerate]     = useState(false);
 
   // Step 5 — Save Transcript
   const [saveTranscript,   setSaveTranscript]   = useState(true);
@@ -294,7 +295,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     setModel(clampPreferredModel(typedProfile?.preferred_model, typedProfile?.plan_id));
     setHintStyle(typedProfile?.hint_style ?? "short_hints");
     setLanguage("English");
-    setAutoGenerate(true);
+    setAutoGenerate(false);
     setSaveTranscript(true);
     setDurationMinutes(freePlan ? 5 : 30);
     setSessionCallType("interview");
@@ -532,6 +533,25 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     onStart(config);
   }
 
+  function startFromSavedSetup() {
+    if (!lastSetup) return;
+    applyLastSetup(lastSetup);
+    const overlay = useOverlayStore.getState();
+    overlay.setActiveModel(
+      clampPreferredModel(lastSetup.model ?? typedProfile?.preferred_model, typedProfile?.plan_id),
+    );
+    overlay.setHintStyle(lastSetup.hint_style);
+    overlay.setSimpleLanguage(lastSetup.simple_language ?? false);
+    overlay.setSaveTranscript(lastSetup.save_transcript ?? true);
+    overlay.setSessionCallType(lastSetup.session_call_type ?? "interview");
+    overlay.setSessionLanguage(lastSetup.language ?? "English");
+    setAppStealthMode(lastSetup.stealth_mode ?? false);
+    useDocumentStore.getState().setActiveResumeId(lastSetup.resume_id ?? null);
+    useDocumentStore.getState().setActiveJDId(lastSetup.jd_id ?? null);
+    markPracticeStart({ source: "wizard" });
+    onStart(lastSetup);
+  }
+
   const canProceed = step < totalSteps;
   const isLastStep = step === totalSteps;
   const stepBlocker = wizardStepBlocker({
@@ -627,7 +647,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
               answer+hint · Session debrief {AI_CREDIT_COSTS.session_debrief} credits
             </p>
           </div>
-          <AudioOkBadge />
+          <AudioOkBadge onReady={setQuickAudioReady} />
           <div
             role="note"
             className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
@@ -641,13 +661,16 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
             size="lg"
             leftIcon={<Play className="w-4 h-4" />}
             onClick={() => {
-              // Never skip Connect gates (mic / speaker / network) — QA-076 / QA-078.
               applyLastSetup(lastSetup);
+              if (quickAudioReady) {
+                startFromSavedSetup();
+                return;
+              }
               setShowWizard(true);
               setStep(connectStep);
             }}
           >
-            Continue — check mic &amp; speaker
+            {quickAudioReady ? "Start Practice Session" : "Continue — check mic & speaker"}
           </Button>
           <button
             type="button"
@@ -677,6 +700,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
             {currentStepLabel}
           </h2>
           <div className="mt-2 flex justify-center">
+            {step !== resumeStep && (
             <SessionContextChip
               resumeLabel={
                 resumes.find((r) => r.id === resumeId)?.title ??
@@ -684,6 +708,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
               }
               language={language}
             />
+            )}
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             Estimated usage: ~{AI_CREDIT_COSTS.live_hint} credits/hint ·{" "}
@@ -969,6 +994,18 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-1.5">
                   <FileText className="w-3.5 h-3.5" /> Resume {sessionCallType === "interview" ? "(required)" : "(optional)"}
                 </label>
+                {resumeId && resumes.some((r) => r.id === resumeId) ? (
+                  <p className="text-sm text-foreground rounded-xl border border-border bg-secondary/30 px-3 py-2.5">
+                    Using <span className="font-medium">{resumes.find((r) => r.id === resumeId)?.title || "your selected resume"}</span>
+                    <button
+                      type="button"
+                      className="ml-2 text-xs text-primary hover:underline"
+                      onClick={() => setResumeId(null)}
+                    >
+                      Change
+                    </button>
+                  </p>
+                ) : (
                 <select
                   value={resumeId ?? ""}
                   onChange={(e) => setResumeId(e.target.value || null)}
@@ -979,6 +1016,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                     <option key={r.id} value={r.id}>{r.title || (r as any).file_name}</option>
                   ))}
                 </select>
+                )}
               </div>
 
               <div>

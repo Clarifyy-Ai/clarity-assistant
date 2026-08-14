@@ -408,17 +408,24 @@ export async function assembleClaimedPaperJob(
       (exam.legacy_exam_type as string | null) ||
       mapExamType(String(exam.code ?? exam.name ?? ""));
 
+    const PYP_SOURCES = ["OFFICIAL_PYP", "Previous Year Paper", "PYP", "previous_year"];
+
     let bankRows: GapFillRow[] = [];
     if (examTypeKeys.length > 0) {
-      const { data, error: bankErr } = await db
+      // Public PYP rows are practice-ready even when is_verified is still false.
+      // Requiring verified-only dropped ~1000 previous-year questions and forced AI fill.
+      let bankQuery = db
         .from("questions")
         .select(
           "id, question_text, options, correct_answer, subject, topic, difficulty, source, source_year, is_public, is_verified",
         )
         .eq("is_public", true)
-        .eq("is_verified", true)
         .in("exam_type", examTypeKeys)
-        .limit(800);
+        .limit(2000);
+      if (mode === "official_previous") {
+        bankQuery = bankQuery.in("source", PYP_SOURCES);
+      }
+      const { data, error: bankErr } = await bankQuery;
       if (bankErr) {
         throw new Error(bankErr.message);
       }
@@ -547,6 +554,8 @@ export async function assembleClaimedPaperJob(
       return { ok: false, status: "failed", errorCode: "LEASE_LOST", error: "Lost job lease", httpStatus: 409 };
     }
 
+    const requestedQuestionCount = blueprint.total_questions;
+
     const selectedStems = selected.map((q) => String(q.question_text ?? ""));
     const paperSim = validatePaperSimilarity(selectedStems);
     if (!paperSim.ok) {
@@ -567,6 +576,27 @@ export async function assembleClaimedPaperJob(
       const filtered = selected.filter((_, idx) => !drop.has(idx));
       selected.length = 0;
       selected.push(...filtered);
+    }
+
+    // Custom / adaptive practice: after the quality bar, take remaining unique
+    // public bank items (fingerprint + valid answer only). Re-running paper-wide
+    // near-dup collapse here is what shrunk IBPS custom sets from 50 → ~18.
+    const allowRelaxedBank = mode === "custom_mock" || mode === "adaptive";
+    if (allowRelaxedBank && selected.length < blueprint.total_questions) {
+      const selectedIds = new Set(selected.map((r) => String(r.id)));
+      for (const row of candidates) {
+        if (selected.length >= blueprint.total_questions) break;
+        if (selectedIds.has(String(row.id))) continue;
+        const text = String(row.question_text ?? "");
+        const options = normalizeMcqOptions(row.options);
+        const correctIndex = resolveCorrectIndex(row.correct_answer, options.length);
+        if (correctIndex == null) continue;
+        const fp = questionFingerprint(text, options);
+        if (seenFp.has(fp)) continue;
+        seenFp.add(fp);
+        selectedIds.add(String(row.id));
+        selected.push(row);
+      }
     }
 
     const allowAiFill = mode !== "official_previous";
@@ -606,6 +636,7 @@ export async function assembleClaimedPaperJob(
         topics,
         marksPositive: blueprint.marks_per_question,
         marksNegative: blueprint.negative_mark,
+        userId: job.user_id,
         onBatch: async () => {
           await heartbeatJobLease(db, job.id, workerId, 180_000);
         },
@@ -643,20 +674,28 @@ export async function assembleClaimedPaperJob(
         };
       }
       if (selected.length < 5) {
+        const quotaBlocked = /429|RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(aiFillError ?? "");
+        const fillDetail = quotaBlocked
+          ? "AI question generation is rate-limited. Wait a minute and try again."
+          : aiFillError
+            ? aiFillError.replace(/\s+/g, " ").slice(0, 180)
+            : "";
         await failJob(
           db,
           job,
           workerId,
           "INSUFFICIENT_APPROVED_QUESTIONS",
-          `Only ${selected.length} questions after bank + AI fill${aiFillError ? ` (${aiFillError})` : ""}.`,
-          false,
+          fillDetail
+            ? `Only ${selected.length} questions after bank + AI fill (${fillDetail})`
+            : `Only ${selected.length} questions after bank + AI fill.`,
+          quotaBlocked,
         );
         return {
           ok: false,
           status: "failed",
           errorCode: "INSUFFICIENT_APPROVED_QUESTIONS",
-          error: aiFillError
-            ? `Not enough questions (${selected.length}). AI fill: ${aiFillError}`
+          error: fillDetail
+            ? `Not enough questions (${selected.length}). ${fillDetail}`
             : "Not enough questions for a practice set.",
           available: selected.length,
           httpStatus: 422,
@@ -667,8 +706,8 @@ export async function assembleClaimedPaperJob(
       blueprint.paper_class = aiFilledCount > 0 ? "ai_generated" : "custom_practice";
       blueprint.label =
         aiFilledCount > 0
-          ? `AI-assisted practice set (${selected.length} unique questions). Not an official or leaked examination paper.`
-          : "Custom Practice Set — assembled from available approved bank items. Not a full exam simulation.";
+          ? `AI-assisted practice set (${selected.length} of ${requestedQuestionCount} requested unique questions). Not an official or leaked examination paper.`
+          : `Custom Practice Set — ${selected.length} of ${requestedQuestionCount} requested questions from available bank items. Not a full exam simulation.`;
       blueprint.slots = blueprint.slots.slice(0, selected.length);
     } else if (aiFilledCount > 0 && blueprint.paper_class !== "official_previous") {
       blueprint.paper_class = "ai_generated";
@@ -724,6 +763,7 @@ export async function assembleClaimedPaperJob(
           shuffle_questions: false,
           shuffle_options: false,
           quality_score: paperQuality.score,
+          requested_question_count: requestedQuestionCount,
         },
         status: "DRAFT",
       })

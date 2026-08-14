@@ -1,6 +1,7 @@
 """FastAPI entrypoint for the Clarity.AI gov-exam scraper."""
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -9,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.core.logger import configure_logging, get_logger
 from app.routes import health, metrics, scrape
+from app.workers.daily_scheduler import daily_scrape_loop
 
 
 @asynccontextmanager
@@ -26,8 +28,28 @@ async def lifespan(app: FastAPI):
     ]
     if missing:
         raise RuntimeError(f"Missing required env: {missing}")
-    log.info("scraper_started", port=settings.port, cors_origins=settings.cors_origins)
+    stop = asyncio.Event()
+    scheduler_task: asyncio.Task[None] | None = None
+    if settings.scrape_daily_enabled:
+        scheduler_task = asyncio.create_task(
+            daily_scrape_loop(settings, stop),
+            name="daily-exam-scrape",
+        )
+    log.info(
+        "scraper_started",
+        port=settings.port,
+        cors_origins=settings.cors_origins,
+        daily_scrape=settings.scrape_daily_enabled,
+        daily_hour_utc=settings.scrape_daily_hour_utc,
+    )
     yield
+    stop.set()
+    if scheduler_task:
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except asyncio.CancelledError:
+            pass
     log.info("scraper_stopped")
 
 

@@ -153,42 +153,59 @@ async function geminiRequest(
   const method = options.stream ? "streamGenerateContent" : "generateContent";
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => {
-    controller.abort();
-  }, timeoutMs);
+  const maxAttempts = 4;
+  let lastError: Error | null = null;
 
-  try {
-    const response = await fetch(buildGeminiUrl(model, method), {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      body: JSON.stringify(payload),
-    });
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
 
-    if (!response.ok) {
+    try {
+      const response = await fetch(buildGeminiUrl(model, method), {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+
       const errorText = await response
         .text()
         .catch(() => "Unknown Gemini error");
 
-      throw new Error(
+      lastError = new Error(
         `Gemini API error (${response.status}): ${truncateErrorText(errorText)}`
       );
-    }
 
-    return await response.json();
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new Error(`Gemini request timed out after ${timeoutMs}ms.`);
-    }
+      if (
+        (response.status === 429 || response.status === 503) &&
+        attempt < maxAttempts - 1
+      ) {
+        const waitMs = Math.min(12_000, 1500 * 2 ** attempt);
+        await new Promise((r) => setTimeout(r, waitMs));
+        continue;
+      }
 
-    throw error;
-  } finally {
-    clearTimeout(timer);
+      throw lastError;
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error(`Gemini request timed out after ${timeoutMs}ms.`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   }
+
+  throw lastError ?? new Error("Gemini request failed");
 }
 
 /* -------------------------------------------------------------------------- */

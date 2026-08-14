@@ -50,6 +50,8 @@ import { isElectronApp } from "@/lib/platform/isElectron";
 import LoginPage from "@/pages/auth/Login";
 import DashboardPage from "@/pages/app/Dashboard";
 import { ElectronRouteGate } from "@/components/layout/ElectronRouteGate";
+import { AppHotkeyListener } from "@/components/layout/AppHotkeyListener";
+import { PANIC_RESPONSE } from "@/types/session.types";
 
 // ✅ FIX P0-A: Marketing routes load eagerly (no lazy chunk on first paint).
 import Landing from "@/pages/marketing/Landing";
@@ -81,6 +83,9 @@ type ElectronAPI = {
   removeGlobalShortcutListener?: () => void;
   onHotkeyConflict?: (callback: (info: { key: string; action: string }) => void) => void;
   removeHotkeyConflictListener?: () => void;
+  syncGlobalShortcuts?: (
+    bindings: Array<{ accelerator: string; action: string }>,
+  ) => Promise<void>;
 };
 
 type ElectronWindow = Window & {
@@ -431,6 +436,7 @@ function AppShell(): JSX.Element {
         )}
         <SessionTimeoutBanner />
         <NetworkBanner />
+        <AppHotkeyListener />
         <main id="main-content" className="flex-1 overflow-y-auto min-w-0">
           <Suspense fallback={<AppLoadingFallback />}>
             <Outlet />
@@ -464,6 +470,7 @@ function AppShell(): JSX.Element {
         <AppTopBar />
         <SessionTimeoutBanner />
         <NetworkBanner />
+        <AppHotkeyListener />
 
         <main id="main-content" className="flex-1 overflow-y-auto pb-16 md:pb-0">
           <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 md:py-6">
@@ -923,9 +930,17 @@ export default function App(): JSX.Element {
     const api = electronWindow.electronAPI;
     if (!api?.onGlobalShortcut) return;
 
+    void import("@/lib/overlay/hotkeyOverrides").then((m) => {
+      void api.syncGlobalShortcuts?.(m.buildElectronShortcutBindings());
+    });
+
     api.onGlobalShortcut((action: string) => {
       if (action === "toggle-overlay") {
         useOverlayStore.getState().toggleMinimize();
+        return;
+      }
+      if (action === "panic-calm") {
+        useOverlayStore.getState().showPanic(PANIC_RESPONSE);
         return;
       }
       if (action === "request-ai-answer") {

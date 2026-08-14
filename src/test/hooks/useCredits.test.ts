@@ -57,6 +57,7 @@ function seed(credits: number) {
     profile: { id: "u1", credits, plan_id: "free" } as never,
     session: { access_token: "tok" } as never,
     credits,
+    isProfileLoaded: true,
     isAuthenticated: true,
     isLoading: false,
     status: "authenticated",
@@ -80,9 +81,20 @@ describe("useCredits — balance & flags [T-0120]", () => {
   });
 
   it("falls back to profile.credits when store credits unset", () => {
-    useAuthStore.setState({ credits: undefined as never, profile: { id: "u1", credits: 33 } as never });
+    useAuthStore.setState({ credits: undefined as never, profile: { id: "u1", credits: 33 } as never, isProfileLoaded: true });
     const { result } = renderHook(() => useCredits());
     expect(result.current.balance).toBe(33);
+  });
+
+  it("does not treat the pre-fetch store 0 as empty when profile has credits", () => {
+    useAuthStore.setState({
+      credits: 0,
+      isProfileLoaded: true,
+      profile: { id: "u1", credits: 50 } as never,
+    });
+    const { result } = renderHook(() => useCredits());
+    expect(result.current.balance).toBe(50);
+    expect(result.current.isEmpty).toBe(false);
   });
 
   it("flags isLow when balance <= 2", () => {

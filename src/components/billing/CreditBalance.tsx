@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useAuthStore } from '@/store/userStore';
 import { Zap, TrendingUp, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { PLAN_MONTHLY_CREDITS, type PlanId } from '@/lib/constants/pricing';
+import { useCreditBalance } from '@/components/billing/useCreditState';
 
 /**
  * CreditBalance Component
@@ -48,8 +50,9 @@ interface CreditStatus {
 }
 
 function getCreditStatus(current: number, limit: number): CreditStatus {
-  const used = limit - current;
-  const percentage = (used / limit) * 100;
+  const safeLimit = Math.max(1, limit);
+  const used = Math.max(0, safeLimit - current);
+  const percentage = Math.min(100, (used / safeLimit) * 100);
 
   let status: 'healthy' | 'warning' | 'critical' = 'healthy';
   if (percentage > 95) status = 'critical';
@@ -79,14 +82,15 @@ export function CreditBalance({
   className,
 }: CreditBalanceProps) {
   const { profile } = useAuthStore();
+  const { balance, known } = useCreditBalance();
   const [creditStatus, setCreditStatus] = useState<CreditStatus | null>(null);
 
   useEffect(() => {
-    if (profile?.credits !== undefined) {
-      const limit = (profile as any).credit_limit ?? 100;
-      setCreditStatus(getCreditStatus(profile.credits, limit));
-    }
-  }, [profile?.credits]);
+    if (!known) return;
+    const planId = ((profile as { plan_id?: string } | null)?.plan_id ?? "free") as PlanId;
+    const limit = PLAN_MONTHLY_CREDITS[planId] ?? PLAN_MONTHLY_CREDITS.free ?? 50;
+    setCreditStatus(getCreditStatus(balance, limit));
+  }, [balance, known, profile]);
 
   if (!creditStatus) {
     return (

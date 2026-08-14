@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Bell, Zap, AlertTriangle, Shield, ShieldOff, LogOut, Settings, User, Search, X } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
+import { useCreditBalance } from "@/components/billing/useCreditState";
 import { useNotificationStore } from "@/store/notificationStore";
 import { useUIStore } from "@/store/uiStore";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -24,6 +25,7 @@ const CMDK_TIP_KEY = "clarify:cmdk-tip-dismissed";
 
 export function AppTopBar() {
   const { profile, signOut, refreshCredits } = useAuthStore();
+  const { balance: creditBalance, known: creditsKnown } = useCreditBalance();
   const location = useLocation();
   const notifStore  = useNotificationStore();
   const uiStore     = useUIStore();
@@ -54,9 +56,8 @@ export function AppTopBar() {
     setShowCmdTip(false);
   }
 
-  const credits = profile?.credits ?? 0;
-  const isLow   = credits <= 2;
-  const isEmpty = credits === 0;
+  const isLow   = creditsKnown && creditBalance <= 2;
+  const isEmpty = creditsKnown && creditBalance === 0;
 
   const initial = (
     profile?.full_name?.trim()?.[0] ??
@@ -117,7 +118,11 @@ export function AppTopBar() {
           style={noDragStyle}
           data-tour="topbar-credits"
           onClick={() => uiStore.openUpgradeModal("pro")}
-          aria-label={`${credits} credit${credits === 1 ? "" : "s"}${isEmpty ? " — upgrade" : ""}`}
+          aria-label={
+            creditsKnown
+              ? `${creditBalance} credit${creditBalance === 1 ? "" : "s"}${isEmpty ? " — upgrade" : ""}`
+              : "Loading credits"
+          }
           className={cn(
             "flex items-center gap-1 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3 rounded-xl border text-[10px] sm:text-xs font-semibold transition-all",
             isEmpty
@@ -132,8 +137,8 @@ export function AppTopBar() {
           ) : (
             <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
           )}
-          <span>{credits}</span>
-          <span className="hidden sm:inline">{credits === 1 ? "credit" : "credits"}</span>
+          <span>{creditsKnown ? creditBalance : "—"}</span>
+          <span className="hidden sm:inline">{creditBalance === 1 ? "credit" : "credits"}</span>
           {isEmpty && <span className="ml-1 hidden sm:inline">· Upgrade</span>}
         </button>
 

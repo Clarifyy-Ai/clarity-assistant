@@ -25,6 +25,34 @@ const CREDIT_REFRESH_SKIP = new Set([
   "support-chat",
 ]);
 
+/** Non-AI functions should not blame an "AI request" on CORS / network failure. */
+const OPERATIONAL_EDGE_FNS = new Set([
+  "submit-test",
+  "create-test",
+  "create-exam-paper",
+  "process-paper-generation-job",
+  "select-test-questions",
+  "get-exam-details",
+  "search-exams",
+  "list-previous-papers",
+  "ping",
+  "create-checkout",
+  "create-portal-session",
+]);
+
+function unreachableUserMessage(fnName: string): string {
+  if (fnName === "delete-account") {
+    return "We couldn't complete account deletion right now. Please try again in a moment.";
+  }
+  if (OPERATIONAL_EDGE_FNS.has(fnName)) {
+    return "Couldn't reach the server. Check your internet connection and try again.";
+  }
+  return "The AI request did not go through. Please try again.";
+}
+
+const NETWORK_RETRY_DELAYS_MS =
+  import.meta.env.MODE === "test" ? [0, 0] : [300, 800];
+
 /**
  * ✅ FIX P7-C: Always read a fresh JWT at call time (session may have refreshed).
  */
@@ -128,20 +156,42 @@ export async function fetchEdge(
 
   try {
     const url = buildEdgeUrl(fnName);
+    const payload =
+      body === undefined
+        ? undefined
+        : isFormData
+          ? body
+          : JSON.stringify(body);
 
-    const response = await fetch(url, {
-      method,
-      headers,
-      body:
-        body === undefined
-          ? undefined
-          : isFormData
-            ? body
-            : JSON.stringify(body),
-      signal,
-    });
-
-    return response;
+    let lastErr: unknown;
+    for (let attempt = 0; attempt <= NETWORK_RETRY_DELAYS_MS.length; attempt++) {
+      if (attempt > 0) {
+        if (signal.aborted) break;
+        await new Promise((r) => setTimeout(r, NETWORK_RETRY_DELAYS_MS[attempt - 1]));
+        if (signal.aborted) break;
+      }
+      try {
+        return await fetch(url, {
+          method,
+          headers,
+          body: payload,
+          signal,
+        });
+      } catch (err: unknown) {
+        lastErr = err;
+        const retryable =
+          err instanceof TypeError &&
+          !signal.aborted &&
+          attempt < NETWORK_RETRY_DELAYS_MS.length;
+        if (!retryable) throw err;
+        logger.warn("network.request.retry", {
+          fnName,
+          attempt: attempt + 1,
+          requestId,
+        });
+      }
+    }
+    throw lastErr;
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") {
       if (options?.signal?.aborted) {
@@ -167,11 +217,7 @@ export async function fetchEdge(
         reason: "unreachable",
         requestId,
       });
-      throw new Error(
-        fnName === "delete-account"
-          ? "We couldn't complete account deletion right now. Please try again in a moment."
-          : "The AI request did not go through. Please try again.",
-      );
+      throw new Error(unreachableUserMessage(fnName));
     }
     throw err;
   } finally {

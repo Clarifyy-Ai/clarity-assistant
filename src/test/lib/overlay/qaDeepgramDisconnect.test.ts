@@ -8,6 +8,15 @@ describe("overlay Ctrl+Shift+H bind", () => {
     expect(DEFAULT_HOTKEYS.TOGGLE_OVERLAY.keys).toBe("Ctrl+Shift+H");
     expect(OVERLAY_HOTKEYS[0]?.keys).toEqual(["ctrl", "shift", "h"]);
   });
+
+  it("does not map Ctrl+Shift+C to overlay toggle (C is coding capture)", () => {
+    expect(DEFAULT_HOTKEYS.TOGGLE_OVERLAY_ALIAS.keys).toBe("Ctrl+Shift+U");
+    expect(DEFAULT_HOTKEYS.CAPTURE_CODING.keys).toBe("Ctrl+Shift+C");
+    const capture = OVERLAY_HOTKEYS.find((h) => h.keys.join("+") === "ctrl+shift+c");
+    expect(capture?.label).toMatch(/screenshot|analyse|analyze/i);
+    const toggle = OVERLAY_HOTKEYS.find((h) => h.keys.join("+") === "ctrl+shift+h");
+    expect(toggle?.label).toMatch(/toggle overlay/i);
+  });
 });
 
 describe("QA Deepgram disconnect flag", () => {

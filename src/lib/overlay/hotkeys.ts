@@ -4,6 +4,7 @@ import { useOverlayStore } from "@/store/overlayStore";
 import { useSessionStore } from "@/store/sessionStore";
 import { useAudioStore } from "@/store/audioStore";
 import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
+import { eventMatchesKeys } from "@/lib/overlay/hotkeyMatch";
 
 // ─────────────────────────────────────────────────────────────────
 // Global Hotkey Manager
@@ -372,11 +373,9 @@ export class HotkeyManager {
 
     if (isEditable && e.key !== "Escape") return;
 
-    const pressed = buildPressedSet(e);
-
     for (const hotkey of this.definitions) {
       if (!hotkey.isEnabled()) continue;
-      if (matchesHotkey(pressed, hotkey.keys)) {
+      if (eventMatchesKeys(e, hotkey.keys)) {
         e.preventDefault();
         e.stopPropagation();
         try {
@@ -419,29 +418,6 @@ export class HotkeyManager {
 // Helpers
 // ─────────────────────────────────────────────────────────────────
 
-/**
- * Normalises platform keys: treats Cmd (macOS) as "ctrl" so definitions
- * like ["ctrl","shift","h"] work on Win/Linux (Ctrl+Shift+H) and macOS (⌘+Shift+H).
- */
-function buildPressedSet(e: KeyboardEvent): Set<string> {
-  const set = new Set<string>();
-  if (e.ctrlKey || e.metaKey) set.add("ctrl");
-  if (e.shiftKey) set.add("shift");
-  if (e.altKey)   set.add("alt");
-  // Keep the primary key lowercase for case-insensitive matching
-  set.add((e.key ?? "").toLowerCase());
-  return set;
-}
-
-/**
- * Exact-match: requires the same key count AND every defined key present.
- * Prevents "extra" modifiers from accidentally firing a shortcut.
- */
-function matchesHotkey(pressed: Set<string>, required: string[]): boolean {
-  if (pressed.size !== required.length) return false;
-  return required.every((k) => pressed.has(k.toLowerCase()));
-}
-
 /** Format a keys array into a human-readable shortcut label. */
 export function formatHotkeyLabel(keys: string[]): string {
   return keys
@@ -456,9 +432,3 @@ export function formatHotkeyLabel(keys: string[]): string {
     })
     .join(" ");
 }
-
-// ─────────────────────────────────────────────────────────────────
-// Singleton — used across the app
-// ─────────────────────────────────────────────────────────────────
-
-export const hotkeyManager = new HotkeyManager();

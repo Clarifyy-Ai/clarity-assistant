@@ -277,6 +277,7 @@ function SwipeSessionRow({
   onDelete: () => void;
 }) {
   const swipe = useSwipeAction({ maxReveal: 72, threshold: 48 });
+  const navigate = useNavigate();
 
   return (
     <div className="relative overflow-hidden border-b border-border last:border-b-0">
@@ -302,7 +303,7 @@ function SwipeSessionRow({
 
       <div
         {...swipe.bind}
-        className="relative grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_1fr_1fr_80px] gap-2 sm:gap-4 px-4 py-3 hover:bg-muted/10 transition-colors items-center bg-background sm:bg-transparent"
+        className="relative grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_1fr_1fr_80px] gap-2 sm:gap-4 px-4 py-3 hover:bg-muted/10 transition-colors items-start bg-background sm:bg-transparent"
       >
         <div className="min-w-0">
           <p className="text-sm font-medium text-foreground truncate">
@@ -362,16 +363,18 @@ function SwipeSessionRow({
         </div>
 
         <div className="flex items-center gap-1">
-          <Link to={`/app/sessions/${s.id}`}>
-            <button
-              type="button"
-              className="p-2 hover:bg-muted/20 rounded-lg transition-colors min-h-11 min-w-11 inline-flex items-center justify-center"
-              title="View"
-              aria-label="View session"
-            >
-              <Eye className="w-3.5 h-3.5 text-muted-foreground" />
-            </button>
-          </Link>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/app/sessions/${s.id}`);
+            }}
+            className="p-2 hover:bg-muted/20 rounded-lg transition-colors min-h-11 min-w-11 inline-flex items-center justify-center"
+            title="View"
+            aria-label="View session"
+          >
+            <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+          </button>
           <button
             type="button"
             onClick={onDelete}

@@ -32,7 +32,7 @@ function getEffectiveCombo(id: HotkeyId, overrides: Overrides): string {
 function findConflicts(overrides: Overrides): Map<string, HotkeyId[]> {
   const byCombo = new Map<string, HotkeyId[]>();
   for (const id of Object.keys(DEFAULT_HOTKEYS) as HotkeyId[]) {
-    const combo = getEffectiveCombo(id, overrides);
+    const combo = getEffectiveCombo(id, overrides).toLowerCase();
     const list = byCombo.get(combo) ?? [];
     list.push(id);
     byCombo.set(combo, list);
@@ -120,11 +120,25 @@ export default function SettingsHotkeys() {
       className="max-w-3xl"
     >
       {isMobile && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
-          <p className="font-medium">Desktop shortcuts</p>
+        <div
+          role="note"
+          className="rounded-xl border border-amber-500/40 bg-amber-500/15 px-4 py-4 text-sm space-y-2"
+        >
+          <p className="font-semibold text-foreground">Desktop overlay required</p>
+          <p className="text-muted-foreground text-xs leading-relaxed">
+            Live overlay, global hotkeys (Ctrl+Shift+H / Ctrl+Shift+P), and system-audio capture
+            need a desktop browser or the Clarify desktop app. On mobile you can still complete
+            setup and practice with the microphone, but overlay shortcuts are unavailable.
+          </p>
+        </div>
+      )}
+      {!isMobile && (
+        <div className="rounded-xl border border-border bg-card px-4 py-3 text-sm">
+          <p className="font-medium">When shortcuts fire</p>
           <p className="text-muted-foreground text-xs mt-1 leading-relaxed">
-            Ctrl+Shift overlay hotkeys work in the desktop app and a focused desktop browser.
-            They are not available on phones or tablets.
+            Overlay shortcuts run during an active Practice Coach or Mock Interview.
+            In Chrome, Ctrl+Shift+H opens History and Ctrl+Shift+J opens DevTools —
+            remap those here or use the Clarify desktop app for global hotkeys.
           </p>
         </div>
       )}

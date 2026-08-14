@@ -442,9 +442,9 @@ export default function Landing() {
 
       <PracticeCoachWalkthrough />
 
-      <section id="gov-exams" className="pb-14 sm:pb-16 px-4 sm:px-6 bg-amber-500/5 border-y border-amber-500/10">
-        <div className="max-w-5xl mx-auto py-14">
-          <m.div className="text-center mb-10" {...fadeUp()}>
+      <section id="gov-exams" className="px-4 sm:px-6 bg-amber-500/5 border-y border-amber-500/10">
+        <div className="max-w-5xl mx-auto py-8 sm:py-10">
+          <m.div className="text-center mb-5" {...fadeUp()}>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs font-medium text-amber-600 mb-4">
               <Landmark className="w-3.5 h-3.5" />
               UPSC · SSC · IBPS · JEE · NEET · PSU
@@ -460,7 +460,7 @@ export default function Landing() {
           <m.div {...fadeUp(0.1)}>
             <GovExamShowcase />
           </m.div>
-          <m.div className="text-center mt-8" {...fadeUp(0.2)}>
+          <m.div className="text-center mt-6" {...fadeUp(0.2)}>
             <Link
               to="/gov-exams"
               className="inline-flex items-center gap-2 text-sm font-semibold text-amber-600 hover:underline"
@@ -473,9 +473,9 @@ export default function Landing() {
       </section>
 
       {/* ── Feature Pillars ─────────────────────────────────────────────────── */}
-      <section id="features" className="scroll-mt-20 pb-14 sm:pb-16 px-4 sm:px-6">
+      <section id="features" className="scroll-mt-20 pt-6 pb-10 sm:pb-12 px-4 sm:px-6">
         <div className="max-w-6xl mx-auto">
-          <m.div className="text-center mb-10" {...fadeUp()}>
+          <m.div className="text-center mb-4" {...fadeUp()}>
             <h2 className="text-2xl sm:text-3xl font-bold">
               Five pillars. One complete prep system.
             </h2>
@@ -484,7 +484,7 @@ export default function Landing() {
             </p>
           </m.div>
 
-          <m.div {...fadeUp(0.1)} className="mb-10">
+          <m.div {...fadeUp(0.1)} className="mb-6">
             <FeatureShowcase />
           </m.div>
 

@@ -13,3 +13,4 @@ export { PageContent } from './PageContent';
 export { ScrollToTop } from './ScrollToTop';
 export { SettingsPageShell } from './SettingsPageShell';
 export { AuthShell } from './AuthShell';
+export { AppHotkeyListener } from './AppHotkeyListener';

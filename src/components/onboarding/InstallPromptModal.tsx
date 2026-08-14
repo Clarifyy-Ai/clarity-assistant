@@ -215,35 +215,11 @@ export function InstallPromptModal(): JSX.Element | null {
         </div>
 
         <DialogFooter className="px-6 pt-4 flex-wrap pb-[calc(1rem+env(safe-area-inset-bottom,0px))] border-t border-border bg-muted/20 flex-col sm:flex-row gap-2 sm:gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="sm:mr-auto text-muted-foreground min-h-11"
-            onClick={snooze}
-          >
-            Remind me later
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="min-h-11"
-            onClick={() => {
-              snooze();
-              navigate("/app/mock");
-            }}
-          >
-            Continue in browser
-          </Button>
-          <Button type="button" variant="outline" size="sm" className="min-h-11" onClick={dismissPermanent}>
-            Don&apos;t show again
-          </Button>
           {canInstall ? (
             <Button
               type="button"
               size="sm"
-              className="bg-primary hover:bg-primary/90 min-h-11"
+              className={`bg-primary hover:bg-primary/90 min-h-11 ${isMobile ? "order-1" : "sm:order-4"}`}
               disabled={installing}
               onClick={() => void handleInstall()}
               leftIcon={<Download className="w-4 h-4" />}
@@ -255,13 +231,53 @@ export function InstallPromptModal(): JSX.Element | null {
               type="button"
               variant="outline"
               size="sm"
-              className="min-h-11"
+              className={`min-h-11 ${isMobile ? "order-1" : "sm:order-4"}`}
               onClick={() => {
                 snooze();
                 navigate(DESKTOP_INSTALL_GUIDE_PATH);
               }}
             >
               {installButtonLabel}
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={`min-h-11 ${isMobile ? "order-2" : "sm:order-1"}`}
+            onClick={() => {
+              snooze();
+              navigate("/app/mock");
+            }}
+          >
+            Continue in browser
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className={`min-h-11 ${isMobile ? "order-3" : "sm:order-2"}`}
+            onClick={dismissPermanent}
+          >
+            Don&apos;t show again
+          </Button>
+          {isMobile ? (
+            <button
+              type="button"
+              className="order-4 text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline py-1 min-h-11"
+              onClick={snooze}
+            >
+              Remind me later
+            </button>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="sm:order-3 text-muted-foreground min-h-11"
+              onClick={snooze}
+            >
+              Remind me later
             </Button>
           )}
         </DialogFooter>

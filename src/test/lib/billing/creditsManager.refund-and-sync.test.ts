@@ -18,7 +18,10 @@ function makeAuthState(overrides: any = {}) {
       byok_anthropic: false,
     },
     user: { id: "u1" },
-    updateProfile: vi.fn((patch: any) => Object.assign(state.profile, patch)),
+    updateProfile: vi.fn(),
+    setProfile: vi.fn((next: any) => {
+      state.profile = next;
+    }),
     ...overrides,
   };
   return state;
@@ -76,9 +79,10 @@ describe("deductCreditsForAction — 402 refund/race handling", () => {
     expect(result.error).toBe("Insufficient credits (server-verified)");
     // refreshCredits() was invoked internally and synced the store from the DB row.
     expect(result.creditsRemaining).toBe(3);
-    expect(authState.updateProfile).toHaveBeenCalledWith(
+    expect(authState.setProfile).toHaveBeenCalledWith(
       expect.objectContaining({ credits: 3 }),
     );
+    expect(authState.updateProfile).not.toHaveBeenCalled();
   });
 
   it("falls back to a generic insufficient-credits message when body has no error", async () => {
@@ -138,7 +142,10 @@ describe("deductCreditsForAction — success path balance sync", () => {
 
     expect(result.success).toBe(true);
     expect(result.creditsRemaining).toBe(44);
-    expect(authState.updateProfile).toHaveBeenCalledWith({ credits: 44 });
+    expect(authState.setProfile).toHaveBeenCalledWith(
+      expect.objectContaining({ credits: 44 }),
+    );
+    expect(authState.updateProfile).not.toHaveBeenCalled();
     expect(mockOpenUpgradeModal).not.toHaveBeenCalled();
   });
 
@@ -189,12 +196,15 @@ describe("refreshCredits — balance sync from DB", () => {
     const result = await refreshCredits();
 
     expect(result).toBe(77);
-    expect(authState.updateProfile).toHaveBeenCalledWith({
-      credits: 77,
-      plan: "pro",
-      plan_id: "pro",
-      subscription_status: "trialing",
-    });
+    expect(authState.setProfile).toHaveBeenCalledWith(
+      expect.objectContaining({
+        credits: 77,
+        plan: "pro",
+        plan_id: "pro",
+        subscription_status: "trialing",
+      }),
+    );
+    expect(authState.updateProfile).not.toHaveBeenCalled();
   });
 
   it("returns null and skips the profile update when the DB call errors", async () => {

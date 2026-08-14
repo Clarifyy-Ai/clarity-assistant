@@ -7,7 +7,7 @@ import {
 } from "@/lib/network/aiErrorUx";
 import { supabase } from "@/integrations/supabase/client";
 import { refreshCredits } from "@/lib/billing/creditsManager";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { useAuthStore } from "@/store/userStore";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -24,6 +24,7 @@ import { PrepToolShell, SaveToAnswerBankConfirm } from "@/components/prep/PrepTo
 import { answerBankDB } from "@/lib/supabase/database";
 import { Whiteboard, type WhiteboardHandle } from "@/components/prep/Whiteboard";
 import { SYSTEM_DESIGN_PRESETS } from "@/lib/prep/systemDesignPresets";
+import { splitMarkdownSections } from "@/lib/prep/structuredOutput";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 
 type Difficulty = "easy" | "medium" | "hard";
@@ -114,6 +115,10 @@ export default function SystemDesign() {
   }, []);
 
   const activeTopic = topics?.find((t) => t.id === selected) ?? null;
+  const breakdownSections = useMemo(
+    () => (breakdown ? splitMarkdownSections(breakdown) : []),
+    [breakdown],
+  );
 
   async function getAIBreakdown() {
     if (!activeTopic || !credits.canAfford("system_design")) return;
@@ -324,20 +329,34 @@ export default function SystemDesign() {
               </div>
 
               {breakdown && (
-                <Card className="border-primary/20 bg-primary/5">
-                  <div className="flex items-center justify-between mb-3">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between px-0.5">
                     <p className="text-xs font-semibold text-primary uppercase tracking-widest flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5" /> AI Design Breakdown
                     </p>
                     <button
+                      type="button"
                       onClick={() => { navigator.clipboard.writeText(breakdown); toast.success("Copied!"); }}
                       className="text-muted-foreground hover:text-foreground"
+                      aria-label="Copy full breakdown"
                     >
                       <Copy className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <div className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{breakdown}</div>
-                </Card>
+                  {breakdownSections.map((section, index) => (
+                    <Card key={`${index}-${section.title}`} className="border-primary/20 bg-primary/5">
+                      <div className="flex items-start gap-3">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary text-xs font-semibold">
+                          {index + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="text-sm font-semibold text-foreground mb-2">{section.title}</h3>
+                          <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{section.body}</p>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
               )}
 
               <div className="mt-4">

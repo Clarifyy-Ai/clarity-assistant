@@ -11,6 +11,10 @@ import {
 import { clampPreferredModel } from "@/lib/ai/modelOptions";
 import { useAuthStore } from "@/store/authStore";
 
+/** Ignore duplicate Ctrl+Shift+H from Electron globalShortcut + in-page listener. */
+let lastMinimizeToggleAt = 0;
+const MINIMIZE_TOGGLE_GUARD_MS = 80;
+
 // ─────────────────────────────────────────────────────────────────
 // Overlay Position
 // ─────────────────────────────────────────────────────────────────
@@ -269,7 +273,7 @@ export const useOverlayStore = create<OverlayStore>()(
       overlay_width: DEFAULT_WIDTH,
       overlay_height: DEFAULT_HEIGHT,
 
-      auto_generate: true,
+      auto_generate: false,
       auto_answer_silence_seconds: 3,
       simple_language: false,
       save_transcript: true,
@@ -396,6 +400,9 @@ export const useOverlayStore = create<OverlayStore>()(
 
       toggleMinimize: () =>
         set((s) => {
+          const now = Date.now();
+          if (now - lastMinimizeToggleAt < MINIMIZE_TOGGLE_GUARD_MS) return s;
+          lastMinimizeToggleAt = now;
           if (s.is_visible) {
             return {
               is_visible: false,

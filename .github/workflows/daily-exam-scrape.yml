@@ -1,0 +1,49 @@
+# Daily official-paper collector. Sequential per exam so Edge timeouts stay under
+# the hosted limit. Requires repo secret EXAM_SCRAPE_CRON_SECRET (same value as
+# the Edge Function secret / Vault exam_scrape_cron_secret).
+name: Daily exam scrape
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      exam_type:
+        description: "Exam id (JEE_MAIN, NEET, UPSC, SSC_CGL, IBPS_PO). Empty = all."
+        required: false
+        default: ""
+      force:
+        description: "Re-run even if a job already completed today (true/false)"
+        required: false
+        default: "false"
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        exam_type: [JEE_MAIN, NEET, UPSC, SSC_CGL, IBPS_PO]
+    steps:
+      - name: Collect official PYQs
+        env:
+          CRON_SECRET: ${{ secrets.EXAM_SCRAPE_CRON_SECRET }}
+          EXAM_TYPE: ${{ github.event.inputs.exam_type || matrix.exam_type }}
+          FORCE: ${{ github.event.inputs.force || 'false' }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "EXAM_SCRAPE_CRON_SECRET is not set; skipping (pg_cron is the primary scheduler)."
+            exit 0
+          fi
+          if [ -n "${{ github.event.inputs.exam_type }}" ] && [ "${{ github.event.inputs.exam_type }}" != "${{ matrix.exam_type }}" ]; then
+            echo "Skipping ${{ matrix.exam_type }} (manual exam_type filter)."
+            exit 0
+          fi
+          BODY=$(printf '{"exam_type":"%s","source":"github_actions","force":%s}' "$EXAM_TYPE" "$( [ "$FORCE" = "true" ] && echo true || echo false )")
+          curl -sS --fail-with-body --max-time 180 \
+            -X POST "https://qzgvjrvtkwlzxpmlddkx.supabase.co/functions/v1/run-daily-exam-scrape" \
+            -H "Content-Type: application/json" \
+            -H "x-internal-secret: ${CRON_SECRET}" \
+            -d "$BODY"

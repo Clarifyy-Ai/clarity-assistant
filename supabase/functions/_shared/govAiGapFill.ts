@@ -5,7 +5,8 @@
  */
 
 import { createServiceClient } from "./supabase.ts";
-import { geminiGenerate, parseJSON } from "./gemini.ts";
+import { generateWithFallback } from "./aiProvider.ts";
+import { parseJSON } from "./gemini.ts";
 import { buildGapFillPrompt, type WeakTopicStat } from "./examAIPrompts.ts";
 import {
   conflictsWithSelected,
@@ -60,6 +61,7 @@ export type FillUntilOpts = {
   strongTopics?: string[];
   marksPositive?: number;
   marksNegative?: number;
+  userId?: string;
   onBatch?: () => Promise<void>;
 };
 
@@ -70,8 +72,12 @@ export type FillUntilOpts = {
 export async function fillUntilCount(
   opts: FillUntilOpts,
 ): Promise<{ added: GapFillRow[]; error?: string }> {
-  if (!Deno.env.get("GEMINI_API_KEY")?.trim()) {
-    return { added: [], error: "GEMINI_API_KEY not configured on Supabase" };
+  if (
+    !Deno.env.get("GEMINI_API_KEY")?.trim() &&
+    !Deno.env.get("OPENAI_API_KEY")?.trim() &&
+    !Deno.env.get("ANTHROPIC_API_KEY")?.trim()
+  ) {
+    return { added: [], error: "No AI provider key configured on Supabase" };
   }
 
   const added: GapFillRow[] = [];
@@ -111,10 +117,14 @@ export async function fillUntilCount(
       selectedTexts,
       marksPositive: opts.marksPositive ?? 1,
       marksNegative: opts.marksNegative ?? 0,
+      userId: opts.userId,
     });
 
     if (result.error) lastError = result.error;
+    const quotaHit = /429|RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(result.error ?? "");
     if (result.rows.length === 0) {
+      // generateWithFallback already exhausted Gemini + OpenAI/Anthropic.
+      if (quotaHit) break;
       emptyBatches += 1;
       if (emptyBatches >= 3) break;
       continue;
@@ -147,6 +157,7 @@ async function generateAndInsertBatch(args: {
   selectedTexts: string[];
   marksPositive: number;
   marksNegative: number;
+  userId?: string;
 }): Promise<{ rows: GapFillRow[]; error?: string }> {
   const subj = args.subjects[0] ?? "General";
   const examStr = args.examType || "General Competitive Exam";
@@ -164,9 +175,17 @@ async function generateAndInsertBatch(args: {
 
   let raw: string;
   try {
-    raw = await geminiGenerate(prompt, undefined, 0.85, 8192);
+    const generated = await generateWithFallback({
+      prompt,
+      temperature: 0.85,
+      maxTokens: 8192,
+      jsonMode: true,
+      userId: args.userId ?? getSystemUserId() ?? "gap-fill",
+      action: "gov_ai_gap_fill",
+    });
+    raw = generated.text;
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Gemini gap-fill failed";
+    const message = err instanceof Error ? err.message : "AI gap-fill failed";
     console.warn("[govAiGapFill] generate error:", message);
     return { rows: [], error: message };
   }
@@ -179,7 +198,10 @@ async function generateAndInsertBatch(args: {
   for (const q of qs) {
     if (typeof q !== "object" || q === null) continue;
     const rec = q as Record<string, unknown>;
-    const text = String(rec.question_text ?? "").trim().slice(0, 1000);
+    const text = String(rec.question_text ?? "").trim().slice(0, 1000)
+      .replace(/!\[[^\]]*]\([^)]*\)/g, "")
+      .replace(/^\s*(reference\s+image|\[figure\])\s*$/gim, "")
+      .trim();
     if (text.length < 10) continue;
 
     const optionTexts = normalizeMcqOptions(rec.options);

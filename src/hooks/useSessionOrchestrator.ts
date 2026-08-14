@@ -23,6 +23,8 @@ interface CreateSessionParams {
   session_type: string;
   interview_type: string;
   target_company?: string | null;
+  company?: string | null;
+  role?: string | null;
   question_count?: number;
   hint_style?: string;
   model?: string;
@@ -44,12 +46,12 @@ export function useSessionOrchestrator() {
     store.getState().setMode(params.session_type === "live" ? "live" : "mock");
     store.getState().setStatus("active");
     store.getState().setConfig({
-      company: params.target_company ?? null,
-      role: null,
+      company: params.company ?? params.target_company ?? null,
+      role: params.role ?? null,
       interview_type: params.interview_type as any,
       question_count: params.question_count ?? 5,
-      hint_style: (params.hint_style as any) ?? "concise",
-      model: (params.model as any) ?? "gemini-2.0-flash",
+      hint_style: (params.hint_style as any) ?? "short_hints",
+      model: (params.model as any) ?? "gemini-flash",
       smart_routing: false,
       stealth_mode: false,
       resume_id: params.resume_id ?? null,

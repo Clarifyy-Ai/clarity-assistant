@@ -106,11 +106,15 @@ export const OverlayListeningIndicator = memo(function OverlayListeningIndicator
       ) : state === "error" ? (
         <AlertCircle className="w-2.5 h-2.5" aria-hidden />
       ) : (
-        <span className="flex items-end gap-0.5 h-3" aria-hidden>
+      <span
+        className="flex items-end gap-0.5 h-3"
+        aria-hidden
+        title={`Audio level ${Math.round(Math.min(1, Math.max(0, currentLevel)) * 100)}%`}
+      >
           {[0.35, 0.65, 1, 0.5].map((base, i) => {
             const active = state === "listening" || state === "busy";
             const h = active
-              ? Math.max(4, Math.min(12, (currentLevel / 100) * 12 * base + (i % 2) * 2))
+              ? Math.max(4, Math.min(12, currentLevel * 12 * base + (i % 2) * 2))
               : 4 + i;
             return (
               <span

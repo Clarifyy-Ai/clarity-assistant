@@ -27,6 +27,17 @@ import { toast } from "sonner";
 
 const STEPS = ["Exam", "Paper basis", "Customize", "Review"] as const;
 
+function paperJobErrorMessage(job: PaperJobResult): string {
+  const raw = [job.errorMessage, job.error, job.errorCode].find(
+    (v): v is string => typeof v === "string" && v.trim().length > 0,
+  ) ?? "Generation failed";
+  if (/429|RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(raw)) {
+    return "AI question generation is temporarily rate-limited. Wait a minute and try again.";
+  }
+  const compact = raw.replace(/\s+/g, " ").trim();
+  return compact.length > 180 ? `${compact.slice(0, 180)}…` : compact;
+}
+
 const JOB_STAGES = [
   "analyzing_pattern",
   "planning_blueprint",
@@ -167,7 +178,7 @@ export default function GenerateGovPaper(): React.ReactElement {
         });
         setJob(result);
         if (result.status === "failed" || !result.mockTestId) {
-          toast.error(result.error ?? result.errorCode ?? "Topic practice failed");
+          toast.error(paperJobErrorMessage(result));
           return;
         }
         toast.success(
@@ -192,7 +203,7 @@ export default function GenerateGovPaper(): React.ReactElement {
       setJob(result);
 
       if (result.status === "failed") {
-        toast.error(result.error ?? result.errorCode ?? "Generation failed");
+        toast.error(paperJobErrorMessage(result));
         return;
       }
 
@@ -235,7 +246,7 @@ export default function GenerateGovPaper(): React.ReactElement {
         );
         navigate(`/app/mock-test/session/${current.mockTestId}`);
       } else if (current.status === "failed") {
-        toast.error(current.errorMessage ?? current.errorCode ?? "Failed");
+        toast.error(paperJobErrorMessage(current));
       } else {
         toast.message(
           "Still generating unique questions on the server. This can take a few minutes when the bank is short — refresh Mock Tests shortly.",

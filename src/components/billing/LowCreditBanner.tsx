@@ -4,6 +4,7 @@ import { useAuthStore } from "@/store/authStore";
 import { PLAN_MONTHLY_CREDITS, type PlanId } from "@/lib/constants/pricing";
 import { cn } from "@/lib/utils";
 import { CreditExhaustedState } from "./CreditExhaustedState";
+import { useCreditBalance } from "./useCreditState";
 
 export { useLowCreditState } from "./useCreditState";
 
@@ -15,11 +16,11 @@ const ABSOLUTE_LOW_CREDIT = 5;
 
 /** Shows when balance is at or below 5 credits or 20% of the plan's monthly allotment. */
 export function LowCreditBanner({ className }: LowCreditBannerProps) {
-  const profile = useAuthStore((s) => s.profile);
   const planId = (useAuthStore((s) => s.planId) ?? "free") as PlanId;
-
-  const balance = profile?.credits ?? 0;
+  const { balance, known } = useCreditBalance();
   const monthly = PLAN_MONTHLY_CREDITS[planId];
+
+  if (!known) return null;
 
   if (balance <= 0) {
     return (

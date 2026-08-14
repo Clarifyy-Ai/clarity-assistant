@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 
 import { deductCredits as deductCreditsApi } from "@/lib/api/billing";
+import { resolveCreditBalance } from "@/lib/billing/resolveCreditBalance";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { useAuthStore } from "@/store/authStore";
 
@@ -72,15 +73,15 @@ export function useCredits() {
   const user = useAuthStore((state) => state.user);
   const profile = useAuthStore((state) => state.profile);
   const storeCredits = useAuthStore((state) => state.credits);
+  const isProfileLoaded = useAuthStore((state) => state.isProfileLoaded);
   const refreshCredits = useAuthStore((state) => state.refreshCredits);
   const setProfile = useAuthStore((state) => state.setProfile);
 
-  const balance =
-    typeof storeCredits === "number"
-      ? storeCredits
-      : typeof profile?.credits === "number"
-        ? profile.credits
-        : 0;
+  const { balance } = resolveCreditBalance({
+    isProfileLoaded,
+    profileCredits: profile?.credits,
+    storeCredits,
+  });
 
   const isLow = balance > 0 && balance <= 2;
   const isEmpty = balance <= 0;

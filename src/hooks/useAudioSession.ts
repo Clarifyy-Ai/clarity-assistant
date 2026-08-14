@@ -184,10 +184,18 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
                 },
               }
             );
+            toast.warning(
+              "Without tab audio, the coach cannot hear the interviewer — use Chat or enable tab audio from the toolbar.",
+              { duration: Infinity },
+            );
           }
         } else {
           store.setSystemAudioAvailable(false);
           toast.message("Continuing with mic only. Enable tab audio from the toolbar to capture the interviewer.");
+          toast.warning(
+            "Without tab audio, the coach cannot hear the interviewer — use Chat or enable tab audio from the toolbar.",
+            { duration: Infinity },
+          );
         }
       } else if (opts.enableSystemAudio && !isSystemAudioSupported()) {
         store.setSystemAudioAvailable(false);
@@ -197,7 +205,9 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
           recoverable: false,
           suggestion: "Use Chrome/Edge and join the interview in a browser tab.",
         });
-        toast.warning("Tab audio is not supported in this browser. Only your microphone will be transcribed.");
+        toast.warning(
+          "Tab audio is not supported in this browser. Only your microphone will be transcribed. Type a question in the Chat tab as a fallback.",
+        );
       }
 
       store.setCombinedStream(micStream);
@@ -284,7 +294,10 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
           });
           useOverlayStore.getState().setError(dgMsg);
           useOverlayStore.getState().setSessionPipelineState("audio_unavailable");
-          toast.error(dgMsg);
+          toast.error(
+            "Live transcription is off. Type a question in the Chat tab to get hints.",
+            { duration: Infinity },
+          );
         } else {
           useOverlayStore.getState().setSessionPipelineState("listening");
         }

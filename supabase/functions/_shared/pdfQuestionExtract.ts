@@ -280,6 +280,8 @@ Rules:
 - Skip any item that is not a valid MCQ with 4 options.
 - difficulty must be one of "EASY", "MEDIUM", "HARD".
 - If text is unclear from OCR, still extract best-effort but keep options distinct.
+- Never invent image URLs, placeholder hosts, or the caption "Reference Image".
+- Describe diagrams in LaTeX inside question_text instead of a fake image.
 
 Schema:
 {
@@ -299,8 +301,7 @@ Schema:
       "difficulty": "MEDIUM",
       "marks_positive": 4,
       "marks_negative": 1,
-      "latex_present": false,
-      "image_url": ""
+      "latex_present": false
     }
   ],
   "raw_ocr_notes": "optional short notes about OCR quality"

@@ -35,7 +35,7 @@ const EXAM_TYPE_MAP: Record<string, string> = {
   SSC_CGL:          "SSC Exams (CGL/CHSL)",
   SSC_CHSL:         "SSC Exams (CGL/CHSL)",
   IBPS_PO:          "Banking (IBPS/SBI/RBI)",
-  RRB_NTPC:         "GENERAL",
+  RRB_NTPC:         "RRB NTPC",
   HPCL_ENGINEER:    "HPCL Engineer",
   APPSC_GROUP:      "APPSC (Group 1/2/3/4)",
   APPSC_GROUP2:     "APPSC (Group 1/2/3/4)",

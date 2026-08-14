@@ -2,11 +2,19 @@
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useAuthStore } from "@/store/authStore";
+import { resolveCreditBalance } from "@/lib/billing/resolveCreditBalance";
 import { Clock, MessageSquare, Zap, CreditCard } from "lucide-react";
 
 export function OverlaySessionStats() {
   const elapsed = useSessionStore((s) => s.elapsed_seconds);
-  const creditsRemaining = useAuthStore((s) => s.profile?.credits ?? 0);
+  const profileCredits = useAuthStore((s) => s.profile?.credits);
+  const storeCredits = useAuthStore((s) => s.credits);
+  const isProfileLoaded = useAuthStore((s) => s.isProfileLoaded);
+  const { balance: creditsRemaining } = resolveCreditBalance({
+    isProfileLoaded,
+    profileCredits,
+    storeCredits,
+  });
   const hintCount = useOverlayStore((s) => s.hint_history.length);
   const questionCount = useOverlayStore((s) => s.questions_detected);
 

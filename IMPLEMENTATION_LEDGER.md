@@ -109,4 +109,16 @@ Last updated: 2026-08-14 — remaining QA master-prompt close-out (local).
 | AUG14-WS7 | P1 | Onboarding hint icons + persist mic on Skip | Distinct hint icons; `audio_input_device` on skip | IMPLEMENTED_AND_LOCALLY_VERIFIED | — |
 | AUG14-WS1 | P1 | QA seed preserves passwords | `QA_*_PASSWORD` env + `.env.qa.local` reuse | IMPLEMENTED_AND_LOCALLY_VERIFIED | Operator rotation still required |
 
+Last updated: 2026-08-14 evening — collected unfinished agent workstreams; remaining local close-out.
+
+| ID | Priority | Requirement | Implementation | Status | Remaining |
+|----|----------|-------------|----------------|--------|-----------|
+| AUG14E-WS10 | P0 | OverlaySettings stale shortcut list (Ctrl+Shift+H/C) | OverlaySettings sourced from `OVERLAY_HOTKEYS`; `DEFAULT_HOTKEYS` C=capture, U=toggle alias | IMPLEMENTED_AND_LOCALLY_VERIFIED | Interactive overlay UAT |
+| AUG14E-WS10c | P0 | Settings/mobile hide desktop shortcuts | SettingsHotkeys hides list on mobile; prominent desktop overlay notice | IMPLEMENTED_AND_LOCALLY_VERIFIED | Visual UAT |
+| AUG14E-WS10d | P0 | Audio-level meter scale | OverlayListeningIndicator uses 0–1 RMS (`currentLevel * 12`) not `/100` | IMPLEMENTED_AND_LOCALLY_VERIFIED | Mic UAT |
+| AUG14E-WS12b | P1 | System Design numbered section cards | `splitMarkdownSections` + numbered cards | IMPLEMENTED_AND_LOCALLY_VERIFIED | — |
+| AUG14E-WS21b | P1 | Gov exam hub card spacing | Stretch grid, `p-4`, CTAs aligned | IMPLEMENTED_AND_LOCALLY_VERIFIED | Visual UAT |
+| AUG14E-WS20b | P1 | Analytics chart sr-only summaries | Trend/dimension summaries skip null (Not scored) | IMPLEMENTED_AND_LOCALLY_VERIFIED | — |
+| AUG14E-WS25b | P1 | PWA footer action order | Install first on mobile; Remind me later last as text link | IMPLEMENTED_AND_LOCALLY_VERIFIED | Visual UAT |
+
 

@@ -12,6 +12,8 @@ import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { handleCors, getCorsHeaders, withCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { getClientIp } from "../_shared/auth.ts";
+import { takeUniqueStemRows } from "../_shared/questionStemDedupe.ts";
+import { mapExamType } from "../_shared/examTypeMap.ts";
 import {
   createRateLimitKey,
   enforceRateLimitAsync,
@@ -206,7 +208,7 @@ Deno.serve(async (req) => {
   }
 
   const body: IncomingBody = validated.data;
-  const examType = s(body.exam_type, 120);
+  const examType = mapExamType(s(body.exam_type, 120)) || s(body.exam_type, 120);
   const sourceYear = body.source_year;
   const paper = body.paper ?? null;
   const rawQuestions = body.questions;
@@ -290,9 +292,38 @@ Deno.serve(async (req) => {
     return json({ error: "No valid questions in payload" }, 400, req);
   }
 
+  const { data: existingPublic } = await db
+    .from("questions")
+    .select("question_text")
+    .eq("exam_type", examType)
+    .eq("is_public", true)
+    .limit(4000);
+
+  const { novel, skipped } = takeUniqueStemRows(
+    rows,
+    (existingPublic ?? []).map((r) => String((r as { question_text?: string }).question_text ?? "")),
+  );
+  const skippedCount = rawQuestions.length - rows.length + skipped;
+
+  if (novel.length === 0) {
+    return json(
+      {
+        success: true,
+        paper_id: paperId,
+        inserted_count: 0,
+        skipped_count: skippedCount,
+        exam_type: examType,
+        source_year: sourceYear,
+        message: "All questions already exist in the public bank.",
+      },
+      200,
+      req,
+    );
+  }
+
   const { data: inserted, error: insertErr } = await db
     .from("questions")
-    .insert(rows)
+    .insert(novel)
     .select("id");
 
   if (insertErr) {
@@ -305,7 +336,7 @@ Deno.serve(async (req) => {
       success: true,
       paper_id: paperId,
       inserted_count: inserted?.length ?? 0,
-      skipped_count: rawQuestions.length - rows.length,
+      skipped_count: skippedCount,
       exam_type: examType,
       source_year: sourceYear,
     },

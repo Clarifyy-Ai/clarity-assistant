@@ -7,8 +7,27 @@
  * production near-dup detection must keep working with n-gram/Jaccard alone.
  */
 
+const LATEX_OR_GREEK: Array<[RegExp, string]> = [
+  [/\\alpha|α/gi, " alpha "],
+  [/\\beta|β/gi, " beta "],
+  [/\\gamma|γ/gi, " gamma "],
+  [/\\theta|θ/gi, " theta "],
+  [/\\pi|π/gi, " pi "],
+  [/\\omega|ω/gi, " omega "],
+  [/\\sigma|σ/gi, " sigma "],
+  [/\\lambda|λ/gi, " lambda "],
+  [/\\mu|μ/gi, " mu "],
+  [/\\delta|\\Delta|δ|Δ/gi, " delta "],
+];
+
+function expandMathTokens(text: string): string {
+  let t = text;
+  for (const [re, rep] of LATEX_OR_GREEK) t = t.replace(re, rep);
+  return t.replace(/\\[a-zA-Z]+/g, " ");
+}
+
 export function normalizeQuestionText(text: string): string {
-  return text
+  return expandMathTokens(text)
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s]/gu, " ")
     .replace(/\s+/g, " ")

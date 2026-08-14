@@ -159,7 +159,7 @@ export default function SessionDetail() {
           </button>
           <div className="min-w-0">
             <h1 className="text-lg sm:text-xl font-bold text-foreground capitalize truncate">
-              {session.session_type} Interview
+              {(session.type ?? session.session_type ?? "practice")} Interview
               {session.target_company && ` — ${session.target_company}`}
             </h1>
             <p className="text-muted-foreground text-[10px] sm:text-xs mt-0.5">

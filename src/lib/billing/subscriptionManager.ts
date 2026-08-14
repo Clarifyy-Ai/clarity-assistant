@@ -465,16 +465,17 @@ type ProfileBillingRow = {
 type SubscriptionRow = {
   id?: string | null;
   user_id?: string | null;
-  stripe_customer_id?: string | null;
   stripe_subscription_id?: string | null;
   stripe_price_id?: string | null;
   plan_id?: string | null;
   status?: string | null;
+  monthly_credits?: number | null;
   credits_monthly?: number | null;
   monthly_amount_cents?: number | null;
   current_period_start?: string | null;
   current_period_end?: string | null;
   cancel_at?: string | null;
+  canceled_at?: string | null;
   cancel_at_period_end?: boolean | null;
   created_at?: string | null;
   updated_at?: string | null;
@@ -704,17 +705,16 @@ export async function getUserSubscription(
         [
           "id",
           "user_id",
-          "stripe_customer_id",
           "stripe_subscription_id",
           "stripe_price_id",
           "plan_id",
           "status",
-          "credits_monthly",
+          "monthly_credits",
           "monthly_amount_cents",
           "current_period_start",
           "current_period_end",
           "cancel_at",
-          "cancel_at_period_end",
+          "canceled_at",
           "created_at",
           "updated_at",
         ].join(", ")

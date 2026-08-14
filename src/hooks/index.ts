@@ -41,7 +41,6 @@ export { useStealthMouse } from "./useStealthMouse";
 
 // ─── AI & Analysis ────────────────────────────────────────────────────────────
 export { useConfidenceScore } from "./useConfidenceScore";
-export { useSentimentAnalysis } from "./useSentimentAnalysis";
 export { useModelSwitcher } from "./useModelSwitcher";
 
 // ─── Interview & Prep ─────────────────────────────────────────────────────────

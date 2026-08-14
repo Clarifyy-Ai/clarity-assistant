@@ -142,7 +142,8 @@ Requirements:
 3. Explanations must teach the concept briefly (2–4 sentences).
 4. Use LaTeX only when needed for math ($...$).
 5. No duplicate or near-duplicate stems.
-6. Return ONLY valid JSON — no markdown fences:
+6. Do NOT invent figures, image URLs, markdown images, or the words "Reference Image". If a diagram is needed, describe it in LaTeX in question_text.
+7. Return ONLY valid JSON — no markdown fences:
 
 {
   "questions": [

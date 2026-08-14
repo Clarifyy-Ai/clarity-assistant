@@ -8,6 +8,7 @@ import { useSessionStore } from "@/store/sessionStore";
 
 import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
 import { formatHotkeyLabel } from "@/lib/overlay/hotkeys";
+import { OVERLAY_HOTKEY_CATALOG } from "@/lib/overlay/hotkeyCatalog";
 import { isCapturePrimaryForInterviewType } from "@/lib/constants/interviewTypes";
 import { SERVER_AI_CREDIT_COSTS } from "@/lib/billing/creditsManager";
 import { isCaptureBlockedByNetwork } from "@/lib/overlay/captureGating";
@@ -70,17 +71,23 @@ const HINT_STYLE_ARIA_LABELS: Record<string, string> = {
   keywords_only: "Keywords only hint style",
 };
 
-const HOTKEY_REFERENCE = [
-  { keys: ["ctrl", "shift", "h"], label: "Minimize / restore overlay" },
-  { keys: ["ctrl", "shift", "s"], label: "Discrete UI (opacity)" },
-  { keys: ["ctrl", "shift", "y"], label: "Cycle hint style" },
-  { keys: ["ctrl", "shift", "c"], label: "Screenshot + full answer (2 cr)" },
-  { keys: ["ctrl", "shift", "p"], label: "Calm coaching steps" },
-  { keys: ["ctrl", "shift", "m"], label: "Mute / unmute" },
-  { keys: ["ctrl", "1-4"], label: "Snap to corner" },
-  { keys: ["ctrl", "shift", "esc"], label: "Emergency exit" },
-  { keys: ["escape"], label: "Clear hint" },
-];
+const TOOLBAR_HOTKEY_COMBOS = new Set([
+  "ctrl+shift+h",
+  "ctrl+shift+t",
+  "ctrl+shift+a",
+  "ctrl+shift+s",
+  "ctrl+shift+y",
+  "ctrl+shift+c",
+  "ctrl+shift+p",
+  "ctrl+shift+m",
+  "ctrl+1-4",
+  "ctrl+shift+escape",
+  "escape",
+]);
+
+const HOTKEY_REFERENCE = OVERLAY_HOTKEY_CATALOG.filter((hk) =>
+  TOOLBAR_HOTKEY_COMBOS.has(hk.keys.join("+")),
+);
 
 interface OverlayToolbarProps {
   onToggleMic?: () => void;

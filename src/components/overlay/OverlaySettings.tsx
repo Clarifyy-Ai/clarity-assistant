@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { OVERLAY_HOTKEYS } from "@/components/overlay/OverlayHotkeyHelp";
 import { formatHotkeyLabel } from "@/lib/overlay/hotkeys";
+import { OVERLAY_MOBILE_TOAST_BODY } from "@/lib/constants/overlaySetupGuide";
 
 interface OverlaySettingsProps {
   isOpen?: boolean;
@@ -522,17 +523,21 @@ export function OverlaySettings({
             Shortcuts
           </p>
           {isMobile ? (
-            <p className="text-[11px] text-amber-300/80 leading-relaxed">
-              Keyboard shortcuts require a physical keyboard and aren't available on mobile.
-              For the full Practice Coach experience, use a desktop or laptop browser.
+            <p className="text-[11px] text-amber-200/80 leading-relaxed">
+              {OVERLAY_MOBILE_TOAST_BODY}
             </p>
           ) : (
             <div className="space-y-1 text-[11px] font-mono text-white/25">
-              {OVERLAY_HOTKEYS.map((hk) => (
-                <p key={hk.label}>
-                  {hk.keys.includes("1-4") ? "Ctrl+Shift+1-4" : formatHotkeyLabel(hk.keys)} — {hk.label}
-                </p>
-              ))}
+              {OVERLAY_HOTKEYS.map((hk) => {
+                const keys = hk.keys.includes("1-4")
+                  ? "Ctrl+1–4"
+                  : formatHotkeyLabel(hk.keys);
+                return (
+                  <p key={hk.label}>
+                    {keys} — {hk.label}
+                  </p>
+                );
+              })}
             </div>
           )}
         </div>

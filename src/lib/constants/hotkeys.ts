@@ -36,10 +36,10 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
     category:    "overlay",
     global:      true,
   },
-  /** T-0293/T-0307/T-0308 — alias for overlay toggle (also registered globally in Electron) */
+  /** Alternate overlay toggle. Ctrl+Shift+C is coding capture in the overlay manager. */
   TOGGLE_OVERLAY_ALIAS: {
-    keys:        "Ctrl+Shift+C",
-    mac:         "⌘+Shift+C",
+    keys:        "Ctrl+Shift+U",
+    mac:         "⌘+Shift+U",
     action:      "overlay:toggle",
     description: "Show / hide the overlay window (alternate shortcut)",
     category:    "overlay",
@@ -180,8 +180,8 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
     category:    "ai",
   },
   CAPTURE_CODING: {
-    keys:        "Ctrl+Shift+G",
-    mac:         "⌘+Shift+G",
+    keys:        "Ctrl+Shift+C",
+    mac:         "⌘+Shift+C",
     action:      "ai:capture_coding",
     description: "Capture coding problem screenshot for AI analysis",
     category:    "ai",
@@ -228,8 +228,8 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
 
   // ── Navigation ───────────────────────────────────────────────────────────────
   GO_DASHBOARD: {
-    keys:        "Ctrl+Shift+D",
-    mac:         "⌘+Shift+D",
+    keys:        "Ctrl+Alt+D",
+    mac:         "⌘+⌥+D",
     action:      "nav:dashboard",
     description: "Go to dashboard",
     category:    "navigation",

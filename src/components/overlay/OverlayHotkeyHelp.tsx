@@ -1,24 +1,11 @@
 import { useEffect, useRef } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
 import { formatHotkeyLabel } from "@/lib/overlay/hotkeys";
+import { OVERLAY_HOTKEY_CATALOG } from "@/lib/overlay/hotkeyCatalog";
 import { X, Keyboard } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-export const OVERLAY_HOTKEYS = [
-  { keys: ["ctrl", "shift", "h"],   label: "Toggle overlay",       description: "Show or hide the Clarify AI overlay",              group: "visibility" },
-  { keys: ["ctrl", "shift", "t"],   label: "Discrete UI",          description: "Lower overlay opacity until hover",               group: "visibility" },
-  { keys: ["ctrl", "shift", "a"],   label: "Generate answer",      description: "Trigger AI answer for current question",           group: "hints" },
-  { keys: ["ctrl", "shift", "y"],   label: "Cycle hint style",     description: "Full Answer → Short Hints → Keywords",            group: "hints" },
-  { keys: ["ctrl", "shift", "s"],   label: "Scroll up",            description: "Scroll the answer panel upward",                  group: "hints" },
-  { keys: ["ctrl", "shift", "d"],   label: "Scroll down",          description: "Scroll the answer panel downward",                group: "hints" },
-  { keys: ["ctrl", "shift", "q"],   label: "Clear answer",         description: "Clear the current hint / answer text",            group: "hints" },
-  { keys: ["ctrl", "shift", "c"],   label: "Screenshot + analyse", description: "Screenshot a coding problem & get AI analysis",   group: "actions" },
-  { keys: ["ctrl", "shift", "p"],   label: "Calm steps",           description: "Show grounding coaching prompts",                 group: "actions" },
-  { keys: ["ctrl", "shift", "m"],   label: "Mute / unmute",        description: "Toggle microphone during a live session",         group: "session" },
-  { keys: ["ctrl", "shift", "/"],   label: "Hotkey help",          description: "Show this keyboard shortcut reference",           group: "session" },
-  { keys: ["ctrl", "1-4"],          label: "Dock to corner",       description: "Snap overlay to top-left / top-right / bottom corners", group: "layout" },
-  { keys: ["escape"],               label: "Dismiss",              description: "Clear current hint or close panel",               group: "layout" },
-];
+export const OVERLAY_HOTKEYS = OVERLAY_HOTKEY_CATALOG;
 
 const GROUP_COLORS: Record<string, string> = {
   visibility: "#6EE7B7",

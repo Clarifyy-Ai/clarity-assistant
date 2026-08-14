@@ -20,11 +20,6 @@ export {
 
 export {
   OnboardingIndex,
-  OnboardingStep1Role,
-  OnboardingStep2Experience,
-  OnboardingStep3Preferences,
-  OnboardingStep4AudioSetup,
-  OnboardingStep5ResumeUpload,
 } from "./onboarding";
 
 export type { OnboardingData } from "./onboarding";

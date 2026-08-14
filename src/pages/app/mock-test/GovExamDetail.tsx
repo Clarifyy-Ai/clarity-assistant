@@ -140,7 +140,18 @@ export default function GovExamDetail(): React.ReactElement {
     setLoading(true);
     setError(null);
     try {
-      const data = await getExamDetails({ code: examCode });
+      const data = await Promise.race([
+        getExamDetails({ code: examCode }),
+        new Promise<never>((_, reject) => {
+          window.setTimeout(() => {
+            reject(
+              new Error(
+                "Exam details timed out. Check your connection and retry.",
+              ),
+            );
+          }, 25_000);
+        }),
+      ]);
       setDetails(data);
 
       try {

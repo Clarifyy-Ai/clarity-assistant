@@ -156,10 +156,10 @@ function getAllowedOrigins(): Set<string> {
 
   const origins = new Set<string>();
 
-  if (!isProduction) {
-    for (const origin of LOCAL_DEV_ORIGINS) {
-      addOriginIfValid(origins, origin);
-    }
+  // Loopback is always allowed. CORS is not auth — JWT is still required.
+  // Remote Edge + local Vite (http://127.0.0.1:5000) is the closed-beta workflow.
+  for (const origin of LOCAL_DEV_ORIGINS) {
+    addOriginIfValid(origins, origin);
   }
 
   if (isProduction) {
@@ -197,6 +197,11 @@ function getRequestOrigin(req: Request): string | null {
     return null;
   }
 
+  // Electron loadFile / opaque origins send the literal Origin: null
+  if (rawOrigin.trim() === "null") {
+    return "null";
+  }
+
   return normalizeOrigin(rawOrigin);
 }
 
@@ -219,7 +224,7 @@ function isPreviewOrigin(origin: string): boolean {
 }
 
 function isOriginAllowedForCors(requestOrigin: string | null): boolean {
-  if (!requestOrigin) return true;
+  if (!requestOrigin || requestOrigin === "null") return true;
   if (getAllowedOrigins().has(requestOrigin)) return true;
   if (isPreviewOrigin(requestOrigin)) return true;
   return false;
@@ -242,7 +247,9 @@ export function getCorsHeaders(req: Request): Record<string, string> {
     "Vary": "Origin",
   };
 
-  if (requestOrigin && isOriginAllowedForCors(requestOrigin)) {
+  if (requestOrigin === "null") {
+    headers["Access-Control-Allow-Origin"] = "null";
+  } else if (requestOrigin && isOriginAllowedForCors(requestOrigin)) {
     headers["Access-Control-Allow-Origin"] = requestOrigin;
     headers["Access-Control-Allow-Credentials"] = "true";
   }

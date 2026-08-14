@@ -140,9 +140,37 @@ class StorageGateway:
             )
         if not rows:
             return []
-        res = self.db.table("questions").insert(rows).execute()
+        existing = (
+            self.db.table("questions")
+            .select("question_text")
+            .eq("exam_type", c.exam_type)
+            .eq("is_public", True)
+            .limit(4000)
+            .execute()
+        )
+        seen: set[str] = set()
+        for existing_row in existing.data or []:
+            existing_key = " ".join(str(existing_row.get("question_text") or "").lower().split())
+            if existing_key:
+                seen.add(existing_key)
+        novel: list[dict[str, Any]] = []
+        for row in rows:
+            key = " ".join(str(row.get("question_text") or "").lower().split())
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            novel.append(row)
+        if not novel:
+            log.info("questions_all_duplicates", paper_id=paper_id, skipped=len(rows))
+            return []
+        res = self.db.table("questions").insert(novel).execute()
         ids = [r["id"] for r in (res.data or [])]
-        log.info("questions_inserted", paper_id=paper_id, count=len(ids))
+        log.info(
+            "questions_inserted",
+            paper_id=paper_id,
+            count=len(ids),
+            skipped=len(rows) - len(novel),
+        )
         return ids
 
     def insert_images(

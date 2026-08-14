@@ -24,7 +24,8 @@ import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/Button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
-import { resolveQuestionImageUrl } from "@/lib/mock-test/questionMedia";
+import { isUsableQuestionImageUrl, resolveQuestionImageUrl, uniqueImageUrls } from "@/lib/mock-test/questionMedia";
+import { dedupeExactQuestionCopies } from "@/lib/mock-test/dedupeQuestions";
 import { resolvePaperClassPresentation } from "@/lib/gov-exam/disclaimers";
 import { fetchApprovedTranslations } from "@/lib/gov-exam/adminOps";
 import {
@@ -201,7 +202,7 @@ function MathText({ text }: { text: string }) {
 }
 
 function transformImageUrl(url: string): string {
-  if (!url) return url;
+  if (!isUsableQuestionImageUrl(url)) return "";
   let working = resolveQuestionImageUrl(url);
   // Google Drive: convert share/view links to direct image embed
   const driveMatch = working.match(/drive\.google\.com\/(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]+)/);
@@ -219,7 +220,8 @@ function transformImageUrl(url: string): string {
 }
 
 function QuestionImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
-  const [imgSrc, setImgSrc] = useState(transformImageUrl(src));
+  const resolved = transformImageUrl(src);
+  const [imgSrc, setImgSrc] = useState(resolved);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -227,14 +229,8 @@ function QuestionImage({ src, alt, className }: { src: string; alt: string; clas
     setFailed(false);
   }, [src]);
 
-  if (failed) {
-    return (
-      <div className={cn("flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground", className)}>
-        <AlertCircle className="h-4 w-4 shrink-0" />
-        <span>Image could not be loaded</span>
-        <a href={src} target="_blank" rel="noopener noreferrer" className="ml-auto text-xs text-primary underline">Open link</a>
-      </div>
-    );
+  if (!resolved || failed) {
+    return null;
   }
 
   return (
@@ -244,12 +240,7 @@ function QuestionImage({ src, alt, className }: { src: string; alt: string; clas
       className={className}
       loading="lazy"
       onError={() => {
-        // If transformed URL fails, try original
-        if (imgSrc !== src) {
-          setImgSrc(src);
-        } else {
-          setFailed(true);
-        }
+        setFailed(true);
       }}
     />
   );
@@ -551,6 +542,8 @@ export default function TestSession() {
       let orderedQuestions = uniqueIds
         .map((id) => questionMap[id])
         .filter(Boolean);
+
+      orderedQuestions = dedupeExactQuestionCopies(orderedQuestions);
 
       // Prefer approved regional translations when mock config.language is set
       // (create-exam-paper stores language on config). Unreviewed drafts never apply.
@@ -865,12 +858,16 @@ export default function TestSession() {
 
       await fetchEdgeJson("submit-test", { test_id: testId });
 
-      toast.success(autoSubmit ? "Time's up! Test submitted." : "Test submitted.");
+      toast.success(autoSubmit ? "Time's up! Test submitted." : "Test submitted.", {
+        position: "top-center",
+      });
       navigate(`/app/mock-test/results/${testId}`);
     } catch (error) {
       submittingRef.current = false;
       console.error("[TestSession] submit failed:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to submit test.");
+      toast.error(error instanceof Error ? error.message : "Failed to submit test.", {
+        position: "top-center",
+      });
     } finally {
       setSubmitting(false);
       setShowSubmitModal(false);
@@ -887,8 +884,16 @@ export default function TestSession() {
 
   if (!test || !currentQuestion) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <p className="text-muted-foreground">No test session found.</p>
+      <div className="flex h-screen items-center justify-center bg-background p-6">
+        <div className="max-w-md text-center space-y-4">
+          <p className="text-foreground font-semibold">No test session found.</p>
+          <p className="text-sm text-muted-foreground">
+            The test may not have been created (network error) or this link is invalid.
+          </p>
+          <Button variant="secondary" onClick={() => navigate("/app/mock-test")}>
+            Back to mock tests
+          </Button>
+        </div>
       </div>
     );
   }
@@ -909,6 +914,12 @@ export default function TestSession() {
           )}
           <div className="space-y-2 text-sm text-muted-foreground">
             <p><strong className="text-foreground">{questions.length}</strong> questions</p>
+            {Number(test.config?.requested_question_count) > questions.length && (
+              <p className="text-xs">
+                You asked for {Number(test.config?.requested_question_count)}.{" "}
+                {questions.length} unique items were available from the question bank.
+              </p>
+            )}
             {limitMins > 0 && (
               <p><strong className="text-foreground">{limitMins} minutes</strong> time limit</p>
             )}
@@ -1055,11 +1066,12 @@ export default function TestSession() {
           <Button
             variant="outline"
             size="sm"
-            className="h-8 w-8"
+            className="h-8 gap-1.5 px-2"
             onClick={() => setShowSubmitModal(true)}
             aria-label="Submit test"
           >
             <Send className="h-4 w-4" aria-hidden />
+            <span className="text-xs font-semibold">Submit</span>
           </Button>
         </div>
       </div>
@@ -1179,7 +1191,7 @@ export default function TestSession() {
               </span>
             </div>
 
-            <div className="flex items-center gap-4 text-sm font-semibold">
+            <div className="flex items-center gap-3 text-sm font-semibold">
               <div className="flex gap-1 text-muted-foreground">
                 <span className="text-green-500">
                   +{Number(currentQuestion.marks_positive ?? 4)}
@@ -1189,10 +1201,18 @@ export default function TestSession() {
                   -{Number(currentQuestion.marks_negative ?? 1)}
                 </span>
               </div>
+              <Button
+                size="sm"
+                className="lg:hidden"
+                onClick={() => setShowSubmitModal(true)}
+              >
+                <Send className="mr-1.5 h-4 w-4" />
+                Submit Test
+              </Button>
             </div>
           </div>
 
-          <div className="custom-scrollbar flex-1 overflow-y-auto px-4 pb-32 pt-4 md:px-8 md:pt-8">
+          <div className="custom-scrollbar flex-1 overflow-y-auto px-4 pb-40 pt-4 md:px-8 md:pt-8">
             <div className="mx-auto max-w-3xl space-y-6">
               <div className="mb-4 flex items-center justify-between md:hidden">
                 <span className="rounded-md bg-primary/10 px-2 py-1 text-sm font-bold text-primary">
@@ -1206,9 +1226,9 @@ export default function TestSession() {
 
               <div className="rounded-xl border border-border bg-card p-5 text-[17px] font-medium leading-relaxed text-foreground shadow-sm md:text-lg">
                 <MathText text={currentQuestion.question_text} />
-                {currentQuestion.image_url && (
-                  <QuestionImage src={currentQuestion.image_url} alt="Question" className="mt-3 max-w-full rounded-lg" />
-                )}
+                {uniqueImageUrls(currentQuestion.image_url, currentQuestion.question_text).map((src) => (
+                  <QuestionImage key={src} src={src} alt="Question figure" className="mt-3 max-w-full rounded-lg" />
+                ))}
               </div>
 
               {currentQuestion.question_type === "MCQ" ||
@@ -1242,7 +1262,8 @@ export default function TestSession() {
 
                       <span className="text-[15px] text-foreground md:text-base">
                         <MathText text={option.text} />
-                        {(/^https?:\/\/.+\.(png|jpg|jpeg|gif|webp|svg)/i.test(option.text) || /drive\.google\.com|dropbox\.com|imgur\.com/i.test(option.text)) && (
+                        {(/^https?:\/\/.+\.(png|jpg|jpeg|gif|webp|svg)/i.test(option.text) || /drive\.google\.com|dropbox\.com|imgur\.com/i.test(option.text)) &&
+                          uniqueImageUrls(option.text, "").length > 0 && (
                           <QuestionImage
                             src={option.text}
                             alt={`Option ${option.label}`}
@@ -1273,7 +1294,7 @@ export default function TestSession() {
             </div>
           </div>
 
-          <div className="absolute bottom-0 left-0 right-0 z-20 border-t border-border bg-card shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)]">
+          <div className="absolute bottom-0 left-0 right-0 z-40 border-t border-border bg-card shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)]">
             <div className="mx-auto flex max-w-4xl flex-col items-center justify-between gap-3 px-4 py-3 md:flex-row md:py-4">
               <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start">
                 <Button
@@ -1297,29 +1318,51 @@ export default function TestSession() {
                 </Button>
               </div>
 
-              <div className="flex w-full items-center gap-2 sm:w-auto">
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "flex-1 sm:flex-none",
-                    isMarked
-                      ? "border-purple-500/30 bg-purple-500/10 text-purple-600"
-                      : "bg-muted/50"
-                  )}
-                  onClick={handleMarkAndNext}
-                >
-                  <Flag className="mr-1.5 h-4 w-4" />
-                  <span className="hidden sm:inline">Mark for Review & Next</span>
-                  <span className="sm:hidden">Mark & Next</span>
-                </Button>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                <div className="flex w-full items-center gap-2">
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "flex-1 sm:flex-none",
+                      isMarked
+                        ? "border-purple-500/30 bg-purple-500/10 text-purple-600"
+                        : "bg-muted/50"
+                    )}
+                    onClick={handleMarkAndNext}
+                  >
+                    <Flag className="mr-1.5 h-4 w-4" />
+                    <span className="hidden sm:inline">Mark for Review & Next</span>
+                    <span className="sm:hidden">Mark & Next</span>
+                  </Button>
 
-                <Button
-                  className="flex-1 bg-green-600 text-white shadow-md shadow-green-600/20 hover:bg-green-700 sm:flex-none"
-                  onClick={handleSaveAndNext}
-                >
-                  Save & Next
-                  <ChevronRight className="ml-1 h-4 w-4" />
-                </Button>
+                  {currentIndex >= questions.length - 1 ? (
+                    <Button
+                      className="flex-1 bg-green-600 text-white shadow-md shadow-green-600/20 hover:bg-green-700 sm:flex-none"
+                      onClick={() => setShowSubmitModal(true)}
+                    >
+                      <Send className="mr-1.5 h-4 w-4" />
+                      Submit Test
+                    </Button>
+                  ) : (
+                    <Button
+                      className="flex-1 bg-green-600 text-white shadow-md shadow-green-600/20 hover:bg-green-700 sm:flex-none"
+                      onClick={handleSaveAndNext}
+                    >
+                      Save & Next
+                      <ChevronRight className="ml-1 h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                {currentIndex < questions.length - 1 && (
+                  <Button
+                    variant="outline"
+                    className="w-full lg:hidden"
+                    onClick={() => setShowSubmitModal(true)}
+                  >
+                    <Send className="mr-1.5 h-4 w-4" />
+                    Submit Test
+                  </Button>
+                )}
               </div>
             </div>
           </div>

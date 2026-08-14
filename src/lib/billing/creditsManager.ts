@@ -293,19 +293,12 @@ function syncLocalCreditFields(patch: {
   credits?: number;
   plan?: string;
   plan_id?: string;
-  subscription_status?: string;
+  subscription_status?: string | null;
 }): void {
   const auth = useAuthStore.getState() as unknown as {
     profile?: Record<string, unknown> | null;
-    updateProfile?: (p: Record<string, unknown>) => void;
     setProfile?: (p: Record<string, unknown> | null) => void;
-    credits?: number;
   };
-
-  if (typeof auth.updateProfile === "function") {
-    auth.updateProfile(patch);
-    return;
-  }
 
   if (typeof auth.setProfile === "function" && auth.profile) {
     auth.setProfile({ ...auth.profile, ...patch });
@@ -328,9 +321,9 @@ export async function refreshCredits(): Promise<number | null> {
 
   const credits = Number((data as { credits?: number }).credits ?? 0);
   const planId = String((data as { plan_id?: string }).plan_id ?? "free");
-  const subscriptionStatus = String(
-    (data as { subscription_status?: string }).subscription_status ?? "active",
-  );
+  const rawStatus = (data as { subscription_status?: string | null }).subscription_status;
+  const subscriptionStatus =
+    typeof rawStatus === "string" && rawStatus.trim().length > 0 ? rawStatus : null;
 
   syncLocalCreditFields({
     credits,

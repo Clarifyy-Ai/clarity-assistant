@@ -74,6 +74,12 @@ type UsageDay = {
   added: number;
 };
 
+function formatCreditAction(transaction: CreditTransaction): string {
+  const source = (transaction.description || transaction.action || "").trim();
+  if (!source || source === "usage") return "Usage";
+  return source.replace(/^prep_tool_/, "").replace(/_/g, " ");
+}
+
 function formatDate(value: string | null | undefined): string {
   if (!value) {
     return "—";
@@ -568,7 +574,7 @@ export default function UsageDashboard(): JSX.Element {
                       </td>
 
                       <td className="py-3 pr-4">
-                        {transaction.action ?? "—"}
+                        {formatCreditAction(transaction)}
                       </td>
 
                       <td className="py-3 pr-4 text-muted-foreground">

@@ -21,6 +21,15 @@ describe("similarity", () => {
     );
   });
 
+  it("treats LaTeX and unicode greek as the same stem", () => {
+    expect(
+      isNearDuplicate(
+        "If $\\alpha$ and $\\beta$ are the roots of $x^2-x+1=0$",
+        "If α and β are the roots of x^2-x+1=0",
+      ),
+    ).toBe(true);
+  });
+
   it("computes token and ngram jaccard", () => {
     expect(tokenJaccard("the quick brown fox", "the quick brown dog")).toBeGreaterThan(0.5);
     expect(ngramJaccard("abcdefgh", "abcdefxy")).toBeGreaterThan(0.4);

@@ -41,7 +41,9 @@ import {
   resumesDB,
   sessionTranscriptsDB,
   answerBankDB,
+  sessionAnswersDB,
 } from "@/lib/supabase/database";
+import { pairLiveSessionAnswers } from "@/lib/session/liveSessionAnswers";
 import {
   activateSession,
   aiModeForSessionType,
@@ -767,7 +769,7 @@ export function useLiveCopilot({
     }
   }, [audio, initSessionFromConfig, profile?.id, sessionType]);
 
-  const endLiveSession = useCallback(async () => {
+  const endLiveSession = useCallback(async (): Promise<{ answersRecorded: number }> => {
     abortRef.current?.abort();
     useOverlayStore.getState().setSessionPipelineState("session_ending");
     audio.stop();
@@ -775,6 +777,7 @@ export function useLiveCopilot({
     const session = useSessionStore.getState();
     const overlay = useOverlayStore.getState();
     const userId = profile?.id;
+    let answersRecorded = 0;
 
     if (userId && session.session_id && !getPrivateMode()) {
       try {
@@ -782,6 +785,7 @@ export function useLiveCopilot({
         const fullTranscript = audioState.transcript?.full_transcript ?? "";
         const utterances = audioState.transcript?.utterances ?? [];
         const questionCount = utterances.filter((u) => u.is_interviewer_question).length;
+        const pairs = pairLiveSessionAnswers(utterances);
 
         const dbModel = toDbModel(overlay.active_model);
         const saveTranscript = useOverlayStore.getState().save_transcript;
@@ -794,10 +798,23 @@ export function useLiveCopilot({
           filler_words: session.filler_count,
           avg_wpm: session.current_wpm,
           hints_used: overlay.hint_history.length,
-          answers_generated: overlay.hint_history.length,
-          questions_asked: questionCount,
+          answers_generated: pairs.length,
+          questions_asked: Math.max(questionCount, pairs.length),
           notes: saveTranscript && fullTranscript ? fullTranscript : null,
         });
+
+        if (pairs.length > 0) {
+          await sessionAnswersDB.createMany(
+            pairs.map((p) => ({
+              session_id: session.session_id!,
+              user_id: userId,
+              question: p.question,
+              answer: p.answer,
+              duration_ms: p.duration_ms,
+            })),
+          );
+          answersRecorded = pairs.length;
+        }
 
         if (fullTranscript && saveTranscript) {
           try {
@@ -814,11 +831,13 @@ export function useLiveCopilot({
       } catch (err) {
         console.error("[useLiveCopilot] Failed to finalize session:", err);
         toast.error("Session ended, but the summary could not be saved. Your practice still ran.");
+        answersRecorded = 0;
       }
     }
 
     useSessionStore.getState().setStatus("idle");
     useOverlayStore.getState().hideOverlay();
+    return { answersRecorded };
   }, [audio, profile?.id]);
 
   const pauseLiveSession = useCallback(() => {

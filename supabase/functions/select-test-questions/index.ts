@@ -19,6 +19,7 @@ import { fillUntilCount, type GapFillRow } from "../_shared/govAiGapFill.ts";
 import { type WeakTopicStat } from "../_shared/examAIPrompts.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
+import { conflictsWithSelected } from "../_shared/govMcqValidator.ts";
 /* ─── SANITIZATION ───────────────────────────────────────────────────────── */
 //
 // REGEX ESCAPING RULE for RegExp constructor strings:
@@ -68,6 +69,7 @@ const PYP_SOURCES = ["OFFICIAL_PYP", "Previous Year Paper", "PYP", "previous_yea
 
 type QuestionRow = {
   id: string;
+  question_text?: string | null;
   topic: string | null;
   subject: string | null;
   difficulty: string | null;
@@ -91,7 +93,7 @@ async function fetchBankQuestions(
   },
 ): Promise<QuestionRow[]> {
   const baseSelect =
-    "id, topic, subject, difficulty, source, is_public, uploaded_by, source_year";
+    "id, question_text, topic, subject, difficulty, source, is_public, uploaded_by, source_year";
 
   function applyFilters<T extends ReturnType<typeof db.from>>(q: T): T {
     let query = q;
@@ -382,25 +384,57 @@ Deno.serve(async (req: Request) => {
     const countHard = Math.round(question_count * hardPct / 100);
     const countMed  = question_count - countEasy - countHard;
 
-    function pickQuestions(pool: Pool, target: number): string[] {
+    const selectedStems: string[] = [];
+    const usedIds = new Set<string>();
+
+    function pickUnique(pool: Pool, target: number): string[] {
       if (target <= 0) return [];
       const combined = [...shuffle(pool.priority), ...shuffle(pool.normal)];
-      return combined.slice(0, target);
+      const picked: string[] = [];
+      for (const id of combined) {
+        if (picked.length >= target) break;
+        if (usedIds.has(id)) continue;
+        const row = questions.find((q) => q.id === id);
+        const stem = String(row?.question_text ?? "").trim();
+        if (stem && conflictsWithSelected(stem, selectedStems, 0.8)) continue;
+        usedIds.add(id);
+        if (stem) selectedStems.push(stem);
+        picked.push(id);
+      }
+      return picked;
     }
 
     const selectedIds = [
-      ...pickQuestions(pools.EASY,   countEasy),
-      ...pickQuestions(pools.MEDIUM, countMed),
-      ...pickQuestions(pools.HARD,   countHard),
+      ...pickUnique(pools.EASY,   countEasy),
+      ...pickUnique(pools.MEDIUM, countMed),
+      ...pickUnique(pools.HARD,   countHard),
     ];
 
-    /* ── AI GAP-FILL when the exam-specific bank is short ─────────────── */
-    let finalIds         = [...selectedIds];
+    /* ── Top up from remaining bank before any AI generation ───────────── */
+    let finalIds = [...selectedIds];
+    if (finalIds.length < question_count) {
+      const leftover = shuffle(
+        questions
+          .map((q) => q.id as string)
+          .filter((id) => !usedIds.has(id) && !recentQ.has(id)),
+      );
+      for (const id of leftover) {
+        if (finalIds.length >= question_count) break;
+        const row = questions.find((q) => q.id === id);
+        const stem = String(row?.question_text ?? "").trim();
+        if (stem && conflictsWithSelected(stem, selectedStems, 0.8)) continue;
+        usedIds.add(id);
+        if (stem) selectedStems.push(stem);
+        finalIds.push(id);
+      }
+    }
+
+    /* ── AI GAP-FILL only when the user opted into AI-generated questions ─ */
     const gap            = question_count - finalIds.length;
     let generatedCount   = 0;
     let gapFillError: string | undefined;
 
-    if (gap > 0) {
+    if (gap > 0 && wantsAI) {
       const aiCreditCost = creditCost("mock_test_ai_gap_fill");
       const creditResult = await deductCreditsAtomic({
         userId,
@@ -439,6 +473,7 @@ Deno.serve(async (req: Request) => {
           difficultyMix: { EASY: easyPct, MEDIUM: medPct, HARD: hardPct },
           weakTopics,
           strongTopics,
+          userId,
         });
 
         if (fill.added.length > 0) {
@@ -472,6 +507,9 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!allow_shortfall && finalIds.length !== question_count && generatedCount === 0) {
+      const pypOnlyHasSet =
+        wantsPYP && !wantsAI && finalIds.length >= Math.min(10, question_count);
+      if (!pypOnlyHasSet) {
       return new Response(
         JSON.stringify({
           question_ids: finalIds,
@@ -484,6 +522,7 @@ Deno.serve(async (req: Request) => {
         }),
         { status: 422, headers },
       );
+      }
     }
 
     return new Response(

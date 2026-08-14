@@ -21,7 +21,6 @@ import type { LiveSessionConfig } from "@/types/session.types";
 import { notifyOverlayVisibilityOnMobile } from "@/lib/overlay/overlayVisibilityNotice";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { setGenerateAnswerHandler } from "@/lib/overlay/hotkeys";
-import { useHotkeys } from "@/hooks/useHotkeys";
 import { isElectronApp } from "@/lib/platform/isElectron";
 import { openInBrowser } from "@/lib/platform/openInBrowser";
 import {
@@ -195,23 +194,23 @@ function LiveOverlaySession() {
   const handleStop = useCallback(async () => {
     didEndRef.current = true;
 
-    // Snapshot before ending — endLiveSession / reset may clear store state
+    // Snapshot ids/duration before ending — store reset may clear them.
+    // Answer count comes from persist so the summary does not offer a dead scorecard.
     const sessionId = useSessionStore.getState().session_id;
     const durationSeconds = useSessionStore.getState().elapsed_seconds;
-    const questionsDetected = useOverlayStore.getState().questions_detected;
     const hintsUsed = useOverlayStore.getState().hint_history.length;
+
+    const ended = await copilot.endLiveSession();
 
     if (sessionId) {
       saveLastSessionSummary({
         sessionId,
         durationSeconds,
-        questionsDetected,
+        questionsDetected: ended?.answersRecorded ?? 0,
         hintsUsed,
         endedAt: Date.now(),
       });
     }
-
-    await copilot.endLiveSession();
     setLastSessionId(sessionId);
 
     // Return to /app/live summary (never leave users on an empty mid-session page)
@@ -247,8 +246,6 @@ function LiveOverlaySession() {
     setGenerateAnswerHandler(handleGenerate);
     return () => setGenerateAnswerHandler(null);
   }, [handleGenerate]);
-
-  useHotkeys(undefined, isActive || isPaused);
 
   // ── Setup screen ─────────────────────────────────────────────────────────
   useEffect(() => {

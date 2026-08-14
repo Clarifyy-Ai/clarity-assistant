@@ -6,7 +6,6 @@ export {
   buildHotkeyDefinitions,
   HotkeyManager,
   formatHotkeyLabel,
-  hotkeyManager,
 } from "./hotkeys";
 
 export type { HotkeyDefinition } from "./hotkeys";

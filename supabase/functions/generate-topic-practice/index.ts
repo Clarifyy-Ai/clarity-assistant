@@ -332,6 +332,7 @@ Deno.serve(async (req) => {
           topics,
           marksPositive: marksPerQ,
           marksNegative: negativeMark,
+          userId: user.id,
         });
         for (const row of fill.added) {
           if (selected.length >= questionCount) break;

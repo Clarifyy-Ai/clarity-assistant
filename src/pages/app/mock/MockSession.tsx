@@ -18,14 +18,17 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { OverlayWindow } from "@/components/overlay/OverlayWindow";
 import { OverlayKeyboardHandler } from "@/components/overlay/OverlayKeyboardHandler";
 import { LiveSessionController } from "@/components/live/LiveSessionController";
-import { PreSessionSetup } from "@/components/session/PreSessionSetup";
 import { PostSessionSummary } from "@/components/session/PostSessionSummary";
+import { setGenerateAnswerHandler } from "@/lib/overlay/hotkeys";
 import { saveLastSessionSummary } from "@/lib/session/lastSessionSummary";
 import {
   sessionsDB,
   sessionTranscriptsDB,
   sessionAnswersDB,
+  resumesDB,
+  jobDescriptionsDB,
 } from "@/lib/supabase/database";
+import { useDocumentStore } from "@/store/documentStore";
 import { getOrCreateSession, activateSession } from "@/lib/session/sessionLifecycle";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { getLocalMockQuestions } from "@/lib/mock/localQuestionBank";
@@ -135,6 +138,41 @@ function buildConfigFromSessionRow(
     instructions: "",
     enable_system_audio: true,
   };
+}
+
+function pickJdText(row: Record<string, unknown> | null): string {
+  if (!row) return "";
+  for (const key of ["description", "content", "text", "raw_text"] as const) {
+    const value = row[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+async function loadResumeContextText(config: MockConfig): Promise<string> {
+  const active = useDocumentStore.getState().active_context.resume;
+  const fromActive = typeof active?.content === "string" ? active.content.trim() : "";
+  if (fromActive) return fromActive;
+
+  if (!config.resume_id) return "";
+  try {
+    const row = await resumesDB.getByIdMaybe(config.resume_id);
+    return row?.content?.trim() ?? "";
+  } catch (err) {
+    console.warn("[MockSession] resume load failed:", err);
+    return "";
+  }
+}
+
+async function loadJobDescriptionText(config: MockConfig): Promise<string> {
+  if (!config.jd_id) return "";
+  try {
+    const jd = await jobDescriptionsDB.getByIdMaybe(config.jd_id);
+    return pickJdText(jd as Record<string, unknown> | null);
+  } catch (err) {
+    console.warn("[MockSession] JD load failed:", err);
+    return "";
+  }
 }
 
 function sessionDurationSeconds(session: Tables<"sessions">): number {
@@ -307,21 +345,8 @@ export default function MockSession() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orchestrator.currentQuestionIndex]);
 
-  // Hotkeys — overlay toggle is Ctrl+Shift+H only (Ctrl+Shift+C is coding capture in hotkeys.ts)
+  // Next-question only — overlay H/P/M are OverlayKeyboardHandler (avoid double-toggle).
   useHotkeys({
-    "ctrl+shift+h": () => {
-      if (phase !== "active") return;
-      const overlay = useOverlayStore.getState();
-      overlay.is_visible ? overlay.hideOverlay() : overlay.showOverlay();
-    },
-    "ctrl+shift+p": () => {
-      if (phase !== "active") return;
-      setCalmMode((p) => !p);
-    },
-    "ctrl+shift+m": () => {
-      if (phase !== "active") return;
-      audio.toggleMute();
-    },
     "ctrl+shift+n": () => {
       if (phase !== "active") return;
       setSkipConfirm(true);
@@ -332,6 +357,22 @@ export default function MockSession() {
   const qIndex = orchestrator.currentQuestionIndex ?? 0;
   const totalQ = orchestrator.totalQuestions ?? 5;
   const isLastQ = qIndex >= totalQ - 1;
+
+  const handleRequestHint = useCallback(async (questionText?: string) => {
+    const q = questionText || (typeof question === "string" ? question : question?.question_text);
+    if (q) {
+      useOverlayStore.getState().setCurrentQuestion(q);
+      await orchestrator.requestHint(q);
+    }
+  }, [question, orchestrator]);
+
+  useEffect(() => {
+    if (phase !== "active") return;
+    setGenerateAnswerHandler(() => {
+      void handleRequestHint();
+    });
+    return () => setGenerateAnswerHandler(null);
+  }, [phase, handleRequestHint]);
 
   useEffect(() => {
     if (phase !== "active" || !question) return;
@@ -414,6 +455,11 @@ export default function MockSession() {
 
     if (!options?.forceLocal) {
       try {
+        const [resume_context, job_description] = await Promise.all([
+          loadResumeContextText(config),
+          loadJobDescriptionText(config),
+        ]);
+
         const data = await fetchEdgeJson<{ questions?: unknown[] }>("generate-questions", {
           type: interviewType,
           count: questionCount,
@@ -423,6 +469,8 @@ export default function MockSession() {
           company,
           role,
           session_id: dbSessionId,
+          resume_context,
+          job_description,
           free_session: true,
         });
 
@@ -435,6 +483,9 @@ export default function MockSession() {
           orchestrator.setQuestions(raw);
           questionsCacheRef.current = useSessionStore.getState().questions;
           setUsedLocalQuestions(false);
+          if (raw.length < questionCount) {
+            toast.message(`Generated ${raw.length} of ${questionCount} questions.`);
+          }
           return;
         }
       } catch (err) {
@@ -452,7 +503,11 @@ export default function MockSession() {
     orchestrator.setQuestions(local);
     questionsCacheRef.current = useSessionStore.getState().questions;
     setUsedLocalQuestions(true);
-    toast.message("Using built-in practice questions — AI generation was unavailable.");
+    if (local.length < questionCount) {
+      toast.warning(`Using ${local.length} built-in questions (AI generation unavailable).`);
+    } else {
+      toast.message("Using built-in practice questions — AI generation was unavailable.");
+    }
   }
 
   async function handleSetup(config: LiveSessionConfig, existingSessionId?: string) {
@@ -488,8 +543,9 @@ export default function MockSession() {
     const userId = profile?.id;
     if (!userId) {
       toast.error("You must be signed in to start a session.");
-      setPhase("idle");
       isStartingRef.current = false;
+      autoStartedRef.current = false;
+      navigate("/app/mock");
       return;
     }
 
@@ -527,6 +583,8 @@ export default function MockSession() {
         resume_id: config.resume_id,
         jd_id: config.jd_id,
         session_id: dbSessionId,
+        role: config.role,
+        company: config.company,
       });
 
       setSetupStep("questions");
@@ -581,9 +639,13 @@ export default function MockSession() {
     const sessionIdFromRoute = sessionIdParam ?? routeState?.sessionId;
 
     if (autoStartedRef.current || phase !== "idle") return;
-    if (!profile?.id) return;
 
-    if (!configFromRoute && !sessionIdFromRoute) return;
+    if (!configFromRoute && !sessionIdFromRoute) {
+      navigate("/app/mock", { replace: true });
+      return;
+    }
+
+    if (!profile?.id) return;
 
     autoStartedRef.current = true;
 
@@ -620,6 +682,7 @@ export default function MockSession() {
         if (session.status === "abandoned") {
           toast.message("Previous session was abandoned — configure a new mock session.");
           autoStartedRef.current = false;
+          navigate("/app/mock");
           return;
         }
         const config = buildConfigFromSessionRow(session, profile);
@@ -705,14 +768,6 @@ export default function MockSession() {
     }
   }
 
-  async function handleRequestHint(questionText?: string) {
-    const q = questionText || (typeof question === "string" ? question : question?.question_text);
-    if (q) {
-      useOverlayStore.getState().setCurrentQuestion(q);
-      await orchestrator.requestHint(q);
-    }
-  }
-
   async function persistMockSession(opts?: { incompleteNoAnswers?: boolean }) {
     const session = useSessionStore.getState();
     const overlay = useOverlayStore.getState();
@@ -767,9 +822,12 @@ export default function MockSession() {
         });
       }
 
-      if (answersRef.current.length > 0) {
+      const scoredAnswers = answersRef.current.filter(
+        (a) => !a.skipped && (a.answer_text ?? "").trim().length > 0,
+      );
+      if (scoredAnswers.length > 0) {
         await sessionAnswersDB.createMany(
-          answersRef.current.map((a) => ({
+          scoredAnswers.map((a) => ({
             session_id: sessionId,
             user_id: userId,
             question: a.question_text,
@@ -782,6 +840,7 @@ export default function MockSession() {
       await useAuthStore.getState().refreshCredits();
     } catch (err) {
       console.error("[MockSession] Failed to persist session:", err);
+      toast.error("Could not save this session. Your practice ran, but the scorecard may be missing.");
     }
   }
 
@@ -796,11 +855,12 @@ export default function MockSession() {
 
   if (phase === "idle") {
     return (
-      <PreSessionSetup
-        onStart={handleSetup}
-        sessionType="mock"
-        initialConfig={sessionConfigRef.current ?? undefined}
-      />
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center space-y-3">
+          <RefreshCw className="h-8 w-8 animate-spin text-primary mx-auto" />
+          <p className="text-sm text-muted-foreground">Preparing session…</p>
+        </div>
+      </div>
     );
   }
 
@@ -1047,7 +1107,11 @@ export default function MockSession() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <LiveSessionController isActive={true} />
-      <OverlayKeyboardHandler enabled={phase === "active"} onToggleMute={audio.toggleMute} />
+      <OverlayKeyboardHandler
+        enabled={phase === "active"}
+        onToggleMute={audio.toggleMute}
+        onGenerate={() => void handleRequestHint()}
+      />
 
       {/* Compact mock chrome — speaking/transcript live only in the overlay */}
       <header className="fixed top-0 inset-x-0 z-[200] border-b border-border bg-background/95 backdrop-blur">
@@ -1205,7 +1269,10 @@ export default function MockSession() {
         onToggleMic={audio.toggleMute}
         onToggleSystemAudio={audio.toggleSystemAudio}
         onReconnectAudio={() => void audio.reconnect()}
-        onGenerate={() => handleRequestHint()}
+        onGenerate={() => void handleRequestHint()}
+        onRegenerate={() => void handleRequestHint()}
+        onShorten={() => void handleRequestHint()}
+        onExpand={() => void handleRequestHint()}
         onEndSession={handleEndSession}
         onManualQuestion={(q: string) => {
           useOverlayStore.getState().setCurrentQuestion(q);

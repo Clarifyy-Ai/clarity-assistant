@@ -146,7 +146,7 @@ export default function MockWarmup() {
   function warmupFeedback(text: string): { message: string; tone: "success" | "warning" | "info" } {
     const trimmed = text.trim();
     if (!trimmed) {
-      return { message: "Try speaking a few sentences — even a rough answer helps warm up.", tone: "warning" };
+      return { message: "Type a few sentences — even a rough answer helps warm up.", tone: "warning" };
     }
     if (trimmed.length < 40) {
       return { message: "Good start — expand with one concrete example next time.", tone: "info" };
@@ -284,14 +284,14 @@ export default function MockWarmup() {
                 {WARMUP_QUESTIONS[qIdx]}
               </h2>
               <p className="text-xs text-muted-foreground mt-2">
-                No score — just warm up your voice
+                No score — warmup is text-only (voice scoring starts in the real session)
               </p>
             </div>
 
             <textarea
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
-              placeholder="Type or just speak naturally…"
+              placeholder="Type a short answer (warmup is text-only — voice scoring starts in the real session)."
               rows={4}
               className="w-full bg-accent/5 border border-border text-foreground placeholder:text-muted-foreground rounded-2xl px-4 py-3 resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors text-sm"
             />
@@ -316,7 +316,7 @@ export default function MockWarmup() {
             <div>
               <h2 className="text-2xl font-bold text-foreground">You&apos;re warmed up!</h2>
               <p className="text-muted-foreground text-sm mt-2">
-                Your voice is ready. The real questions start now.
+                You&apos;re ready. Voice scoring starts in the real session.
               </p>
             </div>
             <Button

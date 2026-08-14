@@ -122,7 +122,7 @@ describe("fetchEdgeJson — RPC/edge error handling", () => {
   });
 
   it("surfaces network/unreachable errors as a friendly message", async () => {
-    (global.fetch as any).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    (global.fetch as any).mockRejectedValue(new TypeError("Failed to fetch"));
     const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
 
     await expect(fetchEdgeJson("deduct-credits", { action: "generate_hint" })).rejects.toThrow(
@@ -130,8 +130,18 @@ describe("fetchEdgeJson — RPC/edge error handling", () => {
     );
   });
 
+  it("retries Failed to fetch once then succeeds", async () => {
+    (global.fetch as any)
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
+
+    await expect(fetchEdgeJson("create-exam-paper", { examId: "e1" })).resolves.toEqual({ ok: true });
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
   it("does not name delete-account on network failure", async () => {
-    (global.fetch as any).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    (global.fetch as any).mockRejectedValue(new TypeError("Failed to fetch"));
     const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
 
     let message = "";
@@ -142,6 +152,20 @@ describe("fetchEdgeJson — RPC/edge error handling", () => {
     }
     expect(message).toMatch(/couldn't complete account deletion/i);
     expect(message).not.toMatch(/Edge Function|CORS/i);
+  });
+
+  it("does not blame an AI request when submit-test is unreachable", async () => {
+    (global.fetch as any).mockRejectedValue(new TypeError("Failed to fetch"));
+    const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
+
+    let message = "";
+    try {
+      await fetchEdgeJson("submit-test", { test_id: "t1" });
+    } catch (err) {
+      message = err instanceof Error ? err.message : String(err);
+    }
+    expect(message).toMatch(/Couldn't reach the server/i);
+    expect(message).not.toMatch(/AI request/i);
   });
 });
 

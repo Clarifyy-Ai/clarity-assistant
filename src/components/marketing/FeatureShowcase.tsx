@@ -217,18 +217,18 @@ export function FeatureShowcase() {
   const Icon = feature.icon;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 lg:gap-6">
       <div className="lg:col-span-2 flex flex-col gap-2">
         {FEATURES.map((f) => {
           const FIcon = f.icon;
           const isActive = f.id === active;
           return (
+            <div key={f.id} className="space-y-2">
             <button
-              key={f.id}
               type="button"
               onClick={() => setActive(f.id)}
               className={cn(
-                "flex items-center gap-3 rounded-xl border p-3 text-left transition-all",
+                "w-full flex items-center gap-3 rounded-xl border p-3 text-left transition-all",
                 isActive
                   ? cn(f.activeBorder, f.bg)
                   : "border-border bg-card/40 hover:bg-card/70",
@@ -241,11 +241,17 @@ export function FeatureShowcase() {
                 {f.title}
               </span>
             </button>
+            {isActive && (
+              <div className="lg:hidden rounded-xl border border-border bg-card p-4">
+                <Screen />
+              </div>
+            )}
+            </div>
           );
         })}
       </div>
 
-      <div className="lg:col-span-3 rounded-2xl border border-border bg-card p-6 min-h-[220px]">
+      <div className="hidden lg:block lg:col-span-3 rounded-2xl border border-border bg-card p-6 min-h-[220px]">
         <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border">
           <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", feature.bg)}>
             <Icon className={cn("w-4 h-4", feature.color)} />

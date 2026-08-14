@@ -64,7 +64,7 @@ const STORAGE_FROM_CONFIG: Record<string, string> = {
   UPSC_CSE_PRELIMS: "UPSC CSE",
   SSC_CGL: "SSC Exams (CGL/CHSL)",
   IBPS_PO: "Banking (IBPS/SBI/RBI)",
-  RRB_NTPC: "GENERAL",
+  RRB_NTPC: "RRB NTPC",
   HPCL_ENGINEER: "HPCL Engineer",
   PSU: "PSU",
   APPSC_GROUP: "APPSC (Group 1/2/3/4)",
@@ -83,8 +83,8 @@ export const QUESTION_EXAM_TYPE_OPTIONS = [
   "UPSC CSE",
   "SSC Exams (CGL/CHSL)",
   "Banking (IBPS/SBI/RBI)",
+  "RRB NTPC",
   "NDA",
-  "GENERAL",
 ] as const;
 
 export function normalizeExamTypeForStorage(configOrRaw: string | null | undefined): string | null {
