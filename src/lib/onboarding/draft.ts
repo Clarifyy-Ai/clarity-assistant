@@ -7,9 +7,12 @@ export type OnboardingDraft = {
   data: Partial<OnboardingData>;
 };
 
+// Uses localStorage (not sessionStorage) so a full browser refresh/close and
+// reopen still restores the exact step + entered values instead of resetting
+// to an empty Essentials screen.
 export function loadOnboardingDraft(): OnboardingDraft | null {
   try {
-    const raw = sessionStorage.getItem(DRAFT_KEY);
+    const raw = localStorage.getItem(DRAFT_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as OnboardingDraft;
     if (!parsed || typeof parsed !== "object") return null;
@@ -22,7 +25,7 @@ export function loadOnboardingDraft(): OnboardingDraft | null {
 
 export function saveOnboardingDraft(step: number, data: Partial<OnboardingData>): void {
   try {
-    sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ step, data }));
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ step, data }));
   } catch {
     // Ignore quota / private-mode failures.
   }
@@ -30,7 +33,7 @@ export function saveOnboardingDraft(step: number, data: Partial<OnboardingData>)
 
 export function clearOnboardingDraft(): void {
   try {
-    sessionStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(DRAFT_KEY);
   } catch {
     // Ignore.
   }

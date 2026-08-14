@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
 import { PlanGate } from "@/components/layout/PlanGate";
+import { SaveToAnswerBankConfirm } from "@/components/prep/PrepToolShell";
 import { Modal } from "@/components/ui/Modal";
 import { toast } from "sonner";
 import {
@@ -142,6 +143,8 @@ function STARBuilder() {
   const [generated,  setGenerated]  = useState("");
   const [loading,    setLoading]    = useState(false);
   const [saved,      setSaved]      = useState(false);
+  const [savingToBank, setSavingToBank] = useState(false);
+  const [savedAnswerId, setSavedAnswerId] = useState<string | null>(null);
   const [aiLoading,  setAiLoading]  = useState<StarFieldKey | null>(null);
 
   const wordCounts = Object.fromEntries(
@@ -243,9 +246,10 @@ function STARBuilder() {
   // ── Save to Answer Bank ───────────────────────────────────────
 
   async function saveToBank() {
-    if (!user || !generated) return;
+    if (!user || !generated || savingToBank) return;
+    setSavingToBank(true);
     try {
-      await answerBankDB.create(user.id, {
+      const created = await answerBankDB.create(user.id, {
         question_text: question,
         answer_text: generated,
         category: "STAR",
@@ -253,9 +257,13 @@ function STARBuilder() {
         tags: ["star", "prep_lab"],
       });
       setSaved(true);
+      setSavedAnswerId(created.id);
+      toast.success("Saved to Answer Bank");
       setTimeout(() => setSaved(false), 2500);
     } catch (err) {
       toast.error(err?.message ?? "Failed to save answer. Please try again.");
+    } finally {
+      setSavingToBank(false);
     }
   }
 
@@ -316,6 +324,8 @@ function STARBuilder() {
             variant={saved ? "success" : "secondary"}
             size="md"
             onClick={saveToBank}
+            disabled={savingToBank}
+            loading={savingToBank}
             leftIcon={saved
               ? <CheckCircle className="w-4 h-4" />
               : <Save className="w-4 h-4" />
@@ -327,6 +337,12 @@ function STARBuilder() {
       </div>
 
       {/* Generated answer */}
+      {savedAnswerId && (
+        <SaveToAnswerBankConfirm
+          answerId={savedAnswerId}
+          onDismiss={() => setSavedAnswerId(null)}
+        />
+      )}
       {generated && (
         <Card className="border-emerald-500/20 bg-emerald-500/5">
           <div className="flex items-center justify-between mb-3">
