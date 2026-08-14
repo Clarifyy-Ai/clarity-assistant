@@ -213,15 +213,30 @@ export const IS_STAGING = ENV.APP_ENV === "staging";
 export const IS_DEVELOPMENT = ENV.APP_ENV === "development";
 export const IS_TEST = ENV.APP_ENV === "test";
 
+const EXAMPLE_STRIPE_PRICE_RE =
+  /^price_(starter|pro|elite|enterprise|credits)(_\d+)?_(monthly|yearly)$/i;
+const EXAMPLE_CREDITS_PRICE_RE = /^price_credits_\d+$/i;
+
+/** True when a VITE_STRIPE_PRICE_* value is a real Stripe price id, not .env.example. */
+export function isUsableStripePriceId(value?: string | null): boolean {
+  const v = String(value ?? "").trim();
+  if (!v) return false;
+  if (/changeme|your_|placeholder|xxx|_here/i.test(v)) return false;
+  if (EXAMPLE_STRIPE_PRICE_RE.test(v) || EXAMPLE_CREDITS_PRICE_RE.test(v)) return false;
+  return /^price_[A-Za-z0-9]+$/.test(v);
+}
+
 export function isStripeConfigured(): boolean {
   return Boolean(
     ENV.STRIPE_PUBLIC_KEY &&
-      (ENV.STRIPE_PRICE_STARTER_MONTHLY ||
-        ENV.STRIPE_PRICE_PRO_MONTHLY ||
-        ENV.STRIPE_PRICE_ELITE_MONTHLY ||
-        ENV.STRIPE_PRICE_CREDITS_50 ||
-        ENV.STRIPE_PRICE_CREDITS_150 ||
-        ENV.STRIPE_PRICE_CREDITS_500)
+      ENV.STRIPE_PUBLIC_KEY.startsWith("pk_") &&
+      !ENV.STRIPE_PUBLIC_KEY.includes("your_") &&
+      (isUsableStripePriceId(ENV.STRIPE_PRICE_STARTER_MONTHLY) ||
+        isUsableStripePriceId(ENV.STRIPE_PRICE_PRO_MONTHLY) ||
+        isUsableStripePriceId(ENV.STRIPE_PRICE_ELITE_MONTHLY) ||
+        isUsableStripePriceId(ENV.STRIPE_PRICE_CREDITS_50) ||
+        isUsableStripePriceId(ENV.STRIPE_PRICE_CREDITS_150) ||
+        isUsableStripePriceId(ENV.STRIPE_PRICE_CREDITS_500))
   );
 }
 

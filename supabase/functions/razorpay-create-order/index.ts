@@ -95,7 +95,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    assertBillingConfigOrThrow({ requireRazorpay: true });
+    assertBillingConfigOrThrow({ requireRazorpay: true, requireStripe: false });
   } catch {
     opsLog({
       function_name: "razorpay-create-order",

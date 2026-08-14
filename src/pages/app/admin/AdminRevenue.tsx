@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { creditsDB } from "@/lib/supabase/database";
-import { ENV } from "@/lib/env";
+import { isStripeConfigured } from "@/lib/env";
 import { PLAN_PRICE_CENTS_MONTHLY } from "@/lib/constants/pricing";
 import { formatCents, formatNumber, formatPercent, formatDate } from "@/lib/utils/formatters";
 import { timeAgo }             from "@/lib/utils/dateUtils";
@@ -60,8 +60,7 @@ interface RevenueTransaction {
 
 type DateRange = "7d" | "30d" | "90d" | "12m";
 
-const STRIPE_CONFIGURED =
-  !!ENV.STRIPE_PRICE_PRO_MONTHLY || !!ENV.STRIPE_PRICE_STARTER_MONTHLY;
+const STRIPE_CONFIGURED = isStripeConfigured();
 
 const RANGE_DAYS: Record<DateRange, number> = {
   "7d": 7,

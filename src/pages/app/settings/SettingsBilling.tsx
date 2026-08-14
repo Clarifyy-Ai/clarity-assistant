@@ -43,7 +43,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { ENV } from "@/lib/env";
+import { isStripeConfigured } from "@/lib/env";
 import { creditsDB } from "@/lib/supabase/database";
 import {
   AlertTriangle,
@@ -60,14 +60,7 @@ import {
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-const STRIPE_CONFIGURED =
-  Boolean(ENV.STRIPE_PRICE_PRO_MONTHLY) ||
-  Boolean(ENV.STRIPE_PRICE_STARTER_MONTHLY) ||
-  Boolean(ENV.STRIPE_PRICE_ELITE_MONTHLY) ||
-  Boolean(ENV.STRIPE_PRICE_ENTERPRISE_MONTHLY) ||
-  Boolean(ENV.STRIPE_PRICE_CREDITS_50) ||
-  Boolean(ENV.STRIPE_PRICE_CREDITS_150) ||
-  Boolean(ENV.STRIPE_PRICE_CREDITS_500);
+const STRIPE_CONFIGURED = isStripeConfigured();
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   active: {
@@ -350,7 +343,14 @@ export default function SettingsBilling(): JSX.Element {
       });
     } catch (error) {
       console.error("[SettingsBilling] Razorpay", error);
-      toast.error("Checkout failed. Try again or contact support.");
+      const msg = error instanceof Error ? error.message : "";
+      toast.error(
+        msg.includes("Razorpay not configured") || msg.includes("not configured")
+          ? "Razorpay keys are not set on the server. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in Supabase Edge secrets."
+          : msg.includes("Billing configuration")
+            ? "Billing is not fully configured on the server yet."
+            : "Checkout failed. Try again or contact support.",
+      );
     } finally {
       setRazorpayLoading(null);
     }

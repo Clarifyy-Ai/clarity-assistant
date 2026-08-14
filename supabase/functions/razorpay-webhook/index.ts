@@ -256,7 +256,11 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    assertBillingConfigOrThrow({ requireRazorpay: true });
+    assertBillingConfigOrThrow({
+      requireRazorpay: true,
+      requireStripe: false,
+      requireRazorpayWebhook: true,
+    });
   } catch {
     return new Response(JSON.stringify({ error: "Billing configuration invalid" }), {
       status: 503,

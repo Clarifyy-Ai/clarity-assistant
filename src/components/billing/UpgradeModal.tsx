@@ -1,4 +1,4 @@
-import { ENV } from "@/lib/env";
+import { isStripeConfigured } from "@/lib/env";
 import { useState } from "react"
 import { Modal } from "@/components/ui/Modal"
 import { useUIStore } from "@/store/uiStore"
@@ -14,9 +14,7 @@ import { createCheckoutSession, getCheckoutUrls } from "@/lib/api/billing"
 import { openRazorpayCheckout } from "@/lib/api/payments"
 import { toast } from "sonner"
 
-const STRIPE_CONFIGURED =
-  !!ENV.STRIPE_PRICE_PRO_MONTHLY ||
-  !!ENV.STRIPE_PRICE_STARTER_MONTHLY
+const STRIPE_CONFIGURED = isStripeConfigured();
 
 const MODAL_PLANS: Array<{
   id: PlanId

@@ -118,14 +118,20 @@ const STRIPE_PRICE_KEYS = [
 export function validateBillingConfig(options?: {
   requireStripe?: boolean;
   requireRazorpay?: boolean;
+  requireRazorpayWebhook?: boolean;
 }): BillingConfigReport {
   const environment = detectEnvironment();
-  const requireStripe =
-    options?.requireStripe ??
-    (environment === "production" || Boolean(Deno.env.get("STRIPE_SECRET_KEY")));
   const requireRazorpay =
     options?.requireRazorpay ??
     Boolean(Deno.env.get("RAZORPAY_KEY_ID") || Deno.env.get("RAZORPAY_KEY_SECRET"));
+  // Razorpay-only callers must not fail closed on missing Stripe — INR checkout is
+  // the live path until USD Stripe secrets exist.
+  const requireStripe =
+    options?.requireStripe ??
+    (requireRazorpay && options?.requireRazorpay
+      ? false
+      : environment === "production" || Boolean(Deno.env.get("STRIPE_SECRET_KEY")));
+  const requireRazorpayWebhook = options?.requireRazorpayWebhook ?? false;
 
   const checks: EnvCheckResult[] = [];
 
@@ -171,7 +177,7 @@ export function validateBillingConfig(options?: {
   );
   checks.push(
     check("RAZORPAY_WEBHOOK_SECRET", Deno.env.get("RAZORPAY_WEBHOOK_SECRET"), {
-      required: requireRazorpay,
+      required: requireRazorpayWebhook,
       environment,
     }),
   );
@@ -179,7 +185,7 @@ export function validateBillingConfig(options?: {
   const publicUrl = Deno.env.get("PUBLIC_URL") ?? Deno.env.get("SITE_URL");
   checks.push(
     check("PUBLIC_URL", publicUrl, {
-      required: environment === "production",
+      required: environment === "production" && requireStripe,
       pattern: /^https:\/\//,
       environment,
     }),
@@ -208,6 +214,7 @@ export function validateBillingConfig(options?: {
 export function assertBillingConfigOrThrow(options?: {
   requireStripe?: boolean;
   requireRazorpay?: boolean;
+  requireRazorpayWebhook?: boolean;
 }): BillingConfigReport {
   const report = validateBillingConfig(options);
   if (!report.ok && report.environment === "production") {
