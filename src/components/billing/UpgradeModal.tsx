@@ -11,6 +11,7 @@ import { formatPrice, CREDIT_PACKS } from "@/lib/billing/priceCalculator"
 import { Check, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { createCheckoutSession, getCheckoutUrls } from "@/lib/api/billing"
+import { openRazorpayCheckout } from "@/lib/api/payments"
 import { toast } from "sonner"
 
 const STRIPE_CONFIGURED =
@@ -29,7 +30,7 @@ const MODAL_PLANS: Array<{
 
 export function UpgradeModal() {
   const uiStore = useUIStore()
-  const { planId } = useAuthStore()
+  const { planId, user, profile } = useAuthStore()
   const [loading, setLoading] = useState<string | null>(null)
 
   const handleUpgrade = async (targetPlanId: PlanId) => {
@@ -37,8 +38,19 @@ export function UpgradeModal() {
     if (!plan) return
 
     if (!STRIPE_CONFIGURED || !plan.stripePriceIdMonthly) {
-      toast.error("Stripe is not configured. Visit Settings > Billing for details.")
-      uiStore.setUpgradeModalOpen(false)
+      setLoading(targetPlanId)
+      try {
+        await openRazorpayCheckout({
+          productType: "pro_monthly",
+          userEmail: profile?.email ?? user?.email ?? undefined,
+          userName: profile?.full_name ?? undefined,
+        })
+        uiStore.setUpgradeModalOpen(false)
+      } catch {
+        toast.error("Checkout failed. Open Settings → Billing to pay with Razorpay.")
+      } finally {
+        setLoading(null)
+      }
       return
     }
 
@@ -72,8 +84,19 @@ export function UpgradeModal() {
 
   const handleBuyCredits = async () => {
     if (!STRIPE_CONFIGURED) {
-      toast.error("Stripe is not configured. Visit Settings > Billing for details.")
-      uiStore.setUpgradeModalOpen(false)
+      setLoading("credits")
+      try {
+        await openRazorpayCheckout({
+          productType: "credits_150",
+          userEmail: profile?.email ?? user?.email ?? undefined,
+          userName: profile?.full_name ?? undefined,
+        })
+        uiStore.setUpgradeModalOpen(false)
+      } catch {
+        toast.error("Checkout failed. Open Settings → Billing to pay with Razorpay.")
+      } finally {
+        setLoading(null)
+      }
       return
     }
 
@@ -120,7 +143,7 @@ export function UpgradeModal() {
         <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
           <span className="text-amber-400 text-sm">⚠</span>
           <p className="text-xs text-amber-300">
-            Stripe is not configured yet. Checkout will not work until VITE_STRIPE_* env vars are set.
+            USD Stripe is not configured. Upgrade and credit packs use Razorpay (INR).
           </p>
         </div>
       )}

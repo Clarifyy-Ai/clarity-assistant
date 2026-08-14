@@ -200,14 +200,12 @@ function getRequestOrigin(req: Request): string | null {
   return normalizeOrigin(rawOrigin);
 }
 
-/** Lovable / preview staging hosts — only allowed in non-production environments. */
-const PREVIEW_HOST_PATTERNS: RegExp[] = isProduction
-  ? []
-  : [
-      /\.lovable\.app$/i,
-      /\.lovable\.dev$/i,
-      /\.lovableproject\.com$/i,
-    ];
+/** Preview hosts used by Lovable / staging. CORS is not an auth boundary — JWT still required. */
+const PREVIEW_HOST_PATTERNS: RegExp[] = [
+  /\.lovable\.app$/i,
+  /\.lovable\.dev$/i,
+  /\.lovableproject\.com$/i,
+];
 
 function isPreviewOrigin(origin: string): boolean {
   if (PREVIEW_HOST_PATTERNS.length === 0) return false;

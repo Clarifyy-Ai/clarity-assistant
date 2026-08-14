@@ -127,6 +127,13 @@ function getPlanPriceId(
     : plan.stripePriceIdMonthly;
 }
 
+function razorpayProductForPack(packId: string): RazorpayProductType | null {
+  if (packId === "pack_50") return "credits_50";
+  if (packId === "pack_150") return "credits_150";
+  if (packId === "pack_500") return "credits_500";
+  return null;
+}
+
 function getSettingsBillingSuccessUrl(): string {
   return `${window.location.origin}/app/settings/billing?checkout=success`;
 }
@@ -261,18 +268,34 @@ export default function SettingsBilling(): JSX.Element {
 
     if (
       isPaidSignupPlan(upgradePlan) &&
-      STRIPE_CONFIGURED &&
       !upgradeCheckoutStartedRef.current
     ) {
-      const priceId = getPlanPriceId(upgradePlan as PlanId, upgradeInterval);
-      if (!priceId) {
-        toast.error("No Stripe price is configured for this plan.");
-        setSearchParams({}, { replace: true });
-        return;
-      }
       upgradeCheckoutStartedRef.current = true;
       clearPendingPlan();
       setSearchParams({}, { replace: true });
+
+      if (!STRIPE_CONFIGURED) {
+        setRazorpayLoading("pro_monthly");
+        void openRazorpayCheckout({
+          productType: "pro_monthly",
+          userEmail: profile?.email ?? user?.email ?? undefined,
+          userName: profile?.full_name ?? undefined,
+        })
+          .catch((error) => {
+            console.error("[SettingsBilling] Razorpay upgrade checkout error:", error);
+            toast.error("Checkout failed. Try Pay with Razorpay below.");
+            upgradeCheckoutStartedRef.current = false;
+          })
+          .finally(() => setRazorpayLoading(null));
+        return;
+      }
+
+      const priceId = getPlanPriceId(upgradePlan as PlanId, upgradeInterval);
+      if (!priceId) {
+        toast.error("No Stripe price is configured for this plan.");
+        upgradeCheckoutStartedRef.current = false;
+        return;
+      }
       setActionLoading(upgradePlan);
       void openCheckoutForPrice(priceId)
         .catch((error) => {
@@ -363,6 +386,11 @@ export default function SettingsBilling(): JSX.Element {
     stripePriceId?: string
   ): Promise<void> {
     if (!STRIPE_CONFIGURED || !stripePriceId) {
+      const razorpayProduct = razorpayProductForPack(packId);
+      if (razorpayProduct) {
+        await handleRazorpayCheckout(razorpayProduct);
+        return;
+      }
       toast.error("Credit purchase is not available yet. Please contact support.");
       return;
     }
@@ -479,13 +507,14 @@ export default function SettingsBilling(): JSX.Element {
 
             <div>
               <p className="text-sm font-semibold text-amber-300">
-                Stripe Not Configured
+                USD Stripe checkout is not configured
               </p>
 
               <p className="text-xs text-muted-foreground mt-1">
-                Payment processing is not set up. Set the{" "}
+                Pay with Razorpay (INR) on this page to upgrade or buy credits.
+                Stripe subscriptions will appear here once{" "}
                 <code className="text-amber-300/80">VITE_STRIPE_*</code>{" "}
-                environment variables to enable upgrades and credit purchases.
+                and server Stripe secrets are set.
               </p>
             </div>
           </div>
@@ -517,9 +546,12 @@ export default function SettingsBilling(): JSX.Element {
             <Button
               variant="primary"
               size="sm"
-              onClick={() => void handleOpenBillingPortal()}
-              loading={actionLoading === "portal"}
-              disabled={!STRIPE_CONFIGURED}
+              onClick={() =>
+                void (STRIPE_CONFIGURED
+                  ? handleOpenBillingPortal()
+                  : handleRazorpayCheckout("pro_monthly"))
+              }
+              loading={actionLoading === "portal" || razorpayLoading === "pro_monthly"}
               className="shrink-0"
             >
               <RefreshCw className="w-3.5 h-3.5 mr-1" />
@@ -654,16 +686,19 @@ export default function SettingsBilling(): JSX.Element {
               </h3>
             </div>
 
+            {STRIPE_CONFIGURED ? (
             <Button
               variant="outline"
               size="xs"
               onClick={() => void handleOpenBillingPortal()}
               loading={actionLoading === "portal"}
-              disabled={!STRIPE_CONFIGURED}
             >
               <ExternalLink className="w-3.5 h-3.5 mr-1" />
               Portal
             </Button>
+            ) : (
+              <span className="text-[10px] text-muted-foreground">Pay with Razorpay below</span>
+            )}
           </div>
 
           {loadingSub ? (
@@ -892,8 +927,8 @@ export default function SettingsBilling(): JSX.Element {
                         <Button
                           variant="secondary"
                           size="xs"
-                          loading={actionLoading === pack.id}
-                          disabled={!STRIPE_CONFIGURED || !pack.stripePriceId}
+                          loading={actionLoading === pack.id || razorpayLoading === razorpayProductForPack(pack.id)}
+                          disabled={false}
                           onClick={() =>
                             void handleBuyCredits(pack.id, pack.stripePriceId)
                           }
@@ -951,8 +986,8 @@ export default function SettingsBilling(): JSX.Element {
                 variant="secondary"
                 size="sm"
                 className="w-full mt-auto"
-                loading={actionLoading === pack.id}
-                disabled={!STRIPE_CONFIGURED || !pack.stripePriceId}
+                loading={actionLoading === pack.id || razorpayLoading === razorpayProductForPack(pack.id)}
+                disabled={false}
                 onClick={() =>
                   void handleBuyCredits(pack.id, pack.stripePriceId)
                 }
