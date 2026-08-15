@@ -43,6 +43,7 @@ export const FEATURE_FLAGS = {
   DEBUG_PANEL:         "debug_panel",
   BETA_MODELS:         "beta_models",
   MOCK_TEST_AI:        "mock_test_ai",
+  GOV_EXAM_AI_FILL:    "gov_exam_ai_fill",
 } as const;
 
 export type FeatureFlag = (typeof FEATURE_FLAGS)[keyof typeof FEATURE_FLAGS];
@@ -77,6 +78,7 @@ export const FEATURE_PLAN_GATE: Record<FeatureFlag, PlanId> = {
   [FEATURE_FLAGS.DEBUG_PANEL]:        "enterprise",
   [FEATURE_FLAGS.BETA_MODELS]:        "pro",
   [FEATURE_FLAGS.MOCK_TEST_AI]:       "pro",
+  [FEATURE_FLAGS.GOV_EXAM_AI_FILL]:   "pro",
 } as const;
 
 /** Alias used in some admin pages */

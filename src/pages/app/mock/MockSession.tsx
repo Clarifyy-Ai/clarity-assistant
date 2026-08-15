@@ -359,9 +359,12 @@ export default function MockSession() {
   const isLastQ = qIndex >= totalQ - 1;
 
   const handleRequestHint = useCallback(async (questionText?: string) => {
+    const overlay = useOverlayStore.getState();
+    overlay.setActiveTab("answer");
+    overlay.setMinimalMode(false);
     const q = questionText || (typeof question === "string" ? question : question?.question_text);
     if (q) {
-      useOverlayStore.getState().setCurrentQuestion(q);
+      overlay.setCurrentQuestion(q);
       await orchestrator.requestHint(q);
     }
   }, [question, orchestrator]);

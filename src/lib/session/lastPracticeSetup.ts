@@ -63,17 +63,26 @@ export function stashPendingPracticeSetup(config: LiveSessionConfig): void {
   }
 }
 
-export function consumePendingPracticeSetup(): LiveSessionConfig | null {
+function readPendingPracticeSetup(remove: boolean): LiveSessionConfig | null {
   try {
     const raw = sessionStorage.getItem(PENDING_SETUP_KEY);
     if (!raw) return null;
-    sessionStorage.removeItem(PENDING_SETUP_KEY);
+    if (remove) sessionStorage.removeItem(PENDING_SETUP_KEY);
     const parsed = JSON.parse(raw) as LiveSessionConfig;
     if (!parsed || typeof parsed !== "object") return null;
     return parsed;
   } catch {
     return null;
   }
+}
+
+/** Read a handoff config without consuming it (wizard prefill). */
+export function peekPendingPracticeSetup(): LiveSessionConfig | null {
+  return readPendingPracticeSetup(false);
+}
+
+export function consumePendingPracticeSetup(): LiveSessionConfig | null {
+  return readPendingPracticeSetup(true);
 }
 
 export function formatPracticeSetupSummary(config: LiveSessionConfig): string {

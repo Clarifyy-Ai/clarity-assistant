@@ -1,0 +1,35 @@
+{
+  "generated_at": "2026-08-15",
+  "issues": [
+    {
+      "id": "SEC-001",
+      "severity": "P1",
+      "status": "mitigated",
+      "summary": "Overlay capture evasion disabled; overlay remains visible on share."
+    },
+    {
+      "id": "SEC-002",
+      "severity": "P1",
+      "status": "open",
+      "summary": "questions.correct_answer still readable via Data API on public rows; player no longer selects it."
+    },
+    {
+      "id": "PROD-001",
+      "severity": "P0",
+      "status": "fixed",
+      "summary": "Score-percent mapped to predicted_percentile; now unpublished until cohort exists."
+    },
+    {
+      "id": "CONT-001",
+      "severity": "P0",
+      "status": "blocked",
+      "summary": "No full-sim exam pack ready; licensed PYQ not seeded."
+    },
+    {
+      "id": "CRED-001",
+      "severity": "P1",
+      "status": "blocked",
+      "summary": "Deepgram/Gemini/Stripe live certification requires ops secrets."
+    }
+  ]
+}

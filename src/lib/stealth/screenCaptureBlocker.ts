@@ -39,8 +39,8 @@ export interface ScreenCaptureBlockerOptions {
 
 const DEFAULT_OPTIONS: Required<ScreenCaptureBlockerOptions> = {
   excludeFromCapture: false,
-  enableOpacityAutoFade: true,
-  enableAutoHideOnFocusLoss: true,
+  enableOpacityAutoFade: false,
+  enableAutoHideOnFocusLoss: false,
 };
 
 let currentMitigation: ScreenCaptureMitigation | null = null;
@@ -54,7 +54,12 @@ let focusListenerAttached = false;
 export async function enableScreenCaptureBlocker(
   opts: ScreenCaptureBlockerOptions = {}
 ): Promise<ScreenCaptureMitigation> {
-  const options = { ...DEFAULT_OPTIONS, ...opts };
+  const options: Required<ScreenCaptureBlockerOptions> = {
+    ...DEFAULT_OPTIONS,
+    ...opts,
+    excludeFromCapture: false,
+    enableAutoHideOnFocusLoss: false,
+  };
 
   const platform: StealthPlatform = detectPlatform();
   const mitigation: ScreenCaptureMitigation = {

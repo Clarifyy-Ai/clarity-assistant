@@ -29,9 +29,11 @@ import {
 } from "@/lib/platform/electronWindowManager";
 import {
   consumePendingPracticeSetup,
+  peekPendingPracticeSetup,
   saveLastPracticeSetup,
 } from "@/lib/session/lastPracticeSetup";
 import { saveLastSessionSummary } from "@/lib/session/lastSessionSummary";
+import { resolveQuestionFromTranscript } from "@/lib/session/liveQuestionFromTranscript";
 
 const PREP_LABELS = [
   "Analysing your profile…",
@@ -64,6 +66,7 @@ function LiveOverlaySession() {
   const sessionStatus = useSessionStore((s) => s.status);
   const isMobile = useIsMobile();
 
+  const skipWizardRef = useRef(Boolean(peekPendingPracticeSetup()));
   const [phase, setPhase] = useState<"setup" | "starting" | "active">("setup");
   const [config, setConfig] = useState<LiveSessionConfig>(DEFAULT_CONFIG);
   const [lastSessionId, setLastSessionId] = useState<string | null>(null);
@@ -149,6 +152,7 @@ function LiveOverlaySession() {
   useEffect(() => {
     const pending = consumePendingPracticeSetup();
     if (pending) handleSetup(pending);
+    else skipWizardRef.current = false;
   }, [handleSetup]);
 
   // ── Start live session (creation handled by start-session edge via useLiveCopilot) ──
@@ -226,15 +230,22 @@ function LiveOverlaySession() {
   // ── Generate hint ─────────────────────────────────────────────────────────
   const handleGenerate = useCallback(() => {
     const store = useOverlayStore.getState();
-    let question = store.current_question?.trim() ?? "";
-    if (!question) {
-      const utterances = useAudioStore.getState().transcript?.utterances ?? [];
-      const lastThem = [...utterances].reverse().find((u) => u.speaker === "interviewer");
-      question = lastThem?.text?.trim() ?? "";
-      if (question) store.setCurrentQuestion(question);
+    store.setActiveTab("answer");
+    store.setMinimalMode(false);
+    store.showOverlay();
+
+    const utterances = useAudioStore.getState().transcript?.utterances ?? [];
+    const question = resolveQuestionFromTranscript(utterances, store.current_question);
+    if (question) {
+      store.setCurrentQuestion(question);
+      void copilot.requestLiveHint(question);
+      return;
     }
-    if (question) copilot.requestLiveHint(question);
-    else toast.info("Speak a question or type one in Chat first");
+
+    store.setSessionPipelineState("listening");
+    toast.info(
+      "Listening for the interviewer. Share tab audio, or type the question in Chat.",
+    );
   }, [copilot]);
 
   const handleManualQuestion = useCallback(
@@ -252,7 +263,7 @@ function LiveOverlaySession() {
     if (phase === "setup") notifyOverlayVisibilityOnMobile();
   }, [phase]);
 
-  if (phase === "setup") {
+  if (phase === "setup" && !skipWizardRef.current) {
     return (
       <div className="relative min-h-screen bg-background">
         <header className="sticky top-0 z-[300] flex items-center gap-3 border-b border-border bg-background/95 px-4 py-3 backdrop-blur">
@@ -290,7 +301,7 @@ function LiveOverlaySession() {
     );
   }
 
-  if (phase === "starting") {
+  if (phase === "starting" || (phase === "setup" && skipWizardRef.current)) {
     const prepLabel =
       PREP_LABELS[Math.min(copilot.prepStepIndex, PREP_LABELS.length - 1)] ??
       "Preparing session…";

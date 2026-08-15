@@ -26,7 +26,7 @@ interface StealthMouseGuardProps {
 export function StealthMouseGuard({
   isActive,
   interactive = true,
-  stealthOpacity    = 0.15,
+  stealthOpacity    = 0.85,
   hoverRevealDelayMs = 0,
   children,
 }: StealthMouseGuardProps) {

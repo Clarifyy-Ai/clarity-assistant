@@ -5,6 +5,7 @@ import type {
   TopicMasterySummary,
 } from "@/lib/gov-exam/api";
 import { listWeakTopics, type TopicMasteryRow } from "@/lib/gov-exam/masteryEngine";
+import { masteryTrackingCopy } from "@/lib/gov-exam/masteryLabels";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -97,9 +98,10 @@ export function GovExamReadinessPanel({
                 <li
                   key={w.topic}
                   className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-800 dark:text-amber-300"
-                  title={`Mastery ${(w.mastery_score * 100).toFixed(0)}% · ${w.state} · ${w.evidence_count} evidence`}
+                  title={`Mastery ${(w.mastery_score * 100).toFixed(0)}% · ${masteryTrackingCopy(w.state)} · ${w.evidence_count} evidence`}
                 >
                   {w.topic}
+                  <span className="ml-1 opacity-70">{masteryTrackingCopy(w.state)}</span>
                 </li>
               ))}
             </ul>

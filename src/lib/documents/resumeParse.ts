@@ -40,9 +40,12 @@ export function parseResumeContentString(content: string | null | undefined): Pa
   if (!content?.trim()) return null;
   try {
     const raw = JSON.parse(content) as Record<string, unknown>;
+    if (typeof raw._parse_error === "string" && raw._parse_error) return null;
     return normalizeParsedResume(raw);
   } catch {
-    return null;
+    const text = content.trim();
+    if (text.length < 20) return null;
+    return normalizeParsedResume({ summary: text.slice(0, 8000) });
   }
 }
 

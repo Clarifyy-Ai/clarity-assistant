@@ -26,6 +26,7 @@ const CAPABILITY_MIN_RANK: Record<string, number> = {
   analytics: 2,
   company_research: 2,
   calendar_sync: 2,
+  gov_exam_ai_fill: 2,
   priority_models: 4,
 };
 
@@ -75,10 +76,9 @@ describe("P0-3 server plan gating matrix", () => {
     expect(hasCapability("enterprise", "priority_models")).toBe(true);
   });
 
-  it("starter is never used as a minimum gate (pro is the sold unlock)", () => {
-    // Documented decision: remapped requirePlan('starter') → 'pro'
-    expect(PLAN_RANK.starter).toBe(PLAN_RANK.free);
-    expect(requirePlanMin("free", "starter")).toBe(true); // why starter was a no-op
-    expect(requirePlanMin("free", "pro")).toBe(false); // correct gate
+  it("gov_exam_ai_fill is Pro and independent of free mock_test", () => {
+    expect(hasCapability("free", "mock_test")).toBe(true);
+    expect(hasCapability("free", "gov_exam_ai_fill")).toBe(false);
+    expect(hasCapability("pro", "gov_exam_ai_fill")).toBe(true);
   });
 });

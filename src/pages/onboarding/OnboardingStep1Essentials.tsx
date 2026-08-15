@@ -64,6 +64,10 @@ export default function OnboardingStep1Essentials({ data, onNext, onChange }: St
     data.targetRole && !ROLES.some((r) => r.value === data.targetRole) ? data.targetRole : "",
   );
   const [level,      setLevel]      = useState(data.currentLevel || "");
+  const [industry, setIndustry] = useState(data.industry || "");
+  const [interviewDate, setInterviewDate] = useState(data.interviewDate || "");
+  const [difficulty, setDifficulty] = useState(data.difficulty || "medium");
+  const [goals, setGoals] = useState(data.improvementGoals.join(", "));
   const [loading,    setLoading]    = useState(false);
   const [error,      setError]      = useState<string | null>(null);
 
@@ -79,8 +83,12 @@ export default function OnboardingStep1Essentials({ data, onNext, onChange }: St
       targetRole: resolvedRole,
       currentLevel: level,
       yearsOfExperience: level ? (YEARS_MAP[level] ?? 0) : data.yearsOfExperience,
+      industry,
+      interviewDate,
+      difficulty,
+      improvementGoals: goals.split(",").map((g) => g.trim()).filter(Boolean),
     });
-  }, [resolvedRole, level, onChange, data.yearsOfExperience]);
+  }, [resolvedRole, level, industry, interviewDate, difficulty, goals, onChange, data.yearsOfExperience]);
 
   async function handleNext() {
     if (!canProceed || !user) return;
@@ -101,6 +109,11 @@ export default function OnboardingStep1Essentials({ data, onNext, onChange }: St
         role_type:         role,
         target_role:       resolvedRole,
         experience_years:  YEARS_MAP[level] ?? 0,
+        industry: industry || null,
+        domain: industry || null,
+        interview_date: interviewDate || null,
+        interview_difficulty: difficulty || null,
+        improvement_goals: goals.split(",").map((g) => g.trim()).filter(Boolean),
         notification_prefs: {
           ...existingPrefs,
           experience_level: level,
@@ -236,6 +249,50 @@ export default function OnboardingStep1Essentials({ data, onNext, onChange }: St
           ))}
         </div>
       </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="text-xs font-medium text-muted-foreground">
+          Industry
+          <input
+            type="text"
+            value={industry}
+            onChange={(e) => setIndustry(e.target.value.slice(0, 80))}
+            placeholder="e.g. Fintech"
+            className="mt-1 w-full rounded-xl border border-border bg-secondary/50 px-3 py-2 text-sm text-foreground"
+          />
+        </label>
+        <label className="text-xs font-medium text-muted-foreground">
+          Interview date
+          <input
+            type="date"
+            value={interviewDate}
+            onChange={(e) => setInterviewDate(e.target.value)}
+            className="mt-1 w-full rounded-xl border border-border bg-secondary/50 px-3 py-2 text-sm text-foreground"
+          />
+        </label>
+      </div>
+      <label className="text-xs font-medium text-muted-foreground block">
+        Difficulty
+        <select
+          value={difficulty}
+          onChange={(e) => setDifficulty(e.target.value)}
+          className="mt-1 w-full rounded-xl border border-border bg-secondary/50 px-3 py-2 text-sm text-foreground"
+        >
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+      </label>
+      <label className="text-xs font-medium text-muted-foreground block">
+        Improvement goals
+        <input
+          type="text"
+          value={goals}
+          onChange={(e) => setGoals(e.target.value.slice(0, 200))}
+          placeholder="Comma-separated, e.g. STAR stories, system design"
+          className="mt-1 w-full rounded-xl border border-border bg-secondary/50 px-3 py-2 text-sm text-foreground"
+        />
+      </label>
 
       {error && <p className="text-xs text-red-400">{error}</p>}
 

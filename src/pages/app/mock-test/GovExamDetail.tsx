@@ -517,6 +517,10 @@ export default function GovExamDetail(): React.ReactElement {
                 <p className="text-xs text-muted-foreground">{customLabel}</p>
               </section>
 
+              {user?.id && exam && (
+                <ExamOnboardingCard examId={exam.examId} stageId={stage?.id ?? null} />
+              )}
+
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 items-start">
                 {[
                   { label: "View pattern", tabId: "pattern" as DetailTab },
@@ -976,6 +980,103 @@ export default function GovExamDetail(): React.ReactElement {
         </>
       )}
     </div>
+  );
+}
+
+}
+
+function ExamOnboardingCard({
+  examId,
+  stageId,
+}: {
+  examId: string;
+  stageId: string | null;
+}): React.ReactElement {
+  const { user } = useAuthStore();
+  const [year, setYear] = useState(String(new Date().getFullYear()));
+  const [attemptDate, setAttemptDate] = useState("");
+  const [level, setLevel] = useState("beginner");
+  const [hours, setHours] = useState("10");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (!user?.id) return;
+    setSaving(true);
+    try {
+      const { error } = await supabase.from("user_gov_exam_preferences").upsert(
+        {
+          user_id: user.id,
+          target_exam_id: examId,
+          target_stage_id: stageId,
+          target_year: Number(year) || null,
+          attempt_date: attemptDate || null,
+          preparation_level: level,
+          weekly_study_hours: Number(hours) || null,
+        },
+        { onConflict: "user_id" },
+      );
+      if (error) throw error;
+      toast.success("Exam prep preferences saved.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save preferences.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="rounded-xl border border-border p-4 space-y-3">
+      <h3 className="text-sm font-semibold text-foreground">Your exam onboarding</h3>
+      <p className="text-xs text-muted-foreground">
+        Official dates and vacancies come only from verified sources on this page — never generated.
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <label className="text-xs text-muted-foreground">
+          Target year
+          <input
+            type="number"
+            value={year}
+            onChange={(e) => setYear(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
+          />
+        </label>
+        <label className="text-xs text-muted-foreground">
+          Attempt date
+          <input
+            type="date"
+            value={attemptDate}
+            onChange={(e) => setAttemptDate(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
+          />
+        </label>
+        <label className="text-xs text-muted-foreground">
+          Preparation level
+          <select
+            value={level}
+            onChange={(e) => setLevel(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
+          >
+            <option value="beginner">Beginner</option>
+            <option value="intermediate">Intermediate</option>
+            <option value="advanced">Advanced</option>
+          </select>
+        </label>
+        <label className="text-xs text-muted-foreground">
+          Weekly study hours
+          <input
+            type="number"
+            min={1}
+            max={80}
+            value={hours}
+            onChange={(e) => setHours(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
+          />
+        </label>
+      </div>
+      <Button size="sm" onClick={() => void save()} disabled={saving}>
+        {saving ? "Saving…" : "Save preferences"}
+      </Button>
+    </section>
   );
 }
 

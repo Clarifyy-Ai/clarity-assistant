@@ -37,6 +37,26 @@ import {
   computeRemainingSeconds as remainingFromStart,
   shouldAutoSubmitAttempt,
 } from "@/lib/gov-exam/examTimer";
+import { PLAYABLE_QUESTION_COLUMNS } from "@/lib/gov-exam/playableQuestions";
+
+function resultsPathForTest(testId: string, config: unknown): string {
+  const source =
+    config && typeof config === "object" && "source" in config
+      ? String((config as { source?: string }).source ?? "")
+      : "";
+  return source === "exam_template"
+    ? `/app/assessments/results/${testId}`
+    : `/app/mock-test/results/${testId}`;
+}
+import {
+  clearAttemptRecovery,
+  loadAttemptRecovery,
+  saveAttemptRecovery,
+} from "@/lib/gov-exam/attemptRecovery";
+import {
+  resolveExamAttemptPhase,
+  type ExamAttemptPhase,
+} from "@/lib/gov-exam/examAttemptFsm";
 
 interface QuestionOption {
   label: string;
@@ -48,7 +68,7 @@ interface Question {
   question_text: string;
   question_type: "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER" | "NUMERICAL" | "CODING";
   options: QuestionOption[] | null;
-  correct_answer: string;
+  correct_answer?: string;
   subject: string;
   topic: string;
   difficulty: "EASY" | "MEDIUM" | "HARD";
@@ -75,7 +95,8 @@ interface MockTest {
   test_name: string;
   config: Record<string, unknown> | null;
   question_ids: string[];
-  status: "DRAFT" | "IN_PROGRESS" | "COMPLETED";
+  status: "DRAFT" | "IN_PROGRESS" | "COMPLETED" | "ABANDONED";
+  attempt_phase?: ExamAttemptPhase | string | null;
   time_limit_minutes: number | null;
   started_at?: string | null;
 }
@@ -246,30 +267,15 @@ function QuestionImage({ src, alt, className }: { src: string; alt: string; clas
   );
 }
 
-function estimateLiveScore(
+function estimateAttempted(
   questions: Question[],
   responses: Record<string, ResponseState>
 ) {
-  let score = 0;
-  let max = 0;
-
+  let attempted = 0;
   for (const question of questions) {
-    const marksPos = Number(question.marks_positive ?? 4);
-    const marksNeg = Number(question.marks_negative ?? 1);
-
-    max += marksPos;
-
-    const response = responses[question.id];
-    if (!response?.answer) continue;
-
-    if (response.answer === question.correct_answer) score += marksPos;
-    else score -= marksNeg;
+    if (responses[question.id]?.answer) attempted += 1;
   }
-
-  return {
-    score: Math.max(0, score),
-    max: Math.max(0, max),
-  };
+  return { attempted, total: questions.length };
 }
 
 function deriveResponseState(row: TestResponseRow): ResponseState {
@@ -360,8 +366,8 @@ export default function TestSession() {
     return counts;
   }, [questions, responses]);
 
-  const liveScore = useMemo(
-    () => estimateLiveScore(questions, responses),
+  const attemptProgress = useMemo(
+    () => estimateAttempted(questions, responses),
     [questions, responses]
   );
 
@@ -513,7 +519,7 @@ export default function TestSession() {
       const loadedTest = testData as unknown as MockTest;
 
       if (loadedTest.status === "COMPLETED") {
-        navigate(`/app/mock-test/results/${loadedTest.id}`);
+        navigate(resultsPathForTest(loadedTest.id, loadedTest.config));
         return;
       }
 
@@ -525,10 +531,23 @@ export default function TestSession() {
 
       const remainingSeconds = computeRemainingSeconds(loadedTest);
 
-      const { data: questionRows, error: questionError } = await supabase
-        .from("questions")
-        .select("*")
+      let questionRows: unknown[] | null = null;
+      let questionError: { message?: string } | null = null;
+
+      const playable = await supabase
+        .from("questions_playable")
+        .select(PLAYABLE_QUESTION_COLUMNS.join(","))
         .in("id", loadedTest.question_ids);
+      if (playable.error) {
+        const fallback = await supabase
+          .from("questions")
+          .select(PLAYABLE_QUESTION_COLUMNS.join(","))
+          .in("id", loadedTest.question_ids);
+        questionRows = fallback.data as unknown[] | null;
+        questionError = fallback.error;
+      } else {
+        questionRows = playable.data as unknown[] | null;
+      }
 
       if (questionError) throw questionError;
 
@@ -591,6 +610,29 @@ export default function TestSession() {
         restoredTimeMap[row.question_id] = Number(row.time_spent_seconds ?? 0);
       }
 
+      const queued = user?.id ? loadAttemptRecovery(loadedTest.id, user.id) : null;
+      if (queued?.responses?.length) {
+        for (const item of queued.responses) {
+          restoredResponses[item.question_id] = {
+            answer: item.user_answer,
+            state: item.is_marked_review
+              ? item.user_answer
+                ? "answered-marked"
+                : "marked"
+              : item.user_answer
+                ? "answered"
+                : "visited",
+          };
+          restoredTimeMap[item.question_id] = Math.max(
+            restoredTimeMap[item.question_id] ?? 0,
+            item.time_spent_seconds,
+          );
+        }
+        if (typeof queued.current_index === "number") {
+          setCurrentIndex(queued.current_index);
+        }
+      }
+
       if (!mountedRef.current) return;
 
       setTest(loadedTest);
@@ -614,11 +656,20 @@ export default function TestSession() {
       const startedAt = new Date().toISOString();
       const { error } = await supabase
         .from("mock_tests")
-        .update({ status: "IN_PROGRESS", started_at: startedAt })
+        .update({
+          status: "IN_PROGRESS",
+          started_at: startedAt,
+          attempt_phase: "ACTIVE",
+        })
         .eq("id", test.id)
         .eq("user_id", user!.id);
       if (error) throw error;
-      const updated: MockTest = { ...test, status: "IN_PROGRESS", started_at: startedAt };
+      const updated: MockTest = {
+        ...test,
+        status: "IN_PROGRESS",
+        started_at: startedAt,
+        attempt_phase: "ACTIVE",
+      };
       setTest(updated);
       setTimeLeft(computeRemainingSeconds(updated));
       setPaused(false);
@@ -648,7 +699,7 @@ export default function TestSession() {
     toast.message("Timer resumed from remaining official time.");
   }
 
-  async function saveResponses() {
+  async function saveResponses(options?: { throwOnError?: boolean }) {
     if (!testId || !user?.id || questionsRef.current.length === 0) return;
 
     try {
@@ -688,8 +739,34 @@ export default function TestSession() {
         .upsert(payload, { onConflict: "test_id,question_id" });
 
       if (error) throw error;
+      if (user?.id) clearAttemptRecovery(testId, user.id);
     } catch (error) {
+      if (user?.id && testId) {
+        saveAttemptRecovery({
+          test_id: testId,
+          user_id: user.id,
+          current_index: currentIndex,
+          updated_at: Date.now(),
+          responses: questionsRef.current.map((question) => {
+            const response = responsesRef.current[question.id];
+            return {
+              question_id: question.id,
+              user_answer: response?.answer ?? "",
+              is_attempted: Boolean(response?.answer) || response?.state !== "unattempted",
+              is_marked_review:
+                response?.state === "marked" || response?.state === "answered-marked",
+              time_spent_seconds: timeSpentMapRef.current[question.id] ?? 0,
+              queued_at: Date.now(),
+            };
+          }),
+        });
+      }
       console.warn("[TestSession] autosave failed:", error);
+      if (options?.throwOnError) {
+        throw error instanceof Error
+          ? error
+          : new Error("Could not save answers. Check your connection and try again.");
+      }
     }
   }
 
@@ -854,14 +931,16 @@ export default function TestSession() {
     setSubmitting(true);
 
     try {
-      await saveResponses();
+      await saveResponses({ throwOnError: true });
 
-      await fetchEdgeJson("submit-test", { test_id: testId });
+      await fetchEdgeJson("submit-test", { test_id: testId }, { timeoutMs: 90_000 });
+      if (user?.id) clearAttemptRecovery(testId, user.id);
 
       toast.success(autoSubmit ? "Time's up! Test submitted." : "Test submitted.", {
         position: "top-center",
       });
-      navigate(`/app/mock-test/results/${testId}`);
+      setShowSubmitModal(false);
+      navigate(resultsPathForTest(testId, test?.config));
     } catch (error) {
       submittingRef.current = false;
       console.error("[TestSession] submit failed:", error);
@@ -870,7 +949,6 @@ export default function TestSession() {
       });
     } finally {
       setSubmitting(false);
-      setShowSubmitModal(false);
     }
   }
 
@@ -901,7 +979,7 @@ export default function TestSession() {
   const paperMeta = resolvePaperClassPresentation(test.config);
 
   // Pre-start gate: test must be explicitly started by the user.
-  if (test.status === "DRAFT") {
+  if (test.status === "DRAFT" || resolveExamAttemptPhase(test) === "NOT_STARTED" || resolveExamAttemptPhase(test) === "INSTRUCTIONS") {
     const limitMins = Number(test.time_limit_minutes ?? 0);
     return (
       <div className="flex h-screen items-center justify-center bg-background p-6">
@@ -1205,8 +1283,8 @@ export default function TestSession() {
                 size="sm"
                 className="lg:hidden"
                 onClick={() => setShowSubmitModal(true)}
+                leftIcon={<Send className="h-4 w-4" />}
               >
-                <Send className="mr-1.5 h-4 w-4" />
                 Submit Test
               </Button>
             </div>
@@ -1295,8 +1373,8 @@ export default function TestSession() {
           </div>
 
           <div className="absolute bottom-0 left-0 right-0 z-40 border-t border-border bg-card shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)]">
-            <div className="mx-auto flex max-w-4xl flex-col items-center justify-between gap-3 px-4 py-3 md:flex-row md:py-4">
-              <div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start">
+            <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-2 px-4 py-3 md:py-4">
+              <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1318,49 +1396,37 @@ export default function TestSession() {
                 </Button>
               </div>
 
-              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                <div className="flex w-full items-center gap-2">
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "flex-1 sm:flex-none",
-                      isMarked
-                        ? "border-purple-500/30 bg-purple-500/10 text-purple-600"
-                        : "bg-muted/50"
-                    )}
-                    onClick={handleMarkAndNext}
-                  >
-                    <Flag className="mr-1.5 h-4 w-4" />
-                    <span className="hidden sm:inline">Mark for Review & Next</span>
-                    <span className="sm:hidden">Mark & Next</span>
-                  </Button>
-
-                  {currentIndex >= questions.length - 1 ? (
-                    <Button
-                      className="flex-1 bg-green-600 text-white shadow-md shadow-green-600/20 hover:bg-green-700 sm:flex-none"
-                      onClick={() => setShowSubmitModal(true)}
-                    >
-                      <Send className="mr-1.5 h-4 w-4" />
-                      Submit Test
-                    </Button>
-                  ) : (
-                    <Button
-                      className="flex-1 bg-green-600 text-white shadow-md shadow-green-600/20 hover:bg-green-700 sm:flex-none"
-                      onClick={handleSaveAndNext}
-                    >
-                      Save & Next
-                      <ChevronRight className="ml-1 h-4 w-4" />
-                    </Button>
+              <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "shrink-0",
+                    isMarked
+                      ? "border-purple-500/30 bg-purple-500/10 text-purple-600"
+                      : "bg-muted/50"
                   )}
-                </div>
-                {currentIndex < questions.length - 1 && (
+                  onClick={handleMarkAndNext}
+                >
+                  <Flag className="mr-1.5 h-4 w-4" />
+                  <span className="hidden sm:inline">Mark for Review & Next</span>
+                  <span className="sm:hidden">Mark & Next</span>
+                </Button>
+
+                {currentIndex >= questions.length - 1 ? (
                   <Button
-                    variant="outline"
-                    className="w-full lg:hidden"
+                    className="shrink-0 bg-green-600 text-white shadow-md shadow-green-600/20 hover:bg-green-700"
                     onClick={() => setShowSubmitModal(true)}
+                    leftIcon={<Send className="h-4 w-4" />}
                   >
-                    <Send className="mr-1.5 h-4 w-4" />
                     Submit Test
+                  </Button>
+                ) : (
+                  <Button
+                    className="shrink-0 bg-green-600 text-white shadow-md shadow-green-600/20 hover:bg-green-700"
+                    onClick={handleSaveAndNext}
+                    rightIcon={<ChevronRight className="h-4 w-4" />}
+                  >
+                    Save & Next
                   </Button>
                 )}
               </div>
@@ -1399,14 +1465,15 @@ export default function TestSession() {
           <div className="border-b border-border p-5 text-center">
             <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-widest text-primary/80">
-                Est. Score
+                Attempted
               </p>
               <p className="text-3xl font-black text-primary">
-                {liveScore.score}{" "}
+                {attemptProgress.attempted}{" "}
                 <span className="text-sm font-semibold text-muted-foreground">
-                  / {liveScore.max}
+                  / {attemptProgress.total}
                 </span>
               </p>
+              <p className="mt-1 text-[10px] text-muted-foreground">Score available after submit</p>
             </div>
           </div>
 
@@ -1562,8 +1629,9 @@ export default function TestSession() {
                 className="flex-1"
                 onClick={() => void handleSubmit(false)}
                 disabled={submitting}
+                loading={submitting}
               >
-                {submitting ? "Submitting..." : "Yes, Submit"}
+                Yes, Submit
               </Button>
             </div>
           </div>

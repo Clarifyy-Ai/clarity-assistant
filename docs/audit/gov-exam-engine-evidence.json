@@ -1,0 +1,25 @@
+{
+  "engine": "gov_exam",
+  "generated_at": "2026-08-15",
+  "features": [
+    {
+      "feature_id": "GOV-PLAYER",
+      "product_engine": "gov_exam",
+      "route": "/app/mock-test/session/:testId",
+      "source_files": ["src/pages/app/mock-test/TestSession.tsx", "src/lib/gov-exam/examAttemptFsm.ts", "src/lib/gov-exam/playableQuestions.ts"],
+      "tables": ["mock_tests", "test_responses", "questions_playable"],
+      "verified_status": "VERIFIED_WIRED",
+      "defects_fixed": ["answer keys stripped from live select", "live score hidden until submit", "local recovery queue"],
+      "tests": ["src/test/lib/gov-exam/examCertification.test.ts"]
+    },
+    {
+      "feature_id": "GOV-RANK",
+      "product_engine": "gov_exam",
+      "route": "/app/mock-test/results/:testId",
+      "source_files": ["src/lib/gov-exam/rankAvailability.ts", "supabase/functions/submit-test/index.ts", "src/pages/app/mock-test/TestResults.tsx"],
+      "tables": ["exam_attempt_cohorts", "exam_ranks", "mock_tests.rank_status"],
+      "verified_status": "VERIFIED_WIRED",
+      "residual_limitation": "No All India Rank; cohort empty by default"
+    }
+  ]
+}

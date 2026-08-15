@@ -142,6 +142,19 @@ const MockTestAnalytics = lazy(() => import("@/pages/app/mock-test/TestAnalytics
 const MockTestPapers = lazy(() => import("@/pages/app/mock-test/ExamPapers"));
 const GovExamDetail = lazy(() => import("@/pages/app/mock-test/GovExamDetail"));
 const GenerateGovPaper = lazy(() => import("@/pages/app/mock-test/GenerateGovPaper"));
+const InterviewPracticePlan = lazy(() => import("@/pages/app/plan/InterviewPracticePlan"));
+const QuestionBank = lazy(() => import("@/pages/app/question-bank/QuestionBank"));
+const AssessmentTemplates = lazy(() => import("@/pages/app/assessments/AssessmentTemplates"));
+const LearningHub = lazy(() => import("@/pages/app/learn/LearningHub"));
+const CourseDetail = lazy(() => import("@/pages/app/learn/CourseDetail"));
+const LessonPlayer = lazy(() => import("@/pages/app/learn/LessonPlayer"));
+const Community = lazy(() => import("@/pages/app/community/Community"));
+const CommunityPost = lazy(() => import("@/pages/app/community/PostDetail"));
+const CodingLab = lazy(() => import("@/pages/app/coding/CodingLab"));
+const CodingAssessment = lazy(() => import("@/pages/app/coding/CodingAssessment"));
+const DocumentLibrary = lazy(() => import("@/pages/app/library/DocumentLibrary"));
+const PracticeWorkspace = lazy(() => import("@/pages/app/practice/PracticeWorkspace"));
+const VerifyCertificate = lazy(() => import("@/pages/public/VerifyCertificate"));
 
 // Prep
 const PrepLab = lazy(() => import("@/pages/app/prep/PrepLab"));
@@ -282,6 +295,8 @@ const AdminLiveChat = lazy(
 const AdminQuestionEditor = lazy(
   () => import("@/pages/app/admin/AdminQuestionEditor")
 );
+const AdminCommunity = lazy(() => import("@/pages/app/admin/AdminCommunity"));
+const AdminLearning = lazy(() => import("@/pages/app/admin/AdminLearning"));
 const AdminAuditLog = lazy(() => import("@/pages/app/admin/AdminAuditLog"));
 const AdminQAChecklist = lazy(
   () => import("@/pages/app/admin/AdminQAChecklist")
@@ -536,6 +551,7 @@ const routes = [
   { path: "/terms", element: <MarketingPage component={Terms} /> },
   { path: "/privacy", element: <MarketingPage component={Privacy} /> },
   { path: "/share/:token", element: <Page component={SharedDebrief} /> },
+  { path: "/verify-certificate/:certificateId", element: <Page component={VerifyCertificate} /> },
 
   { path: "/dashboard", element: <Navigate to="/app/dashboard" replace /> },
 
@@ -571,6 +587,10 @@ const routes = [
       {
         path: "/app/mock-test/session/:testId",
         element: <IndiaAppPage component={MockTestSession} />,
+      },
+      {
+        path: "/app/assessments/session/:testId",
+        element: <Page component={MockTestSession} />,
       },
     ],
   },
@@ -698,6 +718,19 @@ const routes = [
 
           { path: "debriefs", element: <Page component={Debrief} /> },
           { path: "debriefs/:id", element: <Page component={DebriefDetail} /> },
+          { path: "plan", element: <Page component={InterviewPracticePlan} /> },
+          { path: "question-bank", element: <Page component={QuestionBank} /> },
+          { path: "assessments", element: <Page component={AssessmentTemplates} /> },
+          { path: "assessments/results/:testId", element: <Page component={MockTestResults} /> },
+          { path: "learn", element: <Page component={LearningHub} /> },
+          { path: "learn/:courseId", element: <Page component={CourseDetail} /> },
+          { path: "learn/:courseId/lesson/:lessonId", element: <Page component={LessonPlayer} /> },
+          { path: "community", element: <Page component={Community} /> },
+          { path: "community/:postId", element: <Page component={CommunityPost} /> },
+          { path: "coding", element: <Page component={CodingLab} /> },
+          { path: "coding/:questionId", element: <Page component={CodingAssessment} /> },
+          { path: "library", element: <Page component={DocumentLibrary} /> },
+          { path: "practice-workspace", element: <Page component={PracticeWorkspace} /> },
           {
             path: "debrief",
             element: <Navigate to="/app/debriefs" replace />,
@@ -830,6 +863,8 @@ const routes = [
             path: "gov/translations",
             element: <Page component={AdminGovTranslationReview} />,
           },
+          { path: "community", element: <Page component={AdminCommunity} /> },
+          { path: "learning", element: <Page component={AdminLearning} /> },
           {
             path: "security-config",
             element: <Page component={SettingsSecurityConfig} />,

@@ -46,7 +46,7 @@ import { toast } from "sonner";
 import {
   formatPracticeSetupSummary,
   loadLastPracticeSetup,
-  consumePendingPracticeSetup,
+  peekPendingPracticeSetup,
 } from "@/lib/session/lastPracticeSetup";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
@@ -236,7 +236,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
 
   // Interview Day (and similar) can pass company/role via query or pending stash.
   useEffect(() => {
-    const pending = consumePendingPracticeSetup();
+    const pending = peekPendingPracticeSetup();
     const companyParam = searchParams.get("company")?.trim() || "";
     const roleParam = searchParams.get("role")?.trim() || "";
     if (pending) {

@@ -97,14 +97,22 @@ Deno.serve(async (req) => {
       return json(req, { error: "Question not found", code: "NOT_FOUND" }, 404);
     }
 
-    const row = {
+    const paperId = uuidOrNull((body as Record<string, unknown>).paperId);
+
+    // Dual-schema row: live table was created with reporter_id/incident_type;
+    // later migration adds reported_by/reason/metadata. Send both so insert
+    // works before or after the column alignment migration.
+    const row: Record<string, unknown> = {
       question_id: questionId,
       reported_by: user.id,
+      reporter_id: user.id,
       reason: reasonRaw,
+      incident_type: reasonRaw,
       notes: notes || null,
       status: "open",
       metadata: {},
     };
+    if (paperId) row.paper_id = paperId;
 
     // Prefer content_quality_incidents; fall back to question_quality_reports if present.
     let incidentId: string | null = null;

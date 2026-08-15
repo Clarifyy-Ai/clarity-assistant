@@ -292,7 +292,6 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
             suggestion:
               "Type questions in Chat, or retry listening from the toolbar.",
           });
-          useOverlayStore.getState().setError(dgMsg);
           useOverlayStore.getState().setSessionPipelineState("audio_unavailable");
           toast.error(
             "Live transcription is off. Type a question in the Chat tab to get hints.",

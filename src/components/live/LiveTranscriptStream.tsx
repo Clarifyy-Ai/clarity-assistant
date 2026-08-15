@@ -77,6 +77,7 @@ function LiveTranscriptStreamInner() {
                 ? "text-amber-300/80 font-medium"
                 : "text-white/55",
             )}
+            aria-label="Final transcript"
           >
             {u.text}
           </span>
@@ -90,7 +91,11 @@ function LiveTranscriptStreamInner() {
             style={{ color: "rgba(255,255,255,0.3)" }}>
             …
           </span>
-          <span className="italic" style={{ color: "rgba(255,255,255,0.45)" }}>
+          <span
+            className="italic"
+            style={{ color: "rgba(255,255,255,0.45)" }}
+            aria-label="Interim transcript — not final"
+          >
             {interim}
           </span>
         </div>

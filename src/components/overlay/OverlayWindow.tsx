@@ -417,7 +417,7 @@ export function OverlayWindow({
 
   // Mount ScreenCaptureBlocker as a side-effect-only node (no visible UI; events feed ScreenCaptureBanner)
   const captureDetector = (
-    <ScreenCaptureBlocker isActive={isStealthMode || isSessionActive} showWarning={false} />
+    <ScreenCaptureBlocker isActive={isSessionActive} showWarning={false} />
   );
 
   // ───────────────────────────────────────────────────────────────
@@ -433,7 +433,7 @@ export function OverlayWindow({
         "border border-white/10",
         "bg-[#0b0b18] backdrop-blur-2xl",
         "shadow-[0_12px_48px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.05)]",
-        "transition-all duration-200",
+        "transition-all duration-200 motion-reduce:transition-none",
         isStealthMode && "overlay-stealth-glass",
         isProctorSafe && "overlay-proctor-safe",
         shouldShow

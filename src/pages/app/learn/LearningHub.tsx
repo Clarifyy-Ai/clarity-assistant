@@ -1,0 +1,65 @@
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { toast } from "sonner";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { supabase } from "@/lib/supabase/client";
+import { useAuthStore } from "@/store/authStore";
+import { PAGE_SHELL, STACK_GRID } from "@/lib/ui/responsivePage";
+
+type Course = {
+  id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  duration_hours: number | null;
+};
+
+export default function LearningHubPage() {
+  const user = useAuthStore((s) => s.user);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [progress, setProgress] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    void (async () => {
+      const { data, error } = await supabase
+        .from("learning_courses")
+        .select("id,slug,title,description,duration_hours")
+        .eq("publish_status", "published")
+        .order("title");
+      if (error) toast.error(error.message);
+      setCourses((data as Course[]) ?? []);
+      if (!user?.id) return;
+      const { data: enrolls } = await supabase
+        .from("course_enrollments")
+        .select("course_id,percentage")
+        .eq("user_id", user.id);
+      const map: Record<string, number> = {};
+      for (const row of enrolls ?? []) map[row.course_id as string] = Number(row.percentage ?? 0);
+      setProgress(map);
+    })();
+  }, [user?.id]);
+
+  return (
+    <div className={PAGE_SHELL}>
+      <PageHeader
+        title="Learning Hub"
+        description="Original Clarify courses. This is not a third-party LMS and not an official certification program."
+      />
+      <div className={STACK_GRID}>
+        {courses.map((course) => (
+          <Card key={course.id} className="flex min-w-0 flex-col">
+            <h2 className="text-base font-semibold">{course.title}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{course.description}</p>
+            <p className="mt-3 text-sm">Duration {course.duration_hours ?? 0} hours</p>
+            <p className="text-sm font-medium">Course progress: {progress[course.id] ?? 0}%</p>
+            <Link to={`/app/learn/${course.id}`} className="mt-4">
+              <Button fullWidth>Open course</Button>
+            </Link>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}

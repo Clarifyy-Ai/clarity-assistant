@@ -277,7 +277,7 @@ export default function Dashboard() {
 
           {isLowCredit && !profileLoading ? (
             <Link
-              to="/app/settings/billing"
+              to="/app/usage"
               className={cn(
                 "flex items-center gap-1.5 px-2 sm:px-3 py-1.5 border rounded-xl",
                 "bg-red-500/10 border-red-500/30 hover:bg-red-500/15 transition-colors",
@@ -289,12 +289,15 @@ export default function Dashboard() {
               </span>
             </Link>
           ) : (
-            <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 border rounded-xl bg-primary/10 border-primary/20">
+            <Link
+              to="/app/usage"
+              className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 border rounded-xl bg-primary/10 border-primary/20 hover:bg-primary/15 transition-colors"
+            >
               <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-primary" />
               <span className="text-[10px] sm:text-xs font-bold text-primary">
                 {profileLoading ? "…" : creditBalance} credits
               </span>
-            </div>
+            </Link>
           )}
         </div>
       </div>
@@ -560,6 +563,7 @@ function DashboardSecondaryWidgets({
           icon={<Zap className="w-4 h-4 text-emerald-400" />}
           color="emerald"
           loading={profileLoading}
+          href="/app/usage"
         />
         <StatCard
           label="Best streak"
@@ -611,11 +615,12 @@ interface StatCardProps {
   color: string;
   trend?: "up" | "down" | "neutral";
   loading?: boolean;
+  href?: string;
 }
 
-function StatCard({ label, value, icon, trend, loading }: StatCardProps) {
-  return (
-    <Card className="flex flex-col gap-2">
+function StatCard({ label, value, icon, trend, loading, href }: StatCardProps) {
+  const body = (
+    <Card className={cn("flex flex-col gap-2", href && "transition-colors hover:border-primary/40")}>
       <div className="flex items-center justify-between">
         {icon}
         {trend === "up" && (
@@ -630,6 +635,15 @@ function StatCard({ label, value, icon, trend, loading }: StatCardProps) {
       <p className="text-[10px] sm:text-xs text-muted-foreground">{label}</p>
     </Card>
   );
+
+  if (href) {
+    return (
+      <Link to={href} className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        {body}
+      </Link>
+    );
+  }
+  return body;
 }
 
 /* ─── RECENT ACTIVITY FEED ───────────────────────────────────────────────── */

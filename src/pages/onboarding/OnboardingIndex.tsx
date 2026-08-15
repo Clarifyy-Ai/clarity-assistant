@@ -56,6 +56,10 @@ const INITIAL_ONBOARDING_DATA: OnboardingData = {
   resumeFileName:     null,
   skipResume:         false,
   interviewAnxiety:   3,
+  industry:           "",
+  interviewDate:      "",
+  improvementGoals:   [],
+  difficulty:         "medium",
 };
 
 const TOTAL_STEPS = 2;
@@ -195,12 +199,19 @@ export default function OnboardingIndex() {
           ...((profile as { notification_prefs?: Record<string, unknown> } | null)
             ?.notification_prefs ?? {}),
           experience_level: level,
+          interview_types: finalData.interviewTypes,
+          interview_difficulty: finalData.difficulty || "medium",
           ...(typeof finalData.interviewAnxiety === "number"
             ? { interview_anxiety: finalData.interviewAnxiety }
             : {}),
         },
         ...(finalData.selectedMicId
           ? { audio_input_device: finalData.selectedMicId }
+          : {}),
+        ...(finalData.industry ? { industry: finalData.industry, domain: finalData.industry } : {}),
+        ...(finalData.interviewDate ? { interview_date: finalData.interviewDate } : {}),
+        ...(finalData.improvementGoals?.length
+          ? { improvement_goals: finalData.improvementGoals, interview_weaknesses: finalData.improvementGoals }
           : {}),
       } as Record<string, unknown>);
 

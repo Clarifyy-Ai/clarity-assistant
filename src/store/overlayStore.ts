@@ -5,6 +5,7 @@ import type { HintStyle, PreferredAIModel } from "@/types/user.types";
 import type { ResumeTalkingPoints, ResumeContext } from "@/lib/ai/resumeFallback";
 import { clearLastFullScreenshot } from "@/lib/audio/screenshotCapture";
 import {
+  pipelineStateFromErrorMessage,
   transitionOverlayState,
   type OverlaySessionState,
 } from "@/lib/overlay/overlaySessionStates";
@@ -568,21 +569,7 @@ export const useOverlayStore = create<OverlayStore>()(
 
       setError: (error_message) =>
         set((s) => {
-          const msg = (error_message ?? "").toLowerCase();
-          let next: OverlaySessionState = "ai_provider_unavailable";
-          if (msg.includes("credit")) next = "insufficient_credits";
-          else if (msg.includes("rate") || msg.includes("429")) next = "rate_limited";
-          else if (msg.includes("permission") || msg.includes("mic"))
-            next = "permission_denied";
-          else if (
-            msg.includes("network") ||
-            msg.includes("offline") ||
-            msg.includes("couldn't reach") ||
-            msg.includes("could not reach") ||
-            msg.includes("connection") ||
-            msg.includes("cors")
-          )
-            next = "backend_unavailable";
+          const next = pipelineStateFromErrorMessage(error_message);
           return {
             error_message,
             hint_state: "error" as HintState,

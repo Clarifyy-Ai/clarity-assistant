@@ -26,8 +26,14 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
+import {
+  RANK_UNAVAILABLE_COPY,
+  resolveRankPublication,
+  scoreBandLabel,
+} from "@/lib/gov-exam/rankAvailability";
 import { supabase } from "@/lib/supabase/client";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { ApiClientError } from "@/lib/api/apiClient";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/env";
 import { useAuthStore } from "@/store/userStore";
 import { useUIStore } from "@/store/uiStore";
@@ -46,7 +52,6 @@ import {
   primaryActionInsight,
   resolvePaperClassPresentation,
 } from "@/lib/gov-exam/disclaimers";
-import { reportQuestion } from "@/lib/gov-exam/api";
 
 type QuestionFilter = "all" | "wrong" | "marked";
 
@@ -89,7 +94,7 @@ interface TestAnalysis {
   weak_topics: string[];
   strong_topics: string[];
   time_analysis: TimeAnalysis;
-  predicted_percentile: number;
+  predicted_percentile: number | null;
   ai_analysis_text?: string | null;
 }
 
@@ -125,18 +130,26 @@ function isLikelyGuessed(timeSpent: number, avgTime: number): boolean {
   return timeSpent > 0 && avgTime > 0 && timeSpent < Math.max(10, avgTime * 0.3);
 }
 
-function getRankTier(percentile: number): string {
-  if (percentile >= 99) return "Top 1%";
-  if (percentile >= 95) return "Top 5%";
-  if (percentile >= 90) return "Top 10%";
-  if (percentile >= 75) return "Top 25%";
-  if (percentile >= 50) return "Top 50%";
-  return "Bottom 50%";
+function getRankPublication(analysis: TestAnalysis, test: MockTest) {
+  return resolveRankPublication({
+    cohortSize: Number(test.config?.cohort_size ?? 0),
+    percentile: analysis.predicted_percentile,
+    rank: typeof test.config?.published_rank === "number" ? test.config.published_rank : null,
+    status: typeof test.config?.rank_status === "string" ? test.config.rank_status : "unavailable",
+  });
 }
 
 function normalizeNumber(value: unknown, fallback = 0): number {
   const num = Number(value);
   return Number.isFinite(num) ? num : fallback;
+}
+
+function questionIdsFromUnknown(payload: unknown): string[] {
+  if (!payload || typeof payload !== "object") return [];
+  const ids = (payload as { question_ids?: unknown }).question_ids;
+  return Array.isArray(ids)
+    ? ids.filter((id): id is string => typeof id === "string" && id.length > 0)
+    : [];
 }
 
 export default function TestResults() {
@@ -229,6 +242,12 @@ export default function TestResults() {
       const orderedQuestions = loadedTest.question_ids
         .map((id) => questionMap[id])
         .filter(Boolean);
+
+      if (orderedQuestions.length < loadedTest.question_ids.length) {
+        toast.warning(
+          `Showing ${orderedQuestions.length} of ${loadedTest.question_ids.length} questions. Refresh if some are still loading.`,
+        );
+      }
 
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token ?? "";
@@ -379,24 +398,37 @@ export default function TestResults() {
             : kind === "weak"
             ? { EASY: 20, MEDIUM: 50, HARD: 30 }
             : { EASY: 20, MEDIUM: 60, HARD: 20 },
-        question_count: questionCount,
+        question_count:
+          kind === "weak" ? Math.min(questionCount, 10) : questionCount,
         duration_minutes: durationMinutes,
         marks_positive: normalizeNumber(originalConfig.marks_positive, 4),
         marks_negative: normalizeNumber(originalConfig.marks_negative, 1),
         randomize_order: true,
         shuffle_options: true,
+        allow_shortfall: true,
+        practice_mode: kind === "weak",
       };
 
-      const selectData = await fetchEdgeJson<{
-        question_ids?: string[];
-        error?: string;
-      }>("select-test-questions", { config: baseConfig });
+      let questionIds: string[] = [];
+      try {
+        const selectData = await fetchEdgeJson<{
+          question_ids?: string[];
+          error?: string;
+        }>("select-test-questions", { config: baseConfig }, { timeoutMs: 90_000 });
 
-      if (selectData.error) throw new Error(selectData.error);
+        if (selectData.error) throw new Error(selectData.error);
 
-      const questionIds = Array.isArray(selectData.question_ids)
-        ? selectData.question_ids
-        : [];
+        questionIds = Array.isArray(selectData.question_ids)
+          ? selectData.question_ids.filter((id): id is string => typeof id === "string")
+          : [];
+      } catch (error) {
+        const fromDetails =
+          error instanceof ApiClientError
+            ? questionIdsFromUnknown(error.details)
+            : [];
+        if (fromDetails.length === 0) throw error;
+        questionIds = fromDetails;
+      }
 
       if (questionIds.length === 0) {
         throw new Error("No questions available for this recommended test.");
@@ -482,7 +514,11 @@ export default function TestResults() {
     );
   }
 
-  const rankTier = getRankTier(analysis.predicted_percentile ?? 0);
+  const rankPublication = getRankPublication(analysis, test);
+  const scorePercent =
+    analysis.max_score > 0
+      ? Math.round((Math.max(0, analysis.total_score ?? 0) / analysis.max_score) * 100)
+      : 0;
   const isPractice = test.config?.practice_mode === true;
   const paperMeta = resolvePaperClassPresentation(test.config);
   const actionInsight = primaryActionInsight({
@@ -551,8 +587,10 @@ export default function TestResults() {
             color: "text-blue-400",
           },
           {
-            label: "Score band (not a cohort percentile)",
-            value: rankTier,
+            label: "Ranking",
+            value: rankPublication.rank_status === "unavailable"
+              ? RANK_UNAVAILABLE_COPY
+              : `Rank ${rankPublication.rank} · P${rankPublication.percentile}`,
             icon: <TrendingUp className="h-5 w-5 text-primary" />,
             color: "text-primary",
           },
@@ -592,9 +630,9 @@ export default function TestResults() {
               <Trophy className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Score-derived band</p>
-              <p className="font-bold text-foreground">{rankTier}</p>
-              <p className="text-[10px] text-muted-foreground">Not a real percentile</p>
+              <p className="text-xs text-muted-foreground">Score band</p>
+              <p className="font-bold text-foreground">{scoreBandLabel(scorePercent)}</p>
+              <p className="text-[10px] text-muted-foreground">{RANK_UNAVAILABLE_COPY}</p>
             </div>
           </CardContent>
         </Card>

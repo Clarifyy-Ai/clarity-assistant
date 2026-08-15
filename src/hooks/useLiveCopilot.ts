@@ -414,6 +414,7 @@ export function useLiveCopilot({
     const overlay = useOverlayStore.getState();
     overlay.setSessionPipelineState("question_detected");
     overlay.setCurrentQuestion(trimmed);
+    overlay.setActiveTab("answer");
 
     if (overlay.auto_generate) {
       void requestLiveHintRef.current(trimmed);
@@ -499,6 +500,11 @@ export function useLiveCopilot({
 
   const requestLiveHint = useCallback(
     async (question: string, modifier?: "regenerate" | "shorten" | "expand") => {
+      const overlayHome = useOverlayStore.getState();
+      overlayHome.setActiveTab("answer");
+      overlayHome.setMinimalMode(false);
+      overlayHome.showOverlay();
+
       if (!profile) return;
 
       // Prefer coach context; fallback if not initialized

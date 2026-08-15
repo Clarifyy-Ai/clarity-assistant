@@ -1,0 +1,44 @@
+{
+  "engine": "interview",
+  "generated_at": "2026-08-15",
+  "features": [
+    {
+      "feature_id": "INT-ONBOARD",
+      "product_engine": "interview",
+      "route": "/onboarding",
+      "ui_pattern": "2-step wizard",
+      "roles": ["authenticated"],
+      "source_files": ["src/pages/onboarding/OnboardingIndex.tsx", "src/pages/onboarding/OnboardingStep1Essentials.tsx"],
+      "tables": ["profiles"],
+      "rls": "profiles own update",
+      "verified_status": "VERIFIED_WIRED",
+      "tests": ["src/test/lib/onboarding/draft.test.ts"],
+      "residual_limitation": "Long 5-step wizard collapsed; fields persist on profile"
+    },
+    {
+      "feature_id": "INT-OVERLAY",
+      "product_engine": "interview",
+      "route": "/app/live/overlay",
+      "ui_pattern": "desktop overlay",
+      "roles": ["authenticated"],
+      "source_files": ["src/pages/app/live/LiveOverlay.tsx", "src/components/overlay/OverlayWindow.tsx", "src/lib/compliance/featureGates.ts"],
+      "edge_functions": ["deepgram-token", "generate-hint", "generate-answer", "start-session"],
+      "ai_providers": ["deepgram", "gemini"],
+      "subscription_entitlement": "desktop_overlay",
+      "verified_status": "VERIFIED_WIRED",
+      "defects_fixed": ["capture exclusion disabled", "auto-hide on focus loss disabled"],
+      "tests": ["src/test/lib/overlay/responsibleUseConsent.test.ts", "src/test/lib/interview/certificationWave.test.ts"],
+      "activation_requirement": "DEEPGRAM_API_KEY + practice consent"
+    },
+    {
+      "feature_id": "INT-PLAN",
+      "product_engine": "interview",
+      "route": "/app/plan",
+      "ui_pattern": "checklist",
+      "source_files": ["src/pages/app/plan/InterviewPracticePlan.tsx", "src/lib/interview/practicePlan.ts"],
+      "tables": ["interview_practice_plans", "interview_practice_plan_items"],
+      "verified_status": "VERIFIED_WIRED",
+      "tests": ["src/test/lib/interview/certificationWave.test.ts"]
+    }
+  ]
+}

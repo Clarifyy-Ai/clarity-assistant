@@ -185,3 +185,12 @@ verify_jwt = true
 # (x-internal-secret, worker secrets, service role, or admin JWT).
 [functions.run-daily-exam-scrape]
 verify_jwt = false
+
+[functions.assemble-assessment]
+verify_jwt = true
+
+[functions.score-coding-submission]
+verify_jwt = true
+
+[functions.issue-course-certificate]
+verify_jwt = true

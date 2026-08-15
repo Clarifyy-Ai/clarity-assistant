@@ -89,13 +89,30 @@ export function isSessionExpired(row: Pick<SessionRow, "created_at">): boolean {
   return Date.now() - created > EXPIRY_MS;
 }
 
+/** Only keep IDs that exist in public.documents (resume IDs live in resumes). */
+async function resolveDocumentsTableId(
+  id: string | null | undefined,
+): Promise<string | null> {
+  if (!id) return null;
+  const { data, error } = await supabase
+    .from("documents")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) {
+    console.warn("[sessionLifecycle] documents FK lookup failed:", error.message);
+    return null;
+  }
+  return data?.id ?? null;
+}
+
 async function abandonExpiredSessions(userId: string, type?: SessionType): Promise<void> {
   const beforeIso = new Date(Date.now() - EXPIRY_MS).toISOString();
   let query = supabase
     .from("sessions")
-    .update({ status: "abandoned", ended_at: new Date().toISOString() })
+    .update({ status: "abandoned", lifecycle_status: "CANCELLED", ended_at: new Date().toISOString() })
     .eq("user_id", userId)
-    .in("status", ["pending", "active"])
+    .in("status", ["pending", "active", "paused"])
     .lt("created_at", beforeIso);
 
   if (type) query = query.eq("type", type);
@@ -119,7 +136,7 @@ export async function getOrCreateSession(
       .select("*")
       .eq("user_id", input.user_id)
       .eq("type", input.type)
-      .in("status", ["pending", "active"])
+      .in("status", ["pending", "active", "paused"])
       .gte("created_at", sinceIso)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -156,14 +173,20 @@ export async function getOrCreateSession(
     input.tags ??
     buildSessionTags(input.type, input.is_practice ?? false);
 
-  const insert: TablesInsert<"sessions"> = {
+  // resume_id / jd_id live on resumes + job_descriptions; sessions.document_id
+  // and sessions.jd_id FK to public.documents — drop IDs that would 500.
+  const document_id = await resolveDocumentsTableId(input.document_id);
+  const jd_id = await resolveDocumentsTableId(input.jd_id);
+
+  const insert: TablesInsert<"sessions"> & { lifecycle_status?: string } = {
     user_id: input.user_id,
     type: input.type,
     status: "pending",
+    lifecycle_status: "CREATED",
     title: input.title ?? null,
     company_id: input.company_id ?? null,
-    document_id: input.document_id ?? null,
-    jd_id: input.jd_id ?? null,
+    document_id,
+    jd_id,
     model_used: input.model_used ?? null,
     tags: tags.length > 0 ? tags : null,
   };
@@ -172,6 +195,24 @@ export async function getOrCreateSession(
     supabase.from("sessions").insert(insert).select().single(),
     "Session create",
   );
+
+  if (insertErr?.message?.includes("sessions_document_id_fkey") ||
+      insertErr?.message?.includes("sessions_jd_id_fkey")) {
+    const retryInsert: TablesInsert<"sessions"> = {
+      ...insert,
+      document_id: null,
+      jd_id: null,
+    };
+    const { data: retried, error: retryErr } = await withDbTimeout(
+      supabase.from("sessions").insert(retryInsert).select().single(),
+      "Session create",
+    );
+    if (retryErr || !retried) {
+      console.error("[sessionLifecycle] insert retry failed:", retryErr);
+      throw new Error(retryErr?.message || "Failed to create session");
+    }
+    return { session: retried as SessionRow, reused: false };
+  }
 
   if (insertErr || !created) {
     console.error("[sessionLifecycle] insert failed:", insertErr);
@@ -202,13 +243,14 @@ export async function activateSession(sessionId: string): Promise<void> {
   if (isSessionExpired(existing)) {
     await supabase
       .from("sessions")
-      .update({ status: "abandoned", ended_at: new Date().toISOString() })
+      .update({ status: "abandoned", lifecycle_status: "CANCELLED", ended_at: new Date().toISOString() })
       .eq("id", sessionId);
     throw new Error("This session expired after 24 hours; please start a new one.");
   }
 
-  const update: TablesUpdate<"sessions"> = {
+  const update: TablesUpdate<"sessions"> & { lifecycle_status?: string } = {
     status: "active",
+    lifecycle_status: "IN_PROGRESS",
     ...(existing.status === "active" ? {} : { started_at: new Date().toISOString() }),
   };
 
@@ -217,7 +259,7 @@ export async function activateSession(sessionId: string): Promise<void> {
       .from("sessions")
       .update(update)
       .eq("id", sessionId)
-      .in("status", ["pending", "active"]),
+      .in("status", ["pending", "active", "paused"]),
     "Session activate",
   );
 
@@ -246,7 +288,7 @@ export async function getResumableSession(
   if (isSessionExpired(data)) {
     await supabase
       .from("sessions")
-      .update({ status: "abandoned", ended_at: new Date().toISOString() })
+      .update({ status: "abandoned", lifecycle_status: "CANCELLED", ended_at: new Date().toISOString() })
       .eq("id", sessionId);
     return null;
   }

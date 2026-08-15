@@ -39,6 +39,8 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { to: "/app/admin/bulk-upload",    icon: Upload,         label: "Bulk Upload"   },
       { to: "/app/admin/seed-questions", icon: Database,       label: "Seed / Import" },
       { to: "/app/admin/qa-checklist",   icon: ClipboardCheck, label: "QA Checklist"  },
+      { to: "/app/admin/community",      icon: MessageSquare,  label: "Q&A Moderation"},
+      { to: "/app/admin/learning",       icon: BookOpen,       label: "Learning Hub"  },
     ],
   },
   {

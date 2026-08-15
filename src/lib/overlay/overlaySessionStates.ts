@@ -156,3 +156,38 @@ export function overlayStateRecovery(state: OverlaySessionState): string {
   };
   return recovery[state] ?? "Continue when ready, or end the session safely.";
 }
+
+/** Map a user-facing error string to the overlay pipeline state (not always "AI unavailable"). */
+export function pipelineStateFromErrorMessage(message: string | null | undefined): OverlaySessionState {
+  const msg = (message ?? "").toLowerCase();
+  if (msg.includes("credit")) return "insufficient_credits";
+  if (msg.includes("rate") || msg.includes("429")) return "rate_limited";
+  if (
+    msg.includes("permission") ||
+    msg.includes("microphone") ||
+    /\bmic\b/.test(msg)
+  ) {
+    return "permission_denied";
+  }
+  if (
+    msg.includes("transcript") ||
+    msg.includes("deepgram") ||
+    msg.includes("speech-to-text") ||
+    msg.includes("stt") ||
+    msg.includes("tab audio") ||
+    msg.includes("system audio")
+  ) {
+    return "audio_unavailable";
+  }
+  if (
+    msg.includes("network") ||
+    msg.includes("offline") ||
+    msg.includes("couldn't reach") ||
+    msg.includes("could not reach") ||
+    msg.includes("connection") ||
+    msg.includes("cors")
+  ) {
+    return "backend_unavailable";
+  }
+  return "ai_provider_unavailable";
+}

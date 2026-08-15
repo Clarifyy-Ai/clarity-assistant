@@ -186,13 +186,8 @@ export function ScreenCaptureBlocker({
       return;
     }
 
-    // Tier 1: Electron — enable OS content protection
-    if (isElectron()) {
-      void enableContentProtection();
-    }
-
-    // Tier 2: Chromium browser — patch getDisplayMedia prototype
-    // patchGetDisplayMedia() is a no-op in Firefox/Safari
+    // Detection only — never exclude the overlay from capture.
+    void enableContentProtection();
     patchGetDisplayMedia();
 
     // Subscribe to lib-level capture state changes (fired by patched getDisplayMedia)
@@ -244,7 +239,7 @@ export function ScreenCaptureBlocker({
         >
           <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
           <p className="text-[10px] font-semibold text-red-400">
-            Screen sharing detected
+            Screen sharing detected — overlay remains visible
           </p>
         </div>
       )}

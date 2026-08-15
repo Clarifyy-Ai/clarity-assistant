@@ -406,7 +406,7 @@ export default function ResumeDetail() {
     <div>
       <PageHeader
         title={doc.name || "Resume"}
-        description={`Uploaded ${new Date(doc.created_at).toLocaleDateString()}`}
+        description={`Uploaded ${new Date(doc.created_at).toLocaleDateString()}. Stored privately for your account; delete any time. Retention follows Settings → Data.`}
         icon={<FileText className="w-5 h-5 text-primary" />}
         breadcrumbs={[
           { label: "Documents", href: "/app/documents" },

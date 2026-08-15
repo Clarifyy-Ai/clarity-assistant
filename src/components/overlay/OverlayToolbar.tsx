@@ -250,7 +250,11 @@ export function OverlayToolbar({
           icon={Sparkles}
           label={compactMobile ? "Hint" : "AI Help"}
           isActive={isGenerating}
-          onClick={onGenerate}
+          onClick={() => {
+            useOverlayStore.getState().setActiveTab("answer");
+            useOverlayStore.getState().setMinimalMode(false);
+            onGenerate?.();
+          }}
           disabled={isGenerating || !onGenerate}
           className={
             isGenerating

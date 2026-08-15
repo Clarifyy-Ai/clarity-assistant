@@ -12,14 +12,9 @@
 export const DISCRETE_UI_LABELS_ENABLED = true;
 
 /**
- * Screen-capture exclusion via Electron setContentProtection.
- * Opt-in only: allowed in Electron builds when the user enables stealth_mode
- * (or explicitly toggles capture exclusion). Default is false / visible.
+ * Screen-capture exclusion / overlay hiding is not permitted.
+ * Practice overlay must remain visible on screen share.
  */
 export function isStealthCaptureFeatureAllowed(): boolean {
-  if (typeof window === "undefined" || !(window as any).electronAPI?.isElectron) {
-    return false;
-  }
-  // Feature may be used when user opts in; gate does not auto-enable it.
-  return true;
+  return false;
 }

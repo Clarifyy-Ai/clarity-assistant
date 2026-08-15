@@ -144,17 +144,9 @@ let contentProtectionEnabled = false;
  *   });
  */
 export async function enableContentProtection(): Promise<boolean> {
-  if (!isElectron()) return false;
-  if (contentProtectionEnabled) return true;
-
-  try {
-    await window.electronAPI!.setContentProtection(true);
-    contentProtectionEnabled = true;
-    return true;
-  } catch (err) {
-    console.error("[screenCaptureEvasion] setContentProtection(true) failed:", err);
-    return false;
-  }
+  // Capture exclusion is not offered. Overlay stays visible on screen share.
+  contentProtectionEnabled = false;
+  return false;
 }
 
 export async function disableContentProtection(): Promise<void> {

@@ -37,8 +37,11 @@ export interface OnboardingData {
 
   /** Optional 1–5 interview-anxiety / confidence preference. */
   interviewAnxiety?:   number;
-  /** Output / speaker device id when available. */
   selectedOutputDeviceId?: string;
+  industry:            string;
+  interviewDate:       string;
+  improvementGoals:    string[];
+  difficulty:          string;
 }
 
 export interface StepProps {

@@ -113,16 +113,16 @@ export function AppTopBar() {
 
       <div style={noDragStyle} className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0 h-9">
 
-        <button
-          type="button"
+        <Link
+          to="/app/usage"
           style={noDragStyle}
           data-tour="topbar-credits"
-          onClick={() => uiStore.openUpgradeModal("pro")}
           aria-label={
             creditsKnown
-              ? `${creditBalance} credit${creditBalance === 1 ? "" : "s"}${isEmpty ? " — upgrade" : ""}`
-              : "Loading credits"
+              ? `${creditBalance} credit${creditBalance === 1 ? "" : "s"} — view usage`
+              : "Credits usage dashboard"
           }
+          title="Credits usage"
           className={cn(
             "flex items-center gap-1 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3 rounded-xl border text-[10px] sm:text-xs font-semibold transition-all",
             isEmpty
@@ -140,7 +140,7 @@ export function AppTopBar() {
           <span>{creditsKnown ? creditBalance : "—"}</span>
           <span className="hidden sm:inline">{creditBalance === 1 ? "credit" : "credits"}</span>
           {isEmpty && <span className="ml-1 hidden sm:inline">· Upgrade</span>}
-        </button>
+        </Link>
 
         <button
           type="button"

@@ -133,16 +133,34 @@ const NAV_SECTIONS: NavSection[] = [
         stealthIcon: Award,
         label: "Gov Exams",
       },
+      {
+        to: "/app/assessments",
+        icon: Award,
+        stealthIcon: Award,
+        label: "Assessments",
+      },
+      {
+        to: "/app/learn",
+        icon: BookOpen,
+        stealthIcon: BookOpen,
+        label: "Learning Hub",
+      },
+      {
+        to: "/app/practice-workspace",
+        icon: ClipboardList,
+        stealthIcon: PenTool,
+        label: "Practice workspace",
+      },
     ],
   },
   {
     label: NAV_SECTION_LABELS.progress,
     items: [
       {
-        to: "/app/sessions",
-        icon: Phone,
-        stealthIcon: FileSpreadsheet,
-        label: PRODUCT_NAMES.sessionHistory,
+        to: "/app/plan",
+        icon: ListTodo,
+        stealthIcon: ListTodo,
+        label: "Practice plan",
       },
       {
         to: "/app/analytics",
@@ -174,6 +192,30 @@ const NAV_SECTIONS: NavSection[] = [
         stealthIcon: FileText,
         label: PRODUCT_NAMES.documents,
         tourId: "nav-documents",
+      },
+      {
+        to: "/app/library",
+        icon: FolderOpen,
+        stealthIcon: FolderOpen,
+        label: "Document library",
+      },
+      {
+        to: "/app/question-bank",
+        icon: FileSpreadsheet,
+        stealthIcon: FileSpreadsheet,
+        label: "Question bank",
+      },
+      {
+        to: "/app/community",
+        icon: Inbox,
+        stealthIcon: Inbox,
+        label: "Q&A",
+      },
+      {
+        to: "/app/coding",
+        icon: PenTool,
+        stealthIcon: PenTool,
+        label: "Coding lab",
       },
       {
         to: "/app/answers",

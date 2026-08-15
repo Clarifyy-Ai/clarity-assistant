@@ -256,7 +256,8 @@ async function completeTestFallback(
     weak_topics: string[];
     strong_topics: string[];
     time_analysis: { avg_seconds: number; time_traps: TimeTrap[] };
-    predicted_percentile: number;
+    predicted_percentile: number | null;
+    rank_status?: string;
   }
 ) {
   const now = new Date().toISOString();
@@ -266,6 +267,9 @@ async function completeTestFallback(
     .update({
       status: "COMPLETED",
       submitted_at: now,
+      attempt_phase: "RESULT_AVAILABLE",
+      rank_status: "unavailable",
+      evaluation_version: 1,
     })
     .eq("id", args.test_id)
     .eq("user_id", args.user_id)
@@ -625,9 +629,9 @@ Deno.serve(async (req: Request) => {
     const boundedTotalScore = Math.max(0, totalScore);
     const pctScore =
       maxScore > 0 ? (boundedTotalScore / maxScore) * 100 : 0;
-    // Score-derived estimate for UI "performance band" — not a real cohort percentile.
-    // Field name `predicted_percentile` kept for DB / RPC compatibility.
-    const predictedPercentile = Math.min(99, Math.max(1, Math.round(pctScore)));
+    // Do not fabricate a cohort percentile from a single-attempt score.
+    const predictedPercentile = null;
+    const rankStatus = "unavailable";
 
     const weakTopics = Object.entries(topicBreakdown)
       .filter(([, value]) => value.attempted > 0 && value.correct / value.attempted < 0.5)
@@ -637,18 +641,7 @@ Deno.serve(async (req: Request) => {
       .filter(([, value]) => value.attempted > 0 && value.correct / value.attempted >= 0.8)
       .map(([topic]) => topic);
 
-    const rankTier =
-      predictedPercentile >= 99
-        ? "Top 1%"
-        : predictedPercentile >= 95
-        ? "Top 5%"
-        : predictedPercentile >= 90
-        ? "Top 10%"
-        : predictedPercentile >= 75
-        ? "Top 25%"
-        : predictedPercentile >= 50
-        ? "Top 50%"
-        : "Bottom 50%";
+    const rankTier = "Ranking data is not yet available.";
 
     const analysisPayload = {
       test_id: testId,
@@ -666,6 +659,7 @@ Deno.serve(async (req: Request) => {
         time_traps: timeTraps,
       },
       predicted_percentile: predictedPercentile,
+      rank_status: rankStatus,
     };
 
     /* ----------------- COMPLETE TEST (RPC -> FALLBACK) ----------------- */
@@ -683,7 +677,7 @@ Deno.serve(async (req: Request) => {
       p_weak_topics: analysisPayload.weak_topics,
       p_strong_topics: analysisPayload.strong_topics,
       p_time_analysis: analysisPayload.time_analysis,
-      p_predicted_percentile: analysisPayload.predicted_percentile,
+      p_predicted_percentile: analysisPayload.predicted_percentile ?? 0,
     });
 
     if (claimResult.error) {
@@ -860,6 +854,7 @@ Deno.serve(async (req: Request) => {
       strong_topics: strongTopics,
       predicted_percentile: predictedPercentile,
       rank_tier: rankTier,
+      rank_status: rankStatus,
       analysis: finalAnalysis,
     });
   } catch (err) {

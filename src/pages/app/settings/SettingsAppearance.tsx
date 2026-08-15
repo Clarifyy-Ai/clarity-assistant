@@ -10,8 +10,6 @@ import { setAppStealthMode } from "@/lib/stealth/stealthActions";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/switch";
-import { DesktopDownloadButton } from "@/components/common/DesktopDownloadButton";
-import { isElectronApp } from "@/lib/platform/isElectron";
 import { CheckCircle, Palette, Monitor, Sun, Moon, Layers, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
@@ -191,8 +189,8 @@ export default function SettingsAppearance() {
             <div>
               <h3 className="text-sm font-semibold text-foreground">Discrete mode</h3>
               <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                Remaps UI labels and dims the overlay so the app looks like a productivity tool.
-                Useful when practising in a shared screen environment.
+                Remaps navigation labels for practice privacy at home. The overlay stays visible
+                on screen share and is not hidden from interview or exam software.
               </p>
             </div>
           </div>
@@ -203,12 +201,11 @@ export default function SettingsAppearance() {
           />
         </div>
 
-        {stealthMode && !isElectronApp() && (
+        {stealthMode && (
           <div className="mt-4 pt-4 border-t border-border">
-            <p className="text-xs text-muted-foreground mb-3">
-              For OS-level screen capture protection (hides the overlay from Zoom, OBS, and screen recorders), install the desktop app.
+            <p className="text-xs text-muted-foreground">
+              Discrete mode never conceals the assistant. Use Practice Coach only where assistance is permitted.
             </p>
-            <DesktopDownloadButton size="sm" variant="outline" showGuideLink={false} />
           </div>
         )}
       </Card>

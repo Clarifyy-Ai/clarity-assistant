@@ -23,7 +23,8 @@ export type Capability =
   | "analytics"
   | "company_research"
   | "priority_models"
-  | "calendar_sync";
+  | "calendar_sync"
+  | "gov_exam_ai_fill";
 
 /**
  * Minimum plan rank required for each capability.
@@ -43,6 +44,7 @@ export const CAPABILITY_MIN_RANK: Record<Capability, number> = {
   analytics: 2, // Pro: performance analytics / gap analysis
   company_research: 2, // Pro: company research
   calendar_sync: 2, // Pro: calendar sync
+  gov_exam_ai_fill: 2, // Pro: AI gap-fill for gov papers — independent of overlay
   priority_models: 4, // Max/enterprise only
 };
 
@@ -103,6 +105,8 @@ export const AI_FUNCTION_CAPABILITY: Record<string, Capability> = {
   "parse-document": "live_rehearsal",
   "company-research": "company_research",
   "analyze-test-performance": "mock_test",
+  "select-test-questions": "mock_test",
+  "create-exam-paper": "gov_exam_ai_fill",
   "parse-question-pdf": "mock_test",
   "sync-calendar": "calendar_sync",
 };

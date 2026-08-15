@@ -1,0 +1,47 @@
+{
+  "generated_at": "2026-08-15",
+  "source": "src/App.tsx",
+  "interview": [
+    "/",
+    "/onboarding",
+    "/app/dashboard",
+    "/app/live",
+    "/app/live/overlay",
+    "/app/mock",
+    "/app/mock/warmup",
+    "/app/mock/session/:sessionId",
+    "/app/prep",
+    "/app/prep/star-builder",
+    "/app/prep/coding-hints",
+    "/app/documents",
+    "/app/debriefs",
+    "/app/plan",
+    "/app/sessions",
+    "/app/interviews",
+    "/app/answers",
+    "/app/companies"
+  ],
+  "gov_exam": [
+    "/gov-exams",
+    "/app/mock-test",
+    "/app/mock-test/configure",
+    "/app/mock-test/exam/:examCode",
+    "/app/mock-test/generate",
+    "/app/mock-test/session/:testId",
+    "/app/mock-test/results/:testId",
+    "/app/mock-test/revision",
+    "/app/mock-test/analytics",
+    "/app/admin/gov/exams",
+    "/app/admin/gov/question-review",
+    "/app/admin/gov/paper-review"
+  ],
+  "shared": [
+    "/login",
+    "/signup",
+    "/pricing",
+    "/app/settings/billing",
+    "/app/settings/privacy",
+    "/app/settings/data",
+    "/app/notifications"
+  ]
+}
