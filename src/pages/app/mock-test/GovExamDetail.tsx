@@ -983,8 +983,6 @@ export default function GovExamDetail(): React.ReactElement {
   );
 }
 
-}
-
 function ExamOnboardingCard({
   examId,
   stageId,
