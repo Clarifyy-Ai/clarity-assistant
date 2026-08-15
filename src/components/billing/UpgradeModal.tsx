@@ -28,8 +28,14 @@ const MODAL_PLANS: Array<{
 
 export function UpgradeModal() {
   const uiStore = useUIStore()
-  const { planId, user, profile } = useAuthStore()
+  const { planId, user, profile, refreshCredits, loadProfile } = useAuthStore()
   const [loading, setLoading] = useState<string | null>(null)
+
+  const reloadAfterRazorpay = () => {
+    toast.success("Payment confirmed. Your plan and credits are updating.")
+    void refreshCredits()
+    void loadProfile()
+  }
 
   const handleUpgrade = async (targetPlanId: PlanId) => {
     const plan = PLANS[targetPlanId]
@@ -42,6 +48,7 @@ export function UpgradeModal() {
           productType: "pro_monthly",
           userEmail: profile?.email ?? user?.email ?? undefined,
           userName: profile?.full_name ?? undefined,
+          onSuccess: reloadAfterRazorpay,
         })
         uiStore.setUpgradeModalOpen(false)
       } catch {
@@ -88,6 +95,7 @@ export function UpgradeModal() {
           productType: "credits_150",
           userEmail: profile?.email ?? user?.email ?? undefined,
           userName: profile?.full_name ?? undefined,
+          onSuccess: reloadAfterRazorpay,
         })
         uiStore.setUpgradeModalOpen(false)
       } catch {

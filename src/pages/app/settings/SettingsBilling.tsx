@@ -337,8 +337,9 @@ export default function SettingsBilling(): JSX.Element {
         userEmail: profile?.email ?? user?.email ?? undefined,
         userName: profile?.full_name ?? undefined,
         onSuccess: () => {
-          toast.success("Payment received — credits will appear shortly.");
+          toast.success("Payment confirmed. Your plan and credits are updating.");
           void credits.refresh();
+          void reloadBillingState();
         },
       });
     } catch (error) {

@@ -26,6 +26,7 @@ export const RATE_LIMIT_CLASS: Record<string, RateLimitClass> = {
   "create-checkout": "strict_fail_closed",
   "stripe-webhook": "strict_fail_closed",
   "razorpay-create-order": "strict_fail_closed",
+  "razorpay-verify-payment": "strict_fail_closed",
   "razorpay-webhook": "strict_fail_closed",
   "deduct-credits": "strict_fail_closed",
   "generate-answer": "strict_fail_closed",

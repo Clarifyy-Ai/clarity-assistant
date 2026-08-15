@@ -83,9 +83,23 @@ export async function openRazorpayCheckout(options: {
         name: options.userName,
       },
       theme: { color: "#6366f1" },
-      handler: () => {
-        options.onSuccess?.();
-        resolve();
+      handler: (response: {
+        razorpay_order_id?: string;
+        razorpay_payment_id?: string;
+        razorpay_signature?: string;
+      }) => {
+        void fetchEdgeJson("razorpay-verify-payment", {
+          razorpay_order_id: response.razorpay_order_id,
+          razorpay_payment_id: response.razorpay_payment_id,
+          razorpay_signature: response.razorpay_signature,
+        })
+          .then(() => {
+            options.onSuccess?.();
+            resolve();
+          })
+          .catch((error: unknown) => {
+            reject(error instanceof Error ? error : new Error("Payment verification failed"));
+          });
       },
       modal: {
         ondismiss: () => {
@@ -93,6 +107,13 @@ export async function openRazorpayCheckout(options: {
           resolve();
         },
       },
+    });
+    rzp.on("payment.failed", (res: unknown) => {
+      const description =
+        res && typeof res === "object" && "error" in res
+          ? String((res as { error?: { description?: string } }).error?.description ?? "Payment failed")
+          : "Payment failed";
+      reject(new Error(description));
     });
     rzp.open();
   });

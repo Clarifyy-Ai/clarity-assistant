@@ -13,6 +13,8 @@ const PRIVATE_MODE_ALLOWLIST = new Set([
   "ping",
   // Live Chat is human support, not cloud AI — keep available in private mode.
   "support-chat",
+  "razorpay-create-order",
+  "razorpay-verify-payment",
 ]);
 
 /** Edge functions that do not deduct credits — skip balance refresh. */
@@ -21,6 +23,7 @@ const CREDIT_REFRESH_SKIP = new Set([
   "stripe-webhook",
   "create-checkout",
   "create-portal-session",
+  "razorpay-create-order",
   "ai-hub-router",
   "support-chat",
 ]);
@@ -38,6 +41,8 @@ const OPERATIONAL_EDGE_FNS = new Set([
   "ping",
   "create-checkout",
   "create-portal-session",
+  "razorpay-create-order",
+  "razorpay-verify-payment",
 ]);
 
 function unreachableUserMessage(fnName: string): string {
