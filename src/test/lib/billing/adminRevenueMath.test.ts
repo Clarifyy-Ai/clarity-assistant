@@ -1,21 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { PLAN_PRICE_CENTS_MONTHLY } from "@/lib/constants/creditEconomics";
+import { catalogPaiseForPlan, RAZORPAY_INR_PAISE } from "@/lib/billing/priceCalculator";
 
-/** Pure helper mirroring creditsDB.monthlyRevenueByPlan money math (P0-6). */
-export function computeUsdMrrByPlan(
+/** Pure helper mirroring creditsDB.monthlyRevenueByPlan money math. */
+export function computeInrCatalogByPlan(
   subscriptions: Array<{ plan_id: string | null; status: string }>,
-): { planId: string; totalCents: number; currency: "USD" }[] {
+): { planId: string; totalPaise: number; currency: "INR" }[] {
   const counts: Record<string, number> = {};
   for (const row of subscriptions) {
     if (row.status !== "active" && row.status !== "trialing") continue;
     const planId = String(row.plan_id ?? "free");
     counts[planId] = (counts[planId] ?? 0) + 1;
   }
-  return Object.entries(counts).map(([planId, count]) => {
-    const priceKey = planId as keyof typeof PLAN_PRICE_CENTS_MONTHLY;
-    const cents = PLAN_PRICE_CENTS_MONTHLY[priceKey] ?? 0;
-    return { planId, totalCents: cents * count, currency: "USD" as const };
-  });
+  return Object.entries(counts).map(([planId, count]) => ({
+    planId,
+    totalPaise: catalogPaiseForPlan(planId) * count,
+    currency: "INR" as const,
+  }));
 }
 
 export function sumRazorpayPaise(
@@ -26,9 +26,9 @@ export function sumRazorpayPaise(
     .reduce((sum, o) => sum + Math.abs(o.amount_paise || 0), 0);
 }
 
-describe("P0-6 admin revenue money math", () => {
-  it("computes USD MRR from subscriptions × catalog prices, not credit counts", () => {
-    const rows = computeUsdMrrByPlan([
+describe("admin revenue money math", () => {
+  it("computes INR catalog from subscriptions × Razorpay prices, not credit counts", () => {
+    const rows = computeInrCatalogByPlan([
       { plan_id: "pro", status: "active" },
       { plan_id: "pro", status: "trialing" },
       { plan_id: "enterprise", status: "active" },
@@ -36,35 +36,32 @@ describe("P0-6 admin revenue money math", () => {
       { plan_id: "pro", status: "canceled" },
     ]);
 
-    const byPlan = Object.fromEntries(rows.map((r) => [r.planId, r.totalCents]));
-    // 2× pro ($29) + 1× enterprise ($79) + free $0
-    expect(byPlan.pro).toBe(2 * PLAN_PRICE_CENTS_MONTHLY.pro);
-    expect(byPlan.enterprise).toBe(PLAN_PRICE_CENTS_MONTHLY.enterprise);
+    const byPlan = Object.fromEntries(rows.map((r) => [r.planId, r.totalPaise]));
+    expect(byPlan.pro).toBe(2 * RAZORPAY_INR_PAISE.pro_monthly);
+    expect(byPlan.enterprise).toBe(RAZORPAY_INR_PAISE.enterprise_monthly);
     expect(byPlan.free).toBe(0);
 
-    const totalUsd = rows.reduce((s, r) => s + r.totalCents, 0);
-    expect(totalUsd).toBe(2 * 2900 + 7900);
+    const totalInr = rows.reduce((s, r) => s + r.totalPaise, 0);
+    expect(totalInr).toBe(2 * 249_900 + 679_900);
   });
 
-  it("never treats credit ledger amounts as cents", () => {
-    // Credit pack grant of 500 credits must NOT become $5.00
+  it("never treats credit ledger amounts as money", () => {
     const creditLedgerSum = 500;
-    const wronglyAsCents = creditLedgerSum; // old bug
-    const correctlyIgnoredForMrr = 0;
-    expect(wronglyAsCents).not.toBe(correctlyIgnoredForMrr);
-    expect(computeUsdMrrByPlan([]).reduce((s, r) => s + r.totalCents, 0)).toBe(0);
+    const wronglyAsPaise = creditLedgerSum;
+    const correctlyIgnoredForCatalog = 0;
+    expect(wronglyAsPaise).not.toBe(correctlyIgnoredForCatalog);
+    expect(computeInrCatalogByPlan([]).reduce((s, r) => s + r.totalPaise, 0)).toBe(0);
   });
 
-  it("sums INR Razorpay paise separately from USD", () => {
+  it("sums collected Razorpay paise separately from catalog", () => {
     const paise = sumRazorpayPaise([
       { amount_paise: 249900, status: "paid" },
       { amount_paise: 69900, status: "captured" },
       { amount_paise: 99999, status: "failed" },
     ]);
     expect(paise).toBe(249900 + 69900);
-    // Must not be added into USD cents totals
-    const usd = computeUsdMrrByPlan([{ plan_id: "pro", status: "active" }]);
-    expect(usd[0].totalCents).toBe(2900);
-    expect(usd[0].currency).toBe("USD");
+    const catalog = computeInrCatalogByPlan([{ plan_id: "pro", status: "active" }]);
+    expect(catalog[0].totalPaise).toBe(249900);
+    expect(catalog[0].currency).toBe("INR");
   });
 });

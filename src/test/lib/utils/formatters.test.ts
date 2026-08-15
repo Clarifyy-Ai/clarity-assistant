@@ -9,6 +9,8 @@ import {
   formatScorePercent,
   formatCents,
   formatMonthlyPrice,
+  formatUsdAmountAsInr,
+  formatUsdCentsAsInr,
   formatDurationMs,
   formatDurationSec,
   formatDurationProse,
@@ -49,15 +51,31 @@ describe("currency formatters", () => {
   it("0 cents shows Free", () => {
     expect(formatCents(0)).toBe("Free");
   });
-  it("1999 cents → $19.99", () => {
-    expect(formatCents(1999)).toBe("$19.99");
+  it("1999 paise → INR, not USD", () => {
+    const s = formatCents(1999);
+    expect(s).toMatch(/19\.99/);
+    expect(s).not.toContain("$");
   });
-  it("hideDecimals strips cents", () => {
-    expect(formatCents(2000, true)).toBe("$20");
+  it("hideDecimals strips fractional rupees", () => {
+    const s = formatCents(2000, true);
+    expect(s).toMatch(/20/);
+    expect(s).not.toContain("$");
   });
-  it("formatMonthlyPrice", () => {
-    expect(formatMonthlyPrice(3900)).toBe("$39/mo");
+  it("explicit USD still available for vendor costs", () => {
+    expect(formatCents(1999, false, "USD")).toBe("$19.99");
+  });
+  it("formatMonthlyPrice is INR without /mo", () => {
+    const s = formatMonthlyPrice(249900);
+    expect(s).toMatch(/2,499/);
+    expect(s).not.toContain("/mo");
+    expect(s).not.toContain("$");
     expect(formatMonthlyPrice(0)).toBe("Free");
+  });
+  it("converts vendor USD costs to INR", () => {
+    const s = formatUsdAmountAsInr(1, 0);
+    expect(s).toMatch(/88/);
+    expect(s).not.toContain("$");
+    expect(formatUsdCentsAsInr(100, true)).toMatch(/88/);
   });
 });
 

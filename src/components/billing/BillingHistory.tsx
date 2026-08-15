@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { creditsDB } from '@/lib/supabase/database';
 import { supabase } from '@/lib/supabase/client';
 import type { PaymentOrderRow } from '@/types/billing.types';
+import { formatInrPaise } from '@/lib/billing/priceCalculator';
 
 /**
  * BillingHistory Component
@@ -24,7 +25,7 @@ interface Transaction {
   date: Date;
   type: 'purchase' | 'usage' | 'refund' | 'bonus';
   description: string;
-  amount: number;  // Dollars
+  amount: number;  // Rupees (from amount_paise / 100)
   credits: number;  // Credit count
   invoice_url?: string;
   status: 'completed' | 'pending' | 'failed';
@@ -170,7 +171,7 @@ export function BillingHistory({
           t.date.toLocaleDateString(),
           t.type,
           t.description,
-          `$${t.amount}`,
+          t.amount > 0 ? formatInrPaise(Math.round(t.amount * 100)) : "—",
           t.credits,
           t.status,
         ].join(',')
@@ -323,7 +324,9 @@ export function BillingHistory({
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right text-xs font-semibold text-foreground">
-                      {transaction.amount > 0 ? '-' : '+'}${Math.abs(transaction.amount)}
+                      {transaction.amount > 0
+                        ? `${transaction.type === "refund" ? "+" : "-"}${formatInrPaise(Math.round(transaction.amount * 100))}`
+                        : "—"}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <span
@@ -389,7 +392,9 @@ export function BillingHistory({
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-bold text-foreground">
-                      {transaction.amount > 0 ? '-' : '+'}${Math.abs(transaction.amount)}
+                      {transaction.amount > 0
+                        ? `${transaction.type === "refund" ? "+" : "-"}${formatInrPaise(Math.round(transaction.amount * 100))}`
+                        : "—"}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1 capitalize">
                       {transaction.type}

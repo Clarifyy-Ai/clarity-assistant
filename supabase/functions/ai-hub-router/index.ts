@@ -15,6 +15,7 @@ import {
   estimateCostMicroUsd,
   estimateInputTokens,
   getHubModel,
+  microUsdToDisplay,
   type AIHubProvider,
 } from "../_shared/aiHub/registry.ts";
 import { decideRoute } from "../_shared/aiHub/analyzer.ts";
@@ -304,7 +305,7 @@ Deno.serve(async (req) => {
         estimatedInputTokens: inputEst,
         maxOutputTokens: maxOut,
         estimatedMaxCostMicroUsd: maxCost,
-        estimatedMaxCostDisplay: `$${(maxCost / 1_000_000).toFixed(4)}`,
+        estimatedMaxCostDisplay: microUsdToDisplay(maxCost),
       };
     });
     const totalMax = estimates.reduce((s, e) => s + e.estimatedMaxCostMicroUsd, 0);
@@ -313,7 +314,7 @@ Deno.serve(async (req) => {
       return json(corsHeaders, {
         estimates,
         totalEstimatedMaxCostMicroUsd: totalMax,
-        totalEstimatedMaxCostDisplay: `$${(totalMax / 1_000_000).toFixed(4)}`,
+        totalEstimatedMaxCostDisplay: microUsdToDisplay(totalMax),
         routingReason,
         note: "Token and cost figures are Estimated maximums unless labeled Actual after execution.",
       });
@@ -639,7 +640,7 @@ Deno.serve(async (req) => {
       routingReason,
       results,
       note:
-        "Free-tier calls do not debit the credits ledger. Paid Hub ops use USD budget only (not credits).",
+        "Free-tier calls do not debit the credits ledger. Paid Hub ops use the ops budget only (not credits).",
     });
   }
 

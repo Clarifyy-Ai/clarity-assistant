@@ -346,7 +346,7 @@ export default function AdminAiHub() {
           </p>
           <p className="text-xs text-muted-foreground">
             Policy: free-tier Hub calls do not debit the credits ledger. Paid Hub Lab spend
-            uses USD ops budget only (not user credits). Product AI flows are unchanged.
+            uses the ops budget only (not user credits). Product AI flows are unchanged.
           </p>
         </Card>
       )}
@@ -510,7 +510,7 @@ export default function AdminAiHub() {
             {status.freeTier.dailyTokens.toLocaleString()} (UTC day bucket)
           </p>
           <p className="text-xs text-muted-foreground">
-            Eligible models are marked free-tier in Lab. Exhaustion falls through to USD ops budget —
+            Eligible models are marked free-tier in Lab. Exhaustion falls through to the ops budget —
             never silent overage, never double-debit of credits.
           </p>
         </Card>
@@ -518,7 +518,7 @@ export default function AdminAiHub() {
 
       {tab === "budgets" && status && (
         <Card className="p-5 space-y-2 text-sm">
-          <h3 className="font-semibold">Ops USD budgets</h3>
+          <h3 className="font-semibold">Ops budgets (INR display)</h3>
           <ul className="space-y-1 text-muted-foreground">
             <li>Daily: {microUsdToDisplay(Number(status.budgets.daily_budget_micro_usd ?? 0))}</li>
             <li>Monthly: {microUsdToDisplay(Number(status.budgets.monthly_budget_micro_usd ?? 0))}</li>

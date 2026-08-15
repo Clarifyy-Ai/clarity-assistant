@@ -68,18 +68,23 @@ export function formatScorePercent(score: number, outOf = 10): string {
 
 // ─── Currency ─────────────────────────────────────────────────────────────────
 
+/** Approximate USD→INR for vendor API cost display (providers invoice in USD). */
+export const APPROX_USD_INR_RATE = 88;
+
 /**
- * Format USD cents to a display string.
- * @example formatCents(1999) → "$19.99"
- * @example formatCents(2000, true) → "$20"
+ * Format minor units (paise / cents) to a display string.
+ * Default currency is INR (live checkout). Pass "USD" only for explicit vendor costs.
+ * @example formatCents(249900, true) → "₹2,499"
+ * @example formatCents(1999, false, "USD") → "$19.99"
  */
 export function formatCents(
   cents: number,
   hideDecimals = false,
-  currency = "USD"
+  currency = "INR"
 ): string {
   if (cents === 0) return "Free";
-  return new Intl.NumberFormat("en-US", {
+  const locale = currency === "INR" ? "en-IN" : "en-US";
+  return new Intl.NumberFormat(locale, {
     style:                 "currency",
     currency,
     minimumFractionDigits: hideDecimals ? 0 : 2,
@@ -88,12 +93,29 @@ export function formatCents(
 }
 
 /**
- * Format a price per month with interval label.
- * @example formatMonthlyPrice(3900) → "$39/mo"
+ * Format a catalog price (paise) without a /mo suffix — checkout is one-time INR.
+ * @example formatMonthlyPrice(249900) → "₹2,499"
  */
 export function formatMonthlyPrice(cents: number): string {
-  if (cents === 0) return "Free";
-  return `${formatCents(cents, true)}/mo`;
+  return formatCents(cents, true);
+}
+
+/** Convert a USD dollar amount to an INR display string. */
+export function formatUsdAmountAsInr(usd: number, digits = 2): string {
+  const safe = Number.isFinite(usd) ? usd : 0;
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(safe * APPROX_USD_INR_RATE);
+}
+
+/** Convert USD cents (vendor API cost) to INR display. */
+export function formatUsdCentsAsInr(usdCents: number, hideDecimals = false): string {
+  const paise = Math.round((Number.isFinite(usdCents) ? usdCents : 0) * APPROX_USD_INR_RATE);
+  if (paise === 0) return formatUsdAmountAsInr(0, hideDecimals ? 0 : 2);
+  return formatCents(paise, hideDecimals, "INR");
 }
 
 /**

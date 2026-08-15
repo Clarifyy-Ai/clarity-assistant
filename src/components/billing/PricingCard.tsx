@@ -245,7 +245,7 @@ export function PricingCard({
           <div className="text-xs text-muted-foreground">{period}</div>
           {yearlyPrice && (
             <div className="text-xs text-emerald-400 mt-1">
-              or ${yearlyPrice}/year
+              or {yearlyPrice}/year
             </div>
           )}
         </div>

@@ -186,5 +186,6 @@ export function estimateInputTokens(text: string): number {
 }
 
 export function microUsdToDisplay(micro: number): string {
-  return `$${(micro / 1_000_000).toFixed(4)}`;
+  const inr = (micro / 1_000_000) * 88;
+  return `₹${inr.toFixed(4)}`;
 }

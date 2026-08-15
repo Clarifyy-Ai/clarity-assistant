@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { creditsDB } from "@/lib/supabase/database";
 import { supabase } from "@/integrations/supabase/client";
-import { formatNumber, formatCents, formatPercent } from "@/lib/utils/formatters";
+import { formatNumber, formatUsdCentsAsInr, formatPercent } from "@/lib/utils/formatters";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { subDays } from "date-fns";
 
@@ -224,7 +224,7 @@ export default function AdminModelCosts() {
       {/* Summary KPIs */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: "Total API Cost",   value: formatCents(totalCost),     icon: DollarSign, sub: "across all models" },
+          { label: "Total API Cost",   value: formatUsdCentsAsInr(totalCost),     icon: DollarSign, sub: "USD provider cost shown in INR" },
           { label: "Total API Calls",  value: formatNumber(totalCalls),   icon: Cpu,        sub: "completions + transcriptions" },
           { label: "Credits Consumed", value: formatNumber(totalRevCred), icon: TrendingUp, sub: "by users this period" },
         ].map(({ label, value, icon: Icon, sub }) => (
@@ -295,7 +295,7 @@ export default function AdminModelCosts() {
                       <TableCell className="text-right tabular-nums">{formatNumber(model.callCount)}</TableCell>
                       <TableCell className="text-right tabular-nums text-muted-foreground">{formatNumber(model.tokensIn)}</TableCell>
                       <TableCell className="text-right tabular-nums text-muted-foreground">{formatNumber(model.tokensOut)}</TableCell>
-                      <TableCell className="text-right font-medium tabular-nums">{formatCents(model.costUSDCents)}</TableCell>
+                      <TableCell className="text-right font-medium tabular-nums">{formatUsdCentsAsInr(model.costUSDCents)}</TableCell>
                       <TableCell className="text-right tabular-nums text-green-600">{formatNumber(model.revenueCredits)}</TableCell>
                       <TableCell className="text-right tabular-nums text-muted-foreground">{model.avgLatencyMs}ms</TableCell>
                       <TableCell className="text-right">

@@ -49,6 +49,8 @@ export {
   formatPriceWithInterval,
   formatInrPaise,
   formatPlanCheckoutPrice,
+  razorpayPaiseForPlan,
+  catalogPaiseForPlan,
   calculateYearlySavings,
   getEffectiveMonthlyPrice,
   getBillingAmount,

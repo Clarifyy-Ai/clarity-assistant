@@ -17,7 +17,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, subDays } from "date-fns";
-import { PLAN_PRICE_CENTS_MONTHLY, type PlanId } from "@/lib/constants/pricing";
+import { type PlanId } from "@/lib/constants/pricing";
+import { formatInrPaise, razorpayPaiseForPlan } from "@/lib/billing/priceCalculator";
+import { formatUsdAmountAsInr } from "@/lib/utils/formatters";
 import {
   Bar,
   BarChart,
@@ -34,7 +36,7 @@ interface DashboardStats {
   freeUsers:     number;
   todaySessions: number;
   totalSessions: number;
-  mrr:           number;
+  mrrPaise:      number;
   convRate:      string;
   aiSpendUsd:    number;
   activeSubscriptions: number;
@@ -103,10 +105,10 @@ export default function AdminDashboard() {
           .gte("created_at", since),
       ]);
 
-      let mrrCents = 0;
+      let mrrPaise = 0;
       for (const sub of subs ?? []) {
         const planId = String(sub.plan_id ?? "pro") as PlanId;
-        mrrCents += PLAN_PRICE_CENTS_MONTHLY[planId] ?? 0;
+        mrrPaise += razorpayPaiseForPlan(planId) ?? 0;
       }
 
       const usageRows = (usage ?? []) as Array<{ cost_microcents?: number | null }>;
@@ -120,7 +122,7 @@ export default function AdminDashboard() {
         freeUsers: totalUsers - proUsers,
         todaySessions,
         totalSessions,
-        mrr: Math.round(mrrCents / 100),
+        mrrPaise,
         convRate: totalUsers ? ((proUsers / totalUsers) * 100).toFixed(1) : "0",
         aiSpendUsd,
         activeSubscriptions: subs?.length ?? 0,
@@ -153,9 +155,9 @@ export default function AdminDashboard() {
       up:    true,
     },
     {
-      label: "Est. MRR",
-      value: `$${stats.mrr.toLocaleString()}`,
-      sub:   `${stats.activeSubscriptions} active subscriptions`,
+      label: "Catalog value",
+      value: formatInrPaise(stats.mrrPaise),
+      sub:   `${stats.activeSubscriptions} active paid plans (INR)`,
       icon:  DollarSign,
       delta: null,
       up:    true,
@@ -206,14 +208,14 @@ export default function AdminDashboard() {
               <div>
                 <p className="text-sm font-semibold text-foreground">AI provider spend (7d)</p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Aggregated from ai_usage_logs ·{" "}
+                  Aggregated from ai_usage_logs (USD API cost shown in INR) ·{" "}
                   <Link to="/app/admin/model-costs" className="text-primary hover:text-primary/80">
                     View breakdown
                   </Link>
                 </p>
               </div>
               <p className="text-2xl font-black text-foreground">
-                ${stats.aiSpendUsd.toFixed(2)}
+                {formatUsdAmountAsInr(stats.aiSpendUsd)}
               </p>
             </div>
           </Card>

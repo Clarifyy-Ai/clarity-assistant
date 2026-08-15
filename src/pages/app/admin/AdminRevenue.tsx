@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { creditsDB } from "@/lib/supabase/database";
-import { PLAN_PRICE_CENTS_MONTHLY } from "@/lib/constants/pricing";
+import { catalogPaiseForPlan, formatInrPaise } from "@/lib/billing/priceCalculator";
 import { formatCents, formatNumber, formatPercent, formatDate } from "@/lib/utils/formatters";
 import { timeAgo }             from "@/lib/utils/dateUtils";
 
@@ -34,7 +34,7 @@ interface RevenueMetrics {
   ltv:               number;
   totalRevenue:      number;
   creditRevenue:     number;
-  /** INR paise from paid Razorpay orders in the selected window (separate from USD MRR). */
+  /** INR paise from paid Razorpay orders in the selected window. */
   inrRevenuePaise:   number;
 }
 
@@ -174,13 +174,12 @@ export default function AdminRevenue() {
 
         const total = profileData.length || 1;
         const planDist: PlanDistribution[] = Object.entries(planCounts).map(([planId, count]) => {
-          const planKey = planId as keyof typeof PLAN_PRICE_CENTS_MONTHLY;
-          const cents = PLAN_PRICE_CENTS_MONTHLY[planKey] ?? 0;
+          const paise = catalogPaiseForPlan(planId);
           return {
             planId,
             planName:   planNames[planId] ?? planId,
             userCount:  count,
-            mrr:        (cents ?? 0) * count,
+            mrr:        paise * count,
             percentage: (count / total) * 100,
           };
         });
@@ -209,12 +208,12 @@ export default function AdminRevenue() {
           : 0;
 
         const txData = await creditsDB.listRecent(50);
-        // P0-6: USD MRR from active subscriptions × catalog prices (not credit ledger).
-        const usdMrrRows = await creditsDB.monthlyRevenueByPlan(sinceIso);
-        const subscriptionMrr = usdMrrRows.reduce((sum, row) => sum + row.totalCents, 0);
-        const mrr = subscriptionMrr > 0 ? subscriptionMrr : planEstimateMrr;
-        // Estimated when Stripe isn't configured OR we fell back to profile plan counts.
-        setMrrIsEstimated(subscriptionMrr === 0);
+        // Catalog INR from active subscriptions × Razorpay prices (not credit ledger).
+        const catalogRows = await creditsDB.monthlyRevenueByPlan(sinceIso);
+        const subscriptionCatalog = catalogRows.reduce((sum, row) => sum + row.totalPaise, 0);
+        const mrr = subscriptionCatalog > 0 ? subscriptionCatalog : planEstimateMrr;
+        // Estimated when we fell back to profile plan counts.
+        setMrrIsEstimated(subscriptionCatalog === 0);
 
         let inrRevenuePaise = 0;
         try {
@@ -227,7 +226,7 @@ export default function AdminRevenue() {
         let mrrGrowth = 0;
         try {
           const prevRows = await creditsDB.monthlyRevenueByPlan(prevSinceIso);
-          const prevTotal = prevRows.reduce((sum, row) => sum + row.totalCents, 0);
+          const prevTotal = prevRows.reduce((sum, row) => sum + row.totalPaise, 0);
           if (prevTotal > 0 && mrr !== prevTotal) {
             mrrGrowth = ((mrr - prevTotal) / prevTotal) * 100;
           }
@@ -294,12 +293,12 @@ export default function AdminRevenue() {
 
   const exportCSV = () => {
     const rows = [
-      ["ID", "User", "Type", "Amount", "Description", "Status", "Date"],
+      ["ID", "User", "Type", "Credits", "Description", "Status", "Date"],
       ...transactions.map((tx) => [
         tx.id,
         tx.userEmail,
         tx.type,
-        (tx.amount / 100).toFixed(2),
+        (tx.amount).toString(),
         tx.description,
         tx.status,
         formatDate(tx.createdAt),
@@ -323,8 +322,8 @@ export default function AdminRevenue() {
           <h1 className="text-xl font-bold text-foreground">Revenue</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {mrrIsEstimated
-              ? "Plan catalog estimate plus INR from Razorpay payment_orders."
-              : "USD catalog MRR plus INR from Razorpay payment_orders."}
+              ? "Plan catalog (INR) plus collected Razorpay payment_orders."
+              : "Active plans × Razorpay catalog (INR), plus collected Razorpay orders."}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -370,7 +369,7 @@ export default function AdminRevenue() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard
-          title={mrrIsEstimated ? "MRR — Estimated" : "MRR"}
+          title={mrrIsEstimated ? "Catalog — Estimated" : "Catalog value"}
           value={metrics ? formatCents(metrics.mrr) : "—"}
           trend={metrics?.mrrGrowth}
           trendLabel="vs last month"
@@ -378,9 +377,9 @@ export default function AdminRevenue() {
           loading={isLoading}
         />
         <MetricCard
-          title="ARR"
+          title="12× catalog"
           value={metrics ? formatCents(metrics.arr) : "—"}
-          subtitle="Annualised run rate"
+          subtitle="Not a subscription run-rate (checkout is one-time)"
           icon={TrendingUp}
           loading={isLoading}
         />
@@ -402,22 +401,9 @@ export default function AdminRevenue() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <MetricCard
-          title="USD MRR"
-          value={metrics ? formatCents(metrics.mrr) : "—"}
-          subtitle="Active/trialing × catalog USD prices"
-          icon={DollarSign}
-          loading={isLoading}
-        />
-        <MetricCard
-          title="INR revenue (period)"
-          value={
-            metrics
-              ? `₹${(metrics.inrRevenuePaise / 100).toLocaleString("en-IN", {
-                  maximumFractionDigits: 0,
-                })}`
-              : "—"
-          }
-          subtitle="Paid Razorpay orders in selected range (not blended into USD MRR)"
+          title="Collected (period)"
+          value={metrics ? formatInrPaise(metrics.inrRevenuePaise) : "—"}
+          subtitle="Paid Razorpay orders in selected range"
           icon={CreditCard}
           loading={isLoading}
         />
@@ -429,7 +415,7 @@ export default function AdminRevenue() {
         <Card className="lg:col-span-1">
           <CardHeader>
             <CardTitle className="text-base">Plan Distribution</CardTitle>
-            <CardDescription>Users and MRR by plan tier</CardDescription>
+            <CardDescription>Users and catalog value by plan tier</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {isLoading
@@ -477,7 +463,7 @@ export default function AdminRevenue() {
                     <TableHead>User</TableHead>
                     <TableHead>Type</TableHead>
                     <TableHead>Description</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead className="text-right">Credits</TableHead>
                     <TableHead className="text-right">When</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -522,7 +508,7 @@ export default function AdminRevenue() {
                             </TableCell>
                             <TableCell className="text-right font-medium tabular-nums">
                               <span className={tx.type === "refund" ? "text-red-500" : "text-green-600"}>
-                                {tx.type === "refund" ? "-" : "+"}{formatCents(tx.amount)}
+                                {tx.type === "refund" ? "-" : "+"}{formatNumber(tx.amount)} credits
                               </span>
                             </TableCell>
                             <TableCell className="text-right text-muted-foreground whitespace-nowrap">

@@ -8,7 +8,7 @@ import {
   BarChart2, Activity, Cpu, FileText, MessageSquare, RefreshCw,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
-import { EmptyState } from "@/components/common/EmptyState";
+import { formatUsdAmountAsInr } from "@/lib/utils/formatters";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
@@ -301,7 +301,7 @@ function AITab({ period }: { period: Period }) {
         <InlineErrorRetry message={loadError} onRetry={() => void load()} />
       )}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <Stat label="Total AI cost" value={`$${totalCost.toFixed(2)}`} sub={`last ${period}d`} />
+        <Stat label="Total AI cost" value={formatUsdAmountAsInr(totalCost)} sub={`last ${period}d`} />
         <Stat label="Credits charged" value={totalCredits.toFixed(0)} />
         <Stat label="Models in use" value={rows.length.toString()} />
       </div>
@@ -309,7 +309,7 @@ function AITab({ period }: { period: Period }) {
         <table className="w-full text-sm">
           <thead className="bg-muted/30 border-b border-border">
             <tr>
-              {["Model", "Calls", "Tokens in", "Tokens out", "Cost USD", "Credits"].map((h) => (
+              {["Model", "Calls", "Tokens in", "Tokens out", "Cost (INR)", "Credits"].map((h) => (
                 <th key={h} className="text-left text-[10px] uppercase tracking-widest text-muted-foreground px-3 py-2">{h}</th>
               ))}
             </tr>
@@ -330,7 +330,7 @@ function AITab({ period }: { period: Period }) {
                 <td className="px-3 py-2 font-bold">{r.calls.toLocaleString()}</td>
                 <td className="px-3 py-2">{r.tokens_in.toLocaleString()}</td>
                 <td className="px-3 py-2">{r.tokens_out.toLocaleString()}</td>
-                <td className="px-3 py-2">${r.cost.toFixed(3)}</td>
+                <td className="px-3 py-2">{formatUsdAmountAsInr(r.cost, 3)}</td>
                 <td className="px-3 py-2">{r.credits.toFixed(1)}</td>
               </tr>
             ))}

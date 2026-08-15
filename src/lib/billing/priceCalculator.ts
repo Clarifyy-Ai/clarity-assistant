@@ -111,6 +111,11 @@ export function razorpayPaiseForPlan(planId: string): number | null {
   return null;
 }
 
+/** Catalog INR paise for admin revenue math (0 for free / unknown). */
+export function catalogPaiseForPlan(planId: string): number {
+  return razorpayPaiseForPlan(planId) ?? 0;
+}
+
 export function razorpayPaiseForPack(packId: string): number | null {
   if (packId === "pack_50") return RAZORPAY_INR_PAISE.credits_50;
   if (packId === "pack_150") return RAZORPAY_INR_PAISE.credits_150;

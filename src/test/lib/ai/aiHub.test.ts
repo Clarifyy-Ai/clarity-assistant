@@ -51,7 +51,7 @@ describe("aiHubRegistry", () => {
     const cost = estimateCostMicroUsd("gemini-2.5-flash", 1000, 500);
     expect(Number.isInteger(cost)).toBe(true);
     expect(cost).toBeGreaterThan(0);
-    expect(microUsdToDisplay(cost)).toMatch(/^\$/);
+    expect(microUsdToDisplay(cost)).toMatch(/^₹/);
   });
 
   it("clamps mode caps", () => {

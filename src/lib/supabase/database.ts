@@ -7,7 +7,7 @@
 import { supabase } from "@/lib/supabase/client";
 import { DatabaseError, ErrorCode, tryCatch } from "@/lib/errors";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase";
-import { PLAN_PRICE_CENTS_MONTHLY } from "@/lib/constants/creditEconomics";
+import { catalogPaiseForPlan } from "@/lib/billing/priceCalculator";
 import { toDbPreferredModel } from "@/lib/ai/modelOptions";
 import {
   mapRowToScorecard,
@@ -1491,11 +1491,11 @@ export const creditsDB = {
   },
 
   /**
-   * P0-6: USD MRR by plan from active/trialing subscriptions × catalog prices.
-   * Never sums credit_transactions.amount (those are credit counts, not cents).
+   * Catalog value by plan from active/trialing subscriptions × Razorpay INR prices.
+   * Never sums credit_transactions.amount (those are credit counts, not money).
    */
   async monthlyRevenueByPlan(_sinceIso: string): Promise<
-    { month: string; planId: string; totalCents: number; currency: "USD" }[]
+    { month: string; planId: string; totalPaise: number; currency: "INR" }[]
   > {
     const { data, error } = await supabase
       .from("subscriptions")
@@ -1517,13 +1517,12 @@ export const creditsDB = {
     }
 
     return Object.entries(counts).map(([planId, count]) => {
-      const priceKey = planId as keyof typeof PLAN_PRICE_CENTS_MONTHLY;
-      const cents = PLAN_PRICE_CENTS_MONTHLY[priceKey] ?? 0;
+      const paise = catalogPaiseForPlan(planId);
       return {
         month,
         planId,
-        totalCents: cents * count,
-        currency: "USD" as const,
+        totalPaise: paise * count,
+        currency: "INR" as const,
       };
     });
   },
