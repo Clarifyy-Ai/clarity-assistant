@@ -1021,9 +1021,12 @@ export type Database = {
           created_at: string
           id: string
           incident_type: string
+          metadata: Json
           notes: string | null
           paper_id: string | null
           question_id: string | null
+          reason: string | null
+          reported_by: string | null
           reporter_id: string | null
           status: string
           updated_at: string
@@ -1032,9 +1035,12 @@ export type Database = {
           created_at?: string
           id?: string
           incident_type?: string
+          metadata?: Json
           notes?: string | null
           paper_id?: string | null
           question_id?: string | null
+          reason?: string | null
+          reported_by?: string | null
           reporter_id?: string | null
           status?: string
           updated_at?: string
@@ -1043,9 +1049,12 @@ export type Database = {
           created_at?: string
           id?: string
           incident_type?: string
+          metadata?: Json
           notes?: string | null
           paper_id?: string | null
           question_id?: string | null
+          reason?: string | null
+          reported_by?: string | null
           reporter_id?: string | null
           status?: string
           updated_at?: string
@@ -5879,6 +5888,7 @@ export type Database = {
         Returns: undefined
       }
       mask_email: { Args: { p_email: string }; Returns: string }
+      plan_monthly_credits: { Args: { p_plan: string }; Returns: number }
       profiles_own_update_allowed: {
         Args: { proposed: Database["public"]["Tables"]["profiles"]["Row"] }
         Returns: boolean
