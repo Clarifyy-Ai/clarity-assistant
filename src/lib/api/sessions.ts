@@ -32,6 +32,8 @@ export type StartSessionRequest = {
   model?: string;
   hint_style?: "minimal" | "balanced" | "detailed";
   focus_areas?: string[];
+  practice_context_id?: string | null;
+  source_type?: string | null;
 };
 
 export type StartSessionResponse = {

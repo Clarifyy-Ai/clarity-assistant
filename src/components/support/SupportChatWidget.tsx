@@ -7,6 +7,16 @@ import { SUPPORT_EMAIL } from "@/lib/constants/contact";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import {
+  SUPPORT_COMPOSER_PLACEHOLDER,
+  SUPPORT_FAILED_LABEL,
+  SUPPORT_MAX_BODY,
+  SUPPORT_SENDING_LABEL,
+  SUPPORT_WIDGET_ARIA,
+  SUPPORT_WIDGET_SLA,
+  SUPPORT_WIDGET_TITLE,
+  canSubmitSupportMessage,
+} from "@/lib/support/supportCopy";
 
 const GUEST_TOKEN_KEY = "clarify-support-guest-token";
 const THREAD_KEY = "clarify-support-thread-id";
@@ -52,8 +62,8 @@ function shouldHideWidget(pathname: string): boolean {
 }
 
 /**
- * Floating Live Chat widget for marketing, auth, and app shells.
- * Guests chat via support-chat edge; messages land in Admin → Live Chat.
+ * Floating Support widget (async human inbox — not live/immediate AI).
+ * Guests chat via support-chat edge; messages land in Admin → Support messages.
  */
 function clearChatSession(): void {
   writeStorage(THREAD_KEY, null);
@@ -76,6 +86,7 @@ export function SupportChatWidget() {
   const [guestToken, setGuestToken] = useState<string | null>(() => readStorage(GUEST_TOKEN_KEY));
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
+  const [sendState, setSendState] = useState<"idle" | "sending" | "sent" | "failed">("idle");
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -162,10 +173,10 @@ export function SupportChatWidget() {
 
   if (hide) return null;
 
-  async function submitMessage(e: FormEvent) {
-    e.preventDefault();
+  async function submitMessage(e?: FormEvent) {
+    e?.preventDefault();
     const text = draft.trim();
-    if (!text || sending) return;
+    if (!canSubmitSupportMessage({ sending, draft })) return;
 
     // Always send contact fields as a fallback: UI may be "authenticated" while the
     // Edge call only has the anon key (tab-local logout / expired JWT).
@@ -176,6 +187,7 @@ export function SupportChatWidget() {
     }
 
     setSending(true);
+    setSendState("sending");
     setError(null);
     try {
       const action = threadId ? "send" : "start";
@@ -197,6 +209,7 @@ export function SupportChatWidget() {
       setForceGuestFields(false);
       setMessages(data.messages ?? []);
       setDraft("");
+      setSendState("sent");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to send message";
       const status = typeof (err as { status?: number })?.status === "number"
@@ -210,6 +223,7 @@ export function SupportChatWidget() {
       } else {
         setError(message);
       }
+      setSendState("failed");
     } finally {
       setSending(false);
     }
@@ -226,16 +240,16 @@ export function SupportChatWidget() {
         <div
           className="pointer-events-auto w-[min(100vw-2rem,22rem)] overflow-hidden rounded-2xl border border-border bg-card shadow-xl"
           role="dialog"
-          aria-label="Live chat support"
+          aria-label={SUPPORT_WIDGET_ARIA}
         >
           <div className="flex items-center justify-between gap-2 border-b border-border bg-primary px-4 py-3 text-primary-foreground">
             <div className="min-w-0">
               <p className="text-sm font-semibold flex items-center gap-1.5">
                 <LifeBuoy className="h-4 w-4 shrink-0" aria-hidden />
-                Live Chat / Support
+                {SUPPORT_WIDGET_TITLE}
               </p>
               <p className="text-[11px] text-primary-foreground/80 truncate">
-                We typically reply within a few hours
+                {SUPPORT_WIDGET_SLA}
               </p>
             </div>
             <button
@@ -319,6 +333,15 @@ export function SupportChatWidget() {
                 {error}
               </p>
             )}
+            {sendState === "failed" && (
+              <button
+                type="button"
+                onClick={() => void submitMessage()}
+                className="px-3 pt-1 text-[11px] text-primary underline-offset-2 hover:underline text-left"
+              >
+                {SUPPORT_FAILED_LABEL}
+              </button>
+            )}
 
             <form
               onSubmit={(e) => void submitMessage(e)}
@@ -326,18 +349,21 @@ export function SupportChatWidget() {
             >
               <textarea
                 value={draft}
-                onChange={(e) => setDraft(e.target.value)}
+                onChange={(e) => {
+                  setDraft(e.target.value);
+                  if (sendState === "sent" || sendState === "failed") setSendState("idle");
+                }}
                 rows={2}
-                maxLength={4000}
-                placeholder="Type your message…"
+                maxLength={SUPPORT_MAX_BODY}
+                placeholder={SUPPORT_COMPOSER_PLACEHOLDER}
                 className="min-h-[2.5rem] flex-1 resize-none rounded-lg border border-input bg-background px-3 py-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
               <Button
                 type="submit"
                 size="sm"
-                disabled={sending || !draft.trim()}
+                disabled={!canSubmitSupportMessage({ sending, draft })}
                 className="shrink-0"
-                aria-label="Send message"
+                aria-label={sending ? SUPPORT_SENDING_LABEL : "Send message"}
               >
                 <Send className="h-4 w-4" />
               </Button>
@@ -351,7 +377,7 @@ export function SupportChatWidget() {
         size="lg"
         onClick={() => setOpen((v) => !v)}
         className="pointer-events-auto h-12 w-12 rounded-full p-0 shadow-lg"
-        aria-label={open ? "Close live chat" : "Open live chat support"}
+        aria-label={open ? "Close support" : SUPPORT_WIDGET_ARIA}
         aria-expanded={open}
       >
         {open ? <X className="h-5 w-5" /> : <MessageCircle className="h-5 w-5" />}

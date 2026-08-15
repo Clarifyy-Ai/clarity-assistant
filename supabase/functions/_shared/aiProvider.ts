@@ -251,6 +251,7 @@ export async function generateWithFallback(
             maxTokens,
             temperature,
             stream: false,
+            jsonMode,
           },
         );
 

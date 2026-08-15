@@ -29,9 +29,14 @@ import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { formatDistanceToNow } from "date-fns";
 import type { Tables } from "@/integrations/supabase";
 import { useSwipeAction } from "@/hooks/useSwipeAction";
+import {
+  sessionMatchesTypeFilter,
+  sessionTypeLabel,
+  type SessionHistoryTypeFilter,
+} from "@/lib/session/sessionHistoryFilters";
+import { SESSIONS_CHANGED_EVENT } from "@/lib/session/sessionReuse";
 
-const SESSION_TYPES = ["all", "live", "mock", "practice"] as const;
-type FilterType = (typeof SESSION_TYPES)[number];
+const SESSION_TYPES: SessionHistoryTypeFilter[] = ["all", "live", "mock", "practice"];
 
 type SessionRow = Pick<
   Tables<"sessions">,
@@ -45,7 +50,7 @@ type SessionRow = Pick<
   | "questions_asked"
   | "status"
   | "tags"
->;
+> & { source_type?: string | null };
 
 const SESSION_TABS = ["recent", "all"] as const;
 type SessionTab = (typeof SESSION_TABS)[number];
@@ -65,7 +70,7 @@ export default function CallSessions() {
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [filter, setFilter] = useState<FilterType>("all");
+  const [filter, setFilter] = useState<SessionHistoryTypeFilter>("all");
   const [search, setSearch] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
@@ -91,6 +96,16 @@ export default function CallSessions() {
     void fetchSessions();
   }, [fetchSessions]);
 
+  useEffect(() => {
+    const refetch = () => void fetchSessions();
+    window.addEventListener("focus", refetch);
+    window.addEventListener(SESSIONS_CHANGED_EVENT, refetch);
+    return () => {
+      window.removeEventListener("focus", refetch);
+      window.removeEventListener(SESSIONS_CHANGED_EVENT, refetch);
+    };
+  }, [fetchSessions]);
+
   async function deleteSession(id: string) {
     try {
       await sessionsDB.delete(id);
@@ -102,7 +117,7 @@ export default function CallSessions() {
   }
 
   const filtered = sessions.filter((s) => {
-    if (filter !== "all" && s.type !== filter) return false;
+    if (filter !== "all" && !sessionMatchesTypeFilter(s.type, filter)) return false;
     if (search) {
       const q = search.toLowerCase();
       return (
@@ -226,6 +241,7 @@ export default function CallSessions() {
               duration = "In progress";
             }
 
+            const typeLabel = sessionTypeLabel(s);
             const typeColor =
               s.type === "live"
                 ? "bg-red-500/10 text-red-400 border-red-500/20"
@@ -239,6 +255,7 @@ export default function CallSessions() {
                 session={s}
                 duration={duration}
                 typeColor={typeColor}
+                typeLabel={typeLabel}
                 onDelete={() => setPendingDeleteId(s.id)}
               />
             );
@@ -269,11 +286,13 @@ function SwipeSessionRow({
   session: s,
   duration,
   typeColor,
+  typeLabel,
   onDelete,
 }: {
   session: SessionRow;
   duration: string | null;
   typeColor: string;
+  typeLabel: string;
   onDelete: () => void;
 }) {
   const swipe = useSwipeAction({ maxReveal: 72, threshold: 48 });
@@ -328,6 +347,13 @@ function SwipeSessionRow({
                 </Badge>
               );
             }
+            if (s.status === "completed" && s.overall_score == null) {
+              return (
+                <Badge variant="secondary" className="text-[9px] mt-0.5">
+                  Feedback processing
+                </Badge>
+              );
+            }
             return null;
           })()}
         </div>
@@ -344,7 +370,7 @@ function SwipeSessionRow({
             ) : (
               <Video className="w-2.5 h-2.5" />
             )}
-            {s.type ?? "practice"}
+            {typeLabel}
           </span>
         </div>
 

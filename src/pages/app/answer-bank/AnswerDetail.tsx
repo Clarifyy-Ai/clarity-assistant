@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
-import { answerBankDB } from "@/lib/supabase/database";
+import { answerBankDB, practiceContextsDB } from "@/lib/supabase/database";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -9,6 +9,10 @@ import { BookOpen, Edit, Trash2, Save, X, Loader2, ArrowLeft, AlertCircle, Mic }
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import {
+  draftFromAnswerBankEntry,
+  practiceContextLaunchPath,
+} from "@/lib/session/practiceContext";
 import type { Tables } from "@/integrations/supabase";
 
 type Answer = Tables<"answer_bank">;
@@ -26,6 +30,21 @@ export default function AnswerDetail() {
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [launchingPractice, setLaunchingPractice] = useState(false);
+
+  async function practiceWithCoach() {
+    if (!answer || !user?.id || launchingPractice) return;
+    setLaunchingPractice(true);
+    try {
+      const draft = draftFromAnswerBankEntry(answer);
+      const created = await practiceContextsDB.create(user.id, draft);
+      navigate(practiceContextLaunchPath(created.id));
+    } catch {
+      toast.error("Could not start practice. Please try again.");
+    } finally {
+      setLaunchingPractice(false);
+    }
+  }
 
   useEffect(() => {
     if (!id || !user?.id) return;
@@ -138,11 +157,8 @@ export default function AnswerDetail() {
               variant="primary"
               size="sm"
               leftIcon={<Mic className="w-4 h-4" />}
-              onClick={() =>
-                navigate("/app/live", {
-                  state: { practicePrompt: answer.question_text },
-                })
-              }
+              onClick={() => void practiceWithCoach()}
+              loading={launchingPractice}
             >
               Practice with {PRODUCT_NAMES.practiceCoach}
             </Button>

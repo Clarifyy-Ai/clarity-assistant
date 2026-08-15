@@ -36,5 +36,11 @@ export type {
 // ─── Context Envelope Builder ─────────────────────────────────────────────────
 export { buildContextEnvelope } from "./contextEnvelopeBuilder";
 
+export {
+  parseStructuredJson,
+  AI_RESPONSE_INVALID,
+  AI_RESPONSE_INVALID_MESSAGE,
+} from "./structuredParse";
+
 // ─── Offline Templates ────────────────────────────────────────────────────────
 export { getOfflineTemplate, getAllOfflineTemplates, getPanicResponse, OFFLINE_PANIC } from "./offlineTemplates";

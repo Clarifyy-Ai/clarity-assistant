@@ -366,6 +366,32 @@ export const sessionsDB = {
     return data;
   },
 
+  /** Idempotent complete: already-completed sessions are returned as-is. */
+  async completeForUser(
+    sessionId: string,
+    userId: string,
+    updates: TablesUpdate<"sessions">,
+  ): Promise<Tables<"sessions"> | null> {
+    const { data: existing, error: readError } = await supabase
+      .from("sessions")
+      .select("*")
+      .eq("id", sessionId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (readError) {
+      throw new DatabaseError(readError.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "sessions",
+        operation: "completeForUser",
+      });
+    }
+    if (existing?.status === "completed") return existing as Tables<"sessions">;
+    return sessionsDB.updateForUser(sessionId, userId, {
+      ...updates,
+      status: "completed",
+      ended_at: updates.ended_at ?? new Date().toISOString(),
+    });
+  },
+
   async end(sessionId: string, summary?: string): Promise<Tables<"sessions">> {
     return sessionsDB.update(sessionId, {
       status:  "completed",
@@ -493,12 +519,12 @@ export const sessionsDB = {
       | "questions_asked"
       | "status"
       | "tags"
-    > & { duration_seconds: number; credits_consumed: number })[]
+    > & { duration_seconds: number; credits_consumed: number; source_type?: string | null })[]
   > {
     const { data, error } = await supabase
       .from("sessions")
       .select(
-        "id, type, title, overall_score, created_at, started_at, ended_at, questions_asked, status, tags, credits_used",
+        "id, type, title, overall_score, created_at, started_at, ended_at, questions_asked, status, tags, credits_used, source_type",
       )
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
@@ -522,6 +548,7 @@ export const sessionsDB = {
       questions_asked: r.questions_asked,
       status: r.status,
       tags: r.tags,
+      source_type: r.source_type ?? null,
       credits_consumed: r.credits_used ?? 0,
       duration_seconds:
         r.started_at && r.ended_at
@@ -1683,6 +1710,64 @@ export const answerBankDB = {
         operation: "deleteAllByUserId",
       });
     }
+  },
+};
+
+export const practiceContextsDB = {
+  async create(
+    userId: string,
+    row: {
+      source_type: string;
+      source_id?: string | null;
+      source_version?: string | null;
+      question_text: string;
+      competency?: string | null;
+      role?: string | null;
+      company?: string | null;
+      resume_id?: string | null;
+      jd_id?: string | null;
+    },
+  ): Promise<{ id: string }> {
+    const { data, error } = await (supabase as any)
+      .from("practice_contexts")
+      .insert({
+        user_id: userId,
+        source_type: row.source_type,
+        source_id: row.source_id ?? null,
+        source_version: row.source_version ?? null,
+        question_text: row.question_text,
+        competency: row.competency ?? null,
+        role: row.role ?? null,
+        company: row.company ?? null,
+        resume_id: row.resume_id ?? null,
+        jd_id: row.jd_id ?? null,
+        status: "open",
+      })
+      .select("id")
+      .single();
+    if (error || !data?.id) {
+      throw new DatabaseError(error?.message ?? "create failed", ErrorCode.DB_QUERY_FAILED, {
+        table: "practice_contexts",
+        operation: "create",
+      });
+    }
+    return { id: data.id as string };
+  },
+
+  async getOwned(userId: string, id: string): Promise<Record<string, unknown> | null> {
+    const { data, error } = await (supabase as any)
+      .from("practice_contexts")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "practice_contexts",
+        operation: "getOwned",
+      });
+    }
+    return (data as Record<string, unknown> | null) ?? null;
   },
 };
 

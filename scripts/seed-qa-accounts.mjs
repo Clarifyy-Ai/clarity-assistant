@@ -118,7 +118,21 @@ const QA_ACCOUNTS = [
     emailConfirm: true,
     onboardingCompleted: true,
     subscriptionStatus: "past_due",
-    notes: "Billing recovery — past_due subscription",
+    notes: "Billing recovery — past_due within 3-day grace",
+    paymentFailedAtHoursAgo: 12,
+  },
+  {
+    key: "PAST_DUE_EXPIRED",
+    email: "qa.pastdue.expired@clarify.ai.test",
+    fullName: "QA Past Due Expired User",
+    planId: "pro",
+    credits: 100,
+    admin: false,
+    emailConfirm: true,
+    onboardingCompleted: true,
+    subscriptionStatus: "past_due",
+    notes: "Billing recovery — past_due beyond 3-day grace",
+    paymentFailedAtHoursAgo: 96,
   },
   {
     key: "DISPOSABLE",
@@ -287,6 +301,9 @@ async function upsertAccount(admin, account, password) {
       onboarding_completed: onboarded,
       onboarding_step: onboarded ? 99 : 1,
       subscription_status: subscriptionStatus,
+      payment_failed_at: Number.isFinite(account.paymentFailedAtHoursAgo)
+        ? new Date(Date.now() - account.paymentFailedAtHoursAgo * 60 * 60 * 1000).toISOString()
+        : null,
       is_banned: account.banned === true,
       updated_at: now,
     },

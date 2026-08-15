@@ -45,6 +45,7 @@ import {
   sessionAnswersDB,
 } from "@/lib/supabase/database";
 import { pairLiveSessionAnswers } from "@/lib/session/liveSessionAnswers";
+import { notifySessionsChanged } from "@/lib/session/sessionReuse";
 import {
   activateSession,
   aiModeForSessionType,
@@ -728,7 +729,9 @@ export function useLiveCopilot({
 
     try {
       const privateMode = getPrivateMode();
-      const reusableSessionId = existingSessionIdRef.current;
+      const reusableSessionId = cfg.practice_context_id
+        ? null
+        : existingSessionIdRef.current;
       if (reusableSessionId && !privateMode) {
         sessionIdRef.current = reusableSessionId;
         await activateSession(reusableSessionId);
@@ -746,6 +749,8 @@ export function useLiveCopilot({
           jd_id: cfg.jd_id ?? null,
           model: useOverlayStore.getState().active_model,
           duration_minutes: cfg.duration_minutes ?? 30,
+          practice_context_id: cfg.practice_context_id ?? null,
+          source_type: cfg.source_type ?? null,
         });
         sessionIdRef.current = result.session_id;
       } else {
@@ -799,8 +804,7 @@ export function useLiveCopilot({
           useOverlayStore.getState().save_transcript &&
           parsePrivacyPrefs(profile?.privacy_prefs).store_transcripts;
 
-        await sessionsDB.updateForUser(session.session_id, userId, {
-          status: "completed",
+        await sessionsDB.completeForUser(session.session_id, userId, {
           credits_used: session.credits_consumed,
           model_used: dbModel as any,
           ended_at: new Date().toISOString(),
@@ -837,6 +841,9 @@ export function useLiveCopilot({
             console.error("[useLiveCopilot] Failed to save transcript:", err);
           }
         }
+
+        toast.success("Session saved");
+        notifySessionsChanged();
       } catch (err) {
         console.error("[useLiveCopilot] Failed to finalize session:", err);
         toast.error("Session ended, but the summary could not be saved. Your practice still ran.");

@@ -8,6 +8,7 @@ import { BillingError, ErrorCode, tryCatch } from "@/lib/errors";
 import { ENV } from "@/lib/env";
 import { getPlanDisplayName } from "@/lib/constants/pricing";
 import { normalizePlanId } from "./planIds";
+import { resolveCanonicalBillingStatus } from "./canonicalBillingStatus";
 
 export { normalizePlanId } from "./planIds";
 
@@ -511,7 +512,12 @@ function mapSubscriptionRow(
   row: SubscriptionRow,
   fallbackProfile?: ProfileBillingRow | null
 ): Subscription | null {
-  const status = normalizeStatus(row.status ?? fallbackProfile?.subscription_status);
+  const status = normalizeStatus(
+    resolveCanonicalBillingStatus(
+      fallbackProfile?.subscription_status,
+      row.status,
+    ),
+  );
 
   if (!isSubscriptionUsable(status)) {
     return null;

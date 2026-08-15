@@ -6,6 +6,12 @@ import {
   isInsufficientCreditsError,
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
+import {
+  AI_RESPONSE_INVALID_MESSAGE,
+  isRephraseAlternatives,
+  parseStructuredJson,
+  type RephraseAlternatives,
+} from "@/lib/ai/structuredParse";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { useRef, useState } from "react";
 import { useCredits } from "@/hooks/useCredits";
@@ -32,6 +38,8 @@ interface Alternatives {
   confident: string;
   concise:   string;
 }
+
+const OFFLINE_FALLBACK_LABEL = "Offline fallback — not AI-generated";
 
 const REPHRASE_IDEMPOTENCY_STORAGE_KEY = "clarify-prep-rephrase-idempotency";
 
@@ -70,6 +78,7 @@ export default function Rephraser() {
   const [saved,        setSaved]        = useState<keyof Alternatives | null>(null);
   const [savedAnswerId, setSavedAnswerId] = useState<string | null>(null);
   const [error,        setError]        = useState<string | null>(null);
+  const [offlineFallback, setOfflineFallback] = useState(false);
 
   const wordCount = original.trim().split(/\s+/).filter(Boolean).length;
 
@@ -82,6 +91,7 @@ export default function Rephraser() {
     setAlternatives(null);
     setSaved(null);
     setSavedAnswerId(null);
+    setOfflineFallback(false);
 
     const contentHash = await sha256(original.trim());
     const idempotencyKey = prepToolContentIdempotencyKey("rephrase", contentHash);
@@ -89,7 +99,10 @@ export default function Rephraser() {
     writeStoredRephraseKey(idempotencyKey);
 
     try {
-      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
+      const data = await fetchEdgeJson<{
+        result?: string;
+        alternatives?: Alternatives;
+      }>("prep-tool", {
         tool_id: "rephrase",
         input: original,
       }, {
@@ -97,9 +110,13 @@ export default function Rephraser() {
           "x-idempotency-key": idempotencyKey,
         },
       });
-      const raw = data.result ?? "";
-      const parsed: Alternatives = JSON.parse(raw);
-      setAlternatives(parsed);
+      const fromServer = data.alternatives && isRephraseAlternatives(data.alternatives)
+        ? data.alternatives
+        : parseStructuredJson(data.result ?? "", isRephraseAlternatives).value;
+      if (!fromServer) {
+        throw Object.assign(new Error(AI_RESPONSE_INVALID_MESSAGE), { code: "AI_RESPONSE_INVALID" });
+      }
+      setAlternatives(fromServer);
       await refreshCredits();
     } catch (err) {
       openUpgradeIfInsufficientCredits(err);
@@ -111,7 +128,8 @@ export default function Rephraser() {
       } else {
         setError(getAiUserFacingError(err));
         setAlternatives(getOfflineAlternatives(original));
-        toast.info("Using offline rephrasing — AI unavailable.");
+        setOfflineFallback(true);
+        toast.info(OFFLINE_FALLBACK_LABEL);
         // Keep key so Retry / double-submit / refresh mid-request replays without a second charge.
       }
     }
@@ -204,6 +222,11 @@ export default function Rephraser() {
         {/* 3 result cards */}
         {alternatives && (
           <div className="space-y-3">
+            {offlineFallback && (
+              <p className="text-xs text-amber-700 dark:text-amber-300" role="status">
+                {OFFLINE_FALLBACK_LABEL}
+              </p>
+            )}
             {(["formal", "confident", "concise"] as const).map((style) => {
               const styleConfig = {
                 formal:    { label: "Formal",    Icon: ClipboardList, color: "blue"   },

@@ -18,6 +18,11 @@ import { enumerateAudioDevices, enumerateAudioOutputDevices, playSpeakerTestTone
 import type { AudioDevice } from "@/types/audio.types";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { practiceContextsDB } from "@/lib/supabase/database";
+import {
+  unspecifiedLabel,
+  shouldHydrateLastPracticeSetup,
+} from "@/lib/session/practiceContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { OverlaySetupGuidePanel } from "@/components/overlay/OverlaySetupGuidePanel";
 import { OVERLAY_VISIBILITY_WARNING } from "@/lib/constants/overlaySetupGuide";
@@ -112,13 +117,14 @@ function BooleanSwitch({
 }
 
 export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSessionSetupWizardProps) {
-  const { profile } = useAuthStore();
+  const { profile, user } = useAuthStore();
   const { isExhausted: creditsExhausted } = useCreditExhaustedState();
   const { loadError: documentsLoadError, reload: reloadDocuments } = useDocuments();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
+  const overlayVisible = useOverlayStore((s) => s.is_visible);
   const resumes        = useDocumentStore((s) => s.resumes);
   const jds            = useDocumentStore((s) => s.jds);
   const activeResumeId = useDocumentStore((s) => s.active_resume_id);
@@ -135,7 +141,12 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const durationOptions = freePlan ? [5] : [15, 30, 45, 60];
 
   const lastSetup = useMemo(() => loadLastPracticeSetup(), []);
-  const [showWizard, setShowWizard] = useState(!lastSetup);
+  const practiceContextId = searchParams.get("context");
+  const [showWizard, setShowWizard] = useState(
+    () => !lastSetup || Boolean(practiceContextId),
+  );
+  const [practiceQuestion, setPracticeQuestion] = useState<string | null>(null);
+  const [contextLoadError, setContextLoadError] = useState<string | null>(null);
   const [quickAudioReady, setQuickAudioReady] = useState(false);
 
   const [step, setStep] = useState(1);
@@ -234,13 +245,15 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   }, [activeJdId, showWizard]);
 
   useEffect(() => {
-    if (showWizard && lastSetup) {
+    if (showWizard && lastSetup && shouldHydrateLastPracticeSetup({ practiceContextId })) {
       applyLastSetup(lastSetup);
     }
-  }, [showWizard, lastSetup]);
+  }, [showWizard, lastSetup, practiceContextId]);
 
   // Interview Day (and similar) can pass company/role via query or pending stash.
+  // Answer Bank `?context=` must not merge lastSetup / pending / practicePrompt.
   useEffect(() => {
+    if (practiceContextId) return;
     const pending = peekPendingPracticeSetup();
     const companyParam = searchParams.get("company")?.trim() || "";
     const roleParam = searchParams.get("role")?.trim() || "";
@@ -269,7 +282,45 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- apply once on mount / query change
-  }, [searchParams]);
+  }, [searchParams, practiceContextId]);
+
+  useEffect(() => {
+    if (!practiceContextId || !user?.id) return;
+    setShowWizard(true);
+    setContextLoadError(null);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const row = await practiceContextsDB.getOwned(user.id, practiceContextId);
+        if (cancelled) return;
+        if (!row) {
+          setContextLoadError("This practice launch could not be found or you do not own it.");
+          return;
+        }
+        const status = String(row.status ?? "");
+        if (status === "expired" || status === "consumed") {
+          setContextLoadError("This practice launch is no longer available.");
+          return;
+        }
+        const question = String(row.question_text ?? "").trim();
+        setPracticeQuestion(question || null);
+        if (typeof row.role === "string" && row.role.trim()) setRole(row.role.trim());
+        if (typeof row.company === "string" && row.company.trim()) setCompany(row.company.trim());
+        if (typeof row.resume_id === "string" && row.resume_id) setResumeId(row.resume_id);
+        if (typeof row.jd_id === "string" && row.jd_id) setJdId(row.jd_id);
+        if (question) {
+          setInstructions((prev) =>
+            prev.includes(question) ? prev : [question, prev].filter(Boolean).join("\n\n"),
+          );
+        }
+      } catch {
+        if (!cancelled) setContextLoadError("Could not load this practice launch.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [practiceContextId, user?.id]);
 
   const activeSteps = isMobile ? MOBILE_STEPS : STEPS;
   const totalSteps = activeSteps.length;
@@ -525,6 +576,8 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       language,
       duration_minutes:     durationMinutes > 0 ? durationMinutes : undefined,
       mic_device_id:        selectedMicId || null,
+      practice_context_id:  practiceContextId,
+      source_type:          practiceContextId ? "answer_bank" : undefined,
     };
 
     // Sync document selections into documentStore so AI context is correct
@@ -648,7 +701,21 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     );
   }
 
-  if (!showWizard && lastSetup) {
+  if (contextLoadError) {
+    return (
+      <div className="w-full">
+        <InlineErrorRetry
+          message={contextLoadError}
+          onRetry={() => {
+            setContextLoadError(null);
+            navigate("/app/answer-bank");
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (!showWizard && lastSetup && !practiceContextId) {
     const quickResumeTitle =
       resumes.find((r) => r.id === (lastSetup.resume_id ?? activeResumeId))?.title ?? null;
     const quickLanguage = lastSetup.language ?? "English";
@@ -742,7 +809,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
             Estimated usage: ~{AI_CREDIT_COSTS.live_hint} credits/hint ·{" "}
             {AI_CREDIT_COSTS.live_answer} credits/full answer
           </p>
-          {lastSetup && (
+          {lastSetup && !practiceContextId && (
             <button
               type="button"
               onClick={() => setShowWizard(false)}
@@ -752,6 +819,44 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
             </button>
           )}
         </div>
+
+        {practiceContextId && (
+          <div
+            className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-left space-y-2"
+            data-testid="practice-context-review"
+          >
+            <p className="text-sm font-semibold text-foreground">
+              Practicing answer: {practiceQuestion || unspecifiedLabel(null)}
+            </p>
+            <ul className="text-xs text-muted-foreground space-y-1">
+              <li>Role: {unspecifiedLabel(role)}</li>
+              <li>Company: {unspecifiedLabel(company)}</li>
+              <li>
+                Resume:{" "}
+                {unspecifiedLabel(resumes.find((r) => r.id === resumeId)?.title ?? null)}
+              </li>
+              <li>
+                Job description:{" "}
+                {unspecifiedLabel(jds.find((j) => j.id === jdId)?.title ?? null)}
+              </li>
+            </ul>
+            <p className="text-[11px] text-amber-200">
+              These fields stay Not specified unless you set them. Profile values are optional defaults — they are never applied silently.
+            </p>
+            <button
+              type="button"
+              onClick={() => applyProfileDefaults()}
+              className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+            >
+              Use profile defaults
+            </button>
+            {overlayVisible && (
+              <p className="text-xs text-amber-300">
+                A session is already running. Starting this practice will replace it.
+              </p>
+            )}
+          </div>
+        )}
 
         {isMobile && (
           <div

@@ -19,6 +19,14 @@ import { creditCost } from "../_shared/creditEconomics.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
+import {
+  AI_RESPONSE_INVALID,
+  AI_RESPONSE_INVALID_MESSAGE,
+  isStarStructuredAnswer,
+  normalizeStarAnswer,
+  parseStructuredJson,
+  REPAIR_JSON_PROMPT,
+} from "../_shared/structuredParse.ts";
 
 // Sanitize text to protect prompt
 function sanitize(input: any, max = 2000): string {
@@ -184,31 +192,40 @@ Return ONLY this JSON:
     // -------------------------------
     // PARSE JSON SAFELY
     // -------------------------------
-    let star: STARAnswer;
-    try {
-      const cleaned = aiResult.text
-        .replace(/```json/g, "")
-        .replace(/```/g, "")
-        .trim();
-
-      const parsed = JSON.parse(cleaned);
-      star = {
-        situation: parsed.situation ?? "",
-        task: parsed.task ?? "",
-        action: parsed.action ?? "",
-        result: parsed.result ?? "",
-        fullAnswer: parsed.fullAnswer ?? "",
-      };
-    } catch {
-      // fallback includes only fullAnswer
-      star = {
-        situation: "",
-        task: "",
-        action: "",
-        result: "",
-        fullAnswer: aiResult.text.trim(),
-      };
+    let star: STARAnswer | null = null;
+    let parsed = parseStructuredJson(aiResult.text, isStarStructuredAnswer);
+    if (!parsed.ok) {
+      log(FN, "warn", "STAR JSON parse failed; one repair retry", {
+        category: parsed.category,
+        length: parsed.length,
+        model,
+      });
+      try {
+        const repaired = await generateWithFallback({
+          prompt: `${REPAIR_JSON_PROMPT}\n\nBroken output:\n${aiResult.text.slice(0, 4000)}`,
+          systemPrompt,
+          maxTokens: 1200,
+          temperature: 0.2,
+          jsonMode: true,
+          model: String(model),
+          userId,
+          action: "generate_star_answer_repair",
+        });
+        parsed = parseStructuredJson(repaired.text, isStarStructuredAnswer);
+      } catch {
+        parsed = { ok: false, value: null, category: "unavailable", length: aiResult.text.length };
+      }
     }
+    const normalized = parsed.ok ? normalizeStarAnswer(parsed.value) : null;
+    if (!normalized) {
+      await refundCredits({
+        userId,
+        cost: starCost,
+        reason: "generate-star-answer invalid JSON",
+      });
+      return errorResponse(AI_RESPONSE_INVALID_MESSAGE, AI_RESPONSE_INVALID, 422, req);
+    }
+    star = normalized;
 
     // -------------------------------
     // LOGGING

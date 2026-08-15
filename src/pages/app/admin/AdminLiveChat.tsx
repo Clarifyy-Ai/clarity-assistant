@@ -173,7 +173,7 @@ export default function AdminLiveChat() {
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-          <MessageSquare className="w-5 h-5 text-primary" /> Live Chat / Support
+          <MessageSquare className="w-5 h-5 text-primary" /> Support messages
         </h1>
         <div className="flex gap-2">
           <KPI label="Open" value={openCount} icon={<AlertCircle className="w-3.5 h-3.5" />} color="text-amber-400" />

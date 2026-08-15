@@ -183,6 +183,17 @@ const startSessionSchema = z.object({
     .boolean()
     .optional()
     .default(false),
+
+  practice_context_id: z
+    .string()
+    .uuid("Invalid practice context ID.")
+    .nullable()
+    .optional(),
+
+  source_type: z
+    .enum(["answer_bank", "manual", "interview_day"])
+    .nullable()
+    .optional(),
 });
 
 type StartSessionRequest = z.infer<typeof startSessionSchema>;
@@ -193,7 +204,23 @@ type ExistingSessionRow = {
   id: string;
   created_at: string;
   status: string;
+  practice_context_id?: string | null;
 };
+
+function shouldReuseExistingSession(opts: {
+  existingStatus: string | null | undefined;
+  existingContextId: string | null | undefined;
+  requestContextId: string | null | undefined;
+}): boolean {
+  const status = String(opts.existingStatus ?? "").toLowerCase();
+  if (status === "completed" || status === "abandoned") return false;
+  if (status !== "pending") return false;
+  const existing = opts.existingContextId ?? null;
+  const request = opts.requestContextId ?? null;
+  if (request && existing !== request) return false;
+  if (!request && existing) return false;
+  return true;
+}
 
 type CreatedSessionRow = {
   id: string;
@@ -603,7 +630,39 @@ Deno.serve(async (req: Request) => {
     role,
   });
 
+  const practiceContextId = body.practice_context_id ?? null;
+  const sourceType = body.source_type ?? (practiceContextId ? "answer_bank" : null);
+
   try {
+    if (practiceContextId) {
+      const { data: ctxRow, error: ctxErr } = await db
+        .from("practice_contexts")
+        .select("id, user_id, status")
+        .eq("id", practiceContextId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (ctxErr) {
+        console.error("[start-session] practice_context lookup:", ctxErr.message);
+        return json(corsHeaders, 500, {
+          error: "Could not start session.",
+          code: "SESSION_LOOKUP_FAILED",
+        });
+      }
+      if (!ctxRow) {
+        return json(corsHeaders, 404, {
+          error: "Practice context not found.",
+          code: "PRACTICE_CONTEXT_NOT_FOUND",
+        });
+      }
+      const ctxStatus = String((ctxRow as { status?: string }).status ?? "");
+      if (ctxStatus === "consumed" || ctxStatus === "expired") {
+        return json(corsHeaders, 409, {
+          error: "This practice launch was already used.",
+          code: "PRACTICE_CONTEXT_CONSUMED",
+        });
+      }
+    }
+
     await db
       .from("sessions")
       .update({
@@ -617,7 +676,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: existingData, error: lookupError } = await db
       .from("sessions")
-      .select("id, created_at, status")
+      .select("id, created_at, status, practice_context_id")
       .eq("user_id", user.id)
       .eq("type", sessionType)
       .in("status", ["pending", "active"])
@@ -638,21 +697,33 @@ Deno.serve(async (req: Request) => {
     }
 
     const existing = existingData as ExistingSessionRow | null;
+    const canReuse = existing?.id
+      ? shouldReuseExistingSession({
+          existingStatus: existing.status,
+          existingContextId: existing.practice_context_id ?? null,
+          requestContextId: practiceContextId,
+        })
+      : false;
 
-    if (existing?.id) {
-      const activePatch =
-        existing.status === "active"
-          ? {
-              status: "active",
-            }
-          : {
-              status: "active",
-              started_at: nowIso,
-            };
+    if (existing?.id && !canReuse) {
+      await db
+        .from("sessions")
+        .update({
+          status: "abandoned",
+          ended_at: nowIso,
+        })
+        .eq("id", existing.id)
+        .eq("user_id", user.id)
+        .in("status", ["pending", "active"]);
+    }
 
+    if (existing?.id && canReuse) {
       const { error: activationError } = await db
         .from("sessions")
-        .update(activePatch)
+        .update({
+          status: "active",
+          started_at: nowIso,
+        })
         .eq("id", existing.id)
         .eq("user_id", user.id);
 
@@ -714,6 +785,8 @@ Deno.serve(async (req: Request) => {
         ended_at: null,
         updated_at: nowIso,
         tags: sessionTags.length > 0 ? sessionTags : null,
+        practice_context_id: practiceContextId,
+        source_type: sourceType,
       })
       .select("id")
       .single();
@@ -733,6 +806,33 @@ Deno.serve(async (req: Request) => {
     }
 
     const created = createdData as CreatedSessionRow;
+
+    if (practiceContextId) {
+      const { data: consumed, error: consumeErr } = await db
+        .from("practice_contexts")
+        .update({
+          status: "consumed",
+          consumed_at: nowIso,
+        })
+        .eq("id", practiceContextId)
+        .eq("user_id", user.id)
+        .eq("status", "open")
+        .select("id")
+        .maybeSingle();
+      if (consumeErr) {
+        console.error("[start-session] consume context:", consumeErr.message);
+      } else if (!consumed) {
+        await db
+          .from("sessions")
+          .update({ status: "abandoned", ended_at: nowIso })
+          .eq("id", created.id)
+          .eq("user_id", user.id);
+        return json(corsHeaders, 409, {
+          error: "This practice launch was already used.",
+          code: "PRACTICE_CONTEXT_CONSUMED",
+        });
+      }
+    }
 
     await logAuditEventFromRequest({
       req,

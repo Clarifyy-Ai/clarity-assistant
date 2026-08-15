@@ -14,6 +14,8 @@
 // Never put service-role keys, Stripe secret keys, webhook secrets,
 // Gemini/OpenAI/Anthropic server keys, or any private secret here.
 
+import { resolveCriticalSupabaseEnv } from "./envCritical";
+
 type RawEnv = Record<string, string | undefined>;
 
 const rawEnv = import.meta.env as RawEnv;
@@ -116,34 +118,31 @@ const APP_ENV_VALUE = parseAppEnvironment(
 const isProductionRuntime =
   APP_ENV_VALUE === "production" || import.meta.env.PROD === true;
 
-// Public (safe-to-ship) fallbacks. The Supabase project URL and anon key are
-// designed to be exposed in the browser — RLS protects the data. If a build
-// ships without the VITE_* injects we log loudly but still boot, rather than
-// hard-crashing the whole app with a blank screen.
+// Public (safe-to-ship) fallbacks for local/dev and Vitest only.
+// Production and Vite production builds fail closed via resolveCriticalSupabaseEnv.
 const FALLBACK_SUPABASE_URL = "https://qzgvjrvtkwlzxpmlddkx.supabase.co";
 const FALLBACK_SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6Z3ZqcnZ0a3dsenhwbWxkZGt4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MDE4MzAsImV4cCI6MjA4OTM3NzgzMH0.hsDv4Sk7L8on5zlr9K6LT1FQe3bEEzmav5bCYes-0so";
 
-const SUPABASE_URL_RAW = optional(["VITE_SUPABASE_URL"]);
-if (!SUPABASE_URL_RAW) {
-  const warning =
-    "[env] VITE_SUPABASE_URL missing from bundle — using public project fallback.";
-  if (isProductionRuntime) console.error(warning);
-  else console.warn(warning);
-}
+const criticalSupabase = resolveCriticalSupabaseEnv({
+  url: optional(["VITE_SUPABASE_URL"]),
+  anonKey: optional(["VITE_SUPABASE_ANON_KEY"]),
+  publishableKey: optional(["VITE_SUPABASE_PUBLISHABLE_KEY"]),
+  failClosed: isProductionRuntime,
+  fallbackUrl: FALLBACK_SUPABASE_URL,
+  fallbackKey: FALLBACK_SUPABASE_ANON_KEY,
+});
+
 const SUPABASE_URL_VALUE = assertValidUrl(
-  SUPABASE_URL_RAW || FALLBACK_SUPABASE_URL,
-  "VITE_SUPABASE_URL"
+  criticalSupabase.url,
+  "VITE_SUPABASE_URL",
 );
 
-const SUPABASE_ANON_KEY_VALUE = optional(
-  ["VITE_SUPABASE_ANON_KEY", "VITE_SUPABASE_PUBLISHABLE_KEY"],
-  FALLBACK_SUPABASE_ANON_KEY
-);
+const SUPABASE_ANON_KEY_VALUE = criticalSupabase.anonKey;
 
 const SUPABASE_PUBLISHABLE_KEY_VALUE = optional(
   ["VITE_SUPABASE_PUBLISHABLE_KEY", "VITE_SUPABASE_ANON_KEY"],
-  FALLBACK_SUPABASE_ANON_KEY
+  criticalSupabase.anonKey,
 );
 
 

@@ -95,6 +95,7 @@ export async function fulfillCapturedRazorpayOrder(
       const { error: profileErr } = await db.from("profiles").update({
         plan_id: planId,
         subscription_status: "active",
+        payment_failed_at: null,
         credits_used_this_month: 0,
         credits_reset_at: new Date().toISOString(),
         pending_promo_code: null,

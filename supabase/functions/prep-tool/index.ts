@@ -21,10 +21,19 @@ import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
 
+import {
+  AI_RESPONSE_INVALID,
+  AI_RESPONSE_INVALID_MESSAGE,
+  isRephraseAlternatives,
+  parseStructuredJson,
+  REPAIR_JSON_PROMPT,
+  type RephraseAlternatives,
+} from "../_shared/structuredParse.ts";
+
 function structuredError(
   req: Request,
   message: string,
-  code: "PROVIDER_UNAVAILABLE" | "INTERNAL_ERROR",
+  code: "PROVIDER_UNAVAILABLE" | "INTERNAL_ERROR" | "AI_RESPONSE_INVALID",
   status: number,
   correlationId: string,
 ): Response {
@@ -291,18 +300,19 @@ Deno.serve(async (req: Request) => {
     // Full-result replay: same key already completed → no second charge / AI call.
     const db = createServiceClient();
     const prior = await getIdempotentResponse(db, idempotencyKey);
-    const priorResult =
-      prior?.success && typeof prior.payload?.result === "string"
-        ? prior.payload.result
-        : null;
-    if (priorResult !== null) {
+    const priorPayload = prior?.success ? prior.payload : null;
+    if (priorPayload && priorPayload.parse_status !== "failed_invalid_response") {
       log(FN, "info", "Prep tool idempotent replay", {
         userId,
         tool_id,
         correlationId,
       });
       return successResponse(
-        { result: priorResult, cached: true },
+        {
+          result: priorPayload.result,
+          alternatives: priorPayload.alternatives,
+          cached: true,
+        },
         { creditsCharged: 0 },
         200,
         req,
@@ -339,6 +349,7 @@ Deno.serve(async (req: Request) => {
         prompt,
         maxTokens: 1200,
         temperature: 0.6,
+        jsonMode: tool_id === "rephrase",
         userId,
         action: `prep_tool_${tool_id}`,
       });
@@ -378,17 +389,63 @@ Deno.serve(async (req: Request) => {
       wasFallback: false,
     });
 
-    const cleaned = sanitizeAIOutput(raw);
+    let alternatives: RephraseAlternatives | null = null;
+    let cleaned = sanitizeAIOutput(raw);
 
-    // Persist AI result on the same idempotency key so retries return cache.
+    if (tool_id === "rephrase") {
+      let parsed = parseStructuredJson(raw, isRephraseAlternatives);
+      if (!parsed.ok) {
+        log(FN, "warn", "Rephrase JSON parse failed; one repair retry", {
+          category: parsed.category,
+          length: parsed.length,
+          correlationId,
+          model: usedModel,
+          operation: tool_id,
+        });
+        try {
+          const repaired = await generateWithFallback({
+            prompt: `${REPAIR_JSON_PROMPT}\n\nOriginal answer:\n${sanitizedInput}\n\nBroken output:\n${raw.slice(0, 4000)}`,
+            maxTokens: 1200,
+            temperature: 0.2,
+            jsonMode: true,
+            userId,
+            action: `prep_tool_${tool_id}_repair`,
+          });
+          parsed = parseStructuredJson(repaired.text, isRephraseAlternatives);
+        } catch {
+          parsed = { ok: false, value: null, category: "unavailable", length: raw.length };
+        }
+      }
+      if (!parsed.ok || !parsed.value) {
+        await refundCredits({
+          userId,
+          cost: toolCost,
+          reason: "prep-tool rephrase invalid JSON",
+        });
+        await storeIdempotentResponse(db, idempotencyKey, {
+          success: false,
+          error: AI_RESPONSE_INVALID,
+          payload: { parse_status: "failed_invalid_response", tool_id },
+        } as never);
+        return structuredError(
+          req,
+          AI_RESPONSE_INVALID_MESSAGE,
+          AI_RESPONSE_INVALID,
+          422,
+          correlationId,
+        );
+      }
+      alternatives = parsed.value;
+      cleaned = JSON.stringify(alternatives);
+    }
+
     await storeIdempotentResponse(db, idempotencyKey, {
       success: true,
       balanceAfter: creditResult.balanceAfter,
       transactionId: creditResult.transactionId,
-      payload: { result: cleaned, tool_id },
+      payload: { result: cleaned, alternatives, tool_id, parse_status: "completed" },
     });
 
-    /* ----------------------- RESPOND ----------------------- */
     log(FN, "info", "Prep tool executed", {
       userId,
       tool_id,
@@ -397,7 +454,7 @@ Deno.serve(async (req: Request) => {
     });
 
     return successResponse(
-      { result: cleaned },
+      { result: cleaned, alternatives },
       { creditsCharged: toolCost },
       200,
       req

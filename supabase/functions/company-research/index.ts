@@ -7,7 +7,7 @@ import {
   getAdminClient,
 } from "../_shared/utils.ts";
 import { deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
-import { parseJSON } from "../_shared/gemini.ts";
+import { parseStructuredJson } from "../_shared/structuredParse.ts";
 import { generateWithFallback } from "../_shared/aiProvider.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
@@ -203,7 +203,10 @@ Return ONLY valid JSON:
       );
     }
 
-    const parsed = parseJSON(aiResult.text, {
+    const parsedResult = parseStructuredJson(aiResult.text, (value): value is Record<string, unknown> =>
+      Boolean(value) && typeof value === "object",
+    );
+    const parsed = parsedResult.value ?? {
       overview: "",
       industry: "",
       tags: [],
@@ -212,7 +215,7 @@ Return ONLY valid JSON:
       values: [],
       tips: [],
       watch_outs: [],
-    });
+    };
 
     const data = validateResponse(parsed);
 

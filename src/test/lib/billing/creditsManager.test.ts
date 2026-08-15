@@ -49,7 +49,10 @@ vi.mock("@/lib/supabase/client", () => ({
   },
 }));
 
-vi.mock("@/lib/env", () => ({ EDGE_BASE: "https://edge.test" }));
+vi.mock("@/lib/env", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/env")>();
+  return { ...actual, EDGE_BASE: "https://edge.test" };
+});
 
 describe("CREDIT_COSTS table", () => {
   it("has positive cost for every action", () => {

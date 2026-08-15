@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
-import { answerBankDB } from "@/lib/supabase/database";
+import { answerBankDB, practiceContextsDB } from "@/lib/supabase/database";
 import type { Tables } from "@/integrations/supabase";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -28,6 +28,10 @@ import {
 } from "@/lib/network/aiErrorUx";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import {
+  draftFromAnswerBankEntry,
+  practiceContextLaunchPath,
+} from "@/lib/session/practiceContext";
 
 // ─────────────────────────────────────────────────────────────────
 // AnswerBank — saved STAR answers + session saves
@@ -37,6 +41,7 @@ const CATEGORIES = ["All", "Behavioural", "Technical", "Leadership", "System Des
 
 export default function AnswerBank() {
   const { user }  = useAuthStore();
+  const navigate = useNavigate();
 
   const [answers,   setAnswers]   = useState<Tables<"answer_bank">[]>([]);
   const [loading,   setLoading]   = useState(true);
@@ -226,15 +231,28 @@ export default function AnswerBank() {
 
                   {/* Actions */}
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <Link
-                      to="/app/live"
-                      state={{ practicePrompt: ans.question_text }}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!user?.id) return;
+                        void (async () => {
+                          try {
+                            const created = await practiceContextsDB.create(
+                              user.id,
+                              draftFromAnswerBankEntry(ans),
+                            );
+                            navigate(practiceContextLaunchPath(created.id));
+                          } catch {
+                            toast.error("Could not start practice. Please try again.");
+                          }
+                        })();
+                      }}
                       className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-all"
                       title="Practice this with Coach"
                       aria-label="Practice this with Coach"
                     >
                       <Mic className="w-3.5 h-3.5" />
-                    </Link>
+                    </button>
                     <Link
                       to={`/app/answers/${ans.id}`}
                       className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/5 transition-all"

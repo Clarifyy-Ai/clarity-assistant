@@ -32,6 +32,7 @@ export default function LiveRehearsal() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const endedSessionId = searchParams.get("ended");
+  const practiceContextId = searchParams.get("context");
   const [defaultOverlay, setDefaultOverlay] = useState(false);
   const [dismissMobileNotice, setDismissMobileNotice] = useState(false);
   const isMobile = useIsMobile();
@@ -40,7 +41,8 @@ export default function LiveRehearsal() {
   );
   const overlayVisible = useOverlayStore((s) => s.is_visible);
   const hasActiveOverlaySession = sessionActive || overlayVisible;
-  const shouldRedirectToOverlay = hasActiveOverlaySession && !endedSessionId;
+  const shouldRedirectToOverlay =
+    hasActiveOverlaySession && !endedSessionId && !practiceContextId;
 
   useEffect(() => {
     setDefaultOverlay(getDefaultOverlayEnabled());

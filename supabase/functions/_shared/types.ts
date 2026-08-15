@@ -69,6 +69,7 @@ export interface AICompletionRequest {
   maxTokens?:   number;
   temperature?: number;
   stream?:      boolean;
+  jsonMode?:    boolean;
 }
 
 export interface AICompletionResponse {

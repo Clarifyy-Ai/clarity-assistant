@@ -87,6 +87,32 @@ Deno.serve(async (req) => {
       return json(corsHeaders, { error: "Invalid JSON body", code: "INVALID_REQUEST" }, 400);
     }
 
+    const guestEmailKey = normalizeEmail(body.guest_email);
+    const guestTokenRaw =
+      typeof body.guest_token === "string" && body.guest_token.length >= 16
+        ? body.guest_token
+        : null;
+    if (guestEmailKey) {
+      const emailRl = await checkRateLimitAsync(db, {
+        key: createRateLimitKey(FUNCTION_NAME, `email:${guestEmailKey}`),
+        limit: 8,
+        windowMs: 60_000,
+      });
+      if (!emailRl.allowed) {
+        return withCorsHeaders(req, rateLimitResponse(emailRl));
+      }
+    }
+    if (guestTokenRaw) {
+      const tokenRl = await checkRateLimitAsync(db, {
+        key: createRateLimitKey(FUNCTION_NAME, `guest:${guestTokenRaw}`),
+        limit: 8,
+        windowMs: 60_000,
+      });
+      if (!tokenRl.allowed) {
+        return withCorsHeaders(req, rateLimitResponse(tokenRl));
+      }
+    }
+
     const action = String(body.action ?? "");
     // Optional auth — guests chat with name/email + token; ignore auth failures.
     let userId: string | null = null;

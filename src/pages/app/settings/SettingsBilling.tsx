@@ -37,6 +37,7 @@ import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PAYMENTS_UNAVAILABLE_MESSAGE, resolveCanonicalBillingStatus } from "@/lib/billing/canonicalBillingStatus";
 import { toast } from "sonner";
 import { creditsDB } from "@/lib/supabase/database";
 import {
@@ -122,7 +123,7 @@ function checkoutErrorMessage(error: unknown): string {
     return msg;
   }
   if (msg.includes("Razorpay not configured") || msg.includes("not configured")) {
-    return "Razorpay keys are not set on the server. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in Supabase Edge secrets.";
+    return PAYMENTS_UNAVAILABLE_MESSAGE;
   }
   if (msg.includes("Billing configuration")) {
     return "Billing is not fully configured on the server yet.";
@@ -252,7 +253,11 @@ export default function SettingsBilling(): JSX.Element {
     }
   }, [searchParams, setSearchParams, refreshCredits]);
 
-  const statusInfo = STATUS_LABELS[subscription?.status ?? ""] ?? null;
+  const canonicalStatus = resolveCanonicalBillingStatus(
+    profile?.subscription_status,
+    subscription?.status,
+  );
+  const statusInfo = STATUS_LABELS[canonicalStatus] ?? STATUS_LABELS[subscription?.status ?? ""] ?? null;
 
   const creditsRemaining = credits.balance;
   const creditsMonthly = currentPlan.creditsPerMonth;
@@ -350,13 +355,13 @@ export default function SettingsBilling(): JSX.Element {
         </Card>
       )}
 
-      {!loadingSub && subscription?.status === "past_due" && (
+      {!loadingSub && canonicalStatus === "past_due" && (
         <Card className="border-amber-500/30 bg-amber-500/5">
           <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <div className="flex items-start gap-3 flex-1">
               <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
               <div>
-                <p className="text-sm font-semibold text-amber-300">Payment failed</p>
+                <p className="text-sm font-semibold text-amber-300">Payment action required</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   Your last payment could not be processed. Buy Pro or Max access
                   to restore plan credits.

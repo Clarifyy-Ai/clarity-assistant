@@ -1,6 +1,10 @@
 import { ApiClientError } from "@/lib/api/apiClient";
 import { BILLING_MESSAGES } from "@/lib/constants/errorMessages";
 import { useUIStore } from "@/store/uiStore";
+import {
+  AI_RESPONSE_INVALID_MESSAGE,
+  isRawJsonParseError,
+} from "@/lib/ai/structuredParse";
 
 const CREDITS_NEEDED_MESSAGE =
   BILLING_MESSAGES.INSUFFICIENT_CREDITS;
@@ -144,6 +148,16 @@ export function getAiUserFacingError(err: unknown): string {
     rawLower.includes("update your payment method")
   ) {
     return "Payment failed. Update your payment method to keep using AI features.";
+  }
+
+  if (
+    code === "AI_RESPONSE_INVALID" ||
+    rawLower.includes("unterminated string") ||
+    rawLower.includes("unexpected token") ||
+    rawLower.includes("unexpected end of json") ||
+    isRawJsonParseError(err)
+  ) {
+    return AI_RESPONSE_INVALID_MESSAGE;
   }
 
   if (!raw) {

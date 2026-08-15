@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -26,6 +26,11 @@ export function PrepToolShell({
   onRetry,
   className,
 }: PrepToolShellProps) {
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (error) errorRef.current?.focus();
+  }, [error]);
+
   return (
     <div className={cn("space-y-4", className)}>
       <div>
@@ -47,7 +52,12 @@ export function PrepToolShell({
       )}
 
       {error && (
-        <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive space-y-2">
+        <div
+          ref={errorRef}
+          role="alert"
+          tabIndex={-1}
+          className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive space-y-2 outline-none"
+        >
           <p className="whitespace-normal break-words">{error}</p>
           {onRetry && (
             <Button type="button" size="sm" variant="outline" onClick={onRetry}>

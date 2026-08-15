@@ -45,7 +45,7 @@ import {
   createServiceClient,
 } from "../_shared/supabase.ts";
 
-import { parseJSON } from "../_shared/gemini.ts";
+import { parseStructuredJson } from "../_shared/structuredParse.ts";
 import { generateWithFallback } from "../_shared/aiProvider.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
@@ -718,9 +718,10 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const parsed = parseJSON(rawAiResponse, {
-    questions: [],
-  }) as ParsedQuestionsResponse;
+  const parsedResult = parseStructuredJson(rawAiResponse, (value): value is ParsedQuestionsResponse =>
+    Boolean(value) && typeof value === "object" && Array.isArray((value as ParsedQuestionsResponse).questions),
+  );
+  const parsed = (parsedResult.value ?? { questions: [] }) as ParsedQuestionsResponse;
 
   const questions = cleanGeneratedQuestions(parsed, body.interviewType);
 

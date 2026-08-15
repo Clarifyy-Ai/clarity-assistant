@@ -362,7 +362,8 @@ async function callOpenAI(
         messages: req.messages,
         max_tokens: req.maxTokens ?? 1024,
         temperature: req.temperature ?? 0.7,
-        stream: req.stream ?? false
+        stream: req.stream ?? false,
+        ...(req.jsonMode ? { response_format: { type: "json_object" } } : {}),
       })
     });
   } finally {
@@ -479,7 +480,8 @@ async function callGemini(
     contents,
     generationConfig: {
       maxOutputTokens: req.maxTokens ?? 1024,
-      temperature: req.temperature ?? 0.7
+      temperature: req.temperature ?? 0.7,
+      ...(req.jsonMode ? { responseMimeType: "application/json" } : {}),
     }
   };
 
