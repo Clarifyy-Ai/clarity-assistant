@@ -16,9 +16,9 @@ import { LAUNCH_PLANS, getPlanDisplayName } from "@/lib/constants/pricing";
 import {
   CREDIT_PACKS as TOPUP_PACKS,
   formatInrPaise,
+  formatPlanCheckoutPrice,
   getBestValueCreditPack,
   razorpayPaiseForPack,
-  razorpayPaiseForPlan,
 } from "@/lib/billing/priceCalculator";
 
 import {
@@ -402,9 +402,7 @@ export default function SettingsBilling(): JSX.Element {
 
             <div className="text-right">
               <p className="text-2xl font-black text-foreground">
-                {currentPlan.monthlyPrice === 0
-                  ? "Free"
-                  : formatInrPaise(razorpayPaiseForPlan(effectivePlanId) ?? 0)}
+                {formatPlanCheckoutPrice(effectivePlanId)}
               </p>
 
               {currentPlan.monthlyPrice > 0 && (
@@ -534,11 +532,7 @@ export default function SettingsBilling(): JSX.Element {
                 key={id}
                 id={id}
                 label={getPlanDisplayName(id)}
-                price={
-                  plan.monthlyPrice === 0
-                    ? "Free"
-                    : formatInrPaise(razorpayPaiseForPlan(id) ?? 0)
-                }
+                price={formatPlanCheckoutPrice(id)}
                 period={plan.monthlyPrice === 0 ? "" : " one-time"}
                 credits={plan.creditsPerMonth}
                 color={color}

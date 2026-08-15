@@ -59,14 +59,14 @@ No credit card is required. You'll start on the Free plan with 50 credits per mo
     category_title: "Getting Started",
     question: "Is there a free plan?",
     answer:
-      "Yes. The Free plan includes 50 credits per month — enough to try Practice Coach and a mock session. No credit card required.",
+      "Yes. The Free plan includes 50 credits per month — enough to try Practice Coach and a mock session. Pro is ₹2,499 one-time. Max is ₹6,799 one-time.",
     body_md: `Yes. The Free plan includes:
 
 - **50 credits** per month
 - Practice sessions with the live AI coach (limited)
 - STAR builder and answer bank (limited)
 
-No credit card required. Upgrade to **Pro** ($29/mo, 1,400 credits) or **Max** ($79/mo, 4,000 credits) anytime.`,
+No credit card required. Upgrade to **Pro** (₹2,499 one-time, 1,400 credits) or **Max** (₹6,799 one-time, 4,000 credits) anytime.`,
     sort_order: 30,
   },
   {
@@ -180,8 +180,8 @@ Credits refresh monthly based on your plan tier. Credit packs are one-time top-u
     category_title: "Billing & Credits",
     question: "How much do paid plans cost?",
     answer:
-      "Pro is a one-time purchase for 1,400 credits. Max is a one-time purchase for 4,000 credits.",
-    body_md: `Pro is a **one-time** purchase for 1,400 credits and unlocks the full feature set. Max is a **one-time** purchase for 4,000 credits and priority model access. Upgrade anytime from **Settings → Billing**.`,
+      "Pro is ₹2,499 one-time (1,400 credits). Max is ₹6,799 one-time (4,000 credits). Pay in INR with Razorpay — no auto-renew.",
+    body_md: `Pro is **₹2,499 one-time** for 1,400 credits and unlocks the full feature set. Max is **₹6,799 one-time** for 4,000 credits and priority model access. Pay in INR with Razorpay — checkout does not auto-renew. Upgrade anytime from **Settings → Billing**.`,
     sort_order: 20,
   },
 ];

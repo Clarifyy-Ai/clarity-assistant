@@ -147,7 +147,7 @@ export function PricingCard({
   id,
   label,
   price,
-  period = '/mo',
+  period = '',
   credits,
   icon,
   color = 'violet',

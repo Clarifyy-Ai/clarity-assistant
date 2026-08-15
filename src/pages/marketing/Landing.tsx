@@ -14,6 +14,10 @@ import {
 import { cn } from "@/lib/utils";
 import { PLANS, type PlanId } from "@/lib/billing/subscriptionManager";
 import { LAUNCH_PLANS } from "@/lib/constants/pricing";
+import {
+  formatPlanCheckoutPrice,
+  razorpayPaiseForPlan,
+} from "@/lib/billing/priceCalculator";
 import { SALES_EMAIL } from "@/lib/constants/contact";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import {
@@ -313,7 +317,7 @@ export default function Landing() {
         offers: {
           "@type": "Offer",
           price: "0",
-          priceCurrency: "USD",
+          priceCurrency: "INR",
         },
       },
     ],
@@ -645,23 +649,16 @@ export default function Landing() {
           <m.div className="text-center mb-10" {...fadeUp()}>
             <h2 className="text-2xl md:text-3xl font-bold">Simple, transparent pricing</h2>
             <p className="mt-3 text-sm text-muted-foreground max-w-md mx-auto">
-              Start free. Upgrade when you're ready. No credit card required.
+              Start free. Buy Pro or Max in INR with Razorpay — one-time, no auto-renew.
             </p>
           </m.div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
             {LAUNCH_PLANS.map((planId, i) => {
               const plan = PLANS[planId];
               const isMax = planId === "enterprise";
-              const priceDisplay = isMax
-                ? "$79"
-                : plan.monthlyPrice === 0
-                  ? "$0"
-                  : `$${(plan.monthlyPrice / 100).toFixed(0)}`;
-              const period = isMax
-                ? " one-time"
-                : plan.monthlyPrice === 0
-                  ? "forever"
-                  : " one-time";
+              const inrPaise = razorpayPaiseForPlan(planId);
+              const priceDisplay = formatPlanCheckoutPrice(planId);
+              const period = inrPaise ? " one-time" : "forever";
               const cta = isMax
                 ? "Get Max"
                 : planId === "free"

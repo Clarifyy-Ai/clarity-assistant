@@ -9,7 +9,7 @@ import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import { usePageMeta } from "@/hooks/usePageMeta";
 
 import { LAUNCH_PLANS, getPlanDisplayName } from "@/lib/constants/pricing";
-import { formatInrPaise, razorpayPaiseForPlan } from "@/lib/billing/priceCalculator";
+import { formatPlanCheckoutPrice, razorpayPaiseForPlan } from "@/lib/billing/priceCalculator";
 import {
   billingReturnPathForPlan,
   isPaidSignupPlan,
@@ -90,10 +90,7 @@ export default function Pricing() {
           {DISPLAY_PLANS.map((planId, i) => {
             const plan = PLANS[planId];
             const inrPaise = razorpayPaiseForPlan(planId);
-            const priceDisplay =
-              plan.monthlyPrice === 0 || !inrPaise
-                ? "Free"
-                : formatInrPaise(inrPaise);
+            const priceDisplay = formatPlanCheckoutPrice(planId);
             const isMax = planId === "enterprise";
             const ctaHref = planId === "free" ? "/signup" : paidPlanHref(planId);
 

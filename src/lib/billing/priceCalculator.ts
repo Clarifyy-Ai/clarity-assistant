@@ -118,6 +118,13 @@ export function razorpayPaiseForPack(packId: string): number | null {
   return null;
 }
 
+/** User-facing plan price (INR). Free plans return "Free". */
+export function formatPlanCheckoutPrice(planId: string): string {
+  const paise = razorpayPaiseForPlan(planId);
+  if (paise == null || paise === 0) return "Free";
+  return formatInrPaise(paise);
+}
+
 export function formatPrice(
   cents: number,
   hideDecimals = false,

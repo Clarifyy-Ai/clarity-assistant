@@ -4,6 +4,7 @@ import {
   getCreditPackById,
   getEnabledCreditPacks,
   formatInrPaise,
+  formatPlanCheckoutPrice,
   razorpayPaiseForPlan,
 } from "@/lib/billing/priceCalculator";
 
@@ -37,5 +38,13 @@ describe("CREDIT_PACKS configuration", () => {
     expect(formatInrPaise(249900)).toContain("2,499");
     expect(razorpayPaiseForPlan("pro")).toBe(249900);
     expect(razorpayPaiseForPlan("enterprise")).toBe(679900);
+  });
+
+  it("formats checkout prices in INR, not USD", () => {
+    expect(formatPlanCheckoutPrice("free")).toBe("Free");
+    expect(formatPlanCheckoutPrice("pro")).toContain("2,499");
+    expect(formatPlanCheckoutPrice("pro")).not.toContain("$");
+    expect(formatPlanCheckoutPrice("enterprise")).toContain("6,799");
+    expect(formatPlanCheckoutPrice("enterprise")).not.toContain("$");
   });
 });

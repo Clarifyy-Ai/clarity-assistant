@@ -9,9 +9,9 @@
 //
 
 // Launch model:
-//   Free        — 50 credits / month, $0
-//   Pro         — 1,400 credits / month, $29 / mo  (or $290 / yr)
-//   Max         — 4,000 credits / month, $79 / mo (consumer high-credit tier)
+//   Free        — 50 credits / month, ₹0
+//   Pro         — 1,400 credits, ₹2,499 one-time (Razorpay INR)
+//   Max         — 4,000 credits, ₹6,799 one-time (Razorpay INR)
 
 import {
 
@@ -120,7 +120,7 @@ export const PLAN_MONTHLY_CREDITS: Record<PlanId, number | null> = {
 
 
 
-/** Prices in cents (USD). 0 = free; null = contact sales. */
+/** Legacy USD catalog cents (admin estimates only). Live checkout is INR via Razorpay. */
 
 export const PLAN_PRICE_CENTS_MONTHLY: Record<PlanId, number | null> = {
 
