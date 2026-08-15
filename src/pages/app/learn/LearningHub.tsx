@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
+import { BookOpen } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/common/EmptyState";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { PAGE_SHELL, STACK_GRID } from "@/lib/ui/responsivePage";
@@ -20,9 +22,11 @@ export default function LearningHubPage() {
   const user = useAuthStore((s) => s.user);
   const [courses, setCourses] = useState<Course[]>([]);
   const [progress, setProgress] = useState<Record<string, number>>({});
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     void (async () => {
+      try {
       const { data, error } = await supabase
         .from("learning_courses")
         .select("id,slug,title,description,duration_hours")
@@ -38,15 +42,31 @@ export default function LearningHubPage() {
       const map: Record<string, number> = {};
       for (const row of enrolls ?? []) map[row.course_id as string] = Number(row.percentage ?? 0);
       setProgress(map);
+      } finally {
+        setLoaded(true);
+      }
     })();
   }, [user?.id]);
+
+  const isPreview = loaded && courses.length === 0;
 
   return (
     <div className={PAGE_SHELL}>
       <PageHeader
         title="Learning Hub"
-        description="Original Clarify courses. This is not a third-party LMS and not an official certification program."
+        description={
+          isPreview
+            ? "Preview — original Clarify courses will appear here. This is not a third-party LMS and not an official certification program."
+            : "Original Clarify courses. This is not a third-party LMS and not an official certification program."
+        }
       />
+      {isPreview ? (
+        <EmptyState
+          icon={BookOpen}
+          title="Courses coming soon"
+          description="Learning Hub is in preview. Published courses will show up here."
+        />
+      ) : (
       <div className={STACK_GRID}>
         {courses.map((course) => (
           <Card key={course.id} className="flex min-w-0 flex-col">
@@ -60,6 +80,7 @@ export default function LearningHubPage() {
           </Card>
         ))}
       </div>
+      )}
     </div>
   );
 }

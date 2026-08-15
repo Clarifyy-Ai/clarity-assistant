@@ -183,7 +183,6 @@ export default function OnboardingIndex() {
         onboarding_completed: true,
         target_role:          role,
         preferred_model:      toDbPreferredModel(finalData.preferredModel),
-        ...(refCode ? { referred_by: refCode } : {}),
         experience_years:
           finalData.yearsOfExperience ??
           (level === "junior"

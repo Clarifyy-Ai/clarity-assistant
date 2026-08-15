@@ -26,6 +26,18 @@ export const ANSWER_KEY_FIELDS = [
   "explanation_html",
 ] as const;
 
+/** Data API relation that never includes answer keys. */
+export const PLAYABLE_QUESTIONS_VIEW = "questions_playable" as const;
+
+export function playableQuestionSelect(): string {
+  return PLAYABLE_QUESTION_COLUMNS.join(",");
+}
+
+/** Answer keys are only for post-submit review of the taker's own completed paper. */
+export function shouldRevealAnswerKeys(testStatus: string | null | undefined): boolean {
+  return String(testStatus ?? "").toUpperCase() === "COMPLETED";
+}
+
 export type PlayableQuestion = {
   id: string;
   question_text: string;

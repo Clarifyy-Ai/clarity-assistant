@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/userStore";
-import { referralsDB } from "@/lib/supabase/database";
+import { referralsDB, type ReferralInviteRow } from "@/lib/supabase/database";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -15,16 +15,33 @@ export default function Referrals() {
   const [copied, setCopied] = useState(false);
   const [invitedCount, setInvitedCount] = useState(0);
   const [creditsEarned, setCreditsEarned] = useState(0);
+  const [invites, setInvites] = useState<ReferralInviteRow[]>([]);
+  const [refereeCredits, setRefereeCredits] = useState(25);
+  const [referrerCredits, setReferrerCredits] = useState(25);
   const [statsError, setStatsError] = useState<string | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [code, setCode] = useState<string | null>(
+    profile?.referral_code?.trim() ? profile.referral_code.trim().toUpperCase() : null,
+  );
 
   async function loadStats() {
     if (!user?.id) return;
     setStatsLoading(true);
     try {
-      const stats = await referralsDB.getStats(user.id);
+      const [stats, program, list] = await Promise.all([
+        referralsDB.getStats(user.id),
+        referralsDB.getProgramCopy().catch(() => ({
+          refereeCredits: 25,
+          referrerCredits: 25,
+          discountPercent: 50,
+        })),
+        referralsDB.listMine().catch(() => [] as ReferralInviteRow[]),
+      ]);
       setInvitedCount(stats.invitedCount);
       setCreditsEarned(stats.creditsEarned);
+      setRefereeCredits(program.refereeCredits);
+      setReferrerCredits(program.referrerCredits);
+      setInvites(list);
       setStatsError(null);
     } catch (err) {
       setStatsError(err instanceof Error ? err.message : "Could not load referral stats");
@@ -38,9 +55,29 @@ export default function Referrals() {
     void loadStats();
   }, [user?.id]);
 
-  const code =
-    profile?.referral_code?.trim() ||
-    (profile?.id ? profile.id.slice(0, 8).toUpperCase() : null);
+  useEffect(() => {
+    const fromProfile = profile?.referral_code?.trim();
+    if (fromProfile) {
+      setCode(fromProfile.toUpperCase());
+      return;
+    }
+    if (!user?.id) return;
+    let cancelled = false;
+    void referralsDB
+      .ensureMyCode()
+      .then((ensured) => {
+        if (!cancelled && ensured) setCode(ensured);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          toast.error("Could not load your referral code. Refresh and try again.");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.referral_code, user?.id]);
+
   const link = code ? `${window.location.origin}/signup?ref=${code}` : null;
 
   function copyLink() {
@@ -48,7 +85,7 @@ export default function Referrals() {
       toast.error("Referral link unavailable. Refresh the page or contact support.");
       return;
     }
-    navigator.clipboard.writeText(link);
+    void navigator.clipboard.writeText(link);
     setCopied(true);
     toast.success("Referral link copied!");
     setTimeout(() => setCopied(false), 2000);
@@ -76,8 +113,12 @@ export default function Referrals() {
 
   const steps = [
     { icon: Share2, title: "Share your link", desc: "Send your unique referral link to friends" },
-    { icon: Users, title: "They sign up", desc: "Your friend creates a free account" },
-    { icon: Zap, title: "You both earn credits", desc: "You both receive bonus credits when your friend creates their first session" },
+    { icon: Users, title: "They sign up", desc: "Your friend creates a free account with your code" },
+    {
+      icon: Zap,
+      title: "You both earn credits",
+      desc: `They get ${refereeCredits} credits and you get ${referrerCredits} credits as soon as they sign up`,
+    },
   ];
 
   return (
@@ -151,6 +192,41 @@ export default function Referrals() {
                 </div>
               ))}
             </div>
+          </Card>
+
+          <Card>
+            <h3 className="text-sm font-semibold text-foreground mb-3">Friends you invited</h3>
+            {statsLoading ? (
+              <div className="space-y-2">
+                <div className="h-10 bg-muted animate-pulse rounded-lg" />
+                <div className="h-10 bg-muted animate-pulse rounded-lg" />
+              </div>
+            ) : invites.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No signups yet. Share your link to start earning credits.
+              </p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {invites.map((invite) => (
+                  <li key={invite.id} className="py-2.5 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {invite.referred_email_masked || "Friend"}
+                      </p>
+                      <p className="text-xs text-muted-foreground capitalize">
+                        {invite.status.replace(/_/g, " ")}
+                        {invite.signed_up_at
+                          ? ` · ${new Date(invite.signed_up_at).toLocaleDateString()}`
+                          : ""}
+                      </p>
+                    </div>
+                    <p className="text-sm font-semibold text-foreground shrink-0">
+                      +{invite.credits_awarded}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </Card>
         </div>
 

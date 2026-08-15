@@ -245,9 +245,8 @@ export function useGamification() {
         return;
       }
 
-      const newTotal = (profileData.xp ?? 0) + amount;
-      await profilesDB.update(user.id, { xp: newTotal });
-      store.setXP(newTotal);
+      // xp / total_sessions are RLS-pinned; session completion trigger is the writer.
+      store.setXP(profileData.xp ?? 0);
       markXpAwarded(eventType, dedupeKey);
     } catch (err) {
       store.addXP(-amount);

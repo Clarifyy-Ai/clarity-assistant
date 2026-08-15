@@ -18,6 +18,7 @@ export { handleSessionStartError, isSessionLimitError } from "@/lib/billing/sess
 // Shows a locked overlay with upgrade CTA instead of the feature.
 // ─────────────────────────────────────────────────────────────────
 
+/** Public tiers only (Free / Pro / Max). Never gate on legacy starter. */
 type GatedPlan = "free" | "pro" | "enterprise";
 
 function normalizeUserPlan(value: unknown): PlanId {

@@ -37,7 +37,7 @@ export const creditPackIdSchema = z.enum([
   "credits_500",
 ]);
 
-export const paymentProviderSchema = z.enum(["stripe"]);
+export const paymentProviderSchema = z.enum(["razorpay", "stripe"]);
 
 export const subscriptionActionSchema = z.enum([
   "create",
@@ -74,7 +74,7 @@ export const couponCodeSchema = z
 export const checkoutRequestSchema = z.object({
   userId: z.string().uuid("Invalid user ID."),
 
-  provider: paymentProviderSchema.default("stripe"),
+  provider: paymentProviderSchema.default("razorpay"),
 
   mode: checkoutModeSchema,
 
@@ -174,7 +174,7 @@ export const creditPurchaseRequestSchema = z.object({
 
   creditPackId: creditPackIdSchema,
 
-  provider: paymentProviderSchema.default("stripe"),
+  provider: paymentProviderSchema.default("razorpay"),
 
   successUrl: z.string().url("Invalid success URL."),
 
@@ -301,7 +301,7 @@ export const subscriptionStatusSchema = z.enum([
 export const billingRecordSchema = z.object({
   userId: z.string().uuid("Invalid user ID."),
 
-  provider: paymentProviderSchema.default("stripe"),
+  provider: paymentProviderSchema.default("razorpay"),
 
   customerId: z
     .string()

@@ -1,5 +1,6 @@
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
+import { authenticateRequest } from "../_shared/auth.ts";
 import { logger, withRequestId } from "../_shared/logger.ts";
 import { startTimer } from "../_shared/timing.ts";
 
@@ -25,19 +26,10 @@ Deno.serve(async (req) => {
 
   const corsHeaders = getCorsHeaders(req);
 
-  // Public probe: status plus which AI providers are configured (booleans only).
+  // Public probe: liveness only. Never expose provider inventory.
   if (!hasServiceRoleAuth(req)) {
-    const present = (key: string) => Boolean((Deno.env.get(key) ?? "").trim());
     return new Response(
-      JSON.stringify({
-        status: "ok",
-        providers: {
-          gemini: present("GEMINI_API_KEY") || present("GOOGLE_AI_API_KEY"),
-          openai: present("OPENAI_API_KEY"),
-          anthropic: present("ANTHROPIC_API_KEY"),
-          deepgram: present("DEEPGRAM_API_KEY"),
-        },
-      }),
+      JSON.stringify({ status: "ok" }),
       {
         status: 200,
         headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" },
@@ -76,20 +68,16 @@ Deno.serve(async (req) => {
       throw new Error("GEMINI_API_KEY is not set");
     }
     checks.gemini_api = { status: "ok", duration_ms: geminiTimer.elapsed() };
-  } catch (err) {
+  } catch {
     allHealthy = false;
     checks.gemini_api = { status: "error", duration_ms: geminiTimer.elapsed() };
-    logger.warn("Health check: Gemini API key missing", {
-      requestId,
-      error: err instanceof Error ? err.message : String(err),
-    });
   }
 
   const billingTimer = startTimer();
   try {
     const { validateBillingConfig } = await import("../_shared/billingConfig.ts");
     const report = validateBillingConfig({
-      requireStripe: Boolean(Deno.env.get("STRIPE_SECRET_KEY")),
+      requireStripe: false,
       requireRazorpay: Boolean(Deno.env.get("RAZORPAY_KEY_ID")),
     });
     checks.billing_config = {
@@ -111,7 +99,6 @@ Deno.serve(async (req) => {
       p_limit: 1,
       p_window_ms: 60_000,
     });
-    // Missing RPC is a hard fail; soft errors still report degraded
     checks.rate_limit_rpc = {
       status: error ? "error" : "ok",
       duration_ms: rlTimer.elapsed(),
@@ -120,6 +107,20 @@ Deno.serve(async (req) => {
   } catch {
     allHealthy = false;
     checks.rate_limit_rpc = { status: "error", duration_ms: rlTimer.elapsed() };
+  }
+
+  const adminAuth = await authenticateRequest(req).catch(() => null);
+  if (adminAuth && !adminAuth.error && adminAuth.context) {
+    const db = createServiceClient();
+    const { data: isAdmin } = await db.rpc("is_admin");
+    if (isAdmin) {
+      await db.from("admin_audit_log").insert({
+        admin_id: adminAuth.context.user.id,
+        action: "health_diagnostics",
+        target_type: "ping",
+        new_value: { requestId },
+      }).then(() => {}, () => {});
+    }
   }
 
   const status = allHealthy ? "healthy" : "degraded";

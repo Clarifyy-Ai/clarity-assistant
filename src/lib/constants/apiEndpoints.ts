@@ -39,6 +39,7 @@ export const EDGE_FUNCTIONS = {
   RESUME_SUBSCRIPTION:    "resume-subscription",
   DEDUCT_CREDITS:         "deduct-credits",
   WEBHOOK_STRIPE:         "stripe-webhook",
+  RECORD_REFERRAL:        "record-referral",
 
   // Auth & User / GDPR
   DELETE_ACCOUNT:         "delete-account",

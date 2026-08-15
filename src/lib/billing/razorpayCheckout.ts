@@ -28,6 +28,16 @@ declare global {
 
 const RAZORPAY_SCRIPT = "https://checkout.razorpay.com/v1/checkout.js";
 
+const CHECKOUT_PREPARE_ERROR = "Checkout could not be prepared. Please try again.";
+
+/** Require a non-empty internal payment order id before opening Razorpay. */
+export function assertInternalOrderId(id: string | null | undefined): string {
+  if (typeof id !== "string" || id.trim() === "") {
+    throw new Error(CHECKOUT_PREPARE_ERROR);
+  }
+  return id.trim();
+}
+
 function loadRazorpayScript(): Promise<void> {
   if (window.Razorpay) return Promise.resolve();
   return new Promise((resolve, reject) => {
@@ -45,6 +55,21 @@ function loadRazorpayScript(): Promise<void> {
   });
 }
 
+function razorpayDescription(productType: RazorpayProductType): string {
+  switch (productType) {
+    case "pro_monthly":
+      return "Pro access (one-time)";
+    case "enterprise_monthly":
+      return "Max access (one-time)";
+    case "credits_50":
+      return "50 credits (one-time)";
+    case "credits_150":
+      return "150 credits (one-time)";
+    case "credits_500":
+      return "500 credits (one-time)";
+  }
+}
+
 export async function createRazorpayOrder(
   productType: RazorpayProductType,
   promoCode?: string,
@@ -60,15 +85,20 @@ export async function openRazorpayCheckout(options: {
   promoCode?: string;
   userEmail?: string;
   userName?: string;
+  /** Fired after the order is created and Razorpay is about to open. */
+  onReady?: () => void;
   onSuccess?: () => void;
   onDismiss?: () => void;
 }): Promise<void> {
   const order = await createRazorpayOrder(options.productType, options.promoCode);
+  assertInternalOrderId(order.payment_order_id);
   await loadRazorpayScript();
 
   if (!window.Razorpay) {
     throw new Error("Razorpay checkout unavailable");
   }
+
+  options.onReady?.();
 
   return new Promise((resolve, reject) => {
     const rzp = new window.Razorpay!({
@@ -76,7 +106,7 @@ export async function openRazorpayCheckout(options: {
       amount: order.amount,
       currency: order.currency,
       name: "Clarify AI",
-      description: options.productType.replace(/_/g, " "),
+      description: razorpayDescription(options.productType),
       order_id: order.order_id,
       prefill: {
         email: options.userEmail,

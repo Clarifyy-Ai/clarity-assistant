@@ -9,6 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { PAGE_SHELL, STACK_GRID } from "@/lib/ui/responsivePage";
+import { EmptyState } from "@/components/common/EmptyState";
+import { Code2 } from "lucide-react";
 
 type CodingQuestion = {
   id: string;
@@ -25,6 +27,7 @@ export default function CodingLabPage() {
   const [title, setTitle] = useState("Two number sum");
   const [description, setDescription] = useState("Return the sum of a two-element array via solve(input).");
   const [starter, setStarter] = useState("function solve(input) {\n  return 0;\n}\n");
+  const [loaded, setLoaded] = useState(false);
 
   async function load() {
     const { data, error } = await supabase
@@ -34,6 +37,7 @@ export default function CodingLabPage() {
       .order("title");
     if (error) toast.error(error.message);
     setQuestions((data as CodingQuestion[]) ?? []);
+    setLoaded(true);
   }
 
   async function createQuestion() {
@@ -73,12 +77,27 @@ export default function CodingLabPage() {
     void load();
   }, []);
 
+  const isPreview = loaded && questions.length === 0;
+
   return (
     <div className={PAGE_SHELL}>
       <PageHeader
         title="Coding Assessment"
-        description="Controlled JavaScript assessments with server-side scoring. Hidden tests are never shown. This is not unrestricted cloud execution."
+        description={
+          isPreview
+            ? "Preview — controlled JavaScript assessments with server-side scoring. Hidden tests are never shown."
+            : "Controlled JavaScript assessments with server-side scoring. Hidden tests are never shown. This is not unrestricted cloud execution."
+        }
       />
+      {isPreview && !isAdmin ? (
+        <EmptyState
+          icon={Code2}
+          title="Coding lab is in preview"
+          description="Published assessments will appear here. This is not unrestricted cloud execution."
+        />
+      ) : (
+      <>
+      {(isAdmin || !isPreview) && (
       <Card className="mb-4 space-y-3">
         <h2 className="text-sm font-semibold">Create coding question</h2>
         <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" />
@@ -87,6 +106,14 @@ export default function CodingLabPage() {
         <Button onClick={() => void createQuestion()}>Create question</Button>
         {isAdmin && <p className="text-xs text-muted-foreground">Admin authoring enabled.</p>}
       </Card>
+      )}
+      {isPreview ? (
+        <EmptyState
+          icon={Code2}
+          title="Coding lab is in preview"
+          description="Published assessments will appear here. This is not unrestricted cloud execution."
+        />
+      ) : (
       <div className={STACK_GRID}>
         {questions.map((q) => (
           <Link key={q.id} to={`/app/coding/${q.id}`}>
@@ -99,6 +126,9 @@ export default function CodingLabPage() {
           </Link>
         ))}
       </div>
+      )}
+      </>
+      )}
     </div>
   );
 }

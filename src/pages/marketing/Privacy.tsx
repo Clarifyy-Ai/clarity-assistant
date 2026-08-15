@@ -32,7 +32,7 @@ export default function Privacy() {
           <li><strong>Account data:</strong> Name, email address, password (hashed).</li>
           <li><strong>Profile data:</strong> Job title, target role, experience level, resume content.</li>
           <li><strong>Usage content:</strong> Interview answers, practice session transcripts, uploaded documents.</li>
-          <li><strong>Payment data:</strong> Processed securely by Stripe; we do not store full card numbers.</li>
+          <li><strong>Payment data:</strong> Processed securely by Razorpay; we do not store full card numbers.</li>
         </ul>
 
         <h3>2.2 Automatically Collected Information</h3>
@@ -55,7 +55,7 @@ export default function Privacy() {
         <h2>4. Data Sharing</h2>
         <p>We do not sell your personal data. We may share data with:</p>
         <ul>
-          <li><strong>Service providers:</strong> Supabase (database/auth), Stripe (payments), Deepgram (transcription), PostHog (analytics), Resend (email).</li>
+          <li><strong>Service providers:</strong> Supabase (database/auth), Razorpay (payments), Deepgram (transcription), PostHog (analytics), Resend (email).</li>
           <li><strong>AI model providers:</strong> OpenAI, Anthropic, Google (for processing your prompts — no data is retained by these providers for training).</li>
           <li><strong>Legal requirements:</strong> If required by law, regulation, or legal process.</li>
         </ul>

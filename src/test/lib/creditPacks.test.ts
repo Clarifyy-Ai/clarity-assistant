@@ -3,6 +3,8 @@ import {
   CREDIT_PACKS,
   getCreditPackById,
   getEnabledCreditPacks,
+  formatInrPaise,
+  razorpayPaiseForPlan,
 } from "@/lib/billing/priceCalculator";
 
 describe("CREDIT_PACKS configuration", () => {
@@ -23,10 +25,17 @@ describe("CREDIT_PACKS configuration", () => {
     expect(pack?.label).toMatch(/150/);
   });
 
-  it("filters enabled packs by stripe price id env", () => {
+  it("enables all launch packs for Razorpay checkout", () => {
     const enabled = getEnabledCreditPacks();
+    expect(enabled).toHaveLength(3);
     enabled.forEach((pack) => {
-      expect(pack.stripePriceId?.trim().length).toBeGreaterThan(0);
+      expect(pack.credits).toBeGreaterThan(0);
     });
+  });
+
+  it("formats Razorpay INR catalog prices", () => {
+    expect(formatInrPaise(249900)).toContain("2,499");
+    expect(razorpayPaiseForPlan("pro")).toBe(249900);
+    expect(razorpayPaiseForPlan("enterprise")).toBe(679900);
   });
 });

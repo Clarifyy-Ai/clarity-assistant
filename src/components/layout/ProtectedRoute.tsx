@@ -1,6 +1,7 @@
 import { memo, useEffect, useState } from "react";
 import { Navigate, Outlet, useLocation, Link } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
+import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { AppLoadingFallback } from "@/components/layout/AppLoadingFallback";
 import { AlertCircle } from "lucide-react";
@@ -17,6 +18,11 @@ import {
   supportMailto,
 } from "@/lib/auth/recoveryActions";
 import { SUPPORT_EMAIL } from "@/lib/constants/contact";
+import { useClaimStoredReferral } from "@/hooks/useClaimStoredReferral";
+import {
+  evaluateMfaAssurance,
+  MFA_REQUIRED_REASON,
+} from "@/hooks/useAuth";
 
 interface ProtectedRouteProps {
   requireOnboarding?: boolean;
@@ -116,6 +122,45 @@ export const ProtectedRoute = memo(function ProtectedRoute({
 
   const location = useLocation();
   const [adminWaitExpired, setAdminWaitExpired] = useState(false);
+  const [mfaAal, setMfaAal] = useState<"pending" | "ok" | "block">("pending");
+  useClaimStoredReferral(user?.id);
+
+  const isLoginPath =
+    location.pathname === "/login" || location.pathname.startsWith("/login/");
+
+  useEffect(() => {
+    if (isLoginPath) {
+      setMfaAal("ok");
+      return;
+    }
+    if (!user || status === "unauthenticated" || status === "idle" || status === "loading") {
+      setMfaAal("ok");
+      return;
+    }
+    if (status !== "authenticated") {
+      setMfaAal("ok");
+      return;
+    }
+
+    let cancelled = false;
+    setMfaAal("pending");
+
+    void (async () => {
+      try {
+        const { data: aal, error } =
+          await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        const decision = evaluateMfaAssurance({ error, aal });
+        if (cancelled) return;
+        setMfaAal(decision === "allow" ? "ok" : "block");
+      } catch {
+        if (!cancelled) setMfaAal("block");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, status, isLoginPath]);
 
   useEffect(() => {
     if (!(requireAdmin && isProfileLoaded && !isAdminResolved)) {
@@ -161,6 +206,34 @@ export const ProtectedRoute = memo(function ProtectedRoute({
       recoveryAction: "redirect_login",
     });
     return <Navigate to={to} state={{ from: location }} replace />;
+  }
+
+  // MFA step-up — fail closed. Skip /login itself. Never render the private app
+  // while current AAL is aal1 and next is aal2, or if the AAL check throws.
+  if (!isLoginPath && status === "authenticated") {
+    if (mfaAal === "pending") {
+      return <AppLoadingFallback />;
+    }
+    if (mfaAal === "block") {
+      const returnTo = `${location.pathname}${location.search}${location.hash}`;
+      const loginHref = buildLoginUrl({
+        loginPath,
+        returnTo,
+        reason: MFA_REQUIRED_REASON,
+      });
+      const qIndex = loginHref.indexOf("?");
+      const to =
+        qIndex >= 0
+          ? { pathname: loginHref.slice(0, qIndex), search: loginHref.slice(qIndex) }
+          : loginHref;
+      logger.info(LogEvents.ROUTE_GUARD_DECISION, {
+        route: location.pathname,
+        authState: "mfa_step_up_required",
+        outcome: "succeeded",
+        recoveryAction: "redirect_login",
+      });
+      return <Navigate to={to} state={{ from: location }} replace />;
+    }
   }
 
   // 3a) Email verification — before profile-dependent gates so unverified users

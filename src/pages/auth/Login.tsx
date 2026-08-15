@@ -47,6 +47,11 @@ import {
   SIGNED_OUT_ELSEWHERE_MESSAGE,
   SIGNED_OUT_ELSEWHERE_REASON,
 } from "@/lib/auth/sessionErrors";
+import {
+  evaluateMfaAssurance,
+  MFA_AAL_START_FAILED_MESSAGE,
+  MFA_REQUIRED_REASON,
+} from "@/hooks/useAuth";
 
 type LocationState = {
   from?: {
@@ -166,6 +171,8 @@ export default function Login(): JSX.Element {
   const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
   const [mfaCode, setMfaCode] = useState("");
   const [mfaVerifying, setMfaVerifying] = useState(false);
+  /** Blocks dashboard redirect until AAL is evaluated (fail-closed MFA). */
+  const [mfaGateResolved, setMfaGateResolved] = useState(false);
 
   const {
     register,
@@ -189,6 +196,8 @@ export default function Login(): JSX.Element {
       setAuthError(SESSION_EXPIRED_MESSAGE);
     } else if (reason === SIGNED_OUT_ELSEWHERE_REASON) {
       setAuthError(SIGNED_OUT_ELSEWHERE_MESSAGE);
+    } else if (reason === MFA_REQUIRED_REASON) {
+      setAuthError(MFA_AAL_START_FAILED_MESSAGE);
     } else if (errorCode === "cancelled") {
       setAuthError("Sign-in was cancelled. You can try again whenever you are ready.");
     } else if (message) {
@@ -215,8 +224,74 @@ export default function Login(): JSX.Element {
     }
   }, [searchParams]);
 
+  async function failClosedMfaStart(): Promise<void> {
+    try {
+      await useAuthStore.getState().signOut();
+    } catch {
+      // Local sign-out is best-effort; still block dashboard access.
+    }
+    setMfaPending(false);
+    setMfaFactorId(null);
+    setMfaCode("");
+    setAuthError(MFA_AAL_START_FAILED_MESSAGE);
+  }
+
+  // Fail-closed AAL: never continue to the app until MFA is challenged or ruled out.
   useEffect(() => {
-    if (mfaPending || accountSuspended) return;
+    if (authStatus === "idle" || authStatus === "loading") {
+      return;
+    }
+    if (authStatus !== "authenticated" || accountSuspended) {
+      setMfaGateResolved(true);
+      return;
+    }
+
+    let cancelled = false;
+    setMfaGateResolved(false);
+
+    void (async () => {
+      try {
+        const { data: aal, error: aalError } =
+          await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (cancelled) return;
+        const decision = evaluateMfaAssurance({ error: aalError, aal });
+        if (decision === "allow") {
+          setMfaGateResolved(true);
+          return;
+        }
+        if (decision === "challenge") {
+          const { data: factors, error: factorsError } =
+            await supabase.auth.mfa.listFactors();
+          if (factorsError) throw factorsError;
+          const totp = factors?.totp?.find((f) => f.status === "verified");
+          if (!totp?.id) {
+            throw new Error("MFA enrolled but no verified authenticator was found.");
+          }
+          if (cancelled) return;
+          setMfaFactorId(totp.id);
+          setMfaCode("");
+          setMfaPending(true);
+          setAuthError(null);
+          setMfaGateResolved(true);
+          return;
+        }
+        await failClosedMfaStart();
+        if (!cancelled) setMfaGateResolved(true);
+      } catch {
+        if (!cancelled) {
+          await failClosedMfaStart();
+          setMfaGateResolved(true);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authStatus, accountSuspended]);
+
+  useEffect(() => {
+    if (mfaPending || accountSuspended || !mfaGateResolved) return;
     if (authStatus !== "authenticated" || !isProfileLoaded) {
       return;
     }
@@ -247,6 +322,7 @@ export default function Login(): JSX.Element {
     mfaPending,
     accountSuspended,
     authUser,
+    mfaGateResolved,
   ]);
 
   useEffect(() => {
@@ -331,30 +407,17 @@ export default function Login(): JSX.Element {
 
     setAuthError(null);
     setAccountSuspended(false);
+    setMfaGateResolved(false);
 
     try {
       await signInWithEmail(data.email, data.password);
 
       safeRemoveLocalStorageItem(ATTEMPT_KEY);
       safeRemoveLocalStorageItem(LOCK_KEY);
-
-      // If TOTP MFA is enrolled, require challenge before leaving login.
-      try {
-        const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-        if (aal?.currentLevel === "aal1" && aal?.nextLevel === "aal2") {
-          const { data: factors } = await supabase.auth.mfa.listFactors();
-          const totp = factors?.totp?.find((f) => f.status === "verified");
-          if (totp?.id) {
-            setMfaFactorId(totp.id);
-            setMfaCode("");
-            setMfaPending(true);
-            return;
-          }
-        }
-      } catch {
-        // MFA APIs unavailable — continue as authenticated without challenge.
-      }
+      // AAL is enforced by the authenticated-session effect (fail-closed).
+      // Do not continue to the dashboard from this handler.
     } catch (error) {
+      setMfaGateResolved(true);
       const message = formatSupabaseAuthError(error);
 
       if (isAccountSuspendedAuthError(error) || isAccountSuspendedAuthError(message)) {

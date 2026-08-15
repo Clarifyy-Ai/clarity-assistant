@@ -5,8 +5,6 @@ import {
   enforceAccountDeletionRateLimitAsync,
 } from "../_shared/rateLimit.ts";
 
-// delete-account — securely delete account and all linked data
-
 function jsonWithCors(
   req: Request,
   body: Record<string, unknown>,
@@ -20,6 +18,82 @@ function jsonWithCors(
     },
   });
 }
+
+function isMissingRelation(error: { message?: string; code?: string } | null): boolean {
+  const msg = (error?.message ?? "").toLowerCase();
+  return error?.code === "42P01" || error?.code === "PGRST205" || msg.includes("does not exist");
+}
+
+type WipeSpec = { table: string; column: string };
+
+const WIPE_TABLES: WipeSpec[] = [
+  { table: "session_ai_interactions", column: "user_id" },
+  { table: "session_answers", column: "user_id" },
+  { table: "session_debriefs", column: "user_id" },
+  { table: "session_transcripts", column: "user_id" },
+  { table: "scorecards", column: "user_id" },
+  { table: "debriefs", column: "user_id" },
+  { table: "transcripts", column: "user_id" },
+  { table: "test_responses", column: "user_id" },
+  { table: "test_analyses", column: "user_id" },
+  { table: "mock_tests", column: "user_id" },
+  { table: "gov_paper_generation_jobs", column: "user_id" },
+  { table: "interview_day_checklists", column: "user_id" },
+  { table: "interview_practice_plan_items", column: "user_id" },
+  { table: "interview_practice_plans", column: "user_id" },
+  { table: "scheduled_interviews", column: "user_id" },
+  { table: "interviews", column: "user_id" },
+  { table: "gap_analyses", column: "user_id" },
+  { table: "job_descriptions", column: "user_id" },
+  { table: "resumes", column: "user_id" },
+  { table: "documents", column: "user_id" },
+  { table: "personal_library_documents", column: "owner_id" },
+  { table: "document_practice_sets", column: "owner_id" },
+  { table: "practice_workspace_sessions", column: "user_id" },
+  { table: "coding_submissions", column: "user_id" },
+  { table: "course_enrollments", column: "user_id" },
+  { table: "lesson_progress", column: "user_id" },
+  { table: "quiz_progress", column: "user_id" },
+  { table: "course_certificates", column: "user_id" },
+  { table: "community_votes", column: "user_id" },
+  { table: "community_comments", column: "user_id" },
+  { table: "community_answers", column: "user_id" },
+  { table: "community_posts", column: "user_id" },
+  { table: "answer_bank", column: "user_id" },
+  { table: "answers", column: "user_id" },
+  { table: "saved_answers", column: "user_id" },
+  { table: "company_research", column: "user_id" },
+  { table: "calendar_integrations", column: "user_id" },
+  { table: "notifications", column: "user_id" },
+  { table: "user_achievements", column: "user_id" },
+  { table: "user_badges", column: "user_id" },
+  { table: "user_gov_exam_preferences", column: "user_id" },
+  { table: "user_topic_performance", column: "user_id" },
+  { table: "topic_mastery", column: "user_id" },
+  { table: "exam_ranks", column: "user_id" },
+  { table: "exam_readiness", column: "user_id" },
+  { table: "revision_list", column: "user_id" },
+  { table: "preparation_plans", column: "user_id" },
+  { table: "coaching_context", column: "user_id" },
+  { table: "feedback", column: "user_id" },
+  { table: "analytics", column: "user_id" },
+  { table: "ai_usage_logs", column: "user_id" },
+  { table: "ai_free_tier_usage", column: "user_id" },
+  { table: "ai_daily_costs", column: "user_id" },
+  { table: "ai_test_runs", column: "user_id" },
+  { table: "model_cost_logs", column: "user_id" },
+  { table: "request_metrics", column: "user_id" },
+  { table: "support_threads", column: "user_id" },
+  { table: "room_chat", column: "user_id" },
+  { table: "room_participants", column: "user_id" },
+  { table: "credits", column: "user_id" },
+  { table: "weekly_challenges", column: "user_id" },
+  { table: "sessions", column: "user_id" },
+  { table: "subscriptions", column: "user_id" },
+  { table: "user_roles", column: "user_id" },
+];
+
+const STORAGE_BUCKETS = ["resumes", "avatars", "documents", "exports"];
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
@@ -35,9 +109,6 @@ Deno.serve(async (req) => {
     const rateLimited = await enforceAccountDeletionRateLimitAsync(db, authenticatedUserId);
     if (rateLimited) return withCorsHeaders(req, rateLimited);
 
-    /* -------------------------------------------------------
-       VALIDATE BODY & CONFIRMATION
-    ------------------------------------------------------- */
     const body = await req.json().catch(() => ({}));
     const confirmation = typeof body?.confirmation === "string"
       ? body.confirmation.trim()
@@ -95,53 +166,26 @@ Deno.serve(async (req) => {
         .from("account_deletion_operations")
         .update({
           status: "processing",
-          current_step: "delete_rows",
+          current_step: "revoke_sessions",
           correlation_id: correlationId,
           updated_at: new Date().toISOString(),
         })
         .eq("id", operationId);
     }
 
-    /* -------------------------------------------------------
-       DELETE ALL USER DATA IN SAFE ORDER
-    ------------------------------------------------------- */
+    await db.auth.admin.signOut(targetUserId, "global").catch(() => {});
 
-    const deleteTables = [
-      // Transactional / billing data
-      "credit_transactions",
-      "subscriptions",
-      "payment_orders",
-      // Session content
-      "session_answers",
-      "session_debriefs",
-      "session_transcripts",
-      // Feature data
-      "answer_bank",
-      "company_research",
-      "interviews",
-      "scheduled_interviews",
-      "notifications",
-      "referrals",
-      "mock_tests",
-      // Documents (before sessions to avoid FK issues)
-      "documents",
-      "resumes",
-      // Core
-      "sessions",
-      "user_roles",
-      // Profile last (FK target)
-      "profiles",
-    ];
+    await db.from("referrals").delete().eq("referred_id", targetUserId);
+    await db.from("referrals").delete().eq("referrer_id", targetUserId);
 
-    for (const table of deleteTables) {
-      const col = table === "profiles" ? "id" : "user_id";
-      const { error } = await db.from(table).delete().eq(col, targetUserId);
-      if (error) {
-        console.error(`Error deleting from ${table}:`, error);
+    for (const spec of WIPE_TABLES) {
+      const { error } = await db.from(spec.table).delete().eq(spec.column, targetUserId);
+      if (error && !isMissingRelation(error)) {
+        console.error(`Error deleting from ${spec.table}:`, error);
         if (operationId) {
           await db.from("account_deletion_operations").update({
             status: "partially_completed",
-            current_step: table,
+            current_step: spec.table,
             error_code: "INTERNAL_ERROR",
             updated_at: new Date().toISOString(),
           }).eq("id", operationId);
@@ -160,36 +204,35 @@ Deno.serve(async (req) => {
       }
     }
 
-    /* -------------------------------------------------------
-       DELETE STORAGE FILES (with error handling)
-    ------------------------------------------------------- */
+    await db.from("payment_orders").update({
+      user_id: null,
+      metadata: { anonymized: true, deleted_at: new Date().toISOString() },
+      promo_code: null,
+    }).eq("user_id", targetUserId);
 
-    const buckets = ["resumes", "avatars"];
-    for (const bucket of buckets) {
-      const { data, error: listErr } = await db.storage
-        .from(bucket)
-        .list(targetUserId);
+    await db.from("credit_transactions").update({
+      description: "anonymized",
+    }).eq("user_id", targetUserId);
 
-      if (listErr) {
-        console.error(`Storage list error (${bucket}):`, listErr);
-        continue;
-      }
+    await db.from("billing_reconciliation_incidents").update({
+      user_id: null,
+      details: { anonymized: true },
+    }).eq("user_id", targetUserId);
 
-      if (data?.length) {
-        const paths = data.map((f: { name: string }) => `${targetUserId}/${f.name}`);
-        const { error: delErr } = await db.storage.from(bucket).remove(paths);
-
-        if (delErr) {
-          console.error(`Storage delete error (${bucket}):`, delErr);
-        }
-      }
+    for (const bucket of STORAGE_BUCKETS) {
+      const { data, error: listErr } = await db.storage.from(bucket).list(targetUserId);
+      if (listErr || !data?.length) continue;
+      const paths = data.map((f: { name: string }) => `${targetUserId}/${f.name}`);
+      await db.storage.from(bucket).remove(paths);
     }
 
-    /* -------------------------------------------------------
-       DELETE AUTH USER LAST
-    ------------------------------------------------------- */
+    const { error: profileErr } = await db.from("profiles").delete().eq("id", targetUserId);
+    if (profileErr && !isMissingRelation(profileErr)) {
+      console.error("profile delete error:", profileErr);
+    }
+
     const { error: deleteErr } = await db.auth.admin.deleteUser(targetUserId);
-    if (deleteErr) {
+    if (deleteErr && !String(deleteErr.message ?? "").toLowerCase().includes("not found")) {
       console.error("auth delete error:", deleteErr);
       if (operationId) {
         await db.from("account_deletion_operations").update({
@@ -212,16 +255,12 @@ Deno.serve(async (req) => {
       );
     }
 
-    /* -------------------------------------------------------
-       AUDIT LOG (optional)
-    ------------------------------------------------------- */
-    // Use service-role anon write since user is now deleted
     await db.from("audit_logs").insert({
-      user_id: targetUserId,
+      user_id: null,
       action: "account_deleted",
-      metadata: { email: userEmail },
+      metadata: { correlationId },
       created_at: new Date().toISOString(),
-    }).catch(() => {});
+    }).then(() => {}, () => {});
 
     if (operationId) {
       await db.from("account_deletion_operations").update({
@@ -238,7 +277,6 @@ Deno.serve(async (req) => {
       operationId,
       correlationId,
     });
-
   } catch (err) {
     console.error("delete-account error:", err);
     return jsonWithCors(

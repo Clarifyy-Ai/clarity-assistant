@@ -29,6 +29,8 @@ import {
 } from "@/lib/coding/assessment";
 import { canAccessDocument, canCreatePracticeSet } from "@/lib/library/documentRights";
 import { scorePracticeAnswers } from "@/lib/practice/workspaceScoring";
+import { resolvePracticeQuestions } from "@/lib/practice/playablePracticeQuestions";
+import { getLocalMockQuestions } from "@/lib/mock/localQuestionBank";
 import { canUserAReadUserBRow, USER_OWNED_TABLES } from "@/lib/security/rlsTenantIsolation";
 import { ALTERNATIVE_FEATURE_STATUS } from "@/lib/certification/alternativeFeatureStatus";
 import { MOBILE_BREAKPOINTS, PAGE_SHELL } from "@/lib/ui/responsivePage";
@@ -177,6 +179,18 @@ describe("practice workspace rubric", () => {
     );
     expect(scores.overall).toBeGreaterThan(0);
     expect(scores.rubricNote).toMatch(/not an official/i);
+  });
+
+  it("still falls back to the local bank when the playable query is empty", () => {
+    const local = getLocalMockQuestions({ type: "behavioural", count: 4, difficulty: "medium" });
+    const resolved = resolvePracticeQuestions({
+      playable: [],
+      interviewType: "Behavioral",
+      localFallback: local,
+      count: 4,
+    });
+    expect(resolved.source).toBe("local");
+    expect(resolved.questions.length).toBeGreaterThan(0);
   });
 });
 

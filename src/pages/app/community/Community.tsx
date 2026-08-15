@@ -17,6 +17,8 @@ import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { COMMUNITY_CATEGORIES } from "@/lib/community/moderation";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
+import { EmptyState } from "@/components/common/EmptyState";
+import { MessageSquare } from "lucide-react";
 
 type Post = {
   id: string;
@@ -36,6 +38,7 @@ export default function CommunityPage() {
   const [body, setBody] = useState("");
   const [tags, setTags] = useState("");
   const [postCategory, setPostCategory] = useState("Interview");
+  const [loaded, setLoaded] = useState(false);
 
   async function load() {
     let q = supabase.from("community_posts").select("*").order("created_at", { ascending: false }).limit(50);
@@ -43,6 +46,7 @@ export default function CommunityPage() {
     const { data, error } = await q;
     if (error) toast.error(error.message);
     setPosts((data as Post[]) ?? []);
+    setLoaded(true);
   }
 
   useEffect(() => {
@@ -68,12 +72,26 @@ export default function CommunityPage() {
     }
   }
 
+  const isPreview = loaded && posts.length === 0;
+
   return (
     <div className={PAGE_SHELL}>
       <PageHeader
         title="Questions & Answers"
-        description="Ask interview and career questions. This is Clarify’s own community, not a third-party forum."
+        description={
+          isPreview
+            ? "Preview — Clarify’s own community for interview questions. This is not a third-party forum."
+            : "Ask interview and career questions. This is Clarify’s own community, not a third-party forum."
+        }
       />
+      {isPreview ? (
+        <EmptyState
+          icon={MessageSquare}
+          title="Q&A is in preview"
+          description="No community posts yet. This space will fill as questions are published."
+        />
+      ) : (
+      <>
       <Card className="mb-4 space-y-3">
         <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ask a question" />
         <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Add a description" />
@@ -108,6 +126,8 @@ export default function CommunityPage() {
           </li>
         ))}
       </ul>
+      </>
+      )}
     </div>
   );
 }

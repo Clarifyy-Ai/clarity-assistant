@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
 import { useInterviewScheduler } from "@/hooks/useInterviewScheduler";
@@ -33,6 +33,12 @@ import { useDesktopDownload } from "@/hooks/useDesktopDownload";
 import { stashPendingPracticeSetup } from "@/lib/session/lastPracticeSetup";
 import type { LiveSessionConfig } from "@/types/session.types";
 import { isElectronApp } from "@/lib/platform/isElectron";
+import {
+  loadInterviewDayChecklist,
+  readLocalChecklist,
+  upsertInterviewDayChecklistItem,
+  writeLocalChecklist,
+} from "@/lib/interview/interviewDayChecklist";
 
 // ─────────────────────────────────────────────────────────────────
 // InterviewDay — focus mode for interview day
@@ -58,7 +64,7 @@ const AFFIRMATIONS = [
 
 export default function InterviewDay() {
   const navigate  = useNavigate();
-  const { profile } = useAuthStore();
+  const { profile, user } = useAuthStore();
   const store     = useInterviewSchedulerStore();
   const scheduler = useInterviewScheduler();
   const prefersReducedMotion = usePrefersReducedMotion();
@@ -70,6 +76,7 @@ export default function InterviewDay() {
 
   const [checklist, setChecklist] = useState<Record<string, boolean>>({});
   const [selectedTodayId, setSelectedTodayId] = useState<string | null>(null);
+  const checklistLoadGen = useRef(0);
   const [affIdx,    setAffIdx]    = useState(0);
   const [timeLeft,  setTimeLeft]  = useState("");
   const [breathing, setBreathing] = useState(false);
@@ -125,33 +132,41 @@ export default function InterviewDay() {
   const todayRound = todayIv ? getCurrentRound(todayIv) : null;
   const todayScheduledAt = todayIv ? getCurrentRoundDate(todayIv) : null;
 
-  // Persist checklist per interview id
+  // Persist checklist per interview: Supabase first, localStorage fallback
   useEffect(() => {
     if (!todayIv?.id) {
       setChecklist({});
       return;
     }
-    const key = `clarify:interview-day-checklist:${todayIv.id}`;
-    try {
-      const raw = localStorage.getItem(key);
-      setChecklist(raw ? (JSON.parse(raw) as Record<string, boolean>) : {});
-    } catch {
-      setChecklist({});
-    }
-  }, [todayIv?.id]);
+    const interviewId = todayIv.id;
+    const gen = ++checklistLoadGen.current;
+    void (async () => {
+      const next = user?.id
+        ? await loadInterviewDayChecklist(user.id, interviewId)
+        : readLocalChecklist(interviewId);
+      if (checklistLoadGen.current !== gen) return;
+      setChecklist(next);
+    })();
+  }, [todayIv?.id, user?.id]);
 
   function toggleChecklistItem(id: string) {
     if (!todayIv?.id) return;
+    const interviewId = todayIv.id;
+    const userId = user?.id;
     setChecklist((prev) => {
-      const next = { ...prev, [id]: !prev[id] };
-      try {
-        localStorage.setItem(
-          `clarify:interview-day-checklist:${todayIv.id}`,
-          JSON.stringify(next),
-        );
-      } catch {
-        /* ignore */
+      const checked = !prev[id];
+      const next = { ...prev, [id]: checked };
+      if (!userId) {
+        writeLocalChecklist(interviewId, next);
+        return next;
       }
+      void upsertInterviewDayChecklistItem({
+        userId,
+        interviewId,
+        itemId: id,
+        checked,
+        nextState: next,
+      });
       return next;
     });
   }

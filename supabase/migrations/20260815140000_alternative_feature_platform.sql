@@ -49,6 +49,10 @@ ALTER TABLE public.questions
     'SCENARIO','BEHAVIORAL','TECHNICAL','CODING','CASE_STUDY'
   ));
 
+UPDATE public.questions
+SET source = 'OFFICIAL_PYP'
+WHERE source IN ('Previous Year Paper', 'PYP', 'previous_year');
+
 ALTER TABLE public.questions
   DROP CONSTRAINT IF EXISTS questions_source_check;
 ALTER TABLE public.questions

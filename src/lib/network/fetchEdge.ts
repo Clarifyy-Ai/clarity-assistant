@@ -15,6 +15,7 @@ const PRIVATE_MODE_ALLOWLIST = new Set([
   "support-chat",
   "razorpay-create-order",
   "razorpay-verify-payment",
+  "record-referral",
 ]);
 
 /** Edge functions that do not deduct credits — skip balance refresh. */
@@ -43,6 +44,7 @@ const OPERATIONAL_EDGE_FNS = new Set([
   "create-portal-session",
   "razorpay-create-order",
   "razorpay-verify-payment",
+  "record-referral",
 ]);
 
 function unreachableUserMessage(fnName: string): string {

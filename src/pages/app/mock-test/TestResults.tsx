@@ -52,6 +52,7 @@ import {
   primaryActionInsight,
   resolvePaperClassPresentation,
 } from "@/lib/gov-exam/disclaimers";
+import { shouldRevealAnswerKeys } from "@/lib/gov-exam/playableQuestions";
 
 type QuestionFilter = "all" | "wrong" | "marked";
 
@@ -214,6 +215,22 @@ export default function TestResults() {
         return;
       }
 
+      const loadedTest = testData as unknown as MockTest;
+
+      if (!shouldRevealAnswerKeys(loadedTest.status)) {
+        const source =
+          loadedTest.config && typeof loadedTest.config === "object" && "source" in loadedTest.config
+            ? String((loadedTest.config as { source?: string }).source ?? "")
+            : "";
+        navigate(
+          source === "exam_template"
+            ? `/app/assessments/session/${loadedTest.id}`
+            : `/app/mock-test/session/${loadedTest.id}`,
+          { replace: true },
+        );
+        return;
+      }
+
       const analysisData = await fetchAnalysisWithRetry();
       if (!analysisData) {
         toast.error("Analysis is still processing. Refresh the page in a few seconds.");
@@ -221,7 +238,6 @@ export default function TestResults() {
         return;
       }
 
-      const loadedTest = testData as unknown as MockTest;
       const loadedAnalysis = analysisData as unknown as TestAnalysis;
 
       const { data: questionRows, error: questionError } = await supabase

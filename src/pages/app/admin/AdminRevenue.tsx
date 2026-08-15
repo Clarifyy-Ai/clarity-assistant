@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { creditsDB } from "@/lib/supabase/database";
-import { isStripeConfigured } from "@/lib/env";
 import { PLAN_PRICE_CENTS_MONTHLY } from "@/lib/constants/pricing";
 import { formatCents, formatNumber, formatPercent, formatDate } from "@/lib/utils/formatters";
 import { timeAgo }             from "@/lib/utils/dateUtils";
@@ -59,8 +58,6 @@ interface RevenueTransaction {
 }
 
 type DateRange = "7d" | "30d" | "90d" | "12m";
-
-const STRIPE_CONFIGURED = isStripeConfigured();
 
 const RANGE_DAYS: Record<DateRange, number> = {
   "7d": 7,
@@ -138,7 +135,7 @@ export default function AdminRevenue() {
   const [isLoading,    setIsLoading]    = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [mrrIsEstimated, setMrrIsEstimated] = useState(!STRIPE_CONFIGURED);
+  const [mrrIsEstimated, setMrrIsEstimated] = useState(true);
 
   const fetchData = async (showRefresh = false) => {
     if (showRefresh) setIsRefreshing(true);
@@ -217,7 +214,7 @@ export default function AdminRevenue() {
         const subscriptionMrr = usdMrrRows.reduce((sum, row) => sum + row.totalCents, 0);
         const mrr = subscriptionMrr > 0 ? subscriptionMrr : planEstimateMrr;
         // Estimated when Stripe isn't configured OR we fell back to profile plan counts.
-        setMrrIsEstimated(!STRIPE_CONFIGURED || subscriptionMrr === 0);
+        setMrrIsEstimated(subscriptionMrr === 0);
 
         let inrRevenuePaise = 0;
         try {
@@ -326,8 +323,8 @@ export default function AdminRevenue() {
           <h1 className="text-xl font-bold text-foreground">Revenue</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {mrrIsEstimated
-              ? "USD MRR estimated from active plan counts × catalog prices. INR shown separately from Razorpay payment_orders."
-              : "USD MRR from active/trialing subscriptions × catalog prices. INR shown separately from Razorpay payment_orders."}
+              ? "Plan catalog estimate plus INR from Razorpay payment_orders."
+              : "USD catalog MRR plus INR from Razorpay payment_orders."}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -373,7 +370,7 @@ export default function AdminRevenue() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard
-          title={mrrIsEstimated ? "MRR — Estimated (Stripe disconnected)" : "MRR"}
+          title={mrrIsEstimated ? "MRR — Estimated" : "MRR"}
           value={metrics ? formatCents(metrics.mrr) : "—"}
           trend={metrics?.mrrGrowth}
           trendLabel="vs last month"

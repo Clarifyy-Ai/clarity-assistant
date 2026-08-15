@@ -3,6 +3,7 @@
 // Dashboard analytics and usage tracking page.
 
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   BarChart3,
   Clock,
@@ -27,7 +28,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/Card";
-import { openBillingPortal } from "@/lib/api/billing";
 import {
   Bar,
   BarChart,
@@ -253,6 +253,7 @@ function UsageTrend({ data }: { data: UsageDay[] }) {
 }
 
 export default function UsageDashboard(): JSX.Element {
+  const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const profile = useAuthStore((state) => state.profile);
   const credits = useAuthStore((state) => state.credits);
@@ -267,7 +268,6 @@ export default function UsageDashboard(): JSX.Element {
   const [isLoadingMoreTx, setIsLoadingMoreTx] = useState(false);
   const [txOffset, setTxOffset] = useState(0);
   const [txHasMore, setTxHasMore] = useState(false);
-  const [isPortalLoading, setIsPortalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function loadUsage(): Promise<void> {
@@ -353,22 +353,6 @@ export default function UsageDashboard(): JSX.Element {
 
   const trend = useMemo(() => buildUsageTrend(transactions), [transactions]);
 
-  async function handleOpenBillingPortal(): Promise<void> {
-    setIsPortalLoading(true);
-
-    try {
-      await openBillingPortal();
-    } catch (portalError) {
-      setError(
-        portalError instanceof Error
-          ? portalError.message
-          : "Unable to open billing portal."
-      );
-
-      setIsPortalLoading(false);
-    }
-  }
-
   return (
     <PageContent className="space-y-6 max-w-7xl mx-auto">
       <PageHeader
@@ -393,11 +377,10 @@ export default function UsageDashboard(): JSX.Element {
 
             <Button
               variant="primary"
-              onClick={() => void handleOpenBillingPortal()}
-              loading={isPortalLoading}
+              onClick={() => navigate("/app/settings/billing")}
             >
               <CreditCard className="mr-2 h-4 w-4" />
-              Billing Portal
+              Billing
             </Button>
           </div>
         }

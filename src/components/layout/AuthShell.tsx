@@ -35,6 +35,12 @@ export function AuthShell({
 }: AuthShellProps) {
   return (
     <div className="min-h-screen flex bg-background">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:text-sm focus:font-medium"
+      >
+        Skip to content
+      </a>
       <div className="hidden lg:flex lg:w-1/2 xl:w-[55%] flex-col relative overflow-hidden bg-gradient-to-br from-primary via-indigo-600 to-blue-700 p-10">
         <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_30%_20%,white,transparent_45%)]" />
         <Link
@@ -85,9 +91,9 @@ export function AuthShell({
             <ThemeToggle />
           </div>
         </div>
-        <div className="flex-1 flex items-center justify-center p-4 sm:p-8">
+        <main id="main-content" className="flex-1 flex items-center justify-center p-4 sm:p-8">
           <div className="w-full max-w-sm">{children}</div>
-        </div>
+        </main>
       </div>
       <SupportChatWidget />
     </div>

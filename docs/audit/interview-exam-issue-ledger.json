@@ -10,8 +10,8 @@
     {
       "id": "SEC-002",
       "severity": "P1",
-      "status": "open",
-      "summary": "questions.correct_answer still readable via Data API on public rows; player no longer selects it."
+      "status": "mitigated",
+      "summary": "Public questions no longer expose correct_answer via Data API; playable view omits keys; authors/admins and completed-attempt review still read keys."
     },
     {
       "id": "PROD-001",
@@ -26,10 +26,22 @@
       "summary": "No full-sim exam pack ready; licensed PYQ not seeded."
     },
     {
+      "id": "REF-001",
+      "severity": "P0",
+      "status": "fixed",
+      "summary": "Referral links used a fake UUID prefix; claims never wrote referrals. Real codes now load, claim runs after login via record-referral, and client inserts are revoked."
+    },
+    {
+      "id": "XP-001",
+      "severity": "P1",
+      "status": "open",
+      "summary": "Extra XP events (prep_lab_use, badges) still do not persist; only the session-complete trigger writes profiles.xp."
+    },
+    {
       "id": "CRED-001",
       "severity": "P1",
       "status": "blocked",
-      "summary": "Deepgram/Gemini/Stripe live certification requires ops secrets."
+      "summary": "Deepgram/Gemini/Stripe/Razorpay live certification requires ops secrets."
     }
   ]
 }

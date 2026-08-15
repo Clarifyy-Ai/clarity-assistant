@@ -9,7 +9,10 @@ import {
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const schema = z.object({
-  referral_code: z.string().trim().min(6).max(16),
+  referral_code: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9]{6,16}$/, "Invalid referral code"),
 });
 
 Deno.serve(async (req: Request) => {

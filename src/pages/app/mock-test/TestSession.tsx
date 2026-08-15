@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  AlertCircle,
   BookmarkPlus,
   CheckCircle2,
   ChevronLeft,
@@ -22,6 +21,7 @@ import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/env";
 import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { isUsableQuestionImageUrl, resolveQuestionImageUrl, uniqueImageUrls } from "@/lib/mock-test/questionMedia";
@@ -37,7 +37,11 @@ import {
   computeRemainingSeconds as remainingFromStart,
   shouldAutoSubmitAttempt,
 } from "@/lib/gov-exam/examTimer";
-import { PLAYABLE_QUESTION_COLUMNS } from "@/lib/gov-exam/playableQuestions";
+import {
+  PLAYABLE_QUESTIONS_VIEW,
+  playableQuestionSelect,
+  stripAnswerKeys,
+} from "@/lib/gov-exam/playableQuestions";
 
 function resultsPathForTest(testId: string, config: unknown): string {
   const source =
@@ -68,7 +72,6 @@ interface Question {
   question_text: string;
   question_type: "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER" | "NUMERICAL" | "CODING";
   options: QuestionOption[] | null;
-  correct_answer?: string;
   subject: string;
   topic: string;
   difficulty: "EASY" | "MEDIUM" | "HARD";
@@ -531,30 +534,16 @@ export default function TestSession() {
 
       const remainingSeconds = computeRemainingSeconds(loadedTest);
 
-      let questionRows: unknown[] | null = null;
-      let questionError: { message?: string } | null = null;
-
       const playable = await supabase
-        .from("questions_playable")
-        .select(PLAYABLE_QUESTION_COLUMNS.join(","))
+        .from(PLAYABLE_QUESTIONS_VIEW)
+        .select(playableQuestionSelect())
         .in("id", loadedTest.question_ids);
-      if (playable.error) {
-        const fallback = await supabase
-          .from("questions")
-          .select(PLAYABLE_QUESTION_COLUMNS.join(","))
-          .in("id", loadedTest.question_ids);
-        questionRows = fallback.data as unknown[] | null;
-        questionError = fallback.error;
-      } else {
-        questionRows = playable.data as unknown[] | null;
-      }
-
-      if (questionError) throw questionError;
+      if (playable.error) throw playable.error;
 
       const questionMap: Record<string, Question> = {};
-      for (const row of questionRows ?? []) {
-        const question = row as unknown as Question;
-        questionMap[question.id] = question;
+      for (const row of playable.data ?? []) {
+        const stripped = stripAnswerKeys(row as Record<string, unknown>);
+        questionMap[stripped.id] = stripped as unknown as Question;
       }
 
       const uniqueIds = [...new Set(loadedTest.question_ids)];
@@ -1568,75 +1557,24 @@ export default function TestSession() {
         </div>
       )}
 
-      {showSubmitModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl md:p-8">
-            <h2 className="mb-6 text-center text-2xl font-black text-foreground">
-              Submit Assessment?
-            </h2>
-
-            <div className="mb-6 space-y-1 rounded-xl border border-border bg-muted/30 p-5">
-              <div className="flex items-center justify-between border-b border-border/50 py-2">
-                <span className="text-sm font-medium text-muted-foreground">
-                  Answered
-                </span>
-                <span className="font-bold text-green-500">{answeredCount}</span>
-              </div>
-
-              <div className="flex items-center justify-between border-b border-border/50 py-2">
-                <span className="text-sm font-medium text-muted-foreground">
-                  Visited, no answer
-                </span>
-                <span className="font-bold text-yellow-500">{visitedNoAnswerCount}</span>
-              </div>
-
-              <div className="flex items-center justify-between border-b border-border/50 py-2">
-                <span className="text-sm font-medium text-muted-foreground">
-                  Not visited
-                </span>
-                <span className="font-bold text-muted-foreground">{notVisitedCount}</span>
-              </div>
-
-              <div className="flex items-center justify-between py-2">
-                <span className="text-sm font-medium text-muted-foreground">
-                  Marked for review
-                </span>
-                <span className="font-bold text-purple-500">{markedCount}</span>
-              </div>
-            </div>
-
-            {unansweredCount > 0 && (
-              <div className="mb-6 flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-600">
-                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
-                <p>
-                  You still have <strong>{unansweredCount} questions</strong> not fully
-                  answered. After submission, answers cannot be changed.
-                </p>
-              </div>
-            )}
-
-            <div className="flex gap-3">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => setShowSubmitModal(false)}
-                disabled={submitting}
-              >
-                Go Back
-              </Button>
-
-              <Button
-                className="flex-1"
-                onClick={() => void handleSubmit(false)}
-                disabled={submitting}
-                loading={submitting}
-              >
-                Yes, Submit
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={showSubmitModal}
+        onOpenChange={(open) => {
+          if (!open && submitting) return;
+          setShowSubmitModal(open);
+        }}
+        title="Submit assessment?"
+        description={
+          unansweredCount > 0
+            ? `Answered ${answeredCount} of ${questions.length}. You still have ${unansweredCount} unanswered (${visitedNoAnswerCount} visited with no answer, ${notVisitedCount} not visited, ${markedCount} marked for review). After submission, answers cannot be changed.`
+            : `Answered ${answeredCount} of ${questions.length}. Marked for review: ${markedCount}. After submission, answers cannot be changed.`
+        }
+        confirmLabel="Yes, submit"
+        cancelLabel="Go back"
+        variant="info"
+        isLoading={submitting}
+        onConfirm={() => void handleSubmit(false)}
+      />
     </div>
   );
 }

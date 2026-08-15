@@ -13,6 +13,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import {
   CheckCircle2, ListChecks, Loader2, Ban, Archive, Languages, EyeOff,
 } from "lucide-react";
@@ -66,6 +67,12 @@ export default function AdminGovQuestionReview() {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [translationLang, setTranslationLang] = useState("hi");
+  const [bulkConfirm, setBulkConfirm] = useState<{
+    title: string;
+    description: string;
+    variant: "default" | "destructive" | "info";
+    run: () => Promise<{ ok: number; failed: Array<{ id: string; error: string }> }>;
+  } | null>(null);
 
   async function load() {
     setLoading(true);
@@ -137,27 +144,35 @@ export default function AdminGovQuestionReview() {
     }
   }
 
-  async function confirmBulk(
+  function confirmBulk(
     label: string,
     run: () => Promise<{ ok: number; failed: Array<{ id: string; error: string }> }>,
+    variant: "default" | "destructive" | "info" = "default",
   ) {
     const ids = [...selected];
     if (ids.length === 0) {
       toast.error("Select at least one question");
       return;
     }
-    const confirmed = window.confirm(
-      `${label} ${ids.length} selected question(s)?\n\nThis is an explicit admin action — questions are not auto-verified.`,
-    );
-    if (!confirmed) return;
+    setBulkConfirm({
+      title: `${label} ${ids.length} selected question(s)?`,
+      description: "This is an explicit admin action — questions are not auto-verified.",
+      variant,
+      run,
+    });
+  }
 
+  async function runBulkConfirm() {
+    if (!bulkConfirm) return;
+    const run = bulkConfirm.run;
     setBulkBusy(true);
     const result = await run();
     setBulkBusy(false);
+    setBulkConfirm(null);
     if (result.failed.length) {
       toast.error(`${result.ok} ok, ${result.failed.length} failed`);
     } else {
-      toast.success(`${label} complete (${result.ok})`);
+      toast.success(`Complete (${result.ok})`);
     }
     void load();
   }
@@ -278,8 +293,10 @@ export default function AdminGovQuestionReview() {
               disabled={bulkBusy}
               leftIcon={<EyeOff className="w-3.5 h-3.5" />}
               onClick={() =>
-                void confirmBulk("Unpublish", () =>
-                  bulkApplyQuestionVerifyAction([...selected], "unpublish", rowsById),
+                confirmBulk(
+                  "Unpublish",
+                  () => bulkApplyQuestionVerifyAction([...selected], "unpublish", rowsById),
+                  "destructive",
                 )
               }
             >
@@ -425,6 +442,19 @@ export default function AdminGovQuestionReview() {
           </TableBody>
         </Table>
       </Card>
+
+      <ConfirmDialog
+        open={bulkConfirm !== null}
+        onOpenChange={(open) => {
+          if (!open && !bulkBusy) setBulkConfirm(null);
+        }}
+        title={bulkConfirm?.title ?? "Confirm action"}
+        description={bulkConfirm?.description}
+        confirmLabel="Confirm"
+        variant={bulkConfirm?.variant ?? "default"}
+        isLoading={bulkBusy}
+        onConfirm={() => void runBulkConfirm()}
+      />
     </div>
   );
 }

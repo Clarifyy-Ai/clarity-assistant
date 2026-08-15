@@ -5,19 +5,9 @@ import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { toast } from "sonner";
 import { Plus, Tag } from "lucide-react";
+import type { Tables } from "@/integrations/supabase/types";
 
-type PromoRow = {
-  id: string;
-  code: string;
-  description: string | null;
-  discount_percent: number;
-  bonus_credits: number;
-  max_redemptions: number | null;
-  redemption_count: number;
-  applies_to: string;
-  is_active: boolean;
-  valid_until: string | null;
-};
+type PromoRow = Tables<"promo_codes">;
 
 export default function AdminPromoCodes() {
   const [rows, setRows] = useState<PromoRow[]>([]);
@@ -29,11 +19,11 @@ export default function AdminPromoCodes() {
   async function load() {
     setLoading(true);
     const { data, error } = await supabase
-      .from("promo_codes" as "profiles")
+      .from("promo_codes")
       .select("*")
       .order("created_at", { ascending: false });
     if (error) toast.error(error.message);
-    else setRows((data as unknown as PromoRow[]) ?? []);
+    else setRows(data ?? []);
     setLoading(false);
   }
 
@@ -47,13 +37,13 @@ export default function AdminPromoCodes() {
       toast.error("Code must be at least 4 characters");
       return;
     }
-    const { error } = await supabase.from("promo_codes" as "profiles").insert({
+    const { error } = await supabase.from("promo_codes").insert({
       code: trimmed,
       discount_percent: discount,
       bonus_credits: bonus,
       applies_to: "all",
       is_active: true,
-    } as never);
+    });
     if (error) toast.error(error.message);
     else {
       toast.success("Promo code created");
@@ -64,8 +54,8 @@ export default function AdminPromoCodes() {
 
   async function toggleActive(row: PromoRow) {
     const { error } = await supabase
-      .from("promo_codes" as "profiles")
-      .update({ is_active: !row.is_active, updated_at: new Date().toISOString() } as never)
+      .from("promo_codes")
+      .update({ is_active: !row.is_active, updated_at: new Date().toISOString() })
       .eq("id", row.id);
     if (error) toast.error(error.message);
     else void load();

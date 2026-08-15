@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -15,7 +15,11 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
-import { getLocalMockQuestions } from "@/lib/mock/localQuestionBank";
+import {
+  fetchPracticeWorkspaceQuestions,
+  type PracticeQuestionSource,
+  type PracticeWorkspaceQuestion,
+} from "@/lib/practice/playablePracticeQuestions";
 import {
   INTERVIEW_TYPES,
   scorePracticeAnswers,
@@ -29,23 +33,14 @@ export default function PracticeWorkspacePage() {
   const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">("medium");
   const [interviewType, setInterviewType] = useState<InterviewType>("Behavioral");
   const [started, setStarted] = useState(false);
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [index, setIndex] = useState(0);
   const [notes, setNotes] = useState("");
   const [answers, setAnswers] = useState<string[]>([]);
+  const [questions, setQuestions] = useState<PracticeWorkspaceQuestion[]>([]);
+  const [questionSource, setQuestionSource] = useState<PracticeQuestionSource>("local");
   const [history, setHistory] = useState<Array<{ id: string; interview_type: string; scores: { overall?: number } | null; started_at: string }>>([]);
-
-  const questions = useMemo(() => {
-    const mapped =
-      interviewType === "Behavioral" || interviewType === "HR"
-        ? "behavioural"
-        : interviewType === "System Design"
-          ? "system_design"
-          : interviewType === "HR"
-            ? "hr"
-            : "technical";
-    return getLocalMockQuestions({ type: mapped, count: 4, role, difficulty });
-  }, [interviewType, role, difficulty, started]);
 
   useEffect(() => {
     if (!started) return;
@@ -63,6 +58,28 @@ export default function PracticeWorkspacePage() {
       .limit(8)
       .then(({ data }) => setHistory((data as typeof history) ?? []));
   }, [user?.id, started]);
+
+  async function startSession() {
+    setLoadingQuestions(true);
+    try {
+      const result = await fetchPracticeWorkspaceQuestions({
+        interviewType,
+        role,
+        difficulty,
+        count: 4,
+      });
+      setQuestions(result.questions);
+      setQuestionSource(result.source);
+      setAnswers([]);
+      setIndex(0);
+      setSeconds(0);
+      setStarted(true);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not load practice questions.");
+    } finally {
+      setLoadingQuestions(false);
+    }
+  }
 
   async function finish() {
     if (!user?.id) return;
@@ -111,7 +128,9 @@ export default function PracticeWorkspacePage() {
               ))}
             </SelectContent>
           </Select>
-          <Button onClick={() => { setStarted(true); setSeconds(0); }}>Start session</Button>
+          <Button loading={loadingQuestions} onClick={() => void startSession()}>
+            Start session
+          </Button>
           <h2 className="pt-4 text-sm font-semibold">Practice history</h2>
           <ul className="space-y-1 text-sm text-muted-foreground">
             {history.map((row) => (
@@ -147,7 +166,12 @@ export default function PracticeWorkspacePage() {
           <Card className="min-w-0">
             <h3 className="text-sm font-semibold">Notes</h3>
             <Textarea className="mt-2 min-h-[180px]" value={notes} onChange={(e) => setNotes(e.target.value)} />
-            <p className="mt-3 text-xs text-muted-foreground">Everything on this page is visible. Use it to rehearse, not to hide assistance.</p>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Everything on this page is visible. Use it to rehearse, not to hide assistance.
+              {questionSource === "local"
+                ? " Questions are from the local practice bank because the playable bank had no interview-topic matches."
+                : " Questions are from the playable practice bank."}
+            </p>
           </Card>
         </div>
       )}

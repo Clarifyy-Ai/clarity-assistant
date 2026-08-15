@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { FEATURE_FLAGS, FEATURE_PLAN_GATE } from "@/lib/constants/features";
 
 /**
  * Mirrors supabase/functions/_shared/requireCapability.ts CAPABILITY_MIN_RANK
@@ -80,5 +81,15 @@ describe("P0-3 server plan gating matrix", () => {
     expect(hasCapability("free", "mock_test")).toBe(true);
     expect(hasCapability("free", "gov_exam_ai_fill")).toBe(false);
     expect(hasCapability("pro", "gov_exam_ai_fill")).toBe(true);
+  });
+
+  it("FEATURE_PLAN_GATE never uses starter; Pro features require pro", () => {
+    expect(FEATURE_PLAN_GATE[FEATURE_FLAGS.COMPANY_RESEARCH]).toBe("pro");
+    expect(FEATURE_PLAN_GATE[FEATURE_FLAGS.ANALYTICS]).toBe("pro");
+    expect(FEATURE_PLAN_GATE[FEATURE_FLAGS.OVERLAY]).toBe("pro");
+    for (const minPlan of Object.values(FEATURE_PLAN_GATE)) {
+      expect(minPlan).not.toBe("starter");
+      expect(minPlan).not.toBe("elite");
+    }
   });
 });

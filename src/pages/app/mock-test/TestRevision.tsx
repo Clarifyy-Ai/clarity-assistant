@@ -98,6 +98,7 @@ export default function TestRevision() {
 
   const [items, setItems] = useState<RevisionItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
   const [doneCount, setDoneCount] = useState(0);
@@ -127,6 +128,7 @@ export default function TestRevision() {
 
   async function loadRevisionItems() {
     setLoading(true);
+    setLoadError(null);
 
     try {
       const today = new Date().toISOString().split("T")[0];
@@ -185,8 +187,9 @@ export default function TestRevision() {
       setShowAnswer(false);
     } catch (error) {
       console.error("[TestRevision] load failed:", error);
-
-      toast.error("Failed to load revision items.");
+      const message = error instanceof Error ? error.message : "Failed to load revision items.";
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -319,7 +322,20 @@ export default function TestRevision() {
         </div>
       )}
 
-      {!loading && (isDone || items.length === 0) && (
+      {!loading && loadError && (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center space-y-3 py-16 text-center">
+            <h3 className="text-lg font-bold text-foreground">Could not load revision</h3>
+            <p className="max-w-xs text-sm text-muted-foreground">{loadError}</p>
+            <Button variant="outline" size="sm" onClick={() => void loadRevisionItems()}>
+              <RotateCcw className="mr-1.5 h-4 w-4" />
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!loading && !loadError && (isDone || items.length === 0) && (
         <Card className="border-green-500/30">
           <CardContent className="flex flex-col items-center justify-center space-y-3 py-16 text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/20">

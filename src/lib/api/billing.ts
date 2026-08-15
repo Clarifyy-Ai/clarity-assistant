@@ -1,10 +1,11 @@
 // src/lib/api/billing.ts
 //
 // Billing/payment API wrappers.
+// Live checkout is Razorpay one-time purchases (see razorpayCheckout.ts).
+// Stripe checkout/portal callers below are no-ops so pages cannot start Stripe.
 
 import {
   createIdempotencyKey,
-  invokeFunction,
   invokeIdempotentFunction,
   type IdempotencyOptions,
 } from "@/lib/api/functions";
@@ -70,32 +71,24 @@ export type DeductCreditsResponse = {
   transaction_id?: string | null;
 };
 
+const STRIPE_CHECKOUT_DISABLED =
+  "Stripe Checkout is not available. Plans and credit packs are one-time Razorpay purchases.";
+
+const STRIPE_PORTAL_DISABLED =
+  "Billing portal is not available. Clarify AI uses one-time Razorpay purchases, not subscriptions.";
+
 export async function createCheckoutSession(
-  payload: CheckoutRequest,
-  options: IdempotencyOptions = {}
+  _payload: CheckoutRequest,
+  _options: IdempotencyOptions = {}
 ): Promise<CheckoutResponse> {
-  return invokeIdempotentFunction<CheckoutResponse, CheckoutRequest>(
-    "create-checkout",
-    payload,
-    {
-      idempotencyKey:
-        options.idempotencyKey ?? createIdempotencyKey("checkout"),
-    }
-  );
+  throw new Error(STRIPE_CHECKOUT_DISABLED);
 }
 
 export async function createBillingPortalSession(
-  payload: BillingPortalRequest,
-  options: IdempotencyOptions = {}
+  _payload: BillingPortalRequest,
+  _options: IdempotencyOptions = {}
 ): Promise<BillingPortalResponse> {
-  return invokeIdempotentFunction<BillingPortalResponse, BillingPortalRequest>(
-    "create-billing-portal",
-    payload,
-    {
-      idempotencyKey:
-        options.idempotencyKey ?? createIdempotencyKey("billing-portal"),
-    }
-  );
+  throw new Error(STRIPE_PORTAL_DISABLED);
 }
 
 export async function cancelSubscription(
@@ -155,36 +148,19 @@ export function getBillingReturnUrl(path = "/app/settings/billing"): string {
 }
 
 export async function redirectToCheckout(
-  payload: CheckoutRequest
+  _payload: CheckoutRequest
 ): Promise<void> {
-  const response = await createCheckoutSession(payload);
-
-  if (!response.url) {
-    throw new Error("Checkout URL was not returned.");
-  }
-
-  window.location.assign(response.url);
+  throw new Error(STRIPE_CHECKOUT_DISABLED);
 }
 
-export async function openCheckoutForPrice(priceId: string): Promise<void> {
-  const urls = getCheckoutUrls();
-
-  await redirectToCheckout({
-    price_id: priceId,
-    ...urls,
-  });
+export async function openCheckoutForPrice(_priceId: string): Promise<void> {
+  throw new Error(STRIPE_CHECKOUT_DISABLED);
 }
 
-export async function redirectToBillingPortal(
-  returnUrl: string
-): Promise<void> {
-  const response = await createBillingPortalSession({
-    return_url: returnUrl,
-  });
-
-  window.location.assign(response.url);
+export async function redirectToBillingPortal(_returnUrl: string): Promise<void> {
+  throw new Error(STRIPE_PORTAL_DISABLED);
 }
 
 export async function openBillingPortal(): Promise<void> {
-  await redirectToBillingPortal(getBillingReturnUrl());
+  throw new Error(STRIPE_PORTAL_DISABLED);
 }

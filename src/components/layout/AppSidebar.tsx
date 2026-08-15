@@ -57,6 +57,7 @@ import type { ProfileRow } from "@/types";
 import { getPlanDisplayName } from "@/lib/constants/pricing";
 import { PRODUCT_NAMES, NAV_SECTION_LABELS } from "@/lib/constants/productNames";
 import { assignLoginWithReturnTo } from "@/lib/auth/safeReturnTo";
+import { useIndiaRegion } from "@/hooks/useIndiaRegion";
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -67,6 +68,8 @@ type NavItem = {
   label: string;
   exact?: boolean;
   tourId?: string;
+  /** Show for everyone; lock + India badge when region gate would bounce. */
+  indiaOnly?: boolean;
 };
 
 type NavSection = {
@@ -132,6 +135,7 @@ const NAV_SECTIONS: NavSection[] = [
         icon: GraduationCap,
         stealthIcon: Award,
         label: "Gov Exams",
+        indiaOnly: true,
       },
       {
         to: "/app/assessments",
@@ -161,6 +165,12 @@ const NAV_SECTIONS: NavSection[] = [
         icon: ListTodo,
         stealthIcon: ListTodo,
         label: "Practice plan",
+      },
+      {
+        to: "/app/sessions",
+        icon: Phone,
+        stealthIcon: Phone,
+        label: PRODUCT_NAMES.sessionHistory,
       },
       {
         to: "/app/analytics",
@@ -279,6 +289,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
 
   const profile = useAuthStore((state) => state.profile);
   const isAdmin = useAuthStore((state) => state.isAdmin);
+  const { isIndia } = useIndiaRegion();
 
   const signOut = useAuthStore((state) => state.signOut);
 
@@ -384,6 +395,36 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
               .map((item) => {
               const isItemActive = isPathActive(location.pathname, item.to);
               const Icon = stealthMode ? item.stealthIcon : item.icon;
+              const displayLabel = stealthMode
+                ? STEALTH_NAV_LABELS[item.label] ?? item.label
+                : item.label;
+              const indiaLocked = Boolean(item.indiaOnly && !isIndia);
+
+              if (indiaLocked) {
+                return (
+                  <div key={item.to}>
+                    <div
+                      title={`${displayLabel} — available in India`}
+                      aria-disabled="true"
+                      className={cn(
+                        "mx-1 flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium",
+                        "text-muted-foreground/70 cursor-not-allowed",
+                        visuallyCollapsed && "justify-center"
+                      )}
+                    >
+                      <Icon className="h-4 w-4 shrink-0" />
+                      {!visuallyCollapsed && (
+                        <>
+                          <span className="truncate flex-1">{displayLabel}</span>
+                          <span className="shrink-0 rounded-full border border-border px-1.5 py-0 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            India
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
 
               return (
                 <div key={item.to}>
@@ -417,9 +458,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
 
                     {!visuallyCollapsed && (
                       <span className="truncate flex-1">
-                        {stealthMode
-                          ? STEALTH_NAV_LABELS[item.label] ?? item.label
-                          : item.label}
+                        {displayLabel}
                       </span>
                     )}
                   </NavLink>

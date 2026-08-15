@@ -6,7 +6,7 @@ import { Badge }  from "@/components/ui/Badge";
 import {
   Calendar, Linkedin, Github,
   Slack, Chrome, ExternalLink,
-  Zap, RefreshCw, Bell,
+  Zap, RefreshCw,
 } from "lucide-react";
 import { cn }          from "@/lib/utils";
 import { useCalendarSync } from "@/hooks/useCalendarSync";
@@ -32,20 +32,8 @@ interface Integration {
   live:   boolean;
 }
 
-const INTEGRATION_ENV_KEYS: Record<string, string | undefined> = {
-  linkedin: import.meta.env.VITE_LINKEDIN_OAUTH_CLIENT_ID,
-  github: import.meta.env.VITE_GITHUB_OAUTH_CLIENT_ID,
-  slack: import.meta.env.VITE_SLACK_OAUTH_CLIENT_ID,
-  chrome_ext: import.meta.env.VITE_CHROME_EXTENSION_ID,
-};
-
-function isIntegrationVisible(integration: Integration): boolean {
-  // Soft-hide unfinished ComingSoonCard integrations — only surface live ones.
-  // OAuth stubs stay hidden unless marked live (Connect would be misleading).
-  if (!integration.live) return false;
-  const key = INTEGRATION_ENV_KEYS[integration.id];
-  if (key === undefined) return true;
-  return typeof key === "string" && key.trim().length > 0;
+function isConnectableIntegration(integration: Integration): boolean {
+  return integration.live && integration.id === "google_calendar";
 }
 
 const INTEGRATIONS: Integration[] = [
@@ -112,100 +100,10 @@ const INTEGRATIONS: Integration[] = [
 ];
 
 // ─────────────────────────────────────────────────────────────────
-// OAuth integrations — env-gated (no fake "coming soon" for providers)
-// ─────────────────────────────────────────────────────────────────
-
-const OAUTH_ENV_KEYS: Record<string, string> = {
-  linkedin: "VITE_LINKEDIN_CLIENT_ID",
-  github:   "VITE_GITHUB_CLIENT_ID",
-  slack:    "VITE_SLACK_CLIENT_ID",
-};
-
-function getOAuthClientId(integrationId: string): string {
-  const envKey = OAUTH_ENV_KEYS[integrationId];
-  if (!envKey) return "";
-  const value = import.meta.env[envKey];
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function OAuthIntegrationCard({ integration }: { integration: Integration }) {
-  const clientId = getOAuthClientId(integration.id);
-  const configured = Boolean(clientId);
-
-  async function handleConnect() {
-    if (!configured) return;
-    toast.info(
-      `${integration.label} OAuth is configured in the client. Complete the provider callback edge function and token storage in Supabase before production use.`,
-      { duration: 5000 },
-    );
-  }
-
-  return (
-    <Card className={configured ? "" : "opacity-90"}>
-      <div className="flex items-center gap-4">
-        <div className={cn(
-          "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
-          integration.bg,
-        )}>
-          <integration.icon className={cn("w-5 h-5", integration.color)} />
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="text-sm font-semibold text-foreground">{integration.label}</p>
-            <Badge variant={configured ? "blue" : "amber"} size="sm">
-              {configured ? "Ready to connect" : "Admin setup required"}
-            </Badge>
-          </div>
-          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-            {integration.desc}
-          </p>
-        </div>
-
-        <div className="shrink-0">
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={!configured}
-            onClick={handleConnect}
-            leftIcon={<ExternalLink className="w-3.5 h-3.5" />}
-          >
-            Connect
-          </Button>
-        </div>
-      </div>
-
-      <div className="mt-3 pt-3 border-t border-border">
-        <p className="text-[10px] text-muted-foreground leading-relaxed">
-          {configured
-            ? "Client ID detected. Wire the OAuth callback edge function and store tokens in Supabase before enabling for all users."
-            : `Configure ${OAUTH_ENV_KEYS[integration.id]} in the frontend env and provider secrets (client ID + secret) in Supabase before enabling OAuth.`}
-        </p>
-      </div>
-    </Card>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────
-// Coming-soon card — notify-me button (stored locally to avoid
-// a waitlist endpoint dependency)
+// Coming later — non-interactive (no Connect / Notify actions)
 // ─────────────────────────────────────────────────────────────────
 
 function ComingSoonCard({ integration }: { integration: Integration }) {
-  const storageKey     = `clarify_notify_${integration.id}`;
-  const [notified, setNotified] = useState(
-    () => localStorage.getItem(storageKey) === "1",
-  );
-
-  function handleNotify() {
-    localStorage.setItem(storageKey, "1");
-    setNotified(true);
-    toast.success(
-      `We'll let you know when ${integration.label} is ready!`,
-      { duration: 4000 },
-    );
-  }
-
   return (
     <Card className="opacity-80">
       <div className="flex items-center gap-4">
@@ -219,29 +117,11 @@ function ComingSoonCard({ integration }: { integration: Integration }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-sm font-semibold text-foreground">{integration.label}</p>
-            <Badge variant="default" size="sm">Coming soon</Badge>
+            <Badge variant="default" size="sm">Coming later</Badge>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
             {integration.desc}
           </p>
-        </div>
-
-        <div className="shrink-0">
-          {notified ? (
-            <span className="text-xs text-emerald-400 font-medium flex items-center gap-1">
-              <Bell className="w-3.5 h-3.5" />
-              Notified
-            </span>
-          ) : (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleNotify}
-              leftIcon={<Bell className="w-3.5 h-3.5" />}
-            >
-              Notify me
-            </Button>
-          )}
         </div>
       </div>
     </Card>
@@ -455,21 +335,19 @@ export default function SettingsIntegrations() {
     <SettingsPageShell title="Integrations">
 
       <div className="space-y-3">
-        {INTEGRATIONS.filter(isIntegrationVisible).map((integration) => {
-          if (integration.id === "google_calendar") {
-            return (
-              <GoogleCalendarCard key={integration.id} integration={integration} />
-            );
-          }
-          if (integration.id in OAUTH_ENV_KEYS) {
-            return (
-              <OAuthIntegrationCard key={integration.id} integration={integration} />
-            );
-          }
-          return (
-            <ComingSoonCard key={integration.id} integration={integration} />
-          );
-        })}
+        {INTEGRATIONS.filter(isConnectableIntegration).map((integration) => (
+          <GoogleCalendarCard key={integration.id} integration={integration} />
+        ))}
+      </div>
+
+      <div className="mt-8 space-y-3">
+        <h3 className="text-sm font-semibold text-foreground">Coming later</h3>
+        <p className="text-xs text-muted-foreground">
+          These providers are not available to connect yet.
+        </p>
+        {INTEGRATIONS.filter((i) => !isConnectableIntegration(i)).map((integration) => (
+          <ComingSoonCard key={integration.id} integration={integration} />
+        ))}
       </div>
     </SettingsPageShell>
   );

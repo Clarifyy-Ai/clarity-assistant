@@ -23,6 +23,7 @@ import { devtools } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 
 import { sanitizeText } from "@/lib/security";
+import { normalizePlanId } from "@/lib/billing/planIds";
 
 import type { FeatureFlagId, PlanId } from "@/types";
 
@@ -100,6 +101,8 @@ export interface GlobalState {
 
   // Feature flags
   featureFlags: Record<FeatureFlagId, boolean>;
+  /** enabled=false hides a plan-gated flag. enabled=true never grants access. */
+  featureKillSwitches: Partial<Record<FeatureFlagId, boolean>>;
   currentPlan: PlanId;
 
   // Modal system
@@ -141,6 +144,8 @@ export interface GlobalActions {
   // Feature flags
   resolveFeatureFlags: (planId: PlanId) => void;
   isFeatureEnabled: (flag: FeatureFlagId) => boolean;
+  /** Kill-switch map from feature_flags. Only `false` hides; `true` is ignored. */
+  setFeatureKillSwitches: (flags: Record<string, boolean>) => void;
 
   // Modal
   openModal: (id: ModalId, props?: Record<string, unknown>) => void;
@@ -203,17 +208,17 @@ const FEATURE_PLAN_GATES: Record<FeatureFlagId, PlanId> = {
   rephraser: "free",
   ai_coach: "free",
 
-  // Align with PlanGate + edge: Pro+ (legacy "starter" maps to free in planIds).
+  // Pro+ only. Legacy starter maps to free and must not unlock these.
   company_research: "pro",
-  coding_hints: "starter",
-  system_design: "starter",
-  session_debrief: "starter",
-  resume_analysis: "starter",
-  overlay: "starter",
-  audio_analysis: "starter",
-  filler_detection: "starter",
-  wpm_tracking: "starter",
-  analytics: "starter",
+  coding_hints: "pro",
+  system_design: "pro",
+  session_debrief: "pro",
+  resume_analysis: "pro",
+  overlay: "pro",
+  audio_analysis: "pro",
+  filler_detection: "pro",
+  wpm_tracking: "pro",
+  analytics: "pro",
 
   screenshot_capture: "pro",
   diarization: "pro",
@@ -222,14 +227,15 @@ const FEATURE_PLAN_GATES: Record<FeatureFlagId, PlanId> = {
   experimental_ui: "pro",
   beta_models: "pro",
 
-  priority_support: "elite",
-  coach_sessions: "elite",
+  priority_support: "enterprise",
+  coach_sessions: "enterprise",
 
   debug_panel: "enterprise",
 };
 
 function resolveFlags(planId: PlanId): Record<FeatureFlagId, boolean> {
-  const userPlanIndex = PLAN_ORDER.indexOf(planId);
+  const normalized = normalizePlanId(planId) as PlanId;
+  const userPlanIndex = PLAN_ORDER.indexOf(normalized);
 
   return Object.fromEntries(
     Object.entries(FEATURE_PLAN_GATES).map(([flag, minimumPlan]) => {
@@ -241,6 +247,20 @@ function resolveFlags(planId: PlanId): Record<FeatureFlagId, boolean> {
       ];
     })
   ) as Record<FeatureFlagId, boolean>;
+}
+
+/** Honor enabled=false as a hide. enabled=true never grants beyond plan. */
+function applyKillSwitches(
+  flags: Record<FeatureFlagId, boolean>,
+  killSwitches: Partial<Record<FeatureFlagId, boolean>>,
+): Record<FeatureFlagId, boolean> {
+  const next = { ...flags };
+  for (const [key, enabled] of Object.entries(killSwitches)) {
+    if (enabled === false && key in next) {
+      next[key as FeatureFlagId] = false;
+    }
+  }
+  return next;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -350,6 +370,7 @@ const INITIAL_STATE: GlobalState = {
   isHydrated: false,
 
   featureFlags: resolveFlags("free"),
+  featureKillSwitches: {},
   currentPlan: "free",
 
   modal: {
@@ -485,9 +506,38 @@ export const useGlobalStore = create<GlobalStore>()(
       // ─────────────────────────────────────────────────────────────────────
 
       resolveFeatureFlags: (planId) => {
+        const normalized = normalizePlanId(planId) as PlanId;
         set((state) => {
-          state.featureFlags = resolveFlags(planId);
-          state.currentPlan = planId;
+          state.currentPlan = normalized;
+          state.featureFlags = applyKillSwitches(
+            resolveFlags(normalized),
+            state.featureKillSwitches,
+          );
+        });
+
+        void import("@/lib/supabase/database")
+          .then(({ featureFlagsDB }) => featureFlagsDB.listKeyEnabled())
+          .then((map) => {
+            get().setFeatureKillSwitches(map);
+          })
+          .catch(() => {
+            // Kill-switch fetch failed: keep plan gates. Never treat as a grant.
+          });
+      },
+
+      setFeatureKillSwitches: (flags) => {
+        const hides: Partial<Record<FeatureFlagId, boolean>> = {};
+        for (const [key, enabled] of Object.entries(flags)) {
+          if (enabled === false) {
+            hides[key as FeatureFlagId] = false;
+          }
+        }
+        set((state) => {
+          state.featureKillSwitches = hides;
+          state.featureFlags = applyKillSwitches(
+            resolveFlags(state.currentPlan),
+            hides,
+          );
         });
       },
 

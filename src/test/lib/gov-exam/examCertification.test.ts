@@ -13,7 +13,7 @@ import {
   resolveRankPublication,
   scoreBandLabel,
 } from "@/lib/gov-exam/rankAvailability";
-import { assertNoAnswerKeys, hasAnswerKeys, stripAnswerKeys } from "@/lib/gov-exam/playableQuestions";
+import { assertNoAnswerKeys, hasAnswerKeys, stripAnswerKeys, ANSWER_KEY_FIELDS, PLAYABLE_QUESTION_COLUMNS, PLAYABLE_QUESTIONS_VIEW, playableQuestionSelect, shouldRevealAnswerKeys } from "@/lib/gov-exam/playableQuestions";
 import {
   clearAttemptRecovery,
   loadAttemptRecovery,
@@ -92,6 +92,22 @@ describe("answer-key protection", () => {
     });
     expect(hasAnswerKeys(playable as unknown as Record<string, unknown>)).toBe(false);
     expect(() => assertNoAnswerKeys(playable as unknown as Record<string, unknown>)).not.toThrow();
+  });
+
+  it("never lists answer-key columns for live attempts", () => {
+    for (const field of ANSWER_KEY_FIELDS) {
+      expect(PLAYABLE_QUESTION_COLUMNS).not.toContain(field);
+      expect(playableQuestionSelect()).not.toContain(field);
+    }
+    expect(PLAYABLE_QUESTIONS_VIEW).toBe("questions_playable");
+  });
+
+  it("reveals keys only after the paper is completed", () => {
+    expect(shouldRevealAnswerKeys("IN_PROGRESS")).toBe(false);
+    expect(shouldRevealAnswerKeys("DRAFT")).toBe(false);
+    expect(shouldRevealAnswerKeys("COMPLETED")).toBe(true);
+    expect(shouldRevealAnswerKeys("completed")).toBe(true);
+    expect(shouldRevealAnswerKeys(null)).toBe(false);
   });
 });
 

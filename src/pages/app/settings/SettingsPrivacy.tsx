@@ -29,6 +29,56 @@ function applyAnalyticsPreference(enabled: boolean) {
 // SettingsPrivacy
 // ─────────────────────────────────────────────────────────────────
 
+/**
+ * Enforcement map — which privacy_prefs keys have a live consumer today.
+ * Stored = written to profiles.privacy_prefs on Save.
+ * Enforced = a runtime consumer actually changes behaviour.
+ *
+ * Consumers:
+ * - analytics_tracking → applyAnalyticsPreference() → PostHog opt-in/out (this page)
+ * - private mode → usePrivateMode (not a privacy_prefs key; pauses cloud AI immediately)
+ */
+const PRIVACY_ENFORCEMENT: Record<
+  string,
+  { stored: boolean; enforced: boolean; consumer: string }
+> = {
+  analytics_tracking: {
+    stored: true,
+    enforced: true,
+    consumer: "PostHog capturing opt-in/out after save",
+  },
+  allow_ai_training: {
+    stored: true,
+    enforced: false,
+    consumer: "None yet — we do not train on session data",
+  },
+  store_transcripts: {
+    stored: true,
+    enforced: false,
+    consumer: "None yet — existing sessions remain until deleted",
+  },
+  public_profile: {
+    stored: true,
+    enforced: false,
+    consumer: "None yet — public leaderboards are not live",
+  },
+  share_scorecard: {
+    stored: true,
+    enforced: false,
+    consumer: "None yet — public scorecard links are not gated on this pref",
+  },
+  login_notifications: {
+    stored: true,
+    enforced: false,
+    consumer: "None yet — login alert emails are not wired",
+  },
+  two_factor: {
+    stored: false,
+    enforced: false,
+    consumer: "Soon — enrollment lives under Settings → Security",
+  },
+};
+
 const PRIVACY_SETTINGS = [
   {
     group: "Data & AI",
@@ -139,6 +189,17 @@ export default function SettingsPrivacy() {
           stored on your profile; items marked “not yet enforced” do not change backend behaviour yet.
           Private mode (below) does pause cloud AI immediately.
         </p>
+        <ul className="mt-3 space-y-1.5 text-[11px] text-muted-foreground">
+          {Object.entries(PRIVACY_ENFORCEMENT).map(([key, row]) => (
+            <li key={key}>
+              <span className="font-medium text-foreground">{key}</span>
+              {": "}
+              {row.enforced ? "enforced" : "stored only"}
+              {" — "}
+              {row.consumer}
+            </li>
+          ))}
+        </ul>
       </Card>
       <Card className="border-primary/20">
         <div className="flex items-start justify-between gap-4">

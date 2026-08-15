@@ -226,18 +226,9 @@ export function isUsableStripePriceId(value?: string | null): boolean {
   return /^price_[A-Za-z0-9]+$/.test(v);
 }
 
+/** Checkout is Razorpay (INR) only. Stripe Checkout is not used. */
 export function isStripeConfigured(): boolean {
-  return Boolean(
-    ENV.STRIPE_PUBLIC_KEY &&
-      ENV.STRIPE_PUBLIC_KEY.startsWith("pk_") &&
-      !ENV.STRIPE_PUBLIC_KEY.includes("your_") &&
-      (isUsableStripePriceId(ENV.STRIPE_PRICE_STARTER_MONTHLY) ||
-        isUsableStripePriceId(ENV.STRIPE_PRICE_PRO_MONTHLY) ||
-        isUsableStripePriceId(ENV.STRIPE_PRICE_ELITE_MONTHLY) ||
-        isUsableStripePriceId(ENV.STRIPE_PRICE_CREDITS_50) ||
-        isUsableStripePriceId(ENV.STRIPE_PRICE_CREDITS_150) ||
-        isUsableStripePriceId(ENV.STRIPE_PRICE_CREDITS_500))
-  );
+  return false;
 }
 
 export function isPostHogConfigured(): boolean {

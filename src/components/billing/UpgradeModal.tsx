@@ -1,4 +1,3 @@
-import { isStripeConfigured } from "@/lib/env";
 import { useState } from "react"
 import { Modal } from "@/components/ui/Modal"
 import { useUIStore } from "@/store/uiStore"
@@ -7,135 +6,88 @@ import {
   PLANS,
   type PlanId,
 } from "@/lib/billing/subscriptionManager"
-import { formatPrice, CREDIT_PACKS } from "@/lib/billing/priceCalculator"
+import { getPlanDisplayName } from "@/lib/constants/pricing"
+import {
+  CREDIT_PACKS,
+  formatInrPaise,
+  razorpayPaiseForPack,
+  razorpayPaiseForPlan,
+} from "@/lib/billing/priceCalculator"
 import { Check, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { createCheckoutSession, getCheckoutUrls } from "@/lib/api/billing"
-import { openRazorpayCheckout } from "@/lib/api/payments"
+import { openRazorpayCheckout, type RazorpayProductType } from "@/lib/api/payments"
 import { toast } from "sonner"
-
-const STRIPE_CONFIGURED = isStripeConfigured();
 
 const MODAL_PLANS: Array<{
   id: PlanId
+  productType: RazorpayProductType
   icon: typeof Zap
   color: "violet" | "amber"
 }> = [
-  // Launch lineup only — Pro is the single paid self-serve tier.
-  // Enterprise is contact-sales (handled on Pricing page), not an in-app upgrade.
-  { id: "pro", icon: Zap, color: "violet" },
+  { id: "pro", productType: "pro_monthly", icon: Zap, color: "violet" },
+  { id: "enterprise", productType: "enterprise_monthly", icon: Zap, color: "amber" },
 ]
+
+type CheckoutPhase = "creating" | "processing"
+
+function checkoutBusyLabel(phase: CheckoutPhase | null, idle: string): string {
+  if (!phase) return idle
+  return phase === "processing" ? "Payment processing" : "Creating secure checkout…"
+}
+
+function checkoutErrorMessage(error: unknown): string {
+  const msg = error instanceof Error ? error.message : ""
+  if (msg.includes("Checkout could not be prepared")) return msg
+  if (msg.toLowerCase().includes("verif")) {
+    return msg || "Payment could not be verified. No credits were added."
+  }
+  return msg.trim() || "Checkout failed. Open Settings → Billing to pay with Razorpay."
+}
 
 export function UpgradeModal() {
   const uiStore = useUIStore()
   const { planId, user, profile, refreshCredits, loadProfile } = useAuthStore()
   const [loading, setLoading] = useState<string | null>(null)
+  const [checkoutPhase, setCheckoutPhase] = useState<CheckoutPhase | null>(null)
 
-  const reloadAfterRazorpay = () => {
-    toast.success("Payment confirmed. Your plan and credits are updating.")
-    void refreshCredits()
-    void loadProfile()
-  }
-
-  const handleUpgrade = async (targetPlanId: PlanId) => {
-    const plan = PLANS[targetPlanId]
-    if (!plan) return
-
-    if (!STRIPE_CONFIGURED || !plan.stripePriceIdMonthly) {
-      setLoading(targetPlanId)
-      try {
-        await openRazorpayCheckout({
-          productType: "pro_monthly",
-          userEmail: profile?.email ?? user?.email ?? undefined,
-          userName: profile?.full_name ?? undefined,
-          onSuccess: reloadAfterRazorpay,
-        })
-        uiStore.setUpgradeModalOpen(false)
-      } catch {
-        toast.error("Checkout failed. Open Settings → Billing to pay with Razorpay.")
-      } finally {
-        setLoading(null)
-      }
-      return
-    }
-
-    setLoading(targetPlanId)
+  const handleRazorpay = async (
+    loadingKey: string,
+    productType: RazorpayProductType,
+  ) => {
+    if (loading) return
+    setLoading(loadingKey)
+    setCheckoutPhase("creating")
     try {
-      const urls = getCheckoutUrls()
-      const data = await createCheckoutSession({
-        price_id: plan.stripePriceIdMonthly!,
-        ...urls,
+      await openRazorpayCheckout({
+        productType,
+        userEmail: profile?.email ?? user?.email ?? undefined,
+        userName: profile?.full_name ?? undefined,
+        onReady: () => setCheckoutPhase("processing"),
+        onSuccess: () => {
+          toast.success("Payment completed")
+          void refreshCredits()
+          void loadProfile()
+          uiStore.setUpgradeModalOpen(false)
+        },
       })
-
-      if (data?.url) {
-        window.location.href = data.url
-      } else {
-        toast.error("Could not create checkout session.")
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : ""
-      toast.error(
-        msg.includes("not configured") || msg.includes("STRIPE_SECRET_KEY")
-          ? "Stripe is not configured on the server. Contact support to upgrade."
-          : "Failed to start checkout. The checkout service may not be deployed yet."
-      )
+    } catch (error) {
+      toast.error(checkoutErrorMessage(error))
     } finally {
       setLoading(null)
-      uiStore.setUpgradeModalOpen(false)
+      setCheckoutPhase(null)
     }
+  }
+
+  const handleUpgrade = async (targetPlanId: PlanId, productType: RazorpayProductType) => {
+    const plan = PLANS[targetPlanId]
+    if (!plan) return
+    await handleRazorpay(targetPlanId, productType)
   }
 
   const defaultPack = CREDIT_PACKS[0]
 
   const handleBuyCredits = async () => {
-    if (!STRIPE_CONFIGURED) {
-      setLoading("credits")
-      try {
-        await openRazorpayCheckout({
-          productType: "credits_150",
-          userEmail: profile?.email ?? user?.email ?? undefined,
-          userName: profile?.full_name ?? undefined,
-          onSuccess: reloadAfterRazorpay,
-        })
-        uiStore.setUpgradeModalOpen(false)
-      } catch {
-        toast.error("Checkout failed. Open Settings → Billing to pay with Razorpay.")
-      } finally {
-        setLoading(null)
-      }
-      return
-    }
-
-    const priceId = defaultPack?.stripePriceId
-    if (!priceId) {
-      toast.error("No credit pack price configured.")
-      return
-    }
-
-    setLoading("credits")
-    try {
-      const data = await createCheckoutSession({
-        price_id: priceId,
-        success_url: `${window.location.origin}/app/settings/credits?success=1`,
-        cancel_url: `${window.location.origin}/app/settings/billing?canceled=1`,
-      })
-
-      if (data?.url) {
-        window.location.href = data.url
-      } else {
-        toast.error("Could not create checkout session.")
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : ""
-      toast.error(
-        msg.includes("not configured") || msg.includes("STRIPE_SECRET_KEY")
-          ? "Stripe is not configured on the server. Contact support to buy credits."
-          : "Failed to start checkout. The checkout service may not be deployed yet."
-      )
-    } finally {
-      setLoading(null)
-      uiStore.setUpgradeModalOpen(false)
-    }
+    await handleRazorpay("credits", "credits_50")
   }
 
   return (
@@ -145,15 +97,9 @@ export function UpgradeModal() {
       title="Upgrade Clarify AI"
       size="lg"
     >
-      {!STRIPE_CONFIGURED && (
-        <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
-          <span className="text-amber-400 text-sm">⚠</span>
-          <p className="text-xs text-amber-300">
-            USD Stripe is not configured. Upgrade and credit packs use Razorpay (INR).
-          </p>
-        </div>
-      )}
-
+      <p className="mb-4 text-xs text-muted-foreground">
+        One-time Pro or Max access and credit packs. Razorpay does not auto-renew.
+      </p>
       <div
         className={cn(
           "grid gap-4",
@@ -162,9 +108,12 @@ export function UpgradeModal() {
       >
         {MODAL_PLANS.map((mp) => {
           const plan = PLANS[mp.id]
+          const displayName = getPlanDisplayName(mp.id)
           const isCurrentPlan = planId === mp.id
           const Icon = mp.icon
           const isHighlighted = uiStore.upgrade_modal_trigger === mp.id
+          const inrPaise = razorpayPaiseForPlan(mp.id)
+          const busy = loading === mp.id
 
           return (
             <div
@@ -190,14 +139,16 @@ export function UpgradeModal() {
                   <Icon className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-foreground">{plan.name}</p>
-                  <p className="text-xs text-muted-foreground">{plan.creditsPerMonth} credits/mo</p>
+                  <p className="text-sm font-bold text-foreground">{displayName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {plan.creditsPerMonth.toLocaleString()} credits included
+                  </p>
                 </div>
                 <div className="ml-auto text-right">
                   <span className="text-xl font-black text-foreground">
-                    {formatPrice(plan.monthlyPrice, true)}
+                    {inrPaise ? formatInrPaise(inrPaise) : "Free"}
                   </span>
-                  <span className="text-xs text-muted-foreground">/mo</span>
+                  <span className="text-xs text-muted-foreground"> one-time</span>
                 </div>
               </div>
 
@@ -218,8 +169,8 @@ export function UpgradeModal() {
 
               <button
                 type="button"
-                onClick={() => !isCurrentPlan && handleUpgrade(mp.id)}
-                disabled={isCurrentPlan || loading === mp.id}
+                onClick={() => !isCurrentPlan && void handleUpgrade(mp.id, mp.productType)}
+                disabled={isCurrentPlan || Boolean(loading)}
                 aria-disabled={isCurrentPlan}
                 className={cn(
                   "mt-auto w-full rounded-xl py-2.5 text-sm font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-transparent",
@@ -230,11 +181,11 @@ export function UpgradeModal() {
                     : "bg-amber-500 text-black hover:bg-amber-400 focus:ring-amber-500"
                 )}
               >
-                {loading === mp.id
-                  ? "Redirecting…"
+                {busy
+                  ? checkoutBusyLabel(checkoutPhase, `Upgrade to ${displayName}`)
                   : isCurrentPlan
                   ? "Current plan"
-                  : `Upgrade to ${plan.name}`}
+                  : `Buy ${displayName} (one-time)`}
               </button>
             </div>
           )
@@ -243,20 +194,22 @@ export function UpgradeModal() {
 
       <div className="mt-4 flex items-center justify-between rounded-xl border border-border bg-secondary/50 p-4">
         <div>
-          <p className="text-sm font-medium text-foreground">Pay as you go</p>
+          <p className="text-sm font-medium text-foreground">Credit pack</p>
           <p className="text-xs text-muted-foreground">
             {defaultPack
-              ? `${defaultPack.credits} credits for ${formatPrice(defaultPack.priceUsdCents)} — no subscription`
-              : "Credit packs — no subscription"}
+              ? `${defaultPack.credits} credits for ${formatInrPaise(razorpayPaiseForPack(defaultPack.id) ?? 0)} — one-time, no auto-renew`
+              : "Credit packs — one-time, no auto-renew"}
           </p>
         </div>
         <button
           type="button"
-          onClick={handleBuyCredits}
-          disabled={loading === "credits"}
+          onClick={() => void handleBuyCredits()}
+          disabled={Boolean(loading)}
           className="rounded-xl border border-border bg-secondary px-4 py-2 text-xs font-medium text-foreground transition-all hover:bg-secondary/80 focus:outline-none focus:ring-2 focus:ring-white/30"
         >
-          {loading === "credits" ? "Redirecting…" : "Buy credits"}
+          {loading === "credits"
+            ? checkoutBusyLabel(checkoutPhase, "Buy credits")
+            : "Buy credits"}
         </button>
       </div>
     </Modal>

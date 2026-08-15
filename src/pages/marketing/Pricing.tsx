@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { PLANS, type BillingInterval, type PlanId } from "@/lib/billing/subscriptionManager";
+import { PLANS, type PlanId } from "@/lib/billing/subscriptionManager";
 import { Check, X, ArrowRight, Zap } from "lucide-react";
 import { ComplianceBanner } from "@/components/marketing";
 import { LazyMotion, domAnimation, m } from "framer-motion";
@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import { usePageMeta } from "@/hooks/usePageMeta";
 
-import { LAUNCH_PLANS } from "@/lib/constants/pricing";
+import { LAUNCH_PLANS, getPlanDisplayName } from "@/lib/constants/pricing";
+import { formatInrPaise, razorpayPaiseForPlan } from "@/lib/billing/priceCalculator";
 import {
   billingReturnPathForPlan,
   isPaidSignupPlan,
@@ -26,34 +27,31 @@ const PLAN_COLORS: Record<string, string> = {
 
 const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
 
-/** Exact 20% off: annual yearlyPrice × 5 === monthly × 12 × 4. */
-function hasExactSave20(monthlyPrice: number, yearlyPrice: number): boolean {
-  if (monthlyPrice <= 0) return false;
-  return yearlyPrice * 5 === monthlyPrice * 12 * 4;
-}
-
-function paidPlanHref(planId: PlanId, interval: BillingInterval): string {
+function paidPlanHref(planId: PlanId): string {
   if (!isPaidSignupPlan(planId)) return "/signup";
-  const returnTo = encodeURIComponent(billingReturnPathForPlan(planId, interval));
-  return `/login?plan=${planId}&interval=${interval}&returnTo=${returnTo}`;
+  const returnTo = encodeURIComponent(billingReturnPathForPlan(planId, "monthly"));
+  return `/login?plan=${planId}&interval=monthly&returnTo=${returnTo}`;
 }
 
 export default function Pricing() {
-  const [annual, setAnnual] = useState(false);
-  const interval: BillingInterval = annual ? "yearly" : "monthly";
-
-  const showSave20 = useMemo(
+  const offers = useMemo(
     () =>
-      DISPLAY_PLANS.filter((id) => id !== "free").every((planId) => {
-        const plan = PLANS[planId];
-        return hasExactSave20(plan.monthlyPrice, plan.yearlyPrice);
+      DISPLAY_PLANS.map((planId) => {
+        const paise = razorpayPaiseForPlan(planId) ?? 0;
+        return {
+          "@type": "Offer" as const,
+          name: getPlanDisplayName(planId),
+          price: planId === "free" ? "0" : (paise / 100).toFixed(2),
+          priceCurrency: "INR",
+          url: `${SITE_URL}${planId === "free" ? "/signup" : paidPlanHref(planId)}`,
+        };
       }),
     []
   );
 
   usePageMeta({
     title: "Pricing — Clarify AI",
-    description: "Simple, transparent pricing for interview prep and rehearsal. Start free, upgrade when ready.",
+    description: "Simple, transparent pricing for interview prep and rehearsal. Free, Pro, and Max — one-time Razorpay purchases in INR, no auto-renew.",
     canonical: `${SITE_URL}/pricing`,
     jsonLd: {
       "@context": "https://schema.org",
@@ -61,16 +59,7 @@ export default function Pricing() {
       name: "Clarify AI",
       description: "AI-powered interview preparation platform with live practice coaching, mock interviews, and a prep lab.",
       brand: { "@type": "Brand", name: "Clarify AI" },
-      offers: DISPLAY_PLANS.map((planId) => {
-        const plan = PLANS[planId];
-        return {
-          "@type": "Offer",
-          name: plan.name,
-          price: planId === "free" ? "0" : (plan.monthlyPrice / 100).toFixed(2),
-          priceCurrency: "USD",
-          url: `${SITE_URL}${planId === "free" ? "/signup" : paidPlanHref(planId, "monthly")}`,
-        };
-      }),
+      offers,
     },
   });
 
@@ -84,35 +73,9 @@ export default function Pricing() {
               Simple, transparent pricing
             </h1>
             <p className="mt-4 text-sm md:text-base text-muted-foreground max-w-lg mx-auto">
-              Start free. Upgrade when you're ready. Cancel anytime.
+              Start free. Buy Pro or Max access when you&apos;re ready. Pay in INR with Razorpay — one-time, no auto-renew.
             </p>
           </m.div>
-
-          <div className="mt-8 inline-flex items-center gap-1 p-1 rounded-xl bg-secondary/60 border border-border">
-            <button
-              onClick={() => setAnnual(false)}
-              aria-pressed={!annual}
-              className={cn(
-                "px-5 py-2 rounded-lg text-sm font-medium transition-all",
-                !annual ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Monthly
-            </button>
-            <button
-              onClick={() => setAnnual(true)}
-              aria-pressed={annual}
-              className={cn(
-                "px-5 py-2 rounded-lg text-sm font-medium transition-all",
-                annual ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Annual
-              {showSave20 ? (
-                <span className="text-primary text-xs ml-1">Save 20%</span>
-              ) : null}
-            </button>
-          </div>
         </div>
       </section>
 
@@ -126,17 +89,13 @@ export default function Pricing() {
         <div className="max-w-5xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
           {DISPLAY_PLANS.map((planId, i) => {
             const plan = PLANS[planId];
-            const monthlyPrice = plan.monthlyPrice;
-            // PLANS.yearlyPrice is annual cents; monthly equivalent = yearlyPrice/12.
-            const effectiveMonthly = annual
-              ? Math.round(plan.yearlyPrice / 12)
-              : monthlyPrice;
+            const inrPaise = razorpayPaiseForPlan(planId);
             const priceDisplay =
-              effectiveMonthly === 0
+              plan.monthlyPrice === 0 || !inrPaise
                 ? "Free"
-                : `$${(effectiveMonthly / 100).toFixed(0)}`;
+                : formatInrPaise(inrPaise);
             const isMax = planId === "enterprise";
-            const ctaHref = planId === "free" ? "/signup" : paidPlanHref(planId, interval);
+            const ctaHref = planId === "free" ? "/signup" : paidPlanHref(planId);
 
             return (
               <m.div
@@ -161,27 +120,17 @@ export default function Pricing() {
                   <Zap className="w-5 h-5 text-white" />
                 </div>
 
-                <h3 className="text-base font-bold">{plan.name}</h3>
+                <h3 className="text-base font-bold">{getPlanDisplayName(planId)}</h3>
                 <p className="text-xs text-muted-foreground mt-1">{plan.tagline}</p>
 
                 <div className="mt-5 min-h-[4.5rem]">
                   <span className="text-3xl font-extrabold">{priceDisplay}</span>
-                  {effectiveMonthly > 0 && (
-                    <span className="text-sm text-muted-foreground ml-1">/mo</span>
-                  )}
-                  {annual && effectiveMonthly > 0 ? (
-                    <p className="text-[11px] text-muted-foreground/70 mt-0.5">billed annually</p>
-                  ) : (
-                    <p className="text-[11px] text-transparent mt-0.5 select-none" aria-hidden>
-                      billed annually
-                    </p>
+                  {plan.monthlyPrice > 0 && (
+                    <span className="text-sm text-muted-foreground ml-1">one-time</span>
                   )}
                 </div>
                 <p className="text-[11px] text-muted-foreground/70 mt-1 min-h-[2.5rem]">
-                  {plan.creditsPerMonth.toLocaleString()} credits/mo
-                  {annual && plan.creditsPerMonth > 0
-                    ? " (monthly allocation while billed annually)"
-                    : ""}
+                  {plan.creditsPerMonth.toLocaleString()} credits included
                 </p>
 
                 <div className="mt-6 pt-5 border-t border-border space-y-2.5 flex-1">

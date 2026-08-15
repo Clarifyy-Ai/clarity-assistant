@@ -30,19 +30,18 @@ import { isOAuthProviderEnabled } from "@/lib/auth/oauthProviders";
 import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
 
 import { signupSchema } from "@/lib/validators";
-import { getCSRFHiddenInputProps, sanitizeText, validateCSRFToken } from "@/lib/security";
+import { getCSRFHiddenInputProps, validateCSRFToken } from "@/lib/security";
 import { cn } from "@/lib/utils";
 import {
   setPendingPlan,
 } from "@/lib/billing/pendingPlan";
+import { normalizeRefCode, storeRefCode } from "@/lib/referrals";
 
 type PasswordStrength = {
   score: number;
   label: string;
   color: string;
 };
-
-const REFERRAL_STORAGE_KEY = "clarify_ref";
 
 const BENEFITS = [
   {
@@ -115,23 +114,6 @@ function getPasswordStrength(password: string): PasswordStrength {
   };
 }
 
-function safeSetLocalStorageItem(key: string, value: string): void {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // Ignore storage failures.
-  }
-}
-
-function normalizeReferralCode(value: string | null): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const sanitized = sanitizeText(value).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 100);
-
-  return sanitized.length > 0 ? sanitized : null;
-}
 
 /**
  * FormData checkboxes arrive as string values like "true" or "on".
@@ -163,7 +145,7 @@ export default function Signup(): JSX.Element {
   const [searchParams] = useSearchParams();
 
   const rawRefCode = searchParams.get("ref");
-  const refCode = useMemo(() => normalizeReferralCode(rawRefCode), [rawRefCode]);
+  const refCode = useMemo(() => normalizeRefCode(rawRefCode), [rawRefCode]);
 
   const authStatus = useAuthStore((state) => state.status);
   const signUpWithEmail = useAuthStore((state) => state.signUpWithEmail);
@@ -209,7 +191,7 @@ export default function Signup(): JSX.Element {
 
   useEffect(() => {
     if (refCode) {
-      safeSetLocalStorageItem(REFERRAL_STORAGE_KEY, refCode);
+      storeRefCode(refCode);
     }
   }, [refCode]);
 
@@ -249,7 +231,7 @@ export default function Signup(): JSX.Element {
     }
 
     if (refCode) {
-      safeSetLocalStorageItem(REFERRAL_STORAGE_KEY, refCode);
+      storeRefCode(refCode);
     }
 
     try {

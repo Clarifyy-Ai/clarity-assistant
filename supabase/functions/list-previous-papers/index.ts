@@ -80,10 +80,19 @@ Deno.serve(async (req) => {
     }
 
     if (!examId) {
+      // Unknown or missing exam codes should not 400 the papers UI — the
+      // local exam_papers table still powers the page.
       return json(req, {
-        error: "examId or examCode is required",
-        code: "VALIDATION_ERROR",
-      }, 400);
+        examId: null,
+        stageId,
+        count: 0,
+        papers: [],
+        bankEmpty: true,
+        message:
+          "No approved previous-year papers in the registry yet. Practice papers can still be generated from the pattern blueprint.",
+        disclaimer:
+          "Clarify AI is not affiliated with any recruiting body. Official labels mean registry provenance only — verify on the official website.",
+      });
     }
 
     let query = db

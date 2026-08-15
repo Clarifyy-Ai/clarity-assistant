@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { featureFlagsDB } from "@/lib/supabase/database";
 import { useGlobalStore }       from "@/store";
 import { FEATURE_PLAN_GATES }   from "@/lib/constants/features";
+import { getPlanDisplayName } from "@/lib/constants/pricing";
 
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
@@ -62,6 +63,7 @@ function getCategoryForFlag(id: FeatureFlagId): string {
 
 export default function AdminFeatureFlags() {
   const featureFlags = useGlobalStore((s) => s.featureFlags);
+  const setFeatureKillSwitches = useGlobalStore((s) => s.setFeatureKillSwitches);
 
   const [rows,       setRows]       = useState<FlagRow[]>([]);
   const [dbFlags,    setDbFlags]    = useState<Record<string, boolean>>({});
@@ -85,6 +87,7 @@ export default function AdminFeatureFlags() {
         const map = await featureFlagsDB.listKeyEnabled();
         if (cancelled) return;
         setDbFlags(map);
+        setFeatureKillSwitches(map);
       } catch (err) {
         if (cancelled) return;
         const message =
@@ -101,7 +104,7 @@ export default function AdminFeatureFlags() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [setFeatureKillSwitches]);
 
   useEffect(() => {
     const built: FlagRow[] = Object.entries(FEATURE_PLAN_GATES ?? {}).map(
@@ -143,6 +146,11 @@ export default function AdminFeatureFlags() {
         await featureFlagsDB.upsertEnabled(key, is_enabled);
         setDbFlags((prev) => ({ ...prev, [key]: is_enabled }));
       }
+      const nextMap = { ...dbFlags };
+      for (const [key, is_enabled] of entries) {
+        nextMap[key] = is_enabled;
+      }
+      setFeatureKillSwitches(nextMap);
       toast.success(`${entries.length} flag(s) saved to database.`);
       setOverrides({});
       setIsDirty(false);
@@ -169,7 +177,7 @@ export default function AdminFeatureFlags() {
         <div>
           <h1 className="text-xl font-bold text-foreground">Feature Flags</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Plan gates (client) plus global toggles saved to feature_flags.
+            Kill-switches saved to feature_flags. They cannot grant plan entitlements.
           </p>
         </div>
 
@@ -185,6 +193,15 @@ export default function AdminFeatureFlags() {
             </Button>
           </div>
         )}
+      </div>
+
+      <div
+        role="status"
+        className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-200"
+      >
+        Feature flags are kill-switches only. Turning a flag off hides it for
+        everyone. Turning a flag on cannot grant Free/Pro/Max entitlements —
+        paid features still require the matching plan.
       </div>
 
       {dbFlagsError && (
@@ -240,7 +257,7 @@ export default function AdminFeatureFlags() {
           <SelectContent>
             <SelectItem value="all">All plans</SelectItem>
             {PLAN_ORDER.map((p) => (
-              <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>
+              <SelectItem key={p} value={p}>{getPlanDisplayName(p)}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -322,8 +339,8 @@ export default function AdminFeatureFlags() {
                       <TableCell className="text-sm text-muted-foreground">{row.category}</TableCell>
 
                       <TableCell>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium capitalize ${PLAN_COLORS[row.minPlan]}`}>
-                          {row.minPlan}
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${PLAN_COLORS[row.minPlan]}`}>
+                          {getPlanDisplayName(row.minPlan)}
                         </span>
                       </TableCell>
 

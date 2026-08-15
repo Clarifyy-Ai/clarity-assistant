@@ -276,7 +276,7 @@ Deno.serve(async (req) => {
         topic: q.topic ? s(q.topic, 120) : "PYQ",
         difficulty: normalizeDifficulty(q.difficulty),
         exam_type: examType,
-        source: "Previous Year Paper",
+        source: "OFFICIAL_PYP",
         source_year: sourceYear,
         is_verified: true,
         is_public: true,

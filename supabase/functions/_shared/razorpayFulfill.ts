@@ -79,7 +79,7 @@ export async function fulfillCapturedRazorpayOrder(
   opts: { order: PaymentOrderRow; paymentId: string },
 ): Promise<{ duplicate: boolean }> {
   const { order, paymentId } = opts;
-  if (order.status === "paid") return { duplicate: true };
+  if (order.status === "paid" || order.status === "fulfilled") return { duplicate: true };
 
   const isNew = await claimPaymentIdempotency(db, paymentId);
   if (!isNew) return { duplicate: true };
@@ -183,13 +183,14 @@ export async function fulfillCapturedRazorpayOrder(
     const { error: paidErr } = await db
       .from("payment_orders")
       .update({
-        status: "paid",
+        status: "fulfilled",
         provider_payment_id: paymentId,
         paid_at: new Date().toISOString(),
+        fulfilled_at: new Date().toISOString(),
         credits_granted: catalogCredits,
       })
       .eq("id", order.id)
-      .neq("status", "paid");
+      .not("status", "in", "(paid,fulfilled)");
     if (paidErr) throw new Error(`mark_paid_failed: ${paidErr.message}`);
 
     return { duplicate: false };

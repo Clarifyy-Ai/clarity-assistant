@@ -1,17 +1,9 @@
 import { ENV } from "@/lib/env";
 import { useState, useEffect, useCallback } from "react";
-import {
-  scorecardsDB,
-  sessionsDB,
-  sessionAnswersDB,
-} from "@/lib/supabase/database";
-import { callGemini } from "@/lib/ai/geminiClient";
-import { useAuthStore } from "@/store/userStore";
-import type { Scorecard, QuestionScore } from "@/types/scorecard.types";
-
-// ─────────────────────────────────────────────────────────────────
-// useScorecard
-// ─────────────────────────────────────────────────────────────────
+import { scorecardsDB, sessionAnswersDB } from "@/lib/supabase/database";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import type { Scorecard } from "@/types/scorecard.types";
+import type { ScorecardUiStatus } from "@/lib/analytics/scoreStatus";
 
 interface UseScorecardOptions {
   sessionId: string;
@@ -19,6 +11,7 @@ interface UseScorecardOptions {
 
 interface ScorecardState {
   scorecard: Scorecard | null;
+  status: ScorecardUiStatus;
   isLoading: boolean;
   isGenerating: boolean;
   error: string | null;
@@ -27,47 +20,14 @@ interface ScorecardState {
   shareToken: string | null;
 }
 
-interface SessionForScoring {
-  interview_type?: string | null;
-  experience_level?: string | null;
-  duration_seconds?: number | null;
-  filler_words?: number | null;
-  total_filler_words?: number | null;
-  avg_wpm?: number | null;
-}
-
-interface AnswerRow {
-  id: string;
-  question: string;
-  answer?: string | null;
-}
-
-interface FillerSummary {
-  total: number;
-  rate_per_minute: number;
-  top_3: Array<{ word: string; count: number }>;
-}
-
-interface WpmTrend {
-  avg: number;
-  trend: string;
-}
-
-interface FeedbackPayload {
-  strengths: string[];
-  improvements: string[];
-  coach_note: string;
-  star_adherence: number;
-  clarity_score: number;
-  structure_score: number;
-  relevance_score: number;
-}
-
+/**
+ * Scorecards are authoritative only when persisted in `scorecards`.
+ * The browser must not invent a final numeric score (no client Gemini write-back).
+ */
 export function useScorecard({ sessionId }: UseScorecardOptions) {
-  const { profile } = useAuthStore();
-
   const [state, setState] = useState<ScorecardState>({
     scorecard: null,
+    status: "loading",
     isLoading: true,
     isGenerating: false,
     error: null,
@@ -76,147 +36,100 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
     shareToken: null,
   });
 
-  const generateScorecard = useCallback(async (): Promise<void> => {
-    setState((s) => ({ ...s, isGenerating: true, isLoading: false }));
+  const applyScorecard = useCallback((existing: Scorecard) => {
+    setState((s) => ({
+      ...s,
+      scorecard: existing,
+      status: "scored",
+      isLoading: false,
+      isGenerating: false,
+      error: null,
+      isShared: existing.is_shared,
+      shareToken: existing.share_token,
+      shareUrl: existing.share_token ? buildShareUrl(existing.share_token) : null,
+    }));
+  }, []);
 
-    try {
-      const session = await sessionsDB.getById(sessionId);
+  const requestServerScore = useCallback(async (): Promise<Scorecard | null> => {
+    setState((s) => ({
+      ...s,
+      status: "pending",
+      isLoading: false,
+      isGenerating: true,
+      error: null,
+    }));
 
-      if (!session) throw new Error("Session not found");
-
-      const answerRows = await sessionAnswersDB.listBySessionId(sessionId);
-
-      const questionsForScoring = (answerRows ?? []).map((row: AnswerRow) => ({
-        id: row.id,
-        question_text: row.question,
-        candidate_answer: row.answer ?? "",
-      }));
-
-      const answered = questionsForScoring.filter((q) =>
-        (q.candidate_answer ?? "").trim().length > 0,
-      );
-      if (answered.length === 0) {
-        throw new Error(
-          "No answers were recorded for this session, so a scorecard cannot be generated. Re-run the session and answer at least one question.",
-        );
-      }
-
-      const sessionMeta = session as SessionForScoring;
-      const durationSeconds = sessionMeta.duration_seconds ?? 0;
-      const fillerTotal =
-        sessionMeta.filler_words ?? sessionMeta.total_filler_words ?? 0;
-      const fillerSummary: FillerSummary = {
-        total: fillerTotal,
-        rate_per_minute:
-          durationSeconds > 0 ? (fillerTotal / durationSeconds) * 60 : 0,
-        top_3: [],
-      };
-      const wpmTrend: WpmTrend = {
-        avg: sessionMeta.avg_wpm ?? 0,
-        trend: "stable",
-      };
-
-      const questionScores = await scoreQuestions(
-        answered,
-        sessionMeta
-      );
-
-      const overallScore = calculateOverallScore(
-        questionScores,
-        fillerSummary.rate_per_minute,
-        wpmTrend.avg
-      );
-
-      const feedback = await generateFeedback(
-        sessionMeta,
-        questionScores,
-        fillerSummary,
-        wpmTrend,
-        overallScore
-      );
-
-      const scorecard: Scorecard = {
-        id: crypto.randomUUID(),
-        session_id: sessionId,
-        user_id: profile?.id ?? "",
-        overall_score: overallScore,
-        confidence_score: Math.round(
-          questionScores.reduce((a, q) => a + q.confidence_score, 0) /
-            Math.max(1, questionScores.length)
-        ),
-        clarity_score: feedback.clarity_score,
-        structure_score: feedback.structure_score,
-        relevance_score: feedback.relevance_score,
-        question_scores: questionScores,
-        filler_count: fillerSummary.total,
-        filler_rate: fillerSummary.rate_per_minute,
-        top_filler_words: fillerSummary.top_3,
-        wpm_avg: wpmTrend.avg,
-        wpm_trend: wpmTrend.trend,
-        strengths: feedback.strengths,
-        improvements: feedback.improvements,
-        coach_note: feedback.coach_note,
-        star_adherence: feedback.star_adherence,
-        is_shared: false,
-        share_token: null,
-        pdf_url: null,
-        generated_at: new Date().toISOString(),
-      };
-
-      await scorecardsDB.create(scorecard);
-
-      await sessionsDB.update(sessionId, {
-        overall_score: overallScore,
-        strengths: feedback.strengths,
-        improvements: feedback.improvements,
-        duration_seconds: durationSeconds || sessionMeta.duration_seconds,
-      } as Parameters<typeof sessionsDB.update>[1]);
-
-      setState((s) => ({
-        ...s,
-        scorecard,
-        isGenerating: false,
-        error: null,
-      }));
-    } catch (err) {
-      setState((s) => ({
-        ...s,
-        isGenerating: false,
-        error:
-          err instanceof Error ? err.message : "Failed to generate scorecard",
-      }));
-    }
-  }, [sessionId, profile]);
+    await fetchEdgeJson("generate-debrief", { session_id: sessionId }, { timeoutMs: 60_000 });
+    return scorecardsDB.getBySessionId(sessionId);
+  }, [sessionId]);
 
   const loadScorecard = useCallback(async (): Promise<void> => {
-    setState((s) => ({ ...s, isLoading: true, error: null }));
+    setState((s) => ({
+      ...s,
+      isLoading: true,
+      status: "loading",
+      error: null,
+    }));
 
     try {
       const existing = await scorecardsDB.getBySessionId(sessionId);
-
       if (existing) {
+        applyScorecard(existing);
+        return;
+      }
+
+      const answers = await sessionAnswersDB.listBySessionId(sessionId).catch(() => []);
+      const hasAnswers = (answers ?? []).some(
+        (row: { answer?: string | null }) => (row.answer ?? "").trim().length > 0,
+      );
+      if (!hasAnswers) {
         setState((s) => ({
           ...s,
-          scorecard: existing,
+          scorecard: null,
+          status: "not_scored",
           isLoading: false,
-          isShared: existing.is_shared,
-          shareToken: existing.share_token,
-          shareUrl: existing.share_token
-            ? buildShareUrl(existing.share_token)
-            : null,
+          isGenerating: false,
+          error:
+            "No answers were recorded for this session, so a scorecard cannot be generated. Re-run the session and answer at least one question.",
         }));
         return;
       }
 
-      await generateScorecard();
+      try {
+        const created = await requestServerScore();
+        if (created) {
+          applyScorecard(created);
+          return;
+        }
+        setState((s) => ({
+          ...s,
+          scorecard: null,
+          status: "not_scored",
+          isLoading: false,
+          isGenerating: false,
+          error: null,
+        }));
+      } catch (err) {
+        setState((s) => ({
+          ...s,
+          scorecard: null,
+          status: "failed",
+          isLoading: false,
+          isGenerating: false,
+          error:
+            err instanceof Error ? err.message : "Failed to generate scorecard",
+        }));
+      }
     } catch {
       setState((s) => ({
         ...s,
         isLoading: false,
+        isGenerating: false,
+        status: "failed",
         error: "Failed to load scorecard",
       }));
     }
-  }, [sessionId, generateScorecard]);
+  }, [sessionId, applyScorecard, requestServerScore]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -255,129 +168,12 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
 
   return {
     ...state,
-    generateScorecard,
+    generateScorecard: loadScorecard,
     shareScorecard,
     exportJSON,
     exportPDF,
     reload: loadScorecard,
   };
-}
-
-// ── Helpers ──────────────────────────────────────────────────────
-
-async function scoreQuestions(
-  questions: Array<{
-    id: string;
-    question_text: string;
-    candidate_answer: string;
-  }>,
-  session: SessionForScoring
-): Promise<QuestionScore[]> {
-  if (questions.length === 0) return [];
-  const prompt = `You are an expert interview coach. Score each answer on a 0-100 scale.
-Session type: ${session.interview_type}
-Experience level: ${session.experience_level}
-
-For each question, return a JSON array with objects:
-{ "question_id": string, "score": number (0-100), "confidence_score": number (0-100), "star_used": boolean, "key_strength": string, "key_weakness": string, "coach_tip": string }
-
-Questions and answers:
-${questions
-  .map(
-    (q, i) =>
-      `Q${i + 1}: "${q.question_text}"\nA: "${q.candidate_answer || "No answer recorded"}"`
-  )
-  .join("\n\n")}
-
-Return ONLY valid JSON array.`;
-
-  const text = await callGemini({ prompt, model: "gemini-1.5-flash" });
-  const clean = text.replace(/```json|```/g, "").trim();
-  let raw: Array<Partial<QuestionScore> & { question_id?: string }>;
-  try {
-    raw = JSON.parse(clean) as Array<
-      Partial<QuestionScore> & { question_id?: string }
-    >;
-  } catch {
-    throw new Error("Scorecard scoring failed: invalid AI response");
-  }
-  if (!Array.isArray(raw) || raw.length === 0) {
-    throw new Error("Scorecard scoring failed: empty AI response");
-  }
-  return raw.map((r, i) => {
-    if (typeof r.score !== "number" || typeof r.confidence_score !== "number") {
-      throw new Error("Scorecard scoring failed: incomplete score payload");
-    }
-    return {
-      question_id: r.question_id ?? questions[i]?.id ?? "",
-      question_text: questions[i]?.question_text ?? "",
-      order_index: i,
-      score: r.score,
-      confidence_score: r.confidence_score,
-      star_used: r.star_used ?? false,
-      key_strength: r.key_strength ?? "",
-      key_weakness: r.key_weakness ?? "",
-      coach_tip: r.coach_tip ?? "",
-    };
-  });
-}
-
-async function generateFeedback(
-  session: SessionForScoring,
-  scores: QuestionScore[],
-  fillerSummary: FillerSummary,
-  wpmTrend: WpmTrend,
-  overallScore: number
-): Promise<FeedbackPayload> {
-  const prompt = `You are an expert interview coach. Generate structured feedback.
-
-Session: ${session.interview_type}, ${session.experience_level}-level
-Overall score: ${overallScore}/100
-Filler word rate: ${fillerSummary.rate_per_minute.toFixed(1)}/min
-Speaking pace: ${wpmTrend.avg} WPM (${wpmTrend.trend})
-
-Return JSON:
-{ "strengths": ["..."], "improvements": ["..."], "coach_note": "...", "star_adherence": number, "clarity_score": number, "structure_score": number, "relevance_score": number }
-
-Return ONLY valid JSON.`;
-
-  const text = await callGemini({ prompt, model: "gemini-1.5-flash" });
-  const clean = text.replace(/```json|```/g, "").trim();
-  let parsed: FeedbackPayload;
-  try {
-    parsed = JSON.parse(clean) as FeedbackPayload;
-  } catch {
-    throw new Error("Scorecard feedback failed: invalid AI response");
-  }
-  if (
-    typeof parsed.clarity_score !== "number" ||
-    typeof parsed.structure_score !== "number" ||
-    typeof parsed.relevance_score !== "number"
-  ) {
-    throw new Error("Scorecard feedback failed: incomplete feedback payload");
-  }
-  return parsed;
-}
-
-function calculateOverallScore(
-  questionScores: QuestionScore[],
-  fillerRate: number,
-  avgWPM: number
-): number {
-  const avgQuestionScore =
-    questionScores.reduce((a, q) => a + q.score, 0) /
-    Math.max(1, questionScores.length);
-  const fillerPenalty = Math.max(0, (fillerRate - 2) * 1);
-  const wpmPenalty =
-    avgWPM < 110
-      ? (110 - avgWPM) * 0.2
-      : avgWPM > 180
-        ? (avgWPM - 180) * 0.1
-        : 0;
-  return Math.max(
-    0,
-    Math.min(100, Math.round(avgQuestionScore - fillerPenalty - wpmPenalty))
-  );
 }
 
 function generateShareToken(): string {

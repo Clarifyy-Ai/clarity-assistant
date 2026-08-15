@@ -3,6 +3,8 @@ import { Copy, Download, Filter, Plus, Search, Upload } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -83,10 +85,12 @@ export default function QuestionBankPage() {
   const [preview, setPreview] = useState<BankRow | null>(null);
   const [importReport, setImportReport] = useState<ImportReport | null>(null);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
+    setLoadError(null);
     let query = supabase
       .from("questions")
       .select(
@@ -96,8 +100,13 @@ export default function QuestionBankPage() {
       .limit(200);
     if (!isAdmin) query = query.eq("uploaded_by", user.id);
     const { data, error } = await query;
-    if (error) toast.error(error.message);
-    setRows((data as BankRow[]) ?? []);
+    if (error) {
+      setLoadError(error.message);
+      toast.error(error.message);
+      setRows([]);
+    } else {
+      setRows((data as BankRow[]) ?? []);
+    }
     setLoading(false);
   }, [user?.id, isAdmin]);
 
@@ -409,6 +418,19 @@ export default function QuestionBankPage() {
 
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : loadError ? (
+            <InlineErrorRetry message={loadError} onRetry={() => void load()} />
+          ) : filtered.length === 0 ? (
+            <EmptyState
+              compact
+              icon={Search}
+              title={rows.length === 0 ? "No questions yet" : "No matches"}
+              description={
+                rows.length === 0
+                  ? "Create a question on the left. Answer keys stay on your own items only — live exams never read them from this list."
+                  : "Try a different search or filter."
+              }
+            />
           ) : (
             <ul className="space-y-2">
               {filtered.map((row) => (

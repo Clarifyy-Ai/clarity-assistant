@@ -73,8 +73,8 @@ export default function Terms() {
 
         <h2>6. Subscriptions &amp; Billing</h2>
         <ul>
-          <li>Paid plans are billed monthly or annually as selected at checkout.</li>
-          <li>You may cancel your subscription at any time; access continues until the end of the billing period.</li>
+          <li>Paid plans and credit packs are billed as one-time Razorpay payments in INR.</li>
+          <li>Razorpay checkout does not auto-renew. Re-purchase when credits or plan access expire.</li>
           <li>Refunds are handled on a case-by-case basis within 7 days of purchase.</li>
           <li>Credit packs are non-refundable once used.</li>
         </ul>

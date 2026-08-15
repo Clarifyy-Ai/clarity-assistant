@@ -18,13 +18,13 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
 import { useAuthStore } from "@/store/authStore";
-import { sanitizeText } from "@/lib/security";
 import { cn } from "@/lib/utils";
 import {
   getEnabledOAuthProviders,
   isOAuthProviderEnabled,
   type OAuthProviderId,
 } from "@/lib/auth/oauthProviders";
+import { storeRefCode } from "@/lib/referrals";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -49,8 +49,6 @@ interface OAuthButtonProps {
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
-
-const REFERRAL_STORAGE_KEY = "clarify_ref";
 
 const ALLOWED_OAUTH_PROVIDERS = new Set<OAuthProviderName>(
   getEnabledOAuthProviders()
@@ -120,25 +118,6 @@ function extractErrorCode(error: unknown): string | null {
   return null;
 }
 
-function normalizeReferralCode(value: string | null): string | null {
-  if (!value) {
-    return null;
-  }
-
-  const sanitized = sanitizeText(value)
-    .replace(/[^A-Za-z0-9_-]/g, "")
-    .slice(0, 100);
-
-  return sanitized.length > 0 ? sanitized : null;
-}
-
-function safeSetLocalStorageItem(key: string, value: string): void {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // Ignore storage failures. OAuth should still continue.
-  }
-}
 
 function assertAllowedProvider(provider: OAuthProviderName): boolean {
   return isOAuthProviderEnabled(provider) && ALLOWED_OAUTH_PROVIDERS.has(provider);
@@ -205,11 +184,7 @@ export const OAuthButton = ({
         throw new Error("Unsupported OAuth provider.");
       }
 
-      const refCode = normalizeReferralCode(searchParams.get("ref"));
-
-      if (refCode) {
-        safeSetLocalStorageItem(REFERRAL_STORAGE_KEY, refCode);
-      }
+      storeRefCode(searchParams.get("ref"));
 
       await signInWithOAuth(provider.name);
 

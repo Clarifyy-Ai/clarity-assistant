@@ -1,5 +1,7 @@
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest, createUserScopedClient } from "../_shared/auth.ts";
+import { createServiceClient } from "../_shared/supabase.ts";
+import { enforceSessionRateLimitAsync } from "../_shared/rateLimit.ts";
 
 function json(req: Request, payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -14,6 +16,13 @@ Deno.serve(async (req) => {
 
   const auth = await authenticateRequest(req);
   if (auth.error || !auth.context) return auth.error ?? json(req, { error: "Unauthorized" }, 401);
+
+  const rateLimited = await enforceSessionRateLimitAsync(
+    createServiceClient(),
+    "assemble-assessment",
+    auth.context.user.id,
+  );
+  if (rateLimited) return rateLimited;
 
   const body = await req.json().catch(() => null);
   const templateId = String(body?.template_id ?? "").trim();

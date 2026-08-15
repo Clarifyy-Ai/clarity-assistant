@@ -1,8 +1,6 @@
-import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { ShieldCheck, ExternalLink, CheckCircle2, Circle, AlertTriangle, Database, Radio, Lock, Key } from "lucide-react";
+import { ShieldCheck, ExternalLink, CheckCircle2, AlertTriangle, Database, Radio, Lock, Key } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 
@@ -158,12 +156,6 @@ const MANUAL: Item[] = [
   },
 ];
 
-const STORAGE_KEY = "security-checklist-done";
-
-function loadDone(): Record<string, boolean> {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); } catch { return {}; }
-}
-
 const sevColors = {
   error: "text-red-500 bg-red-500/10 border-red-500/20",
   warn: "text-amber-500 bg-amber-500/10 border-amber-500/20",
@@ -172,33 +164,24 @@ const sevColors = {
 
 export default function SettingsSecurityConfig() {
   const isAdmin = useAuthStore((s) => s.isAdmin);
-  const [done, setDone] = useState<Record<string, boolean>>(loadDone);
 
   if (!isAdmin) {
     return <Navigate to="/app/settings/security" replace />;
   }
-
-  function toggle(id: string) {
-    const next = { ...done, [id]: !done[id] };
-    setDone(next);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-  }
-
-  const completedCount = MANUAL.filter((i) => done[i.id]).length;
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
           <ShieldCheck className="w-5 h-5 text-emerald-500" />
-          Security Configuration Checklist
+          Security configuration
         </h2>
         <p className="text-xs text-muted-foreground mt-1">
-          Last automated scan: {new Date().toLocaleDateString()} · {RESOLVED.length} fixed in code · {MANUAL.length} need Supabase Dashboard actions
+          Read-only documentation. Checklist marks in this browser are not a
+          production control and do not change server configuration.
         </p>
       </div>
 
-      {/* Resolved */}
       <Card>
         <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-emerald-500" />
@@ -217,47 +200,30 @@ export default function SettingsSecurityConfig() {
         </div>
       </Card>
 
-      {/* Manual */}
       <Card>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
             <AlertTriangle className="w-4 h-4 text-amber-500" />
-            Manual Supabase actions ({completedCount}/{MANUAL.length} done)
+            Manual Supabase Dashboard actions ({MANUAL.length})
           </h3>
           <span className="text-xs text-muted-foreground">
-            Cannot be applied via migrations
+            Apply in the dashboard — this page does not mutate config
           </span>
         </div>
 
         <div className="space-y-3">
           {MANUAL.map((item) => {
-            const isDone = !!done[item.id];
             const Icon = item.icon;
             return (
               <div
                 key={item.id}
-                className={cn(
-                  "rounded-xl border p-4 transition-all",
-                  isDone ? "bg-emerald-500/5 border-emerald-500/20 opacity-70" : "bg-card border-border"
-                )}
+                className="rounded-xl border border-border bg-card p-4"
               >
                 <div className="flex items-start gap-3">
-                  <button
-                    onClick={() => toggle(item.id)}
-                    className="mt-0.5 shrink-0 text-muted-foreground hover:text-emerald-500 transition-colors"
-                    aria-label={isDone ? "Mark as not done" : "Mark as done"}
-                  >
-                    {isDone ? (
-                      <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                    ) : (
-                      <Circle className="w-5 h-5" />
-                    )}
-                  </button>
-
+                  <Icon className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <Icon className="w-4 h-4 text-muted-foreground" />
-                      <h4 className={cn("text-sm font-semibold text-foreground", isDone && "line-through")}>
+                      <h4 className="text-sm font-semibold text-foreground">
                         {item.title}
                       </h4>
                       <span className={cn("text-[10px] px-2 py-0.5 rounded-full border font-medium uppercase tracking-wide", sevColors[item.severity])}>
@@ -276,14 +242,15 @@ export default function SettingsSecurityConfig() {
 
                     {item.link && (
                       <div className="mt-3">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => window.open(item.link!.url, "_blank", "noopener,noreferrer")}
-                          rightIcon={<ExternalLink className="w-3.5 h-3.5" />}
+                        <a
+                          href={item.link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:opacity-80"
                         >
                           {item.link.label}
-                        </Button>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
                       </div>
                     )}
                   </div>
@@ -293,10 +260,6 @@ export default function SettingsSecurityConfig() {
           })}
         </div>
       </Card>
-
-      <p className="text-[11px] text-muted-foreground">
-        Re-run the security scan from your Lovable Security panel after completing each item to confirm it falls off the report.
-      </p>
     </div>
   );
 }

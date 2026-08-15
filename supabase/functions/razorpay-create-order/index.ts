@@ -1,6 +1,7 @@
 /**
- * Razorpay order creation — subscriptions and credit packs (INR).
- * Secrets: RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
+ * Razorpay order creation — one-time plans and credit packs (INR).
+ * Fail-closed: never return a payable provider order without a durable
+ * internal payment_orders row.
  */
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
@@ -29,6 +30,7 @@ const PRODUCT_TYPES = [
 const schema = z.object({
   product_type: z.enum(PRODUCT_TYPES),
   promo_code: z.string().trim().max(32).optional(),
+  idempotency_key: z.string().trim().min(8).max(120).optional(),
 });
 
 type BillingSettings = {
@@ -40,21 +42,34 @@ type BillingSettings = {
   razorpay_enabled: boolean;
 };
 
+const REUSABLE_STATUSES = [
+  "pending",
+  "provider_created",
+  "created",
+] as const;
+
+function json(req: Request, payload: unknown, status: number) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+  });
+}
+
 function baseAmountPaise(
   product: (typeof PRODUCT_TYPES)[number],
   settings: BillingSettings,
 ): number {
   switch (product) {
     case "pro_monthly":
-      return settings.pro_monthly_inr_paise;
+      return Number(settings.pro_monthly_inr_paise);
     case "enterprise_monthly":
-      return settings.enterprise_monthly_inr_paise;
+      return Number(settings.enterprise_monthly_inr_paise);
     case "credits_50":
-      return settings.credits_50_inr_paise;
+      return Number(settings.credits_50_inr_paise);
     case "credits_150":
-      return settings.credits_150_inr_paise;
+      return Number(settings.credits_150_inr_paise);
     case "credits_500":
-      return settings.credits_500_inr_paise;
+      return Number(settings.credits_500_inr_paise);
   }
 }
 
@@ -68,30 +83,51 @@ async function razorpayFetch(path: string, body: Record<string, unknown>) {
     },
     body: JSON.stringify(body),
   });
-  const json = await res.json();
+  const jsonBody = await res.json();
   if (!res.ok) {
-    throw new Error(json?.error?.description ?? "Razorpay API error");
+    throw new Error(jsonBody?.error?.description ?? "Razorpay API error");
   }
-  return json;
+  return jsonBody;
+}
+
+async function recordReconciliation(
+  db: ReturnType<typeof createServiceClient>,
+  row: {
+    user_id: string;
+    provider_order_id?: string | null;
+    payment_order_id?: string | null;
+    reason: string;
+    details?: Record<string, unknown>;
+  },
+) {
+  await db.from("billing_reconciliation_incidents").insert({
+    user_id: row.user_id,
+    provider: "razorpay",
+    provider_order_id: row.provider_order_id ?? null,
+    payment_order_id: row.payment_order_id ?? null,
+    reason: row.reason,
+    details: row.details ?? {},
+  }).then(() => {}, () => {});
+
+  opsLog({
+    function_name: "razorpay-create-order",
+    operation: "reconciliation",
+    result: "error",
+    error_class: row.reason,
+    retryable: true,
+  });
 }
 
 Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;
-  const headers = getCorsHeaders(req);
 
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
-      headers: { ...headers, "Content-Type": "application/json" },
-    });
+    return json(req, { error: "Method not allowed" }, 405);
   }
 
   if (!KEY_ID || !KEY_SECRET) {
-    return new Response(JSON.stringify({ error: "Razorpay not configured" }), {
-      status: 503,
-      headers: { ...headers, "Content-Type": "application/json" },
-    });
+    return json(req, { error: "Integration not configured" }, 503);
   }
 
   try {
@@ -104,35 +140,26 @@ Deno.serve(async (req: Request) => {
       error_class: "BILLING_CONFIG_INVALID",
       retryable: false,
     });
-    return new Response(JSON.stringify({ error: "Billing configuration invalid" }), {
-      status: 503,
-      headers: { ...headers, "Content-Type": "application/json" },
-    });
+    return json(req, { error: "Billing configuration invalid" }, 503);
   }
 
   const auth = await authenticateRequest(req);
-  if (auth.error) {
-    return new Response(auth.error.body, {
-      status: auth.error.status,
-      headers: { ...headers, "Content-Type": "application/json" },
-    });
+  if (auth.error || !auth.context) {
+    return auth.error ?? json(req, { error: "Unauthorized" }, 401);
   }
 
+  const userId = auth.context.user.id;
   const db = createServiceClient();
   const rateLimited = await enforcePaymentRateLimitAsync(
     db,
     "razorpay-create-order",
-    auth.context.user.id,
+    userId,
   );
   if (rateLimited) return rateLimited;
 
-  const raw = await parseJsonBody(req);
-  const parsed = schema.safeParse(raw);
+  const parsed = schema.safeParse(await parseJsonBody(req));
   if (!parsed.success) {
-    return new Response(JSON.stringify({ error: "Invalid request" }), {
-      status: 400,
-      headers: { ...headers, "Content-Type": "application/json" },
-    });
+    return json(req, { error: "Invalid request" }, 400);
   }
 
   const { data: settingsRow } = await db
@@ -143,16 +170,20 @@ Deno.serve(async (req: Request) => {
 
   const settings = (settingsRow ?? {}) as BillingSettings;
   if (settings.razorpay_enabled === false) {
-    return new Response(JSON.stringify({ error: "Razorpay payments disabled" }), {
-      status: 403,
-      headers: { ...headers, "Content-Type": "application/json" },
-    });
+    return json(req, { error: "Razorpay payments disabled" }, 403);
   }
 
   const { product_type, promo_code } = parsed.data;
   let amount = baseAmountPaise(product_type, settings);
   let promoId: string | null = null;
   let appliedPromo: string | null = null;
+
+  if (!Number.isFinite(amount) || amount < 100) {
+    return json(req, {
+      error: "Checkout is not available for this product right now.",
+      code: "PRICE_UNAVAILABLE",
+    }, 503);
+  }
 
   if (promo_code) {
     const code = promo_code.toUpperCase();
@@ -180,7 +211,7 @@ Deno.serve(async (req: Request) => {
     const { data: profile } = await db
       .from("profiles")
       .select("pending_promo_code")
-      .eq("id", auth.context.user.id)
+      .eq("id", userId)
       .single();
     if (profile?.pending_promo_code) {
       const { data: promo } = await db
@@ -198,53 +229,167 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  const receipt = `clarity_${auth.context.user.id.slice(0, 8)}_${Date.now()}`;
-  const order = await razorpayFetch("/orders", {
-    amount,
-    currency: "INR",
-    receipt,
-    notes: {
-      user_id: auth.context.user.id,
-      product_type,
-    },
-  });
+  const headerKey = (
+    req.headers.get("Idempotency-Key") ??
+    req.headers.get("x-idempotency-key") ??
+    ""
+  ).trim().slice(0, 120);
 
-  const { data: row, error: insertErr } = await db
+  const idempotencyKey =
+    parsed.data.idempotency_key ??
+    (headerKey.length >= 8 ? headerKey : `${userId}:${product_type}:${appliedPromo ?? "none"}`);
+
+  const { data: existing } = await db
     .from("payment_orders")
-    .insert({
-      user_id: auth.context.user.id,
-      provider: "razorpay",
-      provider_order_id: order.id,
-      product_type,
-      amount_paise: amount,
-      currency: "INR",
-      status: "created",
-      credits_granted: creditsForRazorpayProductType(product_type),
-      plan_id: planIdForRazorpayProductType(product_type),
-      promo_code_id: promoId,
-      promo_code: appliedPromo,
-      metadata: { receipt },
-    })
-    .select("id")
-    .single();
+    .select("id, provider_order_id, amount_paise, status, promo_code")
+    .eq("user_id", userId)
+    .eq("idempotency_key", idempotencyKey)
+    .in("status", [...REUSABLE_STATUSES])
+    .maybeSingle();
 
-  if (insertErr) {
-    console.error("[razorpay-create-order] insert", insertErr.message);
+  if (existing?.provider_order_id && existing.id) {
+    return json(req, {
+      key_id: KEY_ID,
+      order_id: existing.provider_order_id,
+      amount: existing.amount_paise,
+      currency: "INR",
+      payment_order_id: existing.id,
+      promo_applied: existing.promo_code,
+      product_type,
+      idempotentReplay: true,
+    }, 200);
   }
 
-  return new Response(
-    JSON.stringify({
-      key_id: KEY_ID,
-      order_id: order.id,
+  let paymentOrderId = existing?.id as string | undefined;
+  if (!paymentOrderId) {
+    const { data: reserved, error: reserveErr } = await db
+      .from("payment_orders")
+      .insert({
+        user_id: userId,
+        provider: "razorpay",
+        product_type,
+        amount_paise: amount,
+        currency: "INR",
+        status: "pending",
+        credits_granted: creditsForRazorpayProductType(product_type),
+        plan_id: planIdForRazorpayProductType(product_type),
+        promo_code_id: promoId,
+        promo_code: appliedPromo,
+        idempotency_key: idempotencyKey,
+        metadata: { reserved: true },
+      })
+      .select("id")
+      .single();
+
+    if (reserveErr || !reserved?.id) {
+      if (reserveErr?.code === "23505") {
+        const { data: raced } = await db
+          .from("payment_orders")
+          .select("id, provider_order_id, amount_paise, status, promo_code")
+          .eq("user_id", userId)
+          .eq("idempotency_key", idempotencyKey)
+          .maybeSingle();
+        if (raced?.provider_order_id && raced.id) {
+          return json(req, {
+            key_id: KEY_ID,
+            order_id: raced.provider_order_id,
+            amount: raced.amount_paise,
+            currency: "INR",
+            payment_order_id: raced.id,
+            promo_applied: raced.promo_code,
+            product_type,
+            idempotentReplay: true,
+          }, 200);
+        }
+        if (raced?.id) paymentOrderId = raced.id;
+      }
+      if (!paymentOrderId) {
+        opsLog({
+          function_name: "razorpay-create-order",
+          operation: "reserve_internal_order",
+          result: "error",
+          error_class: "PAYMENT_ORDER_PERSIST_FAILED",
+          retryable: true,
+        });
+        return json(req, {
+          error: "Could not start checkout. Please try again.",
+          code: "ORDER_PERSIST_FAILED",
+        }, 500);
+      }
+    } else {
+      paymentOrderId = reserved.id;
+    }
+  }
+
+  const receipt = `clarity_${userId.slice(0, 8)}_${paymentOrderId.slice(0, 8)}`;
+  let order: { id?: string };
+  try {
+    order = await razorpayFetch("/orders", {
       amount,
       currency: "INR",
-      payment_order_id: row?.id ?? null,
-      promo_applied: appliedPromo,
-      product_type,
-    }),
-    {
-      status: 200,
-      headers: { ...headers, "Content-Type": "application/json" },
-    },
-  );
+      receipt,
+      notes: {
+        user_id: userId,
+        product_type,
+        payment_order_id: paymentOrderId,
+      },
+    });
+  } catch {
+    await db.from("payment_orders").update({
+      status: "failed",
+      metadata: { receipt, provider_error: true },
+    }).eq("id", paymentOrderId);
+    return json(req, {
+      error: "Payment provider is unavailable. Please try again.",
+      code: "PROVIDER_UNAVAILABLE",
+    }, 502);
+  }
+
+  if (!order?.id) {
+    await db.from("payment_orders").update({ status: "failed" }).eq("id", paymentOrderId);
+    return json(req, {
+      error: "Could not create a payment order.",
+      code: "PROVIDER_ORDER_INVALID",
+    }, 502);
+  }
+
+  const { data: persisted, error: persistErr } = await db
+    .from("payment_orders")
+    .update({
+      provider_order_id: order.id,
+      amount_paise: amount,
+      status: "provider_created",
+      metadata: { receipt },
+    })
+    .eq("id", paymentOrderId)
+    .select("id, provider_order_id")
+    .single();
+
+  if (persistErr || !persisted?.id || !persisted.provider_order_id) {
+    await db.from("payment_orders").update({
+      status: "reconciliation_required",
+      provider_order_id: order.id,
+      reconciliation_reason: "provider_created_internal_update_failed",
+    }).eq("id", paymentOrderId);
+    await recordReconciliation(db, {
+      user_id: userId,
+      provider_order_id: order.id,
+      payment_order_id: paymentOrderId,
+      reason: "provider_created_without_durable_update",
+    });
+    return json(req, {
+      error: "Could not start checkout. Please try again.",
+      code: "ORDER_PERSIST_FAILED",
+    }, 500);
+  }
+
+  return json(req, {
+    key_id: KEY_ID,
+    order_id: persisted.provider_order_id,
+    amount,
+    currency: "INR",
+    payment_order_id: persisted.id,
+    promo_applied: appliedPromo,
+    product_type,
+  }, 200);
 });

@@ -16,6 +16,7 @@ import {
   scheduleWithWaitUntil,
 } from "../_shared/govPaperAssembly.ts";
 import { newWorkerId } from "../_shared/govPaperJobLease.ts";
+import { requireCapability } from "../_shared/requireCapability.ts";
 
 const COST = creditCost("create_mock_test");
 
@@ -190,6 +191,21 @@ Deno.serve(async (req) => {
         error: "Approved syllabus not available",
         code: "SYLLABUS_NOT_AVAILABLE",
       }, 409);
+    }
+
+    const aiFillModes = new Set(["generated_mock", "custom_mock", "adaptive"]);
+    if (aiFillModes.has(mode)) {
+      const { data: profile } = await db
+        .from("profiles")
+        .select("plan_id, subscription_status")
+        .eq("id", user.id)
+        .maybeSingle();
+      const capabilityGate = requireCapability(
+        profile?.plan_id,
+        "gov_exam_ai_fill",
+        req,
+      );
+      if (capabilityGate) return capabilityGate;
     }
 
     const creditResult = await deductCreditsAtomic({

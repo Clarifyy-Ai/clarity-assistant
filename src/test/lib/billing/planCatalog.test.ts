@@ -50,8 +50,7 @@ describe("plan catalog parity", () => {
     }
   });
 
-  // P0-1: Max/enterprise must have Stripe price ID fields so checkout can start
-  it("enterprise plan exposes Stripe monthly and yearly price ID fields", () => {
+  it("enterprise and pro plans keep catalog price ID fields", () => {
     expect(Object.keys(PLANS.enterprise)).toEqual(
       expect.arrayContaining(["stripePriceIdMonthly", "stripePriceIdYearly"]),
     );

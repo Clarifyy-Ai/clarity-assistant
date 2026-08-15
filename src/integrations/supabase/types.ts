@@ -5698,6 +5698,36 @@ export type Database = {
         }
         Relationships: []
       }
+      questions_playable: {
+        Row: {
+          id: string
+          question_text: string
+          question_html: string | null
+          question_type: string
+          options: Json | null
+          subject: string
+          topic: string
+          subtopic: string | null
+          category: string | null
+          tags: string[] | null
+          difficulty: string | null
+          exam_type: string | null
+          source: string | null
+          source_year: number | null
+          source_paper: string | null
+          marks_positive: number | null
+          marks_negative: number | null
+          time_limit_seconds: number | null
+          has_image: boolean | null
+          image_url: string | null
+          latex_present: boolean | null
+          is_verified: boolean | null
+          is_public: boolean | null
+          uploaded_by: string | null
+          created_at: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       add_credits: {
@@ -5804,6 +5834,7 @@ export type Database = {
           status: string
         }[]
       }
+      ensure_my_referral_code: { Args: never; Returns: string }
       get_my_referrals: {
         Args: never
         Returns: {

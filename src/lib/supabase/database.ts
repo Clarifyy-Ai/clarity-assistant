@@ -128,6 +128,7 @@ const PROFILE_BOOT_COLUMNS = [
   "stealth_mode",
   "timezone",
   "locale",
+  "referral_code",
   "updated_at",
 ].join(", ");
 
@@ -192,10 +193,13 @@ export const profilesDB = {
   },
 
   async upsert(profile: TablesInsert<"profiles">): Promise<Tables<"profiles">> {
+    const safeProfile = sanitizeProfileClientUpdate(
+      profile as TablesUpdate<"profiles"> & Record<string, unknown>,
+    );
     return query(
       () => supabase
         .from("profiles")
-        .upsert({ ...profile, updated_at: new Date().toISOString() })
+        .upsert({ ...safeProfile, id: profile.id, updated_at: new Date().toISOString() })
         .select(PROFILE_SAFE_COLUMNS)
         .single() as unknown as PromiseLike<{ data: Tables<"profiles"> | null; error: unknown }>,
       { table: "profiles", operation: "upsert" }
@@ -1741,6 +1745,16 @@ export const notificationsDB = {
 
 // ─── Referrals ────────────────────────────────────────────────────────────────
 
+export type ReferralInviteRow = {
+  id: string;
+  referred_email_masked: string | null;
+  referred_id: string;
+  status: string;
+  credits_awarded: number;
+  signed_up_at: string | null;
+  rewarded_at: string | null;
+};
+
 export const referralsDB = {
   async getStats(userId: string): Promise<{ invitedCount: number; creditsEarned: number }> {
     const { count, error: countErr } = await supabase
@@ -1776,27 +1790,59 @@ export const referralsDB = {
     return { invitedCount: count ?? 0, creditsEarned };
   },
 
-  async upsertReferred(params: {
-    referrerId: string;
-    referredId: string;
-    referredEmail?: string;
-  }): Promise<void> {
-    const { error } = await supabase.from("referrals").upsert(
-      {
-        referrer_id: params.referrerId,
-        referred_id: params.referredId,
-        referred_email: params.referredEmail ?? "",
-        credits_awarded: 0,
-      },
-      { onConflict: "referred_id" as any, ignoreDuplicates: true },
-    );
-
+  async listMine(): Promise<ReferralInviteRow[]> {
+    const { data, error } = await supabase.rpc("get_my_referrals");
     if (error) {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
         table: "referrals",
-        operation: "upsertReferred",
+        operation: "listMine",
       });
     }
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      referred_email_masked: row.referred_email_masked ?? null,
+      referred_id: row.referred_id,
+      status: row.status,
+      credits_awarded: row.credits_awarded ?? 0,
+      signed_up_at: row.signed_up_at ?? null,
+      rewarded_at: row.rewarded_at ?? null,
+    }));
+  },
+
+  async getProgramCopy(): Promise<{
+    refereeCredits: number;
+    referrerCredits: number;
+    discountPercent: number;
+  }> {
+    const { data, error } = await supabase
+      .from("billing_settings")
+      .select("referee_credit_reward, referrer_credit_reward, referral_discount_percent")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "billing_settings",
+        operation: "getProgramCopy",
+      });
+    }
+
+    return {
+      refereeCredits: data?.referee_credit_reward ?? 25,
+      referrerCredits: data?.referrer_credit_reward ?? 25,
+      discountPercent: data?.referral_discount_percent ?? 50,
+    };
+  },
+
+  async ensureMyCode(): Promise<string | null> {
+    const { data, error } = await supabase.rpc("ensure_my_referral_code");
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "profiles",
+        operation: "ensureMyCode",
+      });
+    }
+    return typeof data === "string" && data.trim() ? data.trim().toUpperCase() : null;
   },
 };
 

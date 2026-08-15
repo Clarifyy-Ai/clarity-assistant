@@ -104,10 +104,6 @@ export function useXPSystem() {
 
     const prevLevel = gamification.level;
 
-    // Optimistic local update
-    gamification.addXP(amount);
-
-    // Persist to DB via direct profile update (no RPC needed)
     const { data: profileData, error } = await supabase
       .from("profiles")
       .select("xp, total_sessions")
@@ -115,25 +111,12 @@ export function useXPSystem() {
       .maybeSingle();
 
     if (error || !profileData) {
-      gamification.addXP(-amount);
       console.error("[useXPSystem] XP fetch failed:", error?.message);
       return;
     }
 
-    const newTotal = (profileData.xp ?? 0) + amount;
-
-    const { error: updateErr } = await supabase
-      .from("profiles")
-      .update({ xp: newTotal, updated_at: new Date().toISOString() })
-      .eq("id", user.id);
-
-    if (updateErr) {
-      gamification.addXP(-amount);
-      console.error("[useXPSystem] XP update failed:", updateErr.message);
-      return;
-    }
-
-    // Sync with server-authoritative total
+    // xp is RLS-pinned; persist via session trigger / service_role only.
+    const newTotal = profileData.xp ?? 0;
     gamification.setXP(newTotal);
 
     // Badge unlock check
@@ -171,16 +154,6 @@ export function useXPSystem() {
       const bonus = BADGE_DEFINITIONS[badgeId]?.xp_bonus ?? 0;
       if (bonus > 0) {
         gamification.addXP(bonus);
-        // Persist the bonus XP too (fire-and-forget)
-        supabase
-          .from("profiles")
-          .update({ xp: newTotal + bonus })
-          .eq("id", user.id)
-          .then(({ error: bonusErr }) => {
-            if (bonusErr) {
-              console.warn("[useXPSystem] badge bonus persist failed:", bonusErr.message);
-            }
-          });
       }
 
       // Clear pending badge after animation window

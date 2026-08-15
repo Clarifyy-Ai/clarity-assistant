@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 
 type HubTab =
   | "overview"
@@ -109,6 +110,8 @@ export default function AdminAiHub() {
   const [running, setRunning] = useState(false);
   const [history, setHistory] = useState<unknown[]>([]);
   const [probeBusy, setProbeBusy] = useState<string | null>(null);
+  const [benchmarkConfirmOpen, setBenchmarkConfirmOpen] = useState(false);
+  const [pendingRunAction, setPendingRunAction] = useState<"run" | "route" | null>(null);
 
   const loadStatus = useCallback(async () => {
     setLoading(true);
@@ -173,21 +176,7 @@ export default function AdminAiHub() {
     }
   }
 
-  async function handleRun(action: "run" | "route") {
-    if (!prompt.trim()) {
-      toast.error("Enter a prompt first");
-      return;
-    }
-    if (action === "run" && !selectedModels().length) {
-      toast.error("Select at least one model");
-      return;
-    }
-    if (mode === "benchmark") {
-      const ok = window.confirm(
-        "Benchmark may execute multiple API calls and cost ops budget. Continue?",
-      );
-      if (!ok) return;
-    }
+  async function executeRun(action: "run" | "route") {
     setRunning(true);
     setResults([]);
     setRoutingReason(null);
@@ -212,6 +201,23 @@ export default function AdminAiHub() {
     } finally {
       setRunning(false);
     }
+  }
+
+  async function handleRun(action: "run" | "route") {
+    if (!prompt.trim()) {
+      toast.error("Enter a prompt first");
+      return;
+    }
+    if (action === "run" && !selectedModels().length) {
+      toast.error("Select at least one model");
+      return;
+    }
+    if (mode === "benchmark") {
+      setPendingRunAction(action);
+      setBenchmarkConfirmOpen(true);
+      return;
+    }
+    await executeRun(action);
   }
 
   async function testConnection(provider: AIHubProvider) {
@@ -612,6 +618,25 @@ export default function AdminAiHub() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        open={benchmarkConfirmOpen}
+        onOpenChange={(open) => {
+          setBenchmarkConfirmOpen(open);
+          if (!open) setPendingRunAction(null);
+        }}
+        title="Run benchmark?"
+        description="Benchmark may execute multiple API calls and cost ops budget. Continue?"
+        confirmLabel="Run benchmark"
+        variant="info"
+        isLoading={running}
+        onConfirm={async () => {
+          const action = pendingRunAction;
+          setBenchmarkConfirmOpen(false);
+          setPendingRunAction(null);
+          if (action) await executeRun(action);
+        }}
+      />
     </div>
   );
 }

@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, BarChart2,
   Flag, Shield, ChevronRight, DollarSign, Cpu, Bot,
   MessageSquare, FileText, Database, ScrollText, LifeBuoy,
-  ExternalLink, ClipboardCheck, Upload, Menu, Tag, Settings2,
+  ExternalLink, Upload, Menu, Tag, Settings2,
   Link2, BookOpen, ListChecks, FileStack, Languages, FileUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -38,7 +38,6 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { to: "/app/admin/questions",      icon: FileText,       label: "Questions"     },
       { to: "/app/admin/bulk-upload",    icon: Upload,         label: "Bulk Upload"   },
       { to: "/app/admin/seed-questions", icon: Database,       label: "Seed / Import" },
-      { to: "/app/admin/qa-checklist",   icon: ClipboardCheck, label: "QA Checklist"  },
       { to: "/app/admin/community",      icon: MessageSquare,  label: "Q&A Moderation"},
       { to: "/app/admin/learning",       icon: BookOpen,       label: "Learning Hub"  },
     ],
@@ -149,6 +148,12 @@ export default function AdminLayout() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col md:flex-row">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:text-sm focus:font-medium"
+      >
+        Skip to content
+      </a>
       {/* Mobile header */}
       <header className="md:hidden flex items-center gap-3 px-4 py-3 border-b border-border shrink-0">
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
@@ -213,7 +218,7 @@ export default function AdminLayout() {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-auto p-4 md:p-6">
+      <main id="main-content" className="flex-1 overflow-auto p-4 md:p-6">
         <Outlet />
       </main>
     </div>

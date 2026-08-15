@@ -124,13 +124,9 @@ export function validateBillingConfig(options?: {
   const requireRazorpay =
     options?.requireRazorpay ??
     Boolean(Deno.env.get("RAZORPAY_KEY_ID") || Deno.env.get("RAZORPAY_KEY_SECRET"));
-  // Razorpay-only callers must not fail closed on missing Stripe — INR checkout is
-  // the live path until USD Stripe secrets exist.
+  // Razorpay is the live checkout path. Stripe is optional leftover config.
   const requireStripe =
-    options?.requireStripe ??
-    (requireRazorpay && options?.requireRazorpay
-      ? false
-      : environment === "production" || Boolean(Deno.env.get("STRIPE_SECRET_KEY")));
+    options?.requireStripe ?? Boolean(Deno.env.get("STRIPE_SECRET_KEY"));
   const requireRazorpayWebhook = options?.requireRazorpayWebhook ?? false;
 
   const checks: EnvCheckResult[] = [];

@@ -38,6 +38,8 @@ import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 
 import { useUIStore } from "@/store/uiStore";
 
+import { useIndiaRegion } from "@/hooks/useIndiaRegion";
+
 import {
 
   addRecentSearch,
@@ -94,9 +96,25 @@ const COMMANDS: NavCommand[] = [
 
   { label: PRODUCT_NAMES.govExams, path: "/app/mock-test", icon: Brain, group: "Sessions", keywords: "exam gov test" },
 
-  { label: PRODUCT_NAMES.sessionHistory, path: "/app/sessions", icon: Calendar, group: "Sessions", keywords: "history calls" },
+  { label: PRODUCT_NAMES.sessionHistory, path: "/app/sessions", icon: Calendar, group: "Sessions", keywords: "history calls sessions" },
 
   { label: PRODUCT_NAMES.debrief, path: "/app/debriefs", icon: Sparkles, group: "Sessions", keywords: "debriefs feedback" },
+
+  { label: "Learning Hub", path: "/app/learn", icon: BookOpen, group: "Prep", keywords: "learn courses preview" },
+
+  { label: "Q&A", path: "/app/community", icon: BookOpen, group: "Prep", keywords: "community questions" },
+
+  { label: "Coding lab", path: "/app/coding", icon: FlaskConical, group: "Prep", keywords: "coding assessment lab" },
+
+  { label: "Document library", path: "/app/library", icon: FileText, group: "Prep", keywords: "library files documents" },
+
+  { label: "Practice workspace", path: "/app/practice-workspace", icon: BookOpen, group: "Prep", keywords: "workspace practice" },
+
+  { label: "Assessments", path: "/app/assessments", icon: Brain, group: "Sessions", keywords: "assessment" },
+
+  { label: "Question bank", path: "/app/question-bank", icon: FileText, group: "Prep", keywords: "questions bank" },
+
+  { label: "Practice plan", path: "/app/plan", icon: BookOpen, group: "Navigate", keywords: "plan schedule" },
 
   { label: PRODUCT_NAMES.prepLab, path: "/app/prep", icon: BookOpen, group: "Prep", keywords: "prep lab tools" },
 
@@ -147,7 +165,12 @@ export function CommandPalette() {
 
   const { enabled: privateMode, toggle: togglePrivate } = usePrivateMode();
 
-  const visibleCommands = COMMANDS;
+  const { isIndia } = useIndiaRegion();
+
+  const visibleCommands = useMemo(
+    () => COMMANDS.filter((c) => isIndia || c.path !== "/app/mock-test"),
+    [isIndia],
+  );
 
 
 

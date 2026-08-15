@@ -98,6 +98,13 @@ const EXAM_DB_MAP: Record<string, string> = {
   PSU:             "PSU",
 };
 
+/** Frontend exam id -> gov_exams.code. Omit exams that are not in the registry. */
+const REGISTRY_EXAM_CODES: Record<string, string> = {
+  SSC_CGL: "SSC_CGL",
+  IBPS_PO: "IBPS_PO",
+  UPSC: "UPSC_CSE_PRELIMS",
+};
+
 const EXAM_SUBJECT_LABELS: Record<string, string[]> = {
   JEE_MAIN:      ["Physics", "Chemistry", "Math"],
   JEE_ADV:       ["Physics", "Chemistry", "Math"],
@@ -171,6 +178,8 @@ export default function ExamPapers() {
       const normalised = (examType ?? "").toUpperCase();
       const dbExamType  = EXAM_DB_MAP[normalised] ?? normalised;
 
+      const registryCode = REGISTRY_EXAM_CODES[normalised];
+
       const [papersRes, testsRes, registryRes] = await Promise.all([
         supabase
           .from("exam_papers")
@@ -186,7 +195,9 @@ export default function ExamPapers() {
               .eq("status", "COMPLETED")
           : Promise.resolve({ data: [] as MockTestRow[], error: null }),
 
-        listPreviousPapers({ examCode: normalised }).catch(() => null),
+        registryCode
+          ? listPreviousPapers({ examCode: registryCode }).catch(() => null)
+          : Promise.resolve(null),
       ]);
 
       const loadedPapers = (papersRes.data ?? []) as ExamPaper[];

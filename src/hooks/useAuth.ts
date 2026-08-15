@@ -21,6 +21,8 @@ import { buildAuthRedirectUrl } from "@/lib/auth/redirectUrl";
 import type { AuthProvider, ProfileRow } from "@/types";
 import type { UserProfile } from "@/types/user.types";
 import { getEnabledOAuthProviders } from "@/lib/auth/oauthProviders";
+import { omitPinnedProfileColumns } from "@/lib/profile/clientUpdateGuard";
+import { normalizePlanId } from "@/lib/billing/planIds";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -55,15 +57,45 @@ type FeatureKey =
 
 const SUPPORTED_OAUTH_PROVIDERS = new Set<string>(getEnabledOAuthProviders());
 
-const FEATURE_PLAN_MAP: Record<FeatureKey, string[]> = {
-  live_copilot: ["pro", "elite", "enterprise"],
+/** Launch IDs only. Legacy starter→free and elite→pro via normalizePlanId. */
+export const FEATURE_PLAN_MAP: Record<FeatureKey, string[]> = {
+  live_copilot: ["pro", "enterprise"],
   // Rooms are deprecated — never grant access.
   team_rooms: [],
-  advanced_analytics: ["pro", "elite", "enterprise"],
-  export_pdf: ["pro", "elite", "enterprise"],
+  advanced_analytics: ["pro", "enterprise"],
+  export_pdf: ["pro", "enterprise"],
   // BYOK removed — server-managed providers only.
   byok: [],
 };
+
+export const MFA_REQUIRED_REASON = "mfa_required" as const;
+export const MFA_AAL_START_FAILED_MESSAGE =
+  "We couldn't start two-factor verification. Sign in again.";
+
+export type AuthenticatorAssuranceSnapshot = {
+  currentLevel?: string | null;
+  nextLevel?: string | null;
+} | null | undefined;
+
+export type MfaAssuranceDecision = "allow" | "challenge" | "fail_closed";
+
+/**
+ * Fail-closed MFA gate. AAL1 + next AAL2 must challenge; API/parse failures
+ * must never continue into the private app.
+ */
+export function evaluateMfaAssurance(input: {
+  error?: unknown;
+  aal?: AuthenticatorAssuranceSnapshot;
+}): MfaAssuranceDecision {
+  if (input.error) return "fail_closed";
+  const current = input.aal?.currentLevel;
+  const next = input.aal?.nextLevel;
+  if (!current) return "fail_closed";
+  if (current === "aal2") return "allow";
+  if (current === "aal1" && next === "aal2") return "challenge";
+  if (current === "aal1") return "allow";
+  return "fail_closed";
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -103,7 +135,9 @@ function getSafeAvatarPath(userId: string, file: File): string {
 }
 
 function toProfilePatch(patch: Partial<UserProfile>): Partial<ProfileRow> {
-  return patch as unknown as Partial<ProfileRow>;
+  return omitPinnedProfileColumns(
+    patch as unknown as Record<string, unknown>,
+  ) as unknown as Partial<ProfileRow>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -428,7 +462,7 @@ export function useAuth() {
       return false;
     }
 
-    const plan = currentProfile.plan_id ?? "free";
+    const plan = normalizePlanId(currentProfile.plan_id ?? "free");
 
     return FEATURE_PLAN_MAP[feature]?.includes(plan) ?? false;
   }, []);

@@ -63,7 +63,11 @@ vi.mock("@/lib/supabase/database", () => ({
 }));
 
 import { useAuthStore } from "@/store/authStore";
-import { useAuth } from "@/hooks/useAuth";
+import {
+  useAuth,
+  evaluateMfaAssurance,
+  MFA_AAL_START_FAILED_MESSAGE,
+} from "@/hooks/useAuth";
 
 const mockUser = {
   id: "u1",
@@ -201,8 +205,22 @@ describe("useAuth — canAccessFeature [T-0050]", () => {
     expect(result.current.canAccessFeature("live_copilot")).toBe(false);
   });
 
-  it("pro plan can access live_copilot", () => {
-    seedProfile("pro");
+  it("starter plan cannot access live_copilot (legacy starter is not Pro)", () => {
+    seedProfile("starter");
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    expect(result.current.canAccessFeature("live_copilot")).toBe(false);
+    expect(result.current.canAccessFeature("advanced_analytics")).toBe(false);
+    expect(result.current.canAccessFeature("export_pdf")).toBe(false);
+  });
+
+  it("elite maps to Pro and can access live_copilot", () => {
+    seedProfile("elite");
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    expect(result.current.canAccessFeature("live_copilot")).toBe(true);
+  });
+
+  it("enterprise can access live_copilot", () => {
+    seedProfile("enterprise");
     const { result } = renderHook(() => useAuth(), { wrapper });
     expect(result.current.canAccessFeature("live_copilot")).toBe(true);
   });
@@ -227,5 +245,37 @@ describe("useAuth — role flags [T-0051]", () => {
     seedProfile("pro", true);
     const { result } = renderHook(() => useAuth(), { wrapper });
     expect(result.current.isAdmin).toBe(true);
+  });
+});
+
+describe("evaluateMfaAssurance — fail-closed [T-0052]", () => {
+  it("challenges when current aal1 and next aal2", () => {
+    expect(
+      evaluateMfaAssurance({
+        aal: { currentLevel: "aal1", nextLevel: "aal2" },
+      }),
+    ).toBe("challenge");
+  });
+
+  it("allows when MFA is not required", () => {
+    expect(
+      evaluateMfaAssurance({
+        aal: { currentLevel: "aal1", nextLevel: "aal1" },
+      }),
+    ).toBe("allow");
+    expect(
+      evaluateMfaAssurance({
+        aal: { currentLevel: "aal2", nextLevel: "aal2" },
+      }),
+    ).toBe("allow");
+  });
+
+  it("fails closed on API errors or missing AAL payload", () => {
+    expect(evaluateMfaAssurance({ error: new Error("mfa down") })).toBe(
+      "fail_closed",
+    );
+    expect(evaluateMfaAssurance({ aal: null })).toBe("fail_closed");
+    expect(evaluateMfaAssurance({ aal: {} })).toBe("fail_closed");
+    expect(MFA_AAL_START_FAILED_MESSAGE).toMatch(/two-factor verification/i);
   });
 });

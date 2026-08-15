@@ -3,6 +3,7 @@ import { useScorecard } from "@/hooks/useScorecard";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
+import { scorecardStatusLabel } from "@/lib/analytics/scoreStatus";
 import {
   Trophy, TrendingUp, TrendingDown, Share2,
   Download, BarChart2, MessageSquare,
@@ -22,8 +23,8 @@ export default function Scorecard() {
   const { sessionId }   = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
   const {
-    scorecard, isLoading, isGenerating, error,
-    isShared, shareUrl, shareScorecard, exportPDF, reload,
+    scorecard, status, isLoading, isGenerating, error,
+    isShared, shareScorecard, exportPDF, reload,
   } = useScorecard({ sessionId: sessionId! });
 
   const [expandedQ, setExpandedQ] = useState<string | null>(null);
@@ -38,26 +39,39 @@ export default function Scorecard() {
     }
   }
 
-  // ── Loading state ─────────────────────────────────────────────
+  // ── Loading / pending ─────────────────────────────────────────
 
-  if (isLoading || isGenerating) {
+  if (isLoading || isGenerating || status === "loading" || status === "pending") {
     return (
       <div className="min-h-screen bg-background text-foreground">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-4">
           <SkeletonCard />
           <SkeletonCard />
           <SkeletonCard />
-          {isGenerating && (
-            <p className="text-sm text-muted-foreground text-center">
-              Analysing your session… This may take a few seconds.
-            </p>
-          )}
+          <p className="text-sm text-muted-foreground text-center">
+            {status === "pending" || isGenerating
+              ? "Preparing your scorecard on the server… Scores are not generated in the browser."
+              : `${scorecardStatusLabel("loading")}…`}
+          </p>
         </div>
       </div>
     );
   }
 
-  if (error || !scorecard) {
+  if (status === "failed" || (error && status !== "not_scored")) {
+    return (
+      <div className="min-h-screen bg-background text-foreground">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-4">
+          <InlineErrorRetry
+            message={error ?? "Scoring failed. Retry when you are ready."}
+            onRetry={() => void reload()}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "not_scored" || !scorecard) {
     const isNoAnswersError =
       typeof error === "string" &&
       (/no answers were recorded/i.test(error) || /incomplete_no_answers/i.test(error));
@@ -65,29 +79,19 @@ export default function Scorecard() {
     return (
       <div className="min-h-screen bg-background text-foreground">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-4">
-          {error && isNoAnswersError && (
-            <EmptyState
-              icon={AlertTriangle}
-              title="Session incomplete — no scorecard"
-              description={error}
-              actionLabel="Back to mock interviews"
-              onAction={() => navigate("/app/mock")}
-              compact
-            />
-          )}
-          {error && !isNoAnswersError && (
-            <InlineErrorRetry message={error} onRetry={() => void reload()} />
-          )}
-          {!error && (
-            <EmptyState
-              icon={BarChart2}
-              title="Scorecard not found"
-              description="We couldn't find a scorecard for this session."
-              actionLabel="Back to Dashboard"
-              onAction={() => navigate("/app/dashboard")}
-              compact
-            />
-          )}
+          <EmptyState
+            icon={isNoAnswersError ? AlertTriangle : BarChart2}
+            title={isNoAnswersError ? "Session incomplete — no scorecard" : "Not scored"}
+            description={
+              error ??
+              "No server scorecard exists for this session yet. Clarify AI does not invent a numeric score in the browser."
+            }
+            actionLabel="Back to mock interviews"
+            onAction={() => navigate("/app/mock")}
+            secondaryActionLabel="Retry scoring"
+            onSecondaryAction={() => void reload()}
+            compact
+          />
         </div>
       </div>
     );
@@ -288,6 +292,14 @@ export default function Scorecard() {
 
         {/* ── CTA ────────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row gap-3 pt-4">
+          {sessionId && (
+            <Link
+              to={`/app/sessions/${sessionId}`}
+              className="flex-1 text-center py-3 bg-secondary hover:bg-secondary border border-border text-muted-foreground font-medium rounded-xl transition-all"
+            >
+              View session
+            </Link>
+          )}
           <Link
             to="/app/mock"
             className="flex-1 text-center py-3 bg-gradient-to-r from-primary to-purple-600 hover:from-primary hover:to-purple-500 text-foreground font-semibold rounded-xl transition-all"

@@ -1,5 +1,6 @@
 import { supabase } from "@/lib/supabase/client";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { PLAYABLE_QUESTIONS_VIEW } from "@/lib/gov-exam/playableQuestions";
 import { normalizeExamTypeForStorage, resolveExamConfigId } from "@/lib/mock-test/examTypes";
 
 export interface MockTestLaunchConfig {
@@ -111,7 +112,7 @@ export async function countQuestionsForPaper(
     examTypePaperValue;
 
   const { count, error } = await supabase
-    .from("questions")
+    .from(PLAYABLE_QUESTIONS_VIEW)
     .select("id", { count: "exact", head: true })
     .eq("exam_type", examType)
     .eq("source_year", year)

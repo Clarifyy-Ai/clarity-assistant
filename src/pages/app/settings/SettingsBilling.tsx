@@ -14,18 +14,13 @@ import {
 import { LAUNCH_PLANS, getPlanDisplayName } from "@/lib/constants/pricing";
 
 import {
-  formatPrice,
   CREDIT_PACKS as TOPUP_PACKS,
-  getCostPerCredit,
+  formatInrPaise,
   getBestValueCreditPack,
+  razorpayPaiseForPack,
+  razorpayPaiseForPlan,
 } from "@/lib/billing/priceCalculator";
 
-import {
-  cancelSubscription as cancelSubscriptionApi,
-  resumeSubscription as resumeSubscriptionApi,
-  openCheckoutForPrice,
-  openBillingPortal,
-} from "@/lib/api/billing";
 import {
   clearPendingPlan,
   isPaidSignupPlan,
@@ -43,24 +38,15 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
-import { isStripeConfigured } from "@/lib/env";
 import { creditsDB } from "@/lib/supabase/database";
 import {
   AlertTriangle,
   ArrowUpRight,
   CreditCard,
-  ExternalLink,
   RefreshCw,
   Shield,
-  XCircle,
   Zap,
 } from "lucide-react";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Constants
-// ─────────────────────────────────────────────────────────────────────────────
-
-const STRIPE_CONFIGURED = isStripeConfigured();
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   active: {
@@ -73,10 +59,6 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   },
   past_due: {
     label: "Past Due",
-    color: "text-amber-400",
-  },
-  canceling: {
-    label: "Canceling",
     color: "text-amber-400",
   },
   canceled: {
@@ -109,15 +91,12 @@ const PLAN_COLORS: Record<string, "violet" | "amber" | "emerald" | "blue"> = {
   enterprise: "emerald",
 };
 
-function getPlanPriceId(
-  planId: PlanId,
-  interval: "monthly" | "yearly" = "monthly"
-): string | undefined {
-  const plan = PLANS[planId];
-  if (!plan) return undefined;
-  return interval === "yearly"
-    ? plan.stripePriceIdYearly || plan.stripePriceIdMonthly
-    : plan.stripePriceIdMonthly;
+type CheckoutPhase = "creating" | "processing";
+
+function razorpayProductForPlan(planId: string): RazorpayProductType | null {
+  if (planId === "enterprise") return "enterprise_monthly";
+  if (planId === "pro" || planId === "elite") return "pro_monthly";
+  return null;
 }
 
 function razorpayProductForPack(packId: string): RazorpayProductType | null {
@@ -127,30 +106,32 @@ function razorpayProductForPack(packId: string): RazorpayProductType | null {
   return null;
 }
 
-function getSettingsBillingSuccessUrl(): string {
-  return `${window.location.origin}/app/settings/billing?checkout=success`;
+function checkoutBusyLabel(
+  busyKey: string | null,
+  phase: CheckoutPhase | null,
+  currentKey: string,
+  idle: string,
+): string {
+  if (busyKey !== currentKey) return idle;
+  return phase === "processing" ? "Payment processing" : "Creating secure checkout…";
 }
 
-function getSettingsBillingCancelUrl(): string {
-  return `${window.location.origin}/app/settings/billing?checkout=cancelled`;
+function checkoutErrorMessage(error: unknown): string {
+  const msg = error instanceof Error ? error.message : "";
+  if (msg.includes("Checkout could not be prepared")) {
+    return msg;
+  }
+  if (msg.includes("Razorpay not configured") || msg.includes("not configured")) {
+    return "Razorpay keys are not set on the server. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in Supabase Edge secrets.";
+  }
+  if (msg.includes("Billing configuration")) {
+    return "Billing is not fully configured on the server yet.";
+  }
+  if (msg.toLowerCase().includes("verif")) {
+    return msg || "Payment could not be verified. No credits were added.";
+  }
+  return msg.trim() || "Checkout failed. Try again or contact support.";
 }
-
-function isSubscriptionCancelable(
-  subscription: Subscription | null,
-  planId: PlanId
-): boolean {
-  return Boolean(
-    subscription &&
-      !subscription.cancelAtPeriodEnd &&
-      planId !== "free" &&
-      subscription.status !== "canceled" &&
-      subscription.status !== "cancelled"
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Component
-// ─────────────────────────────────────────────────────────────────────────────
 
 export default function SettingsBilling(): JSX.Element {
   const user = useAuthStore((state) => state.user);
@@ -165,9 +146,9 @@ export default function SettingsBilling(): JSX.Element {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loadingSub, setLoadingSub] = useState(true);
   const [subError, setSubError] = useState<string | null>(null);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [promoCode, setPromoCode] = useState("");
   const [razorpayLoading, setRazorpayLoading] = useState<string | null>(null);
+  const [checkoutPhase, setCheckoutPhase] = useState<CheckoutPhase | null>(null);
   /** Sum of debit amounts this calendar month; null when unknown / N/A. */
   const [creditsUsedThisPeriod, setCreditsUsedThisPeriod] = useState<number | null>(null);
   const upgradeCheckoutStartedRef = useRef(false);
@@ -191,8 +172,8 @@ export default function SettingsBilling(): JSX.Element {
       setSubscription(sub);
       await Promise.all([refreshCredits(), loadProfile()]);
     } catch (error) {
-      console.error("[SettingsBilling] Failed to load subscription:", error);
-      setSubError("Could not load subscription details. Please refresh.");
+      console.error("[SettingsBilling] Failed to load billing details:", error);
+      setSubError("Could not load billing details. Please refresh.");
     } finally {
       setLoadingSub(false);
     }
@@ -241,12 +222,9 @@ export default function SettingsBilling(): JSX.Element {
     const legacySuccess = searchParams.get("success");
     const legacyCanceled = searchParams.get("canceled");
     const upgradePlan = searchParams.get("upgrade");
-    const upgradeInterval =
-      searchParams.get("interval") === "yearly" ? "yearly" : "monthly";
 
     if (checkoutStatus === "success" || legacySuccess === "1") {
-      toast.success("Payment successful! Your balance is updating now.");
-      clearPendingPlan();
+      // Query-string return is not proof of payment. Refresh only; do not claim success.
       setSearchParams({}, { replace: true });
       void reloadBillingState();
       void refreshCredits();
@@ -267,38 +245,12 @@ export default function SettingsBilling(): JSX.Element {
       clearPendingPlan();
       setSearchParams({}, { replace: true });
 
-      if (!STRIPE_CONFIGURED) {
-        setRazorpayLoading("pro_monthly");
-        void openRazorpayCheckout({
-          productType: "pro_monthly",
-          userEmail: profile?.email ?? user?.email ?? undefined,
-          userName: profile?.full_name ?? undefined,
-        })
-          .catch((error) => {
-            console.error("[SettingsBilling] Razorpay upgrade checkout error:", error);
-            toast.error("Checkout failed. Try Pay with Razorpay below.");
-            upgradeCheckoutStartedRef.current = false;
-          })
-          .finally(() => setRazorpayLoading(null));
-        return;
-      }
-
-      const priceId = getPlanPriceId(upgradePlan as PlanId, upgradeInterval);
-      if (!priceId) {
-        toast.error("No Stripe price is configured for this plan.");
+      const product = razorpayProductForPlan(upgradePlan) ?? "pro_monthly";
+      void handleRazorpayCheckout(product).catch(() => {
         upgradeCheckoutStartedRef.current = false;
-        return;
-      }
-      setActionLoading(upgradePlan);
-      void openCheckoutForPrice(priceId)
-        .catch((error) => {
-          console.error("[SettingsBilling] upgrade checkout error:", error);
-          toast.error("Failed to start checkout. Please try again later.");
-          upgradeCheckoutStartedRef.current = false;
-        })
-        .finally(() => setActionLoading(null));
+      });
     }
-  }, [searchParams, setSearchParams, reloadBillingState, refreshCredits]);
+  }, [searchParams, setSearchParams, refreshCredits]);
 
   const statusInfo = STATUS_LABELS[subscription?.status ?? ""] ?? null;
 
@@ -318,209 +270,76 @@ export default function SettingsBilling(): JSX.Element {
       ? Math.min(100, (creditsUsed / creditsMonthly) * 100)
       : 0;
 
-  const canCancel = useMemo(
-    () => isSubscriptionCancelable(subscription, effectivePlanId),
-    [subscription, effectivePlanId]
-  );
-
   const bestValuePackId = useMemo(
     () => getBestValueCreditPack().id,
     []
   );
 
   async function handleRazorpayCheckout(productType: RazorpayProductType): Promise<void> {
+    if (razorpayLoading) return;
+
     setRazorpayLoading(productType);
+    setCheckoutPhase("creating");
     try {
       await openRazorpayCheckout({
         productType,
         promoCode: promoCode.trim() || undefined,
         userEmail: profile?.email ?? user?.email ?? undefined,
         userName: profile?.full_name ?? undefined,
+        onReady: () => setCheckoutPhase("processing"),
         onSuccess: () => {
-          toast.success("Payment confirmed. Your plan and credits are updating.");
+          toast.success("Payment completed");
           void credits.refresh();
           void reloadBillingState();
         },
       });
     } catch (error) {
       console.error("[SettingsBilling] Razorpay", error);
-      const msg = error instanceof Error ? error.message : "";
-      toast.error(
-        msg.includes("Razorpay not configured") || msg.includes("not configured")
-          ? "Razorpay keys are not set on the server. Add RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in Supabase Edge secrets."
-          : msg.includes("Billing configuration")
-            ? "Billing is not fully configured on the server yet."
-            : "Checkout failed. Try again or contact support.",
-      );
+      toast.error(checkoutErrorMessage(error));
+      throw error;
     } finally {
       setRazorpayLoading(null);
+      setCheckoutPhase(null);
     }
   }
 
   async function handleUpgrade(targetPlanId: string): Promise<void> {
-    if (!STRIPE_CONFIGURED) {
-      await handleRazorpayCheckout("pro_monthly");
+    const product = razorpayProductForPlan(targetPlanId);
+    if (!product) {
+      toast.error("This plan is not available for checkout.");
       return;
     }
-
-    const typedPlanId = targetPlanId as PlanId;
-    const priceId = getPlanPriceId(typedPlanId);
-
-    if (!priceId) {
-      toast.error("No Stripe price is configured for this plan.");
-      return;
-    }
-
-    setActionLoading(targetPlanId);
-
     try {
-      await openCheckoutForPrice(priceId);
-    } catch (error) {
-      console.error("[SettingsBilling] handleUpgrade error:", error);
-      toast.error("Failed to start checkout. Please try again later.");
-      setActionLoading(null);
+      await handleRazorpayCheckout(product);
+    } catch {
+      // Toast already shown.
     }
   }
 
-  async function handleBuyCredits(
-    packId: string,
-    stripePriceId?: string
-  ): Promise<void> {
-    if (!STRIPE_CONFIGURED || !stripePriceId) {
-      const razorpayProduct = razorpayProductForPack(packId);
-      if (razorpayProduct) {
+  async function handleBuyCredits(packId: string): Promise<void> {
+    const razorpayProduct = razorpayProductForPack(packId);
+    if (razorpayProduct) {
+      try {
         await handleRazorpayCheckout(razorpayProduct);
-        return;
+      } catch {
+        // Toast already shown.
       }
-      toast.error("Credit purchase is not available yet. Please contact support.");
       return;
     }
-
-    setActionLoading(packId);
-
-    try {
-      await openCheckoutForPrice(stripePriceId);
-    } catch (error) {
-      console.error("[SettingsBilling] handleBuyCredits error:", error);
-      toast.error("Failed to start checkout. Please try again later.");
-      setActionLoading(null);
-    }
-  }
-
-  async function handleOpenBillingPortal(): Promise<void> {
-    setActionLoading("portal");
-
-    try {
-      await openBillingPortal();
-    } catch (error) {
-      console.error("[SettingsBilling] handleOpenBillingPortal error:", error);
-      toast.error("Failed to open billing portal.");
-      setActionLoading(null);
-    }
-  }
-
-  async function handleCancel(): Promise<void> {
-    if (!subscription) {
-      toast.error("No active subscription found.");
-      return;
-    }
-
-    setActionLoading("cancel");
-
-    try {
-      const result = await cancelSubscriptionApi({
-        subscription_id: subscription.stripeSubscriptionId,
-      });
-
-      toast.success("Subscription will cancel at the end of the billing period.");
-
-      setSubscription((current) =>
-        current
-          ? {
-              ...current,
-              cancelAtPeriodEnd: true,
-              cancelAt: result.cancel_at_iso
-                ? new Date(result.cancel_at_iso)
-                : current.cancelAt,
-            }
-          : current
-      );
-
-      await reloadBillingState();
-    } catch (error) {
-      console.error("[SettingsBilling] handleCancel error:", error);
-      toast.error("Failed to cancel subscription. Please try again later.");
-    } finally {
-      setActionLoading(null);
-    }
-  }
-
-  async function handleResume(): Promise<void> {
-    if (!subscription) {
-      toast.error("No subscription found.");
-      return;
-    }
-
-    setActionLoading("resume");
-
-    try {
-      await resumeSubscriptionApi({
-        subscription_id: subscription.stripeSubscriptionId,
-      });
-
-      toast.success("Subscription resumed.");
-
-      setSubscription((current) =>
-        current
-          ? {
-              ...current,
-              cancelAtPeriodEnd: false,
-              cancelAt: null,
-            }
-          : current
-      );
-
-      await reloadBillingState();
-    } catch (error) {
-      console.error("[SettingsBilling] handleResume error:", error);
-      toast.error("Failed to resume subscription. Please try again later.");
-    } finally {
-      setActionLoading(null);
-    }
+    toast.error("Credit purchase is not available yet. Please contact support.");
   }
 
   return (
     <div className="space-y-6 max-w-4xl">
       <PageHeader
-        title="Billing & Subscription"
-        description="Manage your plan, subscription, credits, and invoices"
+        title="Billing"
+        description="Manage your plan, credits, and one-time Razorpay purchases"
         breadcrumbs={[
           { label: "Dashboard", href: "/app/dashboard" },
           { label: "Settings", href: "/app/settings" },
           { label: "Billing" },
         ]}
       />
-
-      {!STRIPE_CONFIGURED && (
-        <Card className="border-amber-500/30 bg-amber-500/5">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
-
-            <div>
-              <p className="text-sm font-semibold text-amber-300">
-                USD Stripe checkout is not configured
-              </p>
-
-              <p className="text-xs text-muted-foreground mt-1">
-                Pay with Razorpay (INR) on this page to upgrade or buy credits.
-                Stripe subscriptions will appear here once{" "}
-                <code className="text-amber-300/80">VITE_STRIPE_*</code>{" "}
-                and server Stripe secrets are set.
-              </p>
-            </div>
-          </div>
-        </Card>
-      )}
 
       {subError && (
         <Card className="border-red-500/30 bg-red-500/5">
@@ -539,24 +358,20 @@ export default function SettingsBilling(): JSX.Element {
               <div>
                 <p className="text-sm font-semibold text-amber-300">Payment failed</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Your last payment could not be processed. Update your payment method to
-                  keep your subscription active.
+                  Your last payment could not be processed. Buy Pro or Max access
+                  to restore plan credits.
                 </p>
               </div>
             </div>
             <Button
               variant="primary"
               size="sm"
-              onClick={() =>
-                void (STRIPE_CONFIGURED
-                  ? handleOpenBillingPortal()
-                  : handleRazorpayCheckout("pro_monthly"))
-              }
-              loading={actionLoading === "portal" || razorpayLoading === "pro_monthly"}
+              onClick={() => void handleUpgrade("pro")}
+              loading={razorpayLoading === "pro_monthly"}
               className="shrink-0"
             >
               <RefreshCw className="w-3.5 h-3.5 mr-1" />
-              Retry payment
+              {checkoutBusyLabel(razorpayLoading, checkoutPhase, "pro_monthly", "Buy Pro access")}
             </Button>
           </div>
         </Card>
@@ -589,37 +404,14 @@ export default function SettingsBilling(): JSX.Element {
               <p className="text-2xl font-black text-foreground">
                 {currentPlan.monthlyPrice === 0
                   ? "Free"
-                  : formatPrice(currentPlan.monthlyPrice, true)}
+                  : formatInrPaise(razorpayPaiseForPlan(effectivePlanId) ?? 0)}
               </p>
 
               {currentPlan.monthlyPrice > 0 && (
-                <p className="text-xs text-muted-foreground">/month</p>
+                <p className="text-xs text-muted-foreground">one-time</p>
               )}
             </div>
           </div>
-
-          {!loadingSub && subscription?.cancelAtPeriodEnd && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 mb-4">
-              <XCircle className="w-4 h-4 text-red-400 shrink-0" />
-
-              <p className="text-xs text-red-300">
-                Cancels at end of period{" "}
-                {subscription.currentPeriodEnd
-                  ? `(${subscription.currentPeriodEnd.toLocaleDateString()})`
-                  : ""}
-              </p>
-
-              <Button
-                variant="secondary"
-                size="xs"
-                loading={actionLoading === "resume"}
-                onClick={() => void handleResume()}
-                className="ml-auto"
-              >
-                Resume
-              </Button>
-            </div>
-          )}
 
           <div className="space-y-3">
             <div>
@@ -655,23 +447,11 @@ export default function SettingsBilling(): JSX.Element {
                   variant="primary"
                   size="sm"
                   onClick={() => void handleUpgrade("pro")}
-                  loading={actionLoading === "pro"}
+                  loading={razorpayLoading === "pro_monthly"}
                   disabled={false}
                 >
                   <ArrowUpRight className="w-3.5 h-3.5 mr-1" />
-                  Upgrade to Pro
-                </Button>
-              )}
-
-              {!loadingSub && canCancel && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => void handleCancel()}
-                  loading={actionLoading === "cancel"}
-                  className="text-red-400 hover:text-red-300"
-                >
-                  Cancel subscription
+                  {checkoutBusyLabel(razorpayLoading, checkoutPhase, "pro_monthly", "Upgrade to Pro")}
                 </Button>
               )}
             </div>
@@ -686,20 +466,6 @@ export default function SettingsBilling(): JSX.Element {
                 Account Details
               </h3>
             </div>
-
-            {STRIPE_CONFIGURED ? (
-            <Button
-              variant="outline"
-              size="xs"
-              onClick={() => void handleOpenBillingPortal()}
-              loading={actionLoading === "portal"}
-            >
-              <ExternalLink className="w-3.5 h-3.5 mr-1" />
-              Portal
-            </Button>
-            ) : (
-              <span className="text-[10px] text-muted-foreground">Pay with Razorpay below</span>
-            )}
           </div>
 
           {loadingSub ? (
@@ -721,10 +487,8 @@ export default function SettingsBilling(): JSX.Element {
               </div>
 
               <div className="flex justify-between gap-3">
-                <span className="text-muted-foreground">Customer ID</span>
-                <span className="text-foreground font-mono text-[10px] truncate">
-                  {profile?.stripe_customer_id ?? "Not linked"}
-                </span>
+                <span className="text-muted-foreground">Payment</span>
+                <span className="text-foreground">Razorpay (INR)</span>
               </div>
 
               <div className="flex justify-between gap-3">
@@ -732,34 +496,10 @@ export default function SettingsBilling(): JSX.Element {
                 <span className="text-foreground">{currentPlanLabel}</span>
               </div>
 
-              {subscription?.currentPeriodEnd && (
-                <div className="flex justify-between gap-3">
-                  <span className="text-muted-foreground">
-                    {subscription.cancelAtPeriodEnd ? "Expires" : "Renews"}
-                  </span>
-                  <span className="text-foreground">
-                    {subscription.currentPeriodEnd.toLocaleDateString()}
-                  </span>
-                </div>
-              )}
-
-              {subscription &&
-                !subscription.cancelAtPeriodEnd &&
-                (subscription.monthlyAmountCents ??
-                  PLANS[subscription.planId]?.monthlyPrice ??
-                  0) > 0 && (
-                  <div className="flex justify-between gap-3">
-                    <span className="text-muted-foreground">Next invoice</span>
-                    <span className="text-foreground font-medium">
-                      {formatPrice(
-                        subscription.monthlyAmountCents ??
-                          PLANS[subscription.planId]?.monthlyPrice ??
-                          0,
-                        false
-                      )}
-                    </span>
-                  </div>
-                )}
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Billing</span>
+                <span className="text-foreground">One-time purchase</span>
+              </div>
             </div>
           )}
         </Card>
@@ -787,18 +527,19 @@ export default function SettingsBilling(): JSX.Element {
             const plan = PLANS[id];
             const isCurrent = effectivePlanId === id;
             const color = PLAN_COLORS[id] ?? "violet";
+            const product = razorpayProductForPlan(id);
 
             return (
               <PricingCard
                 key={id}
                 id={id}
-                label={plan.name}
+                label={getPlanDisplayName(id)}
                 price={
                   plan.monthlyPrice === 0
                     ? "Free"
-                    : formatPrice(plan.monthlyPrice, true)
+                    : formatInrPaise(razorpayPaiseForPlan(id) ?? 0)
                 }
-                period={plan.monthlyPrice === 0 ? "" : "/mo"}
+                period={plan.monthlyPrice === 0 ? "" : " one-time"}
                 credits={plan.creditsPerMonth}
                 color={color}
                 features={plan.features.slice(0, 5).map((feature) => ({
@@ -818,11 +559,14 @@ export default function SettingsBilling(): JSX.Element {
                 ctaLabel={
                   isCurrent
                     ? "Current plan"
-                    : !STRIPE_CONFIGURED
-                      ? "Pay with Razorpay"
-                      : undefined
+                    : checkoutBusyLabel(
+                        razorpayLoading,
+                        checkoutPhase,
+                        product ?? "",
+                        `Buy ${getPlanDisplayName(id)} (one-time)`,
+                      )
                 }
-                loading={actionLoading === id}
+                loading={Boolean(product && razorpayLoading === product)}
               />
             );
           })}
@@ -839,8 +583,8 @@ export default function SettingsBilling(): JSX.Element {
             Credits auto-deduct when you use AI features.
           </p>
           <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
-            Razorpay checkout is a one-time payment (Order) — it does not auto-renew.
-            Re-purchase when credits or plan access expire. Stripe subscriptions handle recurring USD billing.
+            Razorpay checkout is a one-time payment for Pro/Max access or credit packs.
+            It does not auto-renew. Re-purchase when credits or plan access expire.
           </p>
           <input
             className="w-full max-w-xs rounded-lg border border-border bg-background px-3 py-2 text-sm"
@@ -852,25 +596,33 @@ export default function SettingsBilling(): JSX.Element {
             <Button
               size="sm"
               loading={razorpayLoading === "pro_monthly"}
-              onClick={() => void handleRazorpayCheckout("pro_monthly")}
+              onClick={() => void handleUpgrade("pro")}
             >
-              Pro — one-time (Razorpay)
+              {checkoutBusyLabel(razorpayLoading, checkoutPhase, "pro_monthly", "Pro — one-time (Razorpay)")}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={razorpayLoading === "enterprise_monthly"}
+              onClick={() => void handleUpgrade("enterprise")}
+            >
+              {checkoutBusyLabel(razorpayLoading, checkoutPhase, "enterprise_monthly", "Max — one-time (Razorpay)")}
             </Button>
             <Button
               size="sm"
               variant="secondary"
               loading={razorpayLoading === "credits_150"}
-              onClick={() => void handleRazorpayCheckout("credits_150")}
+              onClick={() => void handleRazorpayCheckout("credits_150").catch(() => undefined)}
             >
-              150 credits (one-time)
+              {checkoutBusyLabel(razorpayLoading, checkoutPhase, "credits_150", "150 credits (one-time)")}
             </Button>
             <Button
               size="sm"
               variant="secondary"
               loading={razorpayLoading === "credits_500"}
-              onClick={() => void handleRazorpayCheckout("credits_500")}
+              onClick={() => void handleRazorpayCheckout("credits_500").catch(() => undefined)}
             >
-              500 credits (one-time)
+              {checkoutBusyLabel(razorpayLoading, checkoutPhase, "credits_500", "500 credits (one-time)")}
             </Button>
           </div>
         </Card>
@@ -878,7 +630,7 @@ export default function SettingsBilling(): JSX.Element {
 
       <div>
         <h3 className="text-sm font-semibold text-foreground mb-3">
-          Buy Credit Packs (Stripe)
+          Buy Credit Packs
         </h3>
 
         <Card className="mb-3 overflow-hidden p-0">
@@ -889,14 +641,14 @@ export default function SettingsBilling(): JSX.Element {
                   <th className="py-3 px-4 font-medium">Pack</th>
                   <th className="py-3 px-4 font-medium text-right">Credits</th>
                   <th className="py-3 px-4 font-medium text-right">Price</th>
-                  <th className="py-3 px-4 font-medium text-right">$/credit</th>
                   <th className="py-3 px-4 font-medium text-right">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {TOPUP_PACKS.map((pack) => {
-                  const centsPerCredit = getCostPerCredit(pack);
                   const isBestValue = pack.id === bestValuePackId;
+                  const inrPaise = razorpayPaiseForPack(pack.id) ?? 0;
+                  const packProduct = razorpayProductForPack(pack.id);
                   return (
                     <tr
                       key={pack.id}
@@ -919,22 +671,22 @@ export default function SettingsBilling(): JSX.Element {
                         {pack.credits.toLocaleString()}
                       </td>
                       <td className="py-3 px-4 text-right font-semibold text-foreground">
-                        {formatPrice(pack.priceUsdCents)}
-                      </td>
-                      <td className="py-3 px-4 text-right text-muted-foreground">
-                        {formatPrice(Math.round(centsPerCredit), true)}
+                        {formatInrPaise(inrPaise)}
                       </td>
                       <td className="py-3 px-4 text-right">
                         <Button
                           variant="secondary"
                           size="xs"
-                          loading={actionLoading === pack.id || razorpayLoading === razorpayProductForPack(pack.id)}
+                          loading={Boolean(packProduct && razorpayLoading === packProduct)}
                           disabled={false}
-                          onClick={() =>
-                            void handleBuyCredits(pack.id, pack.stripePriceId)
-                          }
+                          onClick={() => void handleBuyCredits(pack.id)}
                         >
-                          Buy
+                          {checkoutBusyLabel(
+                            razorpayLoading,
+                            checkoutPhase,
+                            packProduct ?? "",
+                            "Buy",
+                          )}
                         </Button>
                       </td>
                     </tr>
@@ -946,58 +698,64 @@ export default function SettingsBilling(): JSX.Element {
         </Card>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {TOPUP_PACKS.map((pack) => (
-            <Card
-              key={pack.id}
-              className={cn(
-                "flex flex-col gap-2",
-                pack.badge && "border-primary/30 bg-primary/5"
-              )}
-            >
-              {pack.badge && (
-                <Badge variant="primary" size="sm" className="self-start">
-                  {pack.badge}
-                </Badge>
-              )}
-              {pack.id === bestValuePackId && !pack.badge && (
-                <Badge variant="primary" size="sm" className="self-start">
-                  Best value
-                </Badge>
-              )}
-
-              <div className="flex items-baseline justify-between">
-                <div>
-                  <p className="text-lg font-black text-foreground">
-                    {pack.credits.toLocaleString()}
-                  </p>
-                  <p className="text-xs text-muted-foreground">credits</p>
-                </div>
-
-                <div className="text-right">
-                  <p className="text-lg font-bold text-foreground">
-                    {formatPrice(pack.priceUsdCents)}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">
-                    {formatPrice(Math.round(getCostPerCredit(pack)), true)}/credit
-                  </p>
-                </div>
-              </div>
-
-              <Button
-                variant="secondary"
-                size="sm"
-                className="w-full mt-auto"
-                loading={actionLoading === pack.id || razorpayLoading === razorpayProductForPack(pack.id)}
-                disabled={false}
-                onClick={() =>
-                  void handleBuyCredits(pack.id, pack.stripePriceId)
-                }
+          {TOPUP_PACKS.map((pack) => {
+            const packProduct = razorpayProductForPack(pack.id);
+            return (
+              <Card
+                key={pack.id}
+                className={cn(
+                  "flex flex-col gap-2",
+                  pack.badge && "border-primary/30 bg-primary/5"
+                )}
               >
-                <CreditCard className="w-3.5 h-3.5 mr-1" />
-                Buy
-              </Button>
-            </Card>
-          ))}
+                {pack.badge && (
+                  <Badge variant="primary" size="sm" className="self-start">
+                    {pack.badge}
+                  </Badge>
+                )}
+                {pack.id === bestValuePackId && !pack.badge && (
+                  <Badge variant="primary" size="sm" className="self-start">
+                    Best value
+                  </Badge>
+                )}
+
+                <div className="flex items-baseline justify-between">
+                  <div>
+                    <p className="text-lg font-black text-foreground">
+                      {pack.credits.toLocaleString()}
+                    </p>
+                    <p className="text-xs text-muted-foreground">credits</p>
+                  </div>
+
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-foreground">
+                      {formatInrPaise(razorpayPaiseForPack(pack.id) ?? 0)}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">
+                      one-time · Razorpay
+                    </p>
+                  </div>
+                </div>
+
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="w-full mt-auto"
+                  loading={Boolean(packProduct && razorpayLoading === packProduct)}
+                  disabled={false}
+                  onClick={() => void handleBuyCredits(pack.id)}
+                >
+                  <CreditCard className="w-3.5 h-3.5 mr-1" />
+                  {checkoutBusyLabel(
+                    razorpayLoading,
+                    checkoutPhase,
+                    packProduct ?? "",
+                    "Buy",
+                  )}
+                </Button>
+              </Card>
+            );
+          })}
         </div>
       </div>
     </div>

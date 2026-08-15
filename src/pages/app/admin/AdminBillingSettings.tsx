@@ -37,19 +37,31 @@ export default function AdminBillingSettings() {
   useEffect(() => {
     void (async () => {
       const { data } = await supabase
-        .from("billing_settings" as "profiles")
+        .from("billing_settings")
         .select("*")
-        .eq("id", "1")
+        .eq("id", 1)
         .maybeSingle();
-      if (data) setSettings({ ...defaults, ...(data as unknown as BillingSettings) });
+      if (data) {
+        setSettings({
+          referral_discount_percent: data.referral_discount_percent,
+          referrer_credit_reward: data.referrer_credit_reward,
+          referee_credit_reward: data.referee_credit_reward,
+          razorpay_enabled: data.razorpay_enabled,
+          pro_monthly_inr_paise: data.pro_monthly_inr_paise,
+          enterprise_monthly_inr_paise: data.enterprise_monthly_inr_paise,
+          credits_50_inr_paise: data.credits_50_inr_paise,
+          credits_150_inr_paise: data.credits_150_inr_paise,
+          credits_500_inr_paise: data.credits_500_inr_paise,
+        });
+      }
     })();
   }, []);
 
   async function save() {
     setSaving(true);
     const { error } = await supabase
-      .from("billing_settings" as "profiles")
-      .upsert({ id: "1", ...settings, updated_at: new Date().toISOString() } as never);
+      .from("billing_settings")
+      .upsert({ id: 1, ...settings, updated_at: new Date().toISOString() });
     setSaving(false);
     if (error) toast.error(error.message);
     else toast.success("Billing settings saved");
@@ -107,8 +119,8 @@ export default function AdminBillingSettings() {
       <Card className="p-4 space-y-4">
         <h3 className="font-semibold text-sm">Credits & payments</h3>
         {field("Razorpay enabled", "razorpay_enabled", "checkbox")}
-        {field("Pro monthly (paise)", "pro_monthly_inr_paise")}
-        {field("Enterprise monthly (paise)", "enterprise_monthly_inr_paise")}
+        {field("Pro one-time (paise)", "pro_monthly_inr_paise")}
+        {field("Max one-time (paise)", "enterprise_monthly_inr_paise")}
         {field("50 credits pack (paise)", "credits_50_inr_paise")}
         {field("150 credits pack (paise)", "credits_150_inr_paise")}
         {field("500 credits pack (paise)", "credits_500_inr_paise")}

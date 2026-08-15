@@ -38,6 +38,7 @@ export const RATE_LIMIT_CLASS: Record<string, RateLimitClass> = {
   "ai-hub-router": "strict_fail_closed",
   "support-chat": "controlled_degradation_candidate",
   "analytics-dashboard": "controlled_degradation_candidate",
+  "record-referral": "controlled_degradation_candidate",
   ping: "controlled_degradation_candidate",
 };
 

@@ -84,6 +84,40 @@ function normalizeCents(cents: number): number {
  * formatPrice(1900) => "$19.00"
  * formatPrice(1900, true) => "$19"
  */
+/** Catalog INR amounts charged via Razorpay (paise). */
+export const RAZORPAY_INR_PAISE = {
+  pro_monthly: 249_900,
+  enterprise_monthly: 679_900,
+  credits_50: 69_900,
+  credits_150: 189_900,
+  credits_500: 599_900,
+} as const;
+
+export function formatInrPaise(paise: number, hideDecimals = true): string {
+  const safePaise = normalizeCents(paise);
+  if (safePaise === 0) return "Free";
+  const rupees = safePaise / 100;
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: hideDecimals ? 0 : 2,
+    maximumFractionDigits: hideDecimals ? 0 : 2,
+  }).format(rupees);
+}
+
+export function razorpayPaiseForPlan(planId: string): number | null {
+  if (planId === "pro" || planId === "elite") return RAZORPAY_INR_PAISE.pro_monthly;
+  if (planId === "enterprise") return RAZORPAY_INR_PAISE.enterprise_monthly;
+  return null;
+}
+
+export function razorpayPaiseForPack(packId: string): number | null {
+  if (packId === "pack_50") return RAZORPAY_INR_PAISE.credits_50;
+  if (packId === "pack_150") return RAZORPAY_INR_PAISE.credits_150;
+  if (packId === "pack_500") return RAZORPAY_INR_PAISE.credits_500;
+  return null;
+}
+
 export function formatPrice(
   cents: number,
   hideDecimals = false,
@@ -261,11 +295,7 @@ export function getBestValueCreditPack(): CreditPack {
 }
 
 export function getEnabledCreditPacks(): CreditPack[] {
-  return CREDIT_PACKS.filter(
-    (pack) =>
-      typeof pack.stripePriceId === "string" &&
-      pack.stripePriceId.trim().length > 0
-  );
+  return CREDIT_PACKS.filter((pack) => pack.credits > 0);
 }
 
 export function getCreditPackById(packId: string): CreditPack | null {

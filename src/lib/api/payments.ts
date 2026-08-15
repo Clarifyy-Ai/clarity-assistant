@@ -4,10 +4,14 @@ import {
   type RazorpayProductType,
 } from "@/lib/billing/razorpayCheckout";
 
+// Live checkout is Razorpay one-time purchases. Stripe Checkout/portal
+// helpers in billing.ts must not be called from pages.
+
 export type RecordReferralResponse = {
   success: boolean;
   result?: {
     ok?: boolean;
+    reason?: string;
     referee_credits?: number;
     referrer_credits?: number;
     promo_code?: string;

@@ -59,10 +59,10 @@ function check(name, value, { required, pattern, forbidTestPrefix }) {
   return { name, present, formatValid, environmentCompatible, detail };
 }
 
-const requireStripe = isProd || Boolean(process.env.STRIPE_SECRET_KEY);
-const requireRazorpay = Boolean(
-  process.env.RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_SECRET,
-);
+const requireStripe = Boolean(process.env.STRIPE_SECRET_KEY);
+const requireRazorpay =
+  isProd ||
+  Boolean(process.env.RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_SECRET);
 
 const checks = [
   check("STRIPE_SECRET_KEY", process.env.STRIPE_SECRET_KEY, {
@@ -97,7 +97,7 @@ const checks = [
     required: requireRazorpay,
   }),
   check("RAZORPAY_WEBHOOK_SECRET", process.env.RAZORPAY_WEBHOOK_SECRET, {
-    required: requireRazorpay,
+    required: false,
   }),
   check("PUBLIC_URL", process.env.PUBLIC_URL || process.env.SITE_URL, {
     required: isProd,

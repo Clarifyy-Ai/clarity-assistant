@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { supabase } from "@/lib/supabase/client";
 import { PAGE_SHELL, STACK_GRID } from "@/lib/ui/responsivePage";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
@@ -26,17 +30,29 @@ export default function AssessmentTemplatesPage() {
   const navigate = useNavigate();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [starting, setStarting] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    void supabase
+  async function loadTemplates() {
+    setLoading(true);
+    setLoadError(null);
+    const { data, error } = await supabase
       .from("exam_templates")
       .select("*")
       .eq("is_published", true)
-      .order("title")
-      .then(({ data, error }) => {
-        if (error) toast.error(error.message);
-        setTemplates((data as Template[]) ?? []);
-      });
+      .order("title");
+    if (error) {
+      setLoadError(error.message);
+      toast.error(error.message);
+      setTemplates([]);
+    } else {
+      setTemplates((data as Template[]) ?? []);
+    }
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    void loadTemplates();
   }, []);
 
   async function start(template: Template) {
@@ -74,7 +90,23 @@ export default function AssessmentTemplatesPage() {
         description="Clarify original assessments assembled from the internal question bank. These are not official certification papers."
       />
       <div className={STACK_GRID}>
-        {templates.map((template) => (
+        {loading && (
+          <>
+            <SkeletonCard />
+            <SkeletonCard />
+          </>
+        )}
+        {!loading && loadError && (
+          <InlineErrorRetry message={loadError} onRetry={() => void loadTemplates()} />
+        )}
+        {!loading && !loadError && templates.length === 0 && (
+          <EmptyState
+            icon={ClipboardList}
+            title="No assessments published yet"
+            description="Clarify original templates will appear here once an admin publishes them."
+          />
+        )}
+        {!loading && !loadError && templates.map((template) => (
           <Card key={template.id} className="flex min-w-0 flex-col">
             <h2 className="text-base font-semibold">{template.title}</h2>
             <p className="mt-1 text-sm text-muted-foreground">{template.description}</p>

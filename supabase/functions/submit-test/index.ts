@@ -270,6 +270,7 @@ async function completeTestFallback(
       attempt_phase: "RESULT_AVAILABLE",
       rank_status: "unavailable",
       evaluation_version: 1,
+      overall_score: args.total_score,
     })
     .eq("id", args.test_id)
     .eq("user_id", args.user_id)

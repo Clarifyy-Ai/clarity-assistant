@@ -1008,8 +1008,6 @@ export const useAuthStore = create<AuthStore>()(
                       email,
                       full_name: fullName,
                       avatar_url: avatarUrl,
-                      credits: 50,
-                      plan_id: "free",
                       onboarding_completed: false,
                     } as Parameters<typeof profilesDB.upsert>[0]),
                     PROFILE_FETCH_TIMEOUT_MS,

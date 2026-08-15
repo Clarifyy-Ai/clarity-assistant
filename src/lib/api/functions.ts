@@ -31,7 +31,8 @@ export type EdgeFunctionName =
   | "create-checkout"
   | "create-billing-portal"
   | "cancel-subscription"
-  | "resume-subscription";
+  | "resume-subscription"
+  | "record-referral";
 
 export type IdempotencyOptions = {
   idempotencyKey?: string;

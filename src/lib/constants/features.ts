@@ -51,6 +51,8 @@ export type FeatureFlag = (typeof FEATURE_FLAGS)[keyof typeof FEATURE_FLAGS];
 // ─── Plan Gate Map ────────────────────────────────────────────────────────────
 // Which plan does each feature first become available on?
 
+// Launch IDs only: free | pro | enterprise (Max). Never "starter"/"elite".
+// Legacy starter maps to Free and must not unlock Pro features.
 export const FEATURE_PLAN_GATE: Record<FeatureFlag, PlanId> = {
   [FEATURE_FLAGS.LIVE_ASSIST]:        "free",
   [FEATURE_FLAGS.MOCK_SESSIONS]:      "free",
@@ -58,22 +60,22 @@ export const FEATURE_PLAN_GATE: Record<FeatureFlag, PlanId> = {
   [FEATURE_FLAGS.STAR_BUILDER]:       "free",
   [FEATURE_FLAGS.REPHRASER]:          "free",
   [FEATURE_FLAGS.AI_COACH]:           "free",
-  [FEATURE_FLAGS.COMPANY_RESEARCH]:   "starter",
-  [FEATURE_FLAGS.CODING_HINTS]:       "starter",
-  [FEATURE_FLAGS.SYSTEM_DESIGN]:      "starter",
-  [FEATURE_FLAGS.SESSION_DEBRIEF]:    "starter",
-  [FEATURE_FLAGS.RESUME_ANALYSIS]:    "starter",
-  [FEATURE_FLAGS.OVERLAY]:            "starter",
-  [FEATURE_FLAGS.AUDIO_ANALYSIS]:     "starter",
-  [FEATURE_FLAGS.FILLER_DETECTION]:   "starter",
-  [FEATURE_FLAGS.WPM_TRACKING]:       "starter",
-  [FEATURE_FLAGS.ANALYTICS]:          "starter",
+  [FEATURE_FLAGS.COMPANY_RESEARCH]:   "pro",
+  [FEATURE_FLAGS.CODING_HINTS]:       "pro",
+  [FEATURE_FLAGS.SYSTEM_DESIGN]:      "pro",
+  [FEATURE_FLAGS.SESSION_DEBRIEF]:    "pro",
+  [FEATURE_FLAGS.RESUME_ANALYSIS]:    "pro",
+  [FEATURE_FLAGS.OVERLAY]:            "pro",
+  [FEATURE_FLAGS.AUDIO_ANALYSIS]:     "pro",
+  [FEATURE_FLAGS.FILLER_DETECTION]:   "pro",
+  [FEATURE_FLAGS.WPM_TRACKING]:       "pro",
+  [FEATURE_FLAGS.ANALYTICS]:          "pro",
   [FEATURE_FLAGS.SCREENSHOT_CAPTURE]: "pro",
   [FEATURE_FLAGS.DIARIZATION]:        "pro",
   [FEATURE_FLAGS.BYOK]:               "pro",
   [FEATURE_FLAGS.CALENDAR_SYNC]:      "pro",
-  [FEATURE_FLAGS.PRIORITY_SUPPORT]:   "elite",
-  [FEATURE_FLAGS.COACH_SESSIONS]:     "elite",
+  [FEATURE_FLAGS.PRIORITY_SUPPORT]:   "enterprise",
+  [FEATURE_FLAGS.COACH_SESSIONS]:     "enterprise",
   [FEATURE_FLAGS.EXPERIMENTAL_UI]:    "pro",
   [FEATURE_FLAGS.DEBUG_PANEL]:        "enterprise",
   [FEATURE_FLAGS.BETA_MODELS]:        "pro",
@@ -199,7 +201,7 @@ export const AI_MODELS: Record<string, AIModel> = {
     cost:           "medium",
     supportsStreaming: true,
     supportsVision:   true,
-    minPlan:        "starter",
+    minPlan:        "pro",
     description:    "Massive context window. Ideal for long JDs and full resume analysis.",
   },
 } as const;

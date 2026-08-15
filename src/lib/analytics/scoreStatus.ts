@@ -1,3 +1,10 @@
+export type ScorecardUiStatus =
+  | "loading"
+  | "pending"
+  | "not_scored"
+  | "failed"
+  | "scored";
+
 export function formatSessionScore(
   score: number | null | undefined,
   status?: string,
@@ -11,4 +18,24 @@ export function formatSessionScore(
 export function formatAggregateScore(score: number | null | undefined): string {
   if (typeof score !== "number" || !Number.isFinite(score)) return "—";
   return String(Math.round(score));
+}
+
+export function scorecardStatusLabel(status: ScorecardUiStatus): string {
+  switch (status) {
+    case "loading":
+      return "Loading scorecard";
+    case "pending":
+      return "Score pending";
+    case "not_scored":
+      return "Not scored";
+    case "failed":
+      return "Scoring failed";
+    case "scored":
+      return "Scored";
+  }
+}
+
+/** Client-invented Gemini scores are never authoritative. */
+export function isAuthoritativeScorecard(status: ScorecardUiStatus): boolean {
+  return status === "scored";
 }

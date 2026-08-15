@@ -1,6 +1,7 @@
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
+import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 
 function json(req: Request, payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -62,6 +63,10 @@ Deno.serve(async (req) => {
   const auth = await authenticateRequest(req);
   if (auth.error || !auth.context) return auth.error ?? json(req, { error: "Unauthorized" }, 401);
   const userId = auth.context.user.id;
+
+  const dbForLimit = createServiceClient();
+  const rateLimited = await enforceAiRateLimitAsync(dbForLimit, "score-coding-submission", userId);
+  if (rateLimited) return rateLimited;
 
   const body = await req.json().catch(() => ({})) as Record<string, unknown>;
   for (const key of ["score", "passed_tests", "failed_tests", "execution_status", "passedTests"]) {
