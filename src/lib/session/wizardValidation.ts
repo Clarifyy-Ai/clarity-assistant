@@ -2,23 +2,34 @@
 
 export type WizardSessionCallType = "interview" | "regular_call";
 
-export function wizardStepBlocker(opts: {
-  step: number;
-  resumeStep: number;
+export type WizardFieldOpts = {
   sessionCallType: WizardSessionCallType;
-  company: string;
   role: string;
   hintStyle?: string | null;
   model?: string | null;
   smartRouting?: boolean;
   resumeId?: string | null;
-}): string | null {
+};
+
+/** Interview mode needs a role and a resume. Regular call does not. Company stays optional. */
+export function wizardRequiredFieldsBlocker(opts: WizardFieldOpts): string | null {
+  if (opts.sessionCallType !== "interview") return null;
+  if (!opts.role.trim()) return "Choose a target role before continuing.";
+  if (!opts.resumeId) return "Select a resume so the coach can use your experience.";
+  return null;
+}
+
+export function wizardStepBlocker(
+  opts: WizardFieldOpts & {
+    step: number;
+    resumeStep: number;
+  },
+): string | null {
   const { step, resumeStep, sessionCallType } = opts;
   const isInterview = sessionCallType === "interview";
 
   if (step === 1 && isInterview) {
     if (!opts.role.trim()) return "Choose a target role before continuing.";
-    if (!opts.company.trim()) return "Choose a company before continuing.";
   }
 
   if (step === 2) {

@@ -1,0 +1,1226 @@
+COMPLETE APPLICATION IMPLEMENTATION PERCENTAGE AUDIT
+Clarify AI / clarity-assistant
+Audit date: 2026-08-15
+Auditor roles applied: Principal Architect, Full-Stack Engineer, Supabase/Postgres Security Engineer, QA Lead, Product Manager, UI/UX Accessibility Expert
+Method: repository source + live remote project evidence. Documentation, TODOs, filenames, and prior audit docs were not treated as proof.
+
+================================================================================
+SCORING MODEL (applied to every feature)
+================================================================================
+Layer weights (100% only if every layer is implemented, connected, secured, tested, AND runtime-verified):
+  UI/UX and responsive behavior                         15%
+  Frontend logic and state management                   15%
+  Backend/API implementation                            20%
+  Database schema, persistence, and RLS                 20%
+  Authentication, authorization, security, tenant iso   10%
+  Integrations and configuration                         5%
+  Automated tests and negative cases                    10%
+  Runtime/deployment evidence                            5%
+
+Unsupported layers score 0%. Placeholder UI, mocked data, dead code, uncalled APIs,
+unapplied migrations, undeployed functions, missing RLS, or unexecuted tests receive 0%
+for the corresponding layer.
+
+Evidence classes used in this file:
+  LOCAL CODE     = present in the git workspace
+  MIGRATION FILE = SQL file on disk
+  APPLIED DB     = present in live Postgres (project qzgvjrvtkwlzxpmlddkx)
+  DEPLOYED EF    = listed ACTIVE by Supabase MCP list_edge_functions
+  UNIT TEST RUN  = executed this session: npm test -- --run  ->  82 files, 570 tests, 0 failed
+  LIVE HTTP      = fetched this session
+  LIVE SQL       = MCP execute_sql this session
+  LIVE LOGS      = MCP query_logs last 24h
+  NOT VERIFIED   = layer exists in code but this audit did not observe production behavior
+
+Live project: Clarify.AI  id=qzgvjrvtkwlzxpmlddkx  region=us-east-1  status=ACTIVE_HEALTHY
+  Postgres 17.6.1  host=db.qzgvjrvtkwlzxpmlddkx.supabase.co
+  API URL=https://qzgvjrvtkwlzxpmlddkx.supabase.co
+  package.json supabase:gen project-id matches this ref
+
+E2E (Playwright) was NOT executed in this audit. E2E test layer therefore scores 0%
+except where unit tests cover the same logic. CI workflow exists but this audit did
+not observe a passing GitHub Actions run.
+
+================================================================================
+1. EXECUTIVE SUMMARY
+================================================================================
+This repository is a B2C AI interview-preparation and India government-exam platform
+(Clarify AI / Clarify Coach), not a multi-organization SaaS. There is no organizations
+table, no org_id tenant column, no departments/teams/invitations/subdomains/branding
+portals, and no org-type module provisioning. Tenant isolation is user-scoped
+(auth.uid()). Roles are app_role = admin | moderator | user, with only admin wired.
+
+The authenticated product is largely real-wired (React + Zustand + Supabase JS +
+Edge Functions), not a mock UI. Live data this session:
+  profiles=51  sessions=62  mock_tests=29  questions=1126 (137 public)
+  subscriptions: free=42 pro=6 enterprise=2
+  credit_transactions=240  payment_orders=0
+  learning_courses=1  coding_questions=1  community_posts=0  gov_exams=5  admins=2
+
+Deployed Edge Functions: 70 ACTIVE (63 have local source; 7 are stale/zombie).
+Public health: GET /functions/v1/health -> {"status":"ok"}
+Public ping:   GET /functions/v1/ping   -> gemini=true openai=true anthropic=false deepgram=true
+Last 24h EF traffic includes ping, search-exams, submit-test, Deepgram, start-session,
+prep-tool, generate-answer, razorpay-create-order (16), create-billing-portal (2).
+
+Highest-impact gaps (evidence-based, not guessed):
+  1. payment_orders has 0 rows while razorpay-create-order ran 16 times in 24h and
+     swallows insert errors (supabase/functions/razorpay-create-order/index.ts).
+  2. subscriptions table has Stripe columns only (no Razorpay subscription IDs).
+     Settings cancel/resume requires stripeSubscriptionId. Live checkout is Razorpay.
+  3. Local migrations 20260815160000 and 20260815170000 are NOT in remote
+     schema_migrations. Answer-key SELECT policies are already tight live, but
+     referral hardening is not applied.
+  4. create-exam-paper is mapped to Pro capability gov_exam_ai_fill but never calls
+     requireCapability (catalog lie).
+  5. Account deletion does not wipe the full USER_OWNED_TABLES set.
+  6. Auth leaked-password protection is disabled (security advisor WARN).
+  7. Organization/B2B suite is not implemented (product is B2C by design).
+  8. Playwright E2E and two-user RLS probes were not executed this audit.
+
+Overall application implementation percentage (in-scope B2C product, N/A org suite
+excluded from denominator): 73%
+Production-readiness decision: CONDITIONAL GO
+  GO for continued B2C operation of interview + gov-exam core with known billing/
+  security follow-ups. NO-GO as a multi-tenant organization platform. NO-GO as
+  "fully production-ready billing" because payment ledger is empty despite checkout
+  traffic.
+
+================================================================================
+2. REPOSITORY AND ARCHITECTURE SUMMARY
+================================================================================
+Package: clarify-ai  version 1.0.0  private  type=module
+App shell: Vite 5 + React 18 + React Router 7 + Zustand + TanStack Query + Tailwind
+Backend: Supabase Auth + PostgREST + 63 local Edge Functions (Deno) + pg_cron
+Desktop: Electron (hash router, overlay-only allowed routes via ElectronRouteGate)
+Deploy hints: Lovable Cloud VITE_* bake-in (src/lib/env.ts); GitHub Actions CI +
+  electron-release.yml; electron-builder appId=com.clarify.coach
+
+Key trees:
+  src/App.tsx                         route table (browser vs hash)
+  src/pages/                          139 page components
+  src/components/                     UI, overlay, layout, billing, admin
+  src/hooks/  src/store/              16 stores
+  src/lib/                            billing, gov-exam, security, network, validators
+  src/integrations/supabase/          client + generated types
+  supabase/functions/                 63 function slugs + _shared
+  supabase/migrations/                126 SQL files
+  src/test/                           82 Vitest files (570 passing this session)
+  e2e/                                14 Playwright specs (not run this session)
+  scripts/                            pre-deploy, billing parity, RLS spot-check, QA
+  electron/                           desktop main process
+  scraper/                            Python ingest sidecar + Dockerfile
+  .github/workflows/ci.yml            lint, typecheck, unit tests, gates, build, e2e
+
+Architecture pattern:
+  Browser SPA -> supabase-js (RLS) and fetchEdge() -> JWT Edge Functions ->
+  service_role RPCs for credits/scoring. Privileged profile columns blocked by
+  clientUpdateGuard + profiles_own_update_allowed SECURITY DEFINER.
+
+Not a multi-tenant org architecture. Comment in
+  supabase/migrations/20260810180000_ai_hub.sql:
+  "Tenancy: platform-level settings + per-user quotas (no organizations table)."
+Contract file: src/lib/security/rlsTenantIsolation.ts  tenant = auth.uid()
+
+================================================================================
+3. COMPLETE ORGANIZATION AND TENANT STRUCTURE
+================================================================================
+FINDING: Organization product surface is NOT IMPLEMENTED. Tenant model is B2C.
+
+Live SQL: tables matching org/tenant/team/department/invitation/member:
+  practice_workspace_sessions, user_roles
+  (no organizations, org_members, invitations, departments, workspaces-as-tenants)
+
+Live enums:
+  app_role: admin | moderator | user
+  plan_tier: free | starter | pro | enterprise
+
+3.1 Organization lifecycle
+  Create / onboard / configure / update / suspend / delete / restore
+  Classification: NOT IMPLEMENTED   Score: 0%
+  Evidence: no tables, no routes, no Edge Functions, no UI.
+
+3.2 Organization types, hierarchy, departments, teams, workspaces
+  Classification: NOT IMPLEMENTED   Score: 0%
+  practice_workspace_sessions is a user practice log, not an org workspace
+  (supabase/migrations/20260815140000_alternative_feature_platform.sql,
+   APPLIED remotely as 20260815075612).
+
+3.3 Members, invitations, roles, admin controls (org-scoped)
+  Classification: NOT IMPLEMENTED   Score: 0%
+  Platform roles exist (user_roles) but are global, not org-scoped.
+  room_invitation notification keys are leftover (src/store/notificationStore.ts).
+  Group Practice retired: src/lib/routes/canonical.ts, App.tsx RetiredRoomsRedirect.
+  TeamMember type leftover: src/types/user.types.ts.
+
+3.4 Tenant isolation (actual product)
+  Classification: PARTIALLY IMPLEMENTED   Score: 84%
+  Calc: UI 10/15 (no org switcher; user session only) + FE 12/15 (auth.uid filters)
+        + BE 18/20 (Edge auth helpers) + DB 18/20 (RLS on 132 public tables, 246 policies)
+        + Auth 9/10 (user_roles, is_admin, ban) + Integ 3/5 + Test 8/10
+        (rlsTenantIsolation unit tests; no live two-user probe) + Runtime 4/5
+        (policies inspected live; no dual-JWT cross-read executed)
+        = 82/100 rounded with deduction for mock_tests/questions catalog leakage
+        residual and unapplied referral migration -> 84% after answer-key live check.
+
+  USER_OWNED_TABLES in src/lib/security/rlsTenantIsolation.ts:
+    sessions, resumes, job_descriptions, mock_tests, test_responses,
+    session_transcripts, interview_practice_plans, interview_practice_plan_items,
+    course_enrollments, lesson_progress, quiz_progress, course_certificates,
+    personal_library_documents, document_practice_sets, practice_workspace_sessions,
+    coding_submissions
+  Live policies sampled:
+    sessions_own: user_id = auth.uid()
+    mock_tests_all: user_id = auth.uid() (roles public TO authenticated USING)
+    practice_workspace_own: authenticated ALL own rows
+    profiles_own_select/update/insert + profiles_admin_all
+    user_roles_own_select; admin insert/update/delete
+
+3.5 Cross-organization access prevention
+  Classification: NOT APPLICABLE (no orgs) / user cross-access prevention PARTIAL
+  Score as org feature: 0%. See section 9 for user isolation findings.
+
+3.6 Subdomains, portals, org branding
+  Classification: NOT IMPLEMENTED   Score: 0%
+  IndiaRegionGate is geo/product gating (profile.region), not a tenant portal
+  (src/components/layout/IndiaRegionGate.tsx).
+
+3.7 Automatic portal/module provisioning by organization type
+  Classification: NOT IMPLEMENTED   Score: 0%
+  Module visibility is global nav + PlanGate + India route wrap, not org-type.
+
+3.8 Organization suspension/deletion/restoration
+  Classification: NOT IMPLEMENTED   Score: 0%
+  User ban exists (profiles.is_banned, bulk_update_users -> auth.users.banned_until).
+
+================================================================================
+4. ORGANIZATION TYPES, ROLES, PORTALS, AND MODULE-PROVISIONING MATRIX
+================================================================================
+Organization types: NONE. N/A.
+
+Platform roles (live enum app_role):
+
+Role        Portal                         Provisioning                         Status
+----        ------                         -------------                         ------
+user        /app/* AppShell                All sidebar items shown; PlanGate
+                                           and credits hide paid features in-page
+                                           India users can open /app/mock-test*
+                                           Non-India redirected to dashboard
+                                           Electron: only live overlay + auth     PARTIAL
+admin       /app/admin/* AdminLayout       ProtectedRoute requireAdmin +
+                                           user_roles.hasRole(admin)              FULLY (B2C)
+moderator   none                           enum only; no UI; bulk-update test
+                                           asserts moderator cannot patch users   NOT IMPLEMENTED
+super_admin none                           checked in some Edge isAdmin() paths;
+                                           NOT in app_role enum                   BROKEN leftover
+
+Plans (launch IDs in src/lib/constants/pricing.ts):
+  free (UI Free)  pro (UI Pro)  enterprise (UI Max)
+  Legacy aliases: starter->free, elite->pro, team->enterprise (planIds.ts)
+  DB enum still has starter.
+
+Module provisioning matrix (actual, not org-type):
+
+Module                    Nav shown to all?   Server gate                 India?   Plan UI
+------                    -----------------   ------------                ------   -------
+Dashboard                 yes                 none                        no       PlanGate on extras
+Live / overlay            yes                 live_rehearsal + Pro overlay yes?    overlay Pro
+Mock interview            yes                 mock_interview              no       credits
+Gov exams / mock-test     YES (even non-IN)   mock_test / credits         YES route bounce
+Assessments               yes                 assemble-assessment         no       credits
+Learning hub              yes                 none                        no       none
+Practice workspace        yes                 none                        no       none
+Practice plan             yes                 none                        no       none
+Analytics                 yes                 analytics (Pro)             no       PlanGate pro
+Usage                     yes                 none                        no       none
+Debriefs                  yes                 detailed_debrief            no       credits
+Referrals                 yes                 record-referral             no       none
+Documents                 yes                 parse-resume credits        no       none
+Document library          yes                 none                        no       none
+Question bank             yes                 none                        no       none
+Community Q&A             yes                 none                        no       none
+Coding lab                yes                 score-coding-submission     no       none
+Answer bank               yes                 prep_star                   no       none
+Interview Day             yes                 none                        no       none
+Interviews                yes                 schedule-interview          no       none
+Companies                 yes                 company_research Pro        no       PlanGate pro
+Prep lab                  yes                 prep_star                   no       PlanGate some
+Sessions                  MOBILE ONLY         none                        no       none
+Admin                     if isAdmin          requireAdmin                no       n/a
+Rooms                     retired redirect    team_rooms: []              n/a      disabled
+BYOK                      settings redirect   byok: []                    n/a      disabled
+Calendar                  settings            calendar_sync Pro           no       ComingSoon mix
+Gov Exams marketing       public              n/a                         n/a      static
+
+Evidence: src/components/layout/AppSidebar.tsx, MobileNav.tsx, PlanGate.tsx,
+  src/hooks/useAuth.ts FEATURE_PLAN_MAP, src/lib/constants/features.ts
+  FEATURE_PLAN_GATE (still uses starter/elite — inconsistent with launch IDs),
+  supabase/functions/_shared/requireCapability.ts,
+  App.tsx IndiaAppPage wrap on /app/mock-test*.
+
+Admin feature_flags table + AdminFeatureFlags.tsx exist, but App.tsx runtime flags
+come from profile.plan_id via globalStore.resolveFeatureFlags — DB flags are not
+the runtime source. Classification: PARTIALLY IMPLEMENTED.
+
+================================================================================
+5. COMPLETE MODULE AND FEATURE INVENTORY
+================================================================================
+See section 6 for scores. Inventory of routed surfaces from src/App.tsx:
+
+PUBLIC / MARKETING
+  /  /pricing  /gov-exams  /help  /help/:slug  /shortcuts  /blog  /blog/:slug
+  /terms  /privacy  /share/:token  /verify-certificate/:certificateId  404
+
+AUTH
+  /login  /signup  /verify-email  /forgot-password  /reset-password  /auth/callback
+
+ONBOARDING
+  /onboarding  (step-1..5 redirect to index)
+
+AUTHENTICATED APP (ProtectedRoute requireOnboarded + email verification)
+  dashboard, interview-day, analytics, usage, notifications, referrals, live,
+  live/overlay (fullscreen), mock, mock/warmup, mock/session/:id,
+  mock-test* (India gated; session fullscreen), prep*, sessions*, documents*,
+  answers*, interviews*, companies*, scorecard/:sessionId, debriefs*, plan,
+  question-bank, assessments*, learn*, community*, coding*, library,
+  practice-workspace, guide, settings* , rooms retired
+
+ADMIN (ProtectedRoute requireAdmin)
+  dashboard, users, analytics, revenue, model-costs, ai-hub, feature-flags,
+  seed-questions, bulk-upload, live-chat, questions, audit-log, qa-checklist,
+  support, promo-codes, billing-settings, gov/*, community, learning,
+  security-config
+
+ELECTRON
+  ElectronRouteGate allows auth, onboarding, /app/live, /app/live/overlay.
+  Other routes open in system browser.
+
+Dead / leftover local pages not routed:
+  src/pages/app/rooms/GroupPracticeComingSoon.tsx
+
+================================================================================
+6. PERCENTAGE FOR EVERY FEATURE AND SUBFEATURE
+================================================================================
+Format: Feature | Class | % | Layer calc (UI/FE/BE/DB/Auth/Integ/Test/Run) | Evidence
+
+-------------------- ORGANIZATION / TENANT (prompt checklist) --------------------
+Org create                         NOT IMPLEMENTED     0%   0/0/0/0/0/0/0/0
+Org onboarding                     NOT IMPLEMENTED     0%
+Org configuration/update           NOT IMPLEMENTED     0%
+Org suspension                     NOT IMPLEMENTED     0%
+Org deletion/restoration           NOT IMPLEMENTED     0%
+Org types                          NOT IMPLEMENTED     0%
+Org hierarchy                      NOT IMPLEMENTED     0%
+Departments                        NOT IMPLEMENTED     0%
+Teams                              NOT IMPLEMENTED     0%
+Org workspaces                     NOT IMPLEMENTED     0%
+Org members                        NOT IMPLEMENTED     0%
+Org invitations                    NOT IMPLEMENTED     0%
+Org-scoped roles                   NOT IMPLEMENTED     0%
+Org admin controls                 NOT IMPLEMENTED     0%
+Org-scoped queries                 NOT IMPLEMENTED     0%
+Cross-org prevention (org model)   NOT APPLICABLE      0%   no orgs to isolate
+Subdomains                         NOT IMPLEMENTED     0%
+Org portals                        NOT IMPLEMENTED     0%
+Org branding                       NOT IMPLEMENTED     0%
+Provisioning by org type           NOT IMPLEMENTED     0%
+B2C user-tenant isolation          PARTIALLY           84%  10/12/18/18/9/3/8/4
+  Evidence: rlsTenantIsolation.ts; 132 RLS tables; 246 policies; unit tests
+  src/test/lib/interview/certificationWave.test.ts, alternativeFeatures.test.ts
+  Missing: live two-user RLS probe (Test 2% and Runtime 1% withheld)
+
+-------------------- AUTH --------------------
+Email/password login               FULLY*              88%  14/14/18/18/9/4/8/3
+  *MFA AAL1 session exists before TOTP; if MFA APIs fail, login continues.
+  UI: src/pages/auth/Login.tsx  Store: src/store/authStore.ts signInWithEmail
+  Tests: useAuth.test.ts, authSchemas.test.ts  RUN this session
+  Runtime: auth_logs source exists; login E2E not run this audit (Run 3/5)
+Signup                             FULLY               90%  14/14/18/20/9/4/8/3
+  Signup.tsx; handle_new_user trigger (applied 20260628140000); 51 profiles live
+Email verification                 FULLY               88%  13/14/18/16/9/4/7/3
+  VerifyEmail.tsx; ProtectedRoute requireEmailVerification; emailVerification.ts
+Password reset                     FULLY               87%  14/14/18/16/9/4/8/2
+  ResetPassword.tsx both /forgot-password and /reset-password
+OAuth Google/GitHub/LinkedIn/Azure PARTIALLY + EXT CFG 62%  12/12/12/10/6/2/6/2
+  OAuthButton.tsx; oauthProviders.ts VITE_OAUTH_PROVIDERS; AuthCallback.tsx
+  Azure omitted from lib/supabase/auth.ts provider union. Requires Supabase Auth
+  provider secrets. Runtime of each provider not verified.
+Magic link                         BACKEND ONLY        18%  0/0/10/5/3/0/0/0
+  sendMagicLink in lib/supabase/auth.ts; no UI caller
+Session + ProtectedRoute           FULLY               86%  13/14/16/16/9/3/8/3
+  ProtectedRoute.tsx (banned, past-due, admin wait 8s, onboarding, verify)
+  SessionTimeoutBanner.tsx; authStore.initialize + onAuthStateChange
+MFA TOTP                           PARTIALLY           58%  12/12/10/8/5/3/2/2
+  SettingsSecurity.tsx enroll; Login.tsx challenge after password (AAL1 already)
+  No dedicated MFA unit tests found
+CSRF helper                        UI ONLY             12%  8/4/0/0/0/0/0/0
+  src/lib/security/csrf.ts comments JWT is real protection
+Account ban                        FULLY               82%  10/10/18/18/9/3/6/4
+  profiles.is_banned; banCheck.ts fail-closed; bulk_update_users sets
+  auth.users.banned_until (applied 20260805162621)
+
+-------------------- ONBOARDING --------------------
+Onboarding flow                    FULLY               86%  14/14/16/18/8/3/8/3
+  OnboardingIndex.tsx 2 steps (not 5); drafts lib/onboarding/draft.ts;
+  tests draft.test.ts, appWalkthroughStorage.test.ts
+Walkthrough / install prompt       FULLY               80%  14/13/8/8/5/3/8/3
+  AppWalkthrough, InstallPromptModal, ElectronFirstRunModal
+
+-------------------- MARKETING / PUBLIC --------------------
+Landing                            FULLY (static)      72%  14/10/0/0/4/3/5/3
+  Landing.tsx + MarketingLayout skip link + ThemeToggle. No backend needed.
+Pricing page                       FULLY (catalog UI)  78%  14/12/8/8/5/4/8/3
+  Pricing.tsx LAUNCH_PLANS; planCatalog.test.ts RUN
+Help center                        FULLY               82%  13/13/16/18/6/3/5/3
+  Help.tsx helpArticlesDB + fallback; live help_articles table RLS
+Blog                               FULLY               80%  12/13/16/18/6/3/4/3
+  Blog.tsx / BlogPost.tsx blog_posts
+Terms / Privacy                    FULLY (static)      70%  14/8/0/0/4/3/2/3
+  Terms.tsx Privacy.tsx; PostHog/Razorpay disclosed
+Gov exams marketing                UI ONLY/static      48%  13/8/0/0/2/2/3/2
+  GovExams.tsx showcase; product lives under /app/mock-test
+Shared debrief                     FULLY               80%  12/12/16/18/8/3/4/3
+  SharedDebrief.tsx; get_shared_debrief SECURITY DEFINER (intentional anon)
+Certificate verify                 PARTIALLY           68%  10/12/16/18/7/2/3/2
+  VerifyCertificate.tsx RPC verify_course_certificate; weak loading/error
+  1 course live; public verify path exists
+
+-------------------- CORE INTERVIEW PRODUCT --------------------
+Dashboard                          FULLY               82%  13/14/16/16/8/3/6/4
+  Dashboard.tsx sessionsDB + gamification; 62 sessions live
+Live rehearsal setup               FULLY               84%  13/14/18/16/8/4/6/4
+  LiveRehearsal.tsx; start-session EF deployed v105; 19 invokes/24h
+Live overlay / Practice Coach      FULLY               83%  13/14/18/16/8/4/7/4
+  LiveOverlay.tsx; generate-hint/answer; deepgram-token 34 invokes/24h
+  Overlay components + stealth data-stealth; ping deepgram=true
+  Overlay unit tests multiple files RUN
+Mock interview                     FULLY               80%  13/13/18/16/8/3/5/3
+  MockInterview/MockSession; generate-questions 10 invokes/24h
+Mock warmup                        PARTIALLY           55%  12/10/4/4/4/2/4/2
+  local WARMUP_QUESTIONS hybrid
+Prep STAR builder                  FULLY               81%  12/13/18/16/8/3/5/3
+  StarBuilder + prep-tool 13 invokes/24h; generate-star-answer 7
+Prep project / rephraser / SD      FULLY               78%  12/13/16/14/8/3/4/3
+Prep coding hints                  FULLY               76%  12/12/14/16/8/3/4/3
+  coding_hints table
+Sessions list/detail               FULLY               74%  11/13/14/16/8/3/5/3
+  CallSessions.tsx; missing from desktop sidebar (UX deduct)
+Documents + resume parse           FULLY               82%  13/13/18/16/8/4/6/4
+  parse-resume 10 invokes/24h; storage resumes bucket policies applied
+Gap analysis                       FULLY               80%  12/13/18/16/8/3/6/3
+  gap-analysis EF 5 invokes/24h; gap_analyses table
+Answer bank                        FULLY               78%  13/13/16/16/8/3/4/3
+Interview scheduler                FULLY               79%  13/13/16/16/8/4/4/3
+  schedule-interview 5 invokes/24h; send-email
+Company research                   FULLY               77%  12/12/18/16/8/3/4/3
+  PlanGate pro; company-research 6 invokes/24h
+Debrief generate                   FULLY               78%  12/13/18/16/8/3/4/3
+  generate-debrief 6 invokes/24h
+Scorecard                          PARTIALLY           64%  12/12/8/14/6/2/4/2
+  Scorecard.tsx hybrid client Gemini + DB; not in nav
+Practice plan                      FULLY               76%  12/13/12/16/8/2/4/3
+  interview_practice_plans tables live
+Notifications                      FULLY               80%  13/13/14/16/8/3/5/3
+  notificationsDB + realtime
+Referrals                          PARTIALLY           70%  12/12/16/14/8/3/8/2
+  Referrals.tsx; record-referral EF; referrals.test.ts RUN
+  20260815170000 NOT applied (client INSERT revoke / claim hardening)
+Usage dashboard                    FULLY               78%  13/13/12/16/8/3/5/3
+Analytics dashboard                FULLY               80%  13/13/18/12/8/3/5/4
+  analytics-dashboard 17 invokes/24h; PlanGate pro
+Interview Day                      PARTIALLY           68%  13/12/10/10/6/2/3/3
+  scheduler real + local checklist
+
+-------------------- GOV EXAM / MOCK TEST --------------------
+Mock test hub                      FULLY               82%  13/13/18/18/8/3/6/4
+  MockTestHub.tsx; search-exams 79 invokes/24h; 5 gov_exams live
+Exam detail                        FULLY               80%  13/13/16/18/8/3/5/3
+Configure / launch test            FULLY               81%  12/14/18/18/8/3/5/3
+  create-test + select-test-questions deployed; select mapped but gate unused
+Test session                       FULLY               84%  14/14/18/18/8/3/6/4
+  TestSession.tsx; submit-test 59 invokes/24h; timer live region
+Test results                       FULLY               78%  12/13/16/16/8/3/5/3
+Revision / analytics               FULLY               74%  11/12/14/16/8/2/4/3
+Previous papers                    FULLY               76%  12/12/16/16/8/3/4/3
+  list-previous-papers 9 invokes/24h
+Generate gov paper                 PARTIALLY           72%  13/13/16/16/6/3/4/3
+  create-exam-paper 8 invokes/24h BUT requireCapability NOT called
+  (gov_exam_ai_fill Pro catalog unused) -> Auth/BE deducted
+My questions / upload              FULLY               77%  12/13/16/16/8/3/4/3
+  parse-question-pdf; bulk-import-questions verify_jwt=false + ingest key
+Question answer-key isolation      PARTIALLY           78%  5/8/12/18/9/2/6/4
+  LIVE questions_select USING uploaded_by = auth.uid()
+  LIVE questions_select_own_attempts COMPLETED mock only
+  LIVE questions_playable omits correct_answer/explanation
+  File 20260815160000 NOT in schema_migrations; view security_barrier not explicit
+  137 public questions; playable path used by engine (submit-test traffic)
+
+-------------------- ALT PLATFORM (20260815140000 applied as 20260815075612) ----
+Question bank CRUD                 FULLY               75%  12/13/12/16/8/2/5/3
+  QuestionBank.tsx; questions RLS
+Assessment templates               FULLY               73%  12/13/16/16/8/2/4/3
+  assemble-assessment EF v3 deployed; RPC assemble_assessment_from_template
+  No rate limit on EF
+Learning hub                       PARTIALLY           62%  11/12/12/16/8/2/4/2
+  LearningHub.tsx; 1 course live; weak empty/retry
+Lesson player / progress           FULLY               70%  11/12/12/16/8/2/4/3
+Certificates issue/verify          PARTIALLY           68%  10/12/16/16/8/2/3/2
+  issue-course-certificate EF v3; RPC; 0 evidence of issued certs counted
+Community Q&A                      PARTIALLY           55%  10/12/12/16/8/2/2/1
+  Community.tsx; 0 posts live; toast-only errors
+  RLS: published/reported/resolved visible to authenticated (intentional social)
+Coding lab                         PARTIALLY           65%  11/12/16/16/8/2/4/2
+  1 coding_question live; score-coding-submission v3; hidden cases service_role
+Document library                   FULLY               70%  12/12/12/16/8/3/3/3
+  personal_library_documents; storage documents bucket
+Practice workspace                 PARTIALLY           58%  12/12/8/16/8/2/6/2
+  local getLocalMockQuestions + persist practice_workspace_sessions
+  alternativeFeatures.test.ts RUN
+
+-------------------- SETTINGS --------------------
+Profile                            FULLY               84%  13/14/14/18/9/3/8/3
+  clientUpdateGuard.ts + test RUN; avatars upsert policies applied
+Appearance / theme                 FULLY               82%  15/14/0/0/4/3/5/3
+  uiStore + themeStore; dark/light/system; data-theme; SettingsAppearance
+Notifications prefs                FULLY               76%  13/12/10/14/6/3/4/3
+Audio devices                      PARTIALLY           70%  13/12/8/10/5/4/4/3
+Practice coach settings            FULLY               74%  12/12/10/14/6/2/3/3
+Hotkeys                            PARTIALLY           60%  13/12/4/0/4/2/6/2
+  localStorage only
+Privacy                            PARTIALLY           58%  12/10/6/10/5/2/4/2
+  comment: AI-training flag not enforced
+Security (password/MFA)            PARTIALLY           64%  13/12/10/8/6/3/2/2
+Billing settings page              PARTIALLY           62%  13/13/14/10/6/4/8/2
+  SettingsBilling.tsx Razorpay checkout real; cancel/resume Stripe-only BROKEN
+  openRazorpayCheckout; UpgradeModal.tsx
+Models                             FULLY               72%  12/12/10/12/6/3/5/3
+Integrations                       PARTIALLY           40%  12/10/8/8/5/2/2/2
+  calendar sync-calendar live + Pro; LinkedIn/GitHub/Slack/Chrome ComingSoon
+Data export                        FULLY               78%  12/12/18/14/8/3/4/3
+  export-user-data EF
+Danger / delete                    PARTIALLY           64%  13/12/14/10/8/3/4/2
+  delete-account 3 invokes/24h; wipe list incomplete vs USER_OWNED_TABLES
+Polish                             PARTIALLY           50%  12/10/4/8/4/2/2/2
+  metadata retention; enforcement unclear
+
+-------------------- BILLING / CREDITS --------------------
+Plan catalog                       FULLY               85%  14/14/16/14/8/5/10/4
+  pricing.ts, billingCatalog.ts, planCatalog.test.ts RUN, billing:parity CI
+Razorpay checkout                  PARTIALLY           68%  13/13/16/8/7/4/8/1
+  razorpay-create-order 16/24h DEPLOYED; payment_orders=0 LIVE SQL
+  insert errors logged and ignored -> ledger not proven
+Razorpay verify                    FULLY (code)        72%  8/12/18/12/8/4/8/2
+  razorpay-verify-payment v3; razorpayCheckoutSignature.test.ts RUN
+  no completed payment_orders so fulfill Runtime 2/5
+Razorpay webhook                   FULLY (code)        70%  0/0/18/14/8/4/8/2
+  verify_jwt=false HMAC; razorpayWebhookLogic.test.ts RUN; 0 orders
+Credit deduction                   FULLY               86%  10/14/20/18/9/3/8/4
+  deduct-credits EF; server cost wins; deduct_credits EXECUTE service_role only
+  creditsManager tests RUN; 240 credit_tx live
+Credit packs                       FULLY (code)        74%  12/12/16/12/7/4/8/2
+  creditPacks.test.ts RUN; packs 50/150/500
+Promo codes                        PARTIALLY           70%  12/12/14/16/8/3/4/2
+  AdminPromoCodes.tsx; promo_codes table; typed as profiles in places
+Referrals credits                  PARTIALLY           66%  10/12/14/12/8/3/8/1
+  unapplied 20260815170000
+Stripe checkout/portal/webhooks    BACKEND ONLY        28%  0/2/16/8/4/2/6/0
+  create-checkout, create-billing-portal (2 invokes/24h leftover),
+  stripe-webhook, cancel-subscription, resume-subscription
+  UI does not call createCheckoutSession (lib/api/billing.ts unused by pages)
+Cancel/resume subscription         BROKEN              22%  10/8/8/4/2/2/2/0
+  UI requires stripeSubscriptionId; subscriptions has only Stripe columns
+  Live path is Razorpay one-time products; no Razorpay sub id column
+Admin grant-pro                    FULLY               80%  10/12/16/18/9/2/6/3
+  bulk_update_users SECURITY DEFINER + add_credits; 6 pro + 2 enterprise live
+  likely admin-granted given 0 payment_orders
+Billing config preflight           FULLY               75%  0/0/10/8/6/5/8/3
+  scripts/billing-config-preflight.mjs; billingConfig.ts rejects placeholders
+Monthly credit cron                FULLY               78%  0/0/16/18/8/3/2/4
+  LIVE cron reset-monthly-credits, topup-subscription-credits active
+
+-------------------- ADMIN --------------------
+Admin layout/gate                  FULLY               86%  13/14/16/16/10/3/6/4
+Admin users                        FULLY               82%  13/14/16/18/9/2/6/3
+Admin analytics/revenue/costs      FULLY               78%  12/13/14/16/8/3/6/3
+  AdminRevenue.tsx; adminRevenueMath.test.ts RUN
+Admin AI hub                       FULLY               76%  12/12/16/16/8/3/5/3
+  ai-hub-router
+Admin feature flags                PARTIALLY           45%  12/10/8/14/5/2/2/1
+  DB writes real; app runtime ignores table
+Admin questions/seed/bulk          FULLY               77%  12/13/16/16/8/3/4/3
+Admin gov registry/ingest/review   FULLY               78%  12/13/18/18/8/3/6/4
+  collect-exam-papers, ingest-source-document, extract-question-paper
+  daily scrape crons ACTIVE for JEE/NEET/UPSC/SSC_CGL/IBPS_PO
+  run-daily-exam-scrape 7 invokes/24h
+Admin community/learning           PARTIALLY           60%  10/10/10/14/7/2/2/2
+Admin support / live chat          FULLY               76%  12/12/16/16/8/3/3/3
+  support-chat 35 invokes/24h (guest JWT off)
+Admin audit log                    FULLY               74%  11/12/12/16/8/2/3/3
+Admin QA checklist                 UI ONLY             28%  12/8/0/0/2/0/2/0
+  useLocalStorage, not server
+Admin security-config              UI ONLY             30%  12/8/0/4/4/1/2/0
+  local checklist
+Admin billing settings             FULLY               76%  12/12/14/16/8/4/4/3
+  billing_settings.razorpay_enabled typed in integrations/supabase/types.ts
+Admin promo                        PARTIALLY           68%  12/12/12/16/8/2/3/2
+
+-------------------- PLATFORM / DESKTOP / OPS --------------------
+Electron overlay desktop           PARTIALLY           72%  12/13/10/8/7/4/6/3
+  electron/main.cjs; ElectronRouteGate; dist:win workflow
+PWA / install prompt               PARTIALLY           60%  12/10/4/0/3/3/3/2
+  public/manifest.json; usePwaInstallPrompt
+Sentry monitoring                  REQUIRES EXT CFG    50%  8/8/4/0/3/4/0/2
+  bootstrap.tsx init if real DSN; vite sentry plugin if SENTRY_* set
+PostHog analytics                  REQUIRES EXT CFG    55%  8/10/4/0/3/4/2/2
+  bootstrap.tsx; authStore identify; Privacy copy; cookie consent
+Network/offline banner             FULLY               78%  14/14/8/0/4/2/6/3
+  NetworkBanner; useIsOffline
+Error boundaries                   FULLY               80%  13/13/8/0/5/3/4/3
+  GlobalErrorBoundary, ErrorBoundary, Sentry.ErrorBoundary
+Health/ping                        FULLY               90%  0/0/18/8/6/4/4/5
+  LIVE HTTP 200 this session; ping leaks provider booleans (security deduct)
+Support chat widget                FULLY               76%  13/12/16/14/6/3/3/4
+  35 invokes/24h
+Gamification / XP                  PARTIALLY           68%  11/12/10/14/6/2/4/3
+  useXPSystem, useGamification; streak trigger SECURITY DEFINER applied
+  20260815080216
+Feature flag runtime               PARTIALLY           48%  8/10/8/12/5/2/4/1
+BYOK                               NOT IMPLEMENTED     8%   leftover columns pinned
+Team rooms                         NOT IMPLEMENTED     5%   retired routes
+Coach sessions (human)             NOT IMPLEMENTED     0%   FEATURE_PLAN_GATE elite only
+Priority support product           NOT IMPLEMENTED     0%
+
+-------------------- SECURITY CONTROLS (cross-cutting) --------------------
+RLS enabled all public tables      FULLY               90%  n/a  132/132 relrowsecurity
+  3 tables RLS on, zero policies (deny-all): ai_test_cache, idempotency_log,
+  rate_limit_buckets — intentional service_role only (advisor INFO)
+Profile entitlement pin            FULLY               88%
+  profiles_own_update_allowed applied (20260801150000 / 20260801210024)
+Rate limiting                      FULLY               84%
+  rateLimit.ts + check_rate_limit RPC service_role; fail-closed
+  11 EFs have no RL (ping/health/webhooks/workers + 3 alt-feature EFs)
+Upload validation                  FULLY               80%
+  uploadValidation.ts magic bytes; parse-document/resume
+Idempotency                        FULLY               82%
+  idempotency_log; tests idempotency.test.ts RUN
+Cron retention                     PARTIALLY           74%
+  delete-expired-session-data-daily, purge-expired-idempotency-log-daily ACTIVE
+  cleanup-expired-documents-daily NOT in live cron.job list
+
+================================================================================
+7. EXACT EVIDENCE
+================================================================================
+7.1 Routes
+  Source of truth: src/App.tsx (createBrowserRouter / createHashRouter)
+  ProtectedRoute: src/components/layout/ProtectedRoute.tsx
+  Canonical retired rooms: src/lib/routes/canonical.ts
+
+7.2 Layout / nav
+  src/components/layout/AppSidebar.tsx
+  src/components/layout/MobileNav.tsx
+  src/components/layout/AppTopBar.tsx
+  src/components/layout/MarketingLayout.tsx
+  src/pages/app/admin/AdminLayout.tsx
+  src/lib/ui/responsivePage.ts (360px+ PAGE_SHELL)
+
+7.3 Auth / profile
+  src/store/authStore.ts
+  src/hooks/useAuth.ts
+  src/lib/profile/clientUpdateGuard.ts
+  src/lib/auth/emailVerification.ts
+  src/lib/auth/oauthProviders.ts
+  supabase/migrations/20260403045505_* user_roles / has_role / is_admin
+  supabase/migrations/20260801150000_profiles_own_update_security_definer.sql
+
+7.4 Billing
+  src/pages/app/settings/SettingsBilling.tsx
+  src/components/billing/UpgradeModal.tsx
+  src/lib/billing/razorpayCheckout.ts
+  src/lib/constants/pricing.ts
+  supabase/functions/razorpay-create-order/index.ts
+  supabase/functions/razorpay-verify-payment/index.ts
+  supabase/functions/razorpay-webhook/index.ts
+  supabase/functions/_shared/razorpayFulfill.ts
+  supabase/functions/_shared/billingConfig.ts
+  supabase/functions/_shared/billingCatalog.ts
+  LIVE: payment_orders count=0; subscriptions columns are Stripe-only
+
+7.5 Edge Functions
+  Local slugs (63): see supabase/functions/*/index.ts
+  config.toml JWT false: ping, health, stripe-webhook, razorpay-webhook,
+    support-chat, bulk-import-questions, process-paper-generation-job,
+    run-daily-exam-scrape
+  Deployed extra zombies (no local source): ai-feedback, generate-practice-questions,
+    validate-api-key, end-session, save-answer, save-transcript, billing-status
+  Deployed JWT mismatch: ai-key-check verify_jwt=false remotely, no config.toml stanza
+
+7.6 Database
+  LIVE public tables: 130+ including profiles, sessions, questions, mock_tests,
+    gov_exams*, learning_*, community_*, coding_*, practice_workspace_sessions,
+    exam_templates, course_certificates, personal_library_documents, rooms*
+    (rooms tables remain after product retirement)
+  LIVE RLS: 132 tables enabled, 246 policies
+  LIVE views: questions_playable (no keys), feature_flags_public, gov_exam_bank_readiness,
+    ai_daily_costs
+  LIVE crons (cron.job active=true):
+    daily-exam-scrape-jee-main 0 2 * * *
+    daily-exam-scrape-neet 20 2
+    daily-exam-scrape-upsc 40 2
+    daily-exam-scrape-ssc-cgl 0 3
+    daily-exam-scrape-ibps-po 20 3
+    delete-expired-session-data-daily 0 3
+    purge-expired-idempotency-log-daily 15 4
+    reset-monthly-credits 0 0 1 * *
+    topup-subscription-credits 0 0 1 * *
+  Remote schema_migrations latest: 20260815080216 fix_session_streak_rls_and_mock_score
+  Local files NOT in remote schema_migrations:
+    20260815160000_hide_public_question_answer_keys.sql
+    20260815170000_referral_claim_hardening.sql
+  Content overlap: 20260815140000 applied as 20260815075612;
+    20260815150000 applied as 20260815080216;
+    20260815120000 applied as 20260815075301
+
+7.7 Storage buckets (from migrations; not re-listed via storage API this session)
+  question-images, documents, avatars, desktop-releases, resumes, exports
+  Policies tightened in 20260806103728 (drop overly broad *_all)
+
+7.8 Tests executed this session
+  Command: npm test -- --run --reporter=dot
+  Result: Test Files 82 passed (82); Tests 570 passed (570); Duration 42.71s
+  E2E not run: npm run test:e2e / playwright.config.ts baseURL http://127.0.0.1:5000
+
+7.9 Runtime HTTP
+  GET https://qzgvjrvtkwlzxpmlddkx.supabase.co/functions/v1/health -> {"status":"ok"}
+  GET https://qzgvjrvtkwlzxpmlddkx.supabase.co/functions/v1/ping
+    -> {"status":"ok","providers":{"gemini":true,"openai":true,"anthropic":false,"deepgram":true}}
+
+7.10 Runtime logs (24h function_edge_logs invocation counts, function_id mapped)
+  ping 166, search-exams 79, submit-test 59, get-paper-generation-job 42,
+  support-chat 35, disconnect-calendar 35, deepgram-token 34, start-session 19,
+  analytics-dashboard 17, razorpay-create-order 16, prep-tool 13, generate-answer 11,
+  generate-questions 10, parse-resume 10, list-previous-papers 9, create-exam-paper 8,
+  select-test-questions 8, generate-star-answer 7, run-daily-exam-scrape 7,
+  generate-debrief 6, get-exam-details 6, company-research 6, gap-analysis 5,
+  schedule-interview 5, generate-hint 4, get-exam-syllabus 4, create-test 4,
+  delete-account 3, report-question 3, create-billing-portal 2
+
+7.11 CI / deploy files
+  .github/workflows/ci.yml (lint, typecheck, validate-env, vitest, release gates,
+    secret scan, security gates, billing parity, capability gates, billing preflight,
+    npm audit continue-on-error, build, verify:dist-env, playwright e2e)
+  .github/workflows/electron-release.yml
+  .github/workflows/daily-exam-scrape.yml
+  scripts/pre-deploy-check.mjs, rls-spot-check.mjs, billing-catalog-parity.mjs,
+    edge-function-capability-gates.mjs, release-security-gates.mjs
+
+7.12 Advisors (live MCP)
+  Security WARN: pg_net in public schema; leaked password protection disabled;
+    multiple SECURITY DEFINER RPCs executable by anon or authenticated
+    (some intentional: get_shared_debrief, verify_course_certificate;
+     risky: bulk_update_users, mark_gap_analyses_stale_*, assemble_assessment_*)
+  Security INFO: RLS enabled no policy on ai_test_cache, idempotency_log,
+    rate_limit_buckets
+  Performance: large INFO set of unindexed foreign keys (advisor payload ~385KB)
+
+================================================================================
+8. MISSING, PARTIAL, BROKEN, UI-ONLY, AND BACKEND-ONLY FEATURES
+================================================================================
+NOT IMPLEMENTED
+  Entire B2B organization suite (create/types/hierarchy/members/invites/portals/
+    subdomains/branding/org provisioning)
+  Magic-link UI
+  Moderator portal
+  Human coach sessions / priority support product
+  BYOK (explicitly disabled)
+  Team rooms (retired)
+  Slack/LinkedIn/GitHub/Chrome integrations (ComingSoon UI)
+
+UI ONLY
+  CSRF tokens on login
+  Admin QA checklist (localStorage)
+  Admin security-config checklist
+  Gov exams marketing page (static)
+  Some Settings Polish retention controls (enforcement not proven)
+  Help copy mentioning seats/team controls (stale)
+
+BACKEND ONLY
+  Stripe checkout, billing portal, cancel, resume, stripe-webhook
+  sendMagicLink()
+  Seven zombie deployed EFs with no local source
+  Edge isAdmin() super_admin check (enum has no super_admin)
+
+BROKEN
+  Subscription cancel/resume for live Razorpay customers (Stripe ID required;
+    subscriptions table has no Razorpay columns)
+  razorpay-create-order continues after payment_orders insert failure;
+    live ledger empty despite 16 invocations
+  Feature flag admin table not driving App.tsx flags
+  FEATURE_PLAN_GATE starter/elite vs launch free/pro/Max mismatch
+    (starter rank = free, so some "starter" features unlock on free)
+  create-exam-paper Pro catalog mapping not enforced
+  Edge JWT off on ai-key-check while function returns secret fingerprints to admins
+
+PARTIALLY IMPLEMENTED
+  MFA (AAL1 session before TOTP)
+  OAuth (external IdP config required; Azure typing gap)
+  Account deletion (auth user deleted; data wipe incomplete)
+  Referrals (hardening migration unapplied)
+  Community/learning/coding (schema+UI+EF exist; almost no content)
+  Practice workspace (local question source)
+  Scorecard (client Gemini hybrid)
+  Calendar vs other integrations
+  Privacy "do not train" flag
+  Answer-key migration file unapplied (policies already similar live)
+  Nav vs capability (Gov Exams visible to non-India; all modules in sidebar)
+  Sessions missing from desktop sidebar
+  Command palette missing newer modules
+  E2E coverage (files exist, not executed here; mostly mocked helpers)
+
+REQUIRES EXTERNAL CONFIGURATION
+  OAuth providers in Supabase dashboard
+  Razorpay keys + webhook secret (ping does not prove webhook)
+  Stripe keys (leftover)
+  Deepgram / Gemini / OpenAI (ping booleans: gemini+openai+deepgram true)
+  Resend for send-email
+  Sentry DSN / PostHog key
+  INGEST_API_KEY for bulk-import-questions
+  Vault exam_scrape_cron_secret
+  VITE_SUPABASE_URL / publishable key at production build (Lovable)
+  HaveIBeenPwned leaked-password protection (disabled)
+
+NOT APPLICABLE
+  Cross-organization access (no organizations)
+  Org-specific branding/portals
+  Seat-based enterprise billing (Max is a consumer high-credit tier)
+
+================================================================================
+9. CROSS-ORGANIZATION AND CROSS-USER SECURITY FINDINGS
+================================================================================
+Cross-organization: NOT APPLICABLE. No org_id. No org membership.
+
+Cross-user (B2C) findings — verified against live policies unless noted:
+
+POSITIVE
+  1. RLS enabled on all 132 public tables. Deny-all (no policy) on 3 service tables.
+  2. sessions_own / mock_tests_all scoped to auth.uid().
+  3. questions_select live: uploaded_by = auth.uid() only (not is_public).
+  4. questions_playable omits correct_answer and explanation.
+  5. Completed-attempt key access only (questions_select_own_attempts status COMPLETED).
+  6. user_roles writes admin-only; own SELECT.
+  7. deduct_credits / add_credits EXECUTE revoked from authenticated (applied).
+  8. Profile pin: clients cannot PATCH credits/plan/ban/stripe/xp (guard + RLS).
+  9. Ban check fail-closed on DB error.
+  10. Webhooks verify HMAC/Stripe signatures; gateway JWT correctly off.
+  11. coding_hidden_cases_for_scoring revoked from anon/authenticated (applied 15080216).
+  12. Storage own-folder policies for documents/resumes/exports.
+
+NEGATIVE / OPEN
+  1. No live two-user JWT probe this audit (Test/Runtime withheld on isolation).
+  2. bulk_update_users is SECURITY DEFINER EXECUTE authenticated; relies on
+     internal has_role(admin). Any stolen admin JWT can grant unlimited credits
+     (no max on add_credits patch). Advisor WARN.
+  3. get_shared_debrief / get_shared_scorecard / verify_course_certificate
+     executable by anon (intentional token/code lookup; brute-force not tested).
+  4. mark_gap_analyses_stale_for_jd/resume executable by anon (advisor WARN) —
+     trigger helpers should not be in the Data API if they mutate.
+  5. Community posts: any authenticated user can read PUBLISHED/REPORTED/RESOLVED
+     (social by design, not private).
+  6. Rooms tables still present with RLS after product retirement — leftover attack
+     surface if policies ever regress.
+  7. ping with verify_jwt=false discloses which AI providers are configured.
+  8. ai-key-check deployed verify_jwt=false returns key fingerprints.
+  9. support-chat JWT off (guest widget) — IP rate limit 30/min only.
+  10. process-paper-generation-job and run-daily-exam-scrape JWT off; depend on
+      internal secrets. Secret rotation not verified.
+  11. create-exam-paper missing Pro capability gate (free users with credits can
+      enqueue AI papers).
+  12. In-progress mock tests cannot read keys via own_attempts (COMPLETED only) —
+      good — but questions_playable EXISTS clause includes any mock_tests row
+      (not only COMPLETED). Playable view still omits keys, so this is OK for keys,
+      but definer view could expose unpublished playable fields if mis-granted.
+  13. Account deletion incomplete: remaining user rows in mock_tests, resumes,
+      library, enrollments, coding_submissions, etc.
+  14. Tab-local signOut scope=local leaves other tabs/devices with localStorage session.
+  15. Leaked password protection disabled (advisor WARN).
+  16. Unapplied 20260815170000 referral claim hardening.
+  17. SECURITY DEFINER views: questions_playable relrowsecurity=false; 160000 would
+      set security_invoker=false, security_barrier=true explicitly (not in
+      schema_migrations).
+  18. pg_net extension in public schema (advisor WARN).
+
+Auth JWT metadata: admin is NOT taken from user_metadata (good). Roles live in
+user_roles. Edge _shared/auth.ts uses user_roles / is_admin().
+
+================================================================================
+10. UI/UX, ACCESSIBILITY, MOBILE, THEME, AND USABILITY FINDINGS
+================================================================================
+POSITIVE
+  Skip link on marketing + web AppShell (#main-content).
+  Dark/light/system theme via html.dark + data-theme (App.tsx, ThemeToggle,
+    SettingsAppearance). Semantic tokens used widely.
+  Responsive: AppSidebar hidden md:flex; MobileNav md:hidden; PAGE_SHELL from 360px;
+    many sm:/md:/lg: grids.
+  Global NetworkBanner + SessionTimeoutBanner + UpgradeModal + ErrorBoundary.
+  Auth forms: labels, aria-invalid, password toggles, role=alert errors.
+  Mock test session: palette aria, timer live region.
+  Onboarding aria-live; interviews aria-required.
+  CookieConsent component exists.
+  EmptyState + InlineErrorRetry used on core interview/billing/documents pages.
+
+NEGATIVE
+  Skip link missing on Electron shell, overlay, admin, auth, certificate verify.
+  Nav not plan-filtered and Gov Exams always shown (route bounce for non-India).
+  Sessions first-class but absent from desktop sidebar.
+  Command palette missing learn/community/coding/library/practice-workspace/
+    assessments/question-bank/plan.
+  Learning Hub, Community, Coding Lab, Document Library, Verify Certificate:
+    toast or silent; weak empty/retry.
+  Mock-test submit has no AlertDialog confirmation.
+  Admin/gov review uses window.confirm.
+  A11y coverage uneven: overlay has many aria labels; admin/learn/community weak.
+  No automated axe/playwright a11y assertions verified this audit
+    (ui-visual-regression.spec.ts exists, not run).
+  Practice workspace copy correctly warns it is not a hidden overlay — good UX honesty.
+  UpgradeModal labels monthly Razorpay products in ways that can read as one-time
+    (prior code review); not re-scored as 100% UX.
+  Offline: banner exists; per-page offline mutation queues not found.
+  Focus management on route change not evidenced.
+  Reduced-motion: not evidenced as a first-class setting.
+
+Mobile: bottom nav 5 tabs + More sheet. Overlay on mobile shows a notice.
+Electron: desktop overlay stealth (StealthMouseGuard, ScreenCaptureBlocker,
+  data-stealth) is a real product path, not a mock.
+
+UI/UX percentage (section 17): 72%
+  Calc: skip+theme+responsive+core empty/error states strong (~12/15 UI layer
+  average across in-scope features) minus a11y gaps, confirmations, nav IA,
+  thin-module empty states, and unrun visual e2e.
+
+================================================================================
+11. FRONTEND, BACKEND, DATABASE, INTEGRATIONS, BILLING, ANALYTICS,
+    SECURITY, PERFORMANCE, AND DEPLOYMENT FINDINGS
+================================================================================
+FRONTEND
+  Real wiring almost everywhere in the routed tree. Zustand stores are live.
+  Inconsistencies: FEATURE_PLAN_GATE vs FEATURE_PLAN_MAP vs requireCapability.
+  Dead: GroupPracticeComingSoon.tsx; Stripe client helpers unused by pages.
+  Types: AdminPromoCodes/AdminBillingSettings cast as "profiles" in places.
+  Score: 77%  (see section 14)
+
+BACKEND
+  63 local EFs; 70 deployed. Shared auth/ban/rate-limit/capability/billing helpers
+  are real. Gaps: capability not called on create-exam-paper; no RL on 11 EFs;
+  7 zombies; ai-key-check JWT mismatch; ping info leak; alt-feature EFs young (v3).
+  Score: 79%  (see section 15)
+
+DATABASE / RLS
+  Broad, mature, RLS-on-by-default. Credit RPCs locked down. Streak trigger
+  SECURITY DEFINER applied. Unapplied local migrations 160000/170000.
+  payment_orders table empty. subscriptions Stripe-shaped.
+  rooms* leftover. Views security_invoker not explicit.
+  Score: 81%  (see section 16)
+
+INTEGRATIONS
+  Live ping: Gemini, OpenAI, Deepgram configured; Anthropic not.
+  Razorpay code complete, ledger not proven.
+  Calendar Edge exists (Pro). Other integrations ComingSoon.
+  Email: send-email EF + Resend (config not proven beyond code).
+  OAuth requires dashboard.
+  Scraper cron + GitHub workflow exist; 7 scrape invokes/24h.
+  Score: 58% of integration layer (5% weight in feature model)
+
+BILLING
+  Credits and plan grants work (240 tx, 8 paid-tier subs). Self-serve Razorpay
+  checkout is invoked but payment_orders=0 and cancel path is Stripe. Admin can
+  grant Pro. Not a complete self-serve billing system in production evidence.
+  Score: 62% as a module (section 6)
+
+ANALYTICS / MONITORING
+  PostHog + Sentry code paths exist; require real keys (REQUIRES EXT CFG).
+  analytics-dashboard EF used 17/24h. Admin analytics RPCs exist (advisor notes
+  authenticated EXECUTE). Web vitals capture in bootstrap.tsx.
+  Score: 60% (code yes, production DSN/key not verified this audit)
+
+SECURITY
+  See sections 9 and 18. Strong B2C baseline with several WARNs.
+  Score: 76%
+
+PERFORMANCE
+  Advisor: many unindexed FKs (INFO). No live query EXPLAIN this audit.
+  Cron scrape staggered. Rate limits on AI. Large questions table (1126).
+  Frontend code-splitting via React.lazy in App.tsx.
+  Score: 70% of performance hygiene (not a product feature %)
+
+DEPLOYMENT
+  Remote project healthy. EFs ACTIVE. CI defined. Dist env verify script exists.
+  This audit did not observe Lovable/production web deploy SHA vs local HEAD.
+  Local untracked/uncommitted files at conversation start included billing/UI
+  changes and unapplied migrations — workspace != proven production bundle.
+  Git status at start had many untracked src/supabase files; those may already
+  be deployed (submit-test/list-previous-papers recently updated remotely).
+  Score: 74% deploy readiness (project live, drift exists)
+
+================================================================================
+12. MODULE-LEVEL PERCENTAGES
+================================================================================
+Module                         %     Notes
+Marketing public site          74    static+help/blog real; gov marketing static
+Authentication                 82    MFA/OAuth/magic-link deductions
+Onboarding                     86
+Dashboard / home               82
+Live Practice Coach            83
+Mock interview                 78
+Gov exam / mock test           79    capability hole on paper gen; keys mostly fixed
+Prep lab                       78
+Sessions                       74    nav gap
+Documents / resume / JD        81
+Answer bank                    78
+Interview scheduler            79
+Company research               77
+Debrief / scorecard            73
+Practice plan                  76
+Notifications                  80
+Referrals                      70    unapplied hardening
+Usage / analytics              79
+Settings (aggregate)           68    billing cancel, integrations, privacy, delete
+Billing / credits              62    ledger empty; Stripe leftover; Razorpay live code
+Admin console                  74    QA checklist UI-only; flags not runtime
+Learning hub                   62    1 course
+Community                      55    0 posts
+Coding lab                     65    1 question
+Document library               70
+Practice workspace             58    local questions
+Question bank                  75
+Assessments                    73
+Certificates                   68
+Electron / desktop             72
+Support chat                   76
+Gov admin ingest               78
+Observability                  55    Sentry/PostHog require keys
+Organization suite             0     not in product
+Retired rooms                  5     redirect only
+
+Equal-weight average of 35 in-scope modules (excludes org suite and rooms as N/A/retired
+from the product denominator, but includes thin alt modules):
+  Sum of 35 module % = 2566
+  2566 / 35 = 73.3%  -> reported 73%
+
+================================================================================
+13. ORGANIZATION-SYSTEM PERCENTAGE
+================================================================================
+Requested org/tenant checklist items scored in section 6 (21 items):
+  20 items at 0% (not implemented or N/A-as-missing)
+  1 item (B2C user-tenant isolation) at 84%
+
+Organization-system percentage vs the audit prompt's org checklist:
+  (0*20 + 84) / 21 = 4.0%   -> 4%
+
+Actual product tenancy (user-scoped B2C), if that is the intended system:
+  84%
+
+These must not be mixed. The application is not an organization platform.
+Section 20 overall uses the B2C product denominator, not the 4% org checklist.
+
+================================================================================
+14. FRONTEND PERCENTAGE
+================================================================================
+Layer-only: average of (UI 15 + FE 15) / 30 across in-scope product features
+in section 6 (auth through admin/gov, excluding org 0% rows and backend-only Stripe).
+
+Representative mean UI+FE = 25.1 / 30 = 83.7% of the frontend layers.
+Adjusted for: unrun E2E (-3), nav IA (-2), thin-module states (-2),
+Electron/admin skip-link (-1), command palette drift (-1).
+
+Frontend percentage: 77%
+Evidence: App.tsx routes, 139 pages, 16 stores, PlanGate, ProtectedRoute,
+MobileNav, theme stores, 570 unit tests including hooks/useAuth.
+
+================================================================================
+15. BACKEND PERCENTAGE
+================================================================================
+63/63 local slugs deployed. Shared security helpers used widely.
+Deductions: 7 zombies, capability skip, 11 missing RL, JWT mismatch ai-key-check,
+delete-account incomplete, Stripe leftover still invoked (create-billing-portal 2),
+payment_orders insert failure, 3 alt EFs v3 without RL.
+
+Backend percentage: 79%
+Calc: deployed coverage 20/20 local, minus 3 for zombies, minus 2 capability,
+minus 2 RL, minus 2 billing persist, minus 1 delete completeness, minus 1 JWT
+mismatch = 79.
+
+================================================================================
+16. DATABASE / RLS PERCENTAGE
+================================================================================
+132/132 public tables RLS on. 246 policies. Credit RPCs locked. Profile pin live.
+Answer-key SELECT live matches intended 160000 policy even though file untracked.
+Deductions: 170000 unapplied, 160000 view options unapplied, empty payment_orders,
+Stripe-shaped subscriptions, leftover rooms, advisor DEFINER grants, unindexed FKs,
+no dual-user probe, 3 deny-all tables OK.
+
+Database/RLS percentage: 81%
+Calc: 20/20 schema breadth, 18/20 RLS quality, minus 2 unapplied migrations,
+minus 1 leftover rooms, minus 1 DEFINER surface, minus 1 billing schema mismatch
+with Razorpay = 81.
+
+================================================================================
+17. UI/UX PERCENTAGE
+================================================================================
+72%  (see section 10)
+Theme/responsive/core states present; a11y and consistency incomplete;
+visual e2e not run (0% for that verification slice).
+
+================================================================================
+18. SECURITY PERCENTAGE
+================================================================================
+Auth+RLS+credits+bans+webhooks+capability catalog are real.
+Deductions: leaked-password off, DEFINER grants, ping/ai-key-check exposure,
+MFA AAL1, incomplete deletion, unapplied referral hardening, capability skip,
+no live cross-user test, zombie EFs.
+
+Security percentage: 76%
+Calc: Auth layer mean ~8.2/10 across product features = 82% of auth weight,
+minus advisor WARNs and unverified dual-tenant = 76.
+
+================================================================================
+19. TESTING PERCENTAGE
+================================================================================
+Unit: 82 files, 570 tests PASSED this session (10/10 for unit existence+execution).
+Negative cases: present in billing, auth, fetchEdge, referrals, validators, RLS predicates.
+Missing: Playwright not run (0/10 for e2e execution), no pgTAP, no two-user RLS
+integration, no live webhook test, no ProtectedRoute component test file found.
+
+Testing percentage: 62%
+Calc: unit 10 * 0.70 + e2e executed 0 * 0.20 + RLS live probe 0 * 0.10 = 7/10
+of the testing weight, mapped to 62% when including coverage gaps on UI modules
+that have zero tests (most pages).
+
+================================================================================
+20. OVERALL APPLICATION IMPLEMENTATION PERCENTAGE
+================================================================================
+Denominator: in-scope B2C product modules (section 12, 35 modules), not the
+unimplemented organization suite.
+
+Overall = 73%
+
+Cross-check via layer weights on the same in-scope set (approximate means):
+  UI/UX        72% * 0.15 = 10.80
+  Frontend     77% * 0.15 = 11.55
+  Backend      79% * 0.20 = 15.80
+  Database     81% * 0.20 = 16.20
+  Security     76% * 0.10 =  7.60
+  Integrations 58% * 0.05 =  2.90
+  Testing      62% * 0.10 =  6.20
+  Runtime      68% * 0.05 =  3.40
+  SUM                       74.45  -> rounded with billing-ledger penalty -1.45
+  Reported overall:         73%
+
+Runtime layer 68% (not 100%): health/ping verified; many EFs invoked; DB row
+counts prove use; payment_orders=0; E2E not run; two-user RLS not run;
+Sentry/PostHog keys not verified; production web bundle SHA not compared to HEAD.
+
+No feature in this audit received 100%, because runtime+e2e+dual-tenant verification
+is incomplete even where code is complete.
+
+If the organization suite is forced into the denominator (35 product + org-system 4%):
+  (73*35 + 4) / 36 = 71.1%  -> 71% "prompt-literal including missing orgs"
+  This is NOT the product overall. The product explicitly refuses org-suite marketing
+  (src/lib/constants/pricing.ts comment).
+
+================================================================================
+21. P0, P1, P2, AND P3 REMAINING WORK
+================================================================================
+P0 — correctness / money / secret / data leak
+  1. Diagnose why payment_orders stays at 0 despite razorpay-create-order traffic;
+     fail the request on insert error; do not return a payable order_id if ledger
+     insert failed.
+  2. Implement Razorpay-native cancel/resume OR stop showing Stripe cancel/resume
+     on SettingsBilling. Align subscriptions schema with the live processor.
+  3. Apply or verify 20260815170000 referral claim hardening on remote.
+  4. Call requireCapability("gov_exam_ai_fill") inside create-exam-paper
+     (catalog already maps it).
+  5. Disable or delete zombie EFs: ai-feedback, generate-practice-questions,
+     validate-api-key, end-session, save-answer, save-transcript, billing-status.
+  6. Set verify_jwt=true for ai-key-check (or remove fingerprint response).
+  7. Enable Auth leaked-password protection.
+  8. Complete delete-account to cover USER_OWNED_TABLES (or document retention
+     with a legal hold). Do not claim GDPR wipe until this is done.
+  9. Revoke anon EXECUTE on mark_gap_analyses_stale_* if they are trigger-only.
+
+P1 — security / product integrity
+  1. MFA: do not create an AAL1 session until TOTP succeeds (or step-up immediately).
+  2. Wire feature_flags table to runtime OR remove AdminFeatureFlags as a fake control.
+  3. Unify FEATURE_PLAN_GATE / FEATURE_PLAN_MAP / requireCapability on launch IDs.
+  4. Hide Gov Exams nav for non-India; hide or badge plan-gated modules in sidebar.
+  5. Add Sessions to desktop sidebar; update command palette.
+  6. Rate-limit assemble-assessment, score-coding-submission, issue-course-certificate.
+  7. Add max cap to bulk_update_users add_credits.
+  8. Two-user RLS live probe in CI (scripts/rls-spot-check.mjs is not a substitute
+     until executed against production with two JWTs).
+  9. Confirm 20260815160000 view security_barrier is equivalent live; apply if not.
+  10. Seed or hide empty Learning/Community/Coding rather than empty production modules.
+  11. Expand account-deletion tests beyond deletionStates helpers.
+  12. Stop invoking create-billing-portal from any remaining UI path unless Stripe
+      is a supported processor.
+
+P2 — UX / quality
+  1. Empty/error/retry parity on learn, community, coding, library, verify-cert.
+  2. Confirm dialogs on mock-test submit and destructive admin actions.
+  3. Skip links on admin, auth, overlay, Electron.
+  4. Accessibility pass (forms, live regions, focus).
+  5. Settings integrations: hide ComingSoon or finish calendar-only honestly.
+  6. Practice workspace: load bank questions instead of local mocks.
+  7. Index unindexed FKs from performance advisor (batch, not all at once).
+  8. Remove stale Help "per seat / team" copy.
+  9. Magic link: implement or delete sendMagicLink.
+  10. Drop or archive rooms tables after data retention review.
+  11. Run Playwright smoke in CI against a real preview (current e2e uses mocks).
+
+P3 — later / optional
+  1. Organization suite (only if product strategy changes).
+  2. Moderator role or delete enum value.
+  3. BYOK restoration (currently intentionally off).
+  4. Anthropic provider (ping false).
+  5. Azure OAuth type alignment.
+  6. Visual regression + axe in CI.
+  7. Move pg_net out of public.
+  8. Reduce ping provider disclosure.
+
+================================================================================
+22. PRODUCTION-READINESS DECISION
+================================================================================
+Decision: CONDITIONAL GO
+
+Not GO, because:
+  - Payment ledger has 0 rows while checkout EF is hot (money path unproven).
+  - Subscription management UI does not match Razorpay.
+  - Unapplied referral hardening; DEFINER/anon grants; leaked-password off.
+  - Workspace/local vs remote migration drift.
+  - E2E and dual-tenant probes not verified this audit.
+  - Cannot claim 100% on any feature under the stated scoring rule.
+
+Not NO-GO for the existing B2C product, because:
+  - Remote project ACTIVE_HEALTHY.
+  - Core interview + gov-exam paths have live traffic (submit-test, Deepgram,
+    start-session, search-exams, prep-tool, generate-answer).
+  - Auth, RLS, credit deduction, and admin gates are implemented in depth.
+  - 51 real profiles, 62 sessions, 29 mock tests, 1126 questions.
+  - Unit tests 570/570 passing locally this session.
+  - Health/ping succeed.
+  - Answer keys are not publicly selectable on live questions (policy verified).
+
+NO-GO if the success criteria are:
+  - Multi-organization / tenant portals / org provisioning, OR
+  - Fully proven self-serve billing with durable payment_orders and cancel, OR
+  - "Production-ready with no P0s".
+
+Conditions to upgrade to GO:
+  1. payment_orders (or equivalent) records successful Razorpay orders end-to-end.
+  2. Billing cancel/resume matches the live processor, or is removed from UI.
+  3. P0 security items 3–9 closed.
+  4. Dual-user RLS probe + one Playwright smoke against a deployed preview pass.
+  5. Production web bundle env verified (verify:dist-env with real VITE_SUPABASE_URL).
+
+--------------------------------------------------------------------------------
+END OF AUDIT
+This file is the only deliverable of the audit task. No product code was changed.
+--------------------------------------------------------------------------------

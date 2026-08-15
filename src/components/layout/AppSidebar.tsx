@@ -53,11 +53,12 @@ import {
   STEALTH_BRAND,
 } from "@/lib/stealth/stealthConfig";
 
-import type { ProfileRow } from "@/types";
+import type { FeatureFlagId, ProfileRow } from "@/types";
 import { getPlanDisplayName } from "@/lib/constants/pricing";
 import { PRODUCT_NAMES, NAV_SECTION_LABELS } from "@/lib/constants/productNames";
 import { assignLoginWithReturnTo } from "@/lib/auth/safeReturnTo";
 import { useIndiaRegion } from "@/hooks/useIndiaRegion";
+import { useGlobalStore } from "@/store/globalStore";
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -70,6 +71,8 @@ type NavItem = {
   tourId?: string;
   /** Show for everyone; lock + India badge when region gate would bounce. */
   indiaOnly?: boolean;
+  /** Kill-switch flag. Hidden when enabled=false; plan-deny still shows for upsell. */
+  featureFlag?: FeatureFlagId;
 };
 
 type NavSection = {
@@ -115,6 +118,7 @@ const NAV_SECTIONS: NavSection[] = [
         stealthIcon: ListTodo,
         label: PRODUCT_NAMES.practiceCoach,
         tourId: "nav-practice-coach",
+        featureFlag: "overlay",
       },
       {
         to: "/app/mock",
@@ -122,6 +126,7 @@ const NAV_SECTIONS: NavSection[] = [
         stealthIcon: PenTool,
         label: PRODUCT_NAMES.mockInterview,
         tourId: "nav-mock-interview",
+        featureFlag: "mock_sessions",
       },
       {
         to: "/app/prep",
@@ -177,6 +182,7 @@ const NAV_SECTIONS: NavSection[] = [
         icon: BarChart2,
         stealthIcon: BarChart3,
         label: PRODUCT_NAMES.analytics,
+        featureFlag: "analytics",
       },
       {
         to: "/app/usage",
@@ -226,12 +232,14 @@ const NAV_SECTIONS: NavSection[] = [
         icon: PenTool,
         stealthIcon: PenTool,
         label: "Coding lab",
+        featureFlag: "coding_hints",
       },
       {
         to: "/app/answers",
         icon: BookOpen,
         stealthIcon: FolderOpen,
         label: PRODUCT_NAMES.answerBank,
+        featureFlag: "answer_bank",
       },
     ],
   },
@@ -249,12 +257,14 @@ const NAV_SECTIONS: NavSection[] = [
         icon: CalendarCheck,
         stealthIcon: Calendar,
         label: PRODUCT_NAMES.interviews,
+        featureFlag: "calendar_sync",
       },
       {
         to: "/app/companies",
         icon: Building2,
         stealthIcon: Building,
         label: PRODUCT_NAMES.companyResearch,
+        featureFlag: "company_research",
       },
     ],
   },
@@ -290,6 +300,9 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
   const profile = useAuthStore((state) => state.profile);
   const isAdmin = useAuthStore((state) => state.isAdmin);
   const { isIndia } = useIndiaRegion();
+  const killSwitches = useGlobalStore((state) => state.featureKillSwitches);
+  const featureFlags = useGlobalStore((state) => state.featureFlags);
+  const isFeatureEnabled = useGlobalStore((state) => state.isFeatureEnabled);
 
   const signOut = useAuthStore((state) => state.signOut);
 
@@ -392,6 +405,14 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
             )}
 
             {section.items
+              .filter((item) => {
+                if (!item.featureFlag) return true;
+                return (
+                  isFeatureEnabled(item.featureFlag) ||
+                  Boolean(featureFlags[item.featureFlag]) ||
+                  killSwitches[item.featureFlag] !== false
+                );
+              })
               .map((item) => {
               const isItemActive = isPathActive(location.pathname, item.to);
               const Icon = stealthMode ? item.stealthIcon : item.icon;

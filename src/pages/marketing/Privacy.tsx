@@ -46,7 +46,7 @@ export default function Privacy() {
         <ul>
           <li>To provide and maintain the Service.</li>
           <li>To personalize AI coaching based on your profile and history.</li>
-          <li>To process payments and manage subscriptions.</li>
+          <li>To process payments.</li>
           <li>To send transactional emails (account verification, password reset).</li>
           <li>To improve the Service through aggregated, anonymized analytics.</li>
           <li>To detect and prevent fraud or abuse.</li>

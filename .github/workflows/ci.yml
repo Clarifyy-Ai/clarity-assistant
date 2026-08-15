@@ -58,6 +58,9 @@ jobs:
       - name: AI capability gates
         run: npm run release:capability-gates
 
+      - name: Edge function parity
+        run: npm run release:edge-parity
+
       - name: Billing config preflight
         run: npm run billing:preflight
 

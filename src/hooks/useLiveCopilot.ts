@@ -32,6 +32,7 @@ import {
 } from "@/lib/documents/interviewContext";
 import { parseResumeContentString } from "@/lib/documents/resumeParse";
 import { getPrivateMode } from "@/hooks/usePrivateMode";
+import { parsePrivacyPrefs } from "@/lib/privacy/privacyPrefs";
 import { createDragHandler } from "@/lib/overlay/stealthMouse";
 import { generateId } from "@/lib/utils";
 import { questionFingerprint, hintIdempotencyKey } from "@/lib/ai/questionDetection";
@@ -794,7 +795,9 @@ export function useLiveCopilot({
         const pairs = pairLiveSessionAnswers(utterances);
 
         const dbModel = toDbModel(overlay.active_model);
-        const saveTranscript = useOverlayStore.getState().save_transcript;
+        const saveTranscript =
+          useOverlayStore.getState().save_transcript &&
+          parsePrivacyPrefs(profile?.privacy_prefs).store_transcripts;
 
         await sessionsDB.updateForUser(session.session_id, userId, {
           status: "completed",

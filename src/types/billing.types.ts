@@ -64,7 +64,6 @@ export const PLAN_DEFINITIONS: Record<UserPlan, PlanFeatures> = {
       "Resume + JD hub",
       "Company research engine",
       "Interview scheduler",
-      "Priority support",
     ],
     highlighted_features: ["30 credits/mo", "All 4 AI models", "Full analytics"],
     ai_models: ["Gemini Flash", "Gemini Pro", "GPT-4o", "Claude"],
@@ -88,10 +87,9 @@ export const PLAN_DEFINITIONS: Record<UserPlan, PlanFeatures> = {
       "Everything in Pro",
       "4,000 credits / month",
       "Priority model access",
-      "Priority email support",
       "Advanced usage analytics",
     ],
-    highlighted_features: ["4,000 credits", "Priority support"],
+    highlighted_features: ["4,000 credits", "Priority model access"],
     ai_models: ["Gemini Flash", "Gemini Pro", "GPT-4o", "Claude"],
     is_popular: false,
     cta_label: "Upgrade to Max",
@@ -109,10 +107,9 @@ export const PLAN_DEFINITIONS: Record<UserPlan, PlanFeatures> = {
       "Everything in Pro",
       "4,000 credits / month",
       "Priority model access",
-      "Priority email support",
       "Advanced usage analytics",
     ],
-    highlighted_features: ["4,000 credits", "Priority support"],
+    highlighted_features: ["4,000 credits", "Priority model access"],
     ai_models: ["Gemini Flash", "Gemini Pro", "GPT-4o", "Claude"],
     is_popular: false,
     cta_label: "Upgrade to Max",
@@ -122,10 +119,11 @@ export const PLAN_DEFINITIONS: Record<UserPlan, PlanFeatures> = {
 };
 
 // ── Credit Packs (pay-per-credit) ─────────────────────────────────
-// Canonical pack definitions live in src/lib/billing/priceCalculator.ts
+// Canonical pack definitions live in src/lib/billing/priceCalculator.ts.
+// Type-only re-export — do not value-export CREDIT_PACKS from this types
+// file or the @/types barrel pulls the billing graph into boot.
 
 export type { CreditPack } from "@/lib/billing/priceCalculator";
-export { CREDIT_PACKS } from "@/lib/billing/priceCalculator";
 
 // ── Billing History ───────────────────────────────────────────────
 

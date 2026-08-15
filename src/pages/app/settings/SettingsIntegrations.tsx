@@ -13,6 +13,7 @@ import { useCalendarSync } from "@/hooks/useCalendarSync";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { toast }       from "sonner";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
+import { FeatureKillGate } from "@/components/layout/PlanGate";
 
 // ─────────────────────────────────────────────────────────────────
 // Integration definitions
@@ -336,7 +337,9 @@ export default function SettingsIntegrations() {
 
       <div className="space-y-3">
         {INTEGRATIONS.filter(isConnectableIntegration).map((integration) => (
-          <GoogleCalendarCard key={integration.id} integration={integration} />
+          <FeatureKillGate key={integration.id} flag="calendar_sync" compact>
+            <GoogleCalendarCard integration={integration} />
+          </FeatureKillGate>
         ))}
       </div>
 

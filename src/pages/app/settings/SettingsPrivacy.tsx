@@ -1,102 +1,51 @@
-// @ts-nocheck -- retained: notification_prefs and privacy_prefs JSONB column types not in Supabase generated schema.
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
-import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/switch";
-import { Badge } from "@/components/ui/Badge";
 import { CheckCircle, Shield, Eye, Database, Lock, WifiOff } from "lucide-react";
 import { toast } from "sonner";
 import { usePrivateMode } from "@/hooks/usePrivateMode";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
-import posthog from "posthog-js";
+import {
+  PRIVACY_ENFORCEMENT,
+  parsePrivacyPrefs,
+  toStoredPrivacyPrefs,
+  applyObservabilityPreferences,
+  type PrivacyPrefs,
+} from "@/lib/privacy/privacyPrefs";
 
-function applyAnalyticsPreference(enabled: boolean) {
-  if (!import.meta.env.VITE_POSTHOG_KEY) return;
-  try {
-    if (enabled) {
-      posthog.opt_in_capturing();
-    } else {
-      posthog.opt_out_capturing();
-    }
-  } catch {
-    // PostHog may be unavailable
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────
-// SettingsPrivacy
-// ─────────────────────────────────────────────────────────────────
-
-/**
- * Enforcement map — which privacy_prefs keys have a live consumer today.
- * Stored = written to profiles.privacy_prefs on Save.
- * Enforced = a runtime consumer actually changes behaviour.
- *
- * Consumers:
- * - analytics_tracking → applyAnalyticsPreference() → PostHog opt-in/out (this page)
- * - private mode → usePrivateMode (not a privacy_prefs key; pauses cloud AI immediately)
- */
-const PRIVACY_ENFORCEMENT: Record<
-  string,
-  { stored: boolean; enforced: boolean; consumer: string }
-> = {
-  analytics_tracking: {
-    stored: true,
-    enforced: true,
-    consumer: "PostHog capturing opt-in/out after save",
-  },
-  allow_ai_training: {
-    stored: true,
-    enforced: false,
-    consumer: "None yet — we do not train on session data",
-  },
-  store_transcripts: {
-    stored: true,
-    enforced: false,
-    consumer: "None yet — existing sessions remain until deleted",
-  },
-  public_profile: {
-    stored: true,
-    enforced: false,
-    consumer: "None yet — public leaderboards are not live",
-  },
-  share_scorecard: {
-    stored: true,
-    enforced: false,
-    consumer: "None yet — public scorecard links are not gated on this pref",
-  },
-  login_notifications: {
-    stored: true,
-    enforced: false,
-    consumer: "None yet — login alert emails are not wired",
-  },
-  two_factor: {
-    stored: false,
-    enforced: false,
-    consumer: "Soon — enrollment lives under Settings → Security",
-  },
-};
-
-const PRIVACY_SETTINGS = [
+const PRIVACY_SETTINGS: Array<{
+  group: "Data & AI" | "Visibility";
+  items: Array<{
+    key: keyof PrivacyPrefs;
+    label: string;
+    desc: string;
+  }>;
+}> = [
   {
     group: "Data & AI",
     items: [
       {
-        key:   "allow_ai_training",
+        key: "allow_ai_training",
         label: "Allow anonymised data for AI improvement",
-        desc:  "Preference stored — not yet enforced server-side. We do not currently train on your sessions for model improvement.",
+        desc: "When off, AI Edge calls send x-ai-training-consent: false and session text is omitted from PostHog and Sentry. We do not train models on your sessions unless you opt in.",
       },
       {
-        key:   "store_transcripts",
+        key: "store_transcripts",
         label: "Store session transcripts",
-        desc:  "Preference stored — auto-delete after analysis is not fully wired yet. Existing sessions remain until you delete them.",
+        desc: "When off, transcripts are not written to the cloud. The live overlay transcript still works for the current session. Existing saved transcripts stay until you delete them.",
       },
       {
-        key:   "analytics_tracking",
+        key: "analytics_tracking",
         label: "Product analytics",
-        desc:  "When off, PostHog capturing is opted out in this browser. Applies after you save.",
+        desc: "When off, PostHog capturing is opted out in this browser. Applies after you save.",
+      },
+      {
+        key: "crash_reporting",
+        label: "Crash reporting",
+        desc: "When off, Sentry does not send crash reports from this browser. Applies after you save.",
       },
     ],
   },
@@ -104,76 +53,50 @@ const PRIVACY_SETTINGS = [
     group: "Visibility",
     items: [
       {
-        key:   "public_profile",
-        label: "Public profile",
-        desc:  "Preference stored — leaderboards/community are not live yet, so this has no effect today.",
-      },
-      {
-        key:   "share_scorecard",
+        key: "share_scorecard",
         label: "Allow scorecard sharing",
-        desc:  "Preference stored — public scorecard links are not fully enforced yet.",
-      },
-    ],
-  },
-  {
-    group: "Security",
-    items: [
-      {
-        key:   "login_notifications",
-        label: "Email on new login",
-        desc:  "Preference stored — login alert emails are not yet wired.",
-      },
-      {
-        key:   "two_factor",
-        label: "Two-factor authentication",
-        desc:  "Add an extra layer of security to your account.",
-        badge: "Soon",
-        disabled: true,
+        desc: "When off, public scorecard links cannot be created and the Share button is hidden.",
       },
     ],
   },
 ];
 
+function errorMessage(err: unknown): string {
+  if (err instanceof Error && err.message) return err.message;
+  return "Failed to save privacy settings.";
+}
+
 export default function SettingsPrivacy() {
-  const { user, profile } = useAuthStore();
+  const { profile, updateProfile } = useAuthStore();
   const { enabled: privateMode, toggle: togglePrivateMode } = usePrivateMode();
 
-  const [prefs,  setPrefs]  = useState<Record<string, boolean>>(
-    profile?.privacy_prefs ?? {
-      allow_ai_training:  true,
-      store_transcripts:  true,
-      analytics_tracking: true,
-      public_profile:     false,
-      share_scorecard:    true,
-      login_notifications:true,
-    }
+  const [prefs, setPrefs] = useState<PrivacyPrefs>(() =>
+    parsePrivacyPrefs(profile?.privacy_prefs),
   );
   const [saving, setSaving] = useState(false);
-  const [saved,  setSaved]  = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    applyAnalyticsPreference(Boolean(prefs.analytics_tracking));
-  }, []); // apply once on mount from loaded prefs
+    setPrefs(parsePrivacyPrefs(profile?.privacy_prefs));
+    applyObservabilityPreferences(parsePrivacyPrefs(profile?.privacy_prefs));
+  }, [profile?.privacy_prefs]);
 
-  function toggle(key: string) {
+  function toggle(key: keyof PrivacyPrefs) {
     setPrefs((p) => ({ ...p, [key]: !p[key] }));
   }
 
   async function handleSave() {
-    if (!user) return;
+    if (!profile?.id) return;
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({ privacy_prefs: prefs })
-        .eq("id", user.id);
-      if (error) throw error;
-      applyAnalyticsPreference(Boolean(prefs.analytics_tracking));
+      const stored = toStoredPrivacyPrefs(prefs);
+      await updateProfile({ privacy_prefs: stored });
+      applyObservabilityPreferences(stored);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       toast.success("Privacy settings saved");
     } catch (err) {
-      toast.error(err?.message ?? "Failed to save privacy settings.");
+      toast.error(errorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -182,20 +105,16 @@ export default function SettingsPrivacy() {
   return (
     <SettingsPageShell title="Privacy">
 
-      <Card className="border-amber-500/20 bg-amber-500/5">
+      <Card className="border-primary/20 bg-primary/5">
         <p className="text-xs text-muted-foreground leading-relaxed">
-          <span className="font-medium text-foreground">Honesty note: </span>
-          Product analytics is enforced via PostHog opt-out when saved off. Other toggles are
-          stored on your profile; items marked “not yet enforced” do not change backend behaviour yet.
-          Private mode (below) does pause cloud AI immediately.
+          <span className="font-medium text-foreground">Every setting below is enforced. </span>
+          Private mode (separate control) pauses cloud AI immediately. Two-factor enrollment lives under Settings → Security.
         </p>
         <ul className="mt-3 space-y-1.5 text-[11px] text-muted-foreground">
           {Object.entries(PRIVACY_ENFORCEMENT).map(([key, row]) => (
             <li key={key}>
               <span className="font-medium text-foreground">{key}</span>
-              {": "}
-              {row.enforced ? "enforced" : "stored only"}
-              {" — "}
+              {": enforced — "}
               {row.consumer}
             </li>
           ))}
@@ -222,29 +141,22 @@ export default function SettingsPrivacy() {
       {PRIVACY_SETTINGS.map((group) => (
         <Card key={group.group}>
           <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4 flex items-center gap-2">
-            {group.group === "Data & AI"  && <Database className="w-3.5 h-3.5" />}
-            {group.group === "Visibility" && <Eye      className="w-3.5 h-3.5" />}
-            {group.group === "Security"   && <Lock     className="w-3.5 h-3.5" />}
+            {group.group === "Data & AI" && <Database className="w-3.5 h-3.5" />}
+            {group.group === "Visibility" && <Eye className="w-3.5 h-3.5" />}
             {group.group}
           </h3>
           <div className="space-y-5">
             {group.items.map((item) => (
               <div key={item.key} className="flex items-start justify-between gap-4">
                 <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm text-foreground">{item.label}</p>
-                    {(item as any).badge && (
-                      <Badge variant="default" size="sm">{(item as any).badge}</Badge>
-                    )}
-                  </div>
+                  <p className="text-sm text-foreground">{item.label}</p>
                   <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
                     {item.desc}
                   </p>
                 </div>
                 <Switch
-                  checked={prefs[item.key] ?? false}
-                  onCheckedChange={() => !(item as any).disabled && toggle(item.key)}
-                  disabled={(item as any).disabled}
+                  checked={prefs[item.key]}
+                  onCheckedChange={() => toggle(item.key)}
                   aria-label={item.label}
                 />
               </div>
@@ -253,13 +165,33 @@ export default function SettingsPrivacy() {
         </Card>
       ))}
 
-      {/* GDPR note */}
+      <Card>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4 flex items-center gap-2">
+          <Lock className="w-3.5 h-3.5" />
+          Security
+        </h3>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <p className="text-sm text-foreground">Two-factor authentication</p>
+            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+              Enrollment and recovery live under Settings → Security. This page does not store a 2FA toggle.
+            </p>
+          </div>
+          <Link
+            to="/app/settings/security"
+            className="shrink-0 text-xs font-medium text-primary hover:underline"
+          >
+            Open Security
+          </Link>
+        </div>
+      </Card>
+
       <Card className="flex items-start gap-3 border-blue-500/15 bg-blue-500/3">
         <Shield className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
         <p className="text-xs text-muted-foreground leading-relaxed">
           Under GDPR and CCPA you have the right to access, correct, or delete your
           personal data at any time. Visit{" "}
-          <a href="/privacy" className="text-blue-400 underline" target="_blank">
+          <a href="/privacy" className="text-blue-400 underline" target="_blank" rel="noreferrer">
             our privacy policy
           </a>{" "}
           for full details.
@@ -270,7 +202,7 @@ export default function SettingsPrivacy() {
         variant={saved ? "success" : "primary"}
         size="md"
         loading={saving}
-        onClick={handleSave}
+        onClick={() => void handleSave()}
         leftIcon={saved ? <CheckCircle className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
       >
         {saved ? "Saved!" : "Save privacy settings"}

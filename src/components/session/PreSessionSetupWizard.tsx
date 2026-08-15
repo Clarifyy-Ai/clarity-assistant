@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useDocumentStore } from "@/store/documentStore";
 import { useAuthStore } from "@/store/userStore";
 import { useOverlayStore } from "@/store/overlayStore";
@@ -23,7 +23,11 @@ import { OverlaySetupGuidePanel } from "@/components/overlay/OverlaySetupGuidePa
 import { OVERLAY_VISIBILITY_WARNING } from "@/lib/constants/overlaySetupGuide";
 import { CreditExhaustedState, useCreditExhaustedState } from "@/components/billing/CreditExhaustedState";
 import { EmptyState } from "@/components/common/EmptyState";
-import { wizardStepBlocker } from "@/lib/session/wizardValidation";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import {
+  wizardRequiredFieldsBlocker,
+  wizardStepBlocker,
+} from "@/lib/session/wizardValidation";
 import {
   isFreePlan,
   maxSessionMinutesForPlan,
@@ -46,7 +50,9 @@ import { toast } from "sonner";
 import {
   formatPracticeSetupSummary,
   loadLastPracticeSetup,
+  loadPracticeSetupDraft,
   peekPendingPracticeSetup,
+  savePracticeSetupDraft,
 } from "@/lib/session/lastPracticeSetup";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
@@ -108,7 +114,7 @@ function BooleanSwitch({
 export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSessionSetupWizardProps) {
   const { profile } = useAuthStore();
   const { isExhausted: creditsExhausted } = useCreditExhaustedState();
-  const { loadError: documentsLoadError } = useDocuments();
+  const { loadError: documentsLoadError, reload: reloadDocuments } = useDocuments();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const location = useLocation();
@@ -157,35 +163,34 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const [jdId,             setJdId]             = useState<string | null>(activeJdId);
   const [extraDocIds,      setExtraDocIds]      = useState<string[]>([]);
 
+  const skipDraftSave = useRef(true);
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem("clarify:practice-setup-draft");
-      if (!raw) return;
-      const draft = JSON.parse(raw) as {
-        step?: number;
-        company?: string;
-        role?: string;
-        interviewType?: string;
-      };
-      if (typeof draft.step === "number" && draft.step >= 1) setStep(draft.step);
-      if (draft.company) setCompany(draft.company);
-      if (draft.role) setRole(draft.role);
-      if (draft.interviewType) setInterviewType(draft.interviewType);
-    } catch {
-      // ignore
-    }
+    const draft = loadPracticeSetupDraft();
+    if (!draft) return;
+    if (typeof draft.step === "number" && draft.step >= 1) setStep(draft.step);
+    if (draft.company) setCompany(draft.company);
+    if (draft.role) setRole(draft.role);
+    if (draft.interviewType) setInterviewType(draft.interviewType);
+    if (draft.resumeId) setResumeId(draft.resumeId);
+    if (draft.jdId) setJdId(draft.jdId);
+    if (draft.sessionCallType) setSessionCallType(draft.sessionCallType);
   }, []);
 
   useEffect(() => {
-    try {
-      sessionStorage.setItem(
-        "clarify:practice-setup-draft",
-        JSON.stringify({ step, company, role, interviewType, resumeId, jdId }),
-      );
-    } catch {
-      // ignore
+    if (skipDraftSave.current) {
+      skipDraftSave.current = false;
+      return;
     }
-  }, [step, company, role, interviewType, resumeId, jdId]);
+    savePracticeSetupDraft({
+      step,
+      company,
+      role,
+      interviewType,
+      resumeId,
+      jdId,
+      sessionCallType,
+    });
+  }, [step, company, role, interviewType, resumeId, jdId, sessionCallType]);
 
   // Step 4 — Auto-Generate
   const [autoGenerate,     setAutoGenerate]     = useState(false);
@@ -465,6 +470,18 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   }, []);
 
   function handleStart() {
+    const requiredBlocker = wizardRequiredFieldsBlocker({
+      sessionCallType,
+      role,
+      hintStyle,
+      model,
+      smartRouting,
+      resumeId,
+    });
+    if (requiredBlocker) {
+      toast.message(requiredBlocker);
+      return;
+    }
     const gate = canStartCoachingSession({
       visibilityAcknowledged: visibilityAck,
       responsibleUseAcknowledged: responsibleUseAck,
@@ -535,6 +552,20 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
 
   function startFromSavedSetup() {
     if (!lastSetup) return;
+    const requiredBlocker = wizardRequiredFieldsBlocker({
+      sessionCallType: lastSetup.session_call_type ?? "interview",
+      role: lastSetup.role ?? "",
+      hintStyle: lastSetup.hint_style,
+      model: lastSetup.model,
+      smartRouting: lastSetup.smart_routing,
+      resumeId: lastSetup.resume_id,
+    });
+    if (requiredBlocker) {
+      applyLastSetup(lastSetup);
+      setShowWizard(true);
+      toast.message(requiredBlocker);
+      return;
+    }
     applyLastSetup(lastSetup);
     const overlay = useOverlayStore.getState();
     overlay.setActiveModel(
@@ -554,17 +585,20 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
 
   const canProceed = step < totalSteps;
   const isLastStep = step === totalSteps;
-  const stepBlocker = wizardStepBlocker({
-    step,
-    resumeStep,
+  const fieldOpts = {
     sessionCallType,
-    company,
     role,
     hintStyle,
     model,
     smartRouting,
     resumeId,
+  };
+  const stepBlocker = wizardStepBlocker({
+    step,
+    resumeStep,
+    ...fieldOpts,
   });
+  const startBlocker = wizardRequiredFieldsBlocker(fieldOpts);
 
   useEffect(() => {
     if (isMobile) return;
@@ -575,13 +609,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
         const blocker = wizardStepBlocker({
           step,
           resumeStep,
-          sessionCallType,
-          company,
-          role,
-          hintStyle,
-          model,
-          smartRouting,
-          resumeId,
+          ...fieldOpts,
         });
         if (blocker) {
           toast.message(blocker);
@@ -597,7 +625,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [step, canProceed, isMobile]);
+  }, [step, canProceed, isMobile, resumeStep, sessionCallType, role, hintStyle, model, smartRouting, resumeId]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -805,7 +833,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                      Company {sessionCallType === "interview" ? "(required)" : "(optional)"}
+                      Company (optional)
                     </label>
                       <SearchableCombobox
                         value={company}
@@ -1041,12 +1069,11 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
               </div>
 
               {documentsLoadError && (
-                <div
-                  role="alert"
-                  className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300"
-                >
-                  Could not load documents: {documentsLoadError}. Refresh or open Documents and try again.
-                </div>
+                <InlineErrorRetry
+                  message={`Could not load documents: ${documentsLoadError}`}
+                  onRetry={() => void reloadDocuments()}
+                  compact
+                />
               )}
 
               {resumes.length === 0 && jds.length === 0 && !documentsLoadError && (
@@ -1571,6 +1598,11 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
             {stepBlocker}
           </p>
         )}
+        {isLastStep && startBlocker && (
+          <p role="status" className="text-xs text-amber-600 dark:text-amber-400">
+            {startBlocker}
+          </p>
+        )}
         <div className="flex gap-3">
           {step > 1 && (
             <button
@@ -1586,6 +1618,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
             <button
               onClick={handleStart}
               disabled={
+                Boolean(startBlocker) ||
                 micPermission !== "granted" ||
                 !visibilityAck ||
                 !responsibleUseAck ||
@@ -1595,7 +1628,8 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
               }
               className={cn(
                 "flex-1 py-3.5 font-semibold rounded-xl transition-all flex items-center justify-center gap-2",
-                micPermission !== "granted" ||
+                Boolean(startBlocker) ||
+                  micPermission !== "granted" ||
                   !visibilityAck ||
                   !responsibleUseAck ||
                   preflightLoading ||

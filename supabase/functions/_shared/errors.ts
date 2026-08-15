@@ -52,6 +52,17 @@ const SENSITIVE_KEYS = [
   "anthropic_api_key",
   "gemini_api_key",
   "deepgram_api_key",
+  "transcript",
+  "full_transcript",
+  "transcript_chunk",
+  "utterance",
+  "utterances",
+  "document",
+  "document_text",
+  "prompt",
+  "resume",
+  "session_text",
+  "answer_text",
 ];
 
 function generateErrorId(): string {

@@ -19,6 +19,7 @@ import { fillUntilCount, type GapFillRow } from "../_shared/govAiGapFill.ts";
 import { type WeakTopicStat } from "../_shared/examAIPrompts.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
+import { requireCapability } from "../_shared/requireCapability.ts";
 import { conflictsWithSelected } from "../_shared/govMcqValidator.ts";
 /* ─── SANITIZATION ───────────────────────────────────────────────────────── */
 //
@@ -259,6 +260,11 @@ Deno.serve(async (req: Request) => {
     const includeUserUploads = source_types.includes("USER_UPLOAD");
     const wantsPYP = source_types.includes("OFFICIAL_PYP");
     const wantsAI = source_types.includes("AI_GENERATED");
+
+    if (wantsAI) {
+      const capabilityGate = requireCapability(planId, "gov_exam_ai_fill", req);
+      if (capabilityGate) return capabilityGate;
+    }
 
     if ((planId) === "free") {
       const startOfMonth = new Date();

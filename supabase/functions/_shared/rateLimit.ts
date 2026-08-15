@@ -31,6 +31,7 @@ export const RATE_LIMIT_CLASS: Record<string, RateLimitClass> = {
   "deduct-credits": "strict_fail_closed",
   "generate-answer": "strict_fail_closed",
   "generate-hint": "strict_fail_closed",
+  "generate-scorecard": "strict_fail_closed",
   "prep-tool": "strict_fail_closed",
   "collect-exam-papers": "strict_fail_closed",
   "ingest-source-document": "strict_fail_closed",

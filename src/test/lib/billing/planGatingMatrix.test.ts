@@ -80,7 +80,14 @@ describe("P0-3 server plan gating matrix", () => {
   it("gov_exam_ai_fill is Pro and independent of free mock_test", () => {
     expect(hasCapability("free", "mock_test")).toBe(true);
     expect(hasCapability("free", "gov_exam_ai_fill")).toBe(false);
+    expect(hasCapability("starter", "gov_exam_ai_fill")).toBe(false);
     expect(hasCapability("pro", "gov_exam_ai_fill")).toBe(true);
+    expect(hasCapability("enterprise", "gov_exam_ai_fill")).toBe(true);
+  });
+
+  it("official previous papers stay available to Free; AI fill does not", () => {
+    expect(hasCapability("free", "mock_test")).toBe(true);
+    expect(hasCapability("free", "gov_exam_ai_fill")).toBe(false);
   });
 
   it("FEATURE_PLAN_GATE never uses starter; Pro features require pro", () => {

@@ -1,9 +1,9 @@
 // src/lib/network/fetchEdge.ts
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
+import { allowsAiTraining } from "@/lib/privacy/privacyPrefs";
 import { getPrivateMode } from "@/hooks/usePrivateMode";
 import { EDGE_BASE, SUPABASE_PUBLISHABLE_KEY } from "@/lib/env";
-import { refreshCredits } from "@/lib/billing/creditsManager";
 import { logger } from "@/lib/logger";
 import { isTabLocalLogout } from "@/lib/auth/tabLocalLogout";
 import { ApiClientError } from "@/lib/api/apiClient";
@@ -81,6 +81,9 @@ export async function getAuthHeaders(
   extraHeaders?: Record<string, string>
 ): Promise<Record<string, string>> {
   const token = await readToken();
+  const trainingConsent = allowsAiTraining(
+    useAuthStore.getState().profile?.privacy_prefs,
+  );
 
   // NOTE: We preserve your behavior:
   // - If user token exists -> use it
@@ -90,6 +93,7 @@ export async function getAuthHeaders(
       ? { Authorization: `Bearer ${token}` }
       : { Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}` }),
     apikey: SUPABASE_PUBLISHABLE_KEY,
+    "x-ai-training-consent": trainingConsent ? "true" : "false",
     ...extraHeaders,
   };
 }
@@ -289,6 +293,8 @@ export async function fetchEdgeJson<T>(
   }
 
   if (!CREDIT_REFRESH_SKIP.has(fnName)) {
+    // Dynamic import avoids fetchEdge ↔ creditsManager at module init (boot TDZ).
+    const { refreshCredits } = await import("@/lib/billing/creditsManager");
     void refreshCredits();
   }
 

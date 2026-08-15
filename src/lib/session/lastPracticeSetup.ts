@@ -3,6 +3,17 @@ import type { LiveSessionConfig } from "@/types/session.types";
 const LAST_SETUP_KEY = "clarify:last-practice-setup";
 const PENDING_SETUP_KEY = "clarify:pending-practice-setup";
 const PRACTICE_COUNT_KEY = "clarify:practice-session-count";
+const DRAFT_KEY = "clarify:practice-setup-draft";
+
+export type PracticeSetupDraft = {
+  step?: number;
+  company?: string;
+  role?: string;
+  interviewType?: string;
+  resumeId?: string | null;
+  jdId?: string | null;
+  sessionCallType?: "interview" | "regular_call";
+};
 
 export const FIRST_PRACTICE_EVENT = "clarify:first-practice";
 
@@ -49,6 +60,27 @@ export function saveLastPracticeSetup(config: LiveSessionConfig): void {
   try {
     localStorage.setItem(LAST_SETUP_KEY, JSON.stringify(config));
     recordPracticeSessionStarted();
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+/** In-progress wizard fields. Does not replace last completed setup or increment session count. */
+export function loadPracticeSetupDraft(): PracticeSetupDraft | null {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PracticeSetupDraft;
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function savePracticeSetupDraft(draft: PracticeSetupDraft): void {
+  try {
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
   } catch {
     // ignore quota / private mode
   }

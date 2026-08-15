@@ -37,6 +37,7 @@ import { getStealthLabel } from "@/lib/stealth/stealthConfig";
 import { DesktopDownloadButton } from "@/components/common/DesktopDownloadButton";
 import { isElectronApp } from "@/lib/platform/isElectron";
 import { PlanGate } from "@/components/layout/PlanGate";
+import { normalizePlanId } from "@/lib/billing/planIds";
 import type { Tables } from "@/integrations/supabase/types";
 
 const IS_ELECTRON = isElectronApp();
@@ -230,10 +231,11 @@ export default function Dashboard() {
   const sessionCountLoaded = sessionCount !== null;
   const isNewUser = sessionCountLoaded && sessionCount === 0;
   const isReturningUser = sessionCountLoaded && sessionCount > 0;
-  // More is available to all returning users. Free/starter see secondary
+  // More is available to all returning users. Free-tier users see secondary
   // widgets behind a PlanGate upsell; Pro+ get full unlocked expansion.
-  const planId = (profile?.plan_id ?? "free").toLowerCase();
-  const isFreeOrStarter = planId === "free" || planId === "starter";
+  // Legacy starter plan_id is treated as Free via normalizePlanId.
+  const planId = normalizePlanId(profile?.plan_id);
+  const isFreeOrStarter = planId === "free";
   const showSecondary = isNewUser
     ? false
     : isReturningUser

@@ -129,6 +129,7 @@ const PROFILE_BOOT_COLUMNS = [
   "timezone",
   "locale",
   "referral_code",
+  "privacy_prefs",
   "updated_at",
 ].join(", ");
 
@@ -569,6 +570,14 @@ export const sessionTranscriptsDB = {
     transcript: string;
     utterances?: unknown;
   }): Promise<void> {
+    // Live overlay transcript stays in memory; this only gates cloud persistence.
+    const { parsePrivacyPrefs } = await import("@/lib/privacy/privacyPrefs");
+    const { useAuthStore } = await import("@/store/authStore");
+    const prefs = parsePrivacyPrefs(useAuthStore.getState().profile?.privacy_prefs);
+    if (!prefs.store_transcripts) {
+      return;
+    }
+
     const { error } = await supabase.from("session_transcripts").insert({
       session_id: row.session_id,
       user_id: row.user_id,

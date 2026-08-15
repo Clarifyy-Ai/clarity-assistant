@@ -22,6 +22,7 @@ export const EDGE_FUNCTIONS = {
   GENERATE_HINT:          "generate-hint",
   GENERATE_STAR:          "generate-star-answer",
   GENERATE_DEBRIEF:       "generate-debrief",
+  GENERATE_SCORECARD:     "generate-scorecard",
   GENERATE_REPHRASE:      "prep-tool",
   GENERATE_COACH_REPLY:   "ai-coach-chat",
   COMPANY_RESEARCH:       "company-research",

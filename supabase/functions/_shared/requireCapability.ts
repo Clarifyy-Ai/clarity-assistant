@@ -7,7 +7,7 @@
  *   free/starter = 0, pro/elite = 2, enterprise = 4
  */
 
-import { normalizePlanId, planRank, type CanonicalPlanId } from "./billingCatalog.ts";
+import { launchPlanRank, normalizePlanId, type CanonicalPlanId } from "./billingCatalog.ts";
 import { errorResponse } from "./utils.ts";
 
 export type Capability =
@@ -54,8 +54,7 @@ export function hasCapability(
 ): boolean {
   const id = normalizePlanId(planId);
   if (!id) return false;
-  const rank = planRank(id);
-  return rank >= CAPABILITY_MIN_RANK[capability];
+  return launchPlanRank(id) >= CAPABILITY_MIN_RANK[capability];
 }
 
 export function requireCapability(
@@ -77,8 +76,8 @@ export function requirePlanRank(
   minimum: CanonicalPlanId,
   req?: Request,
 ): Response | null {
-  const userRank = planRank(planId);
-  const need = planRank(minimum);
+  const userRank = launchPlanRank(planId);
+  const need = launchPlanRank(minimum);
   if (userRank < 0 || need < 0 || userRank < need) {
     return errorResponse(
       `This feature requires the ${minimum} plan or higher.`,
@@ -95,6 +94,7 @@ export const AI_FUNCTION_CAPABILITY: Record<string, Capability> = {
   "generate-hint": "advanced_hints",
   "generate-answer": "live_rehearsal",
   "generate-debrief": "detailed_debrief",
+  "generate-scorecard": "detailed_debrief",
   "ai-coach-chat": "live_rehearsal",
   "generate-questions": "mock_interview",
   "generate-star-answer": "prep_star",

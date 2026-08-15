@@ -17,7 +17,9 @@ export default function InterviewPracticePlanPage() {
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
 
-  const daysLeft = daysUntilInterview(profile?.interview_date ?? null);
+  const daysLeft = daysUntilInterview(
+    (profile as { interview_date?: string | null } | null)?.interview_date ?? null,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -56,10 +58,10 @@ export default function InterviewPracticePlanPage() {
           ?.interview_weaknesses ??
           (profile as { improvement_goals?: string[] | null } | null)?.improvement_goals ??
           [],
-        strongAreas: profile?.interview_strengths ?? [],
+        strongAreas: (profile as { interview_strengths?: string[] | null } | null)?.interview_strengths ?? [],
         missingSkills: [],
         targetRole: profile?.target_role,
-        interviewDate: profile?.interview_date,
+        interviewDate: (profile as { interview_date?: string | null } | null)?.interview_date,
       });
 
       const { data: plan } = await supabase

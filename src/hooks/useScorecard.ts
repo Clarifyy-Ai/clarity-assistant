@@ -2,6 +2,9 @@ import { ENV } from "@/lib/env";
 import { useState, useEffect, useCallback } from "react";
 import { scorecardsDB, sessionAnswersDB } from "@/lib/supabase/database";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { ApiClientError } from "@/lib/api/apiClient";
+import { useAuthStore } from "@/store/userStore";
+import { canShareScorecard } from "@/lib/privacy/privacyPrefs";
 import type { Scorecard } from "@/types/scorecard.types";
 import type { ScorecardUiStatus } from "@/lib/analytics/scoreStatus";
 
@@ -18,6 +21,7 @@ interface ScorecardState {
   isShared: boolean;
   shareUrl: string | null;
   shareToken: string | null;
+  shareBlockedReason: string | null;
 }
 
 /**
@@ -34,6 +38,7 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
     isShared: false,
     shareUrl: null,
     shareToken: null,
+    shareBlockedReason: null,
   });
 
   const applyScorecard = useCallback((existing: Scorecard) => {
@@ -59,7 +64,7 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
       error: null,
     }));
 
-    await fetchEdgeJson("generate-debrief", { session_id: sessionId }, { timeoutMs: 60_000 });
+    await fetchEdgeJson("generate-scorecard", { session_id: sessionId }, { timeoutMs: 60_000 });
     return scorecardsDB.getBySessionId(sessionId);
   }, [sessionId]);
 
@@ -110,10 +115,12 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
           error: null,
         }));
       } catch (err) {
+        const isNotScored =
+          err instanceof ApiClientError && err.code === "NOT_SCORED";
         setState((s) => ({
           ...s,
           scorecard: null,
-          status: "failed",
+          status: isNotScored ? "not_scored" : "failed",
           isLoading: false,
           isGenerating: false,
           error:
@@ -138,14 +145,30 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
 
   const shareScorecard = useCallback(async (): Promise<string | null> => {
     if (!state.scorecard) return null;
+    if (!canShareScorecard(useAuthStore.getState().profile?.privacy_prefs)) {
+      const reason =
+        "Scorecard sharing is turned off in Settings → Privacy. Turn on “Allow scorecard sharing” to create a public link.";
+      setState((s) => ({ ...s, shareBlockedReason: reason }));
+      return null;
+    }
     const token = generateShareToken();
     const url = buildShareUrl(token);
     try {
       await scorecardsDB.markShared(sessionId, token);
     } catch {
+      setState((s) => ({
+        ...s,
+        shareBlockedReason: "Could not create a share link. Please try again.",
+      }));
       return null;
     }
-    setState((s) => ({ ...s, isShared: true, shareToken: token, shareUrl: url }));
+    setState((s) => ({
+      ...s,
+      isShared: true,
+      shareToken: token,
+      shareUrl: url,
+      shareBlockedReason: null,
+    }));
     return url;
   }, [state.scorecard, sessionId]);
 

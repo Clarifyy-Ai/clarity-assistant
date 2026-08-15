@@ -12,6 +12,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { toast } from "sonner";
+import { useAuthStore } from "@/store/userStore";
+import { canShareScorecard } from "@/lib/privacy/privacyPrefs";
 
 // ─────────────────────────────────────────────────────────────────
 // Scorecard
@@ -24,8 +27,11 @@ export default function Scorecard() {
   const navigate = useNavigate();
   const {
     scorecard, status, isLoading, isGenerating, error,
-    isShared, shareScorecard, exportPDF, reload,
+    isShared, shareScorecard, shareBlockedReason, exportPDF, reload,
   } = useScorecard({ sessionId: sessionId! });
+  const shareAllowed = canShareScorecard(
+    useAuthStore((s) => s.profile?.privacy_prefs),
+  );
 
   const [expandedQ, setExpandedQ] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState(false);
@@ -36,7 +42,12 @@ export default function Scorecard() {
       await navigator.clipboard.writeText(url);
       setCopyFeedback(true);
       setTimeout(() => setCopyFeedback(false), 2000);
+      return;
     }
+    toast.error(
+      shareBlockedReason ??
+        "Scorecard sharing is turned off in Settings → Privacy.",
+    );
   }
 
   // ── Loading / pending ─────────────────────────────────────────
@@ -142,15 +153,17 @@ export default function Scorecard() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {shareAllowed ? (
             <button
               type="button"
               aria-label={isShared ? "Share scorecard link again" : "Share scorecard link"}
-              onClick={handleShare}
+              onClick={() => void handleShare()}
               className="flex items-center gap-1.5 px-3 py-2 bg-secondary hover:bg-secondary border border-border text-muted-foreground text-sm rounded-xl transition-all"
             >
               <Share2 className="w-3.5 h-3.5" />
               {copyFeedback ? "Copied!" : isShared ? "Share again" : "Share"}
             </button>
+            ) : null}
             <button
               type="button"
               aria-label="Export scorecard as JSON"

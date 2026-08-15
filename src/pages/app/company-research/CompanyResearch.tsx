@@ -92,7 +92,7 @@ export default function CompanyResearch() {
         ]}
       />
 
-      <PlanGate requiredPlan="pro">
+      <PlanGate requiredPlan="pro" featureFlag="company_research">
       <div className="space-y-6">
       {/* Search bar */}
       <Card>

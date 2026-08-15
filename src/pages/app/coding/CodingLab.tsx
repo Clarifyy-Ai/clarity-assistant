@@ -83,6 +83,7 @@ export default function CodingLabPage() {
     <div className={PAGE_SHELL}>
       <PageHeader
         title="Coding Assessment"
+        badge="Preview"
         description={
           isPreview
             ? "Preview — controlled JavaScript assessments with server-side scoring. Hidden tests are never shown."

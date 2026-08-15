@@ -27,6 +27,14 @@ export const USER_OWNED_TABLES: IsolationTable[] = [
   { table: "document_practice_sets", ownerColumn: "owner_id", crossUserSelect: "denied" },
   { table: "practice_workspace_sessions", ownerColumn: "user_id", crossUserSelect: "denied" },
   { table: "coding_submissions", ownerColumn: "user_id", crossUserSelect: "admin_only" },
+  { table: "gap_analyses", ownerColumn: "user_id", crossUserSelect: "denied" },
+  { table: "scorecards", ownerColumn: "user_id", crossUserSelect: "denied" },
+  { table: "interview_day_checklists", ownerColumn: "user_id", crossUserSelect: "denied" },
+  { table: "answer_bank", ownerColumn: "user_id", crossUserSelect: "denied" },
+  { table: "interviews", ownerColumn: "user_id", crossUserSelect: "denied" },
+  { table: "documents", ownerColumn: "user_id", crossUserSelect: "denied" },
+  { table: "notifications", ownerColumn: "user_id", crossUserSelect: "denied" },
+  { table: "payment_orders", ownerColumn: "user_id", crossUserSelect: "denied" },
 ];
 
 export const PLATFORM_CATALOG_TABLES = [

@@ -196,7 +196,6 @@ export default function SettingsDanger() {
           <p className="text-sm font-semibold text-red-300">Delete account</p>
           <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
             Permanently delete your account and all data. This cannot be undone.
-            Your subscription will be cancelled immediately.
           </p>
           <Button
             variant="danger"

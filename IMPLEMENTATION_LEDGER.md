@@ -121,4 +121,13 @@ Last updated: 2026-08-14 evening — collected unfinished agent workstreams; rem
 | AUG14E-WS20b | P1 | Analytics chart sr-only summaries | Trend/dimension summaries skip null (Not scored) | IMPLEMENTED_AND_LOCALLY_VERIFIED | — |
 | AUG14E-WS25b | P1 | PWA footer action order | Install first on mobile; Remind me later last as text link | IMPLEMENTED_AND_LOCALLY_VERIFIED | Visual UAT |
 
+| P0-20260815-BILL | P0 | Razorpay durable payment_orders ledger | Fail-closed create-order; unique provider/idempotency; reconciliation incidents; Option A one-time UI | IMPLEMENTED_NOT_DEPLOYED for web host; Edge `razorpay-create-order`/`verify`/`webhook` deployed | Sandbox payment smoke; web release of Billing UI |
+| P0-20260815-REF | P0 | Referral claim hardening | Client insert/update revoked; `record_referral_reward` service-role; unique referred_id | IMPLEMENTED_AND_RUNTIME_VERIFIED (schema/grants) | Live referral grant smoke |
+| P0-20260815-GOV | P0 | gov_exam_ai_fill capability | `create-exam-paper` + `select-test-questions` call `requireCapability` before credits | IMPLEMENTED_NOT_DEPLOYED for web; Edge deployed | Free/Pro/Max live denial matrix |
+| P0-20260815-ZOMB | P0 | Zombie Edge Functions | 410 stubs deployed; CI allowlist parity | IMPLEMENTED_AND_RUNTIME_VERIFIED (`ai-feedback` 410) | — |
+| P0-20260815-PING | P0 | ping / ai-key-check leak | Public ping `{status:ok}`; ai-key-check JWT+admin, no fingerprints | IMPLEMENTED_AND_RUNTIME_VERIFIED (anon ping/key-check) | Enable leaked-password in Auth console |
+| P0-20260815-DEL | P0 | Account deletion map | Expanded wipe + retain/anonymize billing; session revoke | IMPLEMENTED_NOT_DEPLOYED wait Edge deployed | Disposable-user E2E |
+| P0-20260815-RPC | P0 | mark_gap_analyses_* PUBLIC execute | Revoked from anon/authenticated | IMPLEMENTED_AND_RUNTIME_VERIFIED (privilege query) | Trigger still works on resume/JD update |
+
+
 

@@ -32,6 +32,8 @@ import { assignLoginWithReturnTo } from "@/lib/auth/safeReturnTo";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { useIndiaRegion } from "@/hooks/useIndiaRegion";
+import { useGlobalStore } from "@/store/globalStore";
+import type { FeatureFlagId } from "@/types";
 import {
   Sheet,
   SheetContent,
@@ -45,6 +47,7 @@ type MobileTab = {
   icon: LucideIcon;
   label: string;
   exact?: boolean;
+  featureFlag?: FeatureFlagId;
 };
 
 type MoreLink = {
@@ -52,12 +55,13 @@ type MoreLink = {
   icon: LucideIcon;
   label: string;
   adminOnly?: boolean;
+  featureFlag?: FeatureFlagId;
 };
 
 const TABS: MobileTab[] = [
   { to: "/app/dashboard", icon: LayoutDashboard, label: "Home", exact: true },
-  { to: "/app/live", icon: Mic, label: PRODUCT_NAMES.practiceCoach },
-  { to: "/app/mock", icon: ClipboardList, label: PRODUCT_NAMES.mockInterview },
+  { to: "/app/live", icon: Mic, label: PRODUCT_NAMES.practiceCoach, featureFlag: "overlay" },
+  { to: "/app/mock", icon: ClipboardList, label: PRODUCT_NAMES.mockInterview, featureFlag: "mock_sessions" },
   { to: "/app/prep", icon: FlaskConical, label: PRODUCT_NAMES.prepLab },
   {
     to: "/app/mock-test",
@@ -69,8 +73,8 @@ const TABS: MobileTab[] = [
 const MORE_LINKS: MoreLink[] = [
   { to: "/app/sessions", icon: Phone, label: PRODUCT_NAMES.sessionHistory },
   { to: "/app/documents", icon: FileText, label: PRODUCT_NAMES.documents },
-  { to: "/app/answers", icon: BookOpen, label: PRODUCT_NAMES.answerBank },
-  { to: "/app/analytics", icon: BarChart3, label: PRODUCT_NAMES.analytics },
+  { to: "/app/answers", icon: BookOpen, label: PRODUCT_NAMES.answerBank, featureFlag: "answer_bank" },
+  { to: "/app/analytics", icon: BarChart3, label: PRODUCT_NAMES.analytics, featureFlag: "analytics" },
   { to: "/app/usage", icon: Gauge, label: PRODUCT_NAMES.creditsUsage },
   { to: "/app/debriefs", icon: MessageSquare, label: PRODUCT_NAMES.debrief },
   { to: "/app/plan", icon: ClipboardList, label: "Practice plan" },
@@ -78,12 +82,12 @@ const MORE_LINKS: MoreLink[] = [
   { to: "/app/learn", icon: BookOpen, label: "Learning Hub" },
   { to: "/app/question-bank", icon: FileText, label: "Question bank" },
   { to: "/app/community", icon: MessageSquare, label: "Q&A" },
-  { to: "/app/coding", icon: FlaskConical, label: "Coding lab" },
+  { to: "/app/coding", icon: FlaskConical, label: "Coding lab", featureFlag: "coding_hints" },
   { to: "/app/library", icon: FileText, label: "Document library" },
   { to: "/app/practice-workspace", icon: ClipboardList, label: "Practice workspace" },
   { to: "/app/interview-day", icon: Sunrise, label: PRODUCT_NAMES.interviewDay },
-  { to: "/app/interviews", icon: CalendarDays, label: PRODUCT_NAMES.interviews },
-  { to: "/app/companies", icon: Building2, label: PRODUCT_NAMES.companyResearch },
+  { to: "/app/interviews", icon: CalendarDays, label: PRODUCT_NAMES.interviews, featureFlag: "calendar_sync" },
+  { to: "/app/companies", icon: Building2, label: PRODUCT_NAMES.companyResearch, featureFlag: "company_research" },
   { to: "/app/notifications", icon: Bell, label: "Notifications" },
   { to: "/app/referrals", icon: Gift, label: PRODUCT_NAMES.referrals },
   { to: "/app/guide/practice-coach", icon: BookMarked, label: "Guide" },
@@ -103,7 +107,23 @@ export function MobileNav(): JSX.Element {
   const isAdmin = useAuthStore((s) => s.isAdmin);
   const { isIndia } = useIndiaRegion();
   const [moreOpen, setMoreOpen] = useState(false);
-  const visibleMore = MORE_LINKS.filter((l) => !l.adminOnly || isAdmin);
+  const killSwitches = useGlobalStore((s) => s.featureKillSwitches);
+  const featureFlags = useGlobalStore((s) => s.featureFlags);
+  const isFeatureEnabled = useGlobalStore((s) => s.isFeatureEnabled);
+
+  function navFlagVisible(flag?: FeatureFlagId): boolean {
+    if (!flag) return true;
+    return (
+      isFeatureEnabled(flag) ||
+      Boolean(featureFlags[flag]) ||
+      killSwitches[flag] !== false
+    );
+  }
+
+  const visibleTabs = TABS.filter((tab) => navFlagVisible(tab.featureFlag));
+  const visibleMore = MORE_LINKS.filter(
+    (l) => (!l.adminOnly || isAdmin) && navFlagVisible(l.featureFlag),
+  );
   const moreActive = visibleMore.some(
     (l) => location.pathname === l.to || location.pathname.startsWith(`${l.to}/`),
   );
@@ -113,7 +133,7 @@ export function MobileNav(): JSX.Element {
       className="fixed bottom-0 left-0 right-0 h-16 bg-background/95 backdrop-blur border-t border-border z-[200] flex items-center md:hidden"
       aria-label="Mobile navigation"
     >
-      {TABS.map((tab) => {
+      {visibleTabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = isRouteActive(location.pathname, tab);
         const indiaLocked = tab.to === "/app/mock-test" && !isIndia;

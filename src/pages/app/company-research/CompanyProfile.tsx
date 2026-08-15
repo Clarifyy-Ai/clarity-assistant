@@ -126,7 +126,7 @@ export default function CompanyProfile() {
             { label: companyName || "Company" },
           ]}
         />
-        <PlanGate requiredPlan="pro">
+        <PlanGate requiredPlan="pro" featureFlag="company_research">
           <Card className="min-h-[12rem] p-6" aria-hidden="true">
             <div className="h-24 rounded-xl bg-muted/40" />
           </Card>

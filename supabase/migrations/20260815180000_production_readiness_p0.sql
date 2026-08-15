@@ -493,7 +493,7 @@ GRANT ALL ON public.interview_day_checklists TO service_role;
 
 -- ── 7. Expired document cleanup cron (if function exists) ───────────────────
 
-DO $$
+DO $cron$
 BEGIN
   IF EXISTS (
     SELECT 1 FROM pg_proc p
@@ -504,7 +504,7 @@ BEGIN
     PERFORM cron.schedule(
       'cleanup-expired-documents-daily',
       '30 4 * * *',
-      $$SELECT public.cleanup_expired_documents()$$
+      $job$SELECT public.cleanup_expired_documents()$job$
     );
   END IF;
 EXCEPTION
@@ -512,4 +512,5 @@ EXCEPTION
     NULL;
   WHEN OTHERS THEN
     NULL;
-END $$;
+END;
+$cron$;

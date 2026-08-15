@@ -23,6 +23,7 @@ export type EdgeFunctionName =
   | "generate-questions"
   | "generate-hint"
   | "generate-debrief"
+  | "generate-scorecard"
   | "schedule-interview"
   | "collect-exam-papers"
   | "parse-document"

@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/userStore";
 import { useAudioStore } from "@/store/audioStore";
 import { supabase } from "@/lib/supabase/client";
-import { enumerateAudioDevices } from "@/lib/audio/audioCapture";
+import { enumerateAudioDevices, enumerateAudioOutputDevices } from "@/lib/audio/audioCapture";
 import type { AudioDevice } from "@/types/audio.types";
 import { toast } from "sonner";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
@@ -45,16 +45,34 @@ function noiseFloorToVadSensitivity(floor: number): number {
   return Math.round(Math.min(100, Math.max(0, ((floor - 0.01) / 0.19) * 100)));
 }
 
+function resolveDeviceId(devices: AudioDevice[], preferred: string): string {
+  if (preferred && devices.some((d) => d.deviceId === preferred)) return preferred;
+  return (devices.find((d) => d.isDefault) ?? devices[0])?.deviceId ?? "";
+}
+
 export default function SettingsAudio() {
-  const { user, profile } = useAuthStore();
+  const { user, profile, setProfile } = useAuthStore();
   const vadConfig = useAudioStore((s) => s.vad_config);
   const setVADConfig = useAudioStore((s) => s.setVADConfig);
+  const setMicDeviceId = useAudioStore((s) => s.setMicDeviceId);
+  const setSelectedMicId = useAudioStore((s) => s.setSelectedMicId);
 
   const uiPrefs = (profile?.ui_preferences ?? {}) as Record<string, unknown>;
+  const overlaySettings = (profile?.overlay_settings ?? {}) as Record<string, unknown>;
   const savedVadFloor =
     typeof uiPrefs.vad_noise_floor === "number"
       ? uiPrefs.vad_noise_floor
       : vadConfig.noise_floor;
+
+  const savedInputId =
+    (typeof overlaySettings.audio_input_device === "string" && overlaySettings.audio_input_device) ||
+    profile?.audio_input_device ||
+    profile?.mic_device_id ||
+    "";
+  const savedOutputId =
+    (typeof overlaySettings.audio_output_device === "string" && overlaySettings.audio_output_device) ||
+    profile?.audio_output_device ||
+    "";
 
   const [language,    setLanguage]    = useState(profile?.stt_language ?? "en-US");
   const [fillerWords, setFillerWords] = useState<string[]>(
@@ -69,9 +87,11 @@ export default function SettingsAudio() {
   const [autoGain,    setAutoGain]    = useState(profile?.auto_gain ?? true);
   const [noiseSup,    setNoiseSup]    = useState(profile?.noise_suppression ?? true);
   const [micDevices,  setMicDevices]    = useState<AudioDevice[]>([]);
-  const [selectedMic, setSelectedMic]   = useState(
-    profile?.audio_input_device ?? profile?.mic_device_id ?? "",
-  );
+  const [speakerDevices, setSpeakerDevices] = useState<AudioDevice[]>([]);
+  const [selectedMic, setSelectedMic]   = useState(savedInputId);
+  const [selectedSpeaker, setSelectedSpeaker] = useState(savedOutputId);
+  const [micFallback, setMicFallback] = useState(false);
+  const [speakerFallback, setSpeakerFallback] = useState(false);
   const [vadSensitivity, setVadSensitivity] = useState(noiseFloorToVadSensitivity(savedVadFloor));
   const [saving,      setSaving]      = useState(false);
   const [saved,       setSaved]       = useState(false);
@@ -111,17 +131,39 @@ export default function SettingsAudio() {
     try {
       const devices = await enumerateAudioDevices();
       setMicDevices(devices);
-      if (!selectedMic && devices.length > 0) {
-        const defaultDevice = devices.find((d) => d.isDefault) ?? devices[0];
-        setSelectedMic(defaultDevice.deviceId);
-      }
+      setSelectedMic((prev) => {
+        const next = resolveDeviceId(devices, prev);
+        setMicFallback(Boolean(prev) && next !== prev);
+        if (next) {
+          setMicDeviceId(next);
+          setSelectedMicId(next);
+        }
+        return next;
+      });
     } catch {
+      setMicDevices([]);
       toast.error("Could not list microphones — allow mic access and try again.");
+    }
+    try {
+      const outputs = await enumerateAudioOutputDevices();
+      setSpeakerDevices(outputs);
+      setSelectedSpeaker((prev) => {
+        const next = resolveDeviceId(outputs, prev);
+        setSpeakerFallback(Boolean(prev) && next !== prev);
+        return next;
+      });
+    } catch {
+      setSpeakerDevices([]);
     }
   }
 
   useEffect(() => {
     void refreshMicDevices();
+    const media = navigator.mediaDevices;
+    if (!media?.addEventListener) return;
+    const onChange = () => void refreshMicDevices();
+    media.addEventListener("devicechange", onChange);
+    return () => media.removeEventListener("devicechange", onChange);
   }, []);
 
   async function startMicTest() {
@@ -131,10 +173,24 @@ export default function SettingsAudio() {
     }
     setTesting(true);
     try {
-      const constraints: MediaStreamConstraints = {
-        audio: selectedMic ? { deviceId: { exact: selectedMic } } : true,
-      };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      let stream: MediaStream | null = null;
+      if (selectedMic) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: { deviceId: { exact: selectedMic } },
+          });
+        } catch {
+          stream = null;
+        }
+      }
+      if (!stream) {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const actualId = stream.getAudioTracks()[0]?.getSettings?.().deviceId;
+        if (actualId && actualId !== selectedMic) {
+          setSelectedMic(actualId);
+          setMicFallback(true);
+        }
+      }
       streamRef.current = stream;
       const ctx = new AudioContext();
       audioCtxRef.current = ctx;
@@ -212,7 +268,7 @@ export default function SettingsAudio() {
       vad_noise_floor: noiseFloor,
     };
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("profiles")
         .update({
           stt_language:        language,
@@ -220,11 +276,17 @@ export default function SettingsAudio() {
           auto_gain:           autoGain,
           noise_suppression:   noiseSup,
           audio_input_device:  selectedMic || null,
+          audio_output_device: selectedSpeaker || null,
           ui_preferences:      mergedUiPrefs,
         })
-        .eq("id", user.id);
+        .eq("id", user.id)
+        .select()
+        .maybeSingle();
       if (error) throw error;
       setVADConfig({ noise_floor: noiseFloor });
+      setMicDeviceId(selectedMic || null);
+      setSelectedMicId(selectedMic || null);
+      if (data) setProfile(data);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
@@ -250,8 +312,13 @@ export default function SettingsAudio() {
             <label className="block text-xs text-muted-foreground mb-1.5">Input device</label>
             {micDevices.length > 0 ? (
               <select
-                value={selectedMic}
-                onChange={(e) => setSelectedMic(e.target.value)}
+                value={micDevices.some((d) => d.deviceId === selectedMic) ? selectedMic : resolveDeviceId(micDevices, selectedMic)}
+                onChange={(e) => {
+                  setSelectedMic(e.target.value);
+                  setMicFallback(false);
+                  setMicDeviceId(e.target.value || null);
+                  setSelectedMicId(e.target.value || null);
+                }}
                 className="w-full bg-background border border-input text-foreground rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-ring"
               >
                 {micDevices.map((d) => (
@@ -265,6 +332,35 @@ export default function SettingsAudio() {
                   Refresh
                 </Button>
               </div>
+            )}
+            {micFallback && (
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Saved microphone was unavailable — using the default device.
+              </p>
+            )}
+          </div>
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1.5">Output device</label>
+            {speakerDevices.length > 0 ? (
+              <select
+                value={speakerDevices.some((d) => d.deviceId === selectedSpeaker) ? selectedSpeaker : resolveDeviceId(speakerDevices, selectedSpeaker)}
+                onChange={(e) => {
+                  setSelectedSpeaker(e.target.value);
+                  setSpeakerFallback(false);
+                }}
+                className="w-full bg-background border border-input text-foreground rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-ring"
+              >
+                {speakerDevices.map((d) => (
+                  <option key={d.deviceId} value={d.deviceId}>{d.label}</option>
+                ))}
+              </select>
+            ) : (
+              <p className="text-xs text-muted-foreground">Using the system default speaker.</p>
+            )}
+            {speakerFallback && (
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Saved speaker was unavailable — using the default device.
+              </p>
             )}
           </div>
           <div className="flex items-center justify-between">

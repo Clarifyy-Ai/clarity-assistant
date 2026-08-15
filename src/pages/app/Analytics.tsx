@@ -209,7 +209,7 @@ export default function Analytics() {
         {/* ── Score trends ────────────────────────────── */}
         <TabsContent value="scores">
           <div className="space-y-4">
-            <PlanGate requiredPlan="pro">
+            <PlanGate requiredPlan="pro" featureFlag="analytics">
               <ScoreTrendChart data={analytics.scoreTrend ?? []} />
             </PlanGate>
             <DimensionRadar dimensions={analytics.dimensionAverages} />
@@ -228,7 +228,7 @@ export default function Analytics() {
 
         {/* ── Activity heatmap ────────────────────────── */}
         <TabsContent value="heatmap">
-          <PlanGate requiredPlan="pro">
+          <PlanGate requiredPlan="pro" featureFlag="analytics">
             <ActivityHeatmap data={analytics.activityByDay ?? {}} />
           </PlanGate>
         </TabsContent>

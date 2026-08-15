@@ -33,6 +33,7 @@ import { isOAuthProviderEnabled } from "@/lib/auth/oauthProviders";
 import { isElectronApp } from "@/lib/platform/isElectron";
 import { clearBYOKVault } from "@/lib/security/byokVault";
 import { logger, LogEvents } from "@/lib/logger";
+import { syncPrivacyPrefsFromProfile } from "@/lib/privacy/privacyPrefs";
 import {
   isInvalidRefreshTokenError,
   isNonRetryableAuthError,
@@ -1093,6 +1094,7 @@ export const useAuthStore = create<AuthStore>()(
               }
 
               syncOverlayFromProfile(row);
+              syncPrivacyPrefsFromProfile(row.privacy_prefs);
               logger.info(LogEvents.AUTH_PROFILE_LOAD_SUCCEEDED, {
                 operation: "profile.load",
                 durationMs: Date.now() - profileStartedAt,
@@ -1241,6 +1243,7 @@ export const useAuthStore = create<AuthStore>()(
                 state.credits
               );
             });
+            syncPrivacyPrefsFromProfile(rowRecord.privacy_prefs);
           },
 
           setProfile: (profile) => {
@@ -1268,6 +1271,8 @@ export const useAuthStore = create<AuthStore>()(
                     .getState()
                     .setActiveModel(normalizePreferredModel(preferred));
                 }
+
+                syncPrivacyPrefsFromProfile(row.privacy_prefs);
               }
             });
           },

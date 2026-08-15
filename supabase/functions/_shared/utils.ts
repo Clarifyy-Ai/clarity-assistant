@@ -25,7 +25,7 @@ function safeCorsHeaders(req?: Request): Record<string, string> {
   return {
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type, x-app-name, x-app-version, x-csrf-token, idempotency-key, x-idempotency-key, x-request-id, x-correlation-id",
+      "authorization, x-client-info, apikey, content-type, x-app-name, x-app-version, x-csrf-token, idempotency-key, x-idempotency-key, x-request-id, x-correlation-id, x-ai-training-consent",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
   };

@@ -7,10 +7,6 @@ import { supabase } from "@/lib/supabase/client";
 import { BillingError, ErrorCode, tryCatch } from "@/lib/errors";
 import { ENV } from "@/lib/env";
 import { getPlanDisplayName } from "@/lib/constants/pricing";
-import {
-  cancelSubscription as cancelSubscriptionApi,
-  resumeSubscription as resumeSubscriptionApi,
-} from "@/lib/api/billing";
 import { normalizePlanId } from "./planIds";
 
 export { normalizePlanId } from "./planIds";
@@ -34,6 +30,8 @@ export interface PlanFeature {
 export interface Plan {
   id: PlanId;
   name: string;
+  /** Public label. Launch: Free / Pro / Max. Legacy starter/elite → Pro. */
+  displayName: string;
   tagline: string;
   monthlyPrice: number;
   /** Annual total in cents (true 20% off = monthlyPrice × 12 × 0.8). */
@@ -54,6 +52,7 @@ export const PLANS: Record<PlanId, Plan> = {
   free: {
     id: "free",
     name: "Free",
+    displayName: "Free",
     tagline: "Get started — no card required",
     monthlyPrice: 0,
     yearlyPrice: 0,
@@ -102,11 +101,6 @@ export const PLANS: Record<PlanId, Plan> = {
         included: false,
       },
       {
-        key: "byok",
-        label: "Bring Your Own API Key",
-        included: false,
-      },
-      {
         key: "analytics",
         label: "Performance analytics",
         included: false,
@@ -127,7 +121,8 @@ export const PLANS: Record<PlanId, Plan> = {
   starter: {
     // Legacy catalog — not in LAUNCH_PLANS; retained for DB/Stripe backward compat only.
     id: "starter",
-    name: "Starter",
+    name: "Pro",
+    displayName: "Pro",
     tagline: "Legacy tier (deprecated)",
     monthlyPrice: 0,
     yearlyPrice: 0,
@@ -177,11 +172,6 @@ export const PLANS: Record<PlanId, Plan> = {
         included: true,
       },
       {
-        key: "byok",
-        label: "Bring Your Own API Key",
-        included: false,
-      },
-      {
         key: "analytics",
         label: "Performance analytics",
         included: true,
@@ -202,6 +192,7 @@ export const PLANS: Record<PlanId, Plan> = {
   pro: {
     id: "pro",
     name: "Pro",
+    displayName: "Pro",
     tagline: "Everything you need to land the role",
     monthlyPrice: 2_900,
     yearlyPrice: 27_840, // annual cents = monthly×12×0.8 (true 20%); display monthly = yearlyPrice/12
@@ -252,11 +243,6 @@ export const PLANS: Record<PlanId, Plan> = {
         included: true,
       },
       {
-        key: "byok",
-        label: "Bring Your Own API Key",
-        included: false,
-      },
-      {
         key: "analytics",
         label: "Performance analytics",
         included: true,
@@ -277,8 +263,9 @@ export const PLANS: Record<PlanId, Plan> = {
 
   elite: {
     id: "elite",
-    name: "Elite",
-    tagline: "For FAANG-level prep",
+    name: "Pro",
+    displayName: "Pro",
+    tagline: "Legacy tier (deprecated)",
     monthlyPrice: 7_900,
     yearlyPrice: 75_840, // annual cents = monthly×12×0.8 (true 20%); display monthly = yearlyPrice/12
     creditsPerMonth: 1_000,
@@ -327,11 +314,6 @@ export const PLANS: Record<PlanId, Plan> = {
         included: true,
       },
       {
-        key: "byok",
-        label: "Bring Your Own API Key",
-        included: false,
-      },
-      {
         key: "analytics",
         label: "Performance analytics",
         included: true,
@@ -347,25 +329,14 @@ export const PLANS: Record<PlanId, Plan> = {
         included: true,
         note: "Mixed official + AI papers",
       },
-      {
-        key: "priority_support",
-        label: "Priority support",
-        included: true,
-      },
-      {
-        key: "coach_sessions",
-        label: "1-on-1 coach sessions",
-        included: true,
-        limit: 2,
-        note: "2/month",
-      },
     ],
   },
 
   enterprise: {
     id: "enterprise",
     name: "Max",
-    tagline: "Higher credits for power users and coaches",
+    displayName: "Max",
+    tagline: "Higher credits for power users",
     monthlyPrice: 7_900,
     yearlyPrice: 75_840, // annual cents = monthly×12×0.8 (true 20%); display monthly = yearlyPrice/12
     creditsPerMonth: 4_000,
@@ -386,11 +357,6 @@ export const PLANS: Record<PlanId, Plan> = {
       {
         key: "priority_models",
         label: "Priority model access",
-        included: true,
-      },
-      {
-        key: "dedicated_support",
-        label: "Priority email support",
         included: true,
       },
       {
@@ -477,6 +443,7 @@ type SubscriptionRow = {
   cancel_at?: string | null;
   canceled_at?: string | null;
   cancel_at_period_end?: boolean | null;
+  stripe_customer_id?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
 };
@@ -755,29 +722,17 @@ export async function getUserPlanId(userId: string): Promise<PlanId> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function cancelSubscription(): Promise<void> {
-  const [, error] = await tryCatch(async () => {
-    await cancelSubscriptionApi();
-  });
-
-  if (error) {
-    throw new BillingError(
-      "Failed to cancel subscription.",
-      ErrorCode.BILLING_STRIPE_ERROR
-    );
-  }
+  throw new BillingError(
+    "Subscriptions are not available. Clarify AI uses one-time Razorpay purchases.",
+    ErrorCode.BILLING_STRIPE_ERROR
+  );
 }
 
 export async function resumeSubscription(): Promise<void> {
-  const [, error] = await tryCatch(async () => {
-    await resumeSubscriptionApi();
-  });
-
-  if (error) {
-    throw new BillingError(
-      "Failed to resume subscription.",
-      ErrorCode.BILLING_STRIPE_ERROR
-    );
-  }
+  throw new BillingError(
+    "Subscriptions are not available. Clarify AI uses one-time Razorpay purchases.",
+    ErrorCode.BILLING_STRIPE_ERROR
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

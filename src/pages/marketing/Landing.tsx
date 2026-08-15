@@ -235,15 +235,11 @@ const FAQS = [
   },
   {
     q: "How much does Clarify AI cost?",
-    a: "Free includes 50 credits per month — enough to try Practice Coach and a mock session. Pro is $29 / month for 1,400 credits and the full feature set. Max is $79 / month for 4,000 credits, priority model access, and priority email support.",
+    a: "Free includes 50 credits per month — enough to try Practice Coach and a mock session. Pro is a one-time purchase for 1,400 credits and the full feature set. Max is a one-time purchase for 4,000 credits and priority model access.",
   },
   {
     q: "What is included in the free plan?",
     a: "The free plan gives you 50 credits per month, access to the mock engine, prep lab tools, and basic analytics. Upgrade to Pro when you need more AI coaching volume.",
-  },
-  {
-    q: "Can I bring my own AI API key (BYOK)?",
-    a: "BYOK is on our roadmap and not available at launch. All AI calls currently use Clarify AI's managed Gemini connection and count against your monthly credit balance.",
   },
   {
     q: "Does it work for all interview types?",
@@ -662,10 +658,10 @@ export default function Landing() {
                   ? "$0"
                   : `$${(plan.monthlyPrice / 100).toFixed(0)}`;
               const period = isMax
-                ? "/month"
+                ? " one-time"
                 : plan.monthlyPrice === 0
                   ? "forever"
-                  : "/month";
+                  : " one-time";
               const cta = isMax
                 ? "Get Max"
                 : planId === "free"
@@ -693,7 +689,7 @@ export default function Landing() {
                     Most Popular
                   </span>
                 )}
-                <h3 className="text-base font-bold">{plan.name}</h3>
+                <h3 className="text-base font-bold">{plan.displayName}</h3>
                 <p className="text-xs text-muted-foreground mt-1">{plan.tagline}</p>
                 <div className="mt-5 mb-5">
                   <span className="text-3xl font-extrabold">{priceDisplay}</span>

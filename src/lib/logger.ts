@@ -16,6 +16,11 @@
 //   logger.error("dashboard.http_503", { httpStatus: 503, route: "/app/dashboard" });
 
 import * as Sentry from "@sentry/react";
+import {
+  isCrashReportingEnabled,
+  isAiTrainingAllowed,
+  stripSessionTextFromPayload,
+} from "@/lib/privacy/privacyPrefs";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -96,6 +101,13 @@ const REDACTED_FIELDS = new Set([
   "transcript",
   "prompt",
   "response",
+  "full_transcript",
+  "utterance",
+  "utterances",
+  "session_text",
+  "document",
+  "document_text",
+  "answer_text",
 ]);
 
 function redact(obj: Record<string, unknown>): Record<string, unknown> {
@@ -128,17 +140,22 @@ const APP_RELEASE = import.meta.env.VITE_APP_VERSION ?? "unknown";
 // ── Core logger ───────────────────────────────────────────────────────────────
 
 function emit(level: LogLevel, event: string, fields: Omit<LogEvent, "event" | "level"> = {}): void {
+  const redacted = redact(fields as Record<string, unknown>);
+  const safeFields = isAiTrainingAllowed()
+    ? redacted
+    : stripSessionTextFromPayload(redacted);
+
   const entry: LogEvent = {
     timestamp: new Date().toISOString(),
     level,
     event,
     environment: APP_ENV,
     release: APP_RELEASE,
-    ...redact(fields as Record<string, unknown>),
+    ...safeFields,
   };
 
   // Always emit to Sentry (breadcrumbs for info/warn, capture for error/fatal)
-  if (level !== "debug" || !IS_PRODUCTION) {
+  if (isCrashReportingEnabled() && (level !== "debug" || !IS_PRODUCTION)) {
     try {
       if (level === "error" || level === "fatal") {
         const severity: Sentry.SeverityLevel = level === "fatal" ? "fatal" : "error";

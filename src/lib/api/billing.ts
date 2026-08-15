@@ -77,6 +77,9 @@ const STRIPE_CHECKOUT_DISABLED =
 const STRIPE_PORTAL_DISABLED =
   "Billing portal is not available. Clarify AI uses one-time Razorpay purchases, not subscriptions.";
 
+const STRIPE_SUBSCRIPTION_DISABLED =
+  "Subscriptions are not available. Clarify AI uses one-time Razorpay purchases.";
+
 export async function createCheckoutSession(
   _payload: CheckoutRequest,
   _options: IdempotencyOptions = {}
@@ -92,29 +95,17 @@ export async function createBillingPortalSession(
 }
 
 export async function cancelSubscription(
-  payload: CancelSubscriptionRequest = {},
-  options: IdempotencyOptions = {}
+  _payload: CancelSubscriptionRequest = {},
+  _options: IdempotencyOptions = {}
 ): Promise<CancelSubscriptionResponse> {
-  return invokeIdempotentFunction<
-    CancelSubscriptionResponse,
-    CancelSubscriptionRequest
-  >("cancel-subscription", payload, {
-    idempotencyKey:
-      options.idempotencyKey ?? createIdempotencyKey("cancel-subscription"),
-  });
+  throw new Error(STRIPE_SUBSCRIPTION_DISABLED);
 }
 
 export async function resumeSubscription(
-  payload: ResumeSubscriptionRequest = {},
-  options: IdempotencyOptions = {}
+  _payload: ResumeSubscriptionRequest = {},
+  _options: IdempotencyOptions = {}
 ): Promise<ResumeSubscriptionResponse> {
-  return invokeIdempotentFunction<
-    ResumeSubscriptionResponse,
-    ResumeSubscriptionRequest
-  >("resume-subscription", payload, {
-    idempotencyKey:
-      options.idempotencyKey ?? createIdempotencyKey("resume-subscription"),
-  });
+  throw new Error(STRIPE_SUBSCRIPTION_DISABLED);
 }
 
 export async function deductCredits(

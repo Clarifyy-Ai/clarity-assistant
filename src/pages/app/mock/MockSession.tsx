@@ -13,6 +13,7 @@ import { useNetworkStore } from "@/store/networkStore";
 import { networkMonitor } from "@/lib/network/networkMonitor";
 import { useSessionStore } from "@/store/sessionStore";
 import { useAuthStore } from "@/store/authStore";
+import { parsePrivacyPrefs } from "@/lib/privacy/privacyPrefs";
 import { useAudioStore } from "@/store/audioStore";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { OverlayWindow } from "@/components/overlay/OverlayWindow";
@@ -793,10 +794,11 @@ export default function MockSession() {
       const incompleteNoAnswers = opts?.incompleteNoAnswers ?? answeredCount === 0;
 
       const existingNotes = sessionNotes.trim();
+      const persistTranscripts = parsePrivacyPrefs(profile?.privacy_prefs).store_transcripts;
       const notesParts = [
         incompleteNoAnswers ? INCOMPLETE_NO_ANSWERS_NOTE : null,
         existingNotes || null,
-        !incompleteNoAnswers ? transcript || null : null,
+        persistTranscripts && !incompleteNoAnswers ? transcript || null : null,
       ].filter(Boolean);
 
       await sessionsDB.update(sessionId, {
@@ -816,7 +818,7 @@ export default function MockSession() {
         session_type: "mock",
       } as any);
 
-      if (transcript && !incompleteNoAnswers) {
+      if (transcript && !incompleteNoAnswers && persistTranscripts) {
         await sessionTranscriptsDB.create({
           session_id: sessionId,
           user_id: userId,

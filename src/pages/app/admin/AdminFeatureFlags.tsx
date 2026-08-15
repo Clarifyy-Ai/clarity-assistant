@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { featureFlagsDB } from "@/lib/supabase/database";
 import { useGlobalStore }       from "@/store";
-import { FEATURE_PLAN_GATES }   from "@/lib/constants/features";
-import { getPlanDisplayName } from "@/lib/constants/pricing";
+import { FEATURE_PLAN_GATES, isKillOnlyFlag } from "@/lib/constants/features";
+import { getPlanDisplayName, type DisplayTier } from "@/lib/constants/pricing";
 
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
@@ -35,15 +35,19 @@ interface FlagRow {
   enabled: boolean;
 }
 
-const PLAN_ORDER: PlanId[] = ["free", "starter", "pro", "elite", "enterprise"];
+const PLAN_ORDER: DisplayTier[] = ["free", "pro", "enterprise"];
 
-const PLAN_COLORS: Record<PlanId, string> = {
+const PLAN_COLORS: Record<DisplayTier, string> = {
   free:       "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
-  starter:    "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
   pro:        "bg-primary/15 text-primary dark:bg-primary/20 dark:text-primary/80",
-  elite:      "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
   enterprise: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
 };
+
+function launchPlanKey(plan: PlanId): DisplayTier {
+  if (plan === "enterprise") return "enterprise";
+  if (plan === "pro" || plan === "elite") return "pro";
+  return "free";
+}
 
 const CATEGORIES: Record<string, FeatureFlagId[]> = {
   "Core AI":     ["live_assist", "mock_sessions", "ai_coach", "star_builder", "rephraser"],
@@ -62,14 +66,13 @@ function getCategoryForFlag(id: FeatureFlagId): string {
 }
 
 export default function AdminFeatureFlags() {
-  const featureFlags = useGlobalStore((s) => s.featureFlags);
   const setFeatureKillSwitches = useGlobalStore((s) => s.setFeatureKillSwitches);
 
   const [rows,       setRows]       = useState<FlagRow[]>([]);
   const [dbFlags,    setDbFlags]    = useState<Record<string, boolean>>({});
   const [overrides,  setOverrides]  = useState<Partial<Record<FeatureFlagId, boolean>>>({});
   const [search,     setSearch]     = useState("");
-  const [filterPlan, setFilterPlan] = useState<PlanId | "all">("all");
+  const [filterPlan, setFilterPlan] = useState<DisplayTier | "all">("all");
   const [filterCat,  setFilterCat]  = useState<string>("all");
   const [isDirty,        setIsDirty]        = useState(false);
   const [isSaving,       setIsSaving]       = useState(false);
@@ -113,19 +116,16 @@ export default function AdminFeatureFlags() {
         minPlan:  minPlan as PlanId,
         category: getCategoryForFlag(id as FeatureFlagId),
         isBeta:   id.includes("beta") || id.includes("experimental"),
-        enabled:
-          dbFlags[id] ??
-          featureFlags[id as FeatureFlagId] ??
-          false,
+        enabled: dbFlags[id] !== false,
       })
     );
     setRows(built);
-  }, [featureFlags, dbFlags]);
+  }, [dbFlags]);
 
   const filtered = rows.filter((row) => {
     const matchSearch = search.trim() === "" ||
       row.id.toLowerCase().includes(search.toLowerCase());
-    const matchPlan = filterPlan === "all" || row.minPlan === filterPlan;
+    const matchPlan = filterPlan === "all" || launchPlanKey(row.minPlan) === filterPlan;
     const matchCat  = filterCat  === "all" || row.category === filterCat;
     return matchSearch && matchPlan && matchCat;
   });
@@ -250,7 +250,7 @@ export default function AdminFeatureFlags() {
           />
         </div>
 
-        <Select value={filterPlan} onValueChange={(v) => setFilterPlan(v as PlanId | "all")}>
+        <Select value={filterPlan} onValueChange={(v) => setFilterPlan(v as DisplayTier | "all")}>
           <SelectTrigger className="w-[140px] h-8 text-sm">
             <SelectValue placeholder="All plans" />
           </SelectTrigger>
@@ -309,7 +309,9 @@ export default function AdminFeatureFlags() {
                 filtered.map((row) => {
                   const value      = effectiveValue(row);
                   const isOverride = overrides[row.id] !== undefined;
-                  const minIdx     = PLAN_ORDER.indexOf(row.minPlan);
+                  const launchMin  = launchPlanKey(row.minPlan);
+                  const minIdx     = PLAN_ORDER.indexOf(launchMin);
+                  const killOnly   = isKillOnlyFlag(row.id);
 
                   return (
                     <TableRow
@@ -317,17 +319,24 @@ export default function AdminFeatureFlags() {
                       className={isOverride ? "bg-amber-50/50 dark:bg-amber-900/10" : ""}
                     >
                       <TableCell className="pr-0">
-                        {row.isBeta
-                          ? <Beaker className="h-3.5 w-3.5 text-amber-500" />
-                          : row.minPlan === "enterprise"
-                            ? <Lock className="h-3.5 w-3.5 text-muted-foreground/40" />
-                            : null
+                        {killOnly
+                          ? <Lock className="h-3.5 w-3.5 text-muted-foreground/60" />
+                          : row.isBeta
+                            ? <Beaker className="h-3.5 w-3.5 text-amber-500" />
+                            : row.minPlan === "enterprise"
+                              ? <Lock className="h-3.5 w-3.5 text-muted-foreground/40" />
+                              : null
                         }
                       </TableCell>
 
                       <TableCell>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <code className="text-xs font-mono text-foreground/80">{row.id}</code>
+                          {killOnly && (
+                            <Badge variant="outline" className="text-[10px] font-normal">
+                              Kill-only · not launched
+                            </Badge>
+                          )}
                           {isOverride && (
                             <span className="inline-flex items-center px-1.5 py-0 rounded border border-orange-400 text-[10px] text-orange-600">
                               modified
@@ -339,32 +348,42 @@ export default function AdminFeatureFlags() {
                       <TableCell className="text-sm text-muted-foreground">{row.category}</TableCell>
 
                       <TableCell>
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${PLAN_COLORS[row.minPlan]}`}>
-                          {getPlanDisplayName(row.minPlan)}
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${PLAN_COLORS[launchMin]}`}>
+                          {getPlanDisplayName(launchMin)}
                         </span>
                       </TableCell>
 
                       <TableCell>
-                        <div className="flex items-center gap-1">
-                          {PLAN_ORDER.map((plan, idx) => (
-                            <div
-                              key={plan}
-                              title={plan}
-                              className={`h-2 w-2 rounded-full transition-colors ${
-                                idx >= minIdx && value
-                                  ? "bg-green-500"
-                                  : "bg-muted"
-                              }`}
-                            />
-                          ))}
-                        </div>
+                        {killOnly ? (
+                          <span className="text-[11px] text-muted-foreground">
+                            Cannot grant
+                          </span>
+                        ) : (
+                          <div className="flex items-center gap-1">
+                            {PLAN_ORDER.map((plan, idx) => (
+                              <div
+                                key={plan}
+                                title={getPlanDisplayName(plan)}
+                                className={`h-2 w-2 rounded-full transition-colors ${
+                                  idx >= minIdx && value
+                                    ? "bg-green-500"
+                                    : "bg-muted"
+                                }`}
+                              />
+                            ))}
+                          </div>
+                        )}
                       </TableCell>
 
                       <TableCell className="text-right">
                         <Switch
                           checked={value}
                           onCheckedChange={() => toggleFlag(row.id, value)}
-                          aria-label={`Toggle ${row.id}`}
+                          aria-label={
+                            killOnly
+                              ? `Kill-switch ${row.id} (cannot grant access)`
+                              : `Toggle ${row.id}`
+                          }
                         />
                       </TableCell>
                     </TableRow>

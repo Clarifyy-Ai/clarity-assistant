@@ -542,7 +542,7 @@ export default function TestSession() {
 
       const questionMap: Record<string, Question> = {};
       for (const row of playable.data ?? []) {
-        const stripped = stripAnswerKeys(row as Record<string, unknown>);
+        const stripped = stripAnswerKeys(row as unknown as Record<string, unknown>);
         questionMap[stripped.id] = stripped as unknown as Question;
       }
 

@@ -21,7 +21,8 @@ export interface OpsLogFields {
   meta?: Record<string, string | number | boolean | null>;
 }
 
-const REDACT_KEYS = /secret|token|password|authorization|api[_-]?key|webhook|byok/i;
+const REDACT_KEYS =
+  /secret|token|password|authorization|api[_-]?key|webhook|byok|transcript|document|prompt|utterance|resume|session_text/i;
 
 export function opsLog(fields: OpsLogFields): void {
   const safeMeta: Record<string, unknown> = {};

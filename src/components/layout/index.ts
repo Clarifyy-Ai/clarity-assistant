@@ -6,7 +6,13 @@ export { NetworkBanner } from './NetworkBanner';
 export { PageHeader } from './PageHeader';
 export { ProtectedRoute } from './ProtectedRoute';
 export { SetupChecklist } from './SetupChecklist';
-export { PlanGate, SessionLimitPrompt, getDailySessionCap } from './PlanGate';
+export {
+  PlanGate,
+  FeatureKillGate,
+  FeatureUnavailableState,
+  SessionLimitPrompt,
+  getDailySessionCap,
+} from './PlanGate';
 export { ErrorBoundary } from './ErrorBoundary';
 export { MarketingLayout } from './MarketingLayout';
 export { PageContent } from './PageContent';

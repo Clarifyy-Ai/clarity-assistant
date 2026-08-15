@@ -54,6 +54,7 @@ export default function LearningHubPage() {
     <div className={PAGE_SHELL}>
       <PageHeader
         title="Learning Hub"
+        badge="Preview"
         description={
           isPreview
             ? "Preview — original Clarify courses will appear here. This is not a third-party LMS and not an official certification program."

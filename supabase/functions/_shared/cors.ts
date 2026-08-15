@@ -110,6 +110,9 @@ const ALLOWED_HEADERS = [
   // Client correlation (fetchEdge / apiClient)
   "x-request-id",
   "x-correlation-id",
+
+  // Privacy: AI training opt-out from Settings → Privacy
+  "x-ai-training-consent",
 ].join(", ");
 
 function isValidOrigin(origin: string): boolean {

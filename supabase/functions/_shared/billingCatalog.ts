@@ -164,10 +164,24 @@ export function normalizePlanId(
   return ALIASES[key] ?? null;
 }
 
+export function toLaunchPlanId(
+  raw: string | null | undefined,
+): LaunchPlanId {
+  const id = normalizePlanId(raw);
+  if (id === "enterprise") return "enterprise";
+  if (id === "pro" || id === "elite") return "pro";
+  return "free";
+}
+
 export function planRank(raw: string | null | undefined): number {
   const id = normalizePlanId(raw);
   if (!id) return -1;
   return PLAN_RANK[id];
+}
+
+/** Authorization rank: legacy starter is Free; elite is Pro. */
+export function launchPlanRank(raw: string | null | undefined): number {
+  return PLAN_RANK[toLaunchPlanId(raw)];
 }
 
 export function getPlanDisplayName(raw: string | null | undefined): string {

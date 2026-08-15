@@ -120,7 +120,7 @@ export default function PrepLab() {
         </TabsContent>
 
         <TabsContent value="company">
-          <PlanGate requiredPlan="pro">
+          <PlanGate requiredPlan="pro" featureFlag="company_research">
             <CompanyPrep />
           </PlanGate>
         </TabsContent>

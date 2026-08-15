@@ -1,20 +1,14 @@
-// stripe-webhook/index.ts — Handles Stripe webhook events
+// stripe-webhook/index.ts
+//
+// Inbound Stripe webhook. Signature handling stays fail-closed.
+// Clarify AI launch billing is Razorpay one-time purchases — this
+// endpoint never grants plan entitlements or credits.
 
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
-import { PLAN_MONTHLY_CREDITS } from "../_shared/creditEconomics.ts";
-import { createServiceClient } from "../_shared/supabase.ts";
-import { assertBillingConfigOrThrow } from "../_shared/billingConfig.ts";
 import { opsLog } from "../_shared/opsLog.ts";
 import { reportEdgeError } from "../_shared/errors.ts";
-import {
-  PLAN_CATALOG,
-  CREDIT_PACK_CATALOG,
-  monthlyCreditsForPlan,
-  normalizePlanId,
-} from "../_shared/billingCatalog.ts";
 
-const STRIPE_SECRET_KEY      = Deno.env.get("STRIPE_SECRET_KEY")      ?? "";
-const STRIPE_WEBHOOK_SECRET  = Deno.env.get("STRIPE_WEBHOOK_SECRET")
+const STRIPE_WEBHOOK_SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET")
   ?? Deno.env.get("STRIPE_WEBHOOK_SIGNING_SECRET")
   ?? "";
 
@@ -25,31 +19,25 @@ function isProductionEnv(): boolean {
   return raw === "production" || raw === "prod";
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Constant-time HMAC-SHA256 verification (prevents timing attacks)
-// ─────────────────────────────────────────────────────────────────
-
 async function verifyStripeSignature(
-  payload:   string,
+  payload: string,
   signature: string,
-  secret:    string,
+  secret: string,
 ): Promise<boolean> {
-  const parts         = signature.split(",");
+  const parts = signature.split(",");
   const timestampPart = parts.find((p) => p.startsWith("t="));
-  const sigPart       = parts.find((p) => p.startsWith("v1="));
+  const sigPart = parts.find((p) => p.startsWith("v1="));
 
   if (!timestampPart || !sigPart) {
     console.error("[stripe-webhook] Malformed stripe-signature header");
     return false;
   }
 
-  const timestamp     = timestampPart.slice(2);
-  const expectedSig   = sigPart.slice(3);
+  const timestamp = timestampPart.slice(2);
+  const expectedSig = sigPart.slice(3);
 
-  // Reject stale timestamps (>5 min skew) to prevent replay attacks,
-  // mirroring Stripe's official SDK behaviour.
   const nowSec = Math.floor(Date.now() / 1000);
-  const tsSec  = parseInt(timestamp, 10);
+  const tsSec = parseInt(timestamp, 10);
   if (!Number.isFinite(tsSec) || Math.abs(nowSec - tsSec) > 300) {
     console.error("[stripe-webhook] Stale or invalid timestamp — possible replay attack");
     return false;
@@ -83,197 +71,15 @@ async function verifyStripeSignature(
   return diff === 0;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Helper: look up a profile by Stripe customer ID
-// ─────────────────────────────────────────────────────────────────
-
-async function getProfileByCustomer(
-  db: ReturnType<typeof createServiceClient>,
-  customerId: string,
-): Promise<{ id: string } | null> {
-  const { data } = await db
-    .from("profiles")
-    .select("id")
-    .eq("stripe_customer_id", customerId)
-    .single();
-  return data ?? null;
-}
-
-// ─────────────────────────────────────────────────────────────────
-// Helper: map Stripe subscription status → plan_id
-// ─────────────────────────────────────────────────────────────────
-
-function derivePlanId(metadata: Record<string, string> | null | undefined): string {
-  const raw = metadata?.plan_id?.trim();
-  const normalized = normalizePlanId(raw);
-  if (!raw || !normalized || !(normalized in PLAN_CATALOG)) {
-    console.warn("[stripe-webhook] Missing/unknown plan_id in metadata — defaulting to free");
-    return "free";
-  }
-  return normalized;
-}
-
-type PricePlanEntitlement = {
-  planId: string;
-  monthlyCredits: number;
-};
-
-function buildPriceToPlanMap(): Map<string, PricePlanEntitlement> {
-  const map = new Map<string, PricePlanEntitlement>();
-
-  function add(envKey: string | undefined, planId: keyof typeof PLAN_MONTHLY_CREDITS): void {
-    if (!envKey) return;
-    const priceId = Deno.env.get(envKey)?.trim();
-    if (priceId) {
-      map.set(priceId, {
-        planId,
-        monthlyCredits: monthlyCreditsForPlan(planId),
-      });
-    }
-  }
-
-  // Include inactive legacy prices so renewals still resolve correctly.
-  for (const plan of Object.values(PLAN_CATALOG)) {
-    add(plan.stripePriceEnvKeys.monthly, plan.planId as keyof typeof PLAN_MONTHLY_CREDITS);
-    add(plan.stripePriceEnvKeys.yearly, plan.planId as keyof typeof PLAN_MONTHLY_CREDITS);
-  }
-
-  return map;
-}
-
-const PRICE_TO_PLAN = buildPriceToPlanMap();
-
-function resolveCreditsFromPackMetadata(
-  metadata: Record<string, string>,
-): number {
-  const packId = metadata.credit_pack_id?.trim();
-  if (packId) {
-    const pack = CREDIT_PACK_CATALOG.find((p) => p.packId === packId && p.active);
-    if (pack) return pack.credits;
-  }
-  // Never trust client-supplied credit_amount alone for unknown packs.
-  return 0;
-}
-
-function resolvePlanFromPrice(
-  priceId: string | null | undefined,
-  priceMetadata: Record<string, string> | null | undefined,
-  fallbackMetadata?: Record<string, string> | null,
-): { planId: string; monthlyCredits: number } {
-  const metaPlanId = priceMetadata?.plan_id?.trim() ?? fallbackMetadata?.plan_id?.trim();
-  const normalized = normalizePlanId(metaPlanId);
-  if (metaPlanId && normalized && normalized in PLAN_CATALOG) {
-    return { planId: normalized, monthlyCredits: monthlyCreditsForPlan(normalized) };
-  }
-
-  if (priceId) {
-    const mapped = PRICE_TO_PLAN.get(priceId);
-    if (mapped) {
-      return mapped;
-    }
-    console.warn(
-      `[stripe-webhook] Unknown Stripe price ${priceId} — rejecting entitlement (free)`,
-    );
-  } else {
-    console.warn("[stripe-webhook] No price id on subscription — defaulting plan to free");
-  }
-
-  return { planId: "free", monthlyCredits: PLAN_MONTHLY_CREDITS.free };
-}
-
-function stripeTimestampToIso(unixSeconds: number | null | undefined): string | null {
-  if (typeof unixSeconds !== "number" || !Number.isFinite(unixSeconds)) {
-    return null;
-  }
-  return new Date(unixSeconds * 1000).toISOString();
-}
-
-/**
- * P4-2: Only claw back credits when the wallet still holds at least the
- * originally granted amount. Never wipe the balance to zero blindly.
- */
-export function decideRefundClawback(opts: {
-  currentBalance: number;
-  creditsGranted: number;
-}): {
-  clawbackAmount: number;
-  shouldClawback: boolean;
-  reason: "full_clawback" | "insufficient_unspent" | "nothing_to_claw";
-} {
-  const balance = Math.max(0, Math.floor(opts.currentBalance));
-  const granted = Math.max(0, Math.floor(opts.creditsGranted));
-  if (granted <= 0) {
-    return { clawbackAmount: 0, shouldClawback: false, reason: "nothing_to_claw" };
-  }
-  if (balance >= granted) {
-    return { clawbackAmount: granted, shouldClawback: true, reason: "full_clawback" };
-  }
-  return { clawbackAmount: 0, shouldClawback: false, reason: "insufficient_unspent" };
-}
-
-// ─────────────────────────────────────────────────────────────────
-// Helper: idempotency guard via idempotency_log table
-// Returns true if this is the first time processing the event.
-// ─────────────────────────────────────────────────────────────────
-
-async function ensureIdempotent(
-  db: ReturnType<typeof createServiceClient>,
-  eventId: string,
-): Promise<boolean> {
-  const { data, error } = await db
-    .from("idempotency_log")
-    .insert({ key: `stripe_event_${eventId}`, created_at: new Date().toISOString() })
-    .select("key")
-    .single();
-
-  if (error?.code === "23505") return false; // unique violation → already processed
-  if (error) throw error;
-  return true;
-}
-
-// ─────────────────────────────────────────────────────────────────
-// Handler
-// ─────────────────────────────────────────────────────────────────
-
 Deno.serve(async (req) => {
-  // Note: Stripe webhooks are server-to-server (no Origin header),
-  // but we still handle OPTIONS for any proxy/testing scenarios.
   const cors = handleCors(req);
   if (cors) return cors;
 
   const headers = getCorsHeaders(req);
 
-  try {
-    assertBillingConfigOrThrow({ requireStripe: true });
-  } catch {
-    opsLog({
-      function_name: "stripe-webhook",
-      operation: "config_validate",
-      result: "error",
-      error_class: "BILLING_CONFIG_INVALID",
-      retryable: false,
-    });
-    return new Response(
-      JSON.stringify({ error: "Billing configuration invalid" }),
-      { status: 503, headers: { ...headers, "Content-Type": "application/json" } },
-    );
-  }
-
-  if (!STRIPE_SECRET_KEY) {
-    console.error("[stripe-webhook] STRIPE_SECRET_KEY not configured");
-    return new Response(
-      JSON.stringify({ error: "Stripe not configured" }),
-      { status: 503, headers: { ...headers, "Content-Type": "application/json" } },
-    );
-  }
-
-  // SECURITY: Hard-fail if webhook secret is missing. We must NEVER process
-  // payment events without verifying the signature — accepting unsigned
-  // webhooks would let any attacker mint subscriptions or credit grants.
   if (!STRIPE_WEBHOOK_SECRET) {
     console.error(
-      "[stripe-webhook] STRIPE_WEBHOOK_SECRET not configured — refusing to process events. " +
-      "Set this secret in the Edge Function environment before going live.",
+      "[stripe-webhook] STRIPE_WEBHOOK_SECRET not configured — refusing to process events.",
     );
     return new Response(
       JSON.stringify({ error: "Webhook secret not configured" }),
@@ -281,11 +87,8 @@ Deno.serve(async (req) => {
     );
   }
 
-  const db = createServiceClient();
-  let claimedEventKey: string | null = null;
-
   try {
-    const rawBody  = await req.text();
+    const rawBody = await req.text();
     const signature = req.headers.get("stripe-signature") ?? "";
 
     if (!signature) {
@@ -311,8 +114,15 @@ Deno.serve(async (req) => {
       );
     }
 
-    const event     = JSON.parse(rawBody);
-    const eventType = event.type as string;
+    let event: { id?: string; type?: string; livemode?: boolean };
+    try {
+      event = JSON.parse(rawBody);
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON payload" }),
+        { status: 400, headers: { ...headers, "Content-Type": "application/json" } },
+      );
+    }
 
     if (isProductionEnv() && event.livemode === false) {
       opsLog({
@@ -332,443 +142,18 @@ Deno.serve(async (req) => {
 
     opsLog({
       function_name: "stripe-webhook",
-      operation: eventType,
+      operation: event.type ?? "unknown",
       result: "ok",
       provider: "stripe",
       provider_event_id: event.id,
+      meta: { ignored: true, reason: "stripe_unused_razorpay_only" },
     });
 
-    const isNew = await ensureIdempotent(db, event.id);
-    if (!isNew) {
-      return new Response(
-        JSON.stringify({ received: true, duplicate: true }),
-        { status: 200, headers: { ...headers, "Content-Type": "application/json" } },
-      );
-    }
-    claimedEventKey = `stripe_event_${event.id}`;
-
-    switch (eventType) {
-
-      // ── Checkout completed → activate subscription or credit purchase ──
-      case "checkout.session.completed": {
-        const session        = event.data.object;
-        const customerId     = session.customer     as string;
-        const subscriptionId = session.subscription as string | null;
-        const metadata       = (session.metadata ?? {}) as Record<string, string>;
-        const userId         = metadata.user_id;
-
-        if (!userId) {
-          console.error("[stripe-webhook] checkout.session.completed: no user_id in metadata");
-          break;
-        }
-
-        const linkedProfile = await getProfileByCustomer(db, customerId);
-        if (linkedProfile && linkedProfile.id !== userId) {
-          console.error(
-            `[stripe-webhook] checkout.session.completed: user_id mismatch — metadata=${userId}, customer profile=${linkedProfile.id}`,
-          );
-          break;
-        }
-
-        const catalogCredits = resolveCreditsFromPackMetadata(metadata);
-        const creditAmount = catalogCredits > 0
-          ? catalogCredits
-          : 0;
-        const isCreditPurchase = creditAmount > 0 && !subscriptionId;
-        const planId = derivePlanId(metadata);
-
-        if (isCreditPurchase) {
-          await db.from("profiles").update({
-            stripe_customer_id: customerId,
-            updated_at: new Date().toISOString(),
-          }).eq("id", userId);
-        } else {
-          await db.from("profiles").update({
-            stripe_customer_id:  customerId,
-            subscription_id:     subscriptionId,
-            subscription_status: "active",
-            plan_id:             planId,
-            updated_at:          new Date().toISOString(),
-          }).eq("id", userId);
-        }
-
-        if (subscriptionId) {
-          await db.from("subscriptions").upsert({
-            user_id:                userId,
-            stripe_subscription_id: subscriptionId,
-            plan_id:                planId,
-            status:                 "active",
-            updated_at:             new Date().toISOString(),
-          }, { onConflict: "user_id" });
-        }
-
-        // One-time credit top-up — amount from server catalog only
-        if (creditAmount > 0) {
-          const amount = creditAmount;
-          const paymentId = (session.payment_intent as string | null) ?? session.id;
-          if (amount > 0 && paymentId) {
-            const { data: existing } = await db
-              .from("credit_transactions")
-              .select("id")
-              .eq("stripe_payment_id", paymentId)
-              .maybeSingle();
-
-            if (!existing) {
-              await db.rpc("add_credits", {
-                p_user_id:    userId,
-                p_amount:     amount,
-                p_action:     "purchase",
-                p_description: `Purchased ${amount} credits`,
-                p_payment_id: paymentId,
-              });
-            } else {
-              console.log(`[stripe-webhook] Skipping duplicate credit grant for ${paymentId}`);
-            }
-          }
-        }
-
-        console.log(`[stripe-webhook] checkout.session.completed — user: ${userId}, plan: ${planId}`);
-        break;
-      }
-
-      // ── Invoice paid → keep subscription active, reset monthly credits ──
-      case "invoice.paid": {
-        const invoice        = event.data.object;
-        const customerId     = invoice.customer     as string;
-        const subscriptionId = invoice.subscription as string | null;
-
-        if (!subscriptionId) break;
-
-        const profile = await getProfileByCustomer(db, customerId);
-        if (!profile) {
-          console.warn(`[stripe-webhook] invoice.paid: no profile for customer ${customerId}`);
-          break;
-        }
-
-        await db.from("profiles").update({
-          subscription_status:    "active",
-          credits_used_this_month: 0,
-          credits_reset_at:       new Date().toISOString(),
-          updated_at:             new Date().toISOString(),
-        }).eq("id", profile.id);
-
-        await db.from("subscriptions").update({
-          status:     "active",
-          updated_at: new Date().toISOString(),
-        }).eq("user_id", profile.id);
-
-        // Resolve monthly credits from catalog via subscription price / profile plan — never trust invoice metadata alone.
-        const priceId = invoice.lines?.data?.[0]?.price?.id as string | undefined;
-        const lineMeta = (invoice.lines?.data?.[0]?.metadata ?? {}) as Record<string, string>;
-        const resolved = resolvePlanFromPrice(priceId, lineMeta, null);
-        const { data: profilePlan } = await db
-          .from("profiles")
-          .select("plan_id")
-          .eq("id", profile.id)
-          .maybeSingle();
-        const monthlyCredits =
-          resolved.planId !== "free"
-            ? resolved.monthlyCredits
-            : monthlyCreditsForPlan(profilePlan?.plan_id);
-
-        if (monthlyCredits > 0 && invoice.id) {
-          const { data: existing } = await db
-            .from("credit_transactions")
-            .select("id")
-            .eq("stripe_payment_id", invoice.id)
-            .maybeSingle();
-          if (!existing) {
-            await db.rpc("add_credits", {
-              p_user_id:    profile.id,
-              p_amount:     monthlyCredits,
-              p_action:     "subscription_grant",
-              p_description: `Monthly subscription credits`,
-              p_payment_id: invoice.id,
-            });
-          }
-        }
-
-        console.log(`[stripe-webhook] invoice.paid — customer: ${customerId}`);
-        break;
-      }
-
-      // ── Subscription deleted → downgrade to free ──
-      case "customer.subscription.deleted": {
-        const subscription = event.data.object;
-        const customerId   = subscription.customer as string;
-
-        const profile = await getProfileByCustomer(db, customerId);
-        if (!profile) {
-          console.warn(`[stripe-webhook] subscription.deleted: no profile for ${customerId}`);
-          break;
-        }
-
-        await db.from("profiles").update({
-          plan_id:             "free",
-          subscription_status: "canceled",
-          subscription_id:     null,
-          updated_at:          new Date().toISOString(),
-        }).eq("id", profile.id);
-
-        await db.from("subscriptions").update({
-          status:     "canceled",
-          plan_id:    "free",
-          cancel_at:  new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }).eq("user_id", profile.id);
-
-        console.log(`[stripe-webhook] subscription.deleted — customer: ${customerId}`);
-        break;
-      }
-
-      // ── Subscription updated → sync status + cancellation flag ──
-      case "customer.subscription.updated": {
-        const subscription = event.data.object;
-        const customerId   = subscription.customer as string;
-
-        const profile = await getProfileByCustomer(db, customerId);
-        if (!profile) break;
-
-        const priceItem = subscription.items?.data?.[0];
-        const priceId = (priceItem?.price?.id as string | undefined) ?? null;
-        const priceMetadata = (priceItem?.price?.metadata ?? {}) as Record<string, string>;
-        const subMetadata = (subscription.metadata ?? {}) as Record<string, string>;
-        const { planId, monthlyCredits } = resolvePlanFromPrice(
-          priceId,
-          priceMetadata,
-          subMetadata,
-        );
-
-        const status = subscription.cancel_at_period_end
-          ? "canceling"
-          : (subscription.status as string);
-
-        const trialStart = stripeTimestampToIso(subscription.trial_start);
-        const trialEnd = stripeTimestampToIso(subscription.trial_end);
-
-        await db.from("profiles").update({
-          subscription_status: status,
-          plan_id:             planId,
-          updated_at:          new Date().toISOString(),
-        }).eq("id", profile.id);
-
-        const subscriptionUpdate: Record<string, unknown> = {
-          status,
-          plan_id:          planId,
-          stripe_price_id:  priceId,
-          monthly_credits:  monthlyCredits,
-          cancel_at: subscription.cancel_at
-            ? new Date(subscription.cancel_at * 1000).toISOString()
-            : null,
-          updated_at: new Date().toISOString(),
-        };
-
-        if (trialStart !== null) {
-          subscriptionUpdate.trial_start = trialStart;
-        }
-        if (trialEnd !== null) {
-          subscriptionUpdate.trial_end = trialEnd;
-        }
-
-        await db.from("subscriptions").update(subscriptionUpdate).eq("user_id", profile.id);
-
-        console.log(
-          `[stripe-webhook] subscription.updated — customer: ${customerId}, status: ${status}, plan: ${planId}`,
-        );
-        break;
-      }
-
-      // ── Payment failed → dunning: grace period then downgrade ──
-      case "invoice.payment_failed": {
-        const invoice    = event.data.object;
-        const customerId = invoice.customer as string;
-
-        const { data: failedProfile } = await db
-          .from("profiles")
-          .select("id, plan_id")
-          .eq("stripe_customer_id", customerId)
-          .single();
-        if (!failedProfile) break;
-
-        const nowIso = new Date().toISOString();
-
-        if ((invoice.attempt_count ?? 0) >= 3) {
-          // P0-2: Never overwrite profiles.credits on payment failure — purchased
-          // credit packs must be preserved. Downgrade plan/status only; wallet
-          // resets (if any) belong on customer.subscription.deleted via ledger.
-          await db.from("profiles").update({
-            plan_id:             "free",
-            subscription_status: "past_due",
-            payment_failed_at:   nowIso,
-            updated_at:          nowIso,
-          }).eq("id", failedProfile.id);
-
-          await db.from("subscriptions").update({
-            status:     "past_due",
-            plan_id:    "free",
-            updated_at: nowIso,
-          }).eq("user_id", failedProfile.id);
-
-          await db.from("audit_logs").insert({
-            user_id: failedProfile.id,
-            action:  "payment_downgrade",
-            details: {
-              reason: "payment_failed_3x",
-              previous_plan: failedProfile.plan_id,
-              attempt_count: invoice.attempt_count,
-            },
-          });
-
-          console.log(`[stripe-webhook] invoice.payment_failed — downgraded customer: ${customerId}`);
-        } else {
-          await db.from("profiles").update({
-            subscription_status: "past_due",
-            payment_failed_at:   nowIso,
-            updated_at:          nowIso,
-          }).eq("id", failedProfile.id);
-
-          await db.from("subscriptions").update({
-            status:     "past_due",
-            updated_at: nowIso,
-          }).eq("user_id", failedProfile.id);
-
-          console.log(
-            `[stripe-webhook] invoice.payment_failed — grace period, attempt ${invoice.attempt_count ?? 1}, customer: ${customerId}`,
-          );
-        }
-        break;
-      }
-
-      // ── Charge refunded → flag payment + conditional credit clawback ──
-      case "charge.refunded": {
-        const charge = event.data.object;
-        const customerId = charge.customer as string | null;
-        const paymentIntentId =
-          (typeof charge.payment_intent === "string"
-            ? charge.payment_intent
-            : charge.payment_intent?.id) as string | null;
-        const chargeId = charge.id as string | undefined;
-
-        if (!customerId) {
-          console.warn("[stripe-webhook] charge.refunded: missing customer");
-          break;
-        }
-
-        const { data: refundProfile } = await db
-          .from("profiles")
-          .select("id, credits, plan_id, subscription_status")
-          .eq("stripe_customer_id", customerId)
-          .maybeSingle();
-
-        if (!refundProfile) {
-          console.warn(
-            `[stripe-webhook] charge.refunded: no profile for customer ${customerId}`,
-          );
-          break;
-        }
-
-        const nowIso = new Date().toISOString();
-        const paymentKey = paymentIntentId ?? chargeId ?? event.id;
-
-        // Flag subscription / profile as refunded (do not wipe wallet here).
-        await db.from("profiles").update({
-          subscription_status:
-            refundProfile.subscription_status === "active" ||
-            refundProfile.subscription_status === "trialing"
-              ? "refunded"
-              : refundProfile.subscription_status,
-          updated_at: nowIso,
-        }).eq("id", refundProfile.id);
-
-        await db.from("subscriptions").update({
-          status: "refunded",
-          updated_at: nowIso,
-        }).eq("user_id", refundProfile.id);
-
-        // Resolve originally granted credits from ledger (purchase / subscription_grant).
-        let creditsGranted = 0;
-        if (paymentKey) {
-          const { data: grantRows } = await db
-            .from("credit_transactions")
-            .select("amount, action")
-            .eq("stripe_payment_id", paymentKey)
-            .in("action", ["purchase", "subscription_grant", "bonus"]);
-
-          for (const row of grantRows ?? []) {
-            const amt = typeof row.amount === "number" ? row.amount : 0;
-            if (amt > 0) creditsGranted += amt;
-          }
-        }
-
-        const decision = decideRefundClawback({
-          currentBalance: refundProfile.credits ?? 0,
-          creditsGranted,
-        });
-
-        let clawed = 0;
-        if (decision.shouldClawback && decision.clawbackAmount > 0) {
-          const { data: updated } = await db
-            .from("profiles")
-            .update({
-              credits: (refundProfile.credits ?? 0) - decision.clawbackAmount,
-              updated_at: nowIso,
-            })
-            .eq("id", refundProfile.id)
-            .gte("credits", decision.clawbackAmount)
-            .select("credits")
-            .maybeSingle();
-
-          if (updated) {
-            clawed = decision.clawbackAmount;
-            await db.from("credit_transactions").insert({
-              user_id: refundProfile.id,
-              action: "refund",
-              amount: -clawed,
-              balance_after: updated.credits,
-              description: `Stripe charge.refunded clawback (${paymentKey})`,
-              stripe_payment_id: `refund_${paymentKey}`,
-              created_at: nowIso,
-            });
-          }
-        }
-
-        await db.from("audit_logs").insert({
-          user_id: refundProfile.id,
-          action: "payment_refunded",
-          details: {
-            provider: "stripe",
-            charge_id: chargeId,
-            payment_intent: paymentIntentId,
-            credits_granted: creditsGranted,
-            clawback: clawed,
-            clawback_reason: decision.reason,
-          },
-        });
-
-        console.log(
-          `[stripe-webhook] charge.refunded — user ${refundProfile.id}, clawback=${clawed}, reason=${decision.reason}`,
-        );
-        break;
-      }
-
-      default:
-        console.log(`[stripe-webhook] Unhandled event type: ${eventType}`);
-    }
-
     return new Response(
-      JSON.stringify({ received: true }),
+      JSON.stringify({ received: true, ignored: true }),
       { status: 200, headers: { ...headers, "Content-Type": "application/json" } },
     );
-
   } catch (err) {
-    // Release claim so Stripe retries can re-process after grant/DB failures.
-    if (claimedEventKey) {
-      try {
-        await db.from("idempotency_log").delete().eq("key", claimedEventKey);
-      } catch (releaseErr) {
-        console.error("[stripe-webhook] Failed to release idempotency claim:", releaseErr);
-      }
-    }
     const requestId = await reportEdgeError(err, {
       functionName: "stripe-webhook",
       operation: "handler",

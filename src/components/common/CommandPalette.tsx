@@ -40,6 +40,10 @@ import { useUIStore } from "@/store/uiStore";
 
 import { useIndiaRegion } from "@/hooks/useIndiaRegion";
 
+import { useGlobalStore } from "@/store/globalStore";
+
+import type { FeatureFlagId } from "@/types";
+
 import {
 
   addRecentSearch,
@@ -64,6 +68,8 @@ interface NavCommand {
   icon: React.ComponentType<{ className?: string }>;
 
   group: "Navigate" | "Sessions" | "Prep" | "Account";
+
+  featureFlag?: FeatureFlagId;
 }
 
 const COMMANDS: NavCommand[] = [
@@ -72,15 +78,15 @@ const COMMANDS: NavCommand[] = [
 
   { label: PRODUCT_NAMES.creditsUsage, path: "/app/usage", icon: CreditCard, group: "Navigate", keywords: "billing credits usage" },
 
-  { label: PRODUCT_NAMES.analytics, path: "/app/analytics", icon: BarChart2, group: "Navigate" },
+  { label: PRODUCT_NAMES.analytics, path: "/app/analytics", icon: BarChart2, group: "Navigate", featureFlag: "analytics" },
 
   { label: "Notifications", path: "/app/notifications", icon: Bell, group: "Navigate" },
 
   { label: PRODUCT_NAMES.interviewDay, path: "/app/interview-day", icon: CalendarDays, group: "Navigate", keywords: "planner schedule" },
 
-  { label: PRODUCT_NAMES.interviews, path: "/app/interviews", icon: Calendar, group: "Navigate", keywords: "scheduled" },
+  { label: PRODUCT_NAMES.interviews, path: "/app/interviews", icon: Calendar, group: "Navigate", keywords: "scheduled", featureFlag: "calendar_sync" },
 
-  { label: PRODUCT_NAMES.companyResearch, path: "/app/companies", icon: Building2, group: "Navigate", keywords: "research company" },
+  { label: PRODUCT_NAMES.companyResearch, path: "/app/companies", icon: Building2, group: "Navigate", keywords: "research company", featureFlag: "company_research" },
 
   { label: PRODUCT_NAMES.referrals, path: "/app/referrals", icon: Gift, group: "Navigate", keywords: "invite reward" },
 
@@ -90,27 +96,27 @@ const COMMANDS: NavCommand[] = [
 
   { label: "Billing", path: "/app/settings/billing", icon: CreditCard, group: "Account", keywords: "subscription plan credits payment" },
 
-  { label: PRODUCT_NAMES.practiceCoach, path: "/app/live", icon: Mic, group: "Sessions" },
+  { label: PRODUCT_NAMES.practiceCoach, path: "/app/live", icon: Mic, group: "Sessions", keywords: "sessions overlay live coach", featureFlag: "overlay" },
 
-  { label: PRODUCT_NAMES.mockInterview, path: "/app/mock", icon: FlaskConical, group: "Sessions" },
+  { label: PRODUCT_NAMES.mockInterview, path: "/app/mock", icon: FlaskConical, group: "Sessions", keywords: "sessions mock interview", featureFlag: "mock_sessions" },
 
-  { label: PRODUCT_NAMES.govExams, path: "/app/mock-test", icon: Brain, group: "Sessions", keywords: "exam gov test" },
+  { label: PRODUCT_NAMES.govExams, path: "/app/mock-test", icon: Brain, group: "Sessions", keywords: "sessions exam gov test" },
 
-  { label: PRODUCT_NAMES.sessionHistory, path: "/app/sessions", icon: Calendar, group: "Sessions", keywords: "history calls sessions" },
+  { label: PRODUCT_NAMES.sessionHistory, path: "/app/sessions", icon: Calendar, group: "Sessions", keywords: "sessions history calls" },
 
-  { label: PRODUCT_NAMES.debrief, path: "/app/debriefs", icon: Sparkles, group: "Sessions", keywords: "debriefs feedback" },
+  { label: PRODUCT_NAMES.debrief, path: "/app/debriefs", icon: Sparkles, group: "Sessions", keywords: "sessions debriefs feedback" },
 
   { label: "Learning Hub", path: "/app/learn", icon: BookOpen, group: "Prep", keywords: "learn courses preview" },
 
   { label: "Q&A", path: "/app/community", icon: BookOpen, group: "Prep", keywords: "community questions" },
 
-  { label: "Coding lab", path: "/app/coding", icon: FlaskConical, group: "Prep", keywords: "coding assessment lab" },
+  { label: "Coding lab", path: "/app/coding", icon: FlaskConical, group: "Prep", keywords: "coding assessment lab", featureFlag: "coding_hints" },
 
   { label: "Document library", path: "/app/library", icon: FileText, group: "Prep", keywords: "library files documents" },
 
   { label: "Practice workspace", path: "/app/practice-workspace", icon: BookOpen, group: "Prep", keywords: "workspace practice" },
 
-  { label: "Assessments", path: "/app/assessments", icon: Brain, group: "Sessions", keywords: "assessment" },
+  { label: "Assessments", path: "/app/assessments", icon: Brain, group: "Sessions", keywords: "sessions assessment" },
 
   { label: "Question bank", path: "/app/question-bank", icon: FileText, group: "Prep", keywords: "questions bank" },
 
@@ -126,7 +132,7 @@ const COMMANDS: NavCommand[] = [
 
   { label: "System design", path: "/app/prep/system-design", icon: BookOpen, group: "Prep", keywords: "prep system design" },
 
-  { label: "Coding hints", path: "/app/prep/coding-hints", icon: BookOpen, group: "Prep", keywords: "prep coding hints" },
+  { label: "Coding hints", path: "/app/prep/coding-hints", icon: BookOpen, group: "Prep", keywords: "prep coding hints", featureFlag: "coding_hints" },
 
   { label: "Guide", path: "/app/guide", icon: BookOpen, group: "Navigate", keywords: "guide help how to" },
 
@@ -134,7 +140,7 @@ const COMMANDS: NavCommand[] = [
 
   { label: PRODUCT_NAMES.documents, path: "/app/documents", icon: FileText, group: "Prep" },
 
-  { label: PRODUCT_NAMES.answerBank, path: "/app/answers", icon: BookOpen, group: "Prep" },
+  { label: PRODUCT_NAMES.answerBank, path: "/app/answers", icon: BookOpen, group: "Prep", featureFlag: "answer_bank" },
 
 ];
 
@@ -167,9 +173,23 @@ export function CommandPalette() {
 
   const { isIndia } = useIndiaRegion();
 
+  const killSwitches = useGlobalStore((s) => s.featureKillSwitches);
+
+  const featureFlags = useGlobalStore((s) => s.featureFlags);
+
+  const isFeatureEnabled = useGlobalStore((s) => s.isFeatureEnabled);
+
   const visibleCommands = useMemo(
-    () => COMMANDS.filter((c) => isIndia || c.path !== "/app/mock-test"),
-    [isIndia],
+    () => COMMANDS.filter((c) => {
+      if (!isIndia && c.path === "/app/mock-test") return false;
+      if (!c.featureFlag) return true;
+      return (
+        isFeatureEnabled(c.featureFlag) ||
+        Boolean(featureFlags[c.featureFlag]) ||
+        killSwitches[c.featureFlag] !== false
+      );
+    }),
+    [isIndia, killSwitches, featureFlags, isFeatureEnabled],
   );
 
 
@@ -275,10 +295,11 @@ export function CommandPalette() {
     if (!q) return 0;
     const label = c.label.toLowerCase();
     const keywords = (c.keywords ?? "").toLowerCase();
-    if (label === q) return 0;
-    if (label.startsWith(q)) return 1;
+    const group = c.group.toLowerCase();
+    if (label === q || group === q) return 0;
+    if (label.startsWith(q) || group.startsWith(q)) return 1;
     if (keywords.split(" ").some((word) => word.startsWith(q))) return 2;
-    if (label.includes(q)) return 3;
+    if (label.includes(q) || group.includes(q)) return 3;
     if (keywords.includes(q)) return 4;
     return 5;
   }, []);
@@ -430,7 +451,7 @@ export function CommandPalette() {
 
                   key={c.path}
 
-                  value={`${c.label} ${c.keywords ?? ""} ${c.path}`}
+                  value={`${c.label} ${c.keywords ?? ""} ${c.group} ${c.path}`}
 
                   onSelect={() => go(c.path)}
 

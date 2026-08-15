@@ -48,6 +48,7 @@ import {
   fetchTopicMasteryForExam,
 } from "@/lib/gov-exam/masteryClient";
 import type { ExamReadinessSummary, TopicMasterySummary } from "@/lib/gov-exam/api";
+import { reportQuestion } from "@/lib/gov-exam/api";
 import {
   primaryActionInsight,
   resolvePaperClassPresentation,

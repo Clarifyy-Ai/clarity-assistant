@@ -171,7 +171,7 @@ Until then, use solo mock interviews and practice sessions. Check Help again whe
 - STAR builder: 10 credits
 - Company research: 20 credits
 
-Credits refresh monthly based on your plan tier. Credit packs cost more per credit than a subscription — upgrading is the best value.`,
+Credits refresh monthly based on your plan tier. Credit packs are one-time top-ups — upgrading to Pro or Max is the best value.`,
     sort_order: 10,
   },
   {
@@ -180,8 +180,8 @@ Credits refresh monthly based on your plan tier. Credit packs cost more per cred
     category_title: "Billing & Credits",
     question: "How much do paid plans cost?",
     answer:
-      "Pro is $29/month for 1,400 credits. Max is $79/month for 4,000 credits with priority support.",
-    body_md: `Pro is **$29 / month** for 1,400 credits and unlocks the full feature set. Max is **$79 / month** for 4,000 credits, priority model access, and priority email support. Yearly billing saves roughly two months. Upgrade anytime from **Settings → Billing**.`,
+      "Pro is a one-time purchase for 1,400 credits. Max is a one-time purchase for 4,000 credits.",
+    body_md: `Pro is a **one-time** purchase for 1,400 credits and unlocks the full feature set. Max is a **one-time** purchase for 4,000 credits and priority model access. Upgrade anytime from **Settings → Billing**.`,
     sort_order: 20,
   },
 ];

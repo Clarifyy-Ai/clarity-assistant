@@ -1,6 +1,8 @@
 import type { PreferredAIModel } from "@/types/user.types";
-import { normalizeToDisplayTier } from "@/lib/constants/pricing";
-import type { PlanId } from "@/lib/billing/subscriptionManager";
+import {
+  normalizeToDisplayTier,
+  type PlanId,
+} from "@/lib/constants/pricing";
 
 export interface ModelOption {
   value: PreferredAIModel;

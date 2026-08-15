@@ -78,6 +78,7 @@ export default function CommunityPage() {
     <div className={PAGE_SHELL}>
       <PageHeader
         title="Questions & Answers"
+        badge="Preview"
         description={
           isPreview
             ? "Preview — Clarify’s own community for interview questions. This is not a third-party forum."

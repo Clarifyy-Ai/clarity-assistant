@@ -14,6 +14,12 @@ import posthog from "posthog-js";
 import App from "./App";
 import { isElectronApp } from "@/lib/platform/isElectron";
 import { logSupabaseHealth } from "@/lib/supabase/healthCheck";
+import {
+  readLocalObservabilityPrefs,
+  isCrashReportingEnabled,
+  isAiTrainingAllowed,
+  stripSessionTextFromPayload,
+} from "@/lib/privacy/privacyPrefs";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
@@ -32,12 +38,14 @@ function isRealKey(value: string | undefined, placeholderPrefixes: string[]): bo
 }
 
 // ── Sentry — error monitoring ──────────────────────────────────────────────
+const bootPrivacy = readLocalObservabilityPrefs();
 if (
   isRealKey(import.meta.env.VITE_SENTRY_DSN, ["your-sentry", "https://your"]) &&
   import.meta.env.VITE_APP_ENV !== "development"
 ) {
   Sentry.init({
     dsn: import.meta.env.VITE_SENTRY_DSN,
+    enabled: bootPrivacy.crash_reporting,
     environment: import.meta.env.VITE_APP_ENV || "development",
     release: `Clarify AI@${import.meta.env.VITE_APP_VERSION || "1.0.0"}`,
     integrations: [
@@ -51,6 +59,7 @@ if (
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: import.meta.env.PROD ? 1.0 : 0,
     beforeSend(event) {
+      if (!isCrashReportingEnabled()) return null;
       if (event.extra && "audioStream" in event.extra) {
         delete event.extra.audioStream;
       }
@@ -60,6 +69,16 @@ if (
             b.data.url = b.data.url.replace(/token=[^&]+/, "token=[REDACTED]");
           return b;
         });
+      }
+      if (!isAiTrainingAllowed()) {
+        if (event.extra) event.extra = stripSessionTextFromPayload(event.extra);
+        if (event.contexts) event.contexts = stripSessionTextFromPayload(event.contexts);
+        if (event.breadcrumbs) {
+          event.breadcrumbs = event.breadcrumbs.map((b) => ({
+            ...b,
+            data: b.data ? stripSessionTextFromPayload(b.data) : b.data,
+          }));
+        }
       }
       return event;
     },
@@ -82,6 +101,13 @@ if (isRealKey(import.meta.env.VITE_POSTHOG_KEY, ["phc_your", "your_posthog", "pl
       if (import.meta.env.VITE_APP_ENV !== "production") {
         ph.opt_out_capturing(); // No tracking in dev/staging
       }
+      if (!bootPrivacy.analytics_tracking) {
+        ph.opt_out_capturing();
+      }
+    },
+    sanitize_properties(props) {
+      if (isAiTrainingAllowed()) return props;
+      return stripSessionTextFromPayload(props ?? {});
     },
   });
 }

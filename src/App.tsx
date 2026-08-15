@@ -29,6 +29,7 @@ import { toast } from "sonner";
 import { RETIRED_ROOMS_REDIRECT, RETIRED_ROOMS_TOAST } from "@/lib/routes/canonical";
 
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
+import { FeatureKillGate } from "@/components/layout/PlanGate";
 import { WhatsNewModal, useWhatsNewPrompt } from "@/components/common/WhatsNewModal";
 import { SupportChatWidget } from "@/components/support/SupportChatWidget";
 import { AppSidebar } from "@/components/layout/AppSidebar";
@@ -39,7 +40,6 @@ import { NetworkBanner } from "@/components/layout/NetworkBanner";
 import { SessionTimeoutBanner } from "@/components/layout/SessionTimeoutBanner";
 import { PageContent } from "@/components/layout/PageContent";
 import { SetupChecklist } from "@/components/layout/SetupChecklist";
-import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import { AppWalkthrough, InstallPromptModal, ElectronFirstRunModal } from "@/components/onboarding";
 import { ErrorBoundary } from "@/components/layout/ErrorBoundary";
 import { GlobalErrorBoundary } from "@/components/layout/GlobalErrorBoundary";
@@ -324,6 +324,11 @@ const AdminLayout = lazy(() => import("@/pages/app/admin/AdminLayout"));
 const Scorecard = lazy(() => import("@/pages/Scorecard"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 const SharedDebrief = lazy(() => import("@/pages/marketing/SharedDebrief"));
+const UpgradeModal = lazy(() =>
+  import("@/components/billing/UpgradeModal").then((mod) => ({
+    default: mod.UpgradeModal,
+  })),
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Loaders
@@ -505,7 +510,9 @@ function AppShell(): JSX.Element {
       </div>
 
       <MobileNav />
-      <UpgradeModal />
+      <Suspense fallback={null}>
+        <UpgradeModal />
+      </Suspense>
       <AppWalkthrough />
       <InstallPromptModal />
       <WhatsNewModal open={whatsNew.open} onDismiss={whatsNew.dismiss} />
@@ -582,7 +589,11 @@ const routes = [
     children: [
       {
         path: "/app/live/overlay",
-        element: <Page component={LiveOverlay} />,
+        element: (
+          <FeatureKillGate flag="overlay">
+            <Page component={LiveOverlay} />
+          </FeatureKillGate>
+        ),
       },
       {
         path: "/app/mock-test/session/:testId",
@@ -607,7 +618,14 @@ const routes = [
 
           { path: "dashboard", element: <Page component={Dashboard} /> },
           { path: "interview-day", element: <Page component={InterviewDay} /> },
-          { path: "analytics", element: <Page component={Analytics} /> },
+          {
+            path: "analytics",
+            element: (
+              <FeatureKillGate flag="analytics">
+                <Page component={Analytics} />
+              </FeatureKillGate>
+            ),
+          },
           {
             path: "analytics/:sessionId",
             element: <AnalyticsDebriefRedirect />,
@@ -624,12 +642,40 @@ const routes = [
           },
           { path: "notifications", element: <Page component={Notifications} /> },
           { path: "referrals", element: <Page component={Referrals} /> },
-          { path: "live", element: <Page component={LiveRehearsal} /> },
+          {
+            path: "live",
+            element: (
+              <FeatureKillGate flag="overlay">
+                <Page component={LiveRehearsal} />
+              </FeatureKillGate>
+            ),
+          },
 
-          { path: "mock", element: <Page component={MockInterview} /> },
-          { path: "mock/warmup", element: <Page component={MockWarmup} /> },
+          {
+            path: "mock",
+            element: (
+              <FeatureKillGate flag="mock_sessions">
+                <Page component={MockInterview} />
+              </FeatureKillGate>
+            ),
+          },
+          {
+            path: "mock/warmup",
+            element: (
+              <FeatureKillGate flag="mock_sessions">
+                <Page component={MockWarmup} />
+              </FeatureKillGate>
+            ),
+          },
           { path: "mock/session", element: <Navigate to="/app/mock" replace /> },
-          { path: "mock/session/:sessionId", element: <Page component={MockSession} /> },
+          {
+            path: "mock/session/:sessionId",
+            element: (
+              <FeatureKillGate flag="mock_sessions">
+                <Page component={MockSession} />
+              </FeatureKillGate>
+            ),
+          },
 
           // Mock Test (Gov exams)
           { path: "mock-test", element: <IndiaAppPage component={MockTestHub} /> },
@@ -655,7 +701,11 @@ const routes = [
           { path: "prep/rephraser", element: <Page component={Rephraser} /> },
           {
             path: "prep/coding-hints",
-            element: <Page component={CodingHints} />,
+            element: (
+              <FeatureKillGate flag="coding_hints">
+                <Page component={CodingHints} />
+              </FeatureKillGate>
+            ),
           },
           {
             path: "prep/system-design",
@@ -680,8 +730,22 @@ const routes = [
           },
           { path: "documents/jd/:id", element: <Page component={JDDetail} /> },
 
-          { path: "answers", element: <Page component={AnswerBank} /> },
-          { path: "answers/:id", element: <Page component={AnswerDetail} /> },
+          {
+            path: "answers",
+            element: (
+              <FeatureKillGate flag="answer_bank">
+                <Page component={AnswerBank} />
+              </FeatureKillGate>
+            ),
+          },
+          {
+            path: "answers/:id",
+            element: (
+              <FeatureKillGate flag="answer_bank">
+                <Page component={AnswerDetail} />
+              </FeatureKillGate>
+            ),
+          },
           {
             path: "answer-bank",
             element: <Navigate to="/app/answers" replace />,
@@ -691,24 +755,51 @@ const routes = [
             element: <AnswerBankLegacyRedirect />,
           },
 
-          { path: "interviews", element: <Page component={Interviews} /> },
+          { path: "interviews", element: (
+            <FeatureKillGate flag="calendar_sync">
+              <Page component={Interviews} />
+            </FeatureKillGate>
+          ) },
           {
             path: "interviews/new",
-            element: <Page component={NewInterview} />,
+            element: (
+              <FeatureKillGate flag="calendar_sync">
+                <Page component={NewInterview} />
+              </FeatureKillGate>
+            ),
           },
           {
             path: "interviews/:id/edit",
-            element: <Page component={NewInterview} />,
+            element: (
+              <FeatureKillGate flag="calendar_sync">
+                <Page component={NewInterview} />
+              </FeatureKillGate>
+            ),
           },
           {
             path: "interviews/:id",
-            element: <Page component={InterviewDetail} />,
+            element: (
+              <FeatureKillGate flag="calendar_sync">
+                <Page component={InterviewDetail} />
+              </FeatureKillGate>
+            ),
           },
 
-          { path: "companies", element: <Page component={CompanyResearch} /> },
+          {
+            path: "companies",
+            element: (
+              <FeatureKillGate flag="company_research">
+                <Page component={CompanyResearch} />
+              </FeatureKillGate>
+            ),
+          },
           {
             path: "companies/:id",
-            element: <Page component={CompanyProfile} />,
+            element: (
+              <FeatureKillGate flag="company_research">
+                <Page component={CompanyProfile} />
+              </FeatureKillGate>
+            ),
           },
 
           {
@@ -727,8 +818,22 @@ const routes = [
           { path: "learn/:courseId/lesson/:lessonId", element: <Page component={LessonPlayer} /> },
           { path: "community", element: <Page component={Community} /> },
           { path: "community/:postId", element: <Page component={CommunityPost} /> },
-          { path: "coding", element: <Page component={CodingLab} /> },
-          { path: "coding/:questionId", element: <Page component={CodingAssessment} /> },
+          {
+            path: "coding",
+            element: (
+              <FeatureKillGate flag="coding_hints">
+                <Page component={CodingLab} />
+              </FeatureKillGate>
+            ),
+          },
+          {
+            path: "coding/:questionId",
+            element: (
+              <FeatureKillGate flag="coding_hints">
+                <Page component={CodingAssessment} />
+              </FeatureKillGate>
+            ),
+          },
           { path: "library", element: <Page component={DocumentLibrary} /> },
           { path: "practice-workspace", element: <Page component={PracticeWorkspace} /> },
           {

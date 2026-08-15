@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { useUIStore } from "@/store/uiStore";
-import { Lock, Zap } from "lucide-react";
+import { useGlobalStore } from "@/store/globalStore";
+import { Ban, Lock, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   PLAN_ORDER,
@@ -10,6 +11,8 @@ import {
 } from "@/lib/billing/subscriptionManager";
 import { normalizePlanId } from "@/lib/billing/planIds";
 import { getPlanDisplayName } from "@/lib/constants/pricing";
+import { EmptyState } from "@/components/common/EmptyState";
+import type { FeatureFlagId } from "@/types";
 export { handleSessionStartError, isSessionLimitError } from "@/lib/billing/sessionStartErrors";
 
 // ─────────────────────────────────────────────────────────────────
@@ -47,6 +50,61 @@ interface PlanGateProps {
   fallback?: ReactNode;
   /** compact inline lock badge vs full overlay */
   inline?: boolean;
+  /**
+   * Optional kill-switch flag. Plan remains the primary gate.
+   * A killed flag hides the module; enabled=true never grants access.
+   */
+  featureFlag?: FeatureFlagId;
+}
+
+/** Honest empty state when a kill-switch has hidden a module. */
+export function FeatureUnavailableState({ compact = false }: { compact?: boolean }) {
+  return (
+    <EmptyState
+      icon={Ban}
+      title="Temporarily unavailable"
+      description="This module is temporarily unavailable. Please try again later."
+      compact={compact}
+    />
+  );
+}
+
+/**
+ * Route/nav lock for `enabled: false` kill-switches.
+ * Does not apply plan authorization — PlanGate remains the primary gate.
+ * `isFeatureEnabled` is consulted so a killed flag cannot pass.
+ */
+export function FeatureKillGate({
+  flag,
+  children,
+  compact = false,
+}: {
+  flag: FeatureFlagId;
+  children: ReactNode;
+  compact?: boolean;
+}) {
+  const blocked = useGlobalStore((state) => {
+    const killed = state.featureKillSwitches[flag] === false;
+    if (!killed) return false;
+    return !state.isFeatureEnabled(flag);
+  });
+
+  if (blocked) return <FeatureUnavailableState compact={compact} />;
+  return <>{children}</>;
+}
+
+/**
+ * Sidebar / command palette visibility.
+ * Hide when the kill-switch is off. Plan-deny stays visible so PlanGate can upsell.
+ */
+export function useNavFeatureVisible(flag?: FeatureFlagId): boolean {
+  return useGlobalStore((state) => {
+    if (!flag) return true;
+    return (
+      state.isFeatureEnabled(flag) ||
+      state.featureKillSwitches[flag] !== false
+    );
+  });
 }
 
 export function PlanGate({
@@ -54,6 +112,7 @@ export function PlanGate({
   children,
   fallback,
   inline = false,
+  featureFlag,
 }: PlanGateProps) {
   const { profile } = useAuthStore();
   const uiStore = useUIStore();
@@ -62,7 +121,39 @@ export function PlanGate({
   const hasAccess = planMeetsRequirement(userPlan, requiredPlan);
   const requiredLabel = getPlanDisplayName(requiredPlan);
 
-  if (hasAccess) return <>{children}</>;
+  const featureKilled = useGlobalStore((state) =>
+    featureFlag ? state.featureKillSwitches[featureFlag] === false : false,
+  );
+  const featureEnabled = useGlobalStore((state) =>
+    featureFlag ? state.isFeatureEnabled(featureFlag) : true,
+  );
+  const storePlan = useGlobalStore((state) => state.currentPlan);
+  const flagsReady = normalizePlanId(storePlan) === userPlan;
+
+  if (featureKilled) {
+    if (fallback) return <>{fallback}</>;
+    if (inline) {
+      return (
+        <span className="text-xs text-muted-foreground">Temporarily unavailable</span>
+      );
+    }
+    return <FeatureUnavailableState />;
+  }
+
+  if (hasAccess) {
+    // Plan passed; kill-switch is AND. Skip until flags match the profile
+    // so a brief boot race is not shown as "unavailable".
+    if (featureFlag && flagsReady && !featureEnabled) {
+      if (fallback) return <>{fallback}</>;
+      if (inline) {
+        return (
+          <span className="text-xs text-muted-foreground">Temporarily unavailable</span>
+        );
+      }
+      return <FeatureUnavailableState />;
+    }
+    return <>{children}</>;
+  }
   if (fallback) return <>{fallback}</>;
 
   if (inline) {

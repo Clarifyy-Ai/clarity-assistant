@@ -130,6 +130,9 @@ verify_jwt = true
 [functions.generate-questions]
 verify_jwt = true
 
+[functions.generate-scorecard]
+verify_jwt = true
+
 [functions.generate-star-answer]
 verify_jwt = true
 
@@ -196,4 +199,28 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.issue-course-certificate]
+verify_jwt = true
+
+[functions.ai-key-check]
+verify_jwt = true
+
+[functions.ai-feedback]
+verify_jwt = true
+
+[functions.generate-practice-questions]
+verify_jwt = true
+
+[functions.validate-api-key]
+verify_jwt = true
+
+[functions.end-session]
+verify_jwt = true
+
+[functions.save-answer]
+verify_jwt = true
+
+[functions.save-transcript]
+verify_jwt = true
+
+[functions.billing-status]
 verify_jwt = true

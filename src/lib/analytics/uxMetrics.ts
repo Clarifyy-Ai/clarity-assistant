@@ -4,6 +4,7 @@
 import { analyticsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/authStore";
 import type { Json } from "@/integrations/supabase/types";
+import { isAiTrainingAllowed, stripSessionTextFromPayload } from "@/lib/privacy/privacyPrefs";
 
 const KEYS = {
   onboardingCompleteAt: "clarify:ux:onboarding_complete_at",
@@ -80,17 +81,22 @@ function debug(event: string, properties?: Record<string, unknown>): void {
 }
 
 function emit(payload: UxMetricPayload): void {
-  debug(payload.event, payload.properties);
+  const properties = isAiTrainingAllowed()
+    ? payload.properties
+    : payload.properties
+      ? stripSessionTextFromPayload(payload.properties)
+      : payload.properties;
+  debug(payload.event, properties);
 
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent(UX_METRICS_EVENT, { detail: payload }));
+    window.dispatchEvent(new CustomEvent(UX_METRICS_EVENT, { detail: { event: payload.event, properties } }));
   }
 
   // Optional PostHog (already initialized in main.tsx when keyed)
   try {
     const ph = (window as unknown as { posthog?: { capture?: (e: string, p?: object) => void } })
       .posthog;
-    ph?.capture?.(payload.event, payload.properties);
+    ph?.capture?.(payload.event, properties);
   } catch {
     // ignore
   }
@@ -102,7 +108,7 @@ function emit(payload: UxMetricPayload): void {
     void analyticsDB.track({
       user_id: userId,
       event_type: payload.event,
-      properties: (payload.properties ?? null) as Json,
+      properties: (properties ?? null) as Json,
     });
   } catch {
     // ignore

@@ -3,7 +3,7 @@
 // catalogue, and interview type configuration.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import type { PlanId } from "@/lib/billing";
+import type { PlanId } from "@/lib/constants/pricing";
 
 // ─── Feature Flag Keys ────────────────────────────────────────────────────────
 
@@ -85,6 +85,17 @@ export const FEATURE_PLAN_GATE: Record<FeatureFlag, PlanId> = {
 
 /** Alias used in some admin pages */
 export const FEATURE_PLAN_GATES = FEATURE_PLAN_GATE;
+
+/** Kill-only rows: toggling on cannot grant access or advertise a launched product. */
+export const KILL_ONLY_FLAGS = [
+  FEATURE_FLAGS.BYOK,
+  FEATURE_FLAGS.PRIORITY_SUPPORT,
+  FEATURE_FLAGS.COACH_SESSIONS,
+] as const;
+
+export function isKillOnlyFlag(id: string): boolean {
+  return (KILL_ONLY_FLAGS as readonly string[]).includes(id);
+}
 
 // ─── AI Model Catalogue ───────────────────────────────────────────────────────
 

@@ -124,14 +124,18 @@ export default defineConfig(({ mode }) => {
             if (id.includes("/node_modules/zustand/")) return "vendor-state";
             if (id.includes("/node_modules/@deepgram/")) return "vendor-audio";
 
-            // ── App splits ─────────────────────────────────────────────
-            if (id.includes("/src/store/")) return "chunk-stores";
-            if (id.includes("/src/lib/billing/")) return "chunk-billing";
+            // Keep store/billing/network/api/ai in one chunk. Splitting them
+            // created cross-chunk circular `const` bindings and a boot TDZ:
+            // Uncaught ReferenceError: Cannot access 'P' before initialization.
             if (
-              id.includes("/src/lib/ai/") ||
-              id.includes("/src/lib/network/")
-            )
-              return "chunk-network";
+              id.includes("/src/store/") ||
+              id.includes("/src/lib/billing/") ||
+              id.includes("/src/lib/network/") ||
+              id.includes("/src/lib/api/") ||
+              id.includes("/src/lib/ai/")
+            ) {
+              return "chunk-app-core";
+            }
             if (
               id.includes("/src/pages/app/live/LiveOverlay") ||
               id.includes("/src/components/overlay/")

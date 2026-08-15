@@ -8,7 +8,24 @@ interface LogContext {
   [key: string]: unknown;
 }
 
-const REDACTED_KEYS = ["apiKey", "token", "password", "secret", "authorization"];
+const REDACTED_KEYS = [
+  "apiKey",
+  "token",
+  "password",
+  "secret",
+  "authorization",
+  "transcript",
+  "full_transcript",
+  "transcript_chunk",
+  "utterance",
+  "utterances",
+  "document",
+  "document_text",
+  "prompt",
+  "resume",
+  "session_text",
+  "answer_text",
+];
 
 function log(level: LogLevel, message: string, context?: LogContext): void {
   const sentryReady = Boolean((Deno.env.get("SENTRY_DSN") ?? "").trim());
@@ -21,8 +38,10 @@ function log(level: LogLevel, message: string, context?: LogContext): void {
     ...context,
   };
 
-  for (const key of REDACTED_KEYS) {
-    if (key in entry) entry[key] = "[REDACTED]";
+  for (const key of Object.keys(entry)) {
+    if (REDACTED_KEYS.some((redacted) => redacted.toLowerCase() === key.toLowerCase())) {
+      entry[key] = "[REDACTED]";
+    }
   }
 
   const output = JSON.stringify(entry);
@@ -49,3 +68,5 @@ export const logger = {
 export function withRequestId(): string {
   return crypto.randomUUID();
 }
+
+export { skipTrainingSink, hasAiTrainingConsent } from "./aiTrainingConsent.ts";
