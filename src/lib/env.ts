@@ -55,7 +55,7 @@ function parseAppEnvironment(value: string): AppEnvironment {
   return "development";
 }
 
-function assertValidUrl(value: string, name: string): string {
+function assertValidUrl(value: string, name: string, fallback: string): string {
   try {
     const parsed = new URL(value);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
@@ -63,9 +63,8 @@ function assertValidUrl(value: string, name: string): string {
     }
     return parsed.toString().replace(/\/+$/, "");
   } catch {
-    const message = `[env] ${name} must be a valid http(s) URL.`;
-    console.error(message);
-    throw new Error(message);
+    console.error(`[env] ${name} must be a valid http(s) URL. Using fallback.`);
+    return fallback.replace(/\/+$/, "");
   }
 }
 
