@@ -32,20 +32,6 @@ export type AppEnvironment =
   | "production"
   | "test";
 
-function firstDefined(keys: string[]): string {
-  for (const key of keys) {
-    const value = rawEnv[key];
-    if (typeof value === "string" && value.trim().length > 0) {
-      return value.trim();
-    }
-  }
-  const message =
-    `[env] Missing required environment variable: ${keys.join(", ")}. ` +
-    "Copy .env.example → .env.local and set required values.";
-  console.error(message);
-  throw new Error(message);
-}
-
 function optional(keys: string[], fallback = ""): string {
   for (const key of keys) {
     const value = rawEnv[key];
