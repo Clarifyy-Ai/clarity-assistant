@@ -4174,6 +4174,60 @@ export type Database = {
         }
         Relationships: []
       }
+      practice_contexts: {
+        Row: {
+          company: string | null
+          competency: string | null
+          consumed_at: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          jd_id: string | null
+          question_text: string
+          resume_id: string | null
+          role: string | null
+          source_id: string | null
+          source_type: string
+          source_version: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          company?: string | null
+          competency?: string | null
+          consumed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          jd_id?: string | null
+          question_text?: string
+          resume_id?: string | null
+          role?: string | null
+          source_id?: string | null
+          source_type?: string
+          source_version?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          company?: string | null
+          competency?: string | null
+          consumed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          jd_id?: string | null
+          question_text?: string
+          resume_id?: string | null
+          role?: string | null
+          source_id?: string | null
+          source_type?: string
+          source_version?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       practice_rooms: {
         Row: {
           created_at: string
@@ -6060,8 +6114,10 @@ export type Database = {
           model_used: Database["public"]["Enums"]["ai_model"] | null
           notes: string | null
           overall_score: number | null
+          practice_context_id: string | null
           questions_asked: number | null
           session_type: string | null
+          source_type: string | null
           started_at: string | null
           status: Database["public"]["Enums"]["session_status"]
           tags: string[] | null
@@ -6090,8 +6146,10 @@ export type Database = {
           model_used?: Database["public"]["Enums"]["ai_model"] | null
           notes?: string | null
           overall_score?: number | null
+          practice_context_id?: string | null
           questions_asked?: number | null
           session_type?: string | null
+          source_type?: string | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["session_status"]
           tags?: string[] | null
@@ -6120,8 +6178,10 @@ export type Database = {
           model_used?: Database["public"]["Enums"]["ai_model"] | null
           notes?: string | null
           overall_score?: number | null
+          practice_context_id?: string | null
           questions_asked?: number | null
           session_type?: string | null
+          source_type?: string | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["session_status"]
           tags?: string[] | null
