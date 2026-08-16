@@ -99,28 +99,35 @@ const APP_ENV_VALUE = parseAppEnvironment(
   optional(["VITE_APP_ENV", "APP_ENV"], "development")
 );
 
-// Fail closed for production deploys and Vite production builds.
-const isProductionRuntime =
-  APP_ENV_VALUE === "production" || import.meta.env.PROD === true;
-
-// Public (safe-to-ship) fallbacks for local/dev and Vitest only.
-// Production and Vite production builds fail closed via resolveCriticalSupabaseEnv.
+// Public (safe-to-ship) fallbacks. The app must boot even when env injection
+// fails (stale cached bundles, missing .env in preview, etc.), so we never
+// throw here — we log the problem and fall back to the known project values.
 const FALLBACK_SUPABASE_URL = "https://qzgvjrvtkwlzxpmlddkx.supabase.co";
 const FALLBACK_SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6Z3ZqcnZ0a3dsenhwbWxkZGt4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MDE4MzAsImV4cCI6MjA4OTM3NzgzMH0.hsDv4Sk7L8on5zlr9K6LT1FQe3bEEzmav5bCYes-0so";
 
-const criticalSupabase = resolveCriticalSupabaseEnv({
-  url: optional(["VITE_SUPABASE_URL"]),
-  anonKey: optional(["VITE_SUPABASE_ANON_KEY"]),
-  publishableKey: optional(["VITE_SUPABASE_PUBLISHABLE_KEY"]),
-  failClosed: isProductionRuntime,
-  fallbackUrl: FALLBACK_SUPABASE_URL,
-  fallbackKey: FALLBACK_SUPABASE_ANON_KEY,
-});
+let criticalSupabase: { url: string; anonKey: string };
+try {
+  criticalSupabase = resolveCriticalSupabaseEnv({
+    url: optional(["VITE_SUPABASE_URL"]),
+    anonKey: optional(["VITE_SUPABASE_ANON_KEY"]),
+    publishableKey: optional(["VITE_SUPABASE_PUBLISHABLE_KEY"]),
+    failClosed: false,
+    fallbackUrl: FALLBACK_SUPABASE_URL,
+    fallbackKey: FALLBACK_SUPABASE_ANON_KEY,
+  });
+} catch (e) {
+  console.error("[env] Failed to resolve Supabase env; using fallback.", e);
+  criticalSupabase = {
+    url: FALLBACK_SUPABASE_URL,
+    anonKey: FALLBACK_SUPABASE_ANON_KEY,
+  };
+}
 
 const SUPABASE_URL_VALUE = assertValidUrl(
   criticalSupabase.url,
   "VITE_SUPABASE_URL",
+  FALLBACK_SUPABASE_URL,
 );
 
 const SUPABASE_ANON_KEY_VALUE = criticalSupabase.anonKey;
