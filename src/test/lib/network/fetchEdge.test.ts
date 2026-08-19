@@ -27,6 +27,16 @@ vi.mock("@/hooks/usePrivateMode", () => ({
 }));
 
 vi.mock("@/lib/env", () => ({
+  ENV: {
+    STRIPE_PRICE_STARTER_MONTHLY: "price_mock_starter_m",
+    STRIPE_PRICE_STARTER_YEARLY: "price_mock_starter_y",
+    STRIPE_PRICE_PRO_MONTHLY: "price_mock_pro_m",
+    STRIPE_PRICE_PRO_YEARLY: "price_mock_pro_y",
+    STRIPE_PRICE_ELITE_MONTHLY: "price_mock_elite_m",
+    STRIPE_PRICE_ELITE_YEARLY: "price_mock_elite_y",
+    STRIPE_PRICE_ENTERPRISE_MONTHLY: "price_mock_ent_m",
+    STRIPE_PRICE_ENTERPRISE_YEARLY: "price_mock_ent_y",
+  },
   EDGE_BASE: "https://edge.test/functions/v1",
   SUPABASE_PUBLISHABLE_KEY: "anon-key",
 }));
