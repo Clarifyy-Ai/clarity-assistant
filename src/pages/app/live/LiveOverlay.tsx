@@ -70,6 +70,7 @@ function LiveOverlaySession() {
   const [phase, setPhase] = useState<"setup" | "starting" | "active">("setup");
   const [config, setConfig] = useState<LiveSessionConfig>(DEFAULT_CONFIG);
   const [lastSessionId, setLastSessionId] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
 
   const hasStartedRef = useRef(false);
   const didEndRef = useRef(false);
@@ -144,6 +145,7 @@ function LiveOverlaySession() {
     didEndRef.current = false;
 
     setLastSessionId(null);
+    setStartError(null);
     setConfig(sessionConfig);
     setPhase("starting");
   }, []);
@@ -169,6 +171,7 @@ function LiveOverlaySession() {
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : "Failed to start live session";
         toast.error(message);
+        setStartError(message);
         hasStartedRef.current = false;
         useSessionStore.getState().resetSession();
         useOverlayStore.getState().hideOverlay();
@@ -318,6 +321,20 @@ function LiveOverlaySession() {
             Session will start when context and audio are ready.
           </p>
         )}
+      </div>
+    );
+  }
+
+  if (phase === "setup" && startError) {
+    return (
+      <div className="mx-auto flex min-h-[50vh] max-w-md flex-col justify-center gap-4 px-4 text-center">
+        <AlertTriangle className="mx-auto h-8 w-8 text-red-500" />
+        <h1 className="text-lg font-semibold">Couldn’t start the practice overlay</h1>
+        <p className="text-sm text-muted-foreground">{startError}</p>
+        <div className="flex justify-center gap-2">
+          <Button variant="outline" onClick={() => setStartError(null)}>Edit setup</Button>
+          <Button onClick={() => { setStartError(null); setPhase("starting"); }}>Retry</Button>
+        </div>
       </div>
     );
   }

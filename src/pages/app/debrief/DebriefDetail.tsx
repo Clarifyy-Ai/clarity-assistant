@@ -296,7 +296,6 @@ export default function DebriefDetail() {
           { id: "strengths", label: "Strengths" },
           { id: "improvements", label: "Improvements" },
           { id: "charts", label: "Charts" },
-          { id: "share", label: "Share" },
         ].map((item) => (
           <a
             key={item.id}
@@ -582,7 +581,7 @@ export default function DebriefDetail() {
       )}
 
       {/* Sprint B extras */}
-      <div id="debrief-share" className="scroll-mt-24 sm:scroll-mt-16">
+      <div>
       <DebriefExtras
         debriefId={debrief.id}
         wpmSeries={detailedReport.wpm_series}

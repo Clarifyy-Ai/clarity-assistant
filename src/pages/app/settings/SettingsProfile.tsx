@@ -141,6 +141,10 @@ export default function SettingsProfile() {
       toast.error("Enter your current password to confirm the email change.");
       return;
     }
+    if (trimmed.toLowerCase() === user.email?.trim().toLowerCase()) {
+      toast.info("That is already your current email address.");
+      return;
+    }
 
     setEmailSaving(true);
     try {

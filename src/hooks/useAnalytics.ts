@@ -106,7 +106,9 @@ export function useAnalytics() {
       };
 
       setComparison(result);
-    } catch { /* non-fatal */ }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not compare those sessions.");
+    }
   }, []);
 
   async function fetchSessionSummary(
@@ -169,20 +171,24 @@ export function useAnalytics() {
       "Overall Score", "Filler Rate", "WPM", "Duration (min)", "Questions",
     ];
 
+    const escapeCsv = (value: unknown) => {
+      const text = value === null || value === undefined ? "" : String(value);
+      return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
     const rows = data.recent_sessions.map((s) => [
       new Date(s.date).toLocaleDateString(),
-      s.mode,
-      s.interview_type,
-      s.company ?? "—",
-      s.overall_score,
-      s.filler_rate.toFixed(2),
-      s.wpm_avg,
-      s.duration_minutes,
-      s.question_count,
+      s.mode ?? "",
+      s.interview_type ?? "",
+      s.company ?? "",
+      s.overall_score ?? "",
+      typeof s.filler_rate === "number" ? s.filler_rate.toFixed(2) : "",
+      s.wpm_avg ?? "",
+      s.duration_minutes ?? "",
+      s.question_count ?? "",
     ]);
 
     const csv = [headers, ...rows]
-      .map((row) => row.join(","))
+      .map((row) => row.map(escapeCsv).join(","))
       .join("\n");
 
     const blob = new Blob([csv], { type: "text/csv" });
@@ -210,6 +216,7 @@ export function useAnalytics() {
       (s) => new Date(s.date) >= weekAgo
     ).length;
   })();
+  const sessionsInSelectedPeriod = data?.total_sessions ?? 0;
 
   const scoreTrend = (data?.confidence_trend ?? []).map((p) => ({
     date: p.date,
@@ -266,6 +273,7 @@ export function useAnalytics() {
     avgScore30d,
     scoreDelta,
     sessionsThisWeek,
+    sessionsInSelectedPeriod,
     avgWpm,
     avgFillers,
     fillerDelta,

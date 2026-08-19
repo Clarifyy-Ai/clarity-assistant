@@ -78,6 +78,7 @@ export default function CommunityPage() {
     <div className={PAGE_SHELL}>
       <PageHeader
         title="Questions & Answers"
+        breadcrumbs={[{ label: "Dashboard", href: "/app/dashboard" }, { label: "Questions & Answers" }]}
         badge="Preview"
         description={
           isPreview

@@ -169,7 +169,9 @@ export default function SettingsSecurity() {
               />
               <button
                 type="button"
-                onClick={() => setShowPw(!showPw)}
+                  onClick={() => setShowPw((visible) => !visible)}
+                  aria-label={showPw ? "Hide new password" : "Show new password"}
+                  aria-pressed={showPw}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
                 {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}

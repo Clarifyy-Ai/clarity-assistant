@@ -2,6 +2,7 @@ import type { LicenseType } from "@/lib/content/license";
 
 export const LIBRARY_MIME_TYPES = [
   "application/pdf",
+  "application/msword",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "text/plain",
   "text/csv",

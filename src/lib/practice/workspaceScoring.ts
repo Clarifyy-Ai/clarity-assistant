@@ -41,6 +41,11 @@ function hasStar(text: string): boolean {
   );
 }
 
+function isNonResponsive(text: string): boolean {
+  const normalized = text.trim().toLowerCase().replace(/[^a-z0-9\s]/g, "");
+  return normalized.length < 10 || /^(idk|i dont know|dont know|na|n a|none|no idea|skip)$/.test(normalized);
+}
+
 export function scorePracticeAnswers(
   answers: PracticeAnswer[],
   interviewType: InterviewType,
@@ -57,6 +62,17 @@ export function scorePracticeAnswers(
   }
 
   const lengths = answers.map((a) => wordCount(a.answer));
+  const nonResponsiveCount = answers.filter((a) => isNonResponsive(a.answer)).length;
+  if (nonResponsiveCount === answers.length) {
+    return {
+      overall: 0,
+      technical: 0,
+      communication: 0,
+      answerQuality: 0,
+      areasToImprove: ["Replace non-responsive answers with specific examples, reasoning, and outcomes."],
+      rubricNote: "Practice rubric only — non-responsive answers are not eligible for a positive score.",
+    };
+  }
   const avgWords = lengths.reduce((s, n) => s + n, 0) / lengths.length;
   const communication = clamp(avgWords >= 80 ? 85 : avgWords >= 40 ? 70 : avgWords >= 15 ? 55 : 35);
 
@@ -70,7 +86,9 @@ export function scorePracticeAnswers(
   const technicalBase = interviewType === "Behavioral" || interviewType === "HR" ? 55 : 45;
   const technical = clamp(technicalBase + (keywordHits / answers.length) * 40);
 
-  const overall = clamp((technical + communication + answerQuality) / 3);
+  // A non-answer must never be offset by otherwise strong responses.
+  const responsiveRatio = (answers.length - nonResponsiveCount) / answers.length;
+  const overall = clamp(((technical + communication + answerQuality) / 3) * responsiveRatio);
   const areasToImprove: string[] = [];
   if (communication < 65) areasToImprove.push("Expand answers with a clearer beginning, middle, and end.");
   if (answerQuality < 65) areasToImprove.push("Use a Situation–Task–Action–Result structure with a concrete outcome.");

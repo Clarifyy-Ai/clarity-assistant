@@ -195,6 +195,24 @@ export default function Dashboard() {
       });
   }, [userId, sessionCountReloadKey]);
 
+  // Browsers can throttle a request while the tab is backgrounded. Refresh on
+  // return and fail closed rather than leaving the dashboard skeleton forever.
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") setSessionCountReloadKey((key) => key + 1);
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => document.removeEventListener("visibilitychange", refreshWhenVisible);
+  }, []);
+
+  useEffect(() => {
+    if (sessionCount !== null || !userId) return;
+    const timeout = window.setTimeout(() => {
+      setSessionCountError("Dashboard data is taking too long to load. Please retry.");
+    }, 15_000);
+    return () => window.clearTimeout(timeout);
+  }, [sessionCount, userId, sessionCountReloadKey]);
+
 
   const todayInterview = (scheduler.interviews as ScheduledInterview[]).find((i) => {
     if (!i.scheduled_at) return false;

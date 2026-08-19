@@ -249,9 +249,21 @@ export default function NewInterview() {
     [company, roleTitle, scheduleDate, scheduleTime, isEditMode],
   );
 
+  const validationMessage = useMemo(() => {
+    if (!company.trim()) return "Company name is required.";
+    if (!roleTitle.trim()) return "Role or position is required.";
+    if (!scheduleDate || !scheduleTime) return "Choose an interview date and time.";
+    if (!isEditMode && !scheduledAtIso) return "Choose a valid future interview time.";
+    if (!isEditMode && new Date(scheduledAtIso).getTime() <= Date.now()) return "Choose a future interview time.";
+    return null;
+  }, [company, roleTitle, scheduleDate, scheduleTime, isEditMode, scheduledAtIso]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!canSubmit || loading) return;
+    if (!canSubmit || loading) {
+      setError(validationMessage ?? "Complete the required fields before scheduling.");
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -476,7 +488,7 @@ export default function NewInterview() {
           </h3>
           <div className="space-y-4">
             <Input
-              label="Company name"
+              label="Company name *"
               value={company}
               onChange={(e) => setCompany(e.target.value)}
               placeholder="e.g. Google"
@@ -485,7 +497,7 @@ export default function NewInterview() {
               autoFocus
             />
             <Input
-              label="Role / position"
+              label="Role / position *"
               value={roleTitle}
               onChange={(e) => setRoleTitle(e.target.value)}
               placeholder="e.g. Senior Software Engineer"
@@ -766,7 +778,7 @@ export default function NewInterview() {
             size="md"
             fullWidth
             loading={loading}
-            disabled={!canSubmit || loading}
+            disabled={loading}
             leftIcon={<CalendarDays className="w-4 h-4" aria-hidden="true" />}
           >
             {isEditMode ? "Save changes" : "Schedule interview"}

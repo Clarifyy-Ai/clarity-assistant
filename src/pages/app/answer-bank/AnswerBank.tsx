@@ -38,6 +38,20 @@ import {
 // ─────────────────────────────────────────────────────────────────
 
 const CATEGORIES = ["All", "Behavioural", "Technical", "Leadership", "System Design", "HR"];
+const MAX_ANSWER_LENGTH = 5000;
+
+function validateAnswer(question: string, answer: string, existingAnswers: string[]): string | null {
+  const normalized = answer.trim().toLowerCase().replace(/\s+/g, " ");
+  if (question.trim().length < 5) return "Enter a question of at least 5 characters.";
+  if (answer.trim().length < 10) return "Your answer must be at least 10 characters.";
+  if (answer.length > MAX_ANSWER_LENGTH) return `Your answer must be no more than ${MAX_ANSWER_LENGTH} characters.`;
+  if (/^(.)\1{7,}$/s.test(answer.trim())) return "Please enter a meaningful answer, not repeated characters.";
+  if (new Set(normalized.replace(/\s/g, "")).size < 3) return "Please enter a meaningful answer, not repeated characters.";
+  if (existingAnswers.some((entry) => entry.trim().toLowerCase().replace(/\s+/g, " ") === normalized)) {
+    return "This answer is already saved for your account.";
+  }
+  return null;
+}
 
 export default function AnswerBank() {
   const { user }  = useAuthStore();
@@ -79,6 +93,15 @@ export default function AnswerBank() {
     if (!editId) return;
     try {
       if (!user?.id) return;
+      const validationError = validateAnswer(
+        answers.find((entry) => entry.id === editId)?.question_text ?? "Question",
+        editText,
+        answers.filter((entry) => entry.id !== editId).map((entry) => entry.answer_text ?? ""),
+      );
+      if (validationError) {
+        toast.error(validationError);
+        return;
+      }
       await answerBankDB.update(user.id, editId, { answer_text: editText });
       setAnswers((p) =>
         p.map((a) => a.id === editId ? { ...a, answer_text: editText } : a)
@@ -376,6 +399,7 @@ export default function AnswerBank() {
         onClose={() => setAddOpen(false)}
         onSaved={(a) => { setAnswers((p) => [a, ...p]); setAddOpen(false); }}
         userId={user?.id ?? ""}
+        existingAnswers={answers.map((entry) => entry.answer_text ?? "")}
       />
     </div>
   );
@@ -386,12 +410,13 @@ export default function AnswerBank() {
 // ─────────────────────────────────────────────────────────────────
 
 function AddAnswerModal({
-  open, onClose, onSaved, userId,
+  open, onClose, onSaved, userId, existingAnswers,
 }: {
   open:    boolean;
   onClose: () => void;
   onSaved: (a: Tables<"answer_bank">) => void;
   userId:  string;
+  existingAnswers: string[];
 }) {
   const [question, setQuestion] = useState("");
   const [answer,   setAnswer]   = useState("");
@@ -436,6 +461,11 @@ function AddAnswerModal({
 
   async function handleSave() {
     if (!question.trim() || !answer.trim()) return;
+    const validationError = validateAnswer(question, answer, existingAnswers);
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
     setSaving(true);
     try {
       const data = await answerBankDB.create(userId, {
@@ -505,11 +535,12 @@ function AddAnswerModal({
           </div>
           <textarea
             value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
+            onChange={(e) => setAnswer(e.target.value.slice(0, MAX_ANSWER_LENGTH))}
             placeholder="Write your answer here, or generate a draft with AI…"
             rows={6}
             className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
           />
+          <p className="mt-1 text-xs text-muted-foreground">{answer.length}/{MAX_ANSWER_LENGTH} characters (minimum 10).</p>
         </div>
         <div className="flex gap-3">
           <Button variant="secondary" size="sm" fullWidth onClick={onClose}>

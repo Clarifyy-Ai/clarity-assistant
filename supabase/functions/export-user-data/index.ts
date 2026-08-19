@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
           "full_name, email, plan, created_at, experience_level, target_role"
         )
         .eq("id", user_id)
-        .single();
+        .maybeSingle();
 
       if (pErr) throw pErr;
 
@@ -151,7 +151,10 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error("[export-user-data] error:", err);
     return new Response(
-      JSON.stringify({ error: "Internal server error", code: "INTERNAL_ERROR" }),
+      JSON.stringify({
+        error: "We couldn't prepare your export. Please try again in a moment.",
+        code: "EXPORT_FAILED",
+      }),
       {
         status: 500,
         headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },

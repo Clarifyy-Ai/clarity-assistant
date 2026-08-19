@@ -178,8 +178,8 @@ export default function Analytics() {
           icon={<BarChart2 className="w-4 h-4 text-primary" />}
         />
         <KPICard
-          label="Sessions this week"
-          value={`${analytics.sessionsThisWeek ?? 0}`}
+          label={`Sessions (${analytics.filter.period})`}
+          value={`${analytics.sessionsInSelectedPeriod ?? 0}`}
           icon={<Calendar className="w-4 h-4 text-blue-400" />}
         />
         <KPICard

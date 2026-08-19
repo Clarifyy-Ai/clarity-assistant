@@ -72,6 +72,9 @@ interface NavCommand {
   featureFlag?: FeatureFlagId;
 }
 
+const MAX_SEARCH_LENGTH = 200;
+const SAFE_SEARCH_TEXT = /^[\p{L}\p{N}\s.,:;!?&()'"/+#_-]*$/u;
+
 const COMMANDS: NavCommand[] = [
 
   { label: PRODUCT_NAMES.dashboard, path: "/app/dashboard", icon: Home, group: "Navigate", keywords: "home" },
@@ -166,6 +169,7 @@ export function CommandPalette() {
   const [isSearching, setIsSearching] = useState(false);
 
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [queryError, setQueryError] = useState<string | null>(null);
 
   const navigate = useNavigate();
 
@@ -213,6 +217,7 @@ export function CommandPalette() {
     } else {
 
       setQuery("");
+      setQueryError(null);
 
     }
 
@@ -285,6 +290,20 @@ export function CommandPalette() {
 
   );
 
+  const handleQueryChange = useCallback((value: string) => {
+    if (value.length > MAX_SEARCH_LENGTH) {
+      setQueryError(`Search is limited to ${MAX_SEARCH_LENGTH} characters.`);
+      setQuery(value.slice(0, MAX_SEARCH_LENGTH));
+      return;
+    }
+    if (!SAFE_SEARCH_TEXT.test(value) || /<\s*script|[\u0000-\u001f\u007f]/i.test(value)) {
+      setQueryError("Use letters, numbers, spaces, and standard punctuation only.");
+      return;
+    }
+    setQueryError(null);
+    setQuery(value);
+  }, []);
+
 
 
   // Relevance score: exact match first, then prefix match on label/keywords,
@@ -351,11 +370,15 @@ export function CommandPalette() {
 
         value={query}
 
-        onValueChange={setQuery}
+        onValueChange={handleQueryChange}
 
       />
 
       <CommandList aria-busy={isSearching}>
+
+        {queryError && (
+          <div className="px-4 py-2 text-sm text-red-500" role="alert">{queryError}</div>
+        )}
 
         {!canFilter && !isSearching && (
 

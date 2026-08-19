@@ -66,6 +66,31 @@ import { creditCost } from "../_shared/creditEconomics.ts";
 
 const COST = creditCost("live_answer");
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function retryTransient<T>(operation: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts - 1) await sleep(250 * 2 ** attempt);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("AI request failed");
+}
+
+async function fetchGeminiWithRetry(url: string, init: RequestInit): Promise<Response> {
+  let response: Response | null = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    response = await fetch(url, init);
+    if (response.ok || (response.status < 500 && response.status !== 429)) return response;
+    if (attempt < 2) await sleep(250 * 2 ** attempt);
+  }
+  return response!;
+}
+
 const SYSTEM_PROMPT_BEHAVIORAL = `You are an expert interview coach helping a candidate answer live interview questions.
 
 Generate a complete, confident answer using the STAR method: Situation, Task, Action, Result.
@@ -607,7 +632,7 @@ Deno.serve(async (req: Request) => {
   if (!isGeminiModel(model)) {
     const aiStartMs = Date.now();
     try {
-      const result = await callAI(
+      const result = await retryTransient(() => callAI(
         {
           model: model as ModelId,
           messages: [
@@ -617,7 +642,7 @@ Deno.serve(async (req: Request) => {
           maxTokens: 1024,
           temperature: 0.7,
         },
-      );
+      ));
 
       void logAICost(db, {
         userId: user.id,
@@ -695,7 +720,7 @@ Deno.serve(async (req: Request) => {
   let geminiResponse: Response;
 
   try {
-    geminiResponse = await fetch(geminiUrl, {
+    geminiResponse = await fetchGeminiWithRetry(geminiUrl, {
       method: "POST",
       signal: req.signal,
       headers: {

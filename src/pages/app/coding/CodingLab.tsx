@@ -83,6 +83,7 @@ export default function CodingLabPage() {
     <div className={PAGE_SHELL}>
       <PageHeader
         title="Coding Assessment"
+        breadcrumbs={[{ label: "Dashboard", href: "/app/dashboard" }, { label: "Coding Assessment" }]}
         badge="Preview"
         description={
           isPreview

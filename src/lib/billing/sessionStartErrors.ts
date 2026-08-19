@@ -25,10 +25,9 @@ export function isSessionLimitError(error: unknown): boolean {
 /** Returns true when the error was handled (upgrade prompt shown). */
 export function handleSessionStartError(error: unknown): boolean {
   if (isSessionLimitError(error)) {
-    const message =
-      error instanceof ApiClientError
-        ? error.message
-        : "You've reached your session limit for today.";
+    const resetAt = new Date();
+    resetAt.setHours(24, 0, 0, 0);
+    const message = `Daily session limit reached — you've used all your free sessions for today. Upgrade or come back tomorrow at ${resetAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.`;
     toast.error(message);
     useUIStore.getState().openUpgradeModal("session_limit");
     return true;

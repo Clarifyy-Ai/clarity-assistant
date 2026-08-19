@@ -56,8 +56,8 @@ export default function DocumentLibraryPage() {
       toast.error("Confirm you have permission to use this file.");
       return;
     }
-    if (!isAllowedLibraryMime(file.type) && !/\.(pdf|docx|txt|csv)$/i.test(file.name)) {
-      toast.error("Allowed: PDF, DOCX, TXT, CSV.");
+    if (!isAllowedLibraryMime(file.type) && !/\.(pdf|doc|docx|txt|csv)$/i.test(file.name)) {
+      toast.error("Allowed: PDF, DOC, DOCX, TXT, CSV.");
       return;
     }
     const path = `${user.id}/library/${Date.now()}-${file.name.replace(/[^\w.-]/g, "_")}`;
@@ -115,6 +115,7 @@ export default function DocumentLibraryPage() {
       <PageHeader
         title="Personal Document Library"
         description="Upload documents you own or have permission to use. Clarify does not scrape copyrighted exam papers."
+        breadcrumbs={[{ label: "Dashboard", href: "/app/dashboard" }, { label: "Document Library" }]}
       />
       <Card className="mb-4 space-y-3">
         <label className="flex items-start gap-2 text-sm">
@@ -132,7 +133,7 @@ export default function DocumentLibraryPage() {
         </Select>
         <input
           type="file"
-          accept=".pdf,.docx,.txt,.csv,application/pdf,text/plain,text/csv"
+          accept=".pdf,.doc,.docx,.txt,.csv,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/csv"
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) void upload(file);

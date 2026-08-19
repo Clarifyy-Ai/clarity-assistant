@@ -143,16 +143,25 @@ export default function QuestionBankPage() {
       toast.error("UNKNOWN license content cannot be published.");
     }
     setSaving(true);
+    const isMcq = form.question_type === "MCQ";
     const options = [
       { label: "A", text: form.option_a },
       { label: "B", text: form.option_b },
       { label: "C", text: form.option_c },
       { label: "D", text: form.option_d },
     ].filter((o) => o.text.trim());
+    if (isMcq && (options.length < 2 || !options.some((option) => option.label === form.correct_answer))) {
+      toast.error("MCQ questions need at least two options and a matching correct option.");
+      return;
+    }
+    if (!isMcq && !form.correct_answer.trim()) {
+      toast.error("Enter the expected answer for this short-answer question.");
+      return;
+    }
     const payload = {
       question_text: form.question_text.trim(),
       question_type: form.question_type,
-      options,
+      options: isMcq ? options : [],
       correct_answer: form.correct_answer,
       explanation: form.explanation || null,
       subject: form.category,
@@ -269,6 +278,10 @@ export default function QuestionBankPage() {
       <PageHeader
         title="Question Bank"
         description="Original, user-authored, and licensed questions you have rights to use. Copyrighted exam banks are not imported here."
+        breadcrumbs={[
+          { label: "Dashboard", href: "/app/dashboard" },
+          { label: "Question Bank" },
+        ]}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={exportJson} leftIcon={<Download className="h-4 w-4" />}>
@@ -305,6 +318,7 @@ export default function QuestionBankPage() {
               placeholder="Question"
               className="min-h-[88px]"
             />
+            {form.question_type === "MCQ" ? <>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {(["option_a", "option_b", "option_c", "option_d"] as const).map((key) => (
                 <Input
@@ -315,6 +329,14 @@ export default function QuestionBankPage() {
                 />
               ))}
             </div>
+            </> : (
+              <Textarea
+                value={form.correct_answer}
+                placeholder="Expected answer"
+                onChange={(e) => setForm({ ...form, correct_answer: e.target.value })}
+                className="min-h-[88px]"
+              />
+            )}
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <Input value={form.category} placeholder="Category" onChange={(e) => setForm({ ...form, category: e.target.value })} />
               <Input value={form.topic} placeholder="Topic" onChange={(e) => setForm({ ...form, topic: e.target.value })} />
@@ -338,7 +360,9 @@ export default function QuestionBankPage() {
               </Select>
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {form.question_type === "MCQ" && (
               <Input value={form.correct_answer} placeholder="Correct (A/B/C/D)" onChange={(e) => setForm({ ...form, correct_answer: e.target.value.toUpperCase() })} />
+              )}
               <Select value={form.license_type} onValueChange={(v) => setForm({ ...form, license_type: v as LicenseType })}>
                 <SelectTrigger><SelectValue placeholder="License" /></SelectTrigger>
                 <SelectContent>

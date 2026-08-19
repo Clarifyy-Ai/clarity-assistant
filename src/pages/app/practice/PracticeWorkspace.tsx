@@ -26,6 +26,19 @@ import {
   type InterviewType,
 } from "@/lib/practice/workspaceScoring";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+const MIN_ANSWER_LENGTH = 10;
+const MAX_ANSWER_LENGTH = 5000;
 
 export default function PracticeWorkspacePage() {
   const user = useAuthStore((s) => s.user);
@@ -38,6 +51,8 @@ export default function PracticeWorkspacePage() {
   const [index, setIndex] = useState(0);
   const [notes, setNotes] = useState("");
   const [answers, setAnswers] = useState<string[]>([]);
+  const [skipped, setSkipped] = useState<boolean[]>([]);
+  const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [questions, setQuestions] = useState<PracticeWorkspaceQuestion[]>([]);
   const [questionSource, setQuestionSource] = useState<PracticeQuestionSource>("local");
   const [history, setHistory] = useState<Array<{ id: string; interview_type: string; scores: { overall?: number } | null; started_at: string }>>([]);
@@ -71,6 +86,7 @@ export default function PracticeWorkspacePage() {
       setQuestions(result.questions);
       setQuestionSource(result.source);
       setAnswers([]);
+      setSkipped([]);
       setIndex(0);
       setSeconds(0);
       setStarted(true);
@@ -83,7 +99,20 @@ export default function PracticeWorkspacePage() {
 
   async function finish() {
     if (!user?.id) return;
-    const packed = questions.map((q, i) => ({ question: q.question, answer: answers[i] ?? "" }));
+    const invalidAnswerIndex = answers.findIndex(
+      (answer, i) => !skipped[i] && answer.trim().length > 0 && answer.trim().length < MIN_ANSWER_LENGTH,
+    );
+    if (invalidAnswerIndex !== -1) {
+      setShowEndConfirm(false);
+      setIndex(invalidAnswerIndex);
+      toast.error(`Answer ${invalidAnswerIndex + 1} must be at least ${MIN_ANSWER_LENGTH} characters, or mark it as skipped.`);
+      return;
+    }
+    const packed = questions.map((q, i) => ({
+      question: q.question,
+      answer: answers[i] ?? "",
+      status: skipped[i] || !(answers[i] ?? "").trim() ? "skipped" : "answered",
+    }));
     const scores = scorePracticeAnswers(packed, interviewType);
     const { error } = await supabase.from("practice_workspace_sessions").insert({
       user_id: user.id,
@@ -95,9 +124,14 @@ export default function PracticeWorkspacePage() {
       answers: packed,
       scores,
     });
-    if (error) toast.error(error.message);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setShowEndConfirm(false);
     setStarted(false);
     setAnswers([]);
+    setSkipped([]);
     setIndex(0);
     setSeconds(0);
     toast.success(`Overall ${scores.overall}. This is a practice rubric, not an official score.`);
@@ -152,20 +186,59 @@ export default function PracticeWorkspacePage() {
               className="mt-2 min-h-[140px]"
               value={answers[index] ?? ""}
               onChange={(e) => {
+                const value = e.target.value.slice(0, MAX_ANSWER_LENGTH);
                 const next = [...answers];
-                next[index] = e.target.value;
+                next[index] = value;
                 setAnswers(next);
+                if (value.trim()) {
+                  setSkipped((current) => {
+                    const next = [...current];
+                    next[index] = false;
+                    return next;
+                  });
+                }
               }}
             />
+            <p className="mt-1 text-xs text-muted-foreground">
+              {(answers[index] ?? "").length}/{MAX_ANSWER_LENGTH} characters. Answers need at least {MIN_ANSWER_LENGTH} characters; use Skip if you do not know.
+            </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Button variant="outline" disabled={index === 0} onClick={() => setIndex((i) => i - 1)}>Previous</Button>
-              <Button variant="outline" disabled={index >= questions.length - 1} onClick={() => setIndex((i) => i + 1)}>Next</Button>
-              <Button onClick={() => void finish()}>End session</Button>
+              <Button variant="outline" disabled={index >= questions.length - 1} onClick={() => {
+                const answer = (answers[index] ?? "").trim();
+                if (answer && answer.length < MIN_ANSWER_LENGTH) {
+                  toast.error(`Answer must be at least ${MIN_ANSWER_LENGTH} characters, or choose Skip.`);
+                  return;
+                }
+                setIndex((i) => i + 1);
+              }}>Next</Button>
+              <Button variant="outline" onClick={() => {
+                setSkipped((current) => {
+                  const next = [...current];
+                  next[index] = true;
+                  return next;
+                });
+                if (index < questions.length - 1) setIndex((i) => i + 1);
+              }}>Skip / I don't know</Button>
+              <Button onClick={() => setShowEndConfirm(true)}>End session</Button>
             </div>
           </Card>
           <Card className="min-w-0">
             <h3 className="text-sm font-semibold">Notes</h3>
             <Textarea className="mt-2 min-h-[180px]" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            {skipped.some(Boolean) && (
+              <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+                <h4 className="text-sm font-semibold">Skipped questions</h4>
+                <p className="mt-1 text-xs text-muted-foreground">Review any skipped question before ending the session.</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {skipped.map((wasSkipped, questionIndex) => wasSkipped && (
+                    <Button key={questions[questionIndex]?.id ?? questionIndex} size="xs" variant="outline" onClick={() => setIndex(questionIndex)}>
+                      Question {questionIndex + 1}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
             <p className="mt-3 text-xs text-muted-foreground">
               Everything on this page is visible. Use it to rehearse, not to hide assistance.
               {questionSource === "local"
@@ -175,6 +248,18 @@ export default function PracticeWorkspacePage() {
           </Card>
         </div>
       )}
+      <AlertDialog open={showEndConfirm} onOpenChange={setShowEndConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>End this practice session?</AlertDialogTitle>
+            <AlertDialogDescription>Are you sure you want to end this session? Your answers and skipped questions will be saved.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void finish()}>End Session</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

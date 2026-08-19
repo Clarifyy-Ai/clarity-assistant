@@ -16,6 +16,7 @@ export default function InterviewPracticePlanPage() {
   const [items, setItems] = useState<PracticePlanItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const daysLeft = daysUntilInterview(
     (profile as { interview_date?: string | null } | null)?.interview_date ?? null,
@@ -53,6 +54,7 @@ export default function InterviewPracticePlanPage() {
         return;
       }
 
+      try {
       const generated = buildInterviewPracticePlan({
         weakAreas: (profile as { interview_weaknesses?: string[] | null; improvement_goals?: string[] | null } | null)
           ?.interview_weaknesses ??
@@ -64,7 +66,7 @@ export default function InterviewPracticePlanPage() {
         interviewDate: (profile as { interview_date?: string | null } | null)?.interview_date,
       });
 
-      const { data: plan } = await supabase
+      const { data: plan, error: planError } = await supabase
         .from("interview_practice_plans")
         .insert({
           user_id: user.id,
@@ -75,10 +77,10 @@ export default function InterviewPracticePlanPage() {
         .select("id")
         .maybeSingle();
 
+      if (planError) throw planError;
       if (plan?.id) {
-        await supabase.from("interview_practice_plan_items").insert(
+        const { error: itemsError } = await supabase.from("interview_practice_plan_items").insert(
           generated.map((item) => ({
-            id: undefined,
             plan_id: plan.id,
             user_id: user.id,
             title: item.title,
@@ -90,10 +92,15 @@ export default function InterviewPracticePlanPage() {
             due_offset_days: item.due_offset_days,
           })),
         );
+        if (itemsError) throw itemsError;
       }
 
       if (!cancelled) setItems(generated);
-      setLoading(false);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not create your practice plan.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
     void load();
     return () => {
@@ -108,11 +115,15 @@ export default function InterviewPracticePlanPage() {
     setSavingId(item.id);
     const next = !item.completed;
     setItems((prev) => prev.map((row) => (row.id === item.id ? { ...row, completed: next } : row)));
-    await supabase
+    const { error: updateError } = await supabase
       .from("interview_practice_plan_items")
       .update({ completed: next, completed_at: next ? new Date().toISOString() : null })
       .eq("id", item.id)
       .eq("user_id", user.id);
+    if (updateError) {
+      setItems((prev) => prev.map((row) => (row.id === item.id ? { ...row, completed: item.completed } : row)));
+      setError(updateError.message);
+    }
     setSavingId(null);
   }
 
@@ -130,6 +141,7 @@ export default function InterviewPracticePlanPage() {
         </p>
       )}
       <p className="text-sm text-muted-foreground">{remaining} open activities</p>
+      {error && <p className="rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-500" role="alert">{error}</p>}
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading plan…</p>
       ) : (
