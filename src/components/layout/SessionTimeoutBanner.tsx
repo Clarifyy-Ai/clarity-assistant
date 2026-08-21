@@ -91,13 +91,13 @@ export function SessionTimeoutBanner() {
     try {
       const { data, error } = await supabase.auth.refreshSession();
       if (error) throw error;
-      if (data.session) {
-        setSession(data.session as Parameters<typeof setSession>[0]);
-      }
+      if (!data.session) throw new Error("Session refresh returned no session");
+      setSession(data.session as Parameters<typeof setSession>[0]);
       setShowWarning(false);
       setRemainingMs(null);
     } catch (err) {
       console.error("[SessionTimeoutBanner] refresh failed:", err);
+      await forceSignOut();
     } finally {
       setExtending(false);
     }

@@ -82,6 +82,7 @@ export class DeepgramStreamClient {
   private mediaRecorder: MediaRecorder | null = null;
 
   private reconnectAttempts = 0;
+  private seenFinalSegments = new Set<string>();
 
   // IMPORTANT:
   // - destroyed: permanent teardown (disconnect/unmount). connect() should not proceed.
@@ -90,6 +91,7 @@ export class DeepgramStreamClient {
   private restarting = false;
 
   private pingInterval: ReturnType<typeof setInterval> | null = null;
+  private tokenRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   private currentToken: string | null = null;
   private tokenExpiresAt = 0;
@@ -132,13 +134,13 @@ export class DeepgramStreamClient {
       const msg = err instanceof Error ? err.message : String(err);
       this.callbacks.onError(new Error(`Deepgram token error: ${msg}`));
       this.callbacks.onStatusChange("error");
-      return;
+      throw new Error(`Deepgram token error: ${msg}`);
     }
 
     if (!this.currentToken) {
       this.callbacks.onError(new Error("No Deepgram token available"));
       this.callbacks.onStatusChange("error");
-      return;
+      throw new Error("No Deepgram token available");
     }
 
     const url = this.buildWebSocketURL();
@@ -164,6 +166,7 @@ export class DeepgramStreamClient {
     this.restarting = false;
     this.stopMediaRecorder();
     this.stopPing();
+    this.stopTokenRefresh();
 
     if (this.ws) {
       try {
@@ -255,7 +258,7 @@ export class DeepgramStreamClient {
     if (isExpiredOrClose) {
       const tokenData = await fetchDeepgramToken();
       this.currentToken = tokenData.token;
-      this.tokenExpiresAt = nowMs + tokenData.expires_in * 1000;
+      this.tokenExpiresAt = Date.now() + tokenData.expires_in * 1000;
     }
   }
 
@@ -264,6 +267,7 @@ export class DeepgramStreamClient {
     this.callbacks.onStatusChange("connected");
     this.startMediaRecorder();
     this.startPing();
+    this.scheduleTokenRefresh();
     void import("@/lib/overlay/qaDeepgramDisconnect").then((mod) => {
       if (!mod.isQaDeepgramDisconnectEnabled()) return;
       window.setTimeout(() => {
@@ -310,7 +314,14 @@ export class DeepgramStreamClient {
       const delay = RECONNECT_BASE_DELAY_MS * Math.pow(2, this.reconnectAttempts - 1);
       this.callbacks.onStatusChange("reconnecting");
       setTimeout(() => {
-        if (!this.destroyed) void this.connect();
+        if (!this.destroyed) {
+          void this.connect().catch((error) => {
+            this.callbacks.onError(
+              error instanceof Error ? error : new Error("Deepgram reconnect failed"),
+            );
+            this.callbacks.onStatusChange("error");
+          });
+        }
       }, delay);
     } else {
       this.callbacks.onStatusChange("disconnected");
@@ -357,6 +368,18 @@ export class DeepgramStreamClient {
         const speaker = speakerIndex === 0 ? "interviewer" : "candidate";
         const text = String(alt.transcript ?? "").trim();
         if (!text) return;
+        const fingerprint = [
+          speaker,
+          text.toLowerCase(),
+          Math.round(((data.start as number) ?? 0) * 1000),
+          Math.round((((data.start as number) ?? 0) + ((data.duration as number) ?? 0)) * 1000),
+        ].join(":");
+        if (this.seenFinalSegments.has(fingerprint)) return;
+        this.seenFinalSegments.add(fingerprint);
+        if (this.seenFinalSegments.size > 500) {
+          const oldest = this.seenFinalSegments.values().next().value;
+          if (oldest) this.seenFinalSegments.delete(oldest);
+        }
 
         const fillerWords = words.filter((w) => w.type === "filler");
         const fillerCount = fillerWords.length;
@@ -437,6 +460,21 @@ export class DeepgramStreamClient {
     if (this.pingInterval) {
       clearInterval(this.pingInterval);
       this.pingInterval = null;
+    }
+  }
+
+  private scheduleTokenRefresh(): void {
+      this.stopTokenRefresh();
+      const refreshIn = Math.max(5_000, this.tokenExpiresAt - Date.now() - TOKEN_REFRESH_BUFFER_S * 1000);
+      this.tokenRefreshTimer = setTimeout(() => {
+        if (!this.destroyed) void this.restart();
+      }, refreshIn);
+    }
+
+  private stopTokenRefresh(): void {
+      if (this.tokenRefreshTimer) {
+        clearTimeout(this.tokenRefreshTimer);
+        this.tokenRefreshTimer = null;
     }
   }
 

@@ -38,18 +38,36 @@ function safeBase64(bytes: Uint8Array): string {
 /** Accept partial AI output; normalize into the schema resumes.content expects. */
 function normalizeResumeParsed(obj: any): Record<string, unknown> | null {
   if (!obj || typeof obj !== "object") return null;
+  const cleanText = (value: unknown, max = 4000): string | null => {
+    if (typeof value !== "string") return null;
+    const normalized = value.replace(/\s+/g, " ").trim();
+    return normalized ? normalized.slice(0, max) : null;
+  };
+  const cleanList = (value: unknown, max = 100): string[] =>
+    Array.isArray(value)
+      ? value
+          .map((item) => cleanText(item, 200))
+          .filter((item): item is string => Boolean(item))
+          .slice(0, max)
+      : [];
+  const cleanObjects = (value: unknown, max = 100): Record<string, unknown>[] =>
+    Array.isArray(value)
+      ? value
+          .filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object" && !Array.isArray(item)))
+          .slice(0, max)
+      : [];
   const name =
-    (typeof obj.name === "string" && obj.name) ||
-    (typeof obj.full_name === "string" && obj.full_name) ||
+    cleanText(obj.name, 200) ||
+    cleanText(obj.full_name, 200) ||
     "";
   const summary =
-    (typeof obj.summary === "string" && obj.summary) ||
-    (typeof obj.profile === "string" && obj.profile) ||
+    cleanText(obj.summary) ||
+    cleanText(obj.profile) ||
     "";
-  const skills = Array.isArray(obj.skills) ? obj.skills.map(String).filter(Boolean) : [];
-  const experience = Array.isArray(obj.experience) ? obj.experience : [];
-  const education = Array.isArray(obj.education) ? obj.education : [];
-  const projects = Array.isArray(obj.projects) ? obj.projects : [];
+  const skills = cleanList(obj.skills);
+  const experience = cleanObjects(obj.experience);
+  const education = cleanObjects(obj.education);
+  const projects = cleanObjects(obj.projects);
 
   // Require at least one useful signal — not every key present.
   if (!name && !summary && skills.length === 0 && experience.length === 0) {
@@ -64,11 +82,13 @@ function normalizeResumeParsed(obj: any): Record<string, unknown> | null {
     experience,
     education,
     projects,
-    email: typeof obj.email === "string" ? obj.email : null,
-    phone: typeof obj.phone === "string" ? obj.phone : null,
-    location: typeof obj.location === "string" ? obj.location : null,
+    email: cleanText(obj.email, 320),
+    phone: cleanText(obj.phone, 80),
+    location: cleanText(obj.location, 200),
     total_years_experience:
-      typeof obj.total_years_experience === "number" ? obj.total_years_experience : null,
+      typeof obj.total_years_experience === "number" && Number.isFinite(obj.total_years_experience)
+        ? Math.max(0, Math.min(60, obj.total_years_experience))
+        : null,
   };
 }
 
@@ -86,10 +106,13 @@ async function callGemini(contents: any[]) {
   const timeout = setTimeout(() => controller.abort(), 45_000);
   try {
     const res = await fetch(
-      `${GEMINI_BASE}/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      `${GEMINI_BASE}/models/${GEMINI_MODEL}:generateContent`,
       {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": GEMINI_API_KEY,
+        },
         signal: controller.signal,
         body: JSON.stringify({
           contents: [{ role: "user", parts: contents }],

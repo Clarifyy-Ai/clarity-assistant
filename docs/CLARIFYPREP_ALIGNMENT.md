@@ -64,7 +64,7 @@ Legend: ✅ done · ⚠️ partial · ❌ not done
 | GDPR export + deletion E2E | ✅ | `export-user-data`, `delete-account` EFs |
 | Privacy / ToS legal review | ⚠️ | `Privacy.tsx`, `Terms.tsx` in repo; counsel sign-off pending |
 | Acceptable Use bans live deception | ✅ | `src/pages/marketing/Terms.tsx` §4 (Phase 4) |
-| Session-type AI enforcement | ✅ | `_shared/sessionEnforcement.ts` + migration `20260628120000_session_ai_enforcement.sql` |
+| Session-type AI enforcement | ✅ | `_shared/sessionEnforcement.ts` + migration `20260628120001_session_ai_enforcement.sql` |
 | DPAs with subprocessors | ❌ | Not in repo |
 | Incident response runbook | ❌ | Not in repo |
 | Compliance gating (no stealth) | ✅ | `docs/COMPLIANCE_GATING.md`, `featureGates.ts` |

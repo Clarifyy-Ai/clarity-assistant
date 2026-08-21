@@ -32,6 +32,7 @@ def verify_jwt(token: str, settings: Settings) -> dict[str, Any]:
             signing_key.key,
             algorithms=["RS256", "ES256"],
             audience=settings.supabase_jwt_aud,
+            issuer=f"{settings.supabase_url.rstrip('/')}/auth/v1",
             options={"require": ["exp", "sub"]},
         )
     except (jwt.PyJWTError, httpx.HTTPError) as exc:
@@ -79,3 +80,53 @@ async def get_admin_user(
 def supabase_admin(settings: Settings = Depends(get_settings)) -> Client:
     """FastAPI dependency that returns a memoised service-role Supabase client."""
     return _service_client(settings.supabase_url, settings.supabase_service_role_key)
+
+
+import os
+import shutil
+import tempfile
+from pathlib import Path
+
+
+def sanitize_filename(filename: str) -> str:
+    """Sanitizes an untrusted filename to prevent path injection."""
+    # Remove directory separators and null bytes
+    clean = filename.replace("\\", "/").split("/")[-1].replace("\0", "").strip()
+    # Remove unsafe characters
+    clean = "".join(c for c in clean if c.isalnum() or c in "._- ")
+    return clean[:180] or "unnamed_file"
+
+
+def validate_safe_path(base_dir: Path | str, untrusted_relative_path: str) -> Path:
+    """Resolves an untrusted relative path against base_dir and ensures no path traversal outside base_dir."""
+    base = Path(base_dir).resolve()
+    target = (base / untrusted_relative_path).resolve()
+    try:
+        target.relative_to(base)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "PATH_TRAVERSAL_DETECTED",
+                "message": "Arbitrary file path access is strictly forbidden.",
+                "retryable": False,
+            },
+        ) from exc
+    return target
+
+
+class IsolatedTempWorkspace:
+    """Creates a temporary isolated directory that is guaranteed to be deleted on context exit."""
+
+    def __init__(self, prefix: str = "doc_intel_") -> None:
+        self.prefix = prefix
+        self.path: Path | None = None
+
+    def __enter__(self) -> Path:
+        temp_dir = tempfile.mkdtemp(prefix=self.prefix)
+        self.path = Path(temp_dir).resolve()
+        return self.path
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        if self.path and self.path.exists():
+            shutil.rmtree(self.path, ignore_errors=True)

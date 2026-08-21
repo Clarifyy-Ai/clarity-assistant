@@ -33,6 +33,21 @@ export interface HubGenerateResult {
   errorMessage?: string;
 }
 
+const PROVIDER_TIMEOUT_MS = 30_000;
+
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function providerMode(): "mock" | "live" {
   const m = (Deno.env.get("AI_PROVIDER_MODE") ?? "mock").toLowerCase();
   return m === "live" ? "live" : "mock";
@@ -89,7 +104,7 @@ async function openaiGenerate(req: HubGenerateRequest, key: string): Promise<Hub
   if (req.systemPrompt) messages.push({ role: "system", content: req.systemPrompt });
   messages.push({ role: "user", content: req.prompt });
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const res = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${key}`,
@@ -155,7 +170,7 @@ async function geminiGenerate(req: HubGenerateRequest, key: string): Promise<Hub
   if (req.systemPrompt) {
     payload.systemInstruction = { parts: [{ text: req.systemPrompt }] };
   }
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -210,7 +225,7 @@ async function geminiGenerate(req: HubGenerateRequest, key: string): Promise<Hub
 
 async function anthropicGenerate(req: HubGenerateRequest, key: string): Promise<HubGenerateResult> {
   const start = Date.now();
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "x-api-key": key,

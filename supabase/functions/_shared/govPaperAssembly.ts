@@ -8,8 +8,10 @@ import {
   buildBlueprint,
   seededShuffle,
   validateBlueprintHardConstraints,
+  validateAssembledPaperHardConstraints,
   type PatternSection,
 } from "./govBlueprint.ts";
+import { hasCapability } from "./requireCapability.ts";
 import {
   conflictsWithSelected,
   findNearDuplicatesInSet,
@@ -599,7 +601,15 @@ export async function assembleClaimedPaperJob(
       }
     }
 
-    const allowAiFill = mode !== "official_previous";
+    // Enforce server-side capability check for AI fill — direct edge invocations cannot bypass
+    const { data: userProfile } = await db
+      .from("profiles")
+      .select("plan_id")
+      .eq("id", job.user_id)
+      .maybeSingle();
+
+    const userCanAiFill = hasCapability(userProfile?.plan_id, "gov_exam_ai_fill");
+    const allowAiFill = mode !== "official_previous" && userCanAiFill;
     let aiFilledCount = 0;
     let aiFillError: string | undefined;
 
@@ -654,20 +664,25 @@ export async function assembleClaimedPaperJob(
 
     if (selected.length < blueprint.total_questions) {
       if (requireExact) {
+        const isCapBlocked = mode === "generated_mock" && !userCanAiFill;
+        const errorCode = isCapBlocked ? "CAPABILITY_GATE_FAILED" : "INSUFFICIENT_APPROVED_QUESTIONS";
+        const errorMsg = isCapBlocked
+          ? `AI question generation requires a Pro plan. Found ${selected.length}/${blueprint.total_questions} approved bank items.`
+          : `Need ${blueprint.total_questions} approved previous-year style questions, found ${selected.length}.`;
+
         await failJob(
           db,
           job,
           workerId,
-          "INSUFFICIENT_APPROVED_QUESTIONS",
-          `Need ${blueprint.total_questions} approved previous-year style questions, found ${selected.length}.`,
+          errorCode,
+          errorMsg,
           false,
         );
         return {
           ok: false,
           status: "failed",
-          errorCode: "INSUFFICIENT_APPROVED_QUESTIONS",
-          error:
-            `Insufficient approved questions (${selected.length}/${blueprint.total_questions}).`,
+          errorCode,
+          error: errorMsg,
           available: selected.length,
           required: blueprint.total_questions,
           httpStatus: 422,
@@ -698,6 +713,7 @@ export async function assembleClaimedPaperJob(
             ? `Not enough questions (${selected.length}). ${fillDetail}`
             : "Not enough questions for a practice set.",
           available: selected.length,
+          required: blueprint.total_questions,
           httpStatus: 422,
         };
       }
@@ -713,6 +729,39 @@ export async function assembleClaimedPaperJob(
       blueprint.paper_class = "ai_generated";
       blueprint.label =
         "AI-generated practice paper based on the selected syllabus, pattern, and historical topic distribution. This is not an official or leaked examination paper.";
+    }
+
+    // Hard constraint validation on assembled question set before freezing
+    const assembledHard = validateAssembledPaperHardConstraints({
+      blueprint,
+      questions: selected.slice(0, blueprint.total_questions).map((r) => ({
+        id: String(r.id),
+        question_text: String(r.question_text ?? ""),
+        options: r.options,
+        correct_answer: r.correct_answer,
+        subject: r.subject,
+        topic: r.topic,
+      })),
+      aiQuestionIds,
+    });
+
+    if (!assembledHard.ok) {
+      await failJob(
+        db,
+        job,
+        workerId,
+        "HARD_CONSTRAINT_VIOLATION",
+        `Hard constraint violation: ${assembledHard.errors.join("; ")}`,
+        false,
+        { blueprint_json: blueprint },
+      );
+      return {
+        ok: false,
+        status: "failed",
+        errorCode: "HARD_CONSTRAINT_VIOLATION",
+        error: `Hard constraint violation: ${assembledHard.errors.join("; ")}`,
+        httpStatus: 422,
+      };
     }
 
     st = await stage(db, job.id, workerId, "assembling", { blueprint_json: blueprint });
@@ -803,6 +852,11 @@ export async function assembleClaimedPaperJob(
           llm_generator: aiFilledCount > 0,
           ai_filled_count: aiFilledCount,
           exam_type_keys: examTypeKeys,
+          missing_coverage: selected.length < requestedQuestionCount ? {
+            requested: requestedQuestionCount,
+            provided: selected.length,
+            deficit: requestedQuestionCount - selected.length,
+          } : undefined,
           note:
             aiFilledCount > 0
               ? "Assembled from the approved public bank, then unique AI-generated MCQs filled remaining slots. Not an official paper."

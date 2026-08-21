@@ -121,9 +121,13 @@ Deno.serve(async (req: Request) => {
       status: "paid",
     });
   } catch (error) {
+    console.error(
+      "[razorpay-verify-payment] fulfillment failed:",
+      error instanceof Error ? error.message : String(error),
+    );
     return json(
       req,
-      { error: error instanceof Error ? error.message : "Fulfillment failed" },
+      { error: "Payment could not be finalized. Please contact support if you were charged.", code: "PAYMENT_FULFILLMENT_FAILED" },
       500,
     );
   }

@@ -296,10 +296,22 @@ Deno.serve(async (req: Request) => {
       req.headers.get("Idempotency-Key") ??
       req.headers.get("idempotency-key") ??
       null;
+    const requestHash = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(`${tool_id}\n${sanitizedInput}`),
+    ).then((digest) =>
+      Array.from(new Uint8Array(digest))
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("")
+    );
 
     // Full-result replay: same key already completed → no second charge / AI call.
     const db = createServiceClient();
-    const prior = await getIdempotentResponse(db, idempotencyKey);
+    const prior = await getIdempotentResponse(db, idempotencyKey, {
+      userId,
+      action: `prep_tool_${tool_id}`,
+      requestHash,
+    });
     const priorPayload = prior?.success ? prior.payload : null;
     if (priorPayload && priorPayload.parse_status !== "failed_invalid_response") {
       log(FN, "info", "Prep tool idempotent replay", {
@@ -324,6 +336,7 @@ Deno.serve(async (req: Request) => {
       action: `prep_tool_${tool_id}`,
       cost: toolCost,
       idempotencyKey,
+      requestHash,
     });
     if (!creditResult.success) {
       const msg = (creditResult.error || "").toLowerCase();
@@ -426,7 +439,11 @@ Deno.serve(async (req: Request) => {
           success: false,
           error: AI_RESPONSE_INVALID,
           payload: { parse_status: "failed_invalid_response", tool_id },
-        } as never);
+        } as never, {
+          userId,
+          action: `prep_tool_${tool_id}`,
+          requestHash,
+        });
         return structuredError(
           req,
           AI_RESPONSE_INVALID_MESSAGE,
@@ -444,6 +461,10 @@ Deno.serve(async (req: Request) => {
       balanceAfter: creditResult.balanceAfter,
       transactionId: creditResult.transactionId,
       payload: { result: cleaned, alternatives, tool_id, parse_status: "completed" },
+    }, {
+      userId,
+      action: `prep_tool_${tool_id}`,
+      requestHash,
     });
 
     log(FN, "info", "Prep tool executed", {

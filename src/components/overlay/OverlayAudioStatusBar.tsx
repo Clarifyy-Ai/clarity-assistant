@@ -11,6 +11,7 @@ export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
   const isMuted = useAudioStore((s) => s.is_muted ?? false);
   const currentLevel = useAudioStore((s) => s.levels?.current_level ?? 0);
   const deepgramStatus = useAudioStore((s) => s.deepgram_status ?? "disconnected");
+  const pipelineStatus = useAudioStore((s) => s.pipeline_status ?? "idle");
   const streamError = useAudioStore((s) => s.streams?.error ?? null);
 
   if (!isCapturing && deepgramStatus === "disconnected") return null;
@@ -42,7 +43,7 @@ export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
         <span
           className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[10px] border border-white/10 bg-white/[0.04]"
           title="Microphone input level"
-          aria-label={`Mic level ${Math.round(currentLevel)} percent`}
+          aria-label={`Mic level ${Math.round(currentLevel * 100)} percent`}
         >
           <span className="flex items-end gap-0.5 h-3">
             {[0.25, 0.5, 0.75, 1].map((threshold) => (
@@ -50,7 +51,7 @@ export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
                 key={threshold}
                 className={cn(
                   "w-0.5 rounded-sm transition-all",
-                  currentLevel / 100 >= threshold ? "bg-emerald-400" : "bg-white/15",
+                  currentLevel >= threshold ? "bg-emerald-400" : "bg-white/15",
                 )}
                 style={{ height: `${threshold * 12}px` }}
               />
@@ -85,10 +86,22 @@ export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
               ? "text-amber-300/80 bg-amber-500/10 border-amber-500/20"
               : "text-sky-300/80 bg-sky-500/10 border-sky-500/20",
         )}
-        title={`Transcription: ${deepgramStatus}`}
+        title={`Transcription: ${pipelineStatus}`}
       >
         {dgOk ? <Wifi className="w-2.5 h-2.5" /> : <WifiOff className="w-2.5 h-2.5" />}
-        {dgPending ? "Connecting…" : dgOk ? "Live" : "Text mode"}
+        {pipelineStatus === "reconnecting"
+          ? "Reconnecting…"
+          : pipelineStatus === "transcribing"
+            ? "Transcribing"
+            : pipelineStatus === "receiving_audio"
+              ? "Audio received"
+              : dgPending
+                ? "Connecting…"
+                : dgOk
+                  ? "Live"
+                  : pipelineStatus === "unavailable"
+                    ? "Unavailable"
+                    : "Text mode"}
       </span>
 
       {streamError?.message && (

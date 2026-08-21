@@ -13,7 +13,20 @@ export type PracticeSetupDraft = {
   resumeId?: string | null;
   jdId?: string | null;
   sessionCallType?: "interview" | "regular_call";
-};
+  language?: string;
+  seniority?: string | null;
+  industry?: string | null;
+  interviewStage?: string | null;
+  focusCompetencies?: string[];
+  topicsToAvoid?: string[];
+  answerBankContextIds?: string[];
+  textVoiceMode?: "text" | "voice";
+  ttsVoice?: string | null;
+  followUpDepth?: "none" | "light" | "deep";
+  feedbackStyle?: "concise" | "balanced" | "detailed";
+  durationMinutes?: number;
+  model?: string;
+}
 
 export const FIRST_PRACTICE_EVENT = "clarify:first-practice";
 
@@ -83,6 +96,14 @@ export function savePracticeSetupDraft(draft: PracticeSetupDraft): void {
     sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
   } catch {
     // ignore quota / private mode
+  }
+}
+
+export function clearPracticeSetupDraft(): void {
+  try {
+    sessionStorage.removeItem(DRAFT_KEY);
+  } catch {
+    // ignore storage failures
   }
 }
 

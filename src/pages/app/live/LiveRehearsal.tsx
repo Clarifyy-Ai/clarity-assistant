@@ -134,7 +134,8 @@ export default function LiveRehearsal() {
         <p className="flex-1 text-foreground">
           Starting a session opens <strong className="text-primary">Overlay mode</strong> — the
           focused {PRODUCT_NAMES.practiceCoach} window without the app sidebar. Complete the
-          setup wizard below (mic + speaker checks required) to start.
+          setup wizard below; voice mode includes microphone and speaker checks, while text mode
+          remains available when audio is unavailable.
         </p>
       </div>
 

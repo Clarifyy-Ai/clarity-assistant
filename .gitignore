@@ -84,6 +84,17 @@ Clarify_AI_QA_Checklist_Basic*.xls
 Clarify_AI_*.xlsx
 
 # =========================
+# 🐍 Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+env/
+supabase/.temp/
+
+# =========================
 # 📝 Misc
 # =========================
 *.local
@@ -92,3 +103,4 @@ Clarify_AI_*.xlsx
 *.njsproj
 *.sln
 *.sw?
+

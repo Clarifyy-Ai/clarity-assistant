@@ -10,6 +10,7 @@ import type {
   Speaker,
   DeepgramConnectionStatus,
   AudioSetupStep,
+  AudioPipelineStatus,
   AudioError,
   VADConfig,
 } from "@/types/audio.types";
@@ -50,6 +51,7 @@ interface AudioStore extends AudioStoreState {
 
   // Deepgram actions
   setDeepgramStatus: (status: DeepgramConnectionStatus) => void;
+  setPipelineStatus: (status: AudioPipelineStatus) => void;
 
   // Setup wizard actions
   setSetupStep: (step: AudioSetupStep) => void;
@@ -104,6 +106,7 @@ const INITIAL_AUDIO_STATE: AudioStoreState = {
     noise_floor: 0.05,
   },
   deepgram_status: "disconnected",
+  pipeline_status: "idle",
   setup: {
     step: "device_selection",
     mic_devices: [],
@@ -206,6 +209,13 @@ export const useAudioStore = create<AudioStore>()(
     // ── Transcript actions ─────────────────────────────────
     addUtterance: (utterance) =>
       set((s) => {
+        const duplicate = s.transcript.utterances.some((existing) =>
+          existing.speaker === utterance.speaker &&
+          existing.text.trim().toLowerCase() === utterance.text.trim().toLowerCase() &&
+          Math.abs(existing.start_ms - utterance.start_ms) < 1200 &&
+          Math.abs(existing.end_ms - utterance.end_ms) < 1600,
+        );
+        if (duplicate) return s;
         const utterances = [...s.transcript.utterances, utterance]
           .sort((a, b) => a.start_ms - b.start_ms)
           .slice(-MAX_UTTERANCES);
@@ -270,6 +280,7 @@ export const useAudioStore = create<AudioStore>()(
             ? { ...s.streams, error: null }
             : s.streams,
       })),
+    setPipelineStatus: (pipeline_status) => set({ pipeline_status }),
 
     // ── Setup wizard actions ───────────────────────────────
     setSetupStep: (step) => set((s) => ({ setup: { ...s.setup, step } })),

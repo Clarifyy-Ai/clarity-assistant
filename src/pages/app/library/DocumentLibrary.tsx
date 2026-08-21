@@ -8,6 +8,8 @@ import { supabase, STORAGE_BUCKETS } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 import { isAllowedLibraryMime } from "@/lib/library/documentRights";
+import { validateDocumentFile } from "@/lib/documents/uploadValidation";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { LICENSE_TYPES, type LicenseType } from "@/lib/content/license";
 import {
   Select,
@@ -25,6 +27,8 @@ type Doc = {
   source: string | null;
   content_rights: string;
   rights_confirmed: boolean;
+  processing_status?: string;
+  processing_error?: string | null;
   created_at: string;
 };
 
@@ -56,28 +60,84 @@ export default function DocumentLibraryPage() {
       toast.error("Confirm you have permission to use this file.");
       return;
     }
-    if (!isAllowedLibraryMime(file.type) && !/\.(pdf|doc|docx|txt|csv)$/i.test(file.name)) {
-      toast.error("Allowed: PDF, DOC, DOCX, TXT, CSV.");
+    const validationError = validateDocumentFile(file, "library");
+    if (validationError || (!isAllowedLibraryMime(file.type) && !/\.(pdf|doc|docx|txt|csv|xlsx)$/i.test(file.name))) {
+      toast.error(validationError ?? "Allowed: PDF, DOC, DOCX, TXT, CSV, XLSX.");
       return;
     }
-    const path = `${user.id}/library/${Date.now()}-${file.name.replace(/[^\w.-]/g, "_")}`;
+    const bytes = await file.arrayBuffer();
+    const hashBuffer = await crypto.subtle.digest("SHA-256", bytes);
+    const contentHash = Array.from(new Uint8Array(hashBuffer))
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("");
+    const { data: duplicate } = await supabase
+      .from("personal_library_documents")
+      .select("id, document_name, processing_status")
+      .eq("owner_id", user.id)
+      .eq("content_hash", contentHash)
+      .maybeSingle();
+    if (duplicate) {
+      toast.message("This document is already in your library. Reusing it without another upload or charge.");
+      void load();
+      return;
+    }
+    const path = `${user.id}/library/${contentHash}-${file.name.replace(/[^\w.-]/g, "_")}`;
     const { error: upErr } = await supabase.storage.from(STORAGE_BUCKETS.DOCUMENTS).upload(path, file);
     if (upErr) {
-      toast.error(upErr.message);
+      toast.error(`Upload failed: ${upErr.message}`);
       return;
     }
-    const { error } = await supabase.from("personal_library_documents").insert({
-      owner_id: user.id,
-      uploaded_by: user.id,
-      document_name: file.name,
-      mime_type: file.type,
-      storage_path: path,
-      source,
-      content_rights: rights,
-      rights_confirmed: confirmed,
-    });
-    if (error) toast.error(error.message);
-    else void load();
+    try {
+      const { error } = await supabase.from("personal_library_documents").insert({
+        owner_id: user.id,
+        uploaded_by: user.id,
+        document_name: file.name,
+        mime_type: file.type,
+        storage_path: path,
+        source,
+        content_rights: rights,
+        rights_confirmed: confirmed,
+        content_hash: contentHash,
+        file_size_bytes: file.size,
+        file_category: "library",
+        processing_status: "queued",
+      });
+      if (error) {
+        await supabase.storage.from(STORAGE_BUCKETS.DOCUMENTS).remove([path]);
+        toast.error(`Upload could not be saved: ${error.message}`);
+      } else {
+        try {
+          await fetchEdgeJson("parse-document", {
+            library_document_id: (await supabase
+              .from("personal_library_documents")
+              .select("id")
+              .eq("owner_id", user.id)
+              .eq("storage_path", path)
+              .single()).data?.id,
+            mime_type: file.type || ({
+              pdf: "application/pdf",
+              doc: "application/msword",
+              docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+              txt: "text/plain",
+              csv: "text/csv",
+              xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            }[file.name.split(".").pop()?.toLowerCase() ?? ""] ?? "application/octet-stream"),
+          }, {
+            timeoutMs: 90_000,
+            headers: { "x-idempotency-key": `library-parse:${user.id}:${contentHash}` },
+          });
+          toast.success("Document uploaded and processed.");
+        } catch (parseError) {
+          toast.warning(parseError instanceof Error
+            ? `Uploaded, but processing needs a retry: ${parseError.message}`
+            : "Uploaded, but processing needs a retry.");
+        }
+        void load();
+      }
+    } catch (error) {
+      await supabase.storage.from(STORAGE_BUCKETS.DOCUMENTS).remove([path]);
+      toast.error(`Upload could not be saved: ${error instanceof Error ? error.message : "Please try again."}`);
+    }
   }
 
   async function download(doc: Doc) {
@@ -100,6 +160,7 @@ export default function DocumentLibraryPage() {
       toast.error("Confirm content rights before creating a practice set.");
       return;
     }
+
     const { error } = await supabase.from("document_practice_sets").insert({
       document_id: doc.id,
       owner_id: user.id,
@@ -108,6 +169,30 @@ export default function DocumentLibraryPage() {
     });
     if (error) toast.error(error.message);
     else toast.success("Practice set created. Add original questions in Question Bank, then attach them here.");
+  }
+
+  async function retryProcessing(doc: Doc) {
+    if (!doc.storage_path) return;
+    try {
+      await fetchEdgeJson("parse-document", {
+        library_document_id: doc.id,
+        mime_type: doc.mime_type || ({
+          pdf: "application/pdf",
+          docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          txt: "text/plain",
+          csv: "text/csv",
+          xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }[doc.document_name.split(".").pop()?.toLowerCase() ?? ""] ?? "application/pdf"),
+      }, {
+        timeoutMs: 90_000,
+        headers: { "x-idempotency-key": `library-retry:${doc.id}:${crypto.randomUUID()}` },
+      });
+      toast.success("Document processing completed.");
+      void load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Document processing failed.");
+      void load();
+    }
   }
 
   return (
@@ -133,7 +218,7 @@ export default function DocumentLibraryPage() {
         </Select>
         <input
           type="file"
-          accept=".pdf,.doc,.docx,.txt,.csv,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/csv"
+          accept=".pdf,.doc,.docx,.txt,.csv,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           onChange={(e) => {
             const file = e.target.files?.[0];
             if (file) void upload(file);
@@ -147,10 +232,16 @@ export default function DocumentLibraryPage() {
             <Card className="min-w-0">
               <p className="font-medium break-words">{doc.document_name}</p>
               <p className="text-xs text-muted-foreground">
-                {doc.content_rights} · {doc.source} · {new Date(doc.created_at).toLocaleString()}
+                {doc.content_rights} · {doc.source} · {doc.processing_status ?? "uploaded"} · {new Date(doc.created_at).toLocaleString()}
               </p>
+              {doc.processing_error && (
+                <p className="mt-1 text-xs text-destructive">{doc.processing_error}</p>
+              )}
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" onClick={() => void download(doc)}>Download</Button>
+                {doc.processing_status === "error" && (
+                  <Button size="sm" variant="outline" onClick={() => void retryProcessing(doc)}>Retry processing</Button>
+                )}
                 <Button size="sm" variant="outline" onClick={() => void createPracticeSet(doc)}>Create practice set</Button>
                 <Button size="sm" variant="danger" onClick={() => void remove(doc)}>Delete</Button>
               </div>

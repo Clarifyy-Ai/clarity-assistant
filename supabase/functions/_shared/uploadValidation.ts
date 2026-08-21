@@ -6,12 +6,18 @@ const ALLOWED_MIME_TYPES = new Set([
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "text/plain",
+  "text/csv",
+  "application/csv",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ]);
 
 const EXTENSION_TO_MIME: Record<string, string> = {
   pdf: "application/pdf",
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   txt: "text/plain",
+  csv: "text/csv",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 };
 
 export type UploadMimeValidation =
@@ -55,14 +61,14 @@ export function validateUploadMime(
   if (!resolved) {
     return {
       ok: false,
-      reason: "Missing or unrecognized file type. Allowed: PDF, DOCX, TXT.",
+      reason: "Missing or unrecognized file type. Allowed: PDF, DOCX, TXT, CSV, XLSX.",
     };
   }
 
   if (!ALLOWED_MIME_TYPES.has(resolved)) {
     return {
       ok: false,
-      reason: `File type "${resolved}" is not allowed. Allowed: PDF, DOCX, TXT.`,
+      reason: `File type "${resolved}" is not allowed. Allowed: PDF, DOCX, TXT, CSV, XLSX.`,
     };
   }
 
@@ -145,6 +151,6 @@ export function resolveUploadMime(
     reason: declared.ok
       ? `File content does not match declared type "${declared.mimeType}".`
       : (declared.reason ||
-        "Missing or unrecognized file type. Allowed: PDF, DOCX, TXT."),
+        "Missing or unrecognized file type. Allowed: PDF, DOCX, TXT, CSV, XLSX."),
   };
 }

@@ -51,7 +51,6 @@ function hasInternalAuth(req: Request): boolean {
   const secrets = [
     Deno.env.get("PAPER_JOB_WORKER_SECRET"),
     Deno.env.get("INTERNAL_WORKER_SECRET"),
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
   ].filter((s): s is string => Boolean(s && s.length > 8));
 
   if (secrets.length === 0) return false;

@@ -639,8 +639,16 @@ export default function MockSession() {
       config?: LiveSessionConfig;
       sessionId?: string;
     } | null;
-    const configFromRoute = routeState?.config;
     const sessionIdFromRoute = sessionIdParam ?? routeState?.sessionId;
+    let configFromRoute = routeState?.config;
+    if (!configFromRoute && sessionIdFromRoute) {
+      try {
+        const raw = sessionStorage.getItem(`clarify:mock-config:${sessionIdFromRoute}`);
+        if (raw) configFromRoute = JSON.parse(raw) as LiveSessionConfig;
+      } catch {
+        // Fall back to the persisted database session below.
+      }
+    }
 
     if (autoStartedRef.current || phase !== "idle") return;
 

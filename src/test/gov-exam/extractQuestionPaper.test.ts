@@ -96,6 +96,15 @@ describe("validateExtractQuestionPaperPayload", () => {
     expect(ok.ok).toBe(true);
     if (ok.ok) expect(ok.mode).toBe("pdf_base64");
   });
+
+  it("rejects malformed base64 after the prefix", () => {
+    const invalid = validateExtractQuestionPaperPayload({
+      examId: EXAM_ID,
+      pdfBase64: "JVBERi0xLjQK!",
+    });
+    expect(invalid.ok).toBe(false);
+    if (invalid.ok === false) expect(invalid.code).toBe("VALIDATION_ERROR");
+  });
 });
 
 describe("normalizePdfExtractedQuestions", () => {

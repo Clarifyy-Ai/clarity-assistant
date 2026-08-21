@@ -6,6 +6,7 @@ export const LIBRARY_MIME_TYPES = [
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   "text/plain",
   "text/csv",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ] as const;
 
 export function isAllowedLibraryMime(mime: string | null | undefined): boolean {

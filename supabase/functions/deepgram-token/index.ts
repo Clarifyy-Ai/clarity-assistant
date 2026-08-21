@@ -3,7 +3,7 @@
 // TTL = 60s — enough to establish the WebSocket handshake, too short to abuse.
 // NEVER falls back to returning the raw production key.
 
-import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders, withCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import {
@@ -33,7 +33,7 @@ Deno.serve(async (req: Request) => {
 
     const db = createServiceClient();
     const rateLimited = await enforceSessionRateLimitAsync(db, "deepgram-token", user.id);
-    if (rateLimited) return rateLimited;
+    if (rateLimited) return withCorsHeaders(req, rateLimited);
 
     /* ── ENV VALIDATION ────────────────────────────────────────────────── */
     const DEEPGRAM_API_KEY = Deno.env.get("DEEPGRAM_API_KEY");
@@ -49,9 +49,12 @@ Deno.serve(async (req: Request) => {
 
     if (!DEEPGRAM_PROJECT_ID) {
       try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10_000);
         const listRes = await fetch("https://api.deepgram.com/v1/projects", {
           headers: { Authorization: `Token ${DEEPGRAM_API_KEY}`, Accept: "application/json" },
-        });
+          signal: controller.signal,
+        }).finally(() => clearTimeout(timeout));
         const listText = await listRes.text();
         if (listRes.ok) {
           const parsed = JSON.parse(listText) as {
@@ -98,6 +101,8 @@ Deno.serve(async (req: Request) => {
     /* ── CREATE SCOPED TEMPORARY KEY ───────────────────────────────────── */
     // Deepgram docs show creating keys via:
     // POST https://api.deepgram.com/v1/projects/{project_id}/keys with Authorization: Token ... 【3-1e3103】
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
     const tempKeyRes = await fetch(
       `https://api.deepgram.com/v1/projects/${DEEPGRAM_PROJECT_ID}/keys`,
       {
@@ -114,8 +119,9 @@ Deno.serve(async (req: Request) => {
           scopes: ["usage:write"],
           time_to_live_in_seconds: TOKEN_TTL_SECONDS,
         }),
+        signal: controller.signal,
       },
-    );
+    ).finally(() => clearTimeout(timeout));
 
     if (!tempKeyRes.ok) {
       const errBody = await tempKeyRes.text().catch(() => "");

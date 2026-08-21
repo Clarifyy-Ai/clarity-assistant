@@ -119,11 +119,10 @@ export function useAnalytics() {
       .select(`
         session_id,
         overall_score,
-        filler_rate,
-        wpm_avg,
+        details,
         sessions!inner(
           created_at, mode, interview_type, company, duration_seconds,
-          session_questions(count)
+          session_questions!session_questions_session_id_fkey(count)
         )
       `)
       .eq("session_id", sessionId)
@@ -132,6 +131,7 @@ export function useAnalytics() {
     if (!data) return null;
     const d = data as any;
     const session = d.sessions;
+    const details = d.details ?? {};
 
     return {
       session_id:       sessionId,
@@ -141,8 +141,8 @@ export function useAnalytics() {
       company:          session.company,
       overall_score:    d.overall_score ?? null,
       score_status:     typeof d.overall_score === "number" ? "scored" : "not_scored",
-      filler_rate:      d.filler_rate ?? null,
-      wpm_avg:          d.wpm_avg ?? null,
+      filler_rate:     d.filler_rate ?? details.filler_rate ?? null,
+      wpm_avg:         d.wpm_avg ?? details.wpm_avg ?? null,
       duration_minutes: Math.round(session.duration_seconds / 60),
       question_count:   session.session_questions?.[0]?.count ?? 0,
     };
@@ -216,6 +216,8 @@ export function useAnalytics() {
       (s) => new Date(s.date) >= weekAgo
     ).length;
   })();
+  // The dashboard response is already scoped to the selected period. Using the
+  // profile's lifetime counter here made the filter appear not to work.
   const sessionsInSelectedPeriod = data?.total_sessions ?? 0;
 
   const scoreTrend = (data?.confidence_trend ?? []).map((p) => ({

@@ -165,14 +165,40 @@ async function fetchBankQuestions(
     opts.exam_type &&
     opts.exam_type !== "CUSTOM"
   ) {
-    const { data: fallbackData } = await db
-      .from("questions")
-      .select(baseSelect)
-      .eq("exam_type", opts.exam_type)
-      .eq("is_public", true)
-      .limit(2000);
-    for (const row of (fallbackData ?? []) as QuestionRow[]) {
-      merged.set(row.id, row);
+    // Broaden only the non-taxonomy filters. Do not accidentally mix in
+    // unrelated sources (or another user's uploads) when the requested paper
+    // is PYP-only, AI-only, or user-upload-only.
+    const addFallback = async (
+      builder: ReturnType<typeof db.from>,
+    ): Promise<void> => {
+      const { data: fallbackData } = await builder
+        .eq("exam_type", opts.exam_type)
+        .limit(2000);
+      for (const row of (fallbackData ?? []) as QuestionRow[]) {
+        merged.set(row.id, row);
+      }
+    };
+    if (opts.wantsPYP) {
+      await addFallback(
+        db.from("questions")
+          .select(baseSelect)
+          .eq("is_public", true)
+          .in("source", PYP_SOURCES),
+      );
+    }
+    if (opts.wantsAI) {
+      await addFallback(
+        db.from("questions").select(baseSelect).eq("source", "AI_GENERATED"),
+      );
+    }
+    if (opts.includeUserUploads) {
+      await addFallback(
+        db
+          .from("questions")
+          .select(baseSelect)
+          .eq("source", "USER_UPLOAD")
+          .eq("uploaded_by", opts.userId),
+      );
     }
     questions = [...merged.values()];
   }

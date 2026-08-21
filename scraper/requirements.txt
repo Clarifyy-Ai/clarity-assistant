@@ -2,6 +2,7 @@ fastapi==0.115.0
 uvicorn[standard]==0.30.6
 httpx[http2]==0.27.2
 beautifulsoup4==4.12.3
+charset-normalizer==3.4.0
 lxml==5.3.0
 pypdf==5.0.1
 pdfminer.six==20240706
@@ -13,8 +14,10 @@ python-dotenv==1.0.1
 structlog==24.4.0
 prometheus-client==0.21.0
 python-multipart==0.0.12
+python-docx==1.1.2
+openpyxl==3.1.5
 pydantic==2.9.2
 pydantic-settings==2.5.2
 PyJWT[crypto]==2.9.0
-reppy==0.4.14
 tenacity==9.0.0
+pytest==8.3.3

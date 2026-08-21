@@ -121,7 +121,8 @@ Deno.serve(async (req) => {
       return errorResponse(
         "Missing company name",
         "INVALID_REQUEST",
-        400
+        400,
+        req
       );
     }
 
@@ -139,7 +140,8 @@ Deno.serve(async (req) => {
       return errorResponse(
         "Insufficient credits.",
         "INSUFFICIENT_CREDITS",
-        402
+        402,
+        req
       );
     }
 
@@ -199,7 +201,8 @@ Return ONLY valid JSON:
       return errorResponse(
         "Company research unavailable. Credits refunded.",
         "AI_ERROR",
-        502
+        502,
+        req
       );
     }
 

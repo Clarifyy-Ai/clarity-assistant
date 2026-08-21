@@ -1,36 +1,51 @@
 import type { ParsedResume } from "@/types/ai.types";
 
+const MAX_RESUME_LIST_ITEMS = 100;
+const MAX_RESUME_FIELD_LENGTH = 4_000;
+
+function text(value: unknown, max = MAX_RESUME_FIELD_LENGTH): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized ? normalized.slice(0, max) : null;
+}
+
+function textList(value: unknown, maxItems = MAX_RESUME_LIST_ITEMS): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => text(item, 200))
+    .filter((item): item is string => Boolean(item))
+    .slice(0, maxItems);
+}
+
 /** Normalize edge parse-resume JSON (`name`) into app ParsedResume (`full_name`). */
 export function normalizeParsedResume(raw: Record<string, unknown> | null): ParsedResume | null {
   if (!raw || typeof raw !== "object") return null;
 
-  const skills = Array.isArray(raw.skills)
-    ? raw.skills.map(String).filter(Boolean)
-    : [];
-  const tech_stack = Array.isArray(raw.tech_stack)
-    ? raw.tech_stack.map(String).filter(Boolean)
-    : [];
+  const skills = textList(raw.skills);
+  const tech_stack = textList(raw.tech_stack);
 
   return {
-    full_name:
-      (typeof raw.full_name === "string" && raw.full_name) ||
-      (typeof raw.name === "string" && raw.name) ||
-      null,
-    email: typeof raw.email === "string" ? raw.email : null,
-    phone: typeof raw.phone === "string" ? raw.phone : null,
-    location: typeof raw.location === "string" ? raw.location : null,
-    summary:
-      (typeof raw.summary === "string" && raw.summary) ||
-      (typeof raw.profile === "string" && raw.profile) ||
-      null,
+    full_name: text(raw.full_name) ?? text(raw.name, 200),
+    email: text(raw.email, 320),
+    phone: text(raw.phone, 80),
+    location: text(raw.location, 200),
+    summary: text(raw.summary) ?? text(raw.profile),
     skills,
     tech_stack,
-    experience: Array.isArray(raw.experience) ? (raw.experience as ParsedResume["experience"]) : [],
-    projects: Array.isArray(raw.projects) ? (raw.projects as ParsedResume["projects"]) : [],
-    education: Array.isArray(raw.education) ? (raw.education as ParsedResume["education"]) : [],
+    // AI output is untrusted: only retain object entries. Consumers can safely
+    // render these fields even when a provider returns partial/malformed JSON.
+    experience: Array.isArray(raw.experience)
+      ? raw.experience.filter((item): item is ParsedResume["experience"][number] => Boolean(item && typeof item === "object")).slice(0, MAX_RESUME_LIST_ITEMS)
+      : [],
+    projects: Array.isArray(raw.projects)
+      ? raw.projects.filter((item): item is ParsedResume["projects"][number] => Boolean(item && typeof item === "object")).slice(0, MAX_RESUME_LIST_ITEMS)
+      : [],
+    education: Array.isArray(raw.education)
+      ? raw.education.filter((item): item is ParsedResume["education"][number] => Boolean(item && typeof item === "object")).slice(0, MAX_RESUME_LIST_ITEMS)
+      : [],
     total_years_experience:
-      typeof raw.total_years_experience === "number"
-        ? raw.total_years_experience
+      typeof raw.total_years_experience === "number" && Number.isFinite(raw.total_years_experience)
+        ? Math.max(0, Math.min(60, raw.total_years_experience))
         : null,
     seniority_signal: null,
   };
@@ -101,14 +116,21 @@ export function formatParsedResumeForAI(
     if (skills.length) parts.push(`Skills: ${skills.join(", ")}`);
     if (parsed.experience?.length) {
       const expLines = parsed.experience.slice(0, 4).map((e) => {
-        const bullet = e.impact_bullets?.[0] ?? e.description?.slice(0, 120) ?? "";
-        return `• ${e.title} @ ${e.company}${bullet ? ` — ${bullet}` : ""}`;
+        const bullet = Array.isArray(e.impact_bullets)
+          ? e.impact_bullets.find((item) => typeof item === "string")?.slice(0, 120)
+          : typeof e.description === "string" ? e.description.slice(0, 120) : "";
+        const title = typeof e.title === "string" ? e.title : "Role";
+        const company = typeof e.company === "string" ? e.company : "Unknown company";
+        return `• ${title} @ ${company}${bullet ? ` — ${bullet}` : ""}`;
       });
       parts.push(`Experience:\n${expLines.join("\n")}`);
     }
     if (parsed.projects?.length) {
-      const proj = parsed.projects.slice(0, 3).map((p) => p.name).join("; ");
-      parts.push(`Projects: ${proj}`);
+      const proj = parsed.projects.slice(0, 3)
+        .map((p) => typeof p.name === "string" ? p.name : null)
+        .filter((name): name is string => Boolean(name))
+        .join("; ");
+      if (proj) parts.push(`Projects: ${proj}`);
     }
   }
 

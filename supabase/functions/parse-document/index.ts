@@ -10,13 +10,15 @@ import {
 } from "../_shared/rateLimit.ts";
 import { validateUploadMime } from "../_shared/uploadValidation.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
+import JSZip from "https://esm.sh/jszip@3.10.1";
 
 const PARSE_DOCUMENT_COST = creditCost("parse_document");
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const GEMINI_MODEL = "gemini-2.5-flash";
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const PARSER_VERSION = "document-parser-v2";
 
 function safeBase64(bytes: Uint8Array): string {
   let bin = "";
@@ -39,6 +41,30 @@ function looksBinary(bytes: Uint8Array): boolean {
   let nul = 0;
   for (let i = 0; i < sample.length; i++) {
     if (sample[i] === 0) nul++;
+  }
+
+  async function extractZipText(bytes: Uint8Array, xlsx: boolean): Promise<string | null> {
+    try {
+      const zip = await JSZip.loadAsync(bytes);
+      const fileName = xlsx ? "xl/sharedStrings.xml" : "word/document.xml";
+      const file = zip.file(fileName);
+      if (!file) return null;
+      const xml = await file.async("string");
+      return xml
+        .replace(/<\/(?:w:p|row|si)>/g, "\n")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+        .replace(/\s+/g, " ").trim().slice(0, 50000) || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function response(req: Request, body: Record<string, unknown>, status = 200) {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+    });
   }
   return nul > 4;
 }
@@ -126,14 +152,84 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     const documentId = body?.document_id as string | undefined;
+    const libraryDocumentId = typeof body?.library_document_id === "string"
+      ? body.library_document_id.trim()
+      : "";
     const mimeType = (body?.mime_type as string) || "application/pdf";
 
     const mimeCheck = validateUploadMime(mimeType);
     if (!mimeCheck.ok) {
-      return new Response(
-        JSON.stringify({ error: mimeCheck.reason, code: "BAD_REQUEST" }),
-        { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
-      );
+      return response(req, { error: mimeCheck.reason, code: "BAD_REQUEST" }, 400);
+    }
+
+    if (libraryDocumentId) {
+      const { data: libraryDoc } = await db
+        .from("personal_library_documents")
+        .select("id, owner_id, storage_path, mime_type, content_hash, processing_status")
+        .eq("id", libraryDocumentId)
+        .maybeSingle();
+      if (!libraryDoc || libraryDoc.owner_id !== userId) {
+        return response(req, { error: "Document not found", code: "FORBIDDEN" }, 403);
+      }
+      if (!libraryDoc.storage_path || !libraryDoc.storage_path.startsWith(`${userId}/library/`) ||
+          libraryDoc.storage_path.includes("..")) {
+        return response(req, { error: "Invalid storage path", code: "FORBIDDEN" }, 403);
+      }
+      if (libraryDoc.processing_status === "ready" && libraryDoc.content_hash) {
+        return response(req, { success: true, duplicate: true, reused: true, code: "DUPLICATE_DOCUMENT" });
+      }
+      await db.from("personal_library_documents")
+        .update({ processing_status: "processing", processing_error: null, parser_version: PARSER_VERSION })
+        .eq("id", libraryDocumentId).eq("owner_id", userId);
+
+      const { data: fileData, error: downloadError } = await db.storage
+        .from("documents").download(libraryDoc.storage_path);
+      if (downloadError || !fileData) {
+        await db.from("personal_library_documents").update({
+          processing_status: "error", processing_error: "Document file could not be downloaded.",
+        }).eq("id", libraryDocumentId);
+        return response(req, { error: "Document file could not be downloaded.", code: "SERVICE_UNAVAILABLE" }, 502);
+      }
+      const buf = await fileData.arrayBuffer();
+      if (!buf.byteLength || buf.byteLength > MAX_FILE_BYTES) {
+        return response(req, { error: "File empty or too large.", code: "BAD_REQUEST" }, 400);
+      }
+      const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", buf)))
+        .map((byte) => byte.toString(16).padStart(2, "0")).join("");
+      if (libraryDoc.content_hash && libraryDoc.content_hash !== hash) {
+        return response(req, { error: "Stored file fingerprint does not match the document record.", code: "VALIDATION_ERROR" }, 422);
+      }
+      const bytes = new Uint8Array(buf);
+      let extracted: { full_text: string; summary: string } | null = null;
+      if (mimeCheck.mimeType === "text/plain" || mimeCheck.mimeType === "text/csv" || mimeCheck.mimeType === "application/csv" || mimeCheck.mimeType === "application/vnd.ms-excel") {
+        if (looksBinary(bytes)) return response(req, { error: "This file is not valid text.", code: "UNSUPPORTED_ENCODING" }, 400);
+        const text = bytesToUtf8(bytes).replace(/^\uFEFF/, "").trim();
+        if (text.length < 1) return response(req, { error: "The document contains no readable text.", code: "BAD_REQUEST" }, 400);
+        extracted = { full_text: text.slice(0, 50000), summary: text.slice(0, 400) };
+      } else if (mimeCheck.mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+        const text = await extractZipText(bytes, false);
+        if (text) extracted = { full_text: text, summary: text.slice(0, 400) };
+      } else if (mimeCheck.mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
+        const text = await extractZipText(bytes, true);
+        if (text) extracted = { full_text: text, summary: text.slice(0, 400) };
+      } else {
+        extracted = await extractWithGemini(safeBase64(bytes), mimeCheck.mimeType, "library");
+      }
+      if (!extracted) {
+        await db.from("personal_library_documents").update({
+          processing_status: "error", processing_error: "Could not extract readable text from this document.",
+          content_hash: hash,
+        }).eq("id", libraryDocumentId);
+        return response(req, { error: "Could not extract readable text from this document.", code: "PARSE_FAILED" }, 422);
+      }
+      await db.from("personal_library_documents").update({
+        content_hash: hash, parsed_content: extracted.full_text, parsed_metadata: { summary: extracted.summary },
+        processing_status: "ready", processing_error: null, parser_version: PARSER_VERSION,
+      }).eq("id", libraryDocumentId).eq("owner_id", userId);
+      return response(req, {
+        success: true, content: extracted.full_text, parsed_summary: extracted.summary,
+        content_length: extracted.full_text.length,
+      });
     }
 
     const jdId = typeof body?.jd_id === "string" ? body.jd_id.trim() : "";

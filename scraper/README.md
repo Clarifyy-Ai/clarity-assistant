@@ -28,7 +28,40 @@ The service listens on `http://localhost:8000`.
 | POST   | `/scrape/{job_id}/resume`| Admin JWT  |
 | POST   | `/scrape/{job_id}/cancel`| Admin JWT  |
 | GET    | `/health`               | none        |
-| GET    | `/metrics`              | none        |
+| GET    | `/ready`              | none        |
+| GET    | `/metrics`            | none        |
+| POST   | `/internal/jobs/document` | HMAC service auth |
+| POST   | `/internal/jobs/exam-source` | HMAC service auth |
+| POST   | `/internal/jobs/validate-paper` | HMAC service auth |
+| GET    | `/internal/jobs/{job_id}` | HMAC service auth |
+
+The `/internal/*` endpoints are service-to-service orchestration endpoints;
+they are not browser APIs. Each request must include `X-Internal-Timestamp`,
+`X-Request-ID`, and `X-Internal-Signature`. The signature is HMAC-SHA256 over:
+
+```text
+METHOD
+PATH
+TIMESTAMP
+REQUEST_ID
+SHA256(request body)
+```
+
+The signing secret is configured with
+`DOCUMENT_INTELLIGENCE_AUTH_SECRET`. During rotation, set
+`DOCUMENT_INTELLIGENCE_AUTH_PREVIOUS_SECRET` temporarily. Requests carry
+document identifiers and signed storage references only; never send Supabase
+service-role keys in a request.
+
+## Deterministic parsing
+
+The parser layer under `app/document_intelligence/parsers/` handles text PDFs,
+scanned PDFs (OCR only for pages without usable text), DOCX, TXT, XLSX, CSV,
+approved HTML, and authorized images. Outputs include parser version, page
+numbers, extraction method, OCR confidence, low-confidence regions, image/table
+references, warnings, and a review flag. Resume and job-description parsing is
+heuristic and deterministic; fields that are not present remain `null` or
+empty, never inferred from an AI provider.
 
 ### Start a scrape
 

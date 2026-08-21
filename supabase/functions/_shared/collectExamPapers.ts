@@ -79,11 +79,15 @@ export function sanitizeText(v: unknown, max = 120): string {
   return String(v ?? "").replace(/[<>]/g, "").slice(0, max).trim();
 }
 
+import { isRestrictedCoachingDomain } from "./officialDomainAllowlist.ts";
+
 export function isAllowedHost(raw: string, hosts: Set<string>): boolean {
   try {
     const u = new URL(raw);
     if (u.protocol !== "https:") return false;
-    return hosts.has(u.hostname.toLowerCase());
+    const hostname = u.hostname.toLowerCase();
+    if (isRestrictedCoachingDomain(hostname)) return false;
+    return hosts.has(hostname);
   } catch {
     return false;
   }

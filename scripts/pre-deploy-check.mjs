@@ -22,7 +22,7 @@ const REQUIRED_MIGRATIONS = [
   "20260527000000_revoke_increment_profile_credits.sql",
   "20260527000001_pg_trgm_extensions_schema.sql",
   "20260527120000_revoke_credit_transactions_client_insert.sql",
-  "20260628120000_session_ai_enforcement.sql",
+  "20260628120001_session_ai_enforcement.sql",
   "20260628130000_production_hardening.sql",
   "20260628131000_ai_usage_monitoring.sql",
   "20260628140000_debrief_stripe_idempotency.sql",

@@ -169,13 +169,12 @@ export function isStarStructuredAnswer(value: unknown): value is StarStructuredA
 
 export function normalizeStarAnswer(value: unknown): StarStructuredAnswer | null {
   if (!isStarStructuredAnswer(value)) return null;
-  const row = value as Record<string, unknown>;
-  const situation = String(row.situation ?? "").trim();
-  const task = String(row.task ?? "").trim();
-  const action = String(row.action ?? "").trim();
-  const result = String(row.result ?? "").trim();
+  const situation = value.situation.trim();
+  const task = value.task.trim();
+  const action = value.action.trim();
+  const result = value.result.trim();
   const fullAnswer =
-    String(row.fullAnswer ?? "").trim() ||
+    value.fullAnswer.trim() ||
     [situation && `Situation: ${situation}`, task && `Task: ${task}`, action && `Action: ${action}`, result && `Result: ${result}`]
       .filter(Boolean)
       .join("\n\n");

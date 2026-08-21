@@ -489,7 +489,13 @@ export const useOverlayStore = create<OverlayStore>()(
               "backend_unavailable",
             );
           }
-          return { hint_state, session_pipeline_state };
+          return {
+            hint_state,
+            session_pipeline_state,
+            ...(hint_state === "generating"
+              ? { current_hint: "", streaming_buffer: "", error_message: null }
+              : {}),
+          };
         }),
 
       setSessionPipelineState: (next) =>

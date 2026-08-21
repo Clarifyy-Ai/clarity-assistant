@@ -10,6 +10,7 @@ import {
 import { format, subDays } from "date-fns";
 import { formatUsdAmountAsInr } from "@/lib/utils/formatters";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { EmptyState } from "@/components/common/EmptyState";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
   Bar,

@@ -4,12 +4,14 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.logger import configure_logging, get_logger
-from app.routes import health, metrics, scrape
+from app.routes import document_intelligence, health, metrics, scrape
 from app.workers.daily_scheduler import daily_scrape_loop
 
 
@@ -53,22 +55,30 @@ async def lifespan(app: FastAPI):
     log.info("scraper_stopped")
 
 
+_settings = get_settings()
+is_production = _settings.app_env.lower() == "production"
 app = FastAPI(
     title="Clarity.AI Gov-Exam Scraper",
     version="1.0.0",
-    docs_url="/docs",
+    docs_url=None if is_production else "/docs",
     redoc_url=None,
     lifespan=lifespan,
 )
 
-_settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_settings.cors_origins,
     allow_origin_regex=_settings.cors_origin_regex or None,
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["authorization", "content-type", "x-requested-with"],
+    allow_headers=[
+        "authorization",
+        "content-type",
+        "x-requested-with",
+        "x-internal-timestamp",
+        "x-internal-signature",
+        "x-request-id",
+    ],
     expose_headers=["content-type"],
     max_age=600,
 )
@@ -76,3 +86,25 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(metrics.router)
 app.include_router(scrape.router)
+app.include_router(document_intelligence.router)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    correlation_id = request.headers.get("x-request-id")
+    return JSONResponse(
+        status_code=422,
+        content={
+            "success": False,
+            "error": {
+                "code": "REQUEST_VALIDATION_FAILED",
+                "message": "The request payload is invalid.",
+                "retryable": False,
+                "stage": "request_validation",
+                "correlation_id": correlation_id,
+            },
+            "details": exc.errors(),
+        },
+    )

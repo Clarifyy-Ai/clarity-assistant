@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseResumeContentString } from "@/lib/documents/resumeParse";
+import { formatParsedResumeForAI, normalizeParsedResume, parseResumeContentString } from "@/lib/documents/resumeParse";
 
 describe("parseResumeContentString", () => {
   it("parses JSON resume payloads", () => {
@@ -21,5 +21,21 @@ describe("parseResumeContentString", () => {
     expect(
       parseResumeContentString(JSON.stringify({ _parse_error: "timeout" })),
     ).toBeNull();
+  });
+
+  it("normalizes malformed provider fields without crashing consumers", () => {
+    const parsed = normalizeParsedResume({
+      name: "  Jane   Doe ",
+      skills: ["React", null, 42],
+      experience: [null, "bad", { title: "Engineer", company: "Acme", impact_bullets: "not-an-array" }],
+      projects: [null, { name: "Launch" }],
+      total_years_experience: 999,
+    });
+
+    expect(parsed?.full_name).toBe("Jane Doe");
+    expect(parsed?.skills).toEqual(["React"]);
+    expect(parsed?.experience).toHaveLength(1);
+    expect(parsed?.total_years_experience).toBe(60);
+    expect(() => formatParsedResumeForAI(parsed)).not.toThrow();
   });
 });

@@ -21,6 +21,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { bannedResponse, isUserBanned } from "./banCheck.ts";
 import { isBillingPastDue, isPastDueAllowedPath, pastDueResponse, resolveCanonicalBillingStatus } from "./billingPastDue.ts";
+import { getCorsHeaders } from "./cors.ts";
 
 export type AuthenticatedUser = {
   id: string;
@@ -69,26 +70,28 @@ function jsonResponse(
 /**
  * Standard 401 Unauthorized response.
  */
-export function unauthorizedResponse(message = "Unauthorized."): Response {
+export function unauthorizedResponse(message = "Unauthorized.", req?: Request): Response {
   return jsonResponse(
     {
       error: message,
       code: "UNAUTHORIZED",
     },
-    401
+    401,
+    req ? getCorsHeaders(req) : {}
   );
 }
 
 /**
  * Standard 403 Forbidden response.
  */
-export function forbiddenResponse(message = "Forbidden."): Response {
+export function forbiddenResponse(message = "Forbidden.", req?: Request): Response {
   return jsonResponse(
     {
       error: message,
       code: "FORBIDDEN",
     },
-    403
+    403,
+    req ? getCorsHeaders(req) : {}
   );
 }
 
@@ -179,18 +182,27 @@ export async function requireAuth(req: Request): Promise<AuthContext> {
   }
 
   if (!isPastDueAllowedPath(req)) {
-    const { data: billing } = await admin
+    const { data: billing, error: billingError } = await admin
       .from("profiles")
       .select("subscription_status, payment_failed_at")
       .eq("id", data.user.id)
       .maybeSingle();
-    const { data: subRow } = await admin
+    const { data: subRow, error: subscriptionError } = await admin
       .from("subscriptions")
       .select("status")
       .eq("user_id", data.user.id)
       .order("updated_at", { ascending: false })
       .limit(1)
       .maybeSingle();
+    if (billingError || subscriptionError) {
+      console.error("[auth] Billing authorization lookup failed:", {
+        billing: billingError?.message,
+        subscription: subscriptionError?.message,
+      });
+      const dependencyError = new Error("Authorization dependency unavailable.");
+      dependencyError.name = "DependencyUnavailableError";
+      throw dependencyError;
+    }
     const effectiveStatus = resolveCanonicalBillingStatus(
       billing?.subscription_status,
       (subRow as { status?: string } | null)?.status,
@@ -238,7 +250,7 @@ export async function getAuthContext(
     ) {
       return {
         context: null,
-        error: bannedResponse({}),
+        error: bannedResponse(getCorsHeaders(req)),
       };
     }
     if (
@@ -247,12 +259,25 @@ export async function getAuthContext(
     ) {
       return {
         context: null,
-        error: pastDueResponse({}),
+        error: pastDueResponse(getCorsHeaders(req)),
+      };
+    }
+    if (err instanceof Error && err.name === "DependencyUnavailableError") {
+      return {
+        context: null,
+        error: jsonResponse(
+          {
+            error: "Authorization service temporarily unavailable. Please try again.",
+            code: "AUTH_DEPENDENCY_UNAVAILABLE",
+          },
+          503,
+          getCorsHeaders(req),
+        ),
       };
     }
     return {
       context: null,
-      error: unauthorizedResponse(),
+      error: unauthorizedResponse("Unauthorized.", req),
     };
   }
 }

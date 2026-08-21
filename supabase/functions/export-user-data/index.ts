@@ -23,8 +23,24 @@ Deno.serve(async (req) => {
     /* ---------------------------------------------------
        VALIDATE BODY
     --------------------------------------------------- */
-    const body = await req.json().catch(() => ({}));
-    const type = body?.type ?? "full";
+    const body = await req.json().catch(() => null);
+    const requestedType = body && typeof body === "object"
+      ? (body as Record<string, unknown>).type
+      : undefined;
+    const type = typeof requestedType === "string" ? requestedType.trim().toLowerCase() : "full";
+    const allowedTypes = new Set(["full", "sessions", "transcripts", "answers", "interviews"]);
+    if (!allowedTypes.has(type)) {
+      return new Response(
+        JSON.stringify({
+          error: "Unsupported export type.",
+          code: "INVALID_EXPORT_TYPE",
+        }),
+        {
+          status: 400,
+          headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+        },
+      );
+    }
     const user_id = user.id;
 
     /* ---------------------------------------------------
@@ -57,7 +73,7 @@ Deno.serve(async (req) => {
 
       const { data: answers, error: aErr } = await db
         .from("session_answers")
-        .select("question_text, transcript, score, created_at")
+        .select("question, answer, score, ai_feedback, created_at")
         .in("session_id", ids);
 
       if (aErr) throw aErr;
@@ -128,13 +144,15 @@ Deno.serve(async (req) => {
     /* ---------------------------------------------------
        AUDIT LOG (Optional but recommended)
     --------------------------------------------------- */
-    db.from("audit_logs")
+    const { error: auditError } = await db.from("audit_logs")
       .insert({
         user_id,
         event: "export_user_data",
         created_at: new Date().toISOString(),
-      })
-      .catch(() => {});
+      });
+    if (auditError) {
+      console.error("[export-user-data] audit log failed:", auditError.message);
+    }
 
     /* ---------------------------------------------------
        RETURN FILE

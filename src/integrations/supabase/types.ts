@@ -4137,40 +4137,70 @@ export type Database = {
       }
       personal_library_documents: {
         Row: {
+          content_hash: string | null
           content_rights: string
           created_at: string
           document_name: string
+          file_category: string
+          file_size_bytes: number | null
           id: string
           mime_type: string | null
           owner_id: string
+          parsed_content: string | null
+          parsed_metadata: Json
+          parser_version: string | null
+          processing_error: string | null
+          processing_status: string
           rights_confirmed: boolean
           source: string | null
           storage_path: string | null
+          supersedes_id: string | null
           uploaded_by: string
+          version_number: number
         }
         Insert: {
+          content_hash?: string | null
           content_rights?: string
           created_at?: string
           document_name: string
+          file_category?: string
+          file_size_bytes?: number | null
           id?: string
           mime_type?: string | null
           owner_id: string
+          parsed_content?: string | null
+          parsed_metadata?: Json
+          parser_version?: string | null
+          processing_error?: string | null
+          processing_status?: string
           rights_confirmed?: boolean
           source?: string | null
           storage_path?: string | null
+          supersedes_id?: string | null
           uploaded_by: string
+          version_number?: number
         }
         Update: {
+          content_hash?: string | null
           content_rights?: string
           created_at?: string
           document_name?: string
+          file_category?: string
+          file_size_bytes?: number | null
           id?: string
           mime_type?: string | null
           owner_id?: string
+          parsed_content?: string | null
+          parsed_metadata?: Json
+          parser_version?: string | null
+          processing_error?: string | null
+          processing_status?: string
           rights_confirmed?: boolean
           source?: string | null
           storage_path?: string | null
+          supersedes_id?: string | null
           uploaded_by?: string
+          version_number?: number
         }
         Relationships: []
       }

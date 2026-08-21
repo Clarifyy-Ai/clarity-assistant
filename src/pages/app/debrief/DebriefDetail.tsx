@@ -275,16 +275,6 @@ export default function DebriefDetail() {
         title={debriefTitle + (session?.target_company ? ` — ${session.target_company}` : "")}
         description={debriefSubtitle || undefined}
         breadcrumbs={debriefBreadcrumbs}
-        actions={
-          <DebriefShareButton
-            debriefId={debrief.id}
-            report={detailedReport}
-            onShareToken={handleShareToken}
-            previewTitle={debriefTitle + (session?.target_company ? ` — ${session.target_company}` : "")}
-            previewScore={debrief.overall_grade ?? scorecard?.overall_score ?? null}
-            previewSummary={debrief.summary ?? null}
-          />
-        }
       />
 
       <nav
@@ -296,6 +286,7 @@ export default function DebriefDetail() {
           { id: "strengths", label: "Strengths" },
           { id: "improvements", label: "Improvements" },
           { id: "charts", label: "Charts" },
+          { id: "share", label: "Share" },
         ].map((item) => (
           <a
             key={item.id}
@@ -339,6 +330,25 @@ export default function DebriefDetail() {
               </p>
             )}
           </div>
+        </div>
+      </Card>
+
+      <Card id="debrief-share" className="scroll-mt-24 sm:scroll-mt-16">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">Share this debrief</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Create a read-only link with the grade, summary, strengths, improvements, and action plan.
+            </p>
+          </div>
+          <DebriefShareButton
+            debriefId={debrief.id}
+            report={detailedReport}
+            onShareToken={handleShareToken}
+            previewTitle={debriefTitle + (session?.target_company ? ` — ${session.target_company}` : "")}
+            previewScore={debrief.overall_grade ?? scorecard?.overall_score ?? null}
+            previewSummary={debrief.summary ?? null}
+          />
         </div>
       </Card>
 

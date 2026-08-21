@@ -627,7 +627,9 @@ Deno.serve(async (req: Request) => {
     const attemptPercentage =
       questionIds.length > 0 ? Math.round((attempted / questionIds.length) * 100) : 0;
 
-    const boundedTotalScore = Math.max(0, totalScore);
+    // Negative marking is part of the exam contract. Do not clamp a poor
+    // attempt to zero or the result no longer reflects the configured score.
+    const boundedTotalScore = totalScore;
     const pctScore =
       maxScore > 0 ? (boundedTotalScore / maxScore) * 100 : 0;
     // Do not fabricate a cohort percentile from a single-attempt score.

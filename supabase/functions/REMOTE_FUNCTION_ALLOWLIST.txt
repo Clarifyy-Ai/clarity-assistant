@@ -71,3 +71,7 @@ submit-test
 support-chat
 sync-calendar
 validate-api-key
+cancel-document-processing-job
+create-document-processing-job
+get-document-processing-job
+retry-document-processing-job

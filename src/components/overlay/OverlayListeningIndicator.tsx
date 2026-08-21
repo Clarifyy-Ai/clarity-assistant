@@ -26,6 +26,7 @@ export const OverlayListeningIndicator = memo(function OverlayListeningIndicator
   const isMuted = useAudioStore((s) => s.is_muted);
   const streamError = useAudioStore((s) => s.streams?.error ?? null);
   const deepgram = useAudioStore((s) => s.deepgram_status);
+  const audioPipeline = useAudioStore((s) => s.pipeline_status);
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
   const currentLevel = useAudioStore((s) => s.levels?.current_level ?? 0);
   const sessionStatus = useSessionStore((s) => s.status);
@@ -35,7 +36,19 @@ export const OverlayListeningIndicator = memo(function OverlayListeningIndicator
   let label = overlayStateLabel(pipeline);
   let detail: string | undefined = overlayStateRecovery(pipeline);
 
-  if (streamError?.message) {
+  if (audioPipeline === "unavailable" && !streamError?.message) {
+    state = "error";
+    label = "Audio unavailable";
+    detail = "Check your microphone or use text mode.";
+  } else if (audioPipeline === "text_only") {
+    state = "idle";
+    label = "Text mode";
+    detail = "Voice input is unavailable.";
+  } else if (audioPipeline === "microphone_only") {
+    state = "idle";
+    label = "Mic only";
+    detail = "Live transcription is unavailable.";
+  } else if (streamError?.message) {
     state = "error";
     label = "Error";
     detail = streamError.message;

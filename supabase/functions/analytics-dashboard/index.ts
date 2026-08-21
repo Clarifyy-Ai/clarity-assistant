@@ -92,6 +92,22 @@ Deno.serve(async (req: Request) => {
 
     const sessionList = sessions ?? [];
     const scorecardList = scorecards ?? [];
+    const scorecardMetric = (
+      scorecard: Record<string, unknown>,
+      key: "filler_rate" | "wpm_avg" | "top_filler_word",
+    ): number | string | null => {
+      const direct = scorecard[key];
+      if (typeof direct === "number" || typeof direct === "string") return direct;
+      const details = scorecard.details;
+      if (details && typeof details === "object") {
+        const nested = (details as Record<string, unknown>)[key]
+          ?? (key === "top_filler_word"
+            ? (details as Record<string, unknown>).top_filler_words
+            : undefined);
+        if (typeof nested === "number" || typeof nested === "string") return nested;
+      }
+      return null;
+    };
 
     /* ---------------------------
        AGGREGATES
@@ -116,7 +132,9 @@ Deno.serve(async (req: Request) => {
     const olderSc = scorecardList.filter((sc) => new Date(sc.created_at) < mid);
 
     const avgOf = (list: typeof scorecardList, field: "overall_score" | "filler_rate" | "wpm_avg") => {
-      const vals = list.map((s) => s[field]).filter((x): x is number => typeof x === "number");
+      const vals = list
+        .map((s) => field === "overall_score" ? s[field] : scorecardMetric(s, field))
+        .filter((x): x is number => typeof x === "number");
       return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
     };
 
@@ -139,8 +157,10 @@ Deno.serve(async (req: Request) => {
       .slice(-30)
       .map((sc) => ({
         date: sc.created_at,
-        total_fillers: typeof sc.filler_rate === "number" ? Math.round(sc.filler_rate * 10) : null,
-        top_filler: sc.top_filler_word ?? null,
+        total_fillers: typeof scorecardMetric(sc, "filler_rate") === "number"
+          ? Math.round(scorecardMetric(sc, "filler_rate") as number * 10)
+          : null,
+        top_filler: scorecardMetric(sc, "top_filler_word"),
       }));
 
     const byType = new Map<string, { sum: number; count: number; sessions: number }>();
@@ -175,8 +195,12 @@ Deno.serve(async (req: Request) => {
         company: s.company ?? null,
         overall_score: hasScore ? sc!.overall_score : null,
         score_status: incomplete ? "not_scored" : hasScore ? "scored" : "not_scored",
-        filler_rate: typeof sc?.filler_rate === "number" ? sc.filler_rate : null,
-        wpm_avg: typeof sc?.wpm_avg === "number" ? sc.wpm_avg : null,
+        filler_rate: sc && typeof scorecardMetric(sc, "filler_rate") === "number"
+          ? scorecardMetric(sc, "filler_rate") as number
+          : null,
+        wpm_avg: sc && typeof scorecardMetric(sc, "wpm_avg") === "number"
+          ? scorecardMetric(sc, "wpm_avg") as number
+          : null,
         duration_minutes: Math.round((s.duration_seconds ?? 0) / 60),
         question_count: s.question_count ?? 0,
       };
@@ -240,7 +264,9 @@ Deno.serve(async (req: Request) => {
         total: totalCount ?? totalSessions,
         total_pages: Math.ceil((totalCount ?? totalSessions) / perPage),
       },
-      total_sessions: profile?.total_sessions ?? totalSessions,
+      // This metric powers the selected-period KPI. The profile counter is a
+      // lifetime value and must not override the filtered query count.
+      total_sessions: totalCount ?? totalSessions,
       total_practice_hours: Math.round((totalMinutes / 60) * 10) / 10,
       avg_confidence_score: avgScore,
       avg_confidence_delta_30d: scoreDelta30d,
@@ -249,13 +275,17 @@ Deno.serve(async (req: Request) => {
       longest_streak: profile?.longest_streak ?? 0,
 
       avg_filler_rate:
-        scorecardList.reduce((sum, sc) => sum + (sc.filler_rate ?? 0), 0) /
+        scorecardList.reduce((sum, sc) => sum + (typeof scorecardMetric(sc, "filler_rate") === "number"
+          ? scorecardMetric(sc, "filler_rate") as number
+          : 0), 0) /
         (scorecardList.length || 1),
 
       avg_filler_delta_30d: fillerDelta30d,
 
       avg_wpm:
-        scorecardList.reduce((sum, sc) => sum + (sc.wpm_avg ?? 0), 0) /
+        scorecardList.reduce((sum, sc) => sum + (typeof scorecardMetric(sc, "wpm_avg") === "number"
+          ? scorecardMetric(sc, "wpm_avg") as number
+          : 0), 0) /
         (scorecardList.length || 1),
 
       recent_sessions: recentSessions,

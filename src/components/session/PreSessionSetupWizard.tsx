@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import type { LiveSessionConfig } from "@/types/session.types";
 import type { PreferredAIModel, HintStyle, UserProfile } from "@/types/user.types";
 import { runAudioPreflight, type PreflightReport } from "@/lib/validators/audioValidator";
-import { enumerateAudioDevices, enumerateAudioOutputDevices, playSpeakerTestTone } from "@/lib/audio/audioCapture";
+import { createLevelAnalyser, enumerateAudioDevices, enumerateAudioOutputDevices, playSpeakerTestTone } from "@/lib/audio/audioCapture";
 import type { AudioDevice } from "@/types/audio.types";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -24,6 +24,7 @@ import {
   shouldHydrateLastPracticeSetup,
 } from "@/lib/session/practiceContext";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { isElectronApp } from "@/lib/platform/isElectron";
 import { OverlaySetupGuidePanel } from "@/components/overlay/OverlaySetupGuidePanel";
 import { OVERLAY_VISIBILITY_WARNING } from "@/lib/constants/overlaySetupGuide";
 import { CreditExhaustedState, useCreditExhaustedState } from "@/components/billing/CreditExhaustedState";
@@ -52,8 +53,10 @@ import {
 } from "@/lib/ai/providerAvailability";
 import { useUIStore } from "@/store/uiStore";
 import { toast } from "sonner";
+import { useAudioStore } from "@/store/audioStore";
 import {
   formatPracticeSetupSummary,
+  clearPracticeSetupDraft,
   loadLastPracticeSetup,
   loadPracticeSetupDraft,
   peekPendingPracticeSetup,
@@ -66,6 +69,7 @@ import {
   INTERVIEW_ROLES,
 } from "@/lib/constants/interviewTargets";
 import { Switch } from "@/components/ui/switch";
+import { DEFAULT_HOTKEYS } from "@/lib/constants/hotkeys";
 import { Button } from "@/components/ui/Button";
 import { SearchableCombobox } from "@/components/common/SearchableCombobox";
 import { SessionContextChip } from "@/components/session/SessionContextChip";
@@ -85,17 +89,11 @@ interface PreSessionSetupWizardProps {
 import { INTERVIEW_TYPE_OPTIONS } from "@/lib/constants/interviewTypes";
 
 const STEPS = [
-  { id: 1, label: "Session Type",       icon: Users },
-  { id: 2, label: "AI Settings",        icon: Brain },
-  { id: 3, label: "Documents",          icon: FileText },
-  { id: 4, label: "Auto-Generate",      icon: Sparkles },
-  { id: 5, label: "Save Transcript",    icon: ScrollText },
-  { id: 6, label: "Connect",            icon: CheckCircle2 },
-];
-
-const MOBILE_STEPS = [
-  { id: 1, label: "Resume",       icon: FileText },
-  { id: 2, label: "Microphone",   icon: Volume2 },
+  { id: 1, label: "Interview goal", icon: Users },
+  { id: 2, label: "Context", icon: FileText },
+  { id: 3, label: "Session settings", icon: Brain },
+  { id: 4, label: "Device check", icon: Volume2 },
+  { id: 5, label: "Review", icon: CheckCircle2 },
 ];
 
 function BooleanSwitch({
@@ -119,7 +117,11 @@ function BooleanSwitch({
 export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSessionSetupWizardProps) {
   const { profile, user } = useAuthStore();
   const { isExhausted: creditsExhausted } = useCreditExhaustedState();
-  const { loadError: documentsLoadError, reload: reloadDocuments } = useDocuments();
+  const {
+    loadError: documentsLoadError,
+    reload: reloadDocuments,
+    allAnswers,
+  } = useDocuments();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const location = useLocation();
@@ -143,7 +145,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const lastSetup = useMemo(() => loadLastPracticeSetup(), []);
   const practiceContextId = searchParams.get("context");
   const [showWizard, setShowWizard] = useState(
-    () => !lastSetup || Boolean(practiceContextId),
+    () => sessionType === "live" || !lastSetup || Boolean(practiceContextId),
   );
   const [practiceQuestion, setPracticeQuestion] = useState<string | null>(null);
   const [contextLoadError, setContextLoadError] = useState<string | null>(null);
@@ -156,6 +158,11 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const [company,          setCompany]          = useState("");
   const [role,             setRole]             = useState("");
   const [interviewType,    setInterviewType]    = useState("behavioral");
+  const [seniority,        setSeniority]        = useState("");
+  const [industry,         setIndustry]         = useState("");
+  const [interviewStage,   setInterviewStage]   = useState("");
+  const [focusCompetencies, setFocusCompetencies] = useState<string[]>([]);
+  const [topicsToAvoid,    setTopicsToAvoid]    = useState<string[]>([]);
 
   // Step 2 — Language & AI Settings
   const [language,         setLanguage]         = useState("English");
@@ -168,6 +175,22 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const [hintStyle,        setHintStyle]        = useState<HintStyle>(
     typedProfile?.hint_style ?? "short_hints"
   );
+  const [textVoiceMode, setTextVoiceMode] = useState<"text" | "voice">("voice");
+  const [ttsVoice, setTtsVoice] = useState<string | null>(null);
+  const [availableTtsVoices, setAvailableTtsVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [followUpDepth, setFollowUpDepth] = useState<"none" | "light" | "deep">("light");
+  const [feedbackStyle, setFeedbackStyle] = useState<"concise" | "balanced" | "detailed">("balanced");
+  const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard" | "mixed">("medium");
+  const [answerBankContextIds, setAnswerBankContextIds] = useState<string[]>([]);
+  const [durationMinutes, setDurationMinutes] = useState(freePlan ? 5 : 30);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const updateVoices = () => setAvailableTtsVoices(window.speechSynthesis.getVoices());
+    updateVoices();
+    window.speechSynthesis.addEventListener("voiceschanged", updateVoices);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", updateVoices);
+  }, []);
 
   // Step 3 — Documents
   const [resumeId,         setResumeId]         = useState<string | null>(activeResumeId);
@@ -185,6 +208,19 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     if (draft.resumeId) setResumeId(draft.resumeId);
     if (draft.jdId) setJdId(draft.jdId);
     if (draft.sessionCallType) setSessionCallType(draft.sessionCallType);
+    if (draft.language) setLanguage(draft.language);
+    if (draft.seniority) setSeniority(draft.seniority);
+    if (draft.industry) setIndustry(draft.industry);
+    if (draft.interviewStage) setInterviewStage(draft.interviewStage);
+    if (draft.focusCompetencies) setFocusCompetencies(draft.focusCompetencies);
+    if (draft.topicsToAvoid) setTopicsToAvoid(draft.topicsToAvoid);
+    if (draft.answerBankContextIds) setAnswerBankContextIds(draft.answerBankContextIds);
+    if (draft.textVoiceMode) setTextVoiceMode(draft.textVoiceMode);
+    if (draft.ttsVoice) setTtsVoice(draft.ttsVoice);
+    if (draft.followUpDepth) setFollowUpDepth(draft.followUpDepth);
+    if (draft.feedbackStyle) setFeedbackStyle(draft.feedbackStyle);
+    if (draft.durationMinutes) setDurationMinutes(draft.durationMinutes);
+    if (draft.model) setModel(clampPreferredModel(draft.model as PreferredAIModel, typedProfile?.plan_id));
   }, []);
 
   useEffect(() => {
@@ -200,19 +236,27 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       resumeId,
       jdId,
       sessionCallType,
+      language,
+      seniority,
+      industry,
+      interviewStage,
+      focusCompetencies,
+      topicsToAvoid,
+      answerBankContextIds,
+      textVoiceMode,
+      ttsVoice,
+      followUpDepth,
+      feedbackStyle,
+      durationMinutes,
+      model,
     });
-  }, [step, company, role, interviewType, resumeId, jdId, sessionCallType]);
+  }, [step, company, role, interviewType, resumeId, jdId, sessionCallType, language, seniority, industry, interviewStage, focusCompetencies, topicsToAvoid, answerBankContextIds, textVoiceMode, ttsVoice, followUpDepth, feedbackStyle, durationMinutes, model]);
 
   // Step 4 — Auto-Generate
   const [autoGenerate,     setAutoGenerate]     = useState(false);
 
   // Step 5 — Save Transcript
   const [saveTranscript,   setSaveTranscript]   = useState(true);
-
-  // Step 5b — Duration
-  const [durationMinutes, setDurationMinutes] = useState(
-    freePlan ? 5 : 30,
-  );
 
   // Step 6 — Connect
   const [enableSystemAudio, setEnableSystemAudio] = useState(true);
@@ -223,6 +267,12 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const [speakerDevices,     setSpeakerDevices]    = useState<AudioDevice[]>([]);
   const [selectedSpeakerId,  setSelectedSpeakerId] = useState<string | null>(null);
   const [speakerTested,      setSpeakerTested]     = useState(false);
+  const [audioLevel,         setAudioLevel]        = useState(0);
+  const permissionStreamRef = useRef<MediaStream | null>(null);
+  const levelAnalyserRef = useRef<ReturnType<typeof createLevelAnalyser> | null>(null);
+  const levelTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const deepgramStatus = useAudioStore((state) => state.deepgram_status);
+  const isCapturingAudio = useAudioStore((state) => state.streams?.is_capturing ?? false);
   const [speakerTesting,     setSpeakerTesting]    = useState(false);
   const [isOnline,           setIsOnline]          = useState(
     typeof navigator !== "undefined" ? navigator.onLine : true,
@@ -245,10 +295,10 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   }, [activeJdId, showWizard]);
 
   useEffect(() => {
-    if (showWizard && lastSetup && shouldHydrateLastPracticeSetup({ practiceContextId })) {
+    if (sessionType === "mock" && showWizard && lastSetup && shouldHydrateLastPracticeSetup({ practiceContextId })) {
       applyLastSetup(lastSetup);
     }
-  }, [showWizard, lastSetup, practiceContextId]);
+  }, [showWizard, lastSetup, practiceContextId, sessionType]);
 
   // Interview Day (and similar) can pass company/role via query or pending stash.
   // Answer Bank `?context=` must not merge lastSetup / pending / practicePrompt.
@@ -322,10 +372,11 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     };
   }, [practiceContextId, user?.id]);
 
-  const activeSteps = isMobile ? MOBILE_STEPS : STEPS;
+  const activeSteps = STEPS;
   const totalSteps = activeSteps.length;
-  const connectStep = isMobile ? 2 : 6;
-  const resumeStep = isMobile ? 1 : 3;
+  const connectStep = 4;
+  const resumeStep = 2;
+  const voiceRequired = textVoiceMode === "voice";
 
   // Keep step in range when switching mobile ↔ desktop layouts (avoids
   // activeSteps[step - 1] being undefined → TypeError reading `.label`).
@@ -356,8 +407,19 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     setDurationMinutes(freePlan ? 5 : 30);
     setSessionCallType("interview");
     setInterviewType("behavioral");
+    setSeniority("");
+    setIndustry("");
+    setInterviewStage("");
+    setFocusCompetencies([]);
+    setTopicsToAvoid([]);
+    setAnswerBankContextIds([]);
     setEnableSystemAudio(systemAudioSupported);
     setStealthMode(false);
+    setTextVoiceMode("voice");
+    setTtsVoice(null);
+    setFollowUpDepth("light");
+    setFeedbackStyle("balanced");
+    setDifficulty("medium");
   }
 
   function applyLastSetup(setup: LiveSessionConfig) {
@@ -365,6 +427,12 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     setCompany(setup.company ?? "");
     setRole(setup.role ?? "");
     setInterviewType(setup.interview_type ?? "behavioral");
+    setSeniority(setup.seniority ?? "");
+    setIndustry(setup.industry ?? "");
+    setInterviewStage(setup.interview_stage ?? "");
+    setFocusCompetencies(setup.focus_competencies ?? []);
+    setTopicsToAvoid(setup.topics_to_avoid ?? []);
+    setAnswerBankContextIds(setup.answer_bank_context_ids ?? []);
     setLanguage(setup.language ?? "English");
     setSimpleLanguage(setup.simple_language ?? false);
     setInstructions(setup.instructions ?? "");
@@ -401,6 +469,11 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     setDurationMinutes(Math.min(duration, maxDuration));
     setEnableSystemAudio(setup.enable_system_audio ?? systemAudioSupported);
     setStealthMode(setup.stealth_mode ?? false);
+    setTextVoiceMode(setup.text_voice_mode ?? "voice");
+    setTtsVoice(setup.tts_voice ?? null);
+    setFollowUpDepth(setup.follow_up_depth ?? "light");
+    setFeedbackStyle(setup.feedback_style ?? "balanced");
+    setDifficulty(setup.difficulty ?? "medium");
   }
 
   function handleUseDefaults() {
@@ -432,7 +505,8 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
           : true,
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      stream.getTracks().forEach((t) => t.stop());
+      permissionStreamRef.current?.getTracks().forEach((track) => track.stop());
+      permissionStreamRef.current = stream;
       setMicPermission("granted");
       const devices = await enumerateAudioDevices();
       setMicDevices(devices);
@@ -450,7 +524,31 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   };
 
   useEffect(() => {
-    if (step !== connectStep) return;
+    if (!voiceRequired || micPermission !== "granted") return;
+    const stream = permissionStreamRef.current;
+    if (!stream) return;
+    levelAnalyserRef.current?.disconnect();
+    if (levelTimerRef.current) clearInterval(levelTimerRef.current);
+    try {
+      levelAnalyserRef.current = createLevelAnalyser(stream);
+      levelTimerRef.current = setInterval(() => {
+        setAudioLevel(levelAnalyserRef.current?.getLevel() ?? 0);
+      }, 100);
+    } catch {
+      setAudioLevel(0);
+    }
+    return () => {
+      if (levelTimerRef.current) clearInterval(levelTimerRef.current);
+      levelTimerRef.current = null;
+      levelAnalyserRef.current?.disconnect();
+      levelAnalyserRef.current = null;
+      permissionStreamRef.current?.getTracks().forEach((track) => track.stop());
+      permissionStreamRef.current = null;
+    };
+  }, [micPermission, voiceRequired]);
+
+  useEffect(() => {
+    if (step !== connectStep || !voiceRequired) return;
     let cancelled = false;
     setPreflightLoading(true);
     void runAudioPreflight()
@@ -463,15 +561,15 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     return () => {
       cancelled = true;
     };
-  }, [step, micPermission, connectStep]);
+  }, [step, micPermission, connectStep, voiceRequired]);
 
   // Auto-prompt mic when landing on Connect (QA-078) — skip if already decided.
   useEffect(() => {
-    if (step !== connectStep) return;
+    if (step !== connectStep || !voiceRequired) return;
     if (micPermission !== "unknown") return;
     void checkMicPermission();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- prompt once per visit to Connect
-  }, [step, connectStep]);
+  }, [step, connectStep, voiceRequired]);
 
   useEffect(() => {
     if (micPermission !== "granted") return;
@@ -536,12 +634,12 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     const gate = canStartCoachingSession({
       visibilityAcknowledged: visibilityAck,
       responsibleUseAcknowledged: responsibleUseAck,
-      micGranted: micPermission === "granted",
+      micGranted: !voiceRequired || micPermission === "granted",
     });
     if (!gate.ok) return;
-    if (preflight && !preflight.ready) return;
+    if (voiceRequired && preflight && !preflight.ready) return;
     if (!isOnline) return;
-    if (!speakerTested) {
+    if (voiceRequired && !speakerTested) {
       toast.message("Play the speaker test so we know you can hear session audio.");
       return;
     }
@@ -578,6 +676,17 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       mic_device_id:        selectedMicId || null,
       practice_context_id:  practiceContextId,
       source_type:          practiceContextId ? "answer_bank" : undefined,
+      seniority: seniority || null,
+      industry: industry || null,
+      interview_stage: interviewStage || null,
+      focus_competencies: focusCompetencies,
+      topics_to_avoid: topicsToAvoid,
+      answer_bank_context_ids: answerBankContextIds,
+      text_voice_mode: textVoiceMode,
+      tts_voice: textVoiceMode === "voice" ? ttsVoice : null,
+      follow_up_depth: followUpDepth,
+      feedback_style: feedbackStyle,
+      difficulty,
     };
 
     // Sync document selections into documentStore so AI context is correct
@@ -646,12 +755,33 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     smartRouting,
     resumeId,
   };
+  const selectedResume = resumes.find((item) => item.id === resumeId);
+  const selectedJd = jds.find((item) => item.id === jdId);
+  const resumeParseStatus = String((selectedResume as { parse_status?: string } | undefined)?.parse_status ?? "");
+  const jdParseStatus = String((selectedJd as { parse_status?: string } | undefined)?.parse_status ?? "");
+  const documentBlocker =
+    sessionCallType === "interview" && !selectedResume
+      ? "Select a resume you own before continuing."
+      : resumeParseStatus && !["ready", "completed"].includes(resumeParseStatus)
+        ? "Wait for the selected resume to finish processing before continuing."
+        : jdId && !selectedJd
+          ? "The selected job description is no longer available. Choose it again."
+          : jdParseStatus && !["ready", "completed"].includes(jdParseStatus)
+            ? "Wait for the selected job description to finish processing before continuing."
+            : null;
+  const modelLock = smartRouting ? null : getModelLockReason(model, typedProfile?.plan_id);
+  const modelBlocker =
+    modelLock === "provider"
+      ? "The selected AI provider is unavailable. Choose an available configured model."
+      : modelLock === "plan"
+        ? "The selected AI model requires a higher plan."
+        : null;
   const stepBlocker = wizardStepBlocker({
     step,
     resumeStep,
     ...fieldOpts,
   });
-  const startBlocker = wizardRequiredFieldsBlocker(fieldOpts);
+  const startBlocker = wizardRequiredFieldsBlocker(fieldOpts) ?? documentBlocker ?? modelBlocker;
 
   useEffect(() => {
     if (isMobile) return;
@@ -715,7 +845,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     );
   }
 
-  if (!showWizard && lastSetup && !practiceContextId) {
+  if (sessionType === "mock" && !showWizard && lastSetup && !practiceContextId) {
     const quickResumeTitle =
       resumes.find((r) => r.id === (lastSetup.resume_id ?? activeResumeId))?.title ?? null;
     const quickLanguage = lastSetup.language ?? "English";
@@ -837,7 +967,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
               </li>
               <li>
                 Job description:{" "}
-                {unspecifiedLabel(jds.find((j) => j.id === jdId)?.title ?? null)}
+                {unspecifiedLabel(jds.find((j) => j.id === jdId)?.role_title ?? null)}
               </li>
             </ul>
             <p className="text-[11px] text-amber-200">
@@ -854,6 +984,23 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
               <p className="text-xs text-amber-300">
                 A session is already running. Starting this practice will replace it.
               </p>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            </div>
+            {allAnswers.length > 0 && (
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Answer Bank context</label>
+                <select
+                  multiple
+                  value={answerBankContextIds}
+                  onChange={(e) => setAnswerBankContextIds(Array.from(e.target.selectedOptions).map((option) => option.value).slice(0, 10))}
+                  className="w-full min-h-20 bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm"
+                >
+                  {allAnswers.slice(0, 50).map((answer) => (
+                    <option key={answer.id} value={answer.id}>{answer.question || answer.title || "Saved answer"}</option>
+                  ))}
+                </select>
+              </div>
             )}
           </div>
         )}
@@ -976,13 +1123,42 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                       ))}
                     </select>
                   </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {[
+                      ["Seniority", seniority, setSeniority, ["Intern", "Junior", "Mid", "Senior", "Lead", "Manager"]],
+                      ["Interview stage", interviewStage, setInterviewStage, ["Phone screen", "Technical", "Onsite", "Final round", "HR"]],
+                      ["Industry", industry, setIndustry, ["Technology", "Finance", "Healthcare", "Consulting", "Education", "Other"]],
+                    ].map(([label, value, setter, options]) => (
+                      <div key={String(label)}>
+                        <label className="block text-xs font-medium text-muted-foreground mb-1.5">{String(label)}</label>
+                        <select
+                          value={String(value)}
+                          onChange={(e) => (setter as (value: string) => void)(e.target.value)}
+                          className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-4 py-2.5 text-sm"
+                        >
+                          <option value="">Not specified</option>
+                          {(options as string[]).map((option) => <option key={option} value={option}>{option}</option>)}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1.5">Practice objective</label>
+                    <textarea
+                      value={instructions}
+                      onChange={(e) => setInstructions(e.target.value.slice(0, 2000))}
+                      placeholder="What do you want to improve in this session?"
+                      rows={2}
+                      className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-4 py-2.5 text-sm resize-none"
+                    />
+                  </div>
                 </>
               )}
             </div>
           )}
 
           {/* ── Step 2: Language & AI Settings ────────────────── */}
-          {step === 2 && (
+          {step === 3 && (
             <div className="space-y-5">
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1.5">Language</label>
@@ -1115,6 +1291,51 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                   </div>
                 )}
               </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">Response mode</label>
+                  <select value={textVoiceMode} onChange={(e) => setTextVoiceMode(e.target.value as "text" | "voice")} className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm">
+                    <option value="voice">Voice</option><option value="text">Text only</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">Follow-up depth</label>
+                  <select value={followUpDepth} onChange={(e) => setFollowUpDepth(e.target.value as typeof followUpDepth)} className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm">
+                    <option value="none">No follow-ups</option><option value="light">Light</option><option value="deep">Deep</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">Feedback style</label>
+                  <select value={feedbackStyle} onChange={(e) => setFeedbackStyle(e.target.value as typeof feedbackStyle)} className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm">
+                    <option value="concise">Concise</option><option value="balanced">Balanced</option><option value="detailed">Detailed</option>
+                  </select>
+                </div>
+                {textVoiceMode === "voice" && (
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1.5">TTS voice</label>
+                    <select value={ttsVoice ?? ""} onChange={(e) => setTtsVoice(e.target.value || null)} className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm">
+                      <option value="">Browser default</option>
+                      {availableTtsVoices.map((voice) => (
+                        <option key={`${voice.name}-${voice.lang}`} value={voice.name}>{voice.name} ({voice.lang})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">Difficulty</label>
+                  <select value={difficulty} onChange={(e) => setDifficulty(e.target.value as typeof difficulty)} className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm">
+                    <option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option><option value="mixed">Mixed</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">Duration</label>
+                  <select value={durationMinutes} onChange={(e) => setDurationMinutes(Math.min(Number(e.target.value), maxDuration))} className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm">
+                    {durationOptions.map((duration) => <option key={duration} value={duration}>{duration} minutes</option>)}
+                  </select>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1193,6 +1414,25 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 />
               )}
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">Focus competencies</label>
+                  <input value={focusCompetencies.join(", ")} onChange={(e) => setFocusCompetencies(e.target.value.split(",").map((v) => v.trim()).filter(Boolean).slice(0, 8))} placeholder="Leadership, system design, SQL" className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">Topics to avoid</label>
+                  <input value={topicsToAvoid.join(", ")} onChange={(e) => setTopicsToAvoid(e.target.value.split(",").map((v) => v.trim()).filter(Boolean).slice(0, 8))} placeholder="Optional" className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm" />
+                </div>
+              </div>
+              {allAnswers.length > 0 && (
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">Answer Bank context</label>
+                  <select multiple value={answerBankContextIds} onChange={(e) => setAnswerBankContextIds(Array.from(e.target.selectedOptions).map((option) => option.value).slice(0, 10))} className="w-full min-h-20 bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm">
+                    {allAnswers.slice(0, 50).map((answer) => <option key={answer.id} value={answer.id}>{answer.question || answer.title || "Saved answer"}</option>)}
+                  </select>
+                </div>
+              )}
+
               {/* Extra documents (all resumes + JDs as additional context) */}
               {(resumes.length > 1 || jds.length > 1) && (
                 <div>
@@ -1241,7 +1481,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
           )}
 
           {/* ── Step 4: Auto-Generate ─────────────────────────── */}
-          {step === 4 && (
+          {step === 3 && sessionCallType === "regular_call" && autoGenerate && (
             <div className="space-y-5">
               <div className={cn(
                 "flex flex-col gap-3 p-5 rounded-xl border transition-all cursor-pointer",
@@ -1300,7 +1540,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
           )}
 
           {/* ── Step 5: Save Transcript ───────────────────────── */}
-          {step === 5 && (
+          {step === 3 && sessionCallType === "regular_call" && saveTranscript && (
             <div className="space-y-5">
               <div className="flex items-center justify-between p-4 bg-secondary/20 border border-border rounded-xl">
                 <div>
@@ -1493,12 +1733,53 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 </div>
               )}
 
+              <div className="rounded-xl border border-border bg-secondary/20 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-foreground">Audio activity</span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {voiceRequired ? `${Math.round(audioLevel * 100)}%` : "Text-only mode"}
+                  </span>
+                </div>
+                <div
+                  role="progressbar"
+                  aria-label="Microphone audio level"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(audioLevel * 100)}
+                  className="h-2 overflow-hidden rounded-full bg-muted"
+                >
+                  <div className="h-full rounded-full bg-emerald-500 transition-[width]" style={{ width: `${Math.min(100, Math.round(audioLevel * 100))}%` }} />
+                </div>
+                {voiceRequired && micPermission === "granted" && audioLevel < 0.01 && (
+                  <p className="text-[11px] text-amber-300">Speak near the selected microphone to confirm activity.</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-lg border border-border px-3 py-2">
+                  <span className="text-muted-foreground">STT / WebSocket</span>
+                  <strong className="ml-2 capitalize text-foreground">{voiceRequired ? deepgramStatus : "not required"}</strong>
+                </div>
+                <div className="rounded-lg border border-border px-3 py-2 text-xs">
+                  <span className="text-muted-foreground">Desktop application</span>
+                  <strong className="ml-2 text-foreground">{isElectronApp() ? "available" : "optional — browser mode active"}</strong>
+                </div>
+                <div className="rounded-lg border border-border px-3 py-2">
+                  <span className="text-muted-foreground">Audio</span>
+                  <strong className="ml-2 text-foreground">{isCapturingAudio ? "capturing" : voiceRequired ? "ready to connect" : "text input"}</strong>
+                </div>
+                <div className="rounded-lg border border-border px-3 py-2">
+                  <span className="text-muted-foreground">Network</span>
+                  <strong className="ml-2 text-foreground">{isOnline ? "online" : "offline"}</strong>
+                </div>
+              </div>
+
               {!isMobile && (
               <div className="bg-primary/5 border border-primary/15 rounded-xl p-3 space-y-2">
                 <p className="text-xs font-semibold text-primary/80">Coding capture</p>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
                   During a session, click <strong className="text-foreground">Capture</strong> (or{" "}
-                  <kbd className="hotkey-badge">Ctrl+Shift+C</kbd>) to share your screen once, drag a box around the
+                  <kbd className="hotkey-badge">{DEFAULT_HOTKEYS.CAPTURE_CODING.keys}</kbd>) to share your screen once, drag a box around the
                   question, and get a full AI answer. Costs 2 credits per capture answer.
                 </p>
               </div>
@@ -1683,6 +1964,52 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
               )}
             </div>
           )}
+
+          {step === 5 && (
+            <div className="space-y-4" aria-live="polite">
+              <p className="text-sm text-muted-foreground">Review every setting before starting. You can go back to change any value.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                {[
+                  ["Interview type", INTERVIEW_TYPE_OPTIONS.find((item) => item.value === interviewType)?.label ?? interviewType],
+                  ["Target role", role || "Not specified"],
+                  ["Company", company || "Not specified"],
+                  ["Seniority", seniority || "Not specified"],
+                  ["Industry", industry || "Not specified"],
+                  ["Interview stage", interviewStage || "Not specified"],
+                  ["Language", language],
+                  ["Resume", resumes.find((item) => item.id === resumeId)?.title ?? (resumeId ? "Selected" : "None")],
+                  ["Job Description", jds.find((item) => item.id === jdId)?.role_title ?? (jdId ? "Selected" : "None")],
+                  ["Difficulty", difficulty],
+                  ["Duration", `${durationMinutes} minutes`],
+                  ["Mode", textVoiceMode === "voice" ? "Voice" : "Text only"],
+                  ["TTS voice", textVoiceMode === "voice" ? (ttsVoice || "Browser default") : "Not used"],
+                  ["Follow-up depth", followUpDepth],
+                  ["Feedback", feedbackStyle],
+                  ["AI model", smartRouting ? "Configured smart routing" : (CANONICAL_MODEL_OPTIONS.find((item) => item.value === normalizePreferredModel(model))?.label ?? model)],
+                  ["Focus competencies", focusCompetencies.length ? focusCompetencies.join(", ") : "None"],
+                  ["Topics to avoid", topicsToAvoid.length ? topicsToAvoid.join(", ") : "None"],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex justify-between gap-3 rounded-lg border border-border bg-secondary/20 px-3 py-2">
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className="text-right font-medium text-foreground">{value}</span>
+                  </div>
+                ))}
+              </div>
+              {textVoiceMode === "text" && (
+                <p className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs text-blue-200">
+                  Text-only fallback is selected. Microphone, speaker, and speech-to-text checks are not required.
+                </p>
+              )}
+              <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 text-xs text-muted-foreground space-y-1.5">
+                <p className="font-semibold text-foreground">Privacy and session controls</p>
+                <p><strong className="text-foreground">Overlay:</strong> visible to anyone viewing your screen; normal screen sharing does not hide it.</p>
+                <p><strong className="text-foreground">Transcript:</strong> {saveTranscript ? "saved for your account and review" : "shown during the session but not retained"}.</p>
+                <p><strong className="text-foreground">Audio:</strong> used for the selected voice/STT session and not silently captured outside the active session.</p>
+                <p><strong className="text-foreground">Credits:</strong> AI answers, hints, and debrief generation use the displayed plan credits.</p>
+                <p><strong className="text-foreground">End:</strong> use End Session in the session controls or the configured session shortcut.</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Navigation */}
@@ -1709,6 +2036,16 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
           </p>
         )}
         <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              clearPracticeSetupDraft();
+              navigate("/app/dashboard");
+            }}
+            className="px-4 py-3 text-sm text-muted-foreground hover:text-foreground border border-border rounded-xl"
+          >
+            Save and Exit
+          </button>
           {step > 1 && (
             <button
               onClick={() => setStep((p) => p - 1)}
@@ -1724,22 +2061,22 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
               onClick={handleStart}
               disabled={
                 Boolean(startBlocker) ||
-                micPermission !== "granted" ||
+                (voiceRequired && micPermission !== "granted") ||
                 !visibilityAck ||
                 !responsibleUseAck ||
                 preflightLoading ||
                 !isOnline ||
-                !speakerTested
+                (voiceRequired && !speakerTested)
               }
               className={cn(
                 "flex-1 py-3.5 font-semibold rounded-xl transition-all flex items-center justify-center gap-2",
                 Boolean(startBlocker) ||
-                  micPermission !== "granted" ||
+                  (voiceRequired && micPermission !== "granted") ||
                   !visibilityAck ||
                   !responsibleUseAck ||
                   preflightLoading ||
                   !isOnline ||
-                  !speakerTested
+                  (voiceRequired && !speakerTested)
                   ? "bg-muted text-muted-foreground cursor-not-allowed"
                   : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-foreground"
               )}
@@ -1750,13 +2087,13 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
           ) : (
             <button
               onClick={() => {
-                if (stepBlocker) {
-                  toast.message(stepBlocker);
+                if (stepBlocker || (step === resumeStep && documentBlocker) || (step === 3 && modelBlocker)) {
+                  toast.message(stepBlocker ?? documentBlocker ?? modelBlocker ?? "");
                   return;
                 }
                 setStep((p) => p + 1);
               }}
-              disabled={Boolean(stepBlocker)}
+              disabled={Boolean(stepBlocker || (step === resumeStep && documentBlocker) || (step === 3 && modelBlocker))}
               className="flex-1 flex items-center justify-center gap-1.5 py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-foreground font-semibold rounded-xl transition-all text-sm"
             >
               Next

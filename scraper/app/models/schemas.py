@@ -36,8 +36,8 @@ class JobState(BaseModel):
     job_id: str
     exam_type: str
     status: JobStatus
-    progress: JobProgress = JobProgress()
-    logs: list[str] = []
+    progress: JobProgress = Field(default_factory=JobProgress)
+    logs: list[str] = Field(default_factory=list)
     error: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -82,6 +82,27 @@ class ParsedPaper(BaseModel):
     candidate: PaperCandidate
     pdf_bytes: bytes | None = None
     questions: list[ParsedQuestion]
-    images: list[ParsedImage] = []
+    images: list[ParsedImage] = Field(default_factory=list)
     file_hash: str
     answers_partial: bool = False  # True if answer-key extraction was incomplete
+
+
+class GapAnalysisRequest(BaseModel):
+    resume_id: str
+    jd_id: str
+    force_rerun: bool = False
+
+
+class GapAnalysisResult(BaseModel):
+    match_score: float = Field(default=0.0, ge=0.0, le=100.0)
+    matching_skills: list[str] = Field(default_factory=list)
+    missing_skills: list[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+    experience_gap: str = ""
+    education_fit: str = ""
+    matched_evidence: list[str] = Field(default_factory=list)
+    missing_evidence: list[str] = Field(default_factory=list)
+    parse_failed: bool = False
+    resume_version: str | None = None
+    jd_version: str | None = None
+    status: Literal["completed", "stale", "failed_recoverable", "pending"] = "completed"

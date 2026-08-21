@@ -163,3 +163,90 @@ export function validateBlueprintHardConstraints(
   if (blueprint.negative_mark < 0) errors.push("negative_mark cannot be negative");
   return errors.length ? { ok: false, errors } : { ok: true };
 }
+
+export interface AssembledQuestionItem {
+  id: string;
+  question_text: string;
+  options: unknown;
+  correct_answer?: unknown;
+  section_code?: string | null;
+  subject?: string | null;
+  topic?: string | null;
+}
+
+/**
+ * Validates hard constraints on the assembled question list before publication or freezing.
+ * Any failure must strictly block publication.
+ */
+export function validateAssembledPaperHardConstraints(input: {
+  blueprint: PaperBlueprint;
+  questions: AssembledQuestionItem[];
+  aiQuestionIds?: Set<string>;
+}): { ok: true } | { ok: false; errors: string[] } {
+  const { blueprint, questions } = input;
+  const errors: string[] = [];
+
+  // 1. Exact question count
+  if (questions.length !== blueprint.total_questions) {
+    errors.push(`Exact question count failed: got ${questions.length}, expected ${blueprint.total_questions}`);
+  }
+
+  // 2. Exact maximum marks
+  const expectedTotalMarks = blueprint.total_questions * blueprint.marks_per_question;
+  if (blueprint.total_marks !== expectedTotalMarks) {
+    errors.push(`Exact maximum marks failed: blueprint total_marks ${blueprint.total_marks} != calculated ${expectedTotalMarks}`);
+  }
+
+  // 3. Supported language
+  if (!blueprint.language || blueprint.language.trim().length === 0) {
+    errors.push("Paper language must be specified and supported");
+  }
+
+  // 4. Positive and negative marks sanity
+  if (blueprint.marks_per_question <= 0) {
+    errors.push("Marks per question must be greater than zero");
+  }
+  if (blueprint.negative_mark < 0) {
+    errors.push("Negative marking cannot be negative");
+  }
+  if (blueprint.negative_mark > blueprint.marks_per_question) {
+    errors.push("Negative penalty cannot exceed positive marks per question");
+  }
+
+  // 5. Duration sanity
+  if (blueprint.duration_minutes <= 0) {
+    errors.push("Duration minutes must be greater than zero");
+  }
+
+  // 6. No duplicate questions
+  const seenIds = new Set<string>();
+  const seenTexts = new Set<string>();
+  for (let i = 0; i < questions.length; i++) {
+    const q = questions[i];
+    const qid = String(q.id || `idx-${i}`);
+    if (seenIds.has(qid)) {
+      errors.push(`Duplicate question ID detected: ${qid}`);
+    }
+    seenIds.add(qid);
+
+    const normText = String(q.question_text || "").trim().toLowerCase().replace(/\s+/g, " ");
+    if (normText.length > 10) {
+      if (seenTexts.has(normText)) {
+        errors.push(`Duplicate question stem detected at position ${i + 1}`);
+      }
+      seenTexts.add(normText);
+    }
+
+    // 7. Valid answer for every question
+    if (q.correct_answer == null || String(q.correct_answer).trim() === "") {
+      errors.push(`Question at position ${i + 1} (${qid}) has missing or invalid correct_answer`);
+    }
+
+    // 8. Options validity
+    if (!Array.isArray(q.options) || q.options.length < 2) {
+      errors.push(`Question at position ${i + 1} (${qid}) has fewer than 2 options`);
+    }
+  }
+
+  return errors.length ? { ok: false, errors } : { ok: true };
+}

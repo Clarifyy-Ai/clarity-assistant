@@ -1,4 +1,4 @@
-import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders, withCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest, createUserScopedClient } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { enforceSessionRateLimitAsync } from "../_shared/rateLimit.ts";
@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
     "assemble-assessment",
     auth.context.user.id,
   );
-  if (rateLimited) return rateLimited;
+  if (rateLimited) return withCorsHeaders(req, rateLimited);
 
   const body = await req.json().catch(() => null);
   const templateId = String(body?.template_id ?? "").trim();
@@ -32,6 +32,9 @@ Deno.serve(async (req) => {
   const { data, error } = await userDb.rpc("assemble_assessment_from_template", {
     p_template_id: templateId,
   });
-  if (error) return json(req, { error: error.message }, 400);
+  if (error) {
+    console.error("[assemble-assessment] RPC failed:", error.message);
+    return json(req, { error: "Assessment could not be assembled.", code: "ASSESSMENT_FAILED" }, 400);
+  }
   return json(req, data);
 });

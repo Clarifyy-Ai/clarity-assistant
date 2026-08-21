@@ -734,8 +734,8 @@ async function main() {
         const style = await page.evaluate(() => {
           const article = document.querySelector("article") || document.querySelector("main");
           const p =
-            article?.querySelector("p") ||
-            document.querySelector(".prose p") ||
+            document.querySelector(".legal-prose p") ||
+            article?.querySelector(".prose p") ||
             document.querySelector("p");
           if (!p) return null;
           const cs = getComputedStyle(p);

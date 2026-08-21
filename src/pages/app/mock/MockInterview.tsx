@@ -10,6 +10,7 @@ import { ClipboardList, Timer, Wind } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { handleSessionStartError } from "@/lib/billing/sessionStartErrors";
 import { SessionTrustBanner } from "@/components/session/SessionTrustBanner";
 import { PreSessionSetupWizard } from "@/components/session/PreSessionSetupWizard";
 import type { QuestionDifficulty } from "@/lib/api/ai";
@@ -53,7 +54,7 @@ export default function MockInterview() {
         type: config.interview_type,
         count: numQ,
         question_count: numQ,
-        difficulty,
+        difficulty: config.difficulty ?? difficulty,
       };
 
       const { session, reused } = await getOrCreateSession({
@@ -69,11 +70,18 @@ export default function MockInterview() {
 
       if (reused) toast.message("Resuming your in-progress session");
 
+      try {
+        sessionStorage.setItem(`clarify:mock-config:${session.id}`, JSON.stringify(merged));
+      } catch {
+        // The database session remains the source of truth if storage is unavailable.
+      }
+
       navigate(
         warmup ? "/app/mock/warmup" : `/app/mock/session/${session.id}`,
         { state: { config: merged, sessionId: session.id } },
       );
     } catch (err: unknown) {
+      if (handleSessionStartError(err)) return;
       const message = err instanceof Error ? err.message : "Failed to start session";
       toast.error(message);
     } finally {
@@ -98,7 +106,7 @@ export default function MockInterview() {
       <div className="flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
         <ClipboardList className="w-4 h-4 text-emerald-400 shrink-0" />
         <p className="text-sm text-emerald-300">
-          Mock sessions are <strong>free</strong> — practice as much as you like. Each session runs for 5 minutes.
+          Mock sessions are <strong>free</strong> within your daily plan allowance. Each session runs for 5 minutes.
         </p>
       </div>
 

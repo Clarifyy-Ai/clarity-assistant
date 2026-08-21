@@ -38,6 +38,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const isMutedRef     = useRef(false);
   const isActiveRef    = useRef(false);
+  const recognitionGenerationRef = useRef(0);
 
   // ── Check API support ─────────────────────────────────────────
   const SpeechRecognitionAPI =
@@ -52,6 +53,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     if (!SpeechRecognitionAPI) return null;
 
     const rec = new SpeechRecognitionAPI();
+    const generation = ++recognitionGenerationRef.current;
     rec.continuous      = true;
     rec.interimResults  = true;
     rec.lang            = "en-US";
@@ -81,7 +83,14 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
     rec.onend = () => {
       setInterimTranscript("");
       // Auto-restart unless explicitly stopped
-      if (isActiveRef.current && !isMutedRef.current) {
+      // A previous instance can finish asynchronously after start() creates
+      // its replacement. Only the current instance may auto-restart.
+      if (
+        generation === recognitionGenerationRef.current &&
+        recognitionRef.current === rec &&
+        isActiveRef.current &&
+        !isMutedRef.current
+      ) {
         try { rec.start(); } catch { /* ignore overlapping start */ }
       } else {
         setIsListening(false);
@@ -124,6 +133,7 @@ export function useSpeechRecognition(): SpeechRecognitionHook {
   // ── Stop listening ────────────────────────────────────────────
   const stop = useCallback((): void => {
     isActiveRef.current = false;
+    recognitionGenerationRef.current++;
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch { /* ok */ }
       recognitionRef.current = null;

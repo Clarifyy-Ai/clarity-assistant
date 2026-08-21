@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { isElectronApp } from "@/lib/platform/isElectron";
 
@@ -28,21 +29,35 @@ export function BrandLogo({
     variant === "app" || (variant === "auto" && typeof window !== "undefined" && isElectronApp());
   const src = isApp ? "/brand/app-icon-192.png" : "/brand/logo-192.png";
   const alt = isApp ? "Clarify Coach" : "Clarify AI";
+  const [imageFailed, setImageFailed] = useState(false);
 
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
-      <img
-        src={src}
-        alt={alt}
-        width={48}
-        height={48}
-        decoding="async"
-        className={cn(
-          "shrink-0 rounded-xl object-cover shadow-lg shadow-cyan-500/15 ring-1 ring-white/10",
-          s.icon,
-          iconClassName,
-        )}
-      />
+      {imageFailed ? (
+        <span
+          role="img"
+          aria-label={alt}
+          className={cn(
+            "shrink-0 rounded-xl bg-gradient-to-br from-cyan-500 to-primary shadow-lg shadow-cyan-500/15 ring-1 ring-white/10",
+            s.icon,
+            iconClassName,
+          )}
+        />
+      ) : (
+        <img
+          src={src}
+          alt={alt}
+          width={48}
+          height={48}
+          decoding="async"
+          onError={() => setImageFailed(true)}
+          className={cn(
+            "shrink-0 rounded-xl object-cover shadow-lg shadow-cyan-500/15 ring-1 ring-white/10",
+            s.icon,
+            iconClassName,
+          )}
+        />
+      )}
       {showText && (
         <span className={cn("font-bold tracking-tight text-foreground", s.text)}>
           {isApp ? (

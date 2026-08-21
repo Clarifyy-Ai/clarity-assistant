@@ -93,6 +93,7 @@ export function useLiveCopilot({
     question: string;
     thumbnail?: string;
   } | null>(null);
+  const screenshotRequestInFlightRef = useRef(false);
 
   const configRef = useRef(config);
   configRef.current = config;
@@ -440,8 +441,11 @@ export function useLiveCopilot({
     signal: AbortSignal,
     screenshotBase64?: string | null,
   ): Promise<void> {
+    if (screenshotBase64 && screenshotRequestInFlightRef.current) return;
+    if (screenshotBase64) screenshotRequestInFlightRef.current = true;
     const overlay = useOverlayStore.getState();
-    overlay.setHintState("generating");
+    try {
+      overlay.setHintState("generating");
 
     const cfg = configRef.current;
     const baseContext = coachStore.getContext() ?? getSafeContext();
@@ -498,6 +502,9 @@ export function useLiveCopilot({
       },
       signal,
     });
+    } finally {
+      if (screenshotBase64) screenshotRequestInFlightRef.current = false;
+    }
   }
 
   const requestLiveHint = useCallback(

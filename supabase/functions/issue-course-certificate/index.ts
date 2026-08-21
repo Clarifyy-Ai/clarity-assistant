@@ -1,4 +1,4 @@
-import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders, withCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest, createUserScopedClient } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { enforceSessionRateLimitAsync } from "../_shared/rateLimit.ts";
@@ -22,7 +22,7 @@ Deno.serve(async (req) => {
     "issue-course-certificate",
     auth.context.user.id,
   );
-  if (rateLimited) return rateLimited;
+  if (rateLimited) return withCorsHeaders(req, rateLimited);
 
   const body = await req.json().catch(() => null);
   const courseId = String(body?.course_id ?? "").trim();
@@ -30,6 +30,9 @@ Deno.serve(async (req) => {
 
   const userDb = createUserScopedClient(auth.context.accessToken);
   const { data, error } = await userDb.rpc("issue_course_certificate", { p_course_id: courseId });
-  if (error) return json(req, { error: error.message }, 400);
+  if (error) {
+    console.error("[issue-course-certificate] RPC failed:", error.message);
+    return json(req, { error: "Certificate could not be issued.", code: "CERTIFICATE_FAILED" }, 400);
+  }
   return json(req, data);
 });

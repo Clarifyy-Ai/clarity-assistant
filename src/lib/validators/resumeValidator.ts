@@ -296,7 +296,7 @@ export function validateInterviewContext(
       errors.techStack = "Tech stack must be a list of technologies.";
     } else if (data.techStack.length > 20) {
       errors.techStack = "Tech stack list can have at most 20 items.";
-    } else if (data.techStack.some((t) => t.length > 50)) {
+    } else if (data.techStack.some((t) => typeof t !== "string" || t.trim().length === 0 || t.length > 50)) {
       errors.techStack = "Each technology name must be under 50 characters.";
     }
   }
@@ -382,7 +382,7 @@ export function validateQAPair(pair: QuestionAnswerPair): {
   if (pair.tags) {
     if (pair.tags.length > MAX_TAGS) {
       errors.tags = `Maximum ${MAX_TAGS} tags allowed.`;
-    } else if (pair.tags.some((t) => t.length > MAX_TAG_LENGTH)) {
+    } else if (pair.tags.some((t) => typeof t !== "string" || t.trim().length === 0 || t.length > MAX_TAG_LENGTH)) {
       errors.tags = `Each tag must be under ${MAX_TAG_LENGTH} characters.`;
     } else if (pair.tags.some((t) => !/^[a-zA-Z0-9\-_ ]+$/.test(t))) {
       errors.tags = "Tags can only contain letters, numbers, hyphens, and underscores.";

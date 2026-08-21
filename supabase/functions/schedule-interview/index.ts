@@ -1,6 +1,6 @@
 // schedule-interview — create in-app notification + optional email reminder after scheduling.
 
-import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders, withCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { requireAuth } from "../_shared/utils.ts";
 import { enforceSessionRateLimitAsync } from "../_shared/rateLimit.ts";
@@ -32,7 +32,11 @@ async function sendReminderEmail(
     ? whenIso
     : when.toLocaleString("en-US", { dateStyle: "full", timeStyle: "short" });
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  try {
   const res = await fetch("https://api.resend.com/emails", {
+    signal: controller.signal,
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -48,6 +52,15 @@ async function sendReminderEmail(
   });
 
   return res.ok;
+  } catch (error) {
+    console.error(
+      "[schedule-interview] reminder email failed:",
+      error instanceof Error ? error.message : String(error),
+    );
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -72,7 +85,7 @@ Deno.serve(async (req) => {
       "schedule-interview",
       userId,
     );
-    if (rateLimited) return rateLimited;
+    if (rateLimited) return withCorsHeaders(req, rateLimited);
 
     const body = await req.json().catch(() => ({}));
 
@@ -81,7 +94,11 @@ Deno.serve(async (req) => {
     const role = sanitize(body?.role_title, 120);
     const scheduledAt = sanitize(body?.scheduled_at, 64);
 
-    if (!interviewId || !company || !scheduledAt) {
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(interviewId) ||
+      !company ||
+      !scheduledAt
+    ) {
       return new Response(
         JSON.stringify({ error: "Missing interview_id, company_name, or scheduled_at" }),
         { status: 400, headers }
@@ -103,6 +120,12 @@ Deno.serve(async (req) => {
     }
 
     const when = new Date(scheduledAt);
+    if (!Number.isFinite(when.getTime()) || when.getTime() <= Date.now()) {
+      return new Response(
+        JSON.stringify({ error: "scheduled_at must be a valid future timestamp" }),
+        { status: 400, headers },
+      );
+    }
     const title = `Interview: ${company}`;
     const bodyText = role
       ? `${role} — ${Number.isNaN(when.getTime()) ? scheduledAt : when.toLocaleString()}`

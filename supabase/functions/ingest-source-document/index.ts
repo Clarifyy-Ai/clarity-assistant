@@ -196,8 +196,23 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Fetch active domain allowlist from admin-managed table (with static fallback)
+    const { data: dbAllowlist } = await db
+      .from("gov_domain_allowlist")
+      .select("domain")
+      .eq("is_active", true);
+    const dynamicAllowlist = (dbAllowlist && dbAllowlist.length > 0)
+      ? dbAllowlist.map((r: { domain: string }) => r.domain.toLowerCase().trim())
+      : undefined;
+
+    const classificationResult = classifySource({
+      url: sourceUrl || null,
+      uploadType: storagePath || textPayload || Array.isArray(b.questions) ? "admin" : null,
+      dynamicAllowlist,
+    });
+
     if (sourceUrl) {
-      const hostCheck = assertOfficialExamUrl(sourceUrl);
+      const hostCheck = assertOfficialExamUrl(sourceUrl, dynamicAllowlist);
       if (!hostCheck.ok) {
         return errorResponse(hostCheck.message, hostCheck.code, 403, req);
       }
@@ -228,14 +243,24 @@ Deno.serve(async (req) => {
         .insert({
           recruiting_body_id: exam.recruiting_body_id,
           exam_id: examId,
+          cycle_id: uuidOrNull(b.cycleId),
+          stage_id: stageId,
+          paper_name: sanitizeText(b.paperName, 200) || null,
+          shift,
           document_type: documentType,
           title,
           source_url: sourceUrl || null,
+          approved_domain: classificationResult.approvedDomain,
           storage_path: storagePath,
-          is_official: true,
+          is_official: classificationResult.classification === "official",
+          classification: classificationResult.classification,
+          source_state: "discovered",
+          parser_version: PARSER_VERSION,
           license_class: storagePath || textPayload || Array.isArray(b.questions)
             ? "user_upload"
-            : "official_public",
+            : classificationResult.classification === "official"
+            ? "official_public"
+            : classificationResult.classification,
           review_state: "in_review",
           mime_type: storagePath
             ? "application/octet-stream"
@@ -247,6 +272,7 @@ Deno.serve(async (req) => {
             ingest: true,
             has_text_payload: Boolean(textPayload),
             has_questions_payload: Array.isArray(b.questions),
+            classification: classificationResult.classification,
             note:
               "Admin-registered. Remote fetch skipped (robots/terms unknown). Content only from authorized admin upload.",
           },
@@ -265,6 +291,7 @@ Deno.serve(async (req) => {
         review_state: "in_review",
       };
       if (sourceUrl) patch.source_url = sourceUrl;
+      if (classificationResult.approvedDomain) patch.approved_domain = classificationResult.approvedDomain;
       if (storagePath) patch.storage_path = storagePath;
       if (documentType) patch.document_type = documentType;
       await db.from("gov_official_sources").update(patch).eq("id", sourceId);
@@ -481,7 +508,42 @@ Deno.serve(async (req) => {
           error: qErr?.message ?? "Question insert failed",
           completed_at: new Date().toISOString(),
         });
+        // Record collection failure
+        if (sourceId) {
+          const { data: existingSrc } = await db.from("gov_official_sources").select("failure_count").eq("id", sourceId).maybeSingle();
+          await db.from("gov_official_sources").update({
+            last_collection_attempt_at: new Date().toISOString(),
+            failure_count: ((existingSrc?.failure_count as number) || 0) + 1,
+            last_error_code: "QUESTION_INSERT_FAILED",
+          }).eq("id", sourceId);
+        }
         return errorResponse("Failed to insert questions", "INTERNAL", 500, req);
+      }
+
+      // ── Provenance preservation from discovery to publication ──────────
+      if (insertedQs && insertedQs.length > 0 && sourceId) {
+        const provRows = insertedQs.map((row, i) => ({
+          question_id: row.id,
+          source_id: sourceId,
+          source_class: "previous_year",
+          license_class: classificationResult.classification === "official" ? "official_public" : "user_upload",
+          page_ref: validated.questions[i]?.page_ref ?? null,
+          metadata: {
+            ingest_job_id: jobId,
+            section_code: validated.questions[i]?.section_code ?? null,
+            classification: classificationResult.classification,
+          },
+        }));
+        await db.from("question_provenance").insert(provRows);
+
+        // Update source collection success
+        await db.from("gov_official_sources").update({
+          last_collection_attempt_at: new Date().toISOString(),
+          last_successful_collection_at: new Date().toISOString(),
+          source_state: "ingested",
+          last_error_code: null,
+          updated_at: new Date().toISOString(),
+        }).eq("id", sourceId);
       }
 
       let paperId: string | null = null;

@@ -243,6 +243,11 @@
    Component Utilities
    ───────────────────────────────────────────────────────────────── */
 @layer components {
+  .legal-prose,
+  .legal-prose p,
+  .legal-prose li {
+    text-align: left !important;
+  }
 
   /* ★ FIX: glass-card was rgba(255,255,255,0.05) = invisible on light bg.
      Now always dark glass — visible on ANY background colour */

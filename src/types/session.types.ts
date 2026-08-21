@@ -86,6 +86,16 @@ export interface LiveSessionConfig {
   question_count?: number;
   practice_context_id?: string | null;
   source_type?: "answer_bank" | "manual" | "interview_day" | null;
+  seniority?: string | null;
+  industry?: string | null;
+  interview_stage?: string | null;
+  focus_competencies?: string[];
+  topics_to_avoid?: string[];
+  answer_bank_context_ids?: string[];
+  text_voice_mode?: "text" | "voice";
+  tts_voice?: string | null;
+  follow_up_depth?: "none" | "light" | "deep";
+  feedback_style?: "concise" | "balanced" | "detailed";
 }
 
 // ── Question ──────────────────────────────────────────────────────

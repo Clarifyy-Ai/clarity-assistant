@@ -18,6 +18,8 @@ from app.core.logger import get_logger
 from app.core.rate_limit import AsyncRateLimiter
 from app.models.schemas import ParsedPaper, PaperCandidate
 
+from app.scraper.allowlist import is_official_document_url_allowed, is_restricted_coaching_domain
+
 _FILENAME_SAFE = re.compile(r"[^A-Za-z0-9._-]+")
 log = get_logger(__name__)
 
@@ -44,7 +46,10 @@ class BaseScraper(abc.ABC):
         await self.client.aclose()
 
     async def fetch(self, url: str, *, expect_binary: bool = False) -> bytes | str:
-        """Fetch a URL with politeness + retry. Returns text or bytes."""
+        """Fetch a URL with politeness + retry. Returns text or bytes. Enforces official domain allowlist."""
+        if not is_official_document_url_allowed(url):
+            raise PermissionError(f"URL host is not on the approved government exam allowlist or is restricted: {url}")
+
         await self.limiter.acquire(url)
         try:
             result: bytes | str = b"" if expect_binary else ""

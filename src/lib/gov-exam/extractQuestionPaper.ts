@@ -152,7 +152,12 @@ export function validateExtractQuestionPaperPayload(
     };
   }
 
-  if (pdfBase64 && !/^[A-Za-z0-9+/]+=*$/.test(pdfBase64.slice(0, 64))) {
+  // Validate the complete payload. Checking only a prefix lets malformed
+  // bytes reach the PDF decoder and produces opaque downstream failures.
+  if (
+    pdfBase64 &&
+    (pdfBase64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(pdfBase64))
+  ) {
     return {
       ok: false,
       code: "VALIDATION_ERROR",

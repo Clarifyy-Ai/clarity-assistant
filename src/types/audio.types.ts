@@ -79,6 +79,19 @@ export type DeepgramConnectionStatus =
   | "reconnecting"
   | "error";
 
+export type AudioPipelineStatus =
+  | "idle"
+  | "requesting_permission"
+  | "connecting"
+  | "listening"
+  | "receiving_audio"
+  | "transcribing"
+  | "reconnecting"
+  | "microphone_only"
+  | "text_only"
+  | "unavailable"
+  | "ended";
+
 export interface DeepgramConfig {
   model: "nova-2" | "nova-2-meeting" | "nova-2-phonecall";
   language: string;                // "en-US"
@@ -172,6 +185,7 @@ export interface AudioStoreState {
   transcript: TranscriptState;
   vad_config: VADConfig;
   deepgram_status: DeepgramConnectionStatus;
+  pipeline_status: AudioPipelineStatus;
   setup: AudioSetupState;
   noise_level: number;             // 0.0 – 1.0 ambient noise
   is_muted: boolean;

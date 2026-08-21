@@ -30,6 +30,7 @@ export type DeductCreditsAtomicInput = {
   cost: number;
   sessionId?: string | null;
   idempotencyKey?: string | null;
+  requestHash?: string | null;
 };
 
 export type DeductCreditsAtomicResult = {
@@ -52,6 +53,7 @@ type IdempotencyRecord = {
   key: string;
   response: DeductCreditsAtomicResult;
   expires_at: string;
+  metadata: Record<string, string>;
 };
 
 const IDEMPOTENCY_TABLE = "idempotency_log";
@@ -171,7 +173,8 @@ export function createUserClient(accessToken: string): SupabaseClient {
  */
 export async function getIdempotentResponse(
   db: SupabaseClient,
-  key?: string | null
+  key?: string | null,
+  scope?: { userId: string; action: string; requestHash?: string | null }
 ): Promise<DeductCreditsAtomicResult | null> {
   if (!key) {
     return null;
@@ -186,7 +189,7 @@ export async function getIdempotentResponse(
   try {
     const { data, error } = await db
       .from(IDEMPOTENCY_TABLE)
-      .select("response, expires_at")
+      .select("response, expires_at, metadata")
       .eq("key", key)
       .maybeSingle();
 
@@ -203,6 +206,17 @@ export async function getIdempotentResponse(
       return null;
     }
 
+    if (scope) {
+      const metadata = (data as { metadata?: Record<string, unknown> }).metadata;
+      if (
+        metadata?.user_id !== scope.userId ||
+        metadata?.action !== normalizeAction(scope.action) ||
+        (scope.requestHash && metadata?.request_hash !== scope.requestHash)
+      ) {
+        return null;
+      }
+    }
+
     // Never replay stored *failures* — allow a fresh deduction attempt.
     if (record.response && record.response.success === false) {
       return null;
@@ -217,7 +231,8 @@ export async function getIdempotentResponse(
 export async function storeIdempotentResponse(
   db: SupabaseClient,
   key: string | null | undefined,
-  response: DeductCreditsAtomicResult
+  response: DeductCreditsAtomicResult,
+  scope?: { userId: string; action: string; requestHash?: string | null }
 ): Promise<void> {
   if (!key || !isValidIdempotencyKey(key)) {
     return;
@@ -227,6 +242,11 @@ export async function storeIdempotentResponse(
     key,
     response,
     expires_at: new Date(Date.now() + IDEMPOTENCY_TTL_MS).toISOString(),
+    metadata: {
+      ...(scope?.userId ? { user_id: scope.userId } : {}),
+      ...(scope?.action ? { action: normalizeAction(scope.action) } : {}),
+      ...(scope?.requestHash ? { request_hash: scope.requestHash } : {}),
+    },
   };
 
   try {
@@ -248,17 +268,8 @@ export async function storeIdempotentResponse(
 /**
  * Low-level hardened credit deduction.
  *
- * Uses:
- * - read current balance
- * - guarded update with .gte("credits", amount)
- * - transaction log insert
- *
- * NOTE:
- * For strict enterprise-grade accounting, prefer a Postgres RPC that performs:
- * - balance check
- * - deduction
- * - transaction insert
- * in one SQL transaction.
+ * Uses the service-role transaction RPC when available. The RPC locks the
+ * profile row and records the ledger entry in the same database transaction.
  */
 export async function deductCredits(
   userId: string,
@@ -268,90 +279,38 @@ export async function deductCredits(
   try {
     assertValidCreditInput(userId, action, amount);
 
-    const db = createServiceClient();
     const normalizedAction = normalizeAction(action);
+    const db = createServiceClient();
+    const { data, error } = await db.rpc("deduct_credits_service", {
+      p_user_id: userId,
+      p_action: normalizedAction,
+      p_cost: amount,
+      p_session_id: null,
+      p_idempotency_key: null,
+      p_request_hash: null,
+    });
 
-    const { data: current, error: readError } = await db
-      .from("profiles")
-      .select("credits, credits_used_this_month")
-      .eq("id", userId)
-      .single();
-
-    if (readError || !current) {
-      return {
-        success: false,
-        error: "Profile not found.",
-      };
+    if (error || !data || typeof data !== "object") {
+      return { success: false, error: "Credit deduction failed." };
     }
 
-    const currentCredits =
-      typeof current.credits === "number" ? current.credits : 0;
-
-    const currentCreditsUsed =
-      typeof current.credits_used_this_month === "number"
-        ? current.credits_used_this_month
-        : 0;
-
-    if (currentCredits < amount) {
-      return {
-        success: false,
-        error: "Insufficient credits.",
-      };
+    const result = data as {
+      success?: boolean;
+      error?: string;
+      new_balance?: number;
+      transaction_id?: string;
+    };
+    if (!result.success) {
+      return { success: false, error: result.error ?? "Credit deduction failed." };
     }
-
-    const nextCredits = currentCredits - amount;
-
-    const { data: updated, error: writeError } = await db
-      .from("profiles")
-      .update({
-        credits: nextCredits,
-        credits_used_this_month: currentCreditsUsed + amount,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", userId)
-      .gte("credits", amount)
-      .select("credits")
-      .single();
-
-    if (writeError || !updated) {
-      return {
-        success: false,
-        error: "Credit deduction failed.",
-      };
+    if (!Number.isInteger(result.new_balance)) {
+      return { success: false, error: "Credit deduction returned an invalid balance." };
     }
-
-    const balanceAfter =
-      typeof updated.credits === "number" ? updated.credits : nextCredits;
-
-    const { data: transaction, error: transactionError } = await db
-      .from("credit_transactions")
-      .insert({
-        user_id: userId,
-        action: "usage",
-        amount: -amount,
-        balance_after: balanceAfter,
-        description: normalizedAction,
-        created_at: new Date().toISOString(),
-      })
-      .select("id")
-      .single();
-
-    if (transactionError) {
-      console.error(
-        "[credits] Credit deducted but transaction log failed:",
-        transactionError.message
-      );
-    }
-
-    const transactionId =
-      transaction && typeof transaction.id === "string"
-        ? transaction.id
-        : undefined;
-
     return {
       success: true,
-      newBalance: balanceAfter,
-      transactionId,
+      newBalance: result.new_balance,
+      transactionId:
+        typeof result.transaction_id === "string" ? result.transaction_id : undefined,
     };
   } catch (error) {
     console.error(
@@ -373,30 +332,46 @@ export async function deductCredits(
  * - session_id attachment
  * - idempotency lookup/storage
  *
- * M4 DEFERRED: Preferring public.deduct_credits RPC would be ideal for a single
- * SQL transaction, but that RPC binds to auth.uid() (no p_user_id) and is
- * service_role-only after revoke — Edge Functions cannot impersonate the user
- * JWT for arbitrary deductions without a signature change. Keep the guarded
- * JS read-then-update path (.gte("credits", amount)) until a service-role
- * deduct_credits(p_user_id, ...) RPC is introduced.
+ * The service-role RPC owns the balance lock, ledger insert, and optional
+ * idempotency record in one database transaction.
  */
 export async function deductCreditsAtomic(
   input: DeductCreditsAtomicInput
 ): Promise<DeductCreditsAtomicResult> {
   const db = createServiceClient();
 
-  const idempotentResponse = await getIdempotentResponse(
-    db,
-    input.idempotencyKey
-  );
+  const idempotentResponse = await getIdempotentResponse(db, input.idempotencyKey, {
+    userId: input.userId,
+    action: input.action,
+    requestHash: input.requestHash,
+  });
 
   if (idempotentResponse) {
     return idempotentResponse;
   }
 
-  const result = await deductCredits(input.userId, input.action, input.cost);
+  const rpcResult = await db.rpc("deduct_credits_service", {
+    p_user_id: input.userId,
+    p_action: normalizeAction(input.action),
+    p_cost: input.cost,
+    p_session_id: input.sessionId && isValidUuid(input.sessionId) ? input.sessionId : null,
+    p_idempotency_key: input.idempotencyKey ?? null,
+    p_request_hash: input.requestHash ?? null,
+  });
 
-  if (!result.success || typeof result.newBalance !== "number") {
+  const result = rpcResult.error
+  ? {
+      success: false,
+      error: "Credit service unavailable.",
+    }
+  : {
+      success: Boolean((rpcResult.data as { success?: boolean } | null)?.success),
+      error: (rpcResult.data as { error?: string } | null)?.error,
+      newBalance: Number((rpcResult.data as { new_balance?: number } | null)?.new_balance),
+      transactionId: (rpcResult.data as { transaction_id?: string } | null)?.transaction_id,
+    };
+
+  if (!result.success || !Number.isInteger(result.newBalance)) {
     // Do not persist failed deductions — retries with the same Idempotency-Key
     // must be allowed (getIdempotentResponse also skips stored failures).
     return {
@@ -458,7 +433,11 @@ export async function deductCreditsAtomic(
     transactionId,
   };
 
-  await storeIdempotentResponse(db, input.idempotencyKey, success);
+  await storeIdempotentResponse(db, input.idempotencyKey, success, {
+    userId: input.userId,
+    action: input.action,
+    requestHash: input.requestHash,
+  });
 
   return success;
 }
@@ -500,86 +479,25 @@ export async function refundCredits(
       p_reason: reason,
     });
 
-    if (!rpcResult.error) {
+    const result = rpcResult.data as { success?: boolean; error?: string } | null;
+    if (!rpcResult.error && result?.success === true) {
       return {
         success: true,
       };
     }
 
     console.warn(
-      "[credits] refund_credits RPC failed; falling back:",
-      rpcResult.error.message
+      "[credits] refund_credits RPC failed:",
+      rpcResult.error?.message ?? result?.error ?? "unknown error"
     );
-  } catch {
-    console.warn("[credits] refund_credits RPC unavailable; falling back.");
-  }
-
-  try {
-    const { data: current, error: readError } = await db
-      .from("profiles")
-      .select("credits")
-      .eq("id", input.userId)
-      .single();
-
-    if (readError || !current) {
-      return {
-        success: false,
-        error: "Profile not found for refund.",
-      };
-    }
-
-    const currentCredits =
-      typeof current.credits === "number" ? current.credits : 0;
-
-    const nextCredits = currentCredits + input.cost;
-
-    const { data: updated, error: updateError } = await db
-      .from("profiles")
-      .update({
-        credits: nextCredits,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", input.userId)
-      .select("credits")
-      .single();
-
-    if (updateError || !updated) {
-      return {
-        success: false,
-        error: "Refund update failed.",
-      };
-    }
-
-    const balanceAfter =
-      typeof updated.credits === "number" ? updated.credits : nextCredits;
-
-    await db.from("credit_transactions").insert({
-      user_id: input.userId,
-      action: "refund",
-      amount: input.cost,
-      balance_after: balanceAfter,
-      description: reason,
-      session_id:
-        input.sessionId && isValidUuid(input.sessionId)
-          ? input.sessionId
-          : null,
-      created_at: new Date().toISOString(),
-    });
-
-    return {
-      success: true,
-    };
   } catch (error) {
     console.error(
-      "[credits] Refund fallback failed:",
+      "[credits] Refund RPC failed:",
       error instanceof Error ? error.message : String(error)
     );
-
-    return {
-      success: false,
-      error: "Refund failed.",
-    };
   }
+
+  return { success: false, error: "Refund failed." };
 }
 //
 // Shared Supabase utilities for Edge Functions.

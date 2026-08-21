@@ -149,6 +149,51 @@ function hasAnswers(answers: AnswerRow[]): AnswerRow[] {
   return answers.filter((row) => sanitizeText(row.answer, 20_000).length > 0);
 }
 
+function isNonResponsiveAnswer(answer: string): boolean {
+  const normalized = sanitizeText(answer, 20_000)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return normalized.length < 10 ||
+    /^(idk|i dont know|dont know|no idea|n a|na|none|skip|pass)$/.test(normalized);
+}
+
+function applyAnswerQualityGuard(payload: ScorePayload, answers: AnswerRow[]): ScorePayload {
+  const nonResponsive = answers
+    .map((answer) => isNonResponsiveAnswer(answer.answer));
+  const badCount = nonResponsive.filter(Boolean).length;
+  if (badCount === 0) return payload;
+
+  const responsiveRatio = (answers.length - badCount) / answers.length;
+  const guardedScore = (value: number) => Math.min(value, Math.round(value * responsiveRatio));
+  return {
+    ...payload,
+    overall: guardedScore(payload.overall),
+    dimensions: {
+      confidence: guardedScore(payload.dimensions.confidence),
+      clarity: guardedScore(payload.dimensions.clarity),
+      structure: guardedScore(payload.dimensions.structure),
+      relevance: guardedScore(payload.dimensions.relevance),
+    },
+    question_scores: payload.question_scores.map((score, index) => (
+      nonResponsive[index]
+        ? {
+            ...score,
+            score: 0,
+            confidence_score: 0,
+            key_weakness: "The answer was too short or non-responsive to assess.",
+            coach_tip: "Answer the question with a specific example, reasoning, and outcome.",
+          }
+        : score
+    )),
+    improvements: [
+      "Replace short or non-responsive answers with specific examples, reasoning, and outcomes.",
+      ...payload.improvements,
+    ].slice(0, 8),
+  };
+}
+
 function rejectClientScores(body: unknown): string[] {
   if (!body || typeof body !== "object" || Array.isArray(body)) return [];
   const keys = Object.keys(body as Record<string, unknown>);
@@ -726,6 +771,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    payload = applyAnswerQualityGuard(payload, answers);
     const row = scorecardRow(userId, sessionId, payload);
     let saved: Record<string, unknown> | null = null;
 
