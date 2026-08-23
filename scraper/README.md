@@ -30,10 +30,36 @@ The service listens on `http://localhost:8000`.
 | GET    | `/health`               | none        |
 | GET    | `/ready`              | none        |
 | GET    | `/metrics`            | none        |
+| GET    | `/paper-factory/exams` | Admin JWT   |
+| POST   | `/paper-factory/plan` | Admin JWT   |
+| POST   | `/paper-factory/generate` | Admin JWT |
+| POST   | `/paper-factory/jobs/{job_id}/process` | Admin JWT |
 | POST   | `/internal/jobs/document` | HMAC service auth |
 | POST   | `/internal/jobs/exam-source` | HMAC service auth |
 | POST   | `/internal/jobs/validate-paper` | HMAC service auth |
 | GET    | `/internal/jobs/{job_id}` | HMAC service auth |
+
+## Gov exam paper generation (Python factory)
+
+User-facing generation still goes through the Supabase Edge function
+`create-exam-paper`. When the Edge secret `PAPER_FACTORY_WORKER=1` is set and
+the bank cannot cover the paper, jobs are queued with
+`request_json.generator = "python_paper_factory"`.
+
+This service drains those jobs automatically when:
+
+1. `GEMINI_API_KEY` or `OPENAI_API_KEY` is set, and
+2. `PAPER_FACTORY_EMBEDDED_WORKER=true` (default).
+
+You can also run a dedicated worker:
+
+```bash
+python -m app.paper_factory.cli worker
+```
+
+On Render, prefer a **Starter** (always-on) Web Service so the embedded worker
+keeps polling. Free instances sleep and leave jobs stuck in `queued`.
+
 
 The `/internal/*` endpoints are service-to-service orchestration endpoints;
 they are not browser APIs. Each request must include `X-Internal-Timestamp`,

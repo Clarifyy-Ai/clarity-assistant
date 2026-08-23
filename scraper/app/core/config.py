@@ -51,6 +51,13 @@ class Settings(BaseSettings):
     scrape_daily_enabled: bool = Field(True, alias="SCRAPE_DAILY_ENABLED")
     scrape_daily_hour_utc: int = Field(2, alias="SCRAPE_DAILY_HOUR_UTC")
 
+    # When true (default), start the paper-factory job worker inside the web
+    # process so Render Web Services drain gov_paper_generation_jobs.
+    # Set PAPER_FACTORY_EMBEDDED_WORKER=false to run a dedicated Background Worker.
+    paper_factory_embedded_worker: bool = Field(
+        True, alias="PAPER_FACTORY_EMBEDDED_WORKER"
+    )
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_csv(cls, v):

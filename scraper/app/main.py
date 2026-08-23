@@ -11,6 +11,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.logger import configure_logging, get_logger
+from app.paper_factory.config import get_factory_settings
+from app.paper_factory.worker import worker_loop
 from app.routes import (
     document_intelligence,
     health,
@@ -37,25 +39,49 @@ async def lifespan(app: FastAPI):
     if missing:
         raise RuntimeError(f"Missing required env: {missing}")
     stop = asyncio.Event()
-    scheduler_task: asyncio.Task[None] | None = None
+    background_tasks: list[asyncio.Task] = []
+
     if settings.scrape_daily_enabled:
-        scheduler_task = asyncio.create_task(
-            daily_scrape_loop(settings, stop),
-            name="daily-exam-scrape",
+        background_tasks.append(
+            asyncio.create_task(
+                daily_scrape_loop(settings, stop),
+                name="daily-exam-scrape",
+            )
         )
+
+    factory_settings = get_factory_settings()
+    start_factory_worker = (
+        settings.paper_factory_embedded_worker and factory_settings.has_ai_provider
+    )
+    if start_factory_worker:
+        background_tasks.append(
+            asyncio.create_task(
+                worker_loop(settings=factory_settings, stop=stop),
+                name="paper-factory-worker",
+            )
+        )
+    elif settings.paper_factory_embedded_worker:
+        log.warning(
+            "paper_factory_worker_skipped",
+            reason="Set GEMINI_API_KEY or OPENAI_API_KEY to enable AI paper generation.",
+        )
+
     log.info(
         "scraper_started",
         port=settings.port,
         cors_origins=settings.cors_origins,
         daily_scrape=settings.scrape_daily_enabled,
         daily_hour_utc=settings.scrape_daily_hour_utc,
+        paper_factory_worker=start_factory_worker,
+        has_ai_provider=factory_settings.has_ai_provider,
     )
     yield
     stop.set()
-    if scheduler_task:
-        scheduler_task.cancel()
+    for task in background_tasks:
+        task.cancel()
+    for task in background_tasks:
         try:
-            await scheduler_task
+            await task
         except asyncio.CancelledError:
             pass
     log.info("scraper_stopped")

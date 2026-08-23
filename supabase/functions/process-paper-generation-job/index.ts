@@ -124,7 +124,7 @@ Deno.serve(async (req) => {
       if (jobId) {
         const { data: existing } = await db
           .from("gov_paper_generation_jobs")
-          .select("id, status, mock_test_id, generated_paper_id, error_code, user_id")
+          .select("id, status, mock_test_id, generated_paper_id, error_code, user_id, request_json")
           .eq("id", jobId)
           .maybeSingle();
 
@@ -151,12 +151,57 @@ Deno.serve(async (req) => {
             idempotent: true,
           });
         }
+        const routedGenerator = String(
+          (existing.request_json as Record<string, unknown> | null)?.generator ?? "",
+        ).toLowerCase();
+        if (
+          routedGenerator === "python_paper_factory" ||
+          routedGenerator === "python" ||
+          routedGenerator === "factory"
+        ) {
+          return json(req, {
+            jobId: existing.id,
+            status: existing.status,
+            code: "PYTHON_FACTORY_OWNED",
+            error: "This job is owned by the Python paper-factory worker.",
+            generator: routedGenerator,
+          }, 202);
+        }
       }
       return json(req, {
         error: claimed.message ?? "No claimable job",
         code: "NOT_CLAIMABLE",
         jobId,
       }, 409);
+    }
+
+    // Do not Edge-assemble jobs explicitly routed to the Python factory.
+    const claimedGenerator = String(
+      (claimed.job.request_json as Record<string, unknown> | null | undefined)?.generator ?? "",
+    ).toLowerCase();
+    if (
+      claimedGenerator === "python_paper_factory" ||
+      claimedGenerator === "python" ||
+      claimedGenerator === "factory"
+    ) {
+      // Release the lease so the Python worker can reclaim.
+      await db
+        .from("gov_paper_generation_jobs")
+        .update({
+          status: "queued",
+          worker_id: null,
+          lease_expires_at: null,
+          progress_stage: "queued",
+        })
+        .eq("id", claimed.job.id)
+        .eq("worker_id", claimed.workerId);
+      return json(req, {
+        jobId: claimed.job.id,
+        status: "queued",
+        code: "PYTHON_FACTORY_OWNED",
+        error: "Job released for Python paper-factory worker.",
+        generator: claimedGenerator,
+      }, 202);
     }
 
     const result = await assembleClaimedPaperJob(db, claimed.job, claimed.workerId);

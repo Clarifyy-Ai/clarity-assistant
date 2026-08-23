@@ -619,12 +619,15 @@ class PaperRepository:
 
     @staticmethod
     def _wants_python_factory(job: dict[str, Any]) -> bool:
+        """Only claim jobs explicitly routed to the Python factory.
+
+        Edge sets request_json.generator = "python_paper_factory" when
+        PAPER_FACTORY_WORKER=1. Jobs without that marker stay for the Edge
+        assembler (process-paper-generation-job) to avoid double-claim races.
+        """
         request = job.get("request_json") or {}
         generator = str(request.get("generator") or "").strip().lower()
-        if generator in ("python_paper_factory", "python", "factory"):
-            return True
-        # Also pick up jobs the Edge assembler cannot satisfy from the bank alone.
-        return bool(request.get("allowAiFill")) and not request.get("skipAiFill")
+        return generator in ("python_paper_factory", "python", "factory")
 
     def _claim(
         self, job: dict[str, Any], worker_id: str, now: datetime

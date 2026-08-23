@@ -6,10 +6,22 @@ services:
       - "8000:8000"
     restart: unless-stopped
     environment:
+      PORT: "8000"
       SCRAPE_DAILY_ENABLED: "true"
       SCRAPE_DAILY_HOUR_UTC: "2"
+      # Embedded worker drains gov_paper_generation_jobs when GEMINI/OPENAI keys are set.
+      PAPER_FACTORY_EMBEDDED_WORKER: "true"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
       interval: 30s
       timeout: 5s
       retries: 3
+
+  # Optional dedicated worker (set PAPER_FACTORY_EMBEDDED_WORKER=false on scraper):
+  # paper-factory-worker:
+  #   build: .
+  #   env_file: .env
+  #   restart: unless-stopped
+  #   command: ["python", "-m", "app.paper_factory.cli", "worker"]
+  #   environment:
+  #     PAPER_FACTORY_EMBEDDED_WORKER: "false"
