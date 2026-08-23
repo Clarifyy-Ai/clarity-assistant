@@ -32,6 +32,8 @@ interface SessionStore extends ActiveSessionState {
   setStatus: (status: SessionStatus) => void;
   setConfig: (config: SessionConfig | LiveSessionConfig | null) => void;
   setQuestions: (questions: SessionQuestion[]) => void;
+  /** Append a newly generated question and make it current (does not reset index to 0). */
+  appendAndActivateQuestion: (question: SessionQuestion) => void;
   setCurrentQuestionIndex: (index: number) => void;
   advanceQuestion: () => void;
 
@@ -103,6 +105,21 @@ export const useSessionStore = create<SessionStore>()(
         questions,
         current_question: questions[0] ?? null,
         current_question_index: 0,
+      }),
+
+    appendAndActivateQuestion: (question) =>
+      set((state) => {
+        const questions = [...state.questions, question];
+        const index = questions.length - 1;
+        return {
+          questions,
+          current_question_index: index,
+          current_question: question,
+          question_elapsed_seconds: 0,
+          filler_count: 0,
+          answer_draft: "",
+          is_answering: false,
+        };
       }),
 
     setCurrentQuestionIndex: (index) =>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { useCredits } from "@/hooks/useCredits";
@@ -19,14 +19,14 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/lib/supabase/client";
 import { answerBankDB } from "@/lib/supabase/database";
 import { refreshCredits } from "@/lib/billing/creditsManager";
-import { EDGE_BASE } from "@/lib/env";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { normalizeCompanyName } from "@/lib/company/normalizeCompanyName";
 import { createIdempotencyKey } from "@/lib/api/functions";
 import {
   getAiUserFacingError,
+  isAiProviderUnavailableError,
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
 import { Link, useSearchParams } from "react-router-dom";
@@ -37,7 +37,6 @@ import {
   type StarFieldKey,
   type StarFields,
 } from "@/components/prep/StarBuilderForm";
-
 // Default prep-tool cost for tools without an explicit AI_CREDIT_COSTS entry.
 const PREP_TOOL_DEFAULT_COST = 3;
 
@@ -144,8 +143,13 @@ function STARBuilder() {
   const [loading,    setLoading]    = useState(false);
   const [saved,      setSaved]      = useState(false);
   const [savingToBank, setSavingToBank] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [savedAnswerId, setSavedAnswerId] = useState<string | null>(null);
   const [aiLoading,  setAiLoading]  = useState<StarFieldKey | null>(null);
+  const polishKeysRef = useRef<Partial<Record<StarFieldKey, string>>>({});
+  const generateKeyRef = useRef<string | null>(null);
+  const originalSectionRef = useRef<Partial<Record<StarFieldKey, string>>>({});
+  const originalStarSnapshotRef = useRef<StarFields | null>(null);
 
   const wordCounts = Object.fromEntries(
     Object.entries(star).map(([k, v]) => [k, v.trim().split(/\s+/).filter(Boolean).length])
@@ -158,37 +162,45 @@ function STARBuilder() {
 
   async function polishSection(key: StarFieldKey) {
     if (!credits.canAfford("star_analyse")) return;
+    if (aiLoading) return;
     setAiLoading(key);
+    originalSectionRef.current[key] = star[key];
+
+    const idempotencyKey =
+      polishKeysRef.current[key] ?? createIdempotencyKey(`polish-star:${key}`);
+    polishKeysRef.current[key] = idempotencyKey;
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      if (!token) throw new Error("Not authenticated");
-
-
-      const res = await fetch(`${EDGE_BASE}/polish-star-section`, {
-        method:  "POST",
-        headers: {
-          "Content-Type":  "application/json",
-          "Authorization": `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          section:      key,
-          currentText:  star[key],
+      const data = await fetchEdgeJson<{ polished?: string; original?: string }>(
+        "polish-star-section",
+        {
+          section: key,
+          currentText: star[key],
           questionText: question || undefined,
-        }),
-      });
+        },
+        {
+          headers: {
+            "x-idempotency-key": idempotencyKey,
+          },
+        },
+      );
 
-      if (!res.ok) throw new Error(`Polish failed: ${res.status}`);
-
-      const envelope = await res.json();
-      if (envelope.success && envelope.data?.polished) {
-        setStar((p) => ({ ...p, [key]: envelope.data.polished }));
-        await refreshCredits();
-      }
+      const polished = typeof data.polished === "string" ? data.polished.trim() : "";
+      if (!polished) throw new Error("AI rewrite returned empty content.");
+      setStar((p) => ({ ...p, [key]: polished }));
+      polishKeysRef.current[key] = undefined;
+      await refreshCredits();
     } catch (err) {
-      console.error("polishSection failed:", err);
-      toast.error("Failed to polish section. Please try again.");
+      const prior = originalSectionRef.current[key];
+      if (typeof prior === "string") {
+        setStar((p) => ({ ...p, [key]: prior }));
+      }
+      openUpgradeIfInsufficientCredits(err);
+      const msg = isAiProviderUnavailableError(err)
+        ? "AI improvement is temporarily unavailable."
+        : getAiUserFacingError(err);
+      toast.error(msg);
+      await refreshCredits().catch(() => undefined);
     } finally {
       setAiLoading(null);
     }
@@ -198,46 +210,52 @@ function STARBuilder() {
 
   async function generateFull() {
     if (!isComplete || !credits.canAfford("star_generate")) return;
+    if (loading) return;
     setLoading(true);
+    originalStarSnapshotRef.current = { ...star };
+
+    const idempotencyKey =
+      generateKeyRef.current ?? createIdempotencyKey("generate-star-answer");
+    generateKeyRef.current = idempotencyKey;
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      if (!token) throw new Error("Not authenticated");
-
-
-      const res = await fetch(`${EDGE_BASE}/generate-star-answer`, {
-        method:  "POST",
+      const data = await fetchEdgeJson<{
+        fullAnswer?: string;
+        situation?: string;
+        task?: string;
+        action?: string;
+        result?: string;
+      }>("generate-star-answer", {
+        questionText: question,
+        resumeText: [
+          docStore.active_context?.resume?.content || "",
+          "",
+          "User STAR draft (polish and integrate — do not invent facts beyond this draft):",
+          `Situation: ${star.situation}`,
+          `Task: ${star.task}`,
+          `Action: ${star.action}`,
+          `Result: ${star.result}`,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      }, {
         headers: {
-          "Content-Type":  "application/json",
-          "Authorization": `Bearer ${token}`,
+          "x-idempotency-key": idempotencyKey,
         },
-        body: JSON.stringify({
-          questionText: question,
-          resumeText: [
-            docStore.active_context?.resume?.content || "",
-            "",
-            "User STAR draft (polish and integrate):",
-            `Situation: ${star.situation}`,
-            `Task: ${star.task}`,
-            `Action: ${star.action}`,
-            `Result: ${star.result}`,
-          ]
-            .filter(Boolean)
-            .join("\n"),
-        }),
       });
 
-      if (!res.ok) throw new Error(`Generate failed: ${res.status}`);
-
-      const envelope = await res.json();
-      if (envelope.success && envelope.data) {
-        setGenerated(envelope.data.fullAnswer ?? "");
-        await refreshCredits();
-      }
+      const full = typeof data.fullAnswer === "string" ? data.fullAnswer.trim() : "";
+      if (!full) throw new Error("AI rewrite returned empty content.");
+      setGenerated(full);
+      generateKeyRef.current = null;
+      await refreshCredits();
     } catch (err) {
-      console.error("generateFull failed:", err);
-      toast.error("Failed to generate answer. Please try again.");
+      openUpgradeIfInsufficientCredits(err);
+      const msg = isAiProviderUnavailableError(err)
+        ? "AI improvement is temporarily unavailable."
+        : getAiUserFacingError(err);
+      toast.error(msg);
+      await refreshCredits().catch(() => undefined);
     } finally {
       setLoading(false);
     }
@@ -248,6 +266,7 @@ function STARBuilder() {
   async function saveToBank() {
     if (!user || !generated || savingToBank) return;
     setSavingToBank(true);
+    setSaveFailed(false);
     try {
       const created = await answerBankDB.create(user.id, {
         question_text: question,
@@ -260,8 +279,9 @@ function STARBuilder() {
       setSavedAnswerId(created.id);
       toast.success("Saved to Answer Bank");
       setTimeout(() => setSaved(false), 2500);
-    } catch (err) {
-      toast.error(err?.message ?? "Failed to save answer. Please try again.");
+    } catch {
+      setSaveFailed(true);
+      toast.error("Your improvement was generated but could not be saved.");
     } finally {
       setSavingToBank(false);
     }
@@ -277,7 +297,8 @@ function STARBuilder() {
         renderSectionActions={(key) =>
           star[key].trim().length > 10 ? (
             <button
-              onClick={() => polishSection(key)}
+              type="button"
+              onClick={() => void polishSection(key)}
               disabled={aiLoading === key || !credits.canAfford("star_analyse")}
               className="flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 transition-colors disabled:opacity-40"
             >
@@ -313,7 +334,7 @@ function STARBuilder() {
           size="md"
           disabled={!isComplete || loading || !credits.canAfford("star_generate")}
           loading={loading}
-          onClick={generateFull}
+          onClick={() => void generateFull()}
           leftIcon={<Zap className="w-4 h-4" />}
           fullWidth
         >
@@ -323,7 +344,7 @@ function STARBuilder() {
           <Button
             variant={saved ? "success" : "secondary"}
             size="md"
-            onClick={saveToBank}
+            onClick={() => void saveToBank()}
             disabled={savingToBank}
             loading={savingToBank}
             leftIcon={saved
@@ -331,10 +352,15 @@ function STARBuilder() {
               : <Save className="w-4 h-4" />
             }
           >
-            {saved ? "Saved!" : "Save"}
+            {saveFailed ? "Retry save" : saved ? "Saved!" : "Save"}
           </Button>
         )}
       </div>
+      {saveFailed && (
+        <p className="text-sm text-amber-400">
+          Your improvement was generated but could not be saved.
+        </p>
+      )}
 
       {/* Generated answer */}
       {savedAnswerId && (
@@ -729,16 +755,28 @@ function CompanyPrep() {
 
   async function generate() {
     if (!company.trim() || !role.trim()) return;
+    if (loading) return;
     setLoading(true);
     setBrief(null);
     try {
-      const data = await fetchEdgeJson<{
-        overview?: string;
-        questions?: string[];
-        culture?: string;
-        tips?: string[];
-      }>("company-research", { company: company.trim(), role: role.trim() });
-      setBrief(data);
+      const result = await fetchEdgeJson<{
+        success?: boolean;
+        id?: string;
+        persisted?: boolean;
+        brief?: Record<string, unknown>;
+      }>(
+        "company-research",
+        { company: company.trim(), role: role.trim(), force: true },
+        { headers: { "x-idempotency-key": `company-research:${normalizeCompanyName(company.trim()).replace(/\s+/g, "-")}:prep` } },
+      );
+
+      // The Edge Function is the only writer — never show an unsaved brief.
+      if (!result?.persisted || !result.brief) {
+        toast.error("Research was generated, but we couldn't save it. Please retry.");
+        return;
+      }
+
+      setBrief(result.brief);
       await refreshCredits();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load company brief.");

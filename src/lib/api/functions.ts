@@ -19,6 +19,7 @@ import { useAuthStore } from "@/store/authStore";
 
 export type EdgeFunctionName =
   | "start-session"
+  | "end-session"
   | "generate-answer"
   | "generate-questions"
   | "generate-hint"
@@ -37,6 +38,7 @@ export type EdgeFunctionName =
 
 export type IdempotencyOptions = {
   idempotencyKey?: string;
+  signal?: AbortSignal;
 };
 
 export type InvokeOptions = Omit<ApiClientOptions, "method" | "body"> &

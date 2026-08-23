@@ -11,7 +11,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.logger import configure_logging, get_logger
-from app.routes import document_intelligence, health, metrics, scrape
+from app.routes import (
+    document_intelligence,
+    health,
+    metrics,
+    paper_factory,
+    scrape,
+)
 from app.workers.daily_scheduler import daily_scrape_loop
 
 
@@ -87,6 +93,7 @@ app.include_router(health.router)
 app.include_router(metrics.router)
 app.include_router(scrape.router)
 app.include_router(document_intelligence.router)
+app.include_router(paper_factory.router)
 
 
 @app.exception_handler(RequestValidationError)

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ClipboardList } from "lucide-react";
 import { toast } from "sonner";
@@ -11,6 +11,16 @@ import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { supabase } from "@/lib/supabase/client";
 import { PAGE_SHELL, STACK_GRID } from "@/lib/ui/responsivePage";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { ApiClientError } from "@/lib/api/apiClient";
+import { useAuthStore } from "@/store/authStore";
+import {
+  assessmentStartIdempotencyKey,
+  isAssessmentStartErrorCode,
+  isRetryableAssessmentStartCode,
+  userMessageForAssessmentError,
+  type AssessmentStartErrorCode,
+  type AssessmentStartSuccess,
+} from "@/lib/assessments/assessmentStart";
 
 type Template = {
   id: string;
@@ -24,14 +34,48 @@ type Template = {
   difficulty_distribution: Record<string, number>;
   category_distribution: Record<string, number>;
   max_attempts: number | null;
+  is_active?: boolean | null;
 };
+
+function messageFromStartError(err: unknown): { text: string; retryable: boolean } {
+  if (err instanceof ApiClientError) {
+    const code = isAssessmentStartErrorCode(err.code) ? err.code : "ASSESSMENT_START_FAILED";
+    const details =
+      err.details && typeof err.details === "object"
+        ? (err.details as { details?: { requested_count?: number; available_count?: number } }).details
+        : undefined;
+    return {
+      text: userMessageForAssessmentError(code as AssessmentStartErrorCode, details),
+      retryable: isRetryableAssessmentStartCode(code),
+    };
+  }
+  if (err && typeof err === "object" && "message" in err) {
+    const code =
+      "details" in err && typeof (err as { details?: string }).details === "string"
+        ? (err as { details: string }).details
+        : "";
+    if (isAssessmentStartErrorCode(code)) {
+      return {
+        text: userMessageForAssessmentError(code),
+        retryable: isRetryableAssessmentStartCode(code),
+      };
+    }
+  }
+  return {
+    text: err instanceof Error ? err.message : userMessageForAssessmentError("ASSESSMENT_START_FAILED"),
+    retryable: true,
+  };
+}
 
 export default function AssessmentTemplatesPage() {
   const navigate = useNavigate();
+  const userId = useAuthStore((s) => s.user?.id);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [starting, setStarting] = useState<string | null>(null);
+  const [startError, setStartError] = useState<{ templateId: string; message: string; retryable: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const inFlight = useRef<Set<string>>(new Set());
 
   async function loadTemplates() {
     setLoading(true);
@@ -42,11 +86,11 @@ export default function AssessmentTemplatesPage() {
       .eq("is_published", true)
       .order("title");
     if (error) {
-      setLoadError(error.message);
-      toast.error(error.message);
+      setLoadError("Assessments could not be loaded. Please try again.");
+      toast.error("Assessments could not be loaded. Please try again.");
       setTemplates([]);
     } else {
-      setTemplates((data as Template[]) ?? []);
+      setTemplates(((data as Template[]) ?? []).filter((row) => row.is_active !== false));
     }
     setLoading(false);
   }
@@ -56,29 +100,29 @@ export default function AssessmentTemplatesPage() {
   }, []);
 
   async function start(template: Template) {
+    if (inFlight.current.has(template.id) || starting) return;
+    inFlight.current.add(template.id);
     setStarting(template.id);
+    setStartError(null);
     try {
-      const { data, error } = await supabase.rpc("assemble_assessment_from_template", {
-        p_template_id: template.id,
+      const result = await fetchEdgeJson<AssessmentStartSuccess>("assemble-assessment", {
+        template_id: template.id,
+        idempotency_key: userId ? assessmentStartIdempotencyKey(userId, template.id) : undefined,
+      }, {
+        headers: userId
+          ? { "x-idempotency-key": assessmentStartIdempotencyKey(userId, template.id) }
+          : undefined,
       });
-      if (error) throw error;
-      const testId = (data as { test_id?: string } | null)?.test_id;
-      if (!testId) throw new Error("Assessment could not be assembled.");
-      navigate(`/app/assessments/session/${testId}`);
-    } catch (err) {
-      try {
-        const fallback = await fetchEdgeJson<{ test_id: string }>("assemble-assessment", {
-          template_id: template.id,
-        });
-        if (fallback.test_id) {
-          navigate(`/app/assessments/session/${fallback.test_id}`);
-          return;
-        }
-      } catch {
-        /* fall through */
+      if (!result.test_id) {
+        throw new Error(userMessageForAssessmentError("ASSESSMENT_START_FAILED"));
       }
-      toast.error(err instanceof Error ? err.message : "Could not start assessment.");
+      void navigate(`/app/assessments/session/${result.test_id}`);
+    } catch (err) {
+      const mapped = messageFromStartError(err);
+      setStartError({ templateId: template.id, message: mapped.text, retryable: mapped.retryable });
+      toast.error(mapped.text);
     } finally {
+      inFlight.current.delete(template.id);
       setStarting(null);
     }
   }
@@ -122,9 +166,30 @@ export default function AssessmentTemplatesPage() {
                 <li key={k}>{k} {v}%</li>
               ))}
             </ul>
-            <Button className="mt-4" loading={starting === template.id} onClick={() => void start(template)}>
-              Start assessment
-            </Button>
+            {startError?.templateId === template.id && (
+              <p className="mt-3 text-sm text-destructive" role="alert">
+                {startError.message}
+              </p>
+            )}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                data-testid={`start-assessment-${template.id}`}
+                loading={starting === template.id}
+                disabled={starting !== null}
+                onClick={() => void start(template)}
+              >
+                {starting === template.id ? "Starting" : "Start assessment"}
+              </Button>
+              {startError?.templateId === template.id && startError.retryable && (
+                <Button
+                  variant="outline"
+                  disabled={starting !== null}
+                  onClick={() => void start(template)}
+                >
+                  Retry
+                </Button>
+              )}
+            </div>
           </Card>
         ))}
       </div>

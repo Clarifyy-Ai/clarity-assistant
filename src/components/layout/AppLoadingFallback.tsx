@@ -12,11 +12,10 @@ import {
 } from "@/lib/auth/recoveryActions";
 
 /**
- * Must exceed AUTH_SESSION_TIMEOUT + profile attempts so we never hard-reload
- * while bootstrap is still within its legitimate budget
- * (8s session + 8s profile × 2 attempts ≈ 24s worst case).
+ * Soft stuck UI after soft budget; hard reload only when the user chooses Reload.
+ * Budget: session ≤8s + profile ≤6s × 2 attempts ≈ 20s (role no longer blocks paint).
  */
-const STUCK_TIMEOUT_MS = 30_000;
+const STUCK_TIMEOUT_MS = 22_000;
 
 export function AppLoadingFallback(): JSX.Element {
   const [stuck, setStuck] = useState(false);
@@ -27,12 +26,7 @@ export function AppLoadingFallback(): JSX.Element {
   }, []);
 
   const handleSoftRetry = useCallback(() => {
-    const auth = useAuthStore.getState();
-    if (auth.user?.id) {
-      void auth.loadProfile();
-    } else {
-      void auth.initialize();
-    }
+    void useAuthStore.getState().retryAccountLoad();
     setStuck(false);
   }, []);
 
@@ -55,7 +49,7 @@ export function AppLoadingFallback(): JSX.Element {
             This is taking longer than expected
           </h2>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            We&apos;re having trouble loading your profile. Please try again.
+            We couldn&apos;t load your account. Please try again.
             If this keeps happening, reload the page or contact support.
           </p>
         </div>

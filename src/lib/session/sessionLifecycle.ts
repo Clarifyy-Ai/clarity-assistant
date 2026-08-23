@@ -11,7 +11,10 @@
 // ─────────────────────────────────────────────────────────────────
 
 import { supabase } from "@/lib/supabase/client";
-import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase";
+import type { Tables, TablesUpdate } from "@/integrations/supabase";
+import { startSession } from "@/lib/api/sessions";
+import { createIdempotencyKey } from "@/lib/api/functions";
+import { sessionDurationSeconds } from "@/lib/session/sessionStartEligibility";
 
 export type SessionRow = Tables<"sessions">;
 export type SessionType = SessionRow["type"];
@@ -89,6 +92,19 @@ export function isSessionExpired(row: Pick<SessionRow, "created_at">): boolean {
   return Date.now() - created > EXPIRY_MS;
 }
 
+export function isServerExpired(row: Pick<SessionRow, "expires_at" | "lifecycle_status" | "terminal_reason" | "status">): boolean {
+  if (row.lifecycle_status === "EXPIRED" || row.terminal_reason === "SESSION_TIMEOUT") {
+    return true;
+  }
+  if (row.expires_at) {
+    const expires = new Date(row.expires_at).getTime();
+    if (Number.isFinite(expires) && Date.now() >= expires) return true;
+  }
+  return false;
+}
+
+export { sessionDurationSeconds };
+
 /** Only keep IDs that exist in public.documents (resume IDs live in resumes). */
 async function resolveDocumentsTableId(
   id: string | null | undefined,
@@ -149,77 +165,30 @@ export async function getOrCreateSession(
     throw new Error(findErr.message || "Failed to look up existing session");
   }
 
-  if (existing && !isSessionExpired(existing)) {
+  if (existing && !isSessionExpired(existing) && !isServerExpired(existing)) {
     return { session: existing as SessionRow, reused: true };
   }
 
-  const { data: limitCheck, error: limitErr } = await withDbTimeout(
-    (supabase.rpc as (
-      name: string,
-      args: Record<string, unknown>,
-    ) => ReturnType<typeof supabase.rpc>)(
-      "check_free_tier_limits",
-      { p_user_id: input.user_id, p_action: "start_session" },
-    ),
-    "Session limit check",
-  );
-  const limitResult = limitCheck as { allowed?: boolean; message?: string } | null;
-  if (!limitErr && limitResult && limitResult.allowed === false) {
-    const msg = limitResult.message ?? "Free plan limit reached. Upgrade to Pro.";
-    throw new Error(msg);
-  }
-
-  const tags =
-    input.tags ??
-    buildSessionTags(input.type, input.is_practice ?? false);
-
-  // resume_id / jd_id live on resumes + job_descriptions; sessions.document_id
-  // and sessions.jd_id FK to public.documents — drop IDs that would 500.
-  const document_id = await resolveDocumentsTableId(input.document_id);
-  const jd_id = await resolveDocumentsTableId(input.jd_id);
-
-  const insert: TablesInsert<"sessions"> & { lifecycle_status?: string } = {
-    user_id: input.user_id,
-    type: input.type,
-    status: "pending",
-    lifecycle_status: "CREATED",
-    title: input.title ?? null,
-    company_id: input.company_id ?? null,
-    document_id,
-    jd_id,
-    model_used: input.model_used ?? null,
-    tags: tags.length > 0 ? tags : null,
-  };
-
-  const { data: created, error: insertErr } = await withDbTimeout(
-    supabase.from("sessions").insert(insert).select().single(),
-    "Session create",
+  const started = await startSession(
+    {
+      session_type: input.type === "live" ? "rehearsal" : input.type,
+      type: input.type === "live" ? "rehearsal" : input.type,
+      is_practice: input.is_practice ?? input.type !== "live",
+      resume_id: input.document_id ?? null,
+      jd_id: input.jd_id ?? null,
+      model: input.model_used ?? undefined,
+    },
+    { idempotencyKey: createIdempotencyKey("start-session") },
   );
 
-  if (insertErr?.message?.includes("sessions_document_id_fkey") ||
-      insertErr?.message?.includes("sessions_jd_id_fkey")) {
-    const retryInsert: TablesInsert<"sessions"> = {
-      ...insert,
-      document_id: null,
-      jd_id: null,
-    };
-    const { data: retried, error: retryErr } = await withDbTimeout(
-      supabase.from("sessions").insert(retryInsert).select().single(),
-      "Session create",
-    );
-    if (retryErr || !retried) {
-      console.error("[sessionLifecycle] insert retry failed:", retryErr);
-      throw new Error(retryErr?.message || "Failed to create session");
-    }
-    return { session: retried as SessionRow, reused: false };
+  const { data: created, error: reloadErr } = await withDbTimeout(
+    supabase.from("sessions").select("*").eq("id", started.session_id).maybeSingle(),
+    "Session reload",
+  );
+  if (reloadErr || !created) {
+    throw new Error(reloadErr?.message || "Failed to load started session");
   }
-
-  if (insertErr || !created) {
-    console.error("[sessionLifecycle] insert failed:", insertErr);
-    throw new Error(insertErr?.message || "Failed to create session");
-  }
-
-  return { session: created as SessionRow, reused: false };
+  return { session: created as SessionRow, reused: Boolean(started.reused) };
 }
 
 /**
@@ -230,7 +199,7 @@ export async function activateSession(sessionId: string): Promise<void> {
   const { data: existing, error: lookupError } = await withDbTimeout(
     supabase
       .from("sessions")
-      .select("id, created_at, status")
+      .select("id, created_at, status, expires_at, lifecycle_status, terminal_reason")
       .eq("id", sessionId)
       .maybeSingle(),
     "Session activate",
@@ -240,7 +209,7 @@ export async function activateSession(sessionId: string): Promise<void> {
     throw new Error(lookupError?.message || "Session not found");
   }
 
-  if (isSessionExpired(existing)) {
+  if (isSessionExpired(existing) || isServerExpired(existing as SessionRow)) {
     await supabase
       .from("sessions")
       .update({ status: "abandoned", lifecycle_status: "CANCELLED", ended_at: new Date().toISOString() })
@@ -285,10 +254,15 @@ export async function getResumableSession(
   if (error || !data) return null;
 
   if (data.status === "completed" || data.status === "abandoned") return null;
-  if (isSessionExpired(data)) {
+  if (isSessionExpired(data) || isServerExpired(data)) {
     await supabase
       .from("sessions")
-      .update({ status: "abandoned", lifecycle_status: "CANCELLED", ended_at: new Date().toISOString() })
+      .update({
+        status: "abandoned",
+        lifecycle_status: "EXPIRED",
+        terminal_reason: "SESSION_TIMEOUT",
+        ended_at: new Date().toISOString(),
+      })
       .eq("id", sessionId);
     return null;
   }

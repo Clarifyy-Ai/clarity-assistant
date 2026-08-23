@@ -6,37 +6,43 @@ import {
   log,
   getAdminClient,
 } from "../_shared/utils.ts";
-import { deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
+import {
+  deductCreditsAtomic,
+  refundCredits,
+  getIdempotentResponse,
+  storeIdempotentResponse,
+  createServiceClient,
+} from "../_shared/supabase.ts";
 import { parseStructuredJson } from "../_shared/structuredParse.ts";
 import { generateWithFallback } from "../_shared/aiProvider.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
-import {
-  enforceAiRateLimitAsync,
-} from "../_shared/rateLimit.ts";
+import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
+import { creditDenialResponse } from "../_shared/creditAuthority.ts";
+import {
+  normalizeCompanyName,
+  companyResearchIdempotencyKey,
+} from "../_shared/companyIdentity.ts";
 
 const FN = "company-research";
 const CREDIT_COST = creditCost("company_research");
 
-const SYSTEM_PROMPT = `
-You are an expert career and company research assistant.
+const SYSTEM_PROMPT = `You are an expert career and company research assistant.
 Provide structured, factual, concise interview insights.
-Return ONLY valid JSON.
-`;
+Return ONLY valid JSON.`;
 
 function withTimeout<T>(promise: Promise<T>, ms = 20000): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error("Request timeout")), ms)
+      setTimeout(() => reject(new Error("Request timeout")), ms),
     ),
   ]);
 }
 
 async function retry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
-  let lastError;
-
+  let lastError: unknown;
   for (let i = 0; i <= retries; i++) {
     try {
       return await fn();
@@ -45,46 +51,66 @@ async function retry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
       await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
     }
   }
-
   throw lastError;
 }
 
-function validateResponse(data: any) {
+type ResearchBrief = {
+  overview: string;
+  industry: string;
+  tags: string[];
+  interview_process: string[];
+  questions: string[];
+  values: string[];
+  tips: string[];
+  watch_outs: string[];
+};
+
+function validateResponse(data: Record<string, unknown>): ResearchBrief {
   return {
-    overview:
-      typeof data?.overview === "string"
-        ? data.overview
-        : "No overview available.",
-
-    industry:
-      typeof data?.industry === "string"
-        ? data.industry
-        : "",
-
-    tags: Array.isArray(data?.tags)
-      ? data.tags.slice(0, 20)
+    overview: typeof data.overview === "string" ? data.overview.trim() : "",
+    industry: typeof data.industry === "string" ? data.industry.trim() : "",
+    tags: Array.isArray(data.tags)
+      ? data.tags.filter((t): t is string => typeof t === "string").slice(0, 20)
       : [],
-
-    interview_process: Array.isArray(data?.interview_process)
-      ? data.interview_process
+    interview_process: Array.isArray(data.interview_process)
+      ? data.interview_process.filter((t): t is string => typeof t === "string")
       : [],
-
-    questions: Array.isArray(data?.questions)
-      ? data.questions
+    questions: Array.isArray(data.questions)
+      ? data.questions.filter((t): t is string => typeof t === "string")
       : [],
-
-    values: Array.isArray(data?.values)
-      ? data.values
+    values: Array.isArray(data.values)
+      ? data.values.filter((t): t is string => typeof t === "string")
       : [],
-
-    tips: Array.isArray(data?.tips)
-      ? data.tips
+    tips: Array.isArray(data.tips)
+      ? data.tips.filter((t): t is string => typeof t === "string")
       : [],
-
-    watch_outs: Array.isArray(data?.watch_outs)
-      ? data.watch_outs
+    watch_outs: Array.isArray(data.watch_outs)
+      ? data.watch_outs.filter((t): t is string => typeof t === "string")
       : [],
   };
+}
+
+function isMeaningfulBrief(data: ResearchBrief): boolean {
+  const overview = data.overview.trim();
+  if (!overview || overview === "No overview available.") return false;
+  if (overview.length < 40) return false;
+  const substance =
+    data.tags.length +
+    data.interview_process.length +
+    data.questions.length +
+    data.values.length +
+    data.tips.length;
+  return substance > 0;
+}
+
+function jsonResponse(req: Request, body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...getCorsHeaders(req),
+      "Content-Type": "application/json",
+    },
+  });
 }
 
 Deno.serve(async (req) => {
@@ -92,16 +118,18 @@ Deno.serve(async (req) => {
   if (cors) return cors;
 
   const requestId = crypto.randomUUID();
+  let charged = false;
+  let userId = "";
 
   try {
     log(FN, "info", "Request started", { requestId });
 
     const auth = await requireAuth(req);
-    const userId = auth.userId;
+    userId = auth.userId;
 
     const rateLimited = await enforceAiRateLimitAsync(
       getAdminClient(),
-      "company-research",
+      FN,
       userId,
     );
     if (rateLimited) return rateLimited;
@@ -112,41 +140,104 @@ Deno.serve(async (req) => {
     const capabilityGate = requireCapabilityForFunction(auth.planId, FN, req);
     if (capabilityGate) return capabilityGate;
 
-    const body = await parseBody<any>(req);
-
-    const rawCompany = String(body.company || "").trim();
-    const rawRole = String(body.role || "").trim();
+    const body = await parseBody<Record<string, unknown>>(req);
+    const rawCompany = String(body.company ?? body.companyName ?? "").trim();
+    const rawRole = String(body.role ?? body.roleTitle ?? "").trim();
+    const force = body.force === true || body.refresh === true;
 
     if (!rawCompany) {
-      return errorResponse(
-        "Missing company name",
-        "INVALID_REQUEST",
-        400,
-        req
-      );
+      return errorResponse("Missing company name", "INVALID_REQUEST", 400, req);
     }
 
     const company = rawCompany.slice(0, 100);
     const role = rawRole.slice(0, 100);
+    const normalized = normalizeCompanyName(company);
+    if (!normalized) {
+      return errorResponse("Missing company name", "INVALID_REQUEST", 400, req);
+    }
+
+    const admin = getAdminClient();
+
+    if (!force) {
+      const { data: existing, error: existingErr } = await admin
+        .from("company_research")
+        .select("id, raw_data")
+        .eq("user_id", userId)
+        .eq("company_name_normalized", normalized)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingErr) {
+        log(FN, "error", "Cache read failed", {
+          requestId,
+          error: existingErr.message,
+        });
+      } else if (existing?.raw_data && typeof existing.raw_data === "object") {
+        return jsonResponse(req, {
+          success: true,
+          persisted: true,
+          cached: true,
+          id: existing.id,
+          data: existing.raw_data,
+          brief: existing.raw_data,
+        });
+      }
+    }
+
+    const headerKey = req.headers.get("x-idempotency-key")?.trim();
+    const derivedKey = companyResearchIdempotencyKey({
+      userId,
+      normalizedCompany: normalized.replace(/\s+/g, "-").replace(/[^A-Za-z0-9._:-]/g, "_"),
+      force,
+    });
+    const idempotencyKey =
+      headerKey && /^[A-Za-z0-9._:-]{16,150}$/.test(headerKey)
+        ? headerKey.slice(0, 150)
+        : derivedKey.slice(0, 150);
+
+    const serviceDb = createServiceClient();
+    const prior = await getIdempotentResponse(serviceDb, idempotencyKey, {
+      userId,
+      action: "company_research",
+    });
+    if (prior?.success && prior.payload?.data && prior.payload?.persisted) {
+      return jsonResponse(req, {
+        success: true,
+        persisted: true,
+        cached: true,
+        id: prior.payload.id,
+        data: prior.payload.data,
+        brief: prior.payload.data,
+        balance: prior.balanceAfter ?? prior.balance,
+      });
+    }
 
     const creditResult = await deductCreditsAtomic({
       userId,
       action: "company_research",
       cost: CREDIT_COST,
-      idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+      idempotencyKey,
     });
 
     if (!creditResult.success) {
-      return errorResponse(
-        "Insufficient credits.",
-        "INSUFFICIENT_CREDITS",
-        402,
-        req
-      );
+      return creditDenialResponse(req, creditResult, CREDIT_COST);
+    }
+    charged = true;
+
+    if (creditResult.payload?.data && creditResult.payload?.persisted) {
+      return jsonResponse(req, {
+        success: true,
+        persisted: true,
+        cached: true,
+        id: creditResult.payload.id,
+        data: creditResult.payload.data,
+        brief: creditResult.payload.data,
+        balance: creditResult.balanceAfter ?? creditResult.balance,
+      });
     }
 
-    const prompt = `
-Generate a company research brief for interview preparation.
+    const prompt = `Generate a company research brief for interview preparation.
 
 Company: ${company}
 Role: ${role || "General interview"}
@@ -162,13 +253,11 @@ Return ONLY valid JSON:
   "values": [],
   "tips": [],
   "watch_outs": []
-}
-`;
+}`;
 
-    let aiResult;
-
+    let aiText = "";
     try {
-      aiResult = await withTimeout(
+      const aiResult = await withTimeout(
         retry(() =>
           generateWithFallback({
             prompt,
@@ -178,87 +267,145 @@ Return ONLY valid JSON:
             jsonMode: true,
             userId,
             action: "company_research",
-          })
+          }),
         ),
-        20000
+        20000,
       );
-
-      if (!aiResult?.text) {
-        throw new Error("Empty AI response");
-      }
+      aiText = String(aiResult?.text ?? "").trim();
+      if (!aiText) throw new Error("Empty AI response");
     } catch (err) {
       await refundCredits({
         userId,
         cost: CREDIT_COST,
-        reason: "company-research AI call failure",
+        reason: "company-research provider failure",
       });
-
-      log(FN, "error", "AI failed", {
-        requestId,
-        error: String(err),
-      });
-
+      charged = false;
+      log(FN, "error", "Provider failed", { requestId, error: String(err) });
       return errorResponse(
-        "Company research unavailable. Credits refunded.",
-        "AI_ERROR",
-        502,
-        req
+        "Company research is temporarily unavailable. Please try again.",
+        "PROVIDER_UNAVAILABLE",
+        503,
+        req,
       );
     }
 
-    const parsedResult = parseStructuredJson(aiResult.text, (value): value is Record<string, unknown> =>
-      Boolean(value) && typeof value === "object",
+    const parsedResult = parseStructuredJson(
+      aiText,
+      (value): value is Record<string, unknown> =>
+        Boolean(value) && typeof value === "object" && !Array.isArray(value),
     );
-    const parsed = parsedResult.value ?? {
-      overview: "",
-      industry: "",
-      tags: [],
-      interview_process: [],
-      questions: [],
-      values: [],
-      tips: [],
-      watch_outs: [],
+    const data = validateResponse(parsedResult.value ?? {});
+
+    if (!isMeaningfulBrief(data)) {
+      await refundCredits({
+        userId,
+        cost: CREDIT_COST,
+        reason: "company-research invalid provider payload",
+      });
+      charged = false;
+      return errorResponse(
+        "Company research is temporarily unavailable. Please try again.",
+        "PROVIDER_UNAVAILABLE",
+        503,
+        req,
+      );
+    }
+
+    const culture =
+      data.values.length > 0 ? data.values.join("; ") : data.industry || null;
+    const prepTips =
+      data.tips.length > 0
+        ? data.tips.join("; ")
+        : data.watch_outs.length > 0
+        ? data.watch_outs.join("; ")
+        : null;
+
+    const upsertRow = {
+      user_id: userId,
+      company_name: company,
+      company_name_normalized: normalized,
+      role_title: role || null,
+      overview: data.overview,
+      culture,
+      prep_tips: prepTips,
+      raw_data: data,
     };
 
-    const data = validateResponse(parsed);
+    const { data: saved, error: persistErr } = await admin
+      .from("company_research")
+      .upsert(upsertRow, { onConflict: "user_id,company_name_normalized" })
+      .select("id")
+      .maybeSingle();
+
+    if (persistErr || !saved?.id) {
+      await refundCredits({
+        userId,
+        cost: CREDIT_COST,
+        reason: "company-research persistence failure",
+      });
+      charged = false;
+      log(FN, "error", "Persist failed", {
+        requestId,
+        error: persistErr?.message ?? "missing id",
+      });
+      return errorResponse(
+        "Research was generated, but we could not save it. Please retry.",
+        "DATABASE_UNAVAILABLE",
+        503,
+        req,
+      );
+    }
+
+    await storeIdempotentResponse(
+      serviceDb,
+      idempotencyKey,
+      {
+        success: true,
+        balance: creditResult.balanceAfter ?? creditResult.balance,
+        balanceAfter: creditResult.balanceAfter ?? creditResult.balance,
+        payload: {
+          persisted: true,
+          id: saved.id,
+          data,
+        },
+      },
+      { userId, action: "company_research" },
+    );
 
     log(FN, "info", "Success", {
       requestId,
-      company,
+      company: normalized,
       userId,
+      id: saved.id,
     });
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        data,
-      }),
-      {
-        headers: {
-          ...getCorsHeaders(req),
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    return jsonResponse(req, {
+      success: true,
+      persisted: true,
+      cached: false,
+      id: saved.id,
+      data,
+      brief: data,
+      balance: creditResult.balanceAfter ?? creditResult.balance,
+    });
   } catch (err) {
-    log(FN, "error", "Unhandled error", {
-      requestId,
-      error: String(err),
-    });
-
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: "Internal server error",
-        code: "INTERNAL_ERROR",
-      }),
-      {
-        status: 500,
-        headers: {
-          ...getCorsHeaders(req),
-          "Content-Type": "application/json",
-        },
+    if (charged && userId) {
+      try {
+        await refundCredits({
+          userId,
+          cost: CREDIT_COST,
+          reason: "company-research unhandled failure",
+        });
+      } catch {
+        // best-effort compensation
       }
+    }
+    log(FN, "error", "Unhandled error", { requestId, error: String(err) });
+    return errorResponse(
+      "Company research failed. Please try again.",
+      "INTERNAL_ERROR",
+      500,
+      req,
     );
   }
 });

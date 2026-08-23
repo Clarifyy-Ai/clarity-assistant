@@ -21,6 +21,11 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 import { isTerminalDeletionStatus } from "@/lib/account/deletionStates";
+import {
+  createExportIdempotencyKey,
+  messageFromExportCaught,
+  messageFromExportResponse,
+} from "@/lib/export/exportUserFacingError";
 
 // ─────────────────────────────────────────────────────────────────
 // SettingsDanger — delete account, export data, reset
@@ -42,12 +47,20 @@ export default function SettingsDanger() {
   // ── Export data ──────────────────────────────────────────────
 
   async function handleExport() {
+    if (exporting) return;
     setExporting(true);
+    const idempotencyKey = createExportIdempotencyKey("full");
     try {
-      
-      const res = await fetchEdge("export-user-data", { type: "full" });
+      const res = await fetchEdge(
+        "export-user-data",
+        { type: "full", idempotencyKey },
+        { headers: { "Idempotency-Key": idempotencyKey } },
+      );
 
-      if (!res.ok) throw new Error(`Export failed: ${res.statusText}`);
+      if (!res.ok) {
+        toast.error(await messageFromExportResponse(res));
+        return;
+      }
 
       const blob = await res.blob();
       const url  = URL.createObjectURL(blob);
@@ -58,8 +71,7 @@ export default function SettingsDanger() {
       URL.revokeObjectURL(url);
       toast.success("Export downloaded successfully");
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Export failed. Please try again.";
-      toast.error(message);
+      toast.error(messageFromExportCaught(err));
     } finally {
       setExporting(false);
     }

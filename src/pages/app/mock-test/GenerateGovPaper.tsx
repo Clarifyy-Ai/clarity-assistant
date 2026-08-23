@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Check, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -10,6 +10,7 @@ import {
   getExamSyllabus,
   getPaperGenerationJob,
   searchGovExams,
+  isSearchUnavailableError,
   type GovExamSearchResult,
   type PaperJobResult,
 } from "@/lib/gov-exam/api";
@@ -17,6 +18,19 @@ import {
   bankReadinessLabel,
   formatBankCoverage,
 } from "@/lib/gov-exam/bankReadiness";
+import {
+  customPracticeSetLabel,
+  decideQuestionInventory,
+  formatInventoryCoverage,
+  generateButtonLabel,
+  generationSourceSummary,
+} from "@/lib/gov-exam/questionInventoryPolicy";
+import { planRank } from "@/lib/billing/planCatalog";
+import { formatGovExamOperationError } from "@/lib/gov-exam/examOperationErrors";
+import { ApiClientError } from "@/lib/api/apiClient";
+import { useAuthStore } from "@/store/userStore";
+import { resolveCreditBalance } from "@/lib/billing/resolveCreditBalance";
+import { fetchSpendableCredits } from "@/lib/billing/fetchSpendableCredits";
 import {
   AI_GENERATED_PAPER_LABEL,
   CUSTOM_PRACTICE_PAPER_LABEL,
@@ -28,14 +42,15 @@ import { toast } from "sonner";
 const STEPS = ["Exam", "Paper basis", "Customize", "Review"] as const;
 
 function paperJobErrorMessage(job: PaperJobResult): string {
-  const raw = [job.errorMessage, job.error, job.errorCode].find(
-    (v): v is string => typeof v === "string" && v.trim().length > 0,
-  ) ?? "Generation failed";
-  if (/429|RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(raw)) {
-    return "AI question generation is temporarily rate-limited. Wait a minute and try again.";
-  }
-  const compact = raw.replace(/\s+/g, " ").trim();
-  return compact.length > 180 ? `${compact.slice(0, 180)}…` : compact;
+  return formatGovExamOperationError({
+    error: job.errorMessage ?? job.error ?? "Generation failed",
+    code: job.errorCode ?? "",
+    available: job.available,
+    requested: job.requested ?? job.required,
+    required: job.required,
+    balance: job.balance,
+    cost: job.creditsCharged,
+  });
 }
 
 const JOB_STAGES = [
@@ -81,6 +96,31 @@ export default function GenerateGovPaper(): React.ReactElement {
   const [difficulty, setDifficulty] = useState<"" | "EASY" | "MEDIUM" | "HARD">("");
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState<PaperJobResult | null>(null);
+  const generatingRef = useRef(false);
+  const idempotencyKeyRef = useRef<string | null>(null);
+  const profile = useAuthStore((s) => s.profile);
+  const storeCredits = useAuthStore((s) => (s as { credits?: number }).credits);
+  const isProfileLoaded = useAuthStore((s) => (s as { isProfileLoaded?: boolean }).isProfileLoaded);
+  const creditBalance = resolveCreditBalance({
+    isProfileLoaded,
+    profileCredits: profile?.credits,
+    storeCredits,
+  });
+  const [serverCredits, setServerCredits] = useState<number | null>(null);
+
+  useEffect(() => {
+    const userId = profile?.id;
+    if (!userId) return;
+    let cancelled = false;
+    void fetchSpendableCredits(userId).then((balance) => {
+      if (!cancelled && balance != null) setServerCredits(balance);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.id]);
+
+  const displayCredits = serverCredits ?? (creditBalance.known ? creditBalance.balance : null);
 
   const selected = useMemo(
     () => exams.find((e) => e.examId === examId) ?? null,
@@ -92,6 +132,18 @@ export default function GenerateGovPaper(): React.ReactElement {
   const bankCoverageLabel = bank
     ? formatBankCoverage(bank.approvedPublicCount, bank.requiredQuestions)
     : null;
+  const requestedForConfig =
+    basis === "full_sim"
+      ? selected?.pattern?.totalQuestions ?? questionCount
+      : questionCount;
+  // AI generation of missing questions is a Pro-and-above capability (rank >= 2).
+  // The server re-checks this; the flag only decides what the UI may offer.
+  const aiFillAvailable = planRank(profile?.plan_id) >= 2;
+  const inventory = decideQuestionInventory({
+    available: bank?.approvedPublicCount ?? 0,
+    requested: requestedForConfig,
+    aiFillAvailable,
+  });
 
   useEffect(() => {
     void searchGovExams({ q: "" })
@@ -105,7 +157,15 @@ export default function GenerateGovPaper(): React.ReactElement {
           setStageId(preferred.stage?.id ?? preferred.stages[0]?.id ?? "");
         }
       })
-      .catch((e) => toast.error(e instanceof Error ? e.message : "Search failed"));
+      .catch((e) =>
+        toast.error(
+          isSearchUnavailableError(e)
+            ? "Exam search is temporarily unavailable. Please try again."
+            : e instanceof Error
+              ? e.message
+              : "Search failed",
+        ),
+      );
   }, []);
 
   useEffect(() => {
@@ -153,31 +213,49 @@ export default function GenerateGovPaper(): React.ReactElement {
     return [...new Set([...selectedTopics, ...fromDraft])].slice(0, 20);
   }, [selectedTopics, topicDraft]);
 
-  async function handleGenerate() {
+  async function handleGenerate(overrideCount?: number) {
     if (!examId || !stageId) {
       toast.error("Select an exam and stage");
       return;
     }
+    if (generatingRef.current) return;
     if (basis === "topic" && resolvedTopics.length === 0) {
       toast.error("Select or enter at least one topic");
       return;
     }
+    const requested = overrideCount ?? requestedForConfig;
+    const liveInventory = decideQuestionInventory({
+      available: bank?.approvedPublicCount ?? 0,
+      requested,
+      aiFillAvailable,
+    });
+    if (!liveInventory.canGenerateRequested) {
+      toast.error(
+        `Only ${liveInventory.available} approved questions are currently available for this configuration.`,
+      );
+      return;
+    }
+    generatingRef.current = true;
     setBusy(true);
     setJob(null);
-    const idempotencyKey = crypto.randomUUID();
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current = crypto.randomUUID();
+    }
+    const idempotencyKey = idempotencyKeyRef.current;
     try {
       if (basis === "topic") {
         const result = await generateTopicPractice({
           examId,
           stageId,
           topics: resolvedTopics,
-          questionCount: Math.min(100, Math.max(5, questionCount)),
+          questionCount: Math.min(100, Math.max(5, requested)),
           language,
           difficulty: difficulty || null,
           idempotencyKey,
         });
         setJob(result);
         if (result.status === "failed" || !result.mockTestId) {
+          idempotencyKeyRef.current = null;
           toast.error(paperJobErrorMessage(result));
           return;
         }
@@ -193,16 +271,19 @@ export default function GenerateGovPaper(): React.ReactElement {
       const result = await createExamPaper({
         examId,
         stageId,
-        mode,
+        mode: overrideCount != null ? "custom_mock" : mode,
         language,
         sourceYears: [2024, 2023, 2022],
-        questionCount: mode === "custom_mock" ? questionCount : undefined,
-        durationMinutes: mode === "custom_mock" ? durationMinutes : undefined,
+        questionCount:
+          overrideCount != null || mode === "custom_mock" ? requested : undefined,
+        durationMinutes:
+          overrideCount != null || mode === "custom_mock" ? durationMinutes : undefined,
         idempotencyKey,
       });
       setJob(result);
 
       if (result.status === "failed") {
+        idempotencyKeyRef.current = null;
         toast.error(paperJobErrorMessage(result));
         return;
       }
@@ -246,15 +327,20 @@ export default function GenerateGovPaper(): React.ReactElement {
         );
         navigate(`/app/mock-test/session/${current.mockTestId}`);
       } else if (current.status === "failed") {
+        idempotencyKeyRef.current = null;
         toast.error(paperJobErrorMessage(current));
       } else {
         toast.message(
-          "Still generating unique questions on the server. This can take a few minutes when the bank is short — refresh Mock Tests shortly.",
+          "Paper generation is still running on the server. Open Mock Tests in a moment to start the attempt.",
         );
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Generation failed");
+      if (e instanceof ApiClientError) {
+        idempotencyKeyRef.current = null;
+      }
+      toast.error(formatGovExamOperationError(e));
     } finally {
+      generatingRef.current = false;
       setBusy(false);
     }
   }
@@ -379,7 +465,9 @@ export default function GenerateGovPaper(): React.ReactElement {
                       <span className="block text-xs text-muted-foreground">
                         {bankCoverageLabel}
                         {!fullSimAvailable
-                          ? " — bank is short; remaining unique questions will be generated with AI (takes a few minutes)"
+                          ? aiFillAvailable
+                            ? " — bank is short; the remaining questions are generated by AI to the official blueprint"
+                            : " — bank is short; a full paper needs AI generation, available on Pro and above"
                           : ""}
                       </span>
                     )}
@@ -388,20 +476,22 @@ export default function GenerateGovPaper(): React.ReactElement {
               ))}
               {basis === "topic" && (
                 <p className="text-xs text-muted-foreground">
-                  Topic practice uses verified bank items first. If coverage is short, unique
-                  AI-generated MCQs fill the rest — this can take a minute. Not an official paper.
+                  Topic practice uses verified bank items only. If coverage is short, generate a
+                  smaller Custom Practice Set — we do not invent missing questions. Not an official paper.
                 </p>
               )}
               {basis === "full_sim" && (
                 <p className="text-xs text-muted-foreground">
-                  Uses the exact pattern count. Unique bank questions are used first; remaining
-                  slots are generated with AI and deduplicated. Not an official or leaked paper.
+                  Builds the exact pattern count: approved bank items first, then AI-generated
+                  questions written to the approved syllabus and blueprint. Not an official or
+                  leaked paper.
                 </p>
               )}
-              {!fullSimAvailable && (
+              {!fullSimAvailable && !aiFillAvailable && (
                 <p className="text-xs text-amber-700 dark:text-amber-400">
-                  Approved bank coverage is {bankCoverageLabel ?? "unknown"}. Generation will take
-                  longer while AI fills unique remaining questions for this exam.
+                  Approved bank coverage is {bankCoverageLabel ?? "unknown"}. Generating the
+                  remaining questions requires a Pro plan, or you can build a smaller Custom
+                  Practice Set from the approved bank.
                 </p>
               )}
             </fieldset>
@@ -533,27 +623,42 @@ export default function GenerateGovPaper(): React.ReactElement {
                       : "Custom practice"}
                 </dd>
                 <dt className="text-muted-foreground">Questions</dt>
-                <dd>{basis === "full_sim" ? selected?.pattern?.totalQuestions : questionCount}</dd>
+                <dd>{requestedForConfig}</dd>
+                <dt className="text-muted-foreground">Approved inventory</dt>
+                <dd>{formatInventoryCoverage(inventory.available, requestedForConfig)}</dd>
+                <dt className="text-muted-foreground">Question sources</dt>
+                <dd>{generationSourceSummary(inventory)}</dd>
                 {basis === "topic" && (
                   <>
                     <dt className="text-muted-foreground">Topics</dt>
                     <dd className="truncate">{resolvedTopics.join(", ") || "—"}</dd>
                   </>
                 )}
-                <dt className="text-muted-foreground">Bank coverage</dt>
-                <dd>{bankCoverageLabel ?? "—"}</dd>
-                <dt className="text-muted-foreground">Credits</dt>
+                <dt className="text-muted-foreground">Your credits</dt>
+                <dd>{displayCredits ?? "…"}</dd>
+                <dt className="text-muted-foreground">Operation cost</dt>
                 <dd>{CREATE_EXAM_PAPER_CREDIT_COST}</dd>
                 <dt className="text-muted-foreground">Quality checks</dt>
                 <dd>
                   {basis === "topic"
                     ? "Topic/subject match · uniqueness · bank approval"
-                    : "Blueprint · uniqueness · bank + AI fill"}
+                    : "Blueprint · uniqueness · approved bank inventory"}
                 </dd>
               </dl>
-              <p className="text-xs text-amber-700 dark:text-amber-400">
-                {basis === "topic" ? CUSTOM_PRACTICE_PAPER_LABEL : AI_GENERATED_PAPER_LABEL}
-              </p>
+              {inventory.reason === "ai_fill" && (
+                <p className="text-sm text-muted-foreground">
+                  {inventory.available} approved questions are available, so{" "}
+                  {inventory.aiQuestions} will be generated by AI against the approved syllabus,
+                  section weights and marking scheme. Every generated question is validated for a
+                  single correct answer and checked against the rest of the paper for duplicates.
+                </p>
+              )}
+              {(inventory.reason === "short" || inventory.reason === "empty") && (
+                <p className="text-sm text-amber-700 dark:text-amber-400">
+                  Only {inventory.available} approved questions are currently available for this
+                  configuration.
+                </p>
+              )}
 
               {busy && job && (
                 <ul className="space-y-1.5 mt-4" aria-live="polite">
@@ -590,7 +695,7 @@ export default function GenerateGovPaper(): React.ReactElement {
               <Button onClick={() => setStep((s) => Math.min(3, s + 1))} disabled={!examId}>
                 Continue
               </Button>
-            ) : (
+            ) : inventory.canGenerateRequested ? (
               <Button
                 onClick={() => void handleGenerate()}
                 disabled={busy || !stageId}
@@ -600,8 +705,24 @@ export default function GenerateGovPaper(): React.ReactElement {
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Generating…
                   </>
+                ) : basis === "full_sim" ? (
+                  generateButtonLabel(inventory)
                 ) : (
                   "Generate Practice Paper"
+                )}
+              </Button>
+            ) : (
+              <Button
+                onClick={() => void handleGenerate(inventory.customPracticeMax)}
+                disabled={busy || !stageId || inventory.customPracticeMax < 5}
+              >
+                {busy ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Generating…
+                  </>
+                ) : (
+                  customPracticeSetLabel(inventory.customPracticeMax)
                 )}
               </Button>
             )}
@@ -616,7 +737,11 @@ export default function GenerateGovPaper(): React.ReactElement {
             Negative mark: {selected?.pattern?.negativeMark ?? "—"}
           </p>
           <p>Est. credits: {CREATE_EXAM_PAPER_CREDIT_COST}</p>
-          <p>Bank: {bankCoverageLabel ?? "—"}</p>
+          <p>Your credits: {displayCredits ?? "…"}</p>
+          <p>Bank: {formatInventoryCoverage(inventory.available, requestedForConfig)}</p>
+          {inventory.mode === "ai_assisted" && (
+            <p>AI-generated: {inventory.aiQuestions} questions</p>
+          )}
           <p className="pt-2 border-t border-border">
             Official / AI label set from paper class after assembly.
           </p>

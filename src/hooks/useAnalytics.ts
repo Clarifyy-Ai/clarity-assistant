@@ -1,7 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
+import { subscribeFocusRecovery } from "@/lib/focusRecovery";
+import { toSafeUiError } from "@/lib/focusRecovery";
+import { ApiClientError } from "@/lib/api/apiClient";
 import type {
   AnalyticsDashboardData,
   AnalyticsFilter,
@@ -9,9 +12,14 @@ import type {
   AnalyticsSessionFilter,
   SessionComparisonData,
   SessionAnalyticsSummary,
-  LeaderboardEntry,
 } from "@/types/analytics.types";
 import type { InterviewType } from "@/types/session.types";
+import {
+  compareErrorUserMessage,
+  resolveDisplayTimeZone,
+  type SessionComparisonPayload,
+  type SessionComparisonSide,
+} from "@/lib/analytics/sessionComparison";
 
 // ─────────────────────────────────────────────────────────────────
 // useAnalytics
@@ -31,16 +39,33 @@ export function useAnalytics() {
     interview_type: "all",
   });
   const [comparison,   setComparison]   = useState<SessionComparisonData | null>(null);
+  const [isComparing,  setIsComparing]  = useState(false);
+  const [compareError, setCompareError] = useState<string | null>(null);
+
+  const hasDataRef = useRef(false);
 
   // ── Load on mount + filter change ────────────────────────────
 
   useEffect(() => {
     if (!user) return;
     void loadAnalytics();
+    // loadAnalytics closes over current filter; re-run when the user or filters change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, filter.period, filter.session_filter, filter.interview_type]);
 
+  useEffect(() => {
+    return subscribeFocusRecovery((plan) => {
+      if (plan.revalidate.includes("analytics")) {
+        void loadAnalytics();
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
   async function loadAnalytics(): Promise<void> {
-    setIsLoading(true);
+    if (!hasDataRef.current) {
+      setIsLoading(true);
+    }
     setError(null);
 
     try {
@@ -55,10 +80,11 @@ export function useAnalytics() {
         );
       }
       setData(result);
+      hasDataRef.current = true;
       setIsStale(false);
     } catch (err) {
       // Keep last-known data so optional 503s do not blank the shell.
-      setError(err instanceof Error ? err.message : "Failed to load analytics");
+      setError(toSafeUiError(err, "Couldn't load analytics"));
       setData((prev) => {
         setIsStale(Boolean(prev));
         return prev;
@@ -88,65 +114,31 @@ export function useAnalytics() {
     sessionAId: string,
     sessionBId: string
   ): Promise<void> => {
+    setIsComparing(true);
+    setCompareError(null);
     try {
-      const [a, b] = await Promise.all([
-        fetchSessionSummary(sessionAId),
-        fetchSessionSummary(sessionBId),
-      ]);
-      if (!a || !b) return;
-
-      const result: SessionComparisonData = {
-        session_a:         a,
-        session_b:         b,
-        score_delta:       b.overall_score   - a.overall_score,
-        filler_delta:      b.filler_rate     - a.filler_rate,
-        wpm_delta:         b.wpm_avg         - a.wpm_avg,
-        improvement_areas: computeImprovements(a, b),
-        regression_areas:  computeRegressions(a, b),
-      };
-
-      setComparison(result);
+      const timeZone = resolveDisplayTimeZone(
+        useAuthStore.getState().profile?.timezone,
+      );
+      const payload = await fetchEdgeJson<SessionComparisonPayload>(
+        "compare-sessions",
+        {
+          session_a_id: sessionAId,
+          session_b_id: sessionBId,
+          timezone: timeZone,
+        },
+        { timeoutMs: 20_000 },
+      );
+      setComparison(payloadToComparison(payload));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not compare those sessions.");
+      const code = err instanceof ApiClientError ? err.code : null;
+      const raw = err instanceof Error ? err.message : "";
+      setCompareError(compareErrorUserMessage(code, raw));
+      setComparison(null);
+    } finally {
+      setIsComparing(false);
     }
   }, []);
-
-  async function fetchSessionSummary(
-    sessionId: string
-  ): Promise<SessionAnalyticsSummary | null> {
-    const { data } = await supabase
-      .from("scorecards")
-      .select(`
-        session_id,
-        overall_score,
-        details,
-        sessions!inner(
-          created_at, mode, interview_type, company, duration_seconds,
-          session_questions!session_questions_session_id_fkey(count)
-        )
-      `)
-      .eq("session_id", sessionId)
-      .maybeSingle();
-
-    if (!data) return null;
-    const d = data as any;
-    const session = d.sessions;
-    const details = d.details ?? {};
-
-    return {
-      session_id:       sessionId,
-      date:             session.created_at,
-      mode:             session.mode,
-      interview_type:   session.interview_type,
-      company:          session.company,
-      overall_score:    d.overall_score ?? null,
-      score_status:     typeof d.overall_score === "number" ? "scored" : "not_scored",
-      filler_rate:     d.filler_rate ?? details.filler_rate ?? null,
-      wpm_avg:         d.wpm_avg ?? details.wpm_avg ?? null,
-      duration_minutes: Math.round(session.duration_seconds / 60),
-      question_count:   session.session_questions?.[0]?.count ?? 0,
-    };
-  }
 
   // ── Leaderboard opt-in ────────────────────────────────────────
 
@@ -200,13 +192,15 @@ export function useAnalytics() {
     URL.revokeObjectURL(url);
   }, [data, filter.period]);
 
-  const avgScore30d   = data?.avg_confidence_score ?? 0;
+  const avgScore30d   = data?.avg_confidence_score ?? null;
   const scoreDelta    = data?.avg_confidence_delta_30d ?? null;
-  const avgWpm        = data?.avg_wpm ?? 0;
-  const avgFillers    = data ? Math.round(data.avg_filler_rate * 10) / 10 : 0;
+  const avgWpm        = data?.avg_wpm ?? null;
+  const avgFillers    = typeof data?.avg_filler_rate === "number"
+    ? Math.round(data.avg_filler_rate * 10) / 10
+    : null;
   const fillerDelta   = data?.avg_filler_delta_30d ?? null;
   const wpmDelta      = null;
-  const avgConfidence = data?.avg_confidence_score ?? 0;
+  const avgConfidence = data?.avg_confidence_score ?? null;
 
   const sessionsThisWeek = (() => {
     if (!data?.recent_sessions) return 0;
@@ -266,7 +260,12 @@ export function useAnalytics() {
     setInterviewTypeFilter,
 
     compareSessions,
-    clearComparison: () => setComparison(null),
+    clearComparison: () => {
+      setComparison(null);
+      setCompareError(null);
+    },
+    isComparing,
+    compareError,
 
     toggleLeaderboardOptIn,
     downloadCSV,
@@ -302,28 +301,47 @@ export function useAnalytics() {
   };
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────
-
-function computeImprovements(
-  a: SessionAnalyticsSummary,
-  b: SessionAnalyticsSummary
-): string[] {
-  const improvements: string[] = [];
-  if (b.overall_score > a.overall_score + 5)  improvements.push("Overall score");
-  if (b.filler_rate   < a.filler_rate   - 0.5) improvements.push("Fewer filler words");
-  if (b.wpm_avg >= 110 && a.wpm_avg < 110)     improvements.push("Speaking pace");
-  return improvements;
+function sideToSummary(side: SessionComparisonSide): SessionAnalyticsSummary {
+  return {
+    session_id: side.session_id,
+    date: side.started_at ?? side.created_at,
+    started_at: side.started_at,
+    ended_at: side.ended_at,
+    mode: side.session_type ?? "mock",
+    company: side.company,
+    title: side.title,
+    status: side.status,
+    completion_state: side.completion_state,
+    overall_score: side.overall_score,
+    score_status: side.score_state,
+    filler_rate: side.speech.filler_rate,
+    wpm_avg: side.speech.wpm_avg,
+    duration_minutes: side.duration_minutes,
+    duration_seconds: side.duration_seconds,
+    question_count: side.question_count,
+    answered_count: side.answered_count,
+    unanswered_count: side.unanswered_count,
+    comparable: side.completion_state === "completed" && side.score_state === "scored",
+  };
 }
 
-function computeRegressions(
-  a: SessionAnalyticsSummary,
-  b: SessionAnalyticsSummary
-): string[] {
-  const regressions: string[] = [];
-  if (b.overall_score < a.overall_score - 5)   regressions.push("Overall score");
-  if (b.filler_rate   > a.filler_rate   + 0.5)  regressions.push("Filler word rate");
-  if (b.wpm_avg > 180 && a.wpm_avg <= 180)      regressions.push("Speaking too fast");
-  return regressions;
+function payloadToComparison(payload: SessionComparisonPayload): SessionComparisonData {
+  const session_a = sideToSummary(payload.baseline);
+  const session_b = sideToSummary(payload.comparison);
+  return {
+    source_version: payload.source_version,
+    baseline_rule: payload.baseline_rule,
+    timezone: payload.timezone,
+    baseline: session_a,
+    comparison: session_b,
+    session_a,
+    session_b,
+    score_delta: payload.deltas.overall_score,
+    filler_delta: payload.deltas.filler_rate,
+    wpm_delta: payload.deltas.wpm_avg,
+    improvement_areas: payload.improvement_areas,
+    regression_areas: payload.regression_areas,
+    deltas: payload.deltas,
+  };
 }
+

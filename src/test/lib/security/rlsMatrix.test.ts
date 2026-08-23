@@ -186,13 +186,27 @@ describe("Implementation-Level RLS Security Matrix (User A, User B, Admin)", () 
     });
   });
 
-  describe("7. Attempts (test_attempts, interviews)", () => {
+  describe("7. Attempts (test_attempts, interviews, mock_tests)", () => {
     const attemptA: TableRecord = { id: "att-1", user_id: USER_A.userId, score: 85 };
+    const template: TableRecord = { id: "tpl-1", created_by: "platform", slug: "backend-developer" };
+    const questionEligibility: TableRecord = { id: "q-1", created_by: "platform", eligible_roles: ["backend-developer"] };
 
     it("restricts test and interview attempts to their owner", () => {
       expect(rls.canSelect(USER_A, attemptA)).toBe(true);
       expect(rls.canSelect(USER_B, attemptA)).toBe(false);
       expect(rls.canSelect(ADMIN, attemptA)).toBe(true);
+    });
+
+    it("blocks User A from creating an attempt for User B", () => {
+      expect(rls.canInsert(USER_A, { id: "att-2", user_id: USER_B.userId })).toBe(false);
+      expect(rls.canInsert(USER_A, { id: "att-3", user_id: USER_A.userId })).toBe(true);
+    });
+
+    it("blocks User A from modifying templates and question eligibility", () => {
+      expect(rls.canUpdate(USER_A, template)).toBe(false);
+      expect(rls.canUpdate(ADMIN, template)).toBe(true);
+      expect(rls.canUpdate(USER_A, questionEligibility)).toBe(false);
+      expect(rls.canUpdate(ADMIN, questionEligibility)).toBe(true);
     });
   });
 
@@ -206,13 +220,25 @@ describe("Implementation-Level RLS Security Matrix (User A, User B, Admin)", () 
     });
   });
 
-  describe("9. Sessions (sessions, session_events)", () => {
+  describe("9. Sessions (sessions, session_answers, scorecards, transcripts)", () => {
     const sessionA: TableRecord = { id: "sess-1", user_id: USER_A.userId, status: "completed" };
+    const answersA: TableRecord = { id: "ans-1", user_id: USER_A.userId, session_id: "sess-1" };
+    const scorecardA: TableRecord = { id: "sc-1", user_id: USER_A.userId, session_id: "sess-1" };
+    const transcriptA: TableRecord = { id: "tr-1", user_id: USER_A.userId, session_id: "sess-1" };
 
     it("restricts session records to their owner", () => {
       expect(rls.canSelect(USER_A, sessionA)).toBe(true);
       expect(rls.canSelect(USER_B, sessionA)).toBe(false);
       expect(rls.canSelect(ADMIN, sessionA)).toBe(true);
+    });
+
+    it("isolates session answers, scorecards, and transcripts", () => {
+      expect(rls.canSelect(USER_A, answersA)).toBe(true);
+      expect(rls.canSelect(USER_B, answersA)).toBe(false);
+      expect(rls.canSelect(USER_A, scorecardA)).toBe(true);
+      expect(rls.canSelect(USER_B, scorecardA)).toBe(false);
+      expect(rls.canSelect(USER_A, transcriptA)).toBe(true);
+      expect(rls.canSelect(USER_B, transcriptA)).toBe(false);
     });
   });
 

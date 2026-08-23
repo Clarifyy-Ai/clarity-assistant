@@ -9,6 +9,16 @@ import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient, deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
+import { creditDenialResponse } from "../_shared/creditAuthority.ts";
+import {
+  countEligibleGovQuestions,
+  inventoryInsufficientPayload,
+} from "../_shared/govQuestionInventory.ts";
+import {
+  attemptLimitPayload,
+  checkGovExamAttemptLimit,
+} from "../_shared/govAttemptLimits.ts";
+import { isUniqueViolation } from "../_shared/postgresErrors.ts";
 import { isUserBanned, bannedResponse } from "../_shared/banCheck.ts";
 import {
   checkRateLimitAsync,
@@ -29,7 +39,7 @@ import {
 } from "../_shared/govQualityScore.ts";
 import { filterQuestionsByTopics } from "../_shared/govTopicFilter.ts";
 import { examBankTypeKeys, mapExamType } from "../_shared/examTypeMap.ts";
-import { fillUntilCount, type GapFillRow } from "../_shared/govAiGapFill.ts";
+import { type GapFillRow } from "../_shared/govAiGapFill.ts";
 
 const COST = creditCost("create_mock_test");
 
@@ -93,7 +103,7 @@ Deno.serve(async (req) => {
       ...RATE_LIMIT_PRESETS.SESSION_ACTION,
     });
     if (!rateLimitResult.allowed) {
-      return rateLimitResponse(rateLimitResult);
+      return rateLimitResponse(rateLimitResult, req);
     }
 
     const body = await req.json().catch(() => null);
@@ -214,6 +224,31 @@ Deno.serve(async (req) => {
       }
     }
 
+    const { data: profile } = await db
+      .from("profiles")
+      .select("plan_id, credits")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const attemptLimit = await checkGovExamAttemptLimit(db, user.id, profile?.plan_id);
+    if (!attemptLimit.allowed) {
+      return json(req, attemptLimitPayload(attemptLimit), 429);
+    }
+
+    const inventory = await countEligibleGovQuestions(db, {
+      exam: {
+        code: exam.code as string | null,
+        name: exam.name as string | null,
+        legacy_exam_type: exam.legacy_exam_type as string | null,
+      },
+      topics,
+      difficulty,
+    });
+
+    if (inventory.available < questionCount) {
+      return json(req, inventoryInsufficientPayload(inventory.available, questionCount), 409);
+    }
+
     const creditResult = await deductCreditsAtomic({
       userId: user.id,
       action: "create_mock_test",
@@ -222,10 +257,7 @@ Deno.serve(async (req) => {
     });
 
     if (!creditResult?.success) {
-      return json(req, {
-        error: "Insufficient credits",
-        code: "INSUFFICIENT_CREDITS",
-      }, 402);
+      return creditDenialResponse(req, creditResult, COST);
     }
 
     const { data: job, error: jobErr } = await db
@@ -237,7 +269,7 @@ Deno.serve(async (req) => {
         pattern_version_id: patternId,
         mode: "custom_mock",
         language,
-        request_json: { ...b, topics, questionCount, difficulty },
+        request_json: { ...b, topics, questionCount, difficulty, skipAiFill: true },
         status: "selecting_questions",
         progress_stage: "selecting_questions",
         idempotency_key: idempotencyKey,
@@ -249,6 +281,26 @@ Deno.serve(async (req) => {
       .single();
 
     if (jobErr || !job) {
+      if (isUniqueViolation(jobErr)) {
+        const { data: replay } = await db
+          .from("gov_paper_generation_jobs")
+          .select("id, status, mock_test_id, generated_paper_id, error_code, progress_stage, request_json")
+          .eq("user_id", user.id)
+          .eq("idempotency_key", idempotencyKey)
+          .maybeSingle();
+        if (replay) {
+          return json(req, {
+            jobId: replay.id,
+            status: replay.status,
+            mockTestId: replay.mock_test_id,
+            paperId: replay.generated_paper_id,
+            errorCode: replay.error_code,
+            progressStage: replay.progress_stage,
+            paperClass: "custom_practice",
+            idempotentReplay: true,
+          }, replay.status === "completed" ? 200 : 202);
+        }
+      }
       console.error("[generate-topic-practice] job:", jobErr);
       await refundCredits({
         userId: user.id,
@@ -323,32 +375,13 @@ Deno.serve(async (req) => {
       }
 
       if (selected.length < questionCount) {
-        const fill = await fillUntilCount({
-          db,
-          targetCount: questionCount,
-          existing: selected,
-          examType: insertExamType,
-          subjects: topics.slice(0, 4),
-          topics,
-          marksPositive: marksPerQ,
-          marksNegative: negativeMark,
-          userId: user.id,
-        });
-        for (const row of fill.added) {
-          if (selected.length >= questionCount) break;
-          aiQuestionIds.add(row.id);
-          selected.push(row);
-        }
-      }
-
-      if (selected.length < 5) {
         await db
           .from("gov_paper_generation_jobs")
           .update({
             status: "failed",
             progress_stage: "failed",
-            error_code: "INSUFFICIENT_APPROVED_QUESTIONS",
-            error_message: `Only ${selected.length} topic-matched questions after bank + AI fill.`,
+            error_code: "QUESTION_INVENTORY_INSUFFICIENT",
+            error_message: `Only ${selected.length} of ${questionCount} requested questions passed validation.`,
             completed_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           })
@@ -363,19 +396,20 @@ Deno.serve(async (req) => {
         return json(req, {
           jobId,
           status: "failed",
-          errorCode: "INSUFFICIENT_APPROVED_QUESTIONS",
-          error: `Not enough questions for topics (found ${selected.length}). Generation may need a retry.`,
+          errorCode: "QUESTION_INVENTORY_INSUFFICIENT",
+          error: `Only ${selected.length} approved questions are available for this configuration.`,
           available: selected.length,
-          required: Math.min(5, questionCount),
+          requested: questionCount,
+          required: questionCount,
           paperClass: "custom_practice",
-        }, 422);
+        }, 409);
       }
 
       const finalCount = Math.min(selected.length, questionCount);
       const questionIds = selected.slice(0, finalCount).map((q) => q.id);
       const totalMarks = finalCount * marksPerQ;
-      const aiFilled = questionIds.filter((id) => aiQuestionIds.has(id)).length;
-      const paperClass = aiFilled > 0 ? "ai_generated" : "custom_practice";
+      const aiFilled = 0;
+      const paperClass = "custom_practice";
       const disclaimer = customPracticeLabel(finalCount, questionCount, topics, aiFilled);
       durationMinutes = Math.max(
         5,

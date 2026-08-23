@@ -51,7 +51,7 @@ test.describe("Auth regressions [6b937eb, T-0688]", () => {
     for (let attempt = 0; attempt < 4; attempt += 1) {
       await fillLoginForm(page, "bad@example.com", "wrong-password");
       await page.getByRole("button", { name: "Sign in" }).click();
-      await expect(page.getByText(/Invalid login credentials/i)).toBeVisible({
+      await expect(page.getByText(/Incorrect email or password/i)).toBeVisible({
         timeout: 10_000,
       });
     }

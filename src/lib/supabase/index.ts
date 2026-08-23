@@ -68,10 +68,12 @@ export {
   subscribeToPresence,
   subscribeToSession,
   subscribeToNotifications,
+  subscribeToNotificationFeed,
   subscribeToCredits,
   removeChannel,
   removeAllChannels,
   getActiveChannelNames,
+  getActiveChannelCount,
 } from "./realtime";
 
 export type {

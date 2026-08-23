@@ -40,6 +40,47 @@ import {
   type ServiceDb,
 } from "./govPaperJobLease.ts";
 
+/**
+ * Flattens `gov_exam_syllabus_versions.topics_json` (`[{ section, topics[] }]`) into a
+ * readable topic list for AI prompting. Returns `[]` when no approved syllabus exists.
+ */
+export async function loadSyllabusTopics(
+  db: ServiceDb,
+  syllabusVersionId: string | null | undefined,
+): Promise<string[]> {
+  if (!syllabusVersionId) return [];
+  const { data, error } = await db
+    .from("gov_exam_syllabus_versions")
+    .select("topics_json")
+    .eq("id", syllabusVersionId)
+    .maybeSingle();
+  if (error || !data) return [];
+
+  const raw = (data as { topics_json?: unknown }).topics_json;
+  const collected: string[] = [];
+
+  const pushTopic = (value: unknown) => {
+    const text = String(value ?? "")
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (text) collected.push(text);
+  };
+
+  if (Array.isArray(raw)) {
+    for (const entry of raw) {
+      const topics = (entry as { topics?: unknown })?.topics;
+      if (Array.isArray(topics)) topics.forEach(pushTopic);
+    }
+  } else if (raw && typeof raw === "object") {
+    for (const topics of Object.values(raw as Record<string, unknown>)) {
+      if (Array.isArray(topics)) topics.forEach(pushTopic);
+    }
+  }
+
+  return [...new Set(collected)];
+}
+
 export type AssemblyResult =
   | {
     ok: true;
@@ -608,8 +649,10 @@ export async function assembleClaimedPaperJob(
       .eq("id", job.user_id)
       .maybeSingle();
 
+    const requestJson = (jobInput.request_json ?? {}) as Record<string, unknown>;
+    const skipAiFill = requestJson.skipAiFill === true || requestJson.allowAiFill === false;
     const userCanAiFill = hasCapability(userProfile?.plan_id, "gov_exam_ai_fill");
-    const allowAiFill = mode !== "official_previous" && userCanAiFill;
+    const allowAiFill = mode !== "official_previous" && userCanAiFill && !skipAiFill;
     let aiFilledCount = 0;
     let aiFillError: string | undefined;
 
@@ -622,20 +665,26 @@ export async function assembleClaimedPaperJob(
         return { ok: false, status: "failed", errorCode: "LEASE_LOST", error: "Lost job lease", httpStatus: 409 };
       }
 
+      // Drive generation from the approved blueprint and syllabus rather than from the
+      // bank rows we happened to select: an exam with an empty bank still needs a
+      // correctly scoped prompt.
       const subjects = [
-        ...new Set(
-          selected
-            .map((r) => String(r.subject ?? "").trim())
-            .filter(Boolean),
-        ),
+        ...new Set([
+          ...blueprint.sections.map((s) => String(s.name ?? "").trim()),
+          ...selected.map((r) => String(r.subject ?? "").trim()),
+        ].filter(Boolean)),
       ].slice(0, 8);
+
+      const syllabusTopics = await loadSyllabusTopics(
+        db,
+        blueprint.syllabus_version_id,
+      );
       const topics = [
-        ...new Set(
-          selected
-            .map((r) => String(r.topic ?? "").trim())
-            .filter(Boolean),
-        ),
-      ].slice(0, 12);
+        ...new Set([
+          ...syllabusTopics,
+          ...selected.map((r) => String(r.topic ?? "").trim()),
+        ].filter(Boolean)),
+      ].slice(0, 24);
 
       const fill = await fillUntilCount({
         db,
@@ -664,11 +713,11 @@ export async function assembleClaimedPaperJob(
 
     if (selected.length < blueprint.total_questions) {
       if (requireExact) {
-        const isCapBlocked = mode === "generated_mock" && !userCanAiFill;
-        const errorCode = isCapBlocked ? "CAPABILITY_GATE_FAILED" : "INSUFFICIENT_APPROVED_QUESTIONS";
+        const isCapBlocked = mode === "generated_mock" && !userCanAiFill && !skipAiFill;
+        const errorCode = "QUESTION_INVENTORY_INSUFFICIENT";
         const errorMsg = isCapBlocked
           ? `AI question generation requires a Pro plan. Found ${selected.length}/${blueprint.total_questions} approved bank items.`
-          : `Need ${blueprint.total_questions} approved previous-year style questions, found ${selected.length}.`;
+          : `Only ${selected.length} approved questions are available for this configuration.`;
 
         await failJob(
           db,

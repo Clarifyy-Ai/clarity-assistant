@@ -13,14 +13,23 @@ import { creditCost } from "../_shared/creditEconomics.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
+import { creditDenialResponse } from "../_shared/creditAuthority.ts";
+import {
+  assessStarFactualIntegrity,
+  FACTUAL_INTEGRITY_SYSTEM_RULE,
+} from "../_shared/factualIntegrity.ts";
+import {
+  AI_RESPONSE_INVALID,
+  AI_RESPONSE_INVALID_MESSAGE,
+} from "../_shared/structuredParse.ts";
 
 type STARKey = "situation" | "task" | "action" | "result";
 
 const SECTION_GUIDANCE: Record<STARKey, string> = {
-  situation: "Set the scene concisely — context, team size, timeframe, and stakes. 2–3 sentences.",
-  task:      "State your specific role or challenge. Use 'I was responsible for…' or 'My task was…'. 1–2 sentences.",
-  action:    "Detail the exact steps YOU took. Start sentences with strong action verbs. Use 'I', not 'we'. 3–5 sentences.",
-  result:    "Quantify outcomes with numbers, percentages, or business impact. 2–3 sentences.",
+  situation: "Set the scene concisely — context, team size, timeframe, and stakes. 2–3 sentences. Only include facts from the user text.",
+  task:      "State your specific role or challenge. Use 'I was responsible for…' or 'My task was…'. 1–2 sentences. Do not invent responsibilities.",
+  action:    "Detail the exact steps YOU took. Start sentences with strong action verbs. Use 'I', not 'we'. 3–5 sentences. Do not invent tools or steps.",
+  result:    "Describe outcomes. Quantify ONLY when the user provided numbers; otherwise use [Add measurable result if available]. 2–3 sentences.",
 };
 
 const POLISH_STYLES = ["concise", "detailed", "impactful", "natural"] as const;
@@ -117,27 +126,32 @@ Deno.serve(async (req: Request) => {
     const model: ModelId = rawBody.model ?? "gpt-4o-mini";
 
     const polishCost = creditCost("polish_star");
+    const idempotencyKey =
+      req.headers.get("x-idempotency-key") ??
+      req.headers.get("Idempotency-Key") ??
+      null;
     const creditResult = await deductCreditsAtomic({
       userId: auth.userId,
       action: "polish_star",
       cost: polishCost,
-      idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+      idempotencyKey,
     });
     if (!creditResult.success) {
-      return errorResponse(creditResult.error ?? "Insufficient credits.", "INSUFFICIENT_CREDITS", 402, req);
+      return creditDenialResponse(req, creditResult, polishCost);
     }
 
-    // Prompt construction
+    // Prompt construction — never invite invented metrics
     const styleInstruction = instruction ?? {
-      concise:   "Make it shorter and punchier. Remove filler words. Keep only the strongest detail.",
-      detailed:  "Expand with more useful and concrete context. Add metrics when plausible.",
-      impactful: "Maximize impact. Lead with the strongest point. Use crisp action verbs.",
-      natural:   "Make it sound natural and conversational while staying professional."
+      concise:   "Make it shorter and punchier. Remove filler words. Keep only the strongest detail already present.",
+      detailed:  "Expand with clearer structure using only facts already present. If metrics are missing, use [Add measurable result if available] — never invent numbers.",
+      impactful: "Maximize clarity and impact of existing facts. Lead with the strongest point. Use crisp action verbs. Do not invent outcomes.",
+      natural:   "Make it sound natural and conversational while staying professional. Do not invent details."
     }[style];
 
     const systemPrompt = `
 You are an expert interview coach. Your task is to refine ONLY the ${sectionLabel} section of a STAR answer.
 Return ONLY the polished text — no labels, no metadata, no commentary.
+${FACTUAL_INTEGRITY_SYSTEM_RULE}
 Follow guidance strictly:
 
 ${SECTION_GUIDANCE[sectionLabel.toLowerCase() as STARKey]}
@@ -179,14 +193,29 @@ Return ONLY the rewritten ${sectionLabel} text:
       }
       log(FN, "error", "AI provider failed", aiErr);
       return errorResponse(
-        "AI service temporarily unavailable. Your credit has been refunded.",
-        "AI_ERROR",
+        "AI improvement is temporarily unavailable.",
+        "PROVIDER_UNAVAILABLE",
         502,
         req
       );
     }
 
     const polished = sanitizeAIOutput(aiResult.text);
+    const sourceBaseline = [questionText, currentText].filter(Boolean).join("\n");
+    const factual = assessStarFactualIntegrity(sourceBaseline, polished);
+    if (!factual.ok) {
+      await refundCredits({
+        userId: auth.userId,
+        cost: polishCost,
+        reason: "polish-star-section factual integrity failed",
+      });
+      return errorResponse(
+        AI_RESPONSE_INVALID_MESSAGE,
+        AI_RESPONSE_INVALID,
+        422,
+        req,
+      );
+    }
 
     // LOG
     log(FN, "info", "STAR section polished", {
@@ -202,7 +231,7 @@ Return ONLY the rewritten ${sectionLabel} text:
       {
         model,
         tokensUsed: aiResult.totalTokens,
-        creditsCharged: 1,
+        creditsCharged: polishCost,
         latencyMs: aiResult.latencyMs,
       },
       200,

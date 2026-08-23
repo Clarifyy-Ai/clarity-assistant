@@ -27,6 +27,7 @@ import {
   type PreviousYearPaper,
   type TopicMasterySummary,
 } from "@/lib/gov-exam/api";
+import { formatGovExamOperationError } from "@/lib/gov-exam/examOperationErrors";
 import {
   bankReadinessLabel,
   formatBankCoverage,
@@ -344,7 +345,7 @@ export default function GovExamDetail(): React.ReactElement {
           `${generateBase}&basis=topic&topics=${encodeURIComponent(selectedTopics.join(","))}`,
         );
       } else {
-        toast.error(msg);
+        toast.error(formatGovExamOperationError(e));
       }
     } finally {
       setTopicBusy(false);
@@ -355,8 +356,8 @@ export default function GovExamDetail(): React.ReactElement {
     ? "No stage configured for this exam yet."
     : !fullSimAvailable
       ? bank
-        ? `Bank has ${bank.approvedPublicCount} of ${bank.requiredQuestions} approved questions. Remaining unique questions will be generated with AI (takes a few minutes). Not an official paper.`
-        : "Question bank coverage is unknown — remaining questions will be generated with AI."
+        ? `Only ${bank.approvedPublicCount} approved questions are currently available for this configuration (${bank.approvedPublicCount} / ${bank.requiredQuestions}). Generate a Custom Practice Set instead.`
+        : "Question bank coverage is unknown."
       : null;
 
   return (
@@ -446,7 +447,7 @@ export default function GovExamDetail(): React.ReactElement {
 
               <div className="flex flex-wrap gap-2 shrink-0">
                 <Button
-                  disabled={!stage}
+                  disabled={!stage || !fullSimAvailable}
                   title={fullMockDisabledReason ?? "Start full pattern mock"}
                   onClick={() =>
                     navigate(`${generateBase}&basis=full_sim`)
@@ -460,7 +461,9 @@ export default function GovExamDetail(): React.ReactElement {
                   onClick={() => navigate(`${generateBase}&basis=quick`)}
                 >
                   <Sparkles className="h-4 w-4 mr-2" />
-                  Generate Custom Paper
+                  {bank && !fullSimAvailable
+                    ? `Generate Custom Practice Set — up to ${bank.approvedPublicCount} questions`
+                    : "Generate Custom Paper"}
                 </Button>
               </div>
             </div>

@@ -4,7 +4,12 @@
 // - Joins Gemini parts reliably
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getCorsHeaders, handleCors as _handleCorsFn } from "./cors.ts";
+import {
+  getCorsHeaders,
+  handleCors as _handleCorsFn,
+  applyCors,
+  resolveCorrelationId,
+} from "./cors.ts";
 import { deductCreditsAtomic, refundCredits } from "./supabase.ts";
 import { isBillingPastDue, isPastDueAllowedPath } from "./billingPastDue.ts";
 
@@ -175,10 +180,24 @@ export function successResponse<T>(
   status = 200,
   req?: Request
 ): Response {
-  return new Response(JSON.stringify({ success: true, data, ...(meta ? { meta } : {}) }), {
-    status,
-    headers: { ...safeCorsHeaders(req), "Content-Type": "application/json" }
-  });
+  const correlationId = req ? resolveCorrelationId(req) : undefined;
+  const response = new Response(
+    JSON.stringify({
+      success: true,
+      data,
+      ...(meta ? { meta } : {}),
+      ...(correlationId ? { correlation_id: correlationId, correlationId } : {}),
+    }),
+    {
+      status,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+        ...safeCorsHeaders(req),
+      },
+    },
+  );
+  return req ? applyCors(req, response, correlationId) : response;
 }
 
 export function errorResponse(
@@ -187,21 +206,36 @@ export function errorResponse(
   status = 500,
   req?: Request
 ): Response {
-  return new Response(JSON.stringify({ success: false, error: message, code }), {
-    status,
-    headers: { ...safeCorsHeaders(req), "Content-Type": "application/json" }
-  });
+  const correlationId = req ? resolveCorrelationId(req) : undefined;
+  const response = new Response(
+    JSON.stringify({
+      success: false,
+      error: message,
+      code,
+      ...(correlationId ? { correlation_id: correlationId, correlationId } : {}),
+    }),
+    {
+      status,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+        ...safeCorsHeaders(req),
+      },
+    },
+  );
+  return req ? applyCors(req, response, correlationId) : response;
 }
 
 export function streamResponse(stream: ReadableStream, req?: Request): Response {
-  return new Response(stream, {
+  const response = new Response(stream, {
     headers: {
       ...safeCorsHeaders(req),
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
-      Connection: "keep-alive"
-    }
+      Connection: "keep-alive",
+    },
   });
+  return req ? applyCors(req, response) : response;
 }
 
 /* -------------------------------------------------------------------------- */

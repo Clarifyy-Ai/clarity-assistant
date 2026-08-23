@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { sessionsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/userStore";
@@ -35,6 +35,7 @@ import {
   type SessionHistoryTypeFilter,
 } from "@/lib/session/sessionHistoryFilters";
 import { SESSIONS_CHANGED_EVENT } from "@/lib/session/sessionReuse";
+import { subscribeFocusRecovery } from "@/lib/focusRecovery";
 
 const SESSION_TYPES: SessionHistoryTypeFilter[] = ["all", "live", "mock", "practice"];
 
@@ -74,10 +75,15 @@ export default function CallSessions() {
   const [search, setSearch] = useState("");
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
-  const fetchSessions = useCallback(async () => {
+  const hasSessionsRef = useRef(false);
+  hasSessionsRef.current = sessions.length > 0;
+
+  const fetchSessions = useCallback(async (mode: "initial" | "background" = "initial") => {
     if (!user?.id) return;
 
-    setLoading(true);
+    if (mode === "initial") {
+      setLoading(true);
+    }
     setError(false);
     try {
       const limit = tab === "all" ? 500 : 20;
@@ -86,23 +92,29 @@ export default function CallSessions() {
     } catch (err) {
       console.error("[CallSessions] fetch error:", err);
       setError(true);
-      toast.error("Failed to load sessions.");
+      toast.error("Couldn't load sessions. Please retry.");
     } finally {
-      setLoading(false);
+      if (mode === "initial") {
+        setLoading(false);
+      }
     }
   }, [user?.id, tab]);
 
   useEffect(() => {
-    void fetchSessions();
+    void fetchSessions(hasSessionsRef.current ? "background" : "initial");
   }, [fetchSessions]);
 
   useEffect(() => {
-    const refetch = () => void fetchSessions();
-    window.addEventListener("focus", refetch);
+    const refetch = () => void fetchSessions("background");
     window.addEventListener(SESSIONS_CHANGED_EVENT, refetch);
+    const unsub = subscribeFocusRecovery((plan) => {
+      if (plan.revalidate.includes("sessionsList")) {
+        void fetchSessions("background");
+      }
+    });
     return () => {
-      window.removeEventListener("focus", refetch);
       window.removeEventListener(SESSIONS_CHANGED_EVENT, refetch);
+      unsub();
     };
   }, [fetchSessions]);
 

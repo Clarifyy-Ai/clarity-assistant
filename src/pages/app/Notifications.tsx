@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { useNavigate } from "react-router-dom";
 import { notificationsDB } from "@/lib/supabase/database";
-import { supabase } from "@/lib/supabase/client";
+import { subscribeToNotificationFeed } from "@/lib/supabase";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -50,16 +50,18 @@ export default function Notifications() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const loadNotifications = useCallback(async () => {
+  const loadNotifications = useCallback(async (mode: "initial" | "background" = "initial") => {
     if (!user?.id) return;
-    setLoading(true);
+    if (mode === "initial") {
+      setLoading(true);
+    }
     setLoadError(null);
     try {
       const data = await notificationsDB.listByUserId(user.id);
       setNotifications(data);
-    } catch (err) {
-      setLoadError(err instanceof Error ? err.message : "Failed to load notifications");
-      setNotifications([]);
+    } catch {
+      setLoadError("Couldn't load notifications. Please retry.");
+      if (mode === "initial") setNotifications([]);
     } finally {
       setLoading(false);
     }
@@ -71,35 +73,22 @@ export default function Notifications() {
 
   useEffect(() => {
     if (!user?.id) return;
-    const channel = supabase
-      .channel(`notifications:${user.id}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
-        (payload) => {
-          setNotifications((prev) => [payload.new as Notification, ...prev].slice(0, 50));
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
-        (payload) => {
-          setNotifications((prev) =>
-            prev.map((n) => (n.id === (payload.new as Notification).id ? (payload.new as Notification) : n))
-          );
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "DELETE", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
-        (payload) => {
-          setNotifications((prev) => prev.filter((n) => n.id !== (payload.old as Notification).id));
-        }
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return subscribeToNotificationFeed(user.id, {
+      onInsert: (row) => {
+        setNotifications((prev) => [row as Notification, ...prev].slice(0, 50));
+      },
+      onUpdate: (row) => {
+        const next = row as Notification;
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === next.id ? next : n)),
+        );
+      },
+      onDelete: (oldRow) => {
+        const id = (oldRow as { id?: string }).id;
+        if (!id) return;
+        setNotifications((prev) => prev.filter((n) => n.id !== id));
+      },
+    });
   }, [user?.id]);
 
   async function markRead(id: string) {

@@ -29,6 +29,12 @@ import {
   REPAIR_JSON_PROMPT,
   type RephraseAlternatives,
 } from "../_shared/structuredParse.ts";
+import { creditDenialResponse } from "../_shared/creditAuthority.ts";
+import {
+  assessStarFactualIntegrity,
+  FACTUAL_INTEGRITY_SYSTEM_RULE,
+  isValidSystemDesignOutput,
+} from "../_shared/factualIntegrity.ts";
 
 function structuredError(
   req: Request,
@@ -173,13 +179,15 @@ ${input}
 `,
 
   system_design: (input) => `
-Provide a detailed system design breakdown:
-- Requirements
-- High-level architecture
-- Data model
-- Scaling
-- Tradeoffs
-- What to mention in interview
+Provide a detailed system design breakdown with clearly labeled sections:
+## 1. Requirements
+## 2. High-level architecture
+## 3. Data model
+## 4. Scaling
+## 5. Tradeoffs
+## 6. What to mention in interview
+
+Use markdown ## headings for each section. Be concrete and interview-ready.
 
 ${input}
 `,
@@ -212,8 +220,7 @@ ${input}
 
   star_method: (input) => `
 Improve this STAR interview answer. Keep it authentic and specific.
-Only use employers, metrics, tools, dates, and achievements present in the user input.
-If evidence is missing, ask a clarifying question or use [NEEDS EVIDENCE] — never invent experience.
+${FACTUAL_INTEGRITY_SYSTEM_RULE}
 Polish the language, flow, and impact. Quantify results only when the user provided numbers.
 Return the improved version with all 4 sections clearly labeled:
 
@@ -339,15 +346,7 @@ Deno.serve(async (req: Request) => {
       requestHash,
     });
     if (!creditResult.success) {
-      const msg = (creditResult.error || "").toLowerCase();
-      const insufficient =
-        msg.includes("insufficient") || msg.includes("no credits");
-      return errorResponse(
-        insufficient ? "Insufficient credits" : "Credit deduction failed. Please try again.",
-        insufficient ? "INSUFFICIENT_CREDITS" : "CREDIT_DEDUCTION_FAILED",
-        insufficient ? 402 : 500,
-        req,
-      );
+      return creditDenialResponse(req, creditResult, toolCost);
     }
 
     /* ----------------------- PROMPT ----------------------- */
@@ -404,6 +403,45 @@ Deno.serve(async (req: Request) => {
 
     let alternatives: RephraseAlternatives | null = null;
     let cleaned = sanitizeAIOutput(raw);
+
+    if (tool_id === "system_design" && !isValidSystemDesignOutput(cleaned)) {
+      await refundCredits({
+        userId,
+        cost: toolCost,
+        reason: "prep-tool system_design invalid output",
+      });
+      return structuredError(
+        req,
+        AI_RESPONSE_INVALID_MESSAGE,
+        AI_RESPONSE_INVALID,
+        422,
+        correlationId,
+      );
+    }
+
+    if (tool_id === "star_method") {
+      const factual = assessStarFactualIntegrity(sanitizedInput, cleaned);
+      if (!factual.ok) {
+        await refundCredits({
+          userId,
+          cost: toolCost,
+          reason: "prep-tool star_method factual integrity failed",
+        });
+        log(FN, "warn", "STAR factual integrity rejected output", {
+          userId,
+          inventedNumbers: factual.inventedNumbers.slice(0, 8),
+          inventedTerms: factual.inventedTerms.slice(0, 8),
+          correlationId,
+        });
+        return structuredError(
+          req,
+          AI_RESPONSE_INVALID_MESSAGE,
+          AI_RESPONSE_INVALID,
+          422,
+          correlationId,
+        );
+      }
+    }
 
     if (tool_id === "rephrase") {
       let parsed = parseStructuredJson(raw, isRephraseAlternatives);

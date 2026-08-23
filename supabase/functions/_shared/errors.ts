@@ -9,6 +9,8 @@
 // - Standardize success/error response structure
 // - Support future integration with Sentry or another monitoring platform
 
+import { applyCors, withBrowserCors } from "./cors.ts";
+
 export type ErrorCode =
   | "BAD_REQUEST"
   | "UNAUTHORIZED"
@@ -536,15 +538,19 @@ export function withErrorHandling(
   functionName: string,
   handler: (req: Request) => Promise<Response> | Response
 ): (req: Request) => Promise<Response> {
-  return async (req: Request): Promise<Response> => {
+  return withBrowserCors(functionName, async (req: Request): Promise<Response> => {
     try {
       return await handler(req);
     } catch (error) {
-      return safeErrorResponse(error, {
-        functionName,
-        method: req.method,
-        url: req.url,
-      });
+      if (error instanceof Response) return error;
+      return applyCors(
+        req,
+        safeErrorResponse(error, {
+          functionName,
+          method: req.method,
+          url: req.url,
+        }),
+      );
     }
-  };
+  });
 }

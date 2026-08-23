@@ -7,6 +7,9 @@ import { invokeFunction } from "@/lib/api/functions";
 export type StartSessionRequest = {
   session_type?: "mock" | "live" | "warmup" | "rehearsal" | "room" | "practice";
   type?: "mock" | "live" | "warmup" | "rehearsal" | "room" | "practice";
+  action?: "start" | "eligibility" | "restore" | "heartbeat";
+  session_id?: string | null;
+  check_only?: boolean;
   /** Required for type=live practice overlay — server sets DB practice tag. */
   is_practice?: boolean;
   interview_type?:
@@ -40,14 +43,63 @@ export type StartSessionResponse = {
   session_id: string;
   config: Record<string, unknown>;
   started_at: string;
+  expires_at?: string | null;
   reused?: boolean;
+  status?: string;
+  lifecycle_status?: string;
+  found?: boolean;
+  reason?: string;
+  used?: number | null;
+  limit?: number | null;
+  reset_at?: string | null;
+  terminal_reason?: string | null;
+  duration_seconds?: number | null;
 };
 
 export async function startSession(
-  payload: StartSessionRequest
+  payload: StartSessionRequest,
+  options?: { idempotencyKey?: string },
 ): Promise<StartSessionResponse> {
   return invokeFunction<StartSessionResponse, StartSessionRequest>(
     "start-session",
-    payload
+    payload,
+    options?.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : {},
   );
+}
+
+export async function checkSessionStartEligibility(): Promise<StartSessionResponse> {
+  return invokeFunction("start-session", { action: "eligibility", check_only: true });
+}
+
+export async function restoreOwnedSession(input?: {
+  session_id?: string | null;
+  session_type?: StartSessionRequest["session_type"];
+}): Promise<StartSessionResponse> {
+  return invokeFunction("start-session", {
+    action: "restore",
+    session_id: input?.session_id ?? undefined,
+    session_type: input?.session_type,
+    type: input?.session_type,
+  });
+}
+
+export async function heartbeatOwnedSession(sessionId: string): Promise<StartSessionResponse> {
+  return invokeFunction("start-session", {
+    action: "heartbeat",
+    session_id: sessionId,
+  });
+}
+
+export async function endSession(input: {
+  session_id: string;
+  terminal_reason?: string;
+}): Promise<{
+  session_id: string;
+  status: string;
+  terminal_reason: string | null;
+  ended_at: string | null;
+  duration_seconds: number | null;
+  already_terminal?: boolean;
+}> {
+  return invokeFunction("end-session", input);
 }

@@ -1,5 +1,7 @@
 // ─── Auth & User ──────────────────────────────────────────────────────────────
 export { useAuth } from "./useAuth";
+export { useFocusRecoveryCoordinator } from "./useFocusRecoveryCoordinator";
+export { useDashboardData } from "./useDashboardData";
 
 // ─── UI / Device ──────────────────────────────────────────────────────────────
 export { useIsMobile } from "./use-mobile";

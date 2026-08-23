@@ -75,6 +75,7 @@ check_auth  "prep-tool"                     '{"tool_id":"rephrase","input":"test
 check_auth  "select-test-questions"         '{"config":{"exam_type":"JEE_MAIN","question_count":5}}'
 check_auth  "generate-star-answer"          '{"questionText":"Tell me about yourself"}'
 check_auth  "analytics-dashboard"           '{}'
+check_auth  "compare-sessions"              '{"session_a_id":"00000000-0000-0000-0000-000000000000","session_b_id":"11111111-1111-1111-1111-111111111111"}'
 check_auth  "ai-coach-chat"                 '{"message":"hello","history":[]}'
 
 echo "──────────────────────────────────────────────"

@@ -39,6 +39,7 @@ export function InlineErrorRetry({
         onClick={onRetry}
         className="shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
         leftIcon={<RefreshCw className={compact ? "w-3 h-3" : "w-3.5 h-3.5"} />}
+        aria-label="Retry loading this section"
       >
         Retry
       </Button>

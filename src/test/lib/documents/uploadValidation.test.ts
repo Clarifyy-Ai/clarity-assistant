@@ -14,7 +14,9 @@ describe("document upload validation", () => {
   });
 
   it("requires extension and matching MIME", () => {
-    expect(validateDocumentFile(file("resume", "application/pdf"), "resume")).toContain("extension");
+    expect(validateDocumentFile(file("resume", "application/pdf"), "resume")).toMatch(
+      /unsupported file format/i,
+    );
     expect(validateDocumentFile(file("resume.pdf", "text/plain"), "resume")).toContain("MIME");
   });
 

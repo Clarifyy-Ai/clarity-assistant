@@ -16,17 +16,25 @@ const PRIVATE_MODE_ALLOWLIST = new Set([
   "razorpay-create-order",
   "razorpay-verify-payment",
   "record-referral",
+  // GDPR data export is a data-rights operation, not cloud AI.
+  "export-user-data",
 ]);
 
 /** Edge functions that do not deduct credits — skip balance refresh. */
 const CREDIT_REFRESH_SKIP = new Set([
   "ping",
+  "deepgram-token",
   "stripe-webhook",
   "create-checkout",
   "create-portal-session",
   "razorpay-create-order",
   "ai-hub-router",
   "support-chat",
+  "analytics-dashboard",
+  "compare-sessions",
+  "assemble-assessment",
+  "start-session",
+  "end-session",
 ]);
 
 /** Non-AI functions should not blame an "AI request" on CORS / network failure. */
@@ -34,17 +42,47 @@ const OPERATIONAL_EDGE_FNS = new Set([
   "submit-test",
   "create-test",
   "create-exam-paper",
+  "generate-topic-practice",
   "process-paper-generation-job",
   "select-test-questions",
   "get-exam-details",
   "search-exams",
   "list-previous-papers",
+  "assemble-assessment",
   "ping",
   "create-checkout",
   "create-portal-session",
   "razorpay-create-order",
   "razorpay-verify-payment",
   "record-referral",
+  "analytics-dashboard",
+  "compare-sessions",
+  "start-session",
+  "end-session",
+  "export-user-data",
+]);
+
+/** Mutating calls that must not be retried by the browser after a network/CORS glitch. */
+const NO_NETWORK_RETRY_FNS = new Set([
+  "submit-test",
+  "create-exam-paper",
+  "generate-topic-practice",
+  "create-test",
+  "assemble-assessment",
+  "start-session",
+  "end-session",
+  // Question generation is idempotent server-side; client retries can still
+  // amplify provider load / race with AbortController during End Session.
+  "generate-questions",
+  "generate-answer",
+  "prep-tool",
+  "polish-star-section",
+  "generate-star-answer",
+  // Charges credits and persists the brief server-side; a browser retry can
+  // double-charge when the first request actually reached the function.
+  "company-research",
+  // Export burns rate-limit quota; browser retries must not double-consume.
+  "export-user-data",
 ]);
 
 function unreachableUserMessage(fnName: string): string {
@@ -93,6 +131,7 @@ export async function getAuthHeaders(
       ? { Authorization: `Bearer ${token}` }
       : { Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}` }),
     apikey: SUPABASE_PUBLISHABLE_KEY,
+    "x-client-info": "clarify-web",
     "x-ai-training-consent": trainingConsent ? "true" : "false",
     ...extraHeaders,
   };
@@ -175,7 +214,8 @@ export async function fetchEdge(
           : JSON.stringify(body);
 
     let lastErr: unknown;
-    for (let attempt = 0; attempt <= NETWORK_RETRY_DELAYS_MS.length; attempt++) {
+    const maxAttempts = NO_NETWORK_RETRY_FNS.has(fnName) ? 0 : NETWORK_RETRY_DELAYS_MS.length;
+    for (let attempt = 0; attempt <= maxAttempts; attempt++) {
       if (attempt > 0) {
         if (signal.aborted) break;
         await new Promise((r) => setTimeout(r, NETWORK_RETRY_DELAYS_MS[attempt - 1]));
@@ -193,7 +233,7 @@ export async function fetchEdge(
         const retryable =
           err instanceof TypeError &&
           !signal.aborted &&
-          attempt < NETWORK_RETRY_DELAYS_MS.length;
+          attempt < maxAttempts;
         if (!retryable) throw err;
         logger.warn("network.request.retry", {
           fnName,
@@ -264,15 +304,28 @@ export async function fetchEdgeJson<T>(
     const fallback =
       fnName === "delete-account"
         ? "We couldn't complete account deletion right now. Please try again or contact support."
-        : `Request failed (HTTP ${response.status}). Please try again.`;
-    const message = payload?.error || payload?.message || fallback;
+        : "Something went wrong. Please try again.";
+    const rawError = payload?.error;
+    const message =
+      typeof rawError === "string"
+        ? rawError
+        : typeof rawError?.message === "string"
+          ? rawError.message
+          : typeof payload?.message === "string"
+            ? payload.message
+            : fallback;
     const code =
       typeof payload?.code === "string" && payload.code.trim()
         ? payload.code.trim()
-        : "API_ERROR";
+        : typeof rawError?.code === "string"
+          ? rawError.code
+          : "API_ERROR";
     const correlationId =
+      (typeof payload?.correlation_id === "string" && payload.correlation_id) ||
       (typeof payload?.correlationId === "string" && payload.correlationId) ||
       (typeof payload?.requestId === "string" && payload.requestId) ||
+      (typeof rawError?.correlation_id === "string" && rawError.correlation_id) ||
+      response.headers.get("x-correlation-id") ||
       response.headers.get("x-request-id") ||
       undefined;
     if (correlationId) {

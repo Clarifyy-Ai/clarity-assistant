@@ -1,5 +1,5 @@
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
@@ -22,6 +22,19 @@ import {
 import { cn } from "@/lib/utils";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { normalizePlanId } from "@/lib/billing/planIds";
+import { normalizeCompanyName } from "@/lib/company/normalizeCompanyName";
+
+/**
+ * The Edge Function is the only writer of `company_research`. It returns
+ * `persisted: true` only after the row is committed, so the page never shows a
+ * brief that would disappear on reload.
+ */
+type CompanyResearchResponse = {
+  success?: boolean;
+  id?: string;
+  persisted?: boolean;
+  brief?: Record<string, unknown>;
+};
 
 export default function CompanyProfile() {
   const { id }     = useParams<{ id: string }>();
@@ -37,6 +50,7 @@ export default function CompanyProfile() {
   const [error,    setError]    = useState<string | null>(null);
   const [needsGenerateConfirm, setNeedsGenerateConfirm] = useState(false);
   const [confirmGenerate, setConfirmGenerate] = useState(false);
+  const inFlightRef = useRef(false);
 
   // ── Generate or load brief ────────────────────────────────────
   const generateBrief = useCallback(async (force = false) => {
@@ -45,6 +59,9 @@ export default function CompanyProfile() {
       setLoading(false);
       return;
     }
+    // Guards double-click: a second submit would spend credits again.
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
 
     setLoading(true);
     setError(null);
@@ -54,58 +71,50 @@ export default function CompanyProfile() {
         const { data: cached, error: cacheErr } = await supabase
           .from("company_research")
           .select("*")
-          .eq("user_id", user?.id)
-          .ilike("company_name", companyName)
-          .order("created_at", { ascending: false })
-          .limit(1)
+          .eq("user_id", user?.id ?? "")
+          .eq("company_name_normalized", normalizeCompanyName(companyName))
           .maybeSingle();
 
         if (cacheErr) {
           console.warn("[CompanyProfile] Cache read failed:", cacheErr.message);
-        } else if (cached?.raw_data) {
+        }
+
+        if (cached?.raw_data) {
           setBrief(cached.raw_data);
           setLoading(false);
           setNeedsGenerateConfirm(false);
           return;
-        } else {
-          // No cache — require explicit confirm before spending credits
-          setLoading(false);
-          setNeedsGenerateConfirm(true);
-          return;
         }
+
+        // No saved brief — require explicit confirm before spending credits.
+        setLoading(false);
+        setNeedsGenerateConfirm(true);
+        return;
       }
 
-      const data = await fetchEdgeJson<Record<string, unknown>>("company-research", {
-        company: companyName,
-      });
-      setBrief(data);
+      const result = await fetchEdgeJson<CompanyResearchResponse>(
+        "company-research",
+        {
+          company: companyName,
+          role: params.get("role") ?? "",
+          force: true,
+        },
+        { headers: { "x-idempotency-key": `company-research:${user?.id ?? "anon"}:${normalizeCompanyName(companyName).replace(/\s+/g, "-")}:gen` } },
+      );
+
+      if (!result?.persisted || !result?.brief) {
+        setError("Research was generated, but we couldn't save it. Please retry.");
+        return;
+      }
+
+      setBrief(result.brief);
       setNeedsGenerateConfirm(false);
-
-      const d = data as any;
-      const { error: upsertErr } = await supabase
-        .from("company_research")
-        .upsert(
-          {
-            user_id:      user?.id,
-            company_name: companyName,
-            role_title:   params.get("role") ?? null,
-            raw_data:     d,
-            overview:     d.overview  ?? null,
-            culture:      d.culture   ?? null,
-            prep_tips:    Array.isArray(d.tips) ? d.tips.join("; ") : null,
-          } as any,
-          { onConflict: "user_id,company_name" }
-        );
-
-      if (upsertErr) {
-        console.warn("[CompanyProfile] Cache write failed:", upsertErr.message);
-      }
-
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to generate brief";
       console.error("[CompanyProfile] generateBrief error:", err);
       setError(msg);
     } finally {
+      inFlightRef.current = false;
       setLoading(false);
     }
   }, [companyName, user?.id, params]);
@@ -146,6 +155,11 @@ export default function CompanyProfile() {
             { label: companyName || "Company" },
           ]}
         />
+        {/* A failed generation leaves this gate mounted — without the banner the
+            user would see the same CTA with no idea why nothing happened. */}
+        {error ? (
+          <InlineErrorRetry message={error} onRetry={() => void generateBrief(true)} />
+        ) : null}
         <Card className="p-6 space-y-4 text-center">
           <Building2 className="w-10 h-10 text-primary mx-auto" />
           <p className="text-sm text-muted-foreground">
@@ -182,7 +196,10 @@ export default function CompanyProfile() {
 
   // ── Loading state ─────────────────────────────────────────────
 
-  if (loading) {
+  // Only full-page skeleton on first load. Refresh must keep the brief + Refresh
+  // control mounted so in-flight guards work and Playwright cannot re-click after
+  // the button remounts when loading flips false.
+  if (loading && !brief) {
     return (
       <PageContent className="max-w-3xl space-y-5">
         <PageHeader
@@ -198,7 +215,7 @@ export default function CompanyProfile() {
     );
   }
 
-  if (error) {
+  if (error && !brief) {
     return (
       <PageContent className="max-w-3xl space-y-5">
         <PageHeader
@@ -257,14 +274,21 @@ export default function CompanyProfile() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => generateBrief(true)}
-            leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+            disabled={loading}
+            aria-busy={loading}
+            onClick={() => void generateBrief(true)}
+            leftIcon={
+              <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
+            }
           >
             Refresh
           </Button>
         }
       />
 
+      {error ? (
+        <InlineErrorRetry message={error} onRetry={() => void generateBrief(true)} />
+      ) : null}
       {/* Company header */}
       <div className="flex items-center gap-4">
         <div className="w-14 h-14 bg-gradient-to-br from-primary/30 to-blue-600/30 border border-border rounded-2xl flex items-center justify-center text-2xl font-black text-foreground shrink-0">

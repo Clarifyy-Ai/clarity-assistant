@@ -440,6 +440,7 @@ export function useLiveCopilot({
     question: string,
     signal: AbortSignal,
     screenshotBase64?: string | null,
+    idempotencyKey?: string,
   ): Promise<void> {
     if (screenshotBase64 && screenshotRequestInFlightRef.current) return;
     if (screenshotBase64) screenshotRequestInFlightRef.current = true;
@@ -452,6 +453,7 @@ export function useLiveCopilot({
     const context = await enrichContextForAi(baseContext as Record<string, unknown>);
 
     const selectedModel = useOverlayStore.getState().active_model;
+    await refreshCredits().catch(() => undefined);
     const creditCheck = checkCreditsForAction("fullAnswer");
 
     if (!creditCheck.canProceed) {
@@ -464,6 +466,10 @@ export function useLiveCopilot({
 
     overlay.setHintState("streaming");
 
+    const answerKey =
+      idempotencyKey ??
+      hintIdempotencyKey(sessionIdRef.current, question);
+
     await routeAnswerGeneration({
       questionText: question,
       questionTypeHint: cfg.interview_type ?? "behavioral",
@@ -472,6 +478,7 @@ export function useLiveCopilot({
       sessionId: sessionIdRef.current,
       mode: aiModeForSessionType(sessionType as SessionType),
       screenshotBase64: screenshotBase64 ?? null,
+      idempotencyKey: answerKey,
       onToken: (chunk) => useOverlayStore.getState().appendStreamChunk(chunk),
       onDone: async () => {
         const overlayState = useOverlayStore.getState();
@@ -496,9 +503,10 @@ export function useLiveCopilot({
         openUpgradeIfInsufficientCredits(err);
         noteProviderFailureFromError(err);
         useOverlayStore.getState().setError(
-          getAiUserFacingError(err) || "Failed to generate full answer",
+          getAiUserFacingError(err) || "AI Help is temporarily unavailable. Please try again.",
         );
         useOverlayStore.getState().setHintState("idle");
+        void refreshCredits().catch(() => undefined);
       },
       signal,
     });
@@ -540,6 +548,7 @@ export function useLiveCopilot({
 
       const selectedModel = useOverlayStore.getState().active_model;
       const answerMode = useOverlayStore.getState().answer_mode;
+      await refreshCredits().catch(() => undefined);
       const creditCheck = checkCreditsForAction(
         answerMode === "full_answer" ? "fullAnswer" : "hint",
       );
@@ -550,6 +559,14 @@ export function useLiveCopilot({
         const tp = overlay.resume_talking_points;
         if (tp) overlay.setOfflineFallback(formatTalkingPointsAsHint(tp));
         else overlay.setError(creditCheck.reason ?? "Out of credits");
+        return;
+      }
+
+      const sessionStatus = useSessionStore.getState().status;
+      if (sessionStatus !== "active" && sessionStatus !== "paused") {
+        useOverlayStore.getState().setError(
+          "Session is not ready yet. Start the Practice Coach session first.",
+        );
         return;
       }
 
@@ -564,7 +581,7 @@ export function useLiveCopilot({
 
       try {
         if (answerMode === "full_answer") {
-          await requestFullAnswer(question, controller.signal);
+          await requestFullAnswer(question, controller.signal, null, requestId);
           return;
         }
 
@@ -592,6 +609,7 @@ export function useLiveCopilot({
             openUpgradeIfInsufficientCredits(error);
             noteProviderFailureFromError(error);
             useOverlayStore.getState().setError(getAiUserFacingError(error));
+            void refreshCredits().catch(() => undefined);
           },
           signal: controller.signal,
         });
@@ -602,6 +620,7 @@ export function useLiveCopilot({
           useOverlayStore.getState().setError(
             getAiUserFacingError(err) || "Hint generation failed",
           );
+          void refreshCredits().catch(() => undefined);
         }
       }
     },
@@ -811,17 +830,24 @@ export function useLiveCopilot({
           useOverlayStore.getState().save_transcript &&
           parsePrivacyPrefs(profile?.privacy_prefs).store_transcripts;
 
-        await sessionsDB.completeForUser(session.session_id, userId, {
+        // Server-authoritative finalization first (status/ended_at/terminal_reason/duration_seconds).
+        const { endSession } = await import("@/lib/api/sessions");
+        await endSession({
+          session_id: session.session_id,
+          terminal_reason: "USER_ENDED",
+        });
+
+        // Metrics-only follow-up — never overwrite terminal fields or duration.
+        await sessionsDB.updateForUser(session.session_id, userId, {
           credits_used: session.credits_consumed,
           model_used: dbModel as any,
-          ended_at: new Date().toISOString(),
           filler_words: session.filler_count,
           avg_wpm: session.current_wpm,
           hints_used: overlay.hint_history.length,
           answers_generated: pairs.length,
           questions_asked: Math.max(questionCount, pairs.length),
           notes: saveTranscript && fullTranscript ? fullTranscript : null,
-        });
+        } as Parameters<typeof sessionsDB.updateForUser>[2]);
 
         if (pairs.length > 0) {
           await sessionAnswersDB.createMany(
@@ -853,7 +879,7 @@ export function useLiveCopilot({
         notifySessionsChanged();
       } catch (err) {
         console.error("[useLiveCopilot] Failed to finalize session:", err);
-        toast.error("Session ended, but the summary could not be saved. Your practice still ran.");
+        toast.error("We couldn't finish saving your session. Please retry.");
         answersRecorded = 0;
       }
     }

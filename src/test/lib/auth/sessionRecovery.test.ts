@@ -239,6 +239,68 @@ describe("redirectAfterCrossTabSignOut [QA-231]", () => {
   });
 });
 
+describe("classifyUnexpectedSignedOut / auth end reason storage", () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    localStorage.clear();
+  });
+
+  it("treats refresh failure as session_expired", async () => {
+    const { classifyUnexpectedSignedOut, SESSION_EXPIRED_REASON } = await import(
+      "@/lib/auth/sessionErrors"
+    );
+    expect(
+      classifyUnexpectedSignedOut({ recentLogoutBroadcast: false }),
+    ).toBe(SESSION_EXPIRED_REASON);
+  });
+
+  it("treats a recent logout broadcast as signed_out_elsewhere", async () => {
+    const {
+      classifyUnexpectedSignedOut,
+      markExplicitLogoutBroadcast,
+      hasRecentLogoutBroadcast,
+      SIGNED_OUT_ELSEWHERE_REASON,
+    } = await import("@/lib/auth/sessionErrors");
+    markExplicitLogoutBroadcast();
+    expect(hasRecentLogoutBroadcast()).toBe(true);
+    expect(
+      classifyUnexpectedSignedOut({ recentLogoutBroadcast: true }),
+    ).toBe(SIGNED_OUT_ELSEWHERE_REASON);
+  });
+
+  it("notifies other listeners when logout is broadcast", async () => {
+    const { markExplicitLogoutBroadcast, subscribeCrossTabLogoutBroadcast } =
+      await import("@/lib/auth/sessionErrors");
+    let fired = 0;
+    const stop = subscribeCrossTabLogoutBroadcast(() => {
+      fired += 1;
+    });
+    // storage events do not fire in the same document that wrote the key —
+    // simulate a cross-tab write.
+    window.dispatchEvent(
+      new StorageEvent("storage", {
+        key: "clarify_auth_logout_broadcast",
+        newValue: String(Date.now()),
+        storageArea: localStorage,
+      }),
+    );
+    markExplicitLogoutBroadcast();
+    expect(fired).toBe(1);
+    stop();
+  });
+
+  it("persists session_expired so login can show it without a query param", async () => {
+    const {
+      persistAuthEndReason,
+      consumeAuthEndReason,
+      SESSION_EXPIRED_REASON,
+    } = await import("@/lib/auth/sessionErrors");
+    persistAuthEndReason(SESSION_EXPIRED_REASON);
+    expect(consumeAuthEndReason()).toBe(SESSION_EXPIRED_REASON);
+    expect(consumeAuthEndReason()).toBeNull();
+  });
+});
+
 describe("resolveAppPath", () => {
   it("strips hash-router prefixes", async () => {
     const { resolveAppPath } = await import("@/lib/auth/sessionErrors");
@@ -272,7 +334,7 @@ describe("recovery helpers", () => {
     const { supportMailto, PROFILE_FRIENDLY_ERROR } = await import(
       "@/lib/auth/recoveryActions"
     );
-    expect(PROFILE_FRIENDLY_ERROR).toMatch(/having trouble loading your profile/i);
+    expect(PROFILE_FRIENDLY_ERROR).toMatch(/Unable to load your account/i);
     expect(supportMailto("help")).toMatch(/^mailto:support@clarifyprep\.com/);
     expect(supportMailto("help")).not.toMatch(/token|password|jwt/i);
   });

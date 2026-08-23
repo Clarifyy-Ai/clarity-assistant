@@ -4,11 +4,17 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { UploadZone } from "@/components/common/UploadZone";
 import { supabase, STORAGE_BUCKETS } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 import { isAllowedLibraryMime } from "@/lib/library/documentRights";
-import { validateDocumentFile } from "@/lib/documents/uploadValidation";
+import {
+  LIBRARY_ACCEPT,
+  LIBRARY_ACCEPT_LABEL,
+  UNSUPPORTED_FORMAT_MESSAGE,
+  validateDocumentFile,
+} from "@/lib/documents/uploadValidation";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { LICENSE_TYPES, type LicenseType } from "@/lib/content/license";
 import {
@@ -32,12 +38,34 @@ type Doc = {
   created_at: string;
 };
 
+function statusLabel(status: string | undefined): string {
+  switch (status) {
+    case "queued":
+      return "Queued";
+    case "processing":
+    case "validating":
+      return "Processing…";
+    case "ready":
+    case "completed":
+      return "Completed";
+    case "error":
+    case "failed":
+      return "Failed — Retry";
+    case "rejected":
+      return "Rejected";
+    default:
+      return status ?? "Uploaded";
+  }
+}
+
 export default function DocumentLibraryPage() {
   const user = useAuthStore((s) => s.user);
   const [docs, setDocs] = useState<Doc[]>([]);
   const [rights, setRights] = useState<LicenseType>("USER_OWNED");
   const [confirmed, setConfirmed] = useState(false);
   const [source, setSource] = useState("personal");
+  const [uploading, setUploading] = useState(false);
+  const [selectedName, setSelectedName] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!user?.id) return;
@@ -60,11 +88,17 @@ export default function DocumentLibraryPage() {
       toast.error("Confirm you have permission to use this file.");
       return;
     }
+    setSelectedName(`${file.name} (${Math.max(1, Math.round(file.size / 1024))} KB)`);
     const validationError = validateDocumentFile(file, "library");
-    if (validationError || (!isAllowedLibraryMime(file.type) && !/\.(pdf|doc|docx|txt|csv|xlsx)$/i.test(file.name))) {
-      toast.error(validationError ?? "Allowed: PDF, DOC, DOCX, TXT, CSV, XLSX.");
+    if (
+      validationError ||
+      (!isAllowedLibraryMime(file.type) && !/\.(pdf|docx|txt|csv|xlsx)$/i.test(file.name))
+    ) {
+      toast.error(validationError ?? UNSUPPORTED_FORMAT_MESSAGE);
       return;
     }
+    setUploading(true);
+    try {
     const bytes = await file.arrayBuffer();
     const hashBuffer = await crypto.subtle.digest("SHA-256", bytes);
     const contentHash = Array.from(new Uint8Array(hashBuffer))
@@ -79,15 +113,17 @@ export default function DocumentLibraryPage() {
     if (duplicate) {
       toast.message("This document is already in your library. Reusing it without another upload or charge.");
       void load();
+      setUploading(false);
       return;
     }
     const path = `${user.id}/library/${contentHash}-${file.name.replace(/[^\w.-]/g, "_")}`;
     const { error: upErr } = await supabase.storage.from(STORAGE_BUCKETS.DOCUMENTS).upload(path, file);
     if (upErr) {
       toast.error(`Upload failed: ${upErr.message}`);
+      setUploading(false);
       return;
     }
-    try {
+      try {
       const { error } = await supabase.from("personal_library_documents").insert({
         owner_id: user.id,
         uploaded_by: user.id,
@@ -116,7 +152,6 @@ export default function DocumentLibraryPage() {
               .single()).data?.id,
             mime_type: file.type || ({
               pdf: "application/pdf",
-              doc: "application/msword",
               docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
               txt: "text/plain",
               csv: "text/csv",
@@ -134,9 +169,14 @@ export default function DocumentLibraryPage() {
         }
         void load();
       }
+      } catch (error) {
+        await supabase.storage.from(STORAGE_BUCKETS.DOCUMENTS).remove([path]);
+        toast.error(`Upload could not be saved: ${error instanceof Error ? error.message : "Please try again."}`);
+      }
     } catch (error) {
-      await supabase.storage.from(STORAGE_BUCKETS.DOCUMENTS).remove([path]);
-      toast.error(`Upload could not be saved: ${error instanceof Error ? error.message : "Please try again."}`);
+      toast.error(`Upload failed: ${error instanceof Error ? error.message : "Please try again."}`);
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -216,15 +256,22 @@ export default function DocumentLibraryPage() {
             ))}
           </SelectContent>
         </Select>
-        <input
-          type="file"
-          accept=".pdf,.doc,.docx,.txt,.csv,.xlsx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
+        <UploadZone
+          title="Choose file"
+          description={`${LIBRARY_ACCEPT_LABEL}. Images and legacy .doc files are not supported.`}
+          accept={LIBRARY_ACCEPT}
+          disabled={!confirmed}
+          loading={uploading}
+          onFileSelect={(files) => {
+            const file = files[0];
             if (file) void upload(file);
-            e.target.value = "";
           }}
         />
+        {selectedName && (
+          <p className="text-xs text-muted-foreground" aria-live="polite">
+            Selected: {selectedName}
+          </p>
+        )}
       </Card>
       <ul className="space-y-2">
         {docs.map((doc) => (
@@ -232,10 +279,13 @@ export default function DocumentLibraryPage() {
             <Card className="min-w-0">
               <p className="font-medium break-words">{doc.document_name}</p>
               <p className="text-xs text-muted-foreground">
-                {doc.content_rights} · {doc.source} · {doc.processing_status ?? "uploaded"} · {new Date(doc.created_at).toLocaleString()}
+                {doc.content_rights} · {doc.source} · {statusLabel(doc.processing_status)} ·{" "}
+                {new Date(doc.created_at).toLocaleString()}
               </p>
               {doc.processing_error && (
-                <p className="mt-1 text-xs text-destructive">{doc.processing_error}</p>
+                <p className="mt-1 text-xs text-destructive" role="alert">
+                  {doc.processing_error}
+                </p>
               )}
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" onClick={() => void download(doc)}>Download</Button>

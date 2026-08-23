@@ -20,6 +20,10 @@ import { type WeakTopicStat } from "../_shared/examAIPrompts.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 import { requireCapability } from "../_shared/requireCapability.ts";
+import {
+  attemptLimitPayload,
+  checkGovExamAttemptLimit,
+} from "../_shared/govAttemptLimits.ts";
 import { conflictsWithSelected } from "../_shared/govMcqValidator.ts";
 /* ─── SANITIZATION ───────────────────────────────────────────────────────── */
 //
@@ -272,9 +276,6 @@ Deno.serve(async (req: Request) => {
     const hardPct = sanitizeInt(dd.HARD, 20, 0, 100);
     const medPct  = 100 - easyPct - hardPct;
 
-    /* ── FREE PLAN MONTHLY LIMIT ───────────────────────────────────────── */
-    const FREE_TEST_LIMIT = 3;
-
     const { data: profile } = await db
       .from("profiles")
       .select("plan_id, credits")
@@ -292,25 +293,12 @@ Deno.serve(async (req: Request) => {
       if (capabilityGate) return capabilityGate;
     }
 
-    if ((planId) === "free") {
-      const startOfMonth = new Date();
-      startOfMonth.setDate(1);
-      startOfMonth.setHours(0, 0, 0, 0);
-
-      const { count } = await db
-        .from("mock_tests")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", userId)
-        .gte("created_at", startOfMonth.toISOString());
-
-      if ((count ?? 0) >= FREE_TEST_LIMIT) {
-        return new Response(
-          JSON.stringify({
-            error: `Free plan limit reached (${FREE_TEST_LIMIT} tests/month). Please upgrade.`,
-          }),
-          { status: 402, headers },
-        );
-      }
+    const attemptLimit = await checkGovExamAttemptLimit(db, userId, planId);
+    if (!attemptLimit.allowed) {
+      return new Response(
+        JSON.stringify(attemptLimitPayload(attemptLimit)),
+        { status: 429, headers },
+      );
     }
 
     /* ── PERFORMANCE DATA (smart topic prioritisation) ─────────────────── */
@@ -476,8 +464,9 @@ Deno.serve(async (req: Request) => {
       });
       if (!creditResult.success) {
         gapFillError =
-          `Need ${aiCreditCost} credits to generate remaining questions (have ${profile?.credits ?? 0}). ` +
-          `Bank provided ${finalIds.length} of ${question_count}.`;
+          creditResult.code === "INSUFFICIENT_CREDITS"
+            ? `Need ${aiCreditCost} credits to generate remaining questions (have ${creditResult.balance ?? profile?.credits ?? 0}). Bank provided ${finalIds.length} of ${question_count}.`
+            : (creditResult.error ?? "Credit deduction failed.");
       } else {
         const priorityTopics =
           topics.length > 0

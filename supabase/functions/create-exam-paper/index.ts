@@ -16,7 +16,19 @@ import {
   scheduleWithWaitUntil,
 } from "../_shared/govPaperAssembly.ts";
 import { newWorkerId } from "../_shared/govPaperJobLease.ts";
-import { requireCapability } from "../_shared/requireCapability.ts";
+import { hasCapability } from "../_shared/requireCapability.ts";
+import { creditDenialResponse } from "../_shared/creditAuthority.ts";
+import { countEligibleGovQuestions } from "../_shared/govQuestionInventory.ts";
+import {
+  blockedPlanPayload,
+  decideGenerationPlan,
+  planSummary,
+} from "../_shared/govGenerationPlan.ts";
+import {
+  attemptLimitPayload,
+  checkGovExamAttemptLimit,
+} from "../_shared/govAttemptLimits.ts";
+import { isUniqueViolation } from "../_shared/postgresErrors.ts";
 
 const COST = creditCost("create_mock_test");
 
@@ -55,7 +67,7 @@ Deno.serve(async (req) => {
       ...RATE_LIMIT_PRESETS.SESSION_ACTION,
     });
     if (!rateLimitResult.allowed) {
-      return rateLimitResponse(rateLimitResult);
+      return rateLimitResponse(rateLimitResult, req);
     }
 
     const body = await req.json().catch(() => null);
@@ -193,19 +205,44 @@ Deno.serve(async (req) => {
       }, 409);
     }
 
-    const aiFillModes = new Set(["generated_mock", "custom_mock", "adaptive"]);
-    if (aiFillModes.has(mode)) {
-      const { data: profile } = await db
-        .from("profiles")
-        .select("plan_id, subscription_status")
-        .eq("id", user.id)
-        .maybeSingle();
-      const capabilityGate = requireCapability(
-        profile?.plan_id,
-        "gov_exam_ai_fill",
-        req,
-      );
-      if (capabilityGate) return capabilityGate;
+    const { data: profile } = await db
+      .from("profiles")
+      .select("plan_id, subscription_status, credits")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const attemptLimit = await checkGovExamAttemptLimit(db, user.id, profile?.plan_id);
+    if (!attemptLimit.allowed) {
+      return json(req, attemptLimitPayload(attemptLimit), 429);
+    }
+
+    const requestedCountRaw = Number((body as Record<string, unknown>).questionCount);
+    const requestedCount =
+      mode === "custom_mock" && Number.isFinite(requestedCountRaw)
+        ? Math.min(200, Math.max(5, Math.floor(requestedCountRaw)))
+        : Number(pattern.total_questions) || 0;
+
+    const inventory = await countEligibleGovQuestions(db, {
+      exam: {
+        code: exam.code as string | null,
+        name: exam.name as string | null,
+        legacy_exam_type: exam.legacy_exam_type as string | null,
+      },
+    });
+
+    // Decide bank-only vs AI-assisted before charging anything. A short bank is only
+    // fatal when the caller cannot generate the shortfall.
+    const plan = decideGenerationPlan({
+      requested: requestedCount,
+      available: inventory.available,
+      mode,
+      canUseAi: hasCapability(profile?.plan_id, "gov_exam_ai_fill"),
+      preferPythonFactory: Deno.env.get("PAPER_FACTORY_WORKER") === "1",
+    });
+
+    if (plan.kind === "blocked") {
+      const payload = blockedPlanPayload(plan);
+      return json(req, payload, payload.code === "CAPABILITY_REQUIRED" ? 403 : 409);
     }
 
     const creditResult = await deductCreditsAtomic({
@@ -216,10 +253,7 @@ Deno.serve(async (req) => {
     });
 
     if (!creditResult?.success) {
-      return json(req, {
-        error: "Insufficient credits",
-        code: "INSUFFICIENT_CREDITS",
-      }, 402);
+      return creditDenialResponse(req, creditResult, COST);
     }
 
     const { data: job, error: jobErr } = await db
@@ -232,7 +266,13 @@ Deno.serve(async (req) => {
         syllabus_version_id: syllabus?.id ?? null,
         mode,
         language,
-        request_json: body,
+        request_json: {
+          ...(body as Record<string, unknown>),
+          skipAiFill: plan.skipAiFill,
+          allowAiFill: !plan.skipAiFill,
+          generator: plan.generator,
+          generationPlan: planSummary(plan),
+        },
         status: "queued",
         progress_stage: "queued",
         idempotency_key: idempotencyKey,
@@ -248,6 +288,25 @@ Deno.serve(async (req) => {
       .single();
 
     if (jobErr || !job) {
+      if (isUniqueViolation(jobErr)) {
+        const { data: replay } = await db
+          .from("gov_paper_generation_jobs")
+          .select("id, status, mock_test_id, generated_paper_id, error_code, error_message, progress_stage")
+          .eq("user_id", user.id)
+          .eq("idempotency_key", idempotencyKey)
+          .maybeSingle();
+        if (replay) {
+          return json(req, {
+            jobId: replay.id,
+            status: replay.status,
+            mockTestId: replay.mock_test_id,
+            paperId: replay.generated_paper_id,
+            errorCode: replay.error_code,
+            progressStage: replay.progress_stage,
+            idempotentReplay: true,
+          }, replay.status === "completed" ? 200 : 202);
+        }
+      }
       console.error("[create-exam-paper] job insert:", jobErr);
       await refundCredits({
         userId: user.id,
@@ -260,6 +319,20 @@ Deno.serve(async (req) => {
     const jobId = job.id as string;
     const workerId = newWorkerId("create");
 
+    // Heavy AI generation can be delegated to the Python paper factory worker, which
+    // is not bound by Edge execution limits. The job stays queued for it to claim.
+    if (plan.generator === "python_paper_factory") {
+      return json(req, {
+        jobId,
+        status: "queued",
+        progressStage: "queued",
+        creditsCharged: COST,
+        balanceAfter: creditResult.balanceAfter,
+        generationPlan: planSummary(plan),
+        async: true,
+      }, 202);
+    }
+
     const runJob = () =>
       processPaperGenerationJobById(jobId, { workerId, userId: user.id });
 
@@ -271,6 +344,8 @@ Deno.serve(async (req) => {
         status: "queued",
         progressStage: "queued",
         creditsCharged: COST,
+        balanceAfter: creditResult.balanceAfter,
+        generationPlan: planSummary(plan),
         async: true,
       }, 202);
     }
@@ -289,6 +364,7 @@ Deno.serve(async (req) => {
         patternVersion: result.patternVersion,
         syllabusVersion: result.syllabusVersion,
         creditsCharged: COST,
+        generationPlan: planSummary(plan),
         async: false,
       }, 202);
     }

@@ -51,6 +51,7 @@ export const EDGE_FUNCTIONS = {
 
   // Analytics & sessions
   ANALYTICS_DASHBOARD:    "analytics-dashboard",
+  COMPARE_SESSIONS:       "compare-sessions",
   START_SESSION:          "start-session",
 } as const;
 

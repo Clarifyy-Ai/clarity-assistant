@@ -141,10 +141,9 @@ export async function validateMicPermission(): Promise<ValidationResult> {
         error: "Microphone permission is required. Please allow access when prompted.",
       };
     default:
-      return {
-        valid: false,
-        error: "Unable to determine microphone permission state.",
-      };
+      // Permissions API is missing or does not support "microphone" (Safari/Firefox).
+      // That is not a hardware failure — local getUserMedia must decide.
+      return { valid: true };
   }
 }
 

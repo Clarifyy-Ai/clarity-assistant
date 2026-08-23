@@ -64,7 +64,7 @@ export function requireCapability(
 ): Response | null {
   if (hasCapability(planId, capability)) return null;
   return errorResponse(
-    `This feature requires a higher plan (${capability}).`,
+    "This feature requires a supported plan.",
     "CAPABILITY_REQUIRED",
     403,
     req,
@@ -106,6 +106,7 @@ export const AI_FUNCTION_CAPABILITY: Record<string, Capability> = {
   "company-research": "company_research",
   "analyze-test-performance": "mock_test",
   "select-test-questions": "mock_test",
+  "assemble-assessment": "mock_test",
   "create-exam-paper": "gov_exam_ai_fill",
   "parse-question-pdf": "mock_test",
   "sync-calendar": "calendar_sync",

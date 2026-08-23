@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   BookOpen, Upload, ClipboardList,
@@ -21,7 +21,11 @@ import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { LazyMotion, domAnimation } from "framer-motion";
 import { GovExamShowcase } from "@/components/marketing/GovExamShowcase";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
-import { searchGovExams, type GovExamSearchResult } from "@/lib/gov-exam/api";
+import {
+  searchGovExams,
+  mapGovSearchError,
+  type GovExamSearchResult,
+} from "@/lib/gov-exam/api";
 import { formatBankCoverage } from "@/lib/gov-exam/bankReadiness";
 import { GOV_EXAM_AFFILIATION_DISCLAIMER } from "@/lib/gov-exam/disclaimers";
 import { GovExamReadinessPanel } from "@/components/gov-exam/GovExamReadinessPanel";
@@ -31,6 +35,9 @@ import {
 } from "@/lib/gov-exam/masteryClient";
 import { supabase } from "@/lib/supabase/client";
 import { toast } from "sonner";
+import { userFacingDbError } from "@/lib/errors/userFacingDbError";
+
+const SEARCH_DEBOUNCE_MS = 300;
 
 const FAMILY_FILTERS = [
   { id: "", label: "All" },
@@ -185,6 +192,10 @@ export default function MockTestHub(): React.ReactElement {
   const [family, setFamily] = useState("");
   const [govResults, setGovResults] = useState<GovExamSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+  const [searchState, setSearchState] = useState<"idle" | "searching" | "success" | "empty" | "error">("idle");
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const searchAbortRef = useRef<AbortController | null>(null);
+  const searchReqIdRef = useRef(0);
   const [recentChips, setRecentChips] = useState<string[]>([]);
   const [hubReadiness, setHubReadiness] = useState<Awaited<
     ReturnType<typeof fetchLatestExamReadiness>
@@ -206,20 +217,45 @@ export default function MockTestHub(): React.ReactElement {
     } catch {
       /* ignore */
     }
-    void runGovSearch("");
   }, []);
 
   async function runGovSearch(q: string, fam = family) {
+    searchAbortRef.current?.abort();
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
+    const reqId = ++searchReqIdRef.current;
+
     setSearching(true);
+    setSearchState("searching");
+    setSearchError(null);
     try {
-      const data = await searchGovExams({ q, family: fam || undefined });
+      const data = await searchGovExams(
+        { q, family: fam || undefined },
+        { signal: controller.signal },
+      );
+      if (reqId !== searchReqIdRef.current) return;
       setGovResults(data.results);
-    } catch {
+      setSearchState(data.results.length === 0 ? "empty" : "success");
+    } catch (err) {
+      if (controller.signal.aborted) return;
+      if (reqId !== searchReqIdRef.current) return;
       setGovResults([]);
+      const mapped = mapGovSearchError(err);
+      setSearchState("error");
+      setSearchError(mapped.message);
     } finally {
-      setSearching(false);
+      if (reqId === searchReqIdRef.current) setSearching(false);
     }
   }
+
+  // Debounced search for typing + initial empty query; chips/submit also call runGovSearch.
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      void runGovSearch(searchQ.trim(), family);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQ, family]);
 
   function rememberChip(label: string) {
     const next = [label, ...recentChips.filter((c) => c !== label)].slice(0, 6);
@@ -281,7 +317,7 @@ export default function MockTestHub(): React.ReactElement {
         setHubMastery([]);
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to load test history.";
+      const msg = userFacingDbError(err, "load");
       setLoadError(msg);
       toast.error(msg);
     } finally {
@@ -314,7 +350,7 @@ export default function MockTestHub(): React.ReactElement {
           { label: PRODUCT_NAMES.govExams },
         ]}
         actions={
-          <div className="flex gap-2 shrink-0">
+          <div className="flex flex-wrap gap-2 shrink-0 justify-end max-w-full">
             <Link
               to="/app/mock-test/generate"
               className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-all hover:bg-secondary/60"
@@ -424,10 +460,16 @@ export default function MockTestHub(): React.ReactElement {
             </button>
           ))}
         </div>
-        <div className="space-y-2" aria-busy={searching}>
-          {govResults.length === 0 && !searching && (
-            <p className="text-sm text-muted-foreground">
-              No certified exam packs match. Pilot packs: SSC CGL, RRB NTPC, IBPS PO, UPSC Prelims.
+        <div className="space-y-2" aria-busy={searching} data-testid="gov-exam-search-results">
+          {searchState === "error" && !searching && searchError && (
+            <InlineErrorRetry
+              message={searchError}
+              onRetry={() => void runGovSearch(searchQ.trim(), family)}
+            />
+          )}
+          {searchState === "empty" && !searching && (
+            <p className="text-sm text-muted-foreground" data-testid="gov-exam-search-empty">
+              No matching results found. Pilot packs: SSC CGL, RRB NTPC, IBPS PO, UPSC Prelims.
             </p>
           )}
           {govResults.map((exam) => {
@@ -489,7 +531,7 @@ export default function MockTestHub(): React.ReactElement {
                     fullSimOk
                       ? "Full pattern simulation"
                       : bank
-                        ? `Bank ${formatBankCoverage(bank.approvedPublicCount, bank.requiredQuestions)} — AI fills the rest`
+                        ? `Bank ${formatBankCoverage(bank.approvedPublicCount, bank.requiredQuestions)} — custom set available`
                         : "AI will generate remaining unique questions"
                   }
                   onClick={() =>

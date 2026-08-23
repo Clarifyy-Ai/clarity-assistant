@@ -145,7 +145,7 @@ describe("useAuth — sign in [T-0010]", () => {
       res = await result.current.login("a@b.com", "pw");
     });
 
-    expect(res!.error?.message).toBe("bad");
+    expect(res!.error?.message).toBe("Incorrect email or password.");
   });
 });
 

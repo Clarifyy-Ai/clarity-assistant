@@ -7,4 +7,10 @@ export {
   fillLoginForm,
   loginAsTestUser,
   dismissCookieBanner,
+  dismissWalkthrough,
+  clearBrowserAuthState,
+  isPasswordGrantTokenRequest,
+  clickLogout,
+  expectDashboardReady,
+  isAppDashboardPath,
 } from "./e2e/helpers/auth-flow";

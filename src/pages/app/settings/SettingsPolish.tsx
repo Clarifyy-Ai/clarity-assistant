@@ -8,6 +8,8 @@ import {
   Bell, Mail, Smartphone, MonitorSmartphone, Send, Download, Clock, Save,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { userFacingDbError } from "@/lib/errors/userFacingDbError";
+import { messageFromExportCaught } from "@/lib/export/exportUserFacingError";
 
 type RetentionKey = "transcripts" | "ai_answers" | "debriefs" | "documents";
 type ChannelKey = "email" | "push" | "in_app";
@@ -65,7 +67,7 @@ export default function SettingsPolish() {
       if (error) throw error;
       toast.success("Preferences saved");
     } catch (e: any) {
-      toast.error(e?.message ?? "Failed to save");
+      toast.error(userFacingDbError(e, "save"));
     } finally {
       setSaving(false);
     }
@@ -118,7 +120,7 @@ export default function SettingsPolish() {
       URL.revokeObjectURL(url);
       toast.success(`Exported ${rows.length} sessions`);
     } catch (e: any) {
-      toast.error(e?.message ?? "Export failed");
+      toast.error(messageFromExportCaught(e));
     } finally {
       setExporting(false);
     }

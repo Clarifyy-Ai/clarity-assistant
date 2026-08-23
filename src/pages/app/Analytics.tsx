@@ -10,9 +10,9 @@ import { PlanGate } from "@/components/layout/PlanGate";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
   BarChart2, TrendingUp, TrendingDown,
-  Flame, Zap, Brain, Mic,
-  AlertTriangle, CheckCircle, Target,
-  Calendar, Clock, Volume2, Download, GitCompare,
+  Flame, Mic,
+  AlertTriangle, Target,
+  Calendar, Volume2, Download, GitCompare,
 } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
@@ -39,6 +39,12 @@ import { cn } from "@/lib/utils";
 import { format, subDays } from "date-fns";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { formatAggregateScore, formatSessionScore } from "@/lib/analytics/scoreStatus";
+import {
+  canEnableCompare,
+  formatSessionDateTime,
+  resolveDisplayTimeZone,
+  sessionPickerLabel,
+} from "@/lib/analytics/sessionComparison";
 
 // ─────────────────────────────────────────────────────────────────
 // Analytics — progress trends, filler analysis, category scores
@@ -47,7 +53,6 @@ import { formatAggregateScore, formatSessionScore } from "@/lib/analytics/scoreS
 export default function Analytics() {
   const analytics  = useAnalytics();
   const navigate = useNavigate();
-  const { profile } = useAuthStore();
 
   if (analytics.isLoading) {
     return (
@@ -184,13 +189,13 @@ export default function Analytics() {
         />
         <KPICard
           label="Avg WPM"
-          value={`${analytics.avgWpm ?? 0}`}
+          value={formatAggregateScore(analytics.avgWpm)}
           delta={analytics.wpmDelta}
           icon={<Mic className="w-4 h-4 text-emerald-400" />}
         />
         <KPICard
           label="Avg fillers/session"
-          value={`${analytics.avgFillers ?? 0}`}
+          value={typeof analytics.avgFillers === "number" ? String(analytics.avgFillers) : "—"}
           delta={analytics.fillerDelta}
           invertDelta
           icon={<AlertTriangle className="w-4 h-4 text-amber-400" />}
@@ -496,35 +501,37 @@ function CategoryBreakdown({
 // SpeechMetrics
 // ─────────────────────────────────────────────────────────────────
 
-function SpeechMetrics({ analytics }: { analytics: any }) {
+function SpeechMetrics({ analytics }: { analytics: ReturnType<typeof useAnalytics> }) {
   const fillerBreakdown = analytics.fillerBreakdown ?? {};
+  const avgWpm = analytics.avgWpm;
+  const avgFillers = analytics.avgFillers;
+  const avgConfidence = analytics.avgConfidence;
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="text-center">
           <div className="text-2xl sm:text-3xl font-black text-foreground mb-1">
-            {analytics.avgWpm ?? "—"}
+            {typeof avgWpm === "number" ? avgWpm : "—"}
           </div>
           <p className="text-xs text-muted-foreground">Avg WPM</p>
           <p className="text-[10px] text-muted-foreground mt-1">
             Ideal: 100 – 150 WPM
           </p>
-          <ProgressBar
-            value={analytics.avgWpm ?? 0}
-            max={200}
-            color={
-              (analytics.avgWpm ?? 0) >= 100 && (analytics.avgWpm ?? 0) <= 150
-                ? "emerald" : "amber"
-            }
-            size="xs"
-            className="mt-2"
-          />
+          {typeof avgWpm === "number" && (
+            <ProgressBar
+              value={avgWpm}
+              max={200}
+              color={avgWpm >= 100 && avgWpm <= 150 ? "emerald" : "amber"}
+              size="xs"
+              className="mt-2"
+            />
+          )}
         </Card>
 
         <Card className="text-center">
           <div className="text-2xl sm:text-3xl font-black text-amber-400 mb-1">
-            {analytics.avgFillers ?? "—"}
+            {typeof avgFillers === "number" ? avgFillers : "—"}
           </div>
           <p className="text-xs text-muted-foreground">Avg fillers per session</p>
           <p className="text-[10px] text-muted-foreground mt-1">Target: under 5</p>
@@ -532,16 +539,18 @@ function SpeechMetrics({ analytics }: { analytics: any }) {
 
         <Card className="text-center">
           <div className="text-2xl sm:text-3xl font-black text-primary mb-1">
-            {analytics.avgConfidence ?? "—"}%
+            {typeof avgConfidence === "number" ? `${avgConfidence}%` : "—"}
           </div>
           <p className="text-xs text-muted-foreground">Avg confidence score</p>
-          <ProgressBar
-            value={analytics.avgConfidence ?? 0}
-            max={100}
-            color={analytics.avgConfidence >= 65 ? "emerald" : "amber"}
-            size="xs"
-            className="mt-2"
-          />
+          {typeof avgConfidence === "number" && (
+            <ProgressBar
+              value={avgConfidence}
+              max={100}
+              color={avgConfidence >= 65 ? "emerald" : "amber"}
+              size="xs"
+              className="mt-2"
+            />
+          )}
         </Card>
       </div>
 
@@ -652,25 +661,39 @@ function ActivityHeatmap({ data }: { data: Record<string, number> }) {
 
 function SessionComparePanel({ analytics }: { analytics: ReturnType<typeof useAnalytics> }) {
   const sessions = analytics.data?.recent_sessions ?? [];
+  const { profile } = useAuthStore();
+  const timeZone = resolveDisplayTimeZone(profile?.timezone);
   const [sessionA, setSessionA] = useState("");
   const [sessionB, setSessionB] = useState("");
   const comparison = analytics.comparison;
+  const comparable = sessions.filter((s) => s.comparable === true);
 
   useEffect(() => {
-    if (sessions.length >= 2 && !sessionA && !sessionB) {
-      setSessionA(sessions[sessions.length - 2].session_id);
-      setSessionB(sessions[sessions.length - 1].session_id);
+    if (comparable.length >= 2 && !sessionA && !sessionB) {
+      setSessionA(comparable[comparable.length - 2].session_id);
+      setSessionB(comparable[comparable.length - 1].session_id);
     }
-  }, [sessions, sessionA, sessionB]);
+  }, [comparable, sessionA, sessionB]);
 
   if (sessions.length < 2) {
     return (
       <Card className="text-center py-10">
         <GitCompare className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
-        <p className="text-muted-foreground text-sm">Complete at least two sessions to compare.</p>
+        <p className="text-muted-foreground text-sm">
+          Complete at least two sessions to compare.
+        </p>
       </Card>
     );
   }
+
+  const selectedA = sessions.find((s) => s.session_id === sessionA);
+  const selectedB = sessions.find((s) => s.session_id === sessionB);
+  const compareState = canEnableCompare({
+    sessionAId: sessionA,
+    sessionBId: sessionB,
+    sessionAComparable: selectedA?.comparable === true,
+    sessionBComparable: selectedB?.comparable === true,
+  });
 
   return (
     <div className="space-y-4">
@@ -679,48 +702,94 @@ function SessionComparePanel({ analytics }: { analytics: ReturnType<typeof useAn
           <GitCompare className="w-4 h-4 text-primary" />
           <h3 className="text-sm font-semibold text-foreground">Compare sessions</h3>
         </div>
+        <p className="text-xs text-muted-foreground mb-4">
+          Baseline is the earlier session. Comparison is the later session.
+        </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
           <SessionPicker
-            label="Session A (baseline)"
+            label="Session A"
             value={sessionA}
             sessions={sessions}
+            timeZone={timeZone}
             onChange={setSessionA}
           />
           <SessionPicker
-            label="Session B (compare)"
+            label="Session B"
             value={sessionB}
             sessions={sessions}
+            timeZone={timeZone}
             onChange={setSessionB}
           />
         </div>
         <Button
           variant="primary"
           size="sm"
-          disabled={!sessionA || !sessionB || sessionA === sessionB}
+          disabled={!compareState.enabled || analytics.isComparing}
           onClick={() => void analytics.compareSessions(sessionA, sessionB)}
         >
-          Compare
+          {analytics.isComparing ? "Comparing…" : "Compare"}
         </Button>
+        {!compareState.enabled && compareState.reason && (
+          <p className="text-xs text-muted-foreground mt-2">{compareState.reason}</p>
+        )}
+        {comparable.length < 2 && (
+          <p className="text-xs text-muted-foreground mt-2">
+            Compare needs two completed sessions that already have a scorecard.
+            Unfinished or unscored sessions stay in the list but cannot be compared.
+          </p>
+        )}
       </Card>
+
+      {analytics.isComparing && !comparison && (
+        <Card className="text-center py-8">
+          <p className="text-sm text-muted-foreground">Comparing sessions…</p>
+        </Card>
+      )}
+
+      {analytics.compareError && (
+        <InlineErrorRetry
+          message={analytics.compareError}
+          onRetry={() => void analytics.compareSessions(sessionA, sessionB)}
+        />
+      )}
 
       {comparison && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <CompareSessionCard session={comparison.session_a} label="Session A" />
-          <CompareSessionCard session={comparison.session_b} label="Session B" />
+          <CompareSessionCard
+            session={comparison.baseline ?? comparison.session_a}
+            label="Baseline"
+            timeZone={comparison.timezone || timeZone}
+          />
+          <CompareSessionCard
+            session={comparison.comparison ?? comparison.session_b}
+            label="Comparison"
+            timeZone={comparison.timezone || timeZone}
+          />
         </div>
       )}
 
       {comparison && (
         <Card>
           <h3 className="text-sm font-semibold text-foreground mb-3">Delta summary</h3>
+          <p className="text-[10px] text-muted-foreground mb-3">
+            Change = comparison − baseline. Unavailable metrics stay blank.
+          </p>
           <div className="grid grid-cols-3 gap-3 text-center mb-4">
             <DeltaStat label="Score" value={comparison.score_delta} invert={false} />
             <DeltaStat label="Fillers/min" value={comparison.filler_delta} invert />
             <DeltaStat label="WPM" value={comparison.wpm_delta} invert={false} />
           </div>
+          {comparison.deltas && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center mb-4">
+              <DeltaStat label="Communication" value={comparison.deltas.communication} />
+              <DeltaStat label="Technical" value={comparison.deltas.technical} />
+              <DeltaStat label="Problem solving" value={comparison.deltas.problem_solving} />
+              <DeltaStat label="Confidence" value={comparison.deltas.confidence} />
+            </div>
+          )}
           {comparison.improvement_areas.length > 0 && (
             <div className="mb-3">
-              <p className="text-xs font-semibold text-emerald-400 mb-1">Improvements in B</p>
+              <p className="text-xs font-semibold text-emerald-400 mb-1">Improvements</p>
               <ul className="text-xs text-foreground space-y-1">
                 {comparison.improvement_areas.map((a) => (
                   <li key={a}>↑ {a}</li>
@@ -730,7 +799,7 @@ function SessionComparePanel({ analytics }: { analytics: ReturnType<typeof useAn
           )}
           {comparison.regression_areas.length > 0 && (
             <div>
-              <p className="text-xs font-semibold text-red-400 mb-1">Regressions in B</p>
+              <p className="text-xs font-semibold text-red-400 mb-1">Regressions</p>
               <ul className="text-xs text-foreground space-y-1">
                 {comparison.regression_areas.map((a) => (
                   <li key={a}>↓ {a}</li>
@@ -745,16 +814,22 @@ function SessionComparePanel({ analytics }: { analytics: ReturnType<typeof useAn
 }
 
 function SessionPicker({
-  label, value, sessions, onChange,
+  label, value, sessions, timeZone, onChange,
 }: {
   label: string;
   value: string;
+  timeZone: string;
   sessions: {
     session_id: string;
     date: string;
+    started_at?: string | null;
+    mode?: string | null;
     company?: string | null;
     overall_score: number | null;
     score_status?: string;
+    completion_state?: string | null;
+    comparable?: boolean;
+    title?: string | null;
   }[];
   onChange: (id: string) => void;
 }) {
@@ -770,8 +845,20 @@ function SessionPicker({
       >
         <option value="">Select session…</option>
         {sessions.map((s) => (
-          <option key={s.session_id} value={s.session_id}>
-            {format(new Date(s.date), "MMM d")} · {formatSessionScore(s.overall_score, s.score_status)} · {s.company ?? s.session_id.slice(0, 8)}
+          <option
+            key={s.session_id}
+            value={s.session_id}
+            disabled={s.comparable !== true}
+          >
+            {sessionPickerLabel({
+              dateIso: s.started_at ?? s.date,
+              timeZone,
+              sessionType: s.mode,
+              company: s.company ?? s.title,
+              score: s.overall_score,
+              scoreStatus: s.score_status,
+              completionState: s.completion_state,
+            })}
           </option>
         ))}
       </select>
@@ -780,39 +867,55 @@ function SessionPicker({
 }
 
 function CompareSessionCard({
-  session, label,
+  session, label, timeZone,
 }: {
   session: {
     date: string;
+    started_at?: string | null;
     mode: string;
-    interview_type: string;
+    interview_type?: string | null;
     company: string | null;
+    title?: string | null;
     overall_score: number | null;
     score_status?: string;
     filler_rate: number | null;
     wpm_avg: number | null;
-    duration_minutes: number;
-    question_count: number;
+    duration_minutes: number | null;
+    question_count: number | null;
+    answered_count?: number | null;
   };
   label: string;
+  timeZone: string;
 }) {
   return (
     <Card>
       <Badge variant="gray" size="sm" className="mb-3">{label}</Badge>
       <p className="text-xs text-muted-foreground mb-2">
-        {format(new Date(session.date), "MMM d, yyyy")} · {session.mode} · {session.interview_type}
+        {formatSessionDateTime(session.started_at ?? session.date, timeZone)}
+        {session.mode ? ` · ${session.mode}` : ""}
       </p>
-      {session.company && (
-        <p className="text-sm font-medium text-foreground mb-3">{session.company}</p>
+      {(session.company || session.title) && (
+        <p className="text-sm font-medium text-foreground mb-3">
+          {session.company ?? session.title}
+        </p>
       )}
       <div className="text-3xl font-black text-primary mb-3">
         {formatSessionScore(session.overall_score, session.score_status)}
       </div>
       <div className="space-y-2 text-xs">
-        <div className="flex justify-between"><span className="text-muted-foreground">WPM</span><span>{session.wpm_avg ?? "—"}</span></div>
+        <div className="flex justify-between"><span className="text-muted-foreground">WPM</span><span>{typeof session.wpm_avg === "number" ? session.wpm_avg : "—"}</span></div>
         <div className="flex justify-between"><span className="text-muted-foreground">Fillers/min</span><span>{typeof session.filler_rate === "number" ? session.filler_rate.toFixed(1) : "—"}</span></div>
-        <div className="flex justify-between"><span className="text-muted-foreground">Duration</span><span>{session.duration_minutes}m</span></div>
-        <div className="flex justify-between"><span className="text-muted-foreground">Questions</span><span>{session.question_count}</span></div>
+        <div className="flex justify-between"><span className="text-muted-foreground">Duration</span><span>{typeof session.duration_minutes === "number" ? `${session.duration_minutes}m` : "—"}</span></div>
+        <div className="flex justify-between">
+          <span className="text-muted-foreground">Questions</span>
+          <span>
+            {typeof session.question_count === "number"
+              ? typeof session.answered_count === "number"
+                ? `${session.answered_count} / ${session.question_count}`
+                : session.question_count
+              : "—"}
+          </span>
+        </div>
       </div>
     </Card>
   );
@@ -822,9 +925,17 @@ function DeltaStat({
   label, value, invert,
 }: {
   label: string;
-  value: number;
+  value: number | null | undefined;
   invert?: boolean;
 }) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return (
+      <div className="rounded-lg bg-secondary p-3">
+        <p className="text-[10px] text-muted-foreground">{label}</p>
+        <p className="text-lg font-black tabular-nums text-muted-foreground">—</p>
+      </div>
+    );
+  }
   const positive = invert ? value < 0 : value > 0;
   const formatted = label.includes("Fillers") ? value.toFixed(1) : value;
   return (

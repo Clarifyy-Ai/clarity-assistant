@@ -442,7 +442,7 @@ function ResumeManager() {
     <div className="space-y-4">
       <UploadZone
         title="Drop resume here or browse"
-        description={`PDF, DOCX, DOC or TXT · Max 10 MB · Up to ${MAX_UPLOAD_QUEUE} files at once`}
+        description={`PDF, DOCX, or TXT · Max 10 MB · Up to ${MAX_UPLOAD_QUEUE} files at once`}
         accept=".pdf,.docx,.doc,.txt,text/plain,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         multiple
         loading={uploading}
@@ -544,8 +544,17 @@ function ResumeManager() {
         <Card>
           <EmptyState
             icon={FileText}
-            title="No resumes uploaded yet"
+            title="Your document library is empty."
             description="Drop a file above or browse to add your first resume for AI context."
+            compact
+          />
+        </Card>
+      ) : total === 0 ? (
+        <Card>
+          <EmptyState
+            icon={FileText}
+            title="No matching results found."
+            description="Try a different filename or clear the search."
             compact
           />
         </Card>
@@ -1061,6 +1070,15 @@ function JDManager() {
             compact
           />
         </Card>
+      ) : total === 0 ? (
+        <Card>
+          <EmptyState
+            icon={ClipboardList}
+            title="No matching results found."
+            description="Try a different role or company, or clear the search."
+            compact
+          />
+        </Card>
       ) : (
         <div className="space-y-2">
           {pageItems.map((jd) => {
@@ -1229,7 +1247,7 @@ function JDManager() {
               <div className="space-y-2">
                 <UploadZone
                   title="Drop JD file here or browse"
-                  description={`PDF, DOCX, DOC or TXT · Max ${FILE_LIMITS.jd.maxMB} MB`}
+                  description={`PDF, DOCX, or TXT · Max ${FILE_LIMITS.jd.maxMB} MB`}
                   accept=".pdf,.docx,.doc,.txt,text/plain,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   onFileSelect={(files) => {
                     const f = files[0];
@@ -1346,7 +1364,7 @@ function CoverLetterManager() {
     <div className="space-y-4">
       <UploadZone
         title="Drop cover letter here or browse"
-        description="PDF, DOCX, DOC or TXT · Max 5 MB"
+        description="PDF, DOCX, or TXT · Max 5 MB"
         accept=".pdf,.docx,.doc,.txt,text/plain,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         loading={uploading}
         loadingContent={
@@ -1440,7 +1458,7 @@ function PortfolioManager() {
         <>
           <UploadZone
             title="Drop portfolio PDF/TXT/HTML or browse"
-            description="PDF, DOCX, DOC, TXT or HTML · Max 15 MB"
+            description="PDF, DOCX, TXT or HTML · Max 15 MB"
             accept=".pdf,.docx,.doc,.txt,.html"
             onFileSelect={(files) => {
               const f = files[0];

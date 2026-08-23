@@ -147,6 +147,7 @@ export default function Settings() {
           <button
             type="button"
             onClick={() => void handleSignOut()}
+            aria-label="Log out"
             className="flex w-full items-center gap-2.5 px-3 py-2 rounded-xl text-sm text-red-500 hover:bg-red-500/5 transition-all"
           >
             <LogOut className="w-4 h-4 shrink-0" />
@@ -203,6 +204,7 @@ export default function Settings() {
             <button
               type="button"
               onClick={() => void handleSignOut()}
+              aria-label="Log out"
               className="flex w-full items-center gap-3 p-4 rounded-2xl bg-red-500/5 border border-red-500/20 hover:bg-red-500/10 transition-all"
             >
               <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-red-500/10">

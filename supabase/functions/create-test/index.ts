@@ -3,6 +3,7 @@ import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient, deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
+import { creditDenialResponse } from "../_shared/creditAuthority.ts";
 import {
   checkRateLimitAsync,
   createRateLimitKey,
@@ -123,11 +124,7 @@ Deno.serve(async (req) => {
     });
 
     if (!creditResult?.success) {
-      return jsonResponse(
-        req,
-        { error: "Insufficient credits to create test" },
-        402
-      );
+      return creditDenialResponse(req, creditResult, CREATE_TEST_CREDIT_COST);
     }
 
     const finalConfig = {

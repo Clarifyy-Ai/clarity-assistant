@@ -5,6 +5,7 @@ ai-feedback
 ai-hub-router
 ai-key-check
 analytics-dashboard
+compare-sessions
 analyze-paper-trends
 analyze-test-performance
 assemble-assessment

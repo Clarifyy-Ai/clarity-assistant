@@ -28,24 +28,49 @@ import { readCachedAuthSession } from "@/lib/supabase/sessionCache";
 import { profilesDB, userRolesDB } from "@/lib/supabase/database";
 import { useOverlayStore } from "@/store/overlayStore";
 import { normalizePreferredModel } from "@/lib/ai/modelOptions";
-import { ACCOUNT_SUSPENDED_MESSAGE, isAccountSuspendedAuthError } from "@/lib/errors";
+import { ACCOUNT_SUSPENDED_MESSAGE, formatSupabaseAuthError, isAccountSuspendedAuthError } from "@/lib/errors";
 import { isOAuthProviderEnabled } from "@/lib/auth/oauthProviders";
 import { isElectronApp } from "@/lib/platform/isElectron";
 import { clearBYOKVault } from "@/lib/security/byokVault";
 import { logger, LogEvents } from "@/lib/logger";
 import { syncPrivacyPrefsFromProfile } from "@/lib/privacy/privacyPrefs";
 import {
+  classifyUnexpectedSignedOut,
+  hasRecentLogoutBroadcast,
   isInvalidRefreshTokenError,
   isNonRetryableAuthError,
+  markExplicitLogoutBroadcast,
+  redirectAfterCrossTabSignOut,
   redirectToSessionExpiredLogin,
+  subscribeCrossTabLogoutBroadcast,
+  SESSION_EXPIRED_MESSAGE,
+  SIGNED_OUT_ELSEWHERE_MESSAGE,
+  SIGNED_OUT_ELSEWHERE_REASON,
 } from "@/lib/auth/sessionErrors";
 import { buildAuthRedirectUrl } from "@/lib/auth/redirectUrl";
 import {
   clearTabLocalLogout,
   isTabLocalLogout,
-  markTabLocalLogout,
   softClearTabSession,
 } from "@/lib/auth/tabLocalLogout";
+import {
+  AUTH_ACCOUNT_FRIENDLY_ERROR,
+  AUTH_SESSION_TIMEOUT_MS_ELECTRON,
+  AUTH_SESSION_TIMEOUT_MS_WEB,
+  PROFILE_FETCH_TIMEOUT_MS,
+  ROLE_CHECK_TIMEOUT_MS,
+  asLoginCredentials,
+  canRetryAccountRecovery,
+  classifyAccountLoadFailure,
+  createInFlightMap,
+  deriveAccountPhase,
+  isTimeoutError,
+  shouldLoadAccountOnAuthEvent,
+  shouldSkipSoftProfileRefresh,
+  userFacingAccountError,
+  withTimeout,
+  type AccountPhase,
+} from "@/lib/auth/accountBootstrap";
 
 import type {
   SupabaseSession,
@@ -61,131 +86,126 @@ export type AuthStatus =
   | "unauthenticated"
   | "error";
 
-const AUTH_SESSION_TIMEOUT_MS = isElectronApp() ? 10_000 : 8_000;
+export type { AccountPhase };
+
+export type LoadProfileOptions = {
+  /** Bypass cache and fetch even if a recent profile exists. */
+  force?: boolean;
+  /** Revalidate without flipping the shell into an initial-loading state. */
+  background?: boolean;
+};
+
+const AUTH_SESSION_TIMEOUT_MS = isElectronApp()
+  ? AUTH_SESSION_TIMEOUT_MS_ELECTRON
+  : AUTH_SESSION_TIMEOUT_MS_WEB;
+
+const PROFILE_ERROR_MESSAGE = AUTH_ACCOUNT_FRIENDLY_ERROR;
+
+const roleInFlight = createInFlightMap<{ resolved: boolean; isAdmin: boolean }>();
 
 /**
- * Per-attempt budget for the profile read.
- * us-east-1 round-trips from India commonly take 1–2s; 2s caused false timeouts.
- */
-const PROFILE_FETCH_TIMEOUT_MS = 8_000;
-
-/** Role lookup is non-blocking for routing; align with profile budget. */
-const ROLE_CHECK_TIMEOUT_MS = 8_000;
-
-const PROFILE_ERROR_MESSAGE =
-  "We're having trouble loading your profile. Please try again.";
-
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) => {
-      setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms);
-    }),
-  ]);
-}
-
-
-/**
- * Resolve admin role with one retry on abort/timeout/network failure.
- * Non-retryable auth errors are propagated immediately.
- * Unresolved result must NOT be treated as "not admin".
+ * Resolve admin role with one retry on timeout/network failure.
+ * Non-retryable auth errors fail closed (not admin, resolved).
+ * After a failed retry, fail closed so Free-user routes are never blocked;
+ * admin routes can Retry. Privileged access is always server-enforced.
  */
 async function resolveAdminRole(
   userId: string
 ): Promise<{ resolved: boolean; isAdmin: boolean }> {
-  const startedAt = Date.now();
-  logger.info(LogEvents.AUTH_ROLE_LOAD_STARTED, {
-    operation: "role.load",
-    attempt: 1,
-  });
-
-  const attempt = () =>
-    withTimeout(
-      userRolesDB.hasRole(userId, "admin"),
-      ROLE_CHECK_TIMEOUT_MS,
-      "Role check"
-    );
-
-  try {
-    const isAdmin = await attempt();
-    logger.info(LogEvents.AUTH_ROLE_LOAD_SUCCEEDED, {
+  return roleInFlight.run(userId, async () => {
+    const startedAt = Date.now();
+    logger.info(LogEvents.AUTH_ROLE_LOAD_STARTED, {
       operation: "role.load",
       attempt: 1,
-      durationMs: Date.now() - startedAt,
-      outcome: "succeeded",
-      authState: isAdmin ? "admin" : "non_admin",
     });
-    return { resolved: true, isAdmin };
-  } catch (err) {
-    const timedOut = getErrorMessage(err).toLowerCase().includes("timed out");
-    // Do not retry auth failures — they will fail again immediately.
-    if (isNonRetryableAuthError(err)) {
-      logger.warn(LogEvents.AUTH_ROLE_LOAD_FAILED, {
-        operation: "role.load",
-        attempt: 1,
-        durationMs: Date.now() - startedAt,
-        outcome: "failed",
-        retryable: false,
-        recoveryAction: "skip_retry",
-      });
-      console.warn("[authStore] Admin role check: non-retryable auth error", getErrorMessage(err));
-      return { resolved: false, isAdmin: false };
-    }
-    if (timedOut) {
-      logger.warn(LogEvents.AUTH_ROLE_LOAD_TIMED_OUT, {
-        operation: "role.load",
-        attempt: 1,
-        durationMs: Date.now() - startedAt,
-        outcome: "timed_out",
-        retryable: true,
-      });
-    } else {
-      logger.warn(LogEvents.NETWORK_RETRY, {
-        operation: "role.load",
-        attempt: 1,
-        retryable: true,
-      });
-    }
-    console.warn("[authStore] Admin role check failed; retrying once:", err);
+
+    const attempt = () =>
+      withTimeout(
+        userRolesDB.hasRole(userId, "admin"),
+        ROLE_CHECK_TIMEOUT_MS,
+        "Role check",
+      );
+
     try {
       const isAdmin = await attempt();
       logger.info(LogEvents.AUTH_ROLE_LOAD_SUCCEEDED, {
         operation: "role.load",
-        attempt: 2,
+        attempt: 1,
         durationMs: Date.now() - startedAt,
         outcome: "succeeded",
         authState: isAdmin ? "admin" : "non_admin",
       });
       return { resolved: true, isAdmin };
-    } catch (retryErr) {
-      const retryTimedOut = getErrorMessage(retryErr)
-        .toLowerCase()
-        .includes("timed out");
-      logger.error(
-        retryTimedOut
-          ? LogEvents.AUTH_ROLE_LOAD_TIMED_OUT
-          : LogEvents.AUTH_ROLE_LOAD_FAILED,
-        {
+    } catch (err) {
+      if (isNonRetryableAuthError(err)) {
+        logger.warn(LogEvents.AUTH_ROLE_LOAD_FAILED, {
+          operation: "role.load",
+          attempt: 1,
+          durationMs: Date.now() - startedAt,
+          outcome: "failed",
+          retryable: false,
+          recoveryAction: "fail_closed",
+        });
+        console.warn(
+          "[authStore] Admin role check: non-retryable auth error",
+          getErrorMessage(err),
+        );
+        return { resolved: true, isAdmin: false };
+      }
+      if (isTimeoutError(err)) {
+        logger.warn(LogEvents.AUTH_ROLE_LOAD_TIMED_OUT, {
+          operation: "role.load",
+          attempt: 1,
+          durationMs: Date.now() - startedAt,
+          outcome: "timed_out",
+          retryable: true,
+        });
+      } else {
+        logger.warn(LogEvents.NETWORK_RETRY, {
+          operation: "role.load",
+          attempt: 1,
+          retryable: true,
+        });
+      }
+      console.warn("[authStore] Admin role check failed; retrying once:", err);
+      try {
+        const isAdmin = await attempt();
+        logger.info(LogEvents.AUTH_ROLE_LOAD_SUCCEEDED, {
           operation: "role.load",
           attempt: 2,
           durationMs: Date.now() - startedAt,
-          outcome: retryTimedOut ? "timed_out" : "failed",
-          retryable: false,
-          recoveryAction: "leave_unresolved",
-        },
-      );
-      console.warn(
-        "[authStore] Admin role check retry failed; leaving unresolved:",
-        retryErr
-      );
-      // Leave unresolved so gates show loading instead of false Access Denied.
-      return { resolved: false, isAdmin: false };
+          outcome: "succeeded",
+          authState: isAdmin ? "admin" : "non_admin",
+        });
+        return { resolved: true, isAdmin };
+      } catch (retryErr) {
+        const retryTimedOut = isTimeoutError(retryErr);
+        logger.error(
+          retryTimedOut
+            ? LogEvents.AUTH_ROLE_LOAD_TIMED_OUT
+            : LogEvents.AUTH_ROLE_LOAD_FAILED,
+          {
+            operation: "role.load",
+            attempt: 2,
+            durationMs: Date.now() - startedAt,
+            outcome: retryTimedOut ? "timed_out" : "failed",
+            retryable: false,
+            recoveryAction: "fail_closed",
+          },
+        );
+        console.warn(
+          "[authStore] Admin role check retry failed; failing closed (non-admin):",
+          retryErr,
+        );
+        return { resolved: true, isAdmin: false };
+      }
     }
-  }
+  });
 }
 
 export interface AuthState {
   status: AuthStatus;
+  accountPhase: AccountPhase;
   session: SupabaseSession | null;
   user: SupabaseUser | null;
   profile: ProfileRow | null;
@@ -197,6 +217,7 @@ export interface AuthState {
   isOnboarded: boolean;
   planId: string;
   credits: number;
+  recoveryAttempts: number;
 
   // Derived and synced through dset()
   isLoading: boolean;
@@ -219,7 +240,8 @@ export interface AuthActions {
   sendPasswordReset: (email: string) => Promise<void>;
   updatePassword: (newPassword: string) => Promise<void>;
 
-  loadProfile: () => Promise<boolean>;
+  loadProfile: (options?: LoadProfileOptions) => Promise<boolean>;
+  retryAccountLoad: () => Promise<boolean>;
   updateProfile: (updates: Partial<ProfileRow>) => Promise<void>;
   setProfile: (profile: ProfileRow | null) => void;
   refreshCredits: () => Promise<void>;
@@ -238,7 +260,8 @@ function buildInitialAuthState(): AuthState {
 
   if (cached) {
     return {
-      status: "authenticated",
+      status: "loading",
+      accountPhase: "ACCOUNT_LOADING",
       session: cached.session as unknown as SupabaseSession,
       user: cached.user as unknown as SupabaseUser,
       profile: null,
@@ -249,13 +272,15 @@ function buildInitialAuthState(): AuthState {
       isOnboarded: false,
       planId: "free",
       credits: 0,
-      isLoading: false,
-      isAuthenticated: true,
+      recoveryAttempts: 0,
+      isLoading: true,
+      isAuthenticated: false,
     };
   }
 
   return {
     status: "loading",
+    accountPhase: "INITIALIZING",
     session: null,
     user: null,
     profile: null,
@@ -266,6 +291,7 @@ function buildInitialAuthState(): AuthState {
     isOnboarded: false,
     planId: "free",
     credits: 0,
+    recoveryAttempts: 0,
     isLoading: true,
     isAuthenticated: false,
   };
@@ -285,13 +311,69 @@ let _bootstrapping = false;
 
 /** Dedupes concurrent profile loads for the same user. */
 let inFlightProfileLoad: { userId: string; promise: Promise<boolean> } | null = null;
+let inFlightCreditsRefresh: Promise<void> | null = null;
+let profileLoadGeneration = 0;
+
+/** Dedupes concurrent email/password sign-in attempts. */
+let inFlightSignIn: Promise<void> | null = null;
+
+/**
+ * True while signInWithEmail owns profile loading. SIGNED_IN from GoTrue must
+ * not start a second account initialization.
+ */
+let _signingIn = false;
+
+/** Ignore SIGNED_OUT while we locally clear a stale session before password grant. */
+let _ignoreSignedOut = false;
+
+/** Ignore SIGNED_OUT while this tab owns an explicit Log out click. */
+let _explicitLogoutInProgress = false;
+
+/** Access token already hydrated into account context — skip duplicate SIGNED_IN. */
+let _hydratedAccessToken: string | null = null;
 
 const PROFILE_CACHE_TTL_MS = 30_000;
+const BACKGROUND_PROFILE_TTL_MS = 120_000;
 let profileCache: { userId: string; profile: ProfileRow; cachedAt: number } | null = null;
 
 function clearProfileLoadState(): void {
   inFlightProfileLoad = null;
+  inFlightCreditsRefresh = null;
   profileCache = null;
+  profileLoadGeneration += 1;
+  roleInFlight.clear();
+  _hydratedAccessToken = null;
+}
+
+export function getProfileCacheAgeMs(now = Date.now()): number | null {
+  if (!profileCache) return null;
+  return Math.max(0, now - profileCache.cachedAt);
+}
+
+/** Apply role flags without blocking profile resolution. */
+function applyAdminRoleResult(
+  userId: string,
+  roleResult: { resolved: boolean; isAdmin: boolean },
+  set: (fn: (state: AuthStore) => void) => void,
+  get: () => AuthStore,
+): void {
+  if (!roleResult.resolved) return;
+  if (get().user?.id !== userId) return;
+  set((state) => {
+    state.isAdmin = roleResult.isAdmin;
+    state.isAdminResolved = true;
+  });
+}
+
+/** Kick off (or join) the shared role load — never awaited by Free-user routing. */
+function scheduleAdminRoleResolve(
+  userId: string,
+  set: (fn: (state: AuthStore) => void) => void,
+  get: () => AuthStore,
+): void {
+  void resolveAdminRole(userId).then((roleResult) => {
+    applyAdminRoleResult(userId, roleResult, set, get);
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -434,8 +516,14 @@ export const useAuthStore = create<AuthStore>()(
           set((draft) => {
             recipe(draft);
 
+            draft.accountPhase = deriveAccountPhase({
+              status: draft.status,
+              hasUser: Boolean(draft.user),
+              isProfileLoaded: draft.isProfileLoaded,
+            });
             draft.isLoading =
-              draft.status === "idle" || draft.status === "loading";
+              draft.accountPhase === "INITIALIZING" ||
+              draft.accountPhase === "ACCOUNT_LOADING";
             draft.isAuthenticated = draft.status === "authenticated";
           });
         };
@@ -444,11 +532,6 @@ export const useAuthStore = create<AuthStore>()(
           ...INITIAL_STATE,
 
           initialize: async () => {
-            // ── Bootstrap guard ──────────────────────────────────────────────
-            // React StrictMode fires effects twice (mount→unmount→mount) in
-            // development. The second call arrives before the first completes,
-            // so we guard with a module-level flag rather than a store flag
-            // (store state updates are async and would arrive too late).
             if (_bootstrapping) {
               logger.warn(LogEvents.BOOTSTRAP_DUPLICATE_PREVENTED, {
                 operation: "initialize",
@@ -462,15 +545,7 @@ export const useAuthStore = create<AuthStore>()(
               operation: "initialize",
             });
 
-            if (unsubAuthListener) {
-              unsubAuthListener();
-              unsubAuthListener = null;
-            }
-
-            const hadCachedSession =
-              get().status === "authenticated" && Boolean(get().session);
-
-            if (!hadCachedSession) {
+            if (get().status !== "authenticated" || !get().isProfileLoaded) {
               dset((state) => {
                 state.status = "loading";
                 state.error = null;
@@ -482,232 +557,311 @@ export const useAuthStore = create<AuthStore>()(
             }
 
             try {
-              // Wipe any legacy BYOK vault remnants from older clients.
               clearBYOKVault();
             } catch {
               // Ignore vault wipe failures.
             }
 
-            // ── NOTE: Do NOT call loadProfile() here based on cached session. ──
-            // The cached session may hold a stale/revoked refresh token.
-            // Always wait for getSession() to confirm the token is valid before
-            // starting profile or role queries. Calling loadProfile() before
-            // getSession() completes causes:
-            //   (a) duplicate profile load (once here, once after getSession),
-            //   (b) profile/role requests failing with 401 on a stale token,
-            //   (c) repeated timeout warnings that look like an auth loop.
-
-            // This tab opted out of the shared session (independent logout).
-            // Skip hydrating from getSession(); still attach the normal listener
-            // so an intentional login in this tab can recover.
-            if (isTabLocalLogout()) {
-              resetPostHog();
-              dset((state) => {
-                state.session = null;
-                state.user = null;
-                state.profile = null;
-                state.status = "unauthenticated";
-                state.error = null;
-              });
-              logger.info(LogEvents.BOOTSTRAP_COMPLETED, {
-                operation: "initialize",
-                authState: "tab_local_logout",
-                outcome: "succeeded",
-              });
-              void softClearTabSession(() =>
-                supabase.auth.signOut({ scope: "local" }),
-              );
-            } else {
-              try {
-                const {
-                  data: { session },
-                  error,
-                } = await withTimeout(
-                  supabase.auth.getSession(),
-                  AUTH_SESSION_TIMEOUT_MS,
-                  "Session check",
-                );
-
-                if (error) {
-                  throw error;
-                }
-
-                if (session) {
-                  dset((state) => {
-                    state.session = session as unknown as SupabaseSession;
-                    state.user = session.user as unknown as SupabaseUser;
-                  });
-
-                  const profileLoaded = await get().loadProfile();
-                  // Do not return early on profile failure — listener registration and
-                  // bootstrap lock release must still run below.
-                  if (profileLoaded) {
-                    dset((state) => {
-                      state.status = "authenticated";
-                    });
-
-                    logger.info(LogEvents.BOOTSTRAP_COMPLETED, {
-                      operation: "initialize",
-                      authState: "authenticated",
-                      outcome: "succeeded",
-                    });
-                    identifyPostHogUser(session.user as unknown as SupabaseUser);
-                  }
-                } else {
-                  dset((state) => {
-                    state.status = "unauthenticated";
-                  });
-                  logger.info(LogEvents.BOOTSTRAP_COMPLETED, {
-                    operation: "initialize",
-                    authState: "anonymous",
-                    outcome: "succeeded",
-                  });
-                }
-              } catch (error) {
-                if (isInvalidRefreshTokenError(error)) {
-                  logger.warn(LogEvents.AUTH_SESSION_RECOVERY_INVALID_TOKEN, {
-                    outcome: "failed",
-                    recoveryAction: "clear_stale_session",
-                    retryable: false,
-                  });
-                  console.warn(
-                    "[authStore] Stale refresh token detected — clearing local session and redirecting to login",
-                  );
-                  await clearStaleLocalSession();
-                  resetPostHog();
-                  get().reset();
-                  redirectToSessionExpiredLogin();
-                } else {
-                  logger.error(LogEvents.BOOTSTRAP_FAILED, {
-                    outcome: "failed",
-                    operation: "session.check",
-                  });
-                  dset((state) => {
-                    state.status = "error";
-                    state.error = getErrorMessage(error);
-                  });
-                }
+            const hydrateFromSession = async (
+              session: { access_token?: string; user?: SupabaseUser } | null,
+              event: string,
+            ): Promise<void> => {
+              if (!session?.user) {
+                dset((state) => {
+                  state.status = "unauthenticated";
+                  state.session = null;
+                  state.user = null;
+                });
+                return;
               }
-            }
 
-            try {
-              // Register the auth listener before releasing the bootstrap lock so a
-              // StrictMode double-mount cannot start a second initialize() that races
-              // listener registration.
+              dset((state) => {
+                state.session = session as unknown as SupabaseSession;
+                state.user = session.user as unknown as SupabaseUser;
+              });
+
+              const alreadyReady =
+                get().isProfileLoaded && get().user?.id === session.user.id;
+              const sameToken =
+                Boolean(session.access_token) &&
+                _hydratedAccessToken === session.access_token;
+
+              if (
+                !shouldLoadAccountOnAuthEvent({
+                  event,
+                  signingIn: _signingIn,
+                  alreadyReadyForUser: alreadyReady,
+                  sameAccessToken: sameToken,
+                })
+              ) {
+                if (session.access_token) {
+                  _hydratedAccessToken = session.access_token;
+                }
+                return;
+              }
+
+              const profileLoaded = await get().loadProfile();
+              if (!profileLoaded) {
+                return;
+              }
+
+              dset((state) => {
+                state.status = "authenticated";
+                state.recoveryAttempts = 0;
+              });
+              if (session.access_token) {
+                _hydratedAccessToken = session.access_token;
+              }
+              identifyPostHogUser(session.user as unknown as SupabaseUser);
+            };
+
+            if (!unsubAuthListener) {
+              let foreignSignOutHandled = false;
+              const handleForeignSignOut = () => {
+                if (
+                  foreignSignOutHandled ||
+                  _ignoreSignedOut ||
+                  _explicitLogoutInProgress ||
+                  _signingIn ||
+                  isTabLocalLogout()
+                ) {
+                  return;
+                }
+                if (get().status === "unauthenticated" && !get().user) {
+                  return;
+                }
+                foreignSignOutHandled = true;
+                resetPostHog();
+                get().reset();
+                const signedOutReason = classifyUnexpectedSignedOut({
+                  recentLogoutBroadcast: hasRecentLogoutBroadcast(),
+                });
+                dset((state) => {
+                  state.error =
+                    signedOutReason === SIGNED_OUT_ELSEWHERE_REASON
+                      ? SIGNED_OUT_ELSEWHERE_MESSAGE
+                      : SESSION_EXPIRED_MESSAGE;
+                });
+                if (signedOutReason === SIGNED_OUT_ELSEWHERE_REASON) {
+                  redirectAfterCrossTabSignOut();
+                } else {
+                  redirectToSessionExpiredLogin();
+                }
+              };
+
               const { data } = supabase.auth.onAuthStateChange(
                 async (event, session) => {
-                  if (event === "SIGNED_IN" && session) {
-                    // Cross-tab storage sync must not undo independent logout.
-                    // Intentional login clears the flag before calling signIn*.
-                    if (isTabLocalLogout()) {
+                  if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+                    foreignSignOutHandled = false;
+                  }
+                  if (event === "SIGNED_OUT") {
+                    handleForeignSignOut();
+                    return;
+                  }
+
+                  if (isTabLocalLogout()) {
+                    if (session) {
                       void softClearTabSession(() =>
                         supabase.auth.signOut({ scope: "local" }),
                       );
-                      return;
                     }
-                    dset((state) => {
-                      state.session = session as unknown as SupabaseSession;
-                      state.user = session.user as unknown as SupabaseUser;
-                    });
-
-                    const profileLoaded = await get().loadProfile();
-                    if (!profileLoaded) {
-                      return;
-                    }
-
-                    dset((state) => {
-                      state.status = "authenticated";
-                    });
-
-                    identifyPostHogUser(
-                      session.user as unknown as SupabaseUser
-                    );
-                  }
-
-                  if (event === "SIGNED_OUT") {
-                    if (isTabLocalLogout()) {
-                      return;
-                    }
-                    resetPostHog();
-                    get().reset();
+                    return;
                   }
 
                   if (event === "TOKEN_REFRESHED" && session) {
-                    if (isTabLocalLogout()) {
-                      void softClearTabSession(() =>
-                        supabase.auth.signOut({ scope: "local" }),
-                      );
-                      return;
-                    }
                     dset((state) => {
                       state.session = session as unknown as SupabaseSession;
                     });
-                    // Re-check ban on refresh so a mid-session admin ban takes effect.
-                    void get().loadProfile();
-                  }
-
-                  if (event === "USER_UPDATED" && session) {
-                    if (isTabLocalLogout()) {
-                      return;
+                    if (session.access_token) {
+                      _hydratedAccessToken = session.access_token;
                     }
-                    dset((state) => {
-                      state.session = session as unknown as SupabaseSession;
-                      state.user = session.user as unknown as SupabaseUser;
-                    });
-
-                    void get().loadProfile();
+                    return;
                   }
 
                   if (event === "PASSWORD_RECOVERY" && session) {
-                    if (isTabLocalLogout()) {
-                      return;
-                    }
                     dset((state) => {
                       state.session = session as unknown as SupabaseSession;
                       state.user = session.user as unknown as SupabaseUser;
                       state.status = "authenticated";
                     });
+                    return;
                   }
-                }
+
+                  if (
+                    event === "INITIAL_SESSION" ||
+                    event === "SIGNED_IN" ||
+                    event === "USER_UPDATED"
+                  ) {
+                    await hydrateFromSession(
+                      session as {
+                        access_token?: string;
+                        user?: SupabaseUser;
+                      } | null,
+                      event,
+                    );
+                  }
+                },
               );
+
+              const unsubLogoutBroadcast = subscribeCrossTabLogoutBroadcast(() => {
+                handleForeignSignOut();
+              });
 
               unsubAuthListener = () => {
                 data.subscription.unsubscribe();
+                unsubLogoutBroadcast();
               };
+            }
+
+            try {
+              if (isTabLocalLogout()) {
+                resetPostHog();
+                dset((state) => {
+                  state.session = null;
+                  state.user = null;
+                  state.profile = null;
+                  state.status = "unauthenticated";
+                  state.error = null;
+                });
+                logger.info(LogEvents.BOOTSTRAP_COMPLETED, {
+                  operation: "initialize",
+                  authState: "tab_local_logout",
+                  outcome: "succeeded",
+                });
+                void softClearTabSession(() =>
+                  supabase.auth.signOut({ scope: "local" }),
+                );
+                return;
+              }
+
+              const {
+                data: { session: initialSession },
+                error,
+              } = await withTimeout(
+                supabase.auth.getSession(),
+                AUTH_SESSION_TIMEOUT_MS,
+                "Session check",
+              );
+
+              if (error) {
+                throw error;
+              }
+
+              let session = initialSession;
+              // getSession() can return a cached JWT past expires_at without
+              // refreshing. Force refresh so revoked tokens fail closed.
+              const expiresAtMs =
+                typeof session?.expires_at === "number"
+                  ? session.expires_at * 1000
+                  : null;
+              if (session && expiresAtMs != null && expiresAtMs <= Date.now()) {
+                const refreshed = await withTimeout(
+                  supabase.auth.refreshSession(),
+                  AUTH_SESSION_TIMEOUT_MS,
+                  "Session refresh",
+                );
+                if (refreshed.error) {
+                  throw refreshed.error;
+                }
+                session = refreshed.data.session;
+              }
+
+              await hydrateFromSession(
+                session as {
+                  access_token?: string;
+                  user?: SupabaseUser;
+                } | null,
+                "INITIAL_SESSION",
+              );
+
+              logger.info(LogEvents.BOOTSTRAP_COMPLETED, {
+                operation: "initialize",
+                authState: session ? "authenticated" : "anonymous",
+                outcome: "succeeded",
+              });
+            } catch (error) {
+              if (isInvalidRefreshTokenError(error)) {
+                logger.warn(LogEvents.AUTH_SESSION_RECOVERY_INVALID_TOKEN, {
+                  outcome: "failed",
+                  recoveryAction: "clear_stale_session",
+                  retryable: false,
+                });
+                console.warn(
+                  "[authStore] Stale refresh token detected — clearing local session and redirecting to login",
+                );
+                await clearStaleLocalSession();
+                resetPostHog();
+                get().reset();
+                redirectToSessionExpiredLogin();
+              } else {
+                logger.error(LogEvents.BOOTSTRAP_FAILED, {
+                  outcome: "failed",
+                  operation: "session.check",
+                });
+                const kind = classifyAccountLoadFailure(error);
+                dset((state) => {
+                  state.status = "error";
+                  state.error = userFacingAccountError(kind);
+                });
+              }
             } finally {
-              // Release after listener attach so deliberate re-init (OAuth / password
-              // reset) can run, but concurrent StrictMode boots stay serialized.
               _bootstrapping = false;
             }
           },
 
           signInWithEmail: async (email, password) => {
             clearTabLocalLogout();
+            if (inFlightSignIn) {
+              return inFlightSignIn;
+            }
+
+            const run = async (): Promise<void> => {
             dset((state) => {
               state.status = "loading";
               state.error = null;
             });
 
+            const credentials = asLoginCredentials(email, password);
+
+            _signingIn = true;
+            _ignoreSignedOut = true;
+            try {
+              try {
+                // Drop a stale recovered session so password grant is the only
+                // /auth/v1/token request. scope:local does not hit the server.
+                await supabase.auth.signOut({ scope: "local" });
+              } catch {
+                // Best-effort — password grant still proceeds.
+              }
+
             const { data, error } = await supabase.auth.signInWithPassword({
-              email: email.trim(),
-              password,
+              email: credentials.email,
+              password: credentials.password,
             });
 
             if (error) {
+              const friendly = formatSupabaseAuthError(error);
               dset((state) => {
-                state.status = "error";
-                state.error = error.message;
+                state.status = "unauthenticated";
+                state.session = null;
+                state.user = null;
+                state.error = friendly;
               });
 
-              throw error;
+              throw Object.assign(new Error(friendly), {
+                cause: error,
+                code: (error as { code?: string }).code,
+                status: (error as { status?: number }).status,
+              });
             }
 
-            // Keep status "loading" until the profile (and ban check) resolves so a
-            // suspended account is never briefly treated as authenticated.
             dset((state) => {
               state.session = data.session as unknown as SupabaseSession;
               state.user = data.user as unknown as SupabaseUser;
             });
+            if (data.session?.access_token) {
+              _hydratedAccessToken = data.session.access_token;
+            }
 
             const profileLoaded = await get().loadProfile();
 
@@ -727,8 +881,18 @@ export const useAuthStore = create<AuthStore>()(
 
             dset((state) => {
               state.status = "authenticated";
+              state.recoveryAttempts = 0;
             });
+            } finally {
+              _signingIn = false;
+              _ignoreSignedOut = false;
+            }
+            };
 
+            inFlightSignIn = run().finally(() => {
+              inFlightSignIn = null;
+            });
+            return inFlightSignIn;
           },
 
           signUpWithEmail: async (email, password, fullName) => {
@@ -830,19 +994,41 @@ export const useAuthStore = create<AuthStore>()(
               state.error = null;
             });
 
-            // Tab-local only: keep shared localStorage session so other tabs stay signed in.
             clearProfileLoadState();
-            markTabLocalLogout();
+            clearTabLocalLogout();
+            markExplicitLogoutBroadcast();
             resetPostHog();
             try {
               clearBYOKVault();
             } catch {
               // Ignore local vault clearing failure.
             }
-            await softClearTabSession(() =>
-              supabase.auth.signOut({ scope: "local" }),
-            );
-            get().reset();
+            _explicitLogoutInProgress = true;
+            _ignoreSignedOut = true;
+            try {
+              const { error } = await supabase.auth.signOut();
+              if (error) {
+                await supabase.auth.signOut({ scope: "local" });
+              }
+            } catch {
+              try {
+                await supabase.auth.signOut({ scope: "local" });
+              } catch {
+                // Best-effort local clear.
+              }
+            } finally {
+              get().reset();
+              // Keep suppressing foreign SIGNED_OUT until after the login redirect.
+              const release = () => {
+                _ignoreSignedOut = false;
+                _explicitLogoutInProgress = false;
+              };
+              if (typeof window !== "undefined") {
+                window.setTimeout(release, 0);
+              } else {
+                release();
+              }
+            }
           },
 
           clearAuth: async () => {
@@ -880,7 +1066,7 @@ export const useAuthStore = create<AuthStore>()(
             }
           },
 
-          loadProfile: async () => {
+          loadProfile: async (options) => {
             const userId = get().user?.id;
 
             if (!userId) {
@@ -893,19 +1079,32 @@ export const useAuthStore = create<AuthStore>()(
               return inFlightProfileLoad.promise;
             }
 
+            const ttlMs = options?.force
+              ? 0
+              : options?.background
+                ? BACKGROUND_PROFILE_TTL_MS
+                : PROFILE_CACHE_TTL_MS;
             const cached = profileCache;
             if (
-              cached &&
-              cached.userId === userId &&
-              Date.now() - cached.cachedAt < PROFILE_CACHE_TTL_MS &&
+              ttlMs > 0 &&
+              shouldSkipSoftProfileRefresh({
+                userId,
+                cacheUserId: cached?.userId ?? null,
+                cachedAt: cached?.cachedAt ?? null,
+                ttlMs,
+              }) &&
               get().isProfileLoaded &&
               get().profile
             ) {
+              if (!get().isAdminResolved && !options?.background) {
+                scheduleAdminRoleResolve(userId, set, get);
+              }
               return true;
             }
 
             // Surface loading UI when recovering from a prior error state.
-            if (get().status === "error") {
+            // Background revalidation must keep the current Dashboard visible.
+            if (get().status === "error" && !options?.background) {
               set((state) => {
                 state.status = "loading";
                 state.error = null;
@@ -914,6 +1113,7 @@ export const useAuthStore = create<AuthStore>()(
             }
 
             const run = async (): Promise<boolean> => {
+            const generation = ++profileLoadGeneration;
             const profileStartedAt = Date.now();
             const correlationId = crypto.randomUUID();
             // Soft-fail recovery: tab focus / TOKEN_REFRESHED must not wipe a
@@ -937,8 +1137,12 @@ export const useAuthStore = create<AuthStore>()(
 
             try {
               let profile: Awaited<ReturnType<typeof profilesDB.getByIdMaybe>>;
-              // Role lookup runs in parallel — it must never add latency to routing.
-              const rolePromise = resolveAdminRole(userId);
+              // Role lookup must NEVER gate Free-user routing / dashboard paint.
+              // Kick it off in parallel; apply flags when it settles.
+              // Background recovery must not re-hit user_roles when already resolved.
+              if (!(options?.background && get().isAdminResolved)) {
+                scheduleAdminRoleResolve(userId, set, get);
+              }
 
               try {
                 profile = await fetchProfile();
@@ -948,9 +1152,7 @@ export const useAuthStore = create<AuthStore>()(
                 if (isNonRetryableAuthError(firstErr)) {
                   throw firstErr;
                 }
-                const timedOut = getErrorMessage(firstErr)
-                  .toLowerCase()
-                  .includes("timed out");
+                const timedOut = isTimeoutError(firstErr);
                 if (timedOut) {
                   logger.warn(LogEvents.AUTH_PROFILE_LOAD_TIMED_OUT, {
                     operation: "profile.load",
@@ -972,8 +1174,6 @@ export const useAuthStore = create<AuthStore>()(
                 );
                 profile = await fetchProfile();
               }
-
-              const roleResult = await rolePromise;
 
               if (!profile) {
                 // Orphan auth users (trigger miss / deleted row): repair once.
@@ -1049,6 +1249,9 @@ export const useAuthStore = create<AuthStore>()(
               if (get().user?.id !== userId) {
                 return false;
               }
+              if (generation !== profileLoadGeneration) {
+                return hadLoadedProfile;
+              }
 
               profileCache = {
                 userId,
@@ -1063,11 +1266,7 @@ export const useAuthStore = create<AuthStore>()(
                 if (state.status === "error") state.status = "authenticated";
 
                 state.error = null;
-                if (roleResult.resolved) {
-                  state.isAdmin = roleResult.isAdmin;
-                  state.isAdminResolved = true;
-                }
-                // Unresolved role check: leave prior flags; do not set isAdmin=false.
+                // Role flags are applied asynchronously by scheduleAdminRoleResolve.
                 state.isOnboarded = getProfileBoolean(
                   row,
                   "onboarding_completed",
@@ -1076,22 +1275,6 @@ export const useAuthStore = create<AuthStore>()(
                 state.planId = getProfileString(row, "plan_id", "free");
                 state.credits = getProfileNumber(row, "credits", 0);
               });
-
-              // Transient role abort left unresolved — retry once more in background
-              // so a real admin is not stuck behind a permanent loading gate.
-              if (!roleResult.resolved && !get().isAdminResolved) {
-                setTimeout(() => {
-                  void (async () => {
-                    if (get().user?.id !== userId || get().isAdminResolved) return;
-                    const retry = await resolveAdminRole(userId);
-                    if (get().user?.id !== userId || !retry.resolved) return;
-                    set((state) => {
-                      state.isAdmin = retry.isAdmin;
-                      state.isAdminResolved = true;
-                    });
-                  })();
-                }, 750);
-              }
 
               syncOverlayFromProfile(row);
               syncPrivacyPrefsFromProfile(row.privacy_prefs);
@@ -1136,9 +1319,7 @@ export const useAuthStore = create<AuthStore>()(
                 return false;
               }
 
-              const timedOut = getErrorMessage(err)
-                .toLowerCase()
-                .includes("timed out");
+              const timedOut = isTimeoutError(err);
 
               // Tab switches / token refresh often re-fetch the profile. A
               // transient failure must not replace a working session with the
@@ -1177,6 +1358,7 @@ export const useAuthStore = create<AuthStore>()(
                 return true;
               }
 
+              const kind = classifyAccountLoadFailure(err);
               logger.error(
                 timedOut
                   ? LogEvents.AUTH_PROFILE_LOAD_TIMED_OUT
@@ -1191,7 +1373,7 @@ export const useAuthStore = create<AuthStore>()(
 
               dset((state) => {
                 state.status = "error";
-                state.error = PROFILE_ERROR_MESSAGE;
+                state.error = userFacingAccountError(kind);
                 state.isProfileLoaded = false;
                 state.isAdmin = false;
                 // Profile failed hard — do not claim a definitive non-admin role.
@@ -1212,6 +1394,21 @@ export const useAuthStore = create<AuthStore>()(
             return promise;
           },
 
+          retryAccountLoad: async () => {
+            if (!canRetryAccountRecovery(get().recoveryAttempts)) {
+              return false;
+            }
+            dset((state) => {
+              state.recoveryAttempts += 1;
+              state.status = "loading";
+              state.error = null;
+            });
+            if (!get().user?.id) {
+              await get().initialize();
+              return get().isProfileLoaded;
+            }
+            return get().loadProfile({ force: true });
+          },
 
           updateProfile: async (updates) => {
             const userId = get().user?.id;
@@ -1284,28 +1481,44 @@ export const useAuthStore = create<AuthStore>()(
               return;
             }
 
-            const data = await profilesDB.getByIdMaybe(userId);
-            if (!data) {
+            if (inFlightProfileLoad && inFlightProfileLoad.userId === userId) {
+              await inFlightProfileLoad.promise;
               return;
             }
 
-            const row = data as Record<string, unknown>;
-            const nextCredits = getProfileNumber(
-              row,
-              "credits",
-              get().credits
-            );
+            if (inFlightCreditsRefresh) {
+              await inFlightCreditsRefresh;
+              return;
+            }
 
-            set((state) => {
-              state.credits = nextCredits;
+            const generation = profileLoadGeneration;
+            inFlightCreditsRefresh = (async () => {
+              const data = await profilesDB.getByIdMaybe(userId);
+              if (!data) return;
+              if (generation !== profileLoadGeneration) return;
 
-              if (state.profile) {
-                state.profile = {
-                  ...state.profile,
-                  credits: nextCredits,
-                };
-              }
+              const row = data as Record<string, unknown>;
+              const nextCredits = getProfileNumber(
+                row,
+                "credits",
+                get().credits
+              );
+
+              set((state) => {
+                state.credits = nextCredits;
+
+                if (state.profile) {
+                  state.profile = {
+                    ...state.profile,
+                    credits: nextCredits,
+                  };
+                }
+              });
+            })().finally(() => {
+              inFlightCreditsRefresh = null;
             });
+
+            await inFlightCreditsRefresh;
           },
 
           setUser: (user) => {
@@ -1339,6 +1552,7 @@ export const useAuthStore = create<AuthStore>()(
             // boot-time cached session and would resurrect auth after sign-out.
             dset((state) => {
               state.status = "unauthenticated";
+              state.accountPhase = "UNAUTHENTICATED";
               state.session = null;
               state.user = null;
               state.profile = null;
@@ -1349,6 +1563,7 @@ export const useAuthStore = create<AuthStore>()(
               state.isOnboarded = false;
               state.planId = "free";
               state.credits = 0;
+              state.recoveryAttempts = 0;
               state.isLoading = false;
               state.isAuthenticated = false;
             });

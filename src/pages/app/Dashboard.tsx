@@ -2,16 +2,16 @@
 // FIX: session count flicker (null→skeleton), XP div-by-zero,
 // window.location.href→navigate, error handling on queries.
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
-import { sessionsDB } from "@/lib/supabase/database";
 import { useUIStore } from "@/store/uiStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
 import { useGamification } from "@/hooks/useGamification";
 import { useInterviewScheduler } from "@/hooks/useInterviewScheduler";
 import { useDocuments } from "@/hooks/useDocuments";
+import { useDashboardData, type DashboardSessionRow } from "@/hooks/useDashboardData";
 import { SetupChecklist } from "@/components/layout/SetupChecklist";
 import { LowCreditBanner, useLowCreditState } from "@/components/billing/LowCreditBanner";
 import { Card } from "@/components/ui/Card";
@@ -26,7 +26,7 @@ import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import {
   Mic, ClipboardList, FlaskConical, BarChart2, Landmark,
   CalendarDays, Flame, Zap, ChevronRight, ChevronDown,
-  Star, TrendingUp, Trophy, Clock,
+  TrendingUp, Trophy, Clock,
   Building2, AlertTriangle, Info,
   ListTodo, PenTool, FolderOpen, BarChart3, FileSpreadsheet,
   Sparkles, Upload, CheckCircle, Monitor,
@@ -38,16 +38,12 @@ import { DesktopDownloadButton } from "@/components/common/DesktopDownloadButton
 import { isElectronApp } from "@/lib/platform/isElectron";
 import { PlanGate } from "@/components/layout/PlanGate";
 import { normalizePlanId } from "@/lib/billing/planIds";
-import type { Tables } from "@/integrations/supabase/types";
 
 const IS_ELECTRON = isElectronApp();
 
 /* ─── LOCAL TYPES ────────────────────────────────────────────────────────── */
 
-type SessionRow = Pick<
-  Tables<"sessions">,
-  "id" | "type" | "status" | "overall_score" | "title" | "created_at"
->;
+type SessionRow = DashboardSessionRow;
 
 type ScheduledInterview = {
   id: string;
@@ -175,43 +171,22 @@ export default function Dashboard() {
   useDocuments();
   const { reload: reloadInterviews } = useInterviewScheduler();
 
-  const [sessionCount, setSessionCount] = useState<number | null>(null);
-  const [sessionCountError, setSessionCountError] = useState<string | null>(null);
-  const [sessionCountReloadKey, setSessionCountReloadKey] = useState(0);
   const [showMore, setShowMore] = useState(false);
 
   const userId = profile?.id ?? user?.id;
-
-  useEffect(() => {
-    if (!userId) return;
-    setSessionCount(null);
-    setSessionCountError(null);
-    void sessionsDB
-      .countByUserId(userId)
-      .then((count) => setSessionCount(count))
-      .catch((err: unknown) => {
-        setSessionCountError("Couldn't load session count");
-        console.error("[Dashboard] session count error:", err);
-      });
-  }, [userId, sessionCountReloadKey]);
-
-  // Browsers can throttle a request while the tab is backgrounded. Refresh on
-  // return and fail closed rather than leaving the dashboard skeleton forever.
-  useEffect(() => {
-    const refreshWhenVisible = () => {
-      if (document.visibilityState === "visible") setSessionCountReloadKey((key) => key + 1);
-    };
-    document.addEventListener("visibilitychange", refreshWhenVisible);
-    return () => document.removeEventListener("visibilitychange", refreshWhenVisible);
-  }, []);
-
-  useEffect(() => {
-    if (sessionCount !== null || !userId) return;
-    const timeout = window.setTimeout(() => {
-      setSessionCountError("Dashboard data is taking too long to load. Please retry.");
-    }, 15_000);
-    return () => window.clearTimeout(timeout);
-  }, [sessionCount, userId, sessionCountReloadKey]);
+  const dashboardData = useDashboardData(userId);
+  const {
+    sessionCount,
+    sessionCountError,
+    sessionCountRefreshing,
+    recentSessions,
+    recentError,
+    recentInitialLoading,
+    recentRefreshing,
+    backgroundRefreshing,
+    retrySessionCount,
+    retryRecent,
+  } = dashboardData;
 
 
   const todayInterview = (scheduler.interviews as ScheduledInterview[]).find((i) => {
@@ -226,7 +201,7 @@ export default function Dashboard() {
   });
 
   const profileLoading = Boolean(userId) && !isProfileLoaded;
-  const gamificationLoading = gamification.isLoading;
+  const gamificationLoading = gamification.isLoading && !gamification.xp && gamification.streakCurrent === 0;
   const { isLow: isLowCredit, balance: creditBalance } = useLowCreditState();
 
   const readinessScore = computeReadinessScore({
@@ -239,7 +214,6 @@ export default function Dashboard() {
   });
   const readinessLoading =
     gamificationLoading || sessionCount === null || profileLoading;
-
   const firstName = profile?.full_name?.split(" ")[0] ?? "there";
   const hour      = new Date().getHours();
   const greeting  =
@@ -262,6 +236,13 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {backgroundRefreshing
+          ? "Refreshing dashboard data"
+          : sessionCountError || recentError
+            ? "Some dashboard sections failed to update"
+            : "Dashboard ready"}
+      </div>
 
       {/* ── Header ─────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
@@ -271,6 +252,15 @@ export default function Dashboard() {
           </h1>
           <p className="text-muted-foreground text-xs sm:text-sm mt-0.5">
             {format(new Date(), "EEEE, MMMM d")}
+            {backgroundRefreshing && (
+              <span className="ml-2 inline-flex items-center gap-1 text-muted-foreground">
+                <span
+                  className="inline-block h-1.5 w-1.5 rounded-full bg-primary animate-pulse"
+                  aria-hidden="true"
+                />
+                Updating
+              </span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
@@ -435,7 +425,13 @@ export default function Dashboard() {
             stealth={stealth}
             sessionCount={sessionCount}
             sessionCountError={sessionCountError}
-            setSessionCountReloadKey={setSessionCountReloadKey}
+            sessionCountRefreshing={sessionCountRefreshing}
+            onRetrySessionCount={retrySessionCount}
+            recentSessions={recentSessions}
+            recentError={recentError}
+            recentInitialLoading={recentInitialLoading}
+            recentRefreshing={recentRefreshing}
+            onRetryRecent={retryRecent}
             profileLoading={profileLoading}
             profile={profile}
             gamification={gamification}
@@ -451,7 +447,13 @@ export default function Dashboard() {
           stealth={stealth}
           sessionCount={sessionCount}
           sessionCountError={sessionCountError}
-          setSessionCountReloadKey={setSessionCountReloadKey}
+          sessionCountRefreshing={sessionCountRefreshing}
+          onRetrySessionCount={retrySessionCount}
+          recentSessions={recentSessions}
+          recentError={recentError}
+          recentInitialLoading={recentInitialLoading}
+          recentRefreshing={recentRefreshing}
+          onRetryRecent={retryRecent}
           profileLoading={profileLoading}
           profile={profile}
           gamification={gamification}
@@ -474,7 +476,13 @@ function DashboardSecondaryWidgets({
   stealth,
   sessionCount,
   sessionCountError,
-  setSessionCountReloadKey,
+  sessionCountRefreshing,
+  onRetrySessionCount,
+  recentSessions,
+  recentError,
+  recentInitialLoading,
+  recentRefreshing,
+  onRetryRecent,
   profileLoading,
   profile,
   gamification,
@@ -487,7 +495,13 @@ function DashboardSecondaryWidgets({
   stealth: boolean;
   sessionCount: number | null;
   sessionCountError: string | null;
-  setSessionCountReloadKey: React.Dispatch<React.SetStateAction<number>>;
+  sessionCountRefreshing: boolean;
+  onRetrySessionCount: () => void;
+  recentSessions: SessionRow[];
+  recentError: string | null;
+  recentInitialLoading: boolean;
+  recentRefreshing: boolean;
+  onRetryRecent: () => void;
   profileLoading: boolean;
   profile: { credits?: number | null; onboarding_completed?: boolean | null } | null;
   gamification: GamificationData;
@@ -565,7 +579,7 @@ function DashboardSecondaryWidgets({
       {sessionCountError && (
         <InlineErrorRetry
           message={sessionCountError}
-          onRetry={() => setSessionCountReloadKey((k) => k + 1)}
+          onRetry={onRetrySessionCount}
         />
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -575,6 +589,7 @@ function DashboardSecondaryWidgets({
           icon={<ClipboardList className="w-4 h-4 text-blue-400" />}
           color="blue"
           loading={sessionCount === null && !sessionCountError}
+          refreshing={sessionCountRefreshing && sessionCount !== null}
         />
 
         <StatCard
@@ -604,7 +619,13 @@ function DashboardSecondaryWidgets({
       {/* ── Main content: 2-col layout ──────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-5">
-          <RecentActivityFeed />
+          <RecentActivityFeed
+            sessions={recentSessions}
+            loading={recentInitialLoading && recentSessions.length === 0}
+            refreshing={recentRefreshing}
+            error={recentError}
+            onRetry={onRetryRecent}
+          />
           <UpcomingInterviews
             interviews={(scheduler.interviews as ScheduledInterview[]).slice(0, 3)}
             loading={scheduler.is_loading}
@@ -635,10 +656,11 @@ interface StatCardProps {
   color: string;
   trend?: "up" | "down" | "neutral";
   loading?: boolean;
+  refreshing?: boolean;
   href?: string;
 }
 
-function StatCard({ label, value, icon, trend, loading, href }: StatCardProps) {
+function StatCard({ label, value, icon, trend, loading, refreshing, href }: StatCardProps) {
   const body = (
     <Card className={cn("flex flex-col gap-2", href && "transition-colors hover:border-primary/40")}>
       <div className="flex items-center justify-between">
@@ -650,7 +672,14 @@ function StatCard({ label, value, icon, trend, loading, href }: StatCardProps) {
       {loading ? (
         <Skeleton className="h-8 w-16" />
       ) : (
-        <p className="text-xl sm:text-2xl font-black text-foreground">{value}</p>
+        <p className="text-xl sm:text-2xl font-black text-foreground">
+          {value}
+          {refreshing ? (
+            <span className="ml-2 align-middle text-[10px] font-semibold text-muted-foreground">
+              updating
+            </span>
+          ) : null}
+        </p>
       )}
       <p className="text-[10px] sm:text-xs text-muted-foreground">{label}</p>
     </Card>
@@ -668,35 +697,20 @@ function StatCard({ label, value, icon, trend, loading, href }: StatCardProps) {
 
 /* ─── RECENT ACTIVITY FEED ───────────────────────────────────────────────── */
 
-function RecentActivityFeed() {
-  const { user, profile } = useAuthStore();
-  const navigate      = useNavigate();
-  const [sessions, setSessions] = useState<SessionRow[]>([]);
-  const [loading, setLoading]   = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  const userId = profile?.id ?? user?.id;
-
-  useEffect(() => {
-    if (!userId) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    void sessionsDB
-      .listRecentSummary(userId, 10)
-      .then((rows) => {
-        setSessions(rows as SessionRow[]);
-        setLoading(false);
-      })
-      .catch((err: unknown) => {
-        setError("Couldn't load recent sessions");
-        console.error("[Dashboard] recent sessions:", err);
-        setLoading(false);
-      });
-  }, [userId, reloadKey]);
+function RecentActivityFeed({
+  sessions,
+  loading,
+  refreshing,
+  error,
+  onRetry,
+}: {
+  sessions: SessionRow[];
+  loading: boolean;
+  refreshing: boolean;
+  error: string | null;
+  onRetry: () => void;
+}) {
+  const navigate = useNavigate();
 
   return (
     <Card>
@@ -704,6 +718,9 @@ function RecentActivityFeed() {
         <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
           <Clock className="w-4 h-4 text-muted-foreground" />
           Recent Sessions
+          {refreshing && (
+            <span className="text-[10px] font-medium text-muted-foreground">updating</span>
+          )}
         </h3>
         <Link
           to="/app/sessions"
@@ -716,7 +733,7 @@ function RecentActivityFeed() {
       {error ? (
         <InlineErrorRetry
           message={error}
-          onRetry={() => setReloadKey((k) => k + 1)}
+          onRetry={onRetry}
         />
       ) : loading ? (
         <div className="space-y-2">

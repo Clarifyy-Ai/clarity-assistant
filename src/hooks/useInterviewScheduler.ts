@@ -17,6 +17,8 @@ import {
 import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
 import { useAuthStore } from "@/store/userStore";
 import { generateId } from "@/lib/utils";
+import { subscribeFocusRecovery } from "@/lib/focusRecovery";
+import { toSafeUiError } from "@/lib/focusRecovery";
 import type { TablesInsert, TablesUpdate } from "@/integrations/supabase";
 import type {
   ScheduledInterview,
@@ -54,7 +56,8 @@ export function useInterviewScheduler() {
   // one from their definition render → stale closure after auth hydration.
   const loadInterviews = useCallback(async (): Promise<void> => {
     if (!user?.id) return;
-    store.setIsLoading(true);
+    const hadData = useInterviewSchedulerStore.getState().interviews.length > 0;
+    if (!hadData) store.setIsLoading(true);
     store.setLoadError(null);
 
     try {
@@ -72,8 +75,8 @@ export function useInterviewScheduler() {
       })) as ScheduledInterview[];
       store.setInterviews(interviews);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to load interviews";
-      console.error("[useInterviewScheduler] loadInterviews failed:", message);
+      const message = toSafeUiError(err, "Couldn't load interviews");
+      console.error("[useInterviewScheduler] loadInterviews failed:", err);
       store.setLoadError(message);
     } finally {
       store.setIsLoading(false);
@@ -87,7 +90,15 @@ export function useInterviewScheduler() {
     void loadInterviews();
 
     const tick = setInterval(() => store.computeTodayInterviews(), 60_000);
-    return () => clearInterval(tick);
+    const unsub = subscribeFocusRecovery((plan) => {
+      if (plan.revalidate.includes("interviews")) {
+        void loadInterviews();
+      }
+    });
+    return () => {
+      clearInterval(tick);
+      unsub();
+    };
   }, [user?.id, loadInterviews]);
 
   /* ── Create interview ────────────────────────────────────────────────── */

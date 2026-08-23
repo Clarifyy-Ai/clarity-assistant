@@ -48,6 +48,7 @@ import {
   createServiceClient,
   deductCreditsAtomic,
 } from "../_shared/supabase.ts";
+import { creditDenialResponse } from "../_shared/creditAuthority.ts";
 import { callAI } from "../_shared/utils.ts";
 import { logAICost } from "../_shared/aiProvider.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
@@ -586,11 +587,18 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  const idempotencyKey =
+    req.headers.get("Idempotency-Key")?.trim() ||
+    req.headers.get("idempotency-key")?.trim() ||
+    req.headers.get("x-idempotency-key")?.trim() ||
+    null;
+
   const deduction = await deductCreditsAtomic({
     userId: user.id,
     action: "liveanswerlong",
     cost: COST,
     sessionId: body.session_id ?? null,
+    idempotencyKey,
   });
 
   if (!deduction.success) {
@@ -601,14 +609,12 @@ Deno.serve(async (req: Request) => {
       sessionId: body.session_id ?? null,
       status: "failure",
       metadata: {
-        reason: "Insufficient credits.",
+        reason: deduction.error ?? "Credit deduction failed.",
+        code: deduction.code,
       },
     });
 
-    return json(corsHeaders, 402, {
-      error: deduction.error ?? "Insufficient credits.",
-      code: "PAYMENT_REQUIRED",
-    });
+    return creditDenialResponse(req, deduction, COST);
   }
 
   const model = await resolveModel(
@@ -689,8 +695,8 @@ Deno.serve(async (req: Request) => {
       console.error("[generate-answer] Multi-model call failed:", error);
       await refundCreditsSafely({ db, userId: user.id, reason: "AI call failure" });
       return json(corsHeaders, 502, {
-        error: "AI generation failed. Credits refunded.",
-        code: "BAD_GATEWAY",
+        error: "AI Help is temporarily unavailable. Please try again.",
+        code: "PROVIDER_UNAVAILABLE",
       });
     }
   }
@@ -698,6 +704,11 @@ Deno.serve(async (req: Request) => {
   const geminiApiKey = SERVER_GEMINI_API_KEY;
 
   if (!geminiApiKey) {
+    await refundCreditsSafely({
+      db,
+      userId: user.id,
+      reason: "Gemini API key missing",
+    });
     await logAiAudit({
       req,
       userId: user.id,
@@ -710,8 +721,8 @@ Deno.serve(async (req: Request) => {
     });
 
     return json(corsHeaders, 503, {
-      error: "AI service not configured.",
-      code: "SERVICE_UNAVAILABLE",
+      error: "AI Help is temporarily unavailable. Please try again.",
+      code: "PROVIDER_UNAVAILABLE",
     });
   }
 
@@ -775,8 +786,8 @@ Deno.serve(async (req: Request) => {
     });
 
     return json(corsHeaders, 502, {
-      error: "AI service unreachable. Credits refunded.",
-      code: "BAD_GATEWAY",
+      error: "AI Help is temporarily unavailable. Please try again.",
+      code: "PROVIDER_UNAVAILABLE",
     });
   }
 
@@ -808,8 +819,8 @@ Deno.serve(async (req: Request) => {
     });
 
     return json(corsHeaders, 502, {
-      error: "AI generation failed. Credits refunded.",
-      code: "BAD_GATEWAY",
+      error: "AI Help is temporarily unavailable. Please try again.",
+      code: "PROVIDER_UNAVAILABLE",
     });
   }
 
@@ -832,8 +843,8 @@ Deno.serve(async (req: Request) => {
     });
 
     return json(corsHeaders, 502, {
-      error: "Empty AI response. Credits refunded.",
-      code: "BAD_GATEWAY",
+      error: "AI Help is temporarily unavailable. Please try again.",
+      code: "PROVIDER_UNAVAILABLE",
     });
   }
 

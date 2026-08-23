@@ -122,13 +122,18 @@ describe("fetchEdgeJson — RPC/edge error handling", () => {
     );
   });
 
-  it("falls back to a generic HTTP-status message when body has no error/message", async () => {
+  it("falls back to a generic message when body has no error/message", async () => {
     (global.fetch as any).mockResolvedValueOnce(new Response("", { status: 500 }));
     const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
 
-    await expect(fetchEdgeJson("deduct-credits", { action: "generate_hint" })).rejects.toThrow(
-      /HTTP 500/i,
-    );
+    let message = "";
+    try {
+      await fetchEdgeJson("deduct-credits", { action: "generate_hint" });
+    } catch (err) {
+      message = err instanceof Error ? err.message : String(err);
+    }
+    expect(message).toMatch(/Something went wrong/i);
+    expect(message).not.toMatch(/HTTP\s+\d{3}/i);
   });
 
   it("surfaces network/unreachable errors as a friendly message", async () => {
@@ -140,14 +145,24 @@ describe("fetchEdgeJson — RPC/edge error handling", () => {
     );
   });
 
-  it("retries Failed to fetch once then succeeds", async () => {
+  it("retries Failed to fetch once then succeeds for non-mutating calls", async () => {
     (global.fetch as any)
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
     const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
 
-    await expect(fetchEdgeJson("create-exam-paper", { examId: "e1" })).resolves.toEqual({ ok: true });
+    await expect(fetchEdgeJson("search-exams", { q: "" })).resolves.toEqual({ ok: true });
     expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry create-exam-paper after Failed to fetch", async () => {
+    (global.fetch as any).mockRejectedValue(new TypeError("Failed to fetch"));
+    const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
+
+    await expect(fetchEdgeJson("create-exam-paper", { examId: "e1" })).rejects.toThrow(
+      /Couldn't reach the server/i,
+    );
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
   it("does not name delete-account on network failure", async () => {
@@ -164,18 +179,14 @@ describe("fetchEdgeJson — RPC/edge error handling", () => {
     expect(message).not.toMatch(/Edge Function|CORS/i);
   });
 
-  it("does not blame an AI request when submit-test is unreachable", async () => {
+  it("does not retry submit-test after Failed to fetch", async () => {
     (global.fetch as any).mockRejectedValue(new TypeError("Failed to fetch"));
     const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
 
-    let message = "";
-    try {
-      await fetchEdgeJson("submit-test", { test_id: "t1" });
-    } catch (err) {
-      message = err instanceof Error ? err.message : String(err);
-    }
-    expect(message).toMatch(/Couldn't reach the server/i);
-    expect(message).not.toMatch(/AI request/i);
+    await expect(fetchEdgeJson("submit-test", { test_id: "t1" })).rejects.toThrow(
+      /Couldn't reach the server/i,
+    );
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 });
 

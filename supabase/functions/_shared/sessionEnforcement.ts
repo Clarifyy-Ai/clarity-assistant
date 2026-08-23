@@ -38,6 +38,10 @@ export type SessionRowForAiCheck = {
   tags?: string[] | null;
   interview_id?: string | null;
   user_id?: string;
+  status?: string | null;
+  expires_at?: string | null;
+  lifecycle_status?: string | null;
+  terminal_reason?: string | null;
 };
 
 export function normalizeSessionType(type?: string | null): string {
@@ -142,7 +146,7 @@ export async function enforceAiSessionAccess(options: {
 
   const { data, error } = await db
     .from("sessions")
-    .select("id, type, tags, interview_id, user_id")
+    .select("id, type, tags, interview_id, user_id, status, expires_at, lifecycle_status, terminal_reason")
     .eq("id", sessionId)
     .maybeSingle();
 
@@ -169,6 +173,23 @@ export async function enforceAiSessionAccess(options: {
 
   if (data.user_id !== authenticatedUserId) {
     return forbiddenResponse("You do not have permission to access this session.");
+  }
+
+  const status = String((data as SessionRowForAiCheck).status ?? "");
+  const lifecycle = String((data as SessionRowForAiCheck).lifecycle_status ?? "");
+  const expiresAt = (data as SessionRowForAiCheck).expires_at;
+  const expiredByTime = Boolean(expiresAt && Date.parse(expiresAt) <= Date.now());
+  const open = status === "pending" || status === "active" || status === "paused";
+  const timedOut = lifecycle === "EXPIRED" || (open && expiredByTime);
+  if (open && timedOut) {
+    return new Response(
+      JSON.stringify({
+        error: "This practice session has expired and can no longer accept new actions.",
+        code: "SESSION_EXPIRED",
+        reason: "SESSION_EXPIRED",
+      }),
+      { status: 409, headers: { "Content-Type": "application/json" } },
+    );
   }
 
   const verdict = isSessionTypeAllowedForAi(data as SessionRowForAiCheck);

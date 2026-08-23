@@ -30,9 +30,27 @@ import {
   jobDescriptionsDB,
 } from "@/lib/supabase/database";
 import { useDocumentStore } from "@/store/documentStore";
-import { getOrCreateSession, activateSession } from "@/lib/session/sessionLifecycle";
-import { fetchEdgeJson } from "@/lib/network/fetchEdge";
-import { getLocalMockQuestions } from "@/lib/mock/localQuestionBank";
+import { getOrCreateSession, activateSession, isServerExpired } from "@/lib/session/sessionLifecycle";
+import { sessionDurationSeconds as sharedSessionDurationSeconds } from "@/lib/session/sessionStartEligibility";
+import { handleSessionStartError } from "@/lib/billing/sessionStartErrors";
+import {
+  createMockQuestionOperationId,
+  generateMockInterviewQuestion,
+  QUESTION_GENERATION_USER_ERROR,
+} from "@/lib/mock/generateMockQuestion";
+import {
+  createQuestionGenerationSnapshot,
+  isQuestionGenerationInFlight,
+  reduceQuestionGeneration,
+  type QuestionGenerationSnapshot,
+} from "@/lib/mock/questionGenerationFsm";
+import {
+  assertMockSessionAllowsUpdate,
+  isMockSessionMutable,
+  reduceMockSessionLifecycle,
+  type MockSessionLifecycle,
+} from "@/lib/mock/mockSessionLifecycle";
+import { speakQuestionText, stopBrowserTts } from "@/lib/mock/mockTts";
 import { getAiUserFacingError } from "@/lib/network/aiErrorUx";
 import { isOverlayGhostClickSuppressed } from "@/lib/overlay/ghostClickGuard";
 import { toDbModel } from "@/lib/ai/modelMapping";
@@ -41,6 +59,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { Skeleton } from "@/components/ui/SkeletonLoader";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { ErrorBoundary } from "@/components/layout/ErrorBoundary";
 import { PANIC_RESPONSE } from "@/types/session.types";
 import type { LiveSessionConfig, SessionQuestion } from "@/types/session.types";
 import type { PreferredAIModel } from "@/types/user.types";
@@ -67,11 +86,11 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   maxSessionSecondsForPlan,
-  isFreePlan,
 } from "@/lib/constants/freeTier";
 
 type MockSessionPhase = "idle" | "configuring" | "active" | "completed";
 type MockSetupStep = "session" | "questions" | "audio";
+type OverlayInitState = "waiting_session" | "initializing" | "ready" | "error" | "ended";
 
 type MockConfig = LiveSessionConfig & {
   type?: string;
@@ -177,12 +196,7 @@ async function loadJobDescriptionText(config: MockConfig): Promise<string> {
 }
 
 function sessionDurationSeconds(session: Tables<"sessions">): number {
-  if (session.started_at && session.ended_at) {
-    const ms =
-      new Date(session.ended_at).getTime() - new Date(session.started_at).getTime();
-    return Math.max(1, Math.round(ms / 1000));
-  }
-  return 0;
+  return sharedSessionDurationSeconds(session);
 }
 
 /* ─── COMPONENT ─────────────────────────────────────────────────────────── */
@@ -226,6 +240,7 @@ export default function MockSession() {
   });
 
   const startTimeRef = useRef<string>(new Date().toISOString());
+  const sessionIdFromStore = useSessionStore((s) => s.session_id);
 
   const [phase, setPhase] = useState<MockSessionPhase>("idle");
   const [summaryStats, setSummaryStats] = useState<MockSessionSummaryStats | null>(null);
@@ -237,10 +252,21 @@ export default function MockSession() {
   const [setupStep, setSetupStep] = useState<MockSetupStep>("session");
   const [usedLocalQuestions, setUsedLocalQuestions] = useState(false);
   const [sessionNotes, setSessionNotes] = useState("");
+  const [targetQuestionCount, setTargetQuestionCount] = useState(5);
+  const [generationSnap, setGenerationSnap] = useState<QuestionGenerationSnapshot>(
+    () => createQuestionGenerationSnapshot(),
+  );
+  const [nextQuestionError, setNextQuestionError] = useState<string | null>(null);
+  const [overlayInitState, setOverlayInitState] = useState<OverlayInitState>("waiting_session");
 
   const questionsCacheRef = useRef<SessionQuestion[] | null>(null);
   const isStartingRef = useRef(false);
   const autoStartedRef = useRef(false);
+  const lifecycleRef = useRef<MockSessionLifecycle>("ACTIVE");
+  const generationAbortRef = useRef<AbortController | null>(null);
+  const activeOperationIdRef = useRef<string | null>(null);
+  const speakingQuestionIdRef = useRef<string | null>(null);
+  const overlayMountedSessionRef = useRef<string | null>(null);
 
   const SESSION_DURATION = maxSessionSecondsForPlan(planId);
   const [timerMode, setTimerMode] = useState<"countdown" | "countup">("countdown");
@@ -256,29 +282,59 @@ export default function MockSession() {
 
   const handleEndSessionRef = useRef<() => Promise<void>>();
 
-  // Overlay mount/unmount behavior
+  const clearSessionTimers = useCallback(() => {
+    if (sessionTimerRef.current) {
+      clearInterval(sessionTimerRef.current);
+      sessionTimerRef.current = null;
+    }
+  }, []);
+
+  const abortInFlightGeneration = useCallback(() => {
+    generationAbortRef.current?.abort();
+    generationAbortRef.current = null;
+    activeOperationIdRef.current = null;
+    setGenerationSnap((s) => reduceQuestionGeneration(s, { type: "CANCEL" }));
+  }, []);
+
+  // Overlay mount only after session context is ready — one instance per session.
   useEffect(() => {
-    if (phase === "active") {
-      const overlay = useOverlayStore.getState();
-      // Respect stealth mode set during session setup (don't force-clear it).
-      overlay.setMinimalMode(false);
-      overlay.setActiveTab("transcript");
-      overlay.showOverlay();
+    const sessionId = useSessionStore.getState().session_id;
+    if (phase === "active" && sessionId && isMockSessionMutable(lifecycleRef.current)) {
+      if (overlayMountedSessionRef.current !== sessionId) {
+        overlayMountedSessionRef.current = sessionId;
+        const overlay = useOverlayStore.getState();
+        overlay.setMinimalMode(false);
+        overlay.setActiveTab("transcript");
+        overlay.showOverlay();
+        setOverlayInitState("ready");
+      }
+    }
+    if (phase === "completed" || phase === "idle") {
+      useOverlayStore.getState().hideOverlay();
+      overlayMountedSessionRef.current = null;
+      setOverlayInitState(phase === "completed" ? "ended" : "waiting_session");
     }
     return () => {
-      useOverlayStore.getState().hideOverlay();
+      if (phase !== "active") {
+        useOverlayStore.getState().hideOverlay();
+      }
     };
   }, [phase]);
 
-  // Timer
+  // Timer — never fires updates once lifecycle is terminal.
   useEffect(() => {
     if (phase !== "active" || isPaused) return;
+    if (!isMockSessionMutable(lifecycleRef.current)) return;
 
     sessionTimerRef.current = setInterval(() => {
+      if (!isMockSessionMutable(lifecycleRef.current)) {
+        clearSessionTimers();
+        return;
+      }
       if (timerMode === "countdown") {
         setSessionTimeLeft((t) => {
           if (t <= 1) {
-            if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
+            clearSessionTimers();
             handleEndSessionRef.current?.();
             return 0;
           }
@@ -290,9 +346,9 @@ export default function MockSession() {
     }, 1000);
 
     return () => {
-      if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
+      clearSessionTimers();
     };
-  }, [phase, isPaused, timerMode]);
+  }, [phase, isPaused, timerMode, clearSessionTimers]);
 
   const handleTogglePause = useCallback(async () => {
     if (phase !== "active") return;
@@ -315,6 +371,7 @@ export default function MockSession() {
 
   const injectInterviewerQuestion = useCallback(
     (qText: string, index: number) => {
+      if (!isMockSessionMutable(lifecycleRef.current)) return;
       if (!qText.trim()) return;
       const store = useAudioStore.getState();
       const utteranceId = `mock-q-${index}`;
@@ -340,6 +397,7 @@ export default function MockSession() {
 
   useEffect(() => {
     if (phase !== "active") return;
+    if (!isMockSessionMutable(lifecycleRef.current)) return;
     fillerHook.reset();
     wpmHook.reset();
     questionStartRef.current = Date.now();
@@ -350,16 +408,20 @@ export default function MockSession() {
   useHotkeys({
     "ctrl+shift+n": () => {
       if (phase !== "active") return;
+      if (!isMockSessionMutable(lifecycleRef.current)) return;
+      if (isQuestionGenerationInFlight(generationSnap.state)) return;
       setSkipConfirm(true);
     },
   });
 
   const question = orchestrator.currentQuestion;
   const qIndex = orchestrator.currentQuestionIndex ?? 0;
-  const totalQ = orchestrator.totalQuestions ?? 5;
+  const totalQ = targetQuestionCount;
   const isLastQ = qIndex >= totalQ - 1;
+  const generationInFlight = isQuestionGenerationInFlight(generationSnap.state);
 
   const handleRequestHint = useCallback(async (questionText?: string) => {
+    if (!isMockSessionMutable(lifecycleRef.current)) return;
     const overlay = useOverlayStore.getState();
     overlay.setActiveTab("answer");
     overlay.setMinimalMode(false);
@@ -380,20 +442,27 @@ export default function MockSession() {
 
   useEffect(() => {
     if (phase !== "active" || !question) return;
+    if (!isMockSessionMutable(lifecycleRef.current)) return;
 
     const qText = typeof question === "string" ? question : question.question_text ?? "";
+    const qId =
+      typeof question === "string"
+        ? `q-${qIndex}`
+        : question.id || `q-${qIndex}`;
+
     if (qText) {
       injectInterviewerQuestion(qText, qIndex);
       useOverlayStore.getState().setCurrentQuestion(qText);
       if (useOverlayStore.getState().auto_generate) {
         void handleRequestHint(qText);
       }
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(qText);
-        utterance.rate = 1.0;
-        window.speechSynthesis.speak(utterance);
-      }
+      speakingQuestionIdRef.current = qId;
+      speakQuestionText(qText, {
+        questionId: qId,
+        isCurrent: (id) =>
+          speakingQuestionIdRef.current === id &&
+          isMockSessionMutable(lifecycleRef.current),
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, question, qIndex, injectInterviewerQuestion]);
@@ -417,7 +486,8 @@ export default function MockSession() {
   function captureAnswer(skipped = false) {
     const qText = typeof question === "string" ? question : question?.question_text ?? "";
     const elapsed = Math.round((Date.now() - questionStartRef.current) / 1000);
-    answersRef.current.push({
+    const existingIdx = answersRef.current.findIndex((a) => a.question_index === qIndex);
+    const entry: QuestionAnswer = {
       question_text: qText,
       answer_text: skipped ? "" : candidateTranscript,
       question_index: qIndex,
@@ -426,7 +496,12 @@ export default function MockSession() {
       wpm: wpmHook.wpm ?? 0,
       duration_seconds: elapsed,
       timestamp: new Date().toISOString(),
-    });
+    };
+    if (existingIdx >= 0) {
+      answersRef.current[existingIdx] = entry;
+    } else {
+      answersRef.current.push(entry);
+    }
   }
 
   function resolveMockConfigFields(config: MockConfig) {
@@ -443,6 +518,125 @@ export default function MockSession() {
     return { interviewType, questionCount, role, company, difficulty };
   }
 
+  async function runQuestionGeneration(options: {
+    dbSessionId: string;
+    config: MockConfig;
+    questionNumber: number;
+    usedTexts: string[];
+    forceFallback?: boolean;
+  }): Promise<SessionQuestion> {
+    const { interviewType, role, company, difficulty } = resolveMockConfigFields(
+      options.config,
+    );
+    const operationId = createMockQuestionOperationId(
+      options.dbSessionId,
+      options.questionNumber,
+    );
+
+    if (activeOperationIdRef.current) {
+      throw new Error("A question is already being generated.");
+    }
+
+    generationAbortRef.current?.abort();
+    const controller = new AbortController();
+    generationAbortRef.current = controller;
+    activeOperationIdRef.current = operationId;
+
+    setNextQuestionError(null);
+    setGenerationSnap((s) =>
+      reduceQuestionGeneration(s, { type: "START", operationId }),
+    );
+    setGenerationSnap((s) =>
+      reduceQuestionGeneration(s, { type: "BEGIN_PROVIDER" }),
+    );
+
+    try {
+      const [resume_context, job_description] = await Promise.all([
+        loadResumeContextText(options.config),
+        loadJobDescriptionText(options.config),
+      ]);
+
+      if (
+        !assertMockSessionAllowsUpdate(
+          lifecycleRef.current,
+          options.dbSessionId,
+          useSessionStore.getState().session_id,
+        )
+      ) {
+        throw new DOMException("Aborted", "AbortError");
+      }
+
+      const result = await generateMockInterviewQuestion({
+        type: interviewType,
+        count: 1,
+        difficulty,
+        company,
+        role,
+        session_id: options.dbSessionId,
+        resume_context,
+        job_description,
+        free_session: true,
+        exclude_questions: options.usedTexts,
+        allow_fallback: true,
+        questionNumber: options.questionNumber,
+        usedTexts: options.usedTexts,
+        signal: controller.signal,
+        idempotencyKey: operationId,
+        forceFallback: options.forceFallback,
+      });
+
+      if (controller.signal.aborted) {
+        throw new DOMException("Aborted", "AbortError");
+      }
+      if (
+        !assertMockSessionAllowsUpdate(
+          lifecycleRef.current,
+          options.dbSessionId,
+          useSessionStore.getState().session_id,
+        )
+      ) {
+        throw new DOMException("Aborted", "AbortError");
+      }
+      if (activeOperationIdRef.current !== operationId) {
+        throw new DOMException("Aborted", "AbortError");
+      }
+
+      setUsedLocalQuestions(result.source === "fallback");
+      setGenerationSnap((s) =>
+        reduceQuestionGeneration(s, {
+          type: "SUCCESS",
+          source: result.source,
+        }),
+      );
+      return result.question;
+    } catch (err) {
+      if (
+        controller.signal.aborted ||
+        (err instanceof DOMException && err.name === "AbortError") ||
+        !isMockSessionMutable(lifecycleRef.current)
+      ) {
+        setGenerationSnap((s) =>
+          reduceQuestionGeneration(s, { type: "CANCEL" }),
+        );
+        throw err;
+      }
+      setGenerationSnap((s) =>
+        reduceQuestionGeneration(s, {
+          type: "FAIL",
+          code: "QUESTION_GENERATION_UNAVAILABLE",
+        }),
+      );
+      throw err;
+    } finally {
+      if (generationAbortRef.current === controller) {
+        generationAbortRef.current = null;
+      }
+      if (activeOperationIdRef.current === operationId) {
+        activeOperationIdRef.current = null;
+      }
+    }
+  }
+
   async function loadQuestions(
     dbSessionId: string,
     config: MockConfig,
@@ -454,63 +648,35 @@ export default function MockSession() {
     }
 
     setQuestionsError(null);
-    const { interviewType, questionCount, role, company, difficulty } =
-      resolveMockConfigFields(config);
+    const { questionCount } = resolveMockConfigFields(config);
+    setTargetQuestionCount(questionCount);
+    setOverlayInitState("initializing");
 
-    if (!options?.forceLocal) {
-      try {
-        const [resume_context, job_description] = await Promise.all([
-          loadResumeContextText(config),
-          loadJobDescriptionText(config),
-        ]);
-
-        const data = await fetchEdgeJson<{ questions?: unknown[] }>("generate-questions", {
-          type: interviewType,
-          count: questionCount,
-          interview_type: interviewType,
-          question_count: questionCount,
-          difficulty,
-          company,
-          role,
-          session_id: dbSessionId,
-          resume_context,
-          job_description,
-          free_session: true,
-        });
-
-        const raw =
-          data?.questions ??
-          (data as { data?: { questions?: unknown[] } })?.data?.questions ??
-          [];
-
-        if (Array.isArray(raw) && raw.length > 0) {
-          orchestrator.setQuestions(raw);
-          questionsCacheRef.current = useSessionStore.getState().questions;
-          setUsedLocalQuestions(false);
-          if (raw.length < questionCount) {
-            toast.message(`Generated ${raw.length} of ${questionCount} questions.`);
-          }
-          return;
-        }
-      } catch (err) {
-        console.warn("[MockSession] AI question generation failed, using local bank:", err);
+    try {
+      const first = await runQuestionGeneration({
+        dbSessionId,
+        config,
+        questionNumber: 1,
+        usedTexts: [],
+        forceFallback: options?.forceLocal,
+      });
+      if (!isMockSessionMutable(lifecycleRef.current) && phase !== "configuring") {
+        return;
       }
-    }
-
-    const local = getLocalMockQuestions({
-      type: interviewType,
-      count: questionCount,
-      company,
-      role,
-      difficulty,
-    });
-    orchestrator.setQuestions(local);
-    questionsCacheRef.current = useSessionStore.getState().questions;
-    setUsedLocalQuestions(true);
-    if (local.length < questionCount) {
-      toast.warning(`Using ${local.length} built-in questions (AI generation unavailable).`);
-    } else {
-      toast.message("Using built-in practice questions — AI generation was unavailable.");
+      orchestrator.setQuestions([first]);
+      questionsCacheRef.current = useSessionStore.getState().questions;
+      if (useSessionStore.getState().questions[0]?.tags?.includes("fallback_bank")) {
+        toast.message("Using built-in practice questions — AI generation was unavailable.");
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      console.warn("[MockSession] question generation failed:", err);
+      const message =
+        err instanceof Error && err.message.includes("couldn't generate")
+          ? err.message
+          : QUESTION_GENERATION_USER_ERROR;
+      setQuestionsError(message);
+      throw new Error(message);
     }
   }
 
@@ -520,7 +686,14 @@ export default function MockSession() {
     setPhase("configuring");
     setSetupStep("session");
     setQuestionsError(null);
+    setNextQuestionError(null);
     setUsedLocalQuestions(false);
+    setOverlayInitState("initializing");
+    lifecycleRef.current = "ACTIVE";
+    abortInFlightGeneration();
+    setGenerationSnap(createQuestionGenerationSnapshot());
+    questionsCacheRef.current = null;
+    speakingQuestionIdRef.current = null;
 
     sessionConfigRef.current = config;
     setMicDeviceId(config.mic_device_id ?? null);
@@ -577,6 +750,7 @@ export default function MockSession() {
 
       const mockConfig = config as MockConfig;
       const { interviewType, questionCount } = resolveMockConfigFields(mockConfig);
+      setTargetQuestionCount(questionCount);
 
       await orchestrator.createSession({
         session_type: "mock",
@@ -592,11 +766,22 @@ export default function MockSession() {
       });
 
       setSetupStep("questions");
-      await loadQuestions(dbSessionId, mockConfig);
+      await loadQuestions(dbSessionId!, mockConfig);
     } catch (err) {
       console.error("[MockSession] setup failed:", err);
+      if (handleSessionStartError(err)) {
+        isStartingRef.current = false;
+        setPhase("idle");
+        navigate("/app/mock");
+        return;
+      }
       const message = getAiUserFacingError(err);
-      setQuestionsError(message);
+      setQuestionsError(
+        message.includes("502") || message.includes("503")
+          ? QUESTION_GENERATION_USER_ERROR
+          : message,
+      );
+      setOverlayInitState("error");
       if (dbSessionId) {
         try {
           await sessionsDB.update(dbSessionId, {
@@ -618,7 +803,8 @@ export default function MockSession() {
       setSessionElapsed(0);
       setIsPaused(false);
       setPhase("active");
-      overlay.showOverlay();
+      setOverlayInitState("ready");
+      useOverlayStore.getState().showOverlay();
     } catch (err) {
       console.error("[MockSession] audio start failed:", err);
       // micOptional allows text-only mock — still enter active session.
@@ -628,7 +814,8 @@ export default function MockSession() {
       setSessionElapsed(0);
       setIsPaused(false);
       setPhase("active");
-      overlay.showOverlay();
+      setOverlayInitState("ready");
+      useOverlayStore.getState().showOverlay();
     } finally {
       isStartingRef.current = false;
     }
@@ -691,7 +878,18 @@ export default function MockSession() {
           setPhase("completed");
           return;
         }
-        if (session.status === "abandoned") {
+        if (session.status === "abandoned" || isServerExpired(session)) {
+          if (isServerExpired(session) || session.lifecycle_status === "EXPIRED") {
+            setSummaryStats({
+              questionsAnswered: session.answers_generated ?? 0,
+              timeTakenSeconds: sessionDurationSeconds(session),
+              creditsUsed: session.credits_used ?? 0,
+              sessionId: session.id,
+            });
+            setPhase("completed");
+            toast.message("This practice session has expired and can no longer accept new actions.");
+            return;
+          }
           toast.message("Previous session was abandoned — configure a new mock session.");
           autoStartedRef.current = false;
           navigate("/app/mock");
@@ -713,15 +911,36 @@ export default function MockSession() {
     if (endCalledRef.current) return;
     endCalledRef.current = true;
 
-    if (!skipCapture) captureAnswer();
-    if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
+    // ACTIVE → ENDING → ENDED (terminal)
+    lifecycleRef.current = reduceMockSessionLifecycle(lifecycleRef.current, {
+      type: "BEGIN_END",
+    });
+    setOverlayInitState("ended");
+    abortInFlightGeneration();
+    orchestrator.cancelHintRequest();
+    speakingQuestionIdRef.current = null;
+    stopBrowserTts();
+    clearSessionTimers();
+
+    if (!skipCapture) {
+      try {
+        captureAnswer();
+      } catch {
+        /* ignore */
+      }
+    }
+
     audio.stop();
     useOverlayStore.getState().hideOverlay();
+    overlayMountedSessionRef.current = null;
+    lifecycleRef.current = reduceMockSessionLifecycle(lifecycleRef.current, {
+      type: "CONFIRM_ENDED",
+    });
 
     const startedMs = startTimeRef.current
       ? new Date(startTimeRef.current).getTime()
       : Date.now();
-    const timeTakenSeconds = Math.max(1, Math.round((Date.now() - startedMs) / 1000));
+    const timeTakenSeconds = Math.max(0, Math.round((Date.now() - startedMs) / 1000));
     const questionsAnswered = answersRef.current.filter(
       (a) => !a.skipped && (a.answer_text ?? "").trim().length > 0,
     ).length;
@@ -771,13 +990,66 @@ export default function MockSession() {
     }
   }
 
-  async function handleNextQuestion() {
+  async function handleNextQuestion(options?: { skipCapture?: boolean }) {
+    if (!isMockSessionMutable(lifecycleRef.current)) return;
+    if (generationInFlight) return;
+    if (isOverlayGhostClickSuppressed()) return;
+
     if (isLastQ) {
-      await finalizeSession();
-    } else {
-      captureAnswer();
-      orchestrator.nextQuestion();
+      await finalizeSession(options?.skipCapture);
+      return;
     }
+
+    if (!options?.skipCapture) {
+      captureAnswer();
+    }
+    setNextQuestionError(null);
+
+    const sessionId = useSessionStore.getState().session_id;
+    const cfg = sessionConfigRef.current as MockConfig | null;
+    if (!sessionId || !cfg) {
+      setNextQuestionError(QUESTION_GENERATION_USER_ERROR);
+      return;
+    }
+
+    const usedTexts = useSessionStore
+      .getState()
+      .questions.map((q) => q.question_text)
+      .filter(Boolean);
+    const nextNumber = qIndex + 2;
+
+    try {
+      const nextQ = await runQuestionGeneration({
+        dbSessionId: sessionId,
+        config: cfg,
+        questionNumber: nextNumber,
+        usedTexts,
+      });
+
+      if (!isMockSessionMutable(lifecycleRef.current)) return;
+      if (useSessionStore.getState().session_id !== sessionId) return;
+
+      orchestrator.appendAndActivateQuestion(nextQ);
+      questionsCacheRef.current = useSessionStore.getState().questions;
+    } catch (err) {
+      if (
+        (err instanceof DOMException && err.name === "AbortError") ||
+        !isMockSessionMutable(lifecycleRef.current)
+      ) {
+        return;
+      }
+      console.warn("[MockSession] next question generation failed:", err);
+      setNextQuestionError(QUESTION_GENERATION_USER_ERROR);
+      toast.error(QUESTION_GENERATION_USER_ERROR);
+    }
+  }
+
+  async function retryNextQuestion() {
+    if (!isMockSessionMutable(lifecycleRef.current)) return;
+    if (generationInFlight) return;
+    setNextQuestionError(null);
+    // Answer already captured on the failed Next — do not double-capture.
+    await handleNextQuestion({ skipCapture: true });
   }
 
   async function persistMockSession(opts?: { incompleteNoAnswers?: boolean }) {
@@ -793,11 +1065,10 @@ export default function MockSession() {
       const audioState = useAudioStore.getState();
       const transcript = audioState.transcript?.full_transcript ?? candidateTranscript;
       const utterances = audioState.transcript?.utterances ?? [];
-      const questionCount = orchestrator.totalQuestions ?? 0;
       const startedMs = startTimeRef.current
         ? new Date(startTimeRef.current).getTime()
         : Date.now();
-      const duration_seconds = Math.max(1, Math.round((Date.now() - startedMs) / 1000));
+      const duration_seconds = Math.max(0, Math.round((Date.now() - startedMs) / 1000));
       const answeredCount = answersRef.current.filter((a) => !a.skipped).length;
       const incompleteNoAnswers = opts?.incompleteNoAnswers ?? answeredCount === 0;
 
@@ -809,18 +1080,42 @@ export default function MockSession() {
         persistTranscripts && !incompleteNoAnswers ? transcript || null : null,
       ].filter(Boolean);
 
+      // Server finalization owns status / ended_at / terminal_reason /
+      // duration_seconds. Only fall back to a local terminal write when the
+      // server round-trip fails, and tell the user it degraded.
+      let endedByRpc = false;
+      try {
+        const { endSession } = await import("@/lib/api/sessions");
+        await endSession({
+          session_id: sessionId,
+          terminal_reason: incompleteNoAnswers ? "CANCELLED" : "USER_ENDED",
+        });
+        endedByRpc = true;
+      } catch (err) {
+        console.error("[MockSession] end-session failed:", err);
+        endedByRpc = false;
+        toast.error(
+          "We couldn't confirm the end of this session with the server. Your results were saved locally.",
+        );
+      }
+
       await sessionsDB.update(sessionId, {
-        status: incompleteNoAnswers ? "abandoned" : "completed",
+        ...(endedByRpc
+          ? {}
+          : {
+              status: incompleteNoAnswers ? "abandoned" : "completed",
+              ended_at: new Date().toISOString(),
+              duration_seconds,
+              terminal_reason: incompleteNoAnswers ? "CANCELLED" : "USER_ENDED",
+              lifecycle_status: incompleteNoAnswers ? "CANCELLED" : "COMPLETED",
+            }),
         credits_used: session.credits_consumed,
         model_used: dbModel as any,
-        ended_at: new Date().toISOString(),
-        started_at: startTimeRef.current ?? new Date().toISOString(),
-        duration_seconds,
         filler_words: fillerHook.totalCount,
         avg_wpm: wpmHook.wpm,
         hints_used: overlay.hint_history.length,
         answers_generated: answeredCount,
-        questions_asked: questionCount,
+        questions_asked: targetQuestionCount,
         ...(incompleteNoAnswers ? { overall_score: null } : {}),
         notes: notesParts.length > 0 ? notesParts.join("\n") : null,
         session_type: "mock",
@@ -1179,16 +1474,30 @@ export default function MockSession() {
             <Button
               variant="primary"
               size="xs"
-              onClick={handleNextQuestion}
+              disabled={generationInFlight || phase !== "active"}
+              data-testid="mock-next-question"
+              onClick={() => void handleNextQuestion()}
               rightIcon={
-                isLastQ ? <Square className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />
+                generationInFlight ? (
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                ) : isLastQ ? (
+                  <Square className="w-3 h-3" />
+                ) : (
+                  <ChevronRight className="w-3 h-3" />
+                )
               }
             >
-              {isLastQ ? "Finish" : "Next"}
+              {generationInFlight
+                ? "Generating…"
+                : isLastQ
+                  ? "Finish"
+                  : "Next"}
             </Button>
             <Button
               variant="danger"
               size="xs"
+              disabled={phase !== "active"}
+              data-testid="mock-end-session"
               onClick={() => setEndConfirm(true)}
               leftIcon={<Square className="w-3 h-3" />}
             >
@@ -1224,11 +1533,49 @@ export default function MockSession() {
 
           <div className="rounded-2xl border border-border bg-card/60 px-4 py-3 text-left">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
-              Current question
+              {generationInFlight ? "Current question (generating next…)" : "Current question"}
             </p>
-            <p className="text-sm text-foreground leading-relaxed">
+            <p className="text-sm text-foreground leading-relaxed" data-testid="mock-current-question">
               {questionText || "Waiting for question…"}
             </p>
+            {generationInFlight && (
+              <p
+                className="mt-2 text-xs text-muted-foreground flex items-center gap-1.5"
+                data-testid="mock-generating-next"
+              >
+                <RefreshCw className="w-3 h-3 animate-spin" />
+                Generating next question…
+              </p>
+            )}
+            {nextQuestionError && (
+              <div className="mt-3 space-y-2" data-testid="mock-generation-error">
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  We couldn&apos;t generate the next question.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="secondary"
+                    size="xs"
+                    data-testid="mock-retry-next"
+                    onClick={() => void retryNextQuestion()}
+                  >
+                    Retry
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="xs"
+                    onClick={() => setEndConfirm(true)}
+                  >
+                    End Interview
+                  </Button>
+                </div>
+              </div>
+            )}
+            {usedLocalQuestions && !nextQuestionError && (
+              <p className="mt-2 text-[10px] text-muted-foreground">
+                Practice question from the approved question bank
+              </p>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-2">
@@ -1277,21 +1624,53 @@ export default function MockSession() {
         </div>
       </div>
 
-      {/* Overlay — primary surface for speech, transcript, and hints */}
-      <OverlayWindow
-        onToggleMic={audio.toggleMute}
-        onToggleSystemAudio={audio.toggleSystemAudio}
-        onReconnectAudio={() => void audio.reconnect()}
-        onGenerate={() => void handleRequestHint()}
-        onRegenerate={() => void handleRequestHint()}
-        onShorten={() => void handleRequestHint()}
-        onExpand={() => void handleRequestHint()}
-        onEndSession={handleEndSession}
-        onManualQuestion={(q: string) => {
-          useOverlayStore.getState().setCurrentQuestion(q);
-          orchestrator.requestHint(q);
-        }}
-      />
+      {/* Overlay — one instance per session; ErrorBoundary prevents blank app crash */}
+      {phase === "active" &&
+        overlayInitState === "ready" &&
+        Boolean(sessionIdFromStore) && (
+          <ErrorBoundary
+            fallback={(_error, retry) => (
+              <div
+                className="fixed bottom-4 right-4 z-[500] max-w-sm rounded-xl border border-border bg-card p-4 shadow-lg space-y-3"
+                data-testid="mock-overlay-error"
+              >
+                <p className="text-sm font-medium text-foreground">
+                  The interview interface encountered a problem.
+                </p>
+                <div className="flex gap-2">
+                  <Button variant="secondary" size="xs" onClick={retry}>
+                    Retry
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="xs"
+                    onClick={() => void handleEndSession()}
+                  >
+                    End Session
+                  </Button>
+                </div>
+              </div>
+            )}
+          >
+            <OverlayWindow
+              key={`mock-overlay-${sessionIdFromStore}`}
+              onToggleMic={audio.toggleMute}
+              onToggleSystemAudio={audio.toggleSystemAudio}
+              onReconnectAudio={() => void audio.reconnect()}
+              onGenerate={() => void handleRequestHint()}
+              onRegenerate={() => void handleRequestHint()}
+              onShorten={() => void handleRequestHint()}
+              onExpand={() => void handleRequestHint()}
+              onEndSession={handleEndSession}
+              onManualQuestion={(q: string) => {
+                if (!isMockSessionMutable(lifecycleRef.current)) return;
+                useOverlayStore.getState().setCurrentQuestion(q);
+                void orchestrator.requestHint(q);
+              }}
+              isPreparingSession={false}
+            />
+          </ErrorBoundary>
+        )}
 
       <Modal open={skipConfirm} onClose={() => setSkipConfirm(false)} title="Skip question?" size="sm">
         <p className="text-sm text-muted-foreground mb-5">This question will be marked as skipped.</p>
@@ -1303,14 +1682,11 @@ export default function MockSession() {
             variant="danger"
             size="sm"
             fullWidth
+            disabled={generationInFlight}
             onClick={() => {
               captureAnswer(true);
               setSkipConfirm(false);
-              if (isLastQ) {
-                void finalizeSession(true);
-              } else {
-                orchestrator.nextQuestion();
-              }
+              void handleNextQuestion({ skipCapture: true });
             }}
           >
             Skip

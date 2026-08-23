@@ -18,6 +18,7 @@ import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { formatGovExamOperationError } from "@/lib/gov-exam/examOperationErrors";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/env";
 import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/Button";
@@ -922,7 +923,10 @@ export default function TestSession() {
     try {
       await saveResponses({ throwOnError: true });
 
-      await fetchEdgeJson("submit-test", { test_id: testId }, { timeoutMs: 90_000 });
+      await fetchEdgeJson("submit-test", {
+        test_id: testId,
+        idempotencyKey: `submit:${testId}`,
+      }, { timeoutMs: 90_000 });
       if (user?.id) clearAttemptRecovery(testId, user.id);
 
       toast.success(autoSubmit ? "Time's up! Test submitted." : "Test submitted.", {
@@ -933,7 +937,7 @@ export default function TestSession() {
     } catch (error) {
       submittingRef.current = false;
       console.error("[TestSession] submit failed:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to submit test.", {
+      toast.error(formatGovExamOperationError(error), {
         position: "top-center",
       });
     } finally {

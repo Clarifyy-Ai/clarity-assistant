@@ -16,7 +16,7 @@ import {
 } from "react-router-dom";
 
 import { cn } from "@/lib/utils";
-import { supabase } from "@/integrations/supabase/client";
+import { useFocusRecoveryCoordinator } from "@/hooks/useFocusRecoveryCoordinator";
 import { useAuthStore } from "@/store/authStore";
 import { useGlobalStore } from "@/store/globalStore";
 import { useUIStore } from "@/store/uiStore";
@@ -1002,6 +1002,8 @@ export default function App(): JSX.Element {
   const resolvedTheme = useUIStore((state) => state.resolved_theme);
   const stealthMode = useUIStore((state) => state.stealth_mode);
 
+  useFocusRecoveryCoordinator();
+
   useEffect(() => {
     void initialize();
   }, [initialize]);
@@ -1011,25 +1013,6 @@ export default function App(): JSX.Element {
       resolveFeatureFlags(profile.plan_id as PlanId);
     }
   }, [profile?.plan_id, resolveFeatureFlags]);
-
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState !== "visible") return;
-      // Soft probe only — never clear a working session on tab focus.
-      // Profile refresh on TOKEN_REFRESHED soft-fails if the network blips.
-      const { status } = useAuthStore.getState();
-      if (status !== "authenticated") return;
-      void supabase.auth.getSession().catch(() => {
-        // Ignore probe failures; existing session stays in memory.
-      });
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, []);
 
   useEffect(() => {
     const applyThemePrefs = () => {

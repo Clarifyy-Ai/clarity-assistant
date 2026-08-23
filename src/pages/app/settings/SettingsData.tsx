@@ -4,17 +4,20 @@
 import { fetchEdge } from "@/lib/network/fetchEdge";
 import { useState } from "react";
 import { useAuthStore } from "@/store/userStore";
-import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { SkeletonText } from "@/components/ui/SkeletonLoader";
 import {
   Download, FileJson, FileText,
   BarChart2, MessageSquare, BookOpen,
-  CalendarDays, Trash2, CheckCircle,
+  CalendarDays, CheckCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  createExportIdempotencyKey,
+  messageFromExportCaught,
+  messageFromExportResponse,
+} from "@/lib/export/exportUserFacingError";
 
 // ─────────────────────────────────────────────────────────────────
 // SettingsData — export specific data, storage summary
@@ -35,7 +38,7 @@ const EXPORT_TYPES = [
     icon:   MessageSquare,
     label:  "Session transcripts",
     desc:   "Full answer transcripts from all recorded sessions.",
-    format: "TXT",
+    format: "JSON",
     color:  "text-blue-400",
     bg:     "bg-blue-500/10",
   },
@@ -53,7 +56,7 @@ const EXPORT_TYPES = [
     icon:   CalendarDays,
     label:  "Interview schedule",
     desc:   "All scheduled interviews and their details.",
-    format: "CSV",
+    format: "JSON",
     color:  "text-amber-400",
     bg:     "bg-amber-500/10",
   },
@@ -62,37 +65,49 @@ const EXPORT_TYPES = [
     icon:   FileJson,
     label:  "Full data export",
     desc:   "Everything — profile, sessions, answers, settings.",
-    format: "ZIP",
+    format: "JSON",
     color:  "text-foreground",
     bg:     "bg-secondary",
   },
 ];
 
 export default function SettingsData() {
-  const { user } = useAuthStore();
+  const { user: _user } = useAuthStore();
 
   const [exporting, setExporting] = useState<string | null>(null);
   const [done,      setDone]      = useState<string[]>([]);
 
   async function handleExport(type: string) {
+    if (exporting) return;
     setExporting(type);
 
-    
+    const idempotencyKey = createExportIdempotencyKey(type);
+
     try {
-      const res = await fetchEdge("export-user-data", { type });
+      const res = await fetchEdge(
+        "export-user-data",
+        { type, idempotencyKey },
+        { headers: { "Idempotency-Key": idempotencyKey } },
+      );
+
+      if (!res.ok) {
+        const msg = await messageFromExportResponse(res);
+        toast.error(msg);
+        return;
+      }
 
       const blob = await res.blob();
-      const ext  = EXPORT_TYPES.find((t) => t.id === type)?.format.toLowerCase() ?? "json";
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement("a");
       a.href     = url;
-      a.download = `clarify-ai-${type}-${new Date().toISOString().slice(0, 10)}.${ext}`;
+      a.download = `clarify-ai-${type}-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
       setDone((p) => [...p, type]);
       setTimeout(() => setDone((p) => p.filter((d) => d !== type)), 3000);
+      toast.success("Export downloaded successfully");
     } catch (e) {
-      toast.error((e instanceof Error ? e.message : null) ?? "Export failed. Please try again.");
+      toast.error(messageFromExportCaught(e));
     } finally {
       setExporting(null);
     }
@@ -154,7 +169,8 @@ export default function SettingsData() {
                     variant={isDone ? "success" : "secondary"}
                     size="xs"
                     loading={isExporting}
-                    disabled={!!exporting && !isExporting}
+                    disabled={!!exporting}
+                    data-testid={`export-${exp.id}`}
                     onClick={() => handleExport(exp.id)}
                     leftIcon={
                       isDone

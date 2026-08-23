@@ -2,6 +2,7 @@ import { useCallback, useEffect } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useNotificationStore } from "@/store/notificationStore";
 import { useAuthStore } from "@/store/authStore";
+import { subscribeFocusRecovery } from "@/lib/focusRecovery";
 import type { AppNotification } from "@/types/user.types";
 
 export function useNotifications() {
@@ -10,12 +11,19 @@ export function useNotifications() {
 
   useEffect(() => {
     if (!user) return;
-    loadNotifications();
+    void loadNotifications();
+    return subscribeFocusRecovery((plan) => {
+      if (plan.revalidate.includes("notifications")) {
+        void loadNotifications();
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
   async function loadNotifications(): Promise<void> {
     if (!user) return;
-    store.setIsLoading(true);
+    const hadNotifications = store.notifications.length > 0;
+    if (!hadNotifications) store.setIsLoading(true);
     const { data } = await supabase
       .from("notifications")
       .select("*")

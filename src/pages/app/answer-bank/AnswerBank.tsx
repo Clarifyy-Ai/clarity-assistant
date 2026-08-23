@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { answerBankDB, practiceContextsDB } from "@/lib/supabase/database";
@@ -29,16 +29,34 @@ import {
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import {
+  answerBankEmptyTitle,
+  answerBankLoadErrorMessage,
+  userFacingDbError,
+} from "@/lib/errors/userFacingDbError";
+import {
   draftFromAnswerBankEntry,
   practiceContextLaunchPath,
 } from "@/lib/session/practiceContext";
 
 // ─────────────────────────────────────────────────────────────────
-// AnswerBank — saved STAR answers + session saves
+// AnswerBank — saved STAR answers + session saves (Knowledge Base)
 // ─────────────────────────────────────────────────────────────────
 
 const CATEGORIES = ["All", "Behavioural", "Technical", "Leadership", "System Design", "HR"];
 const MAX_ANSWER_LENGTH = 5000;
+
+type LoadPhase = "IDLE" | "LOADING" | "SUCCESS" | "EMPTY" | "ERROR";
+
+function formatCreatedAt(value: string | null | undefined): string {
+  if (!value) return "";
+  try {
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    return format(d, "MMM d, yyyy");
+  } catch {
+    return "";
+  }
+}
 
 function validateAnswer(question: string, answer: string, existingAnswers: string[]): string | null {
   const normalized = answer.trim().toLowerCase().replace(/\s+/g, " ");
@@ -56,9 +74,10 @@ function validateAnswer(question: string, answer: string, existingAnswers: strin
 export default function AnswerBank() {
   const { user }  = useAuthStore();
   const navigate = useNavigate();
+  const productLabel = PRODUCT_NAMES.answerBank;
 
   const [answers,   setAnswers]   = useState<Tables<"answer_bank">[]>([]);
-  const [loading,   setLoading]   = useState(true);
+  const [loadPhase, setLoadPhase] = useState<LoadPhase>("IDLE");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search,    setSearch]    = useState("");
   const [category,  setCategory]  = useState("All");
@@ -67,25 +86,29 @@ export default function AnswerBank() {
   const [editText,  setEditText]  = useState("");
   const [deleteId,  setDeleteId]  = useState<string | null>(null);
   const [addOpen,   setAddOpen]   = useState(false);
+  const fetchGenRef = useRef(0);
 
   useEffect(() => {
-    if (!user) return;
-    fetchAnswers();
+    if (!user?.id) return;
+    void fetchAnswers();
   }, [user?.id]);
 
   async function fetchAnswers() {
     if (!user?.id) return;
-    setLoading(true);
+    const gen = ++fetchGenRef.current;
+    setLoadPhase("LOADING");
     setLoadError(null);
     try {
       const data = await answerBankDB.listByUserId(user.id);
+      if (gen !== fetchGenRef.current) return;
       setAnswers(data);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to load answers";
+      setLoadPhase(data.length === 0 ? "EMPTY" : "SUCCESS");
+    } catch {
+      if (gen !== fetchGenRef.current) return;
+      const msg = answerBankLoadErrorMessage(productLabel);
       setLoadError(msg);
+      setLoadPhase("ERROR");
       toast.error(msg);
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -108,8 +131,8 @@ export default function AnswerBank() {
       );
       setEditId(null);
       toast.success("Answer updated");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update answer.");
+    } catch {
+      toast.error(userFacingDbError(null, "save"));
     }
   }
 
@@ -117,11 +140,15 @@ export default function AnswerBank() {
     if (!deleteId || !user?.id) return;
     try {
       await answerBankDB.delete(user.id, deleteId);
-      setAnswers((p) => p.filter((a) => a.id !== deleteId));
+      setAnswers((p) => {
+        const next = p.filter((a) => a.id !== deleteId);
+        setLoadPhase(next.length === 0 ? "EMPTY" : "SUCCESS");
+        return next;
+      });
       setDeleteId(null);
       toast.success("Answer deleted");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete answer.");
+    } catch {
+      toast.error(userFacingDbError(null, "delete"));
     }
   }
 
@@ -137,18 +164,30 @@ export default function AnswerBank() {
     return true;
   });
 
+  const loading = loadPhase === "LOADING" || loadPhase === "IDLE";
+  const showEmpty =
+    !loading &&
+    loadPhase !== "ERROR" &&
+    filtered.length === 0 &&
+    answers.length === 0;
+  const showNoResults =
+    !loading &&
+    loadPhase !== "ERROR" &&
+    filtered.length === 0 &&
+    answers.length > 0;
+
   return (
     <div className="space-y-5 max-w-4xl">
-      {loadError && (
+      {loadError && loadPhase === "ERROR" && (
         <InlineErrorRetry message={loadError} onRetry={() => void fetchAnswers()} />
       )}
 
       <PageHeader
-        title={PRODUCT_NAMES.answerBank}
+        title={productLabel}
         description="Your saved STAR answers and best responses"
         breadcrumbs={[
           { label: PRODUCT_NAMES.dashboard, href: "/app/dashboard" },
-          { label: PRODUCT_NAMES.answerBank },
+          { label: productLabel },
         ]}
         actions={
           <Button
@@ -177,6 +216,7 @@ export default function AnswerBank() {
           {CATEGORIES.map((c) => (
             <button
               key={c}
+              type="button"
               onClick={() => setCategory(c)}
               className={cn(
                 "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
@@ -196,22 +236,35 @@ export default function AnswerBank() {
         <div className="space-y-3">
           {[...Array(3)].map((_, i) => <SkeletonCard key={i} />)}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : showEmpty ? (
         <Card>
           <EmptyState
             icon={BookOpen}
-            title="No saved answers yet"
+            title={answerBankEmptyTitle(productLabel)}
             description="Save answers from sessions or build them in Prep Lab."
             actionLabel="Add Answer"
             onAction={() => setAddOpen(true)}
           />
         </Card>
+      ) : showNoResults ? (
+        <Card>
+          <EmptyState
+            icon={Search}
+            title="No matching answers"
+            description="Try a different search or category filter."
+            actionLabel="Clear filters"
+            onAction={() => {
+              setSearch("");
+              setCategory("All");
+            }}
+          />
+        </Card>
       ) : (
         <div className="space-y-3">
-          {filtered.map((ansRaw) => {
-            const ans = ansRaw as any;
+          {filtered.map((ans) => {
             const isOpen = expanded[ans.id];
             const isEditing = editId === ans.id;
+            const createdLabel = formatCreatedAt(ans.created_at);
 
             return (
               <Card key={ans.id}>
@@ -229,23 +282,17 @@ export default function AnswerBank() {
                       to={`/app/answers/${ans.id}`}
                       className="text-sm font-medium text-foreground leading-snug hover:text-primary transition-colors block"
                     >
-                      {ans.question_text}
+                      {ans.question_text ?? "Untitled"}
                     </Link>
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                       {ans.category && (
                         <Badge variant="default" size="sm">{ans.category}</Badge>
                       )}
-                      {ans.score !== null && ans.score !== undefined && (
-                        <Badge
-                          variant={ans.score >= 75 ? "emerald" : ans.score >= 50 ? "amber" : "red"}
-                          size="sm"
-                        >
-                          {ans.score}/100
-                        </Badge>
+                      {createdLabel && (
+                        <span className="text-[10px] text-muted-foreground">
+                          {createdLabel}
+                        </span>
                       )}
-                      <span className="text-[10px] text-muted-foreground">
-                        {format(new Date(ans.created_at), "MMM d, yyyy")}
-                      </span>
                       {ans.source === "prep_lab" && (
                         <Badge variant="blue" size="sm">Prep Lab</Badge>
                       )}
@@ -353,23 +400,6 @@ export default function AnswerBank() {
                         {ans.answer_text}
                       </p>
                     )}
-
-                    {/* STAR breakdown */}
-                    {ans.star_breakdown && (
-                      <div className="grid grid-cols-2 gap-2 mt-2">
-                        {Object.entries(ans.star_breakdown).map(([k, v]) => (
-                          <div
-                            key={k}
-                            className="bg-secondary border border-border rounded-xl p-3"
-                          >
-                            <p className="text-[10px] font-bold text-primary uppercase mb-1">
-                              {k}
-                            </p>
-                            <p className="text-xs text-muted-foreground">{v as string}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 )}
               </Card>
@@ -387,7 +417,7 @@ export default function AnswerBank() {
           <Button variant="secondary" size="sm" fullWidth onClick={() => setDeleteId(null)}>
             Cancel
           </Button>
-          <Button variant="danger" size="sm" fullWidth onClick={deleteAnswer}>
+          <Button variant="danger" size="sm" fullWidth onClick={() => void deleteAnswer()}>
             Delete
           </Button>
         </div>
@@ -397,7 +427,11 @@ export default function AnswerBank() {
       <AddAnswerModal
         open={addOpen}
         onClose={() => setAddOpen(false)}
-        onSaved={(a) => { setAnswers((p) => [a, ...p]); setAddOpen(false); }}
+        onSaved={(a) => {
+          setAnswers((p) => [a, ...p]);
+          setLoadPhase("SUCCESS");
+          setAddOpen(false);
+        }}
         userId={user?.id ?? ""}
         existingAnswers={answers.map((entry) => entry.answer_text ?? "")}
       />
@@ -434,15 +468,15 @@ function AddAnswerModal({
         cat === "Behavioural" || cat === "Leadership" || cat === "HR";
       const tool_id = useStar ? "star_method" : "raw_prompt";
       const input = useStar
-        ? `Interview question:\n${question.trim()}\n\nCategory: ${cat}\n\nDraft a complete STAR answer from scratch for THIS exact question (do not substitute a different question). Invent plausible, specific details the candidate can edit.`
-        : `Interview category: ${cat}\nInterview question:\n${question.trim()}\n\nWrite a strong, interview-ready answer for this exact question. Match the category (technical / system design / etc). Do NOT invent a different question. Do NOT force STAR format unless it naturally fits. Be specific and concrete.`;
+        ? `Interview question:\n${question.trim()}\n\nCategory: ${cat}\n\nUser draft (optional):\n${answer.trim() || "(none yet)"}\n\nImprove structure into a STAR answer for THIS exact question. Only use facts from the draft. If evidence is missing, use [NEEDS EVIDENCE] or [Add measurable result if available]. Never invent employers, metrics, technologies, or outcomes.`
+        : `Interview category: ${cat}\nInterview question:\n${question.trim()}\n\nUser draft (optional):\n${answer.trim() || "(none yet)"}\n\nWrite a strong interview-ready answer for this exact question. Match the category. Do NOT invent employers, metrics, or unsupported claims. Use [NEEDS EVIDENCE] where facts are missing.`;
 
       const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
         tool_id,
         input,
       }, {
         headers: {
-          "Idempotency-Key": createIdempotencyKey("answer-bank-ai"),
+          "x-idempotency-key": createIdempotencyKey("answer-bank-ai"),
         },
       });
       const text = (data.result ?? "").trim();
@@ -479,8 +513,8 @@ function AddAnswerModal({
       setAnswer("");
       setCategory("Behavioural");
       setAiDraft(false);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save answer.");
+    } catch {
+      toast.error(userFacingDbError(null, "save"));
     } finally {
       setSaving(false);
     }

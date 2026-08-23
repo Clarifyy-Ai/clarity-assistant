@@ -10,6 +10,7 @@ import {
   SUPABASE_URL,
 } from "@/lib/env";
 import { tabAwareAuthStorage } from "@/lib/auth/tabLocalLogout";
+import { shouldDetectSessionInUrl } from "@/lib/auth/accountBootstrap";
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
@@ -18,6 +19,10 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     storage: tabAwareAuthStorage,
     persistSession: true,
     autoRefreshToken: true,
+    // Only consume ?code= / hash tokens on callback/recovery URLs. Leftover
+    // query params on /login would POST /auth/v1/token and return HTTP 400.
+    detectSessionInUrl: shouldDetectSessionInUrl(),
+    flowType: "pkce",
   },
 });
 

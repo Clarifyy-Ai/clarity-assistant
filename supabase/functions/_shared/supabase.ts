@@ -16,6 +16,7 @@ import {
   createClient,
   type SupabaseClient,
 } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { classifyCreditFailure } from "./creditAuthority.ts";
 
 export type CreditDeductionResult = {
   success: boolean;
@@ -36,8 +37,11 @@ export type DeductCreditsAtomicInput = {
 export type DeductCreditsAtomicResult = {
   success: boolean;
   balanceAfter?: number;
+  /** Spendable balance observed for this attempt (after success, or remaining on denial). */
+  balance?: number;
   transactionId?: string;
   error?: string;
+  code?: string;
   /** Optional cached business payload for full request replay (e.g. prep-tool AI result). */
   payload?: Record<string, unknown>;
 };
@@ -359,24 +363,49 @@ export async function deductCreditsAtomic(
     p_request_hash: input.requestHash ?? null,
   });
 
-  const result = rpcResult.error
-  ? {
+  const rpcData = rpcResult.data as {
+    success?: boolean;
+    error?: string;
+    code?: string;
+    new_balance?: number;
+    balance?: number;
+    transaction_id?: string;
+  } | null;
+
+  if (rpcResult.error) {
+    const unavailable = classifyCreditFailure(
+      rpcResult.error.message ?? "Credit service unavailable.",
+      "CREDIT_SERVICE_UNAVAILABLE",
+    );
+    return {
       success: false,
       error: "Credit service unavailable.",
-    }
-  : {
-      success: Boolean((rpcResult.data as { success?: boolean } | null)?.success),
-      error: (rpcResult.data as { error?: string } | null)?.error,
-      newBalance: Number((rpcResult.data as { new_balance?: number } | null)?.new_balance),
-      transactionId: (rpcResult.data as { transaction_id?: string } | null)?.transaction_id,
+      code: unavailable,
     };
+  }
 
-  if (!result.success || !Number.isInteger(result.newBalance)) {
+  const parsedBalance = Number(rpcData?.new_balance ?? rpcData?.balance);
+  const balanceOk = Number.isFinite(parsedBalance);
+  const result = {
+    success: Boolean(rpcData?.success) && balanceOk,
+    error: rpcData?.error,
+    code: rpcData?.code,
+    newBalance: parsedBalance,
+    transactionId: rpcData?.transaction_id,
+    remaining: Number.isFinite(Number(rpcData?.balance))
+      ? Number(rpcData?.balance)
+      : parsedBalance,
+  };
+
+  if (!result.success) {
     // Do not persist failed deductions — retries with the same Idempotency-Key
     // must be allowed (getIdempotentResponse also skips stored failures).
+    const code = classifyCreditFailure(result.error, result.code);
     return {
       success: false,
       error: result.error ?? "Credit deduction failed.",
+      code,
+      balance: Number.isFinite(result.remaining) ? Math.max(0, Math.floor(result.remaining)) : undefined,
     };
   }
 
@@ -430,7 +459,9 @@ export async function deductCreditsAtomic(
   const success: DeductCreditsAtomicResult = {
     success: true,
     balanceAfter: result.newBalance,
+    balance: result.newBalance,
     transactionId,
+    code: "OK",
   };
 
   await storeIdempotentResponse(db, input.idempotencyKey, success, {

@@ -259,6 +259,9 @@ export const LogEvents = {
   DASHBOARD_LOAD_SUCCEEDED:             "dashboard.load.succeeded",
   DASHBOARD_LOAD_FAILED:                "dashboard.load.failed",
   DASHBOARD_HTTP_503:                   "dashboard.http_503",
+  FOCUS_RECOVERY_STARTED:               "app.focus_recovery.started",
+  FOCUS_RECOVERY_SKIPPED:               "app.focus_recovery.skipped",
+  FOCUS_RECOVERY_COMPLETED:             "app.focus_recovery.completed",
 
   CSP_VIOLATION_REPORTED:               "csp.violation.reported",
   NETWORK_TRANSIENT_FAILURE:            "network.request.transient_failure",

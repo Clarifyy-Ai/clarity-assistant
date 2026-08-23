@@ -24,7 +24,7 @@ import { assignLoginWithReturnTo } from "@/lib/auth/safeReturnTo";
 const CMDK_TIP_KEY = "clarify:cmdk-tip-dismissed";
 
 export function AppTopBar() {
-  const { profile, signOut, refreshCredits } = useAuthStore();
+  const { profile, signOut } = useAuthStore();
   const { balance: creditBalance, known: creditsKnown } = useCreditBalance();
   const location = useLocation();
   const notifStore  = useNotificationStore();
@@ -32,12 +32,6 @@ export function AppTopBar() {
   useNotifications();
   const stealthMode = uiStore.stealth_mode;
   const [showCmdTip, setShowCmdTip] = useState(false);
-
-  useEffect(() => {
-    const onFocus = () => void refreshCredits();
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [refreshCredits]);
 
   useEffect(() => {
     try {

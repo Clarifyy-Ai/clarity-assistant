@@ -509,7 +509,8 @@ export function formatSupabaseAuthError(error: unknown): string {
     return USER_MESSAGES[ErrorCode.AUTH_INVALID_CREDENTIALS]!;
   }
 
-  return message || USER_MESSAGES[ErrorCode.AUTH_INVALID_CREDENTIALS]!;
+  // Never surface raw GoTrue / PostgREST / Postgres text to the user.
+  return USER_MESSAGES[ErrorCode.AUTH_INVALID_CREDENTIALS]!;
 }
 
 /** True when Supabase rejected the client API key (deployment misconfiguration). */

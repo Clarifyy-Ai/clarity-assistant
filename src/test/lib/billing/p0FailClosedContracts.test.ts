@@ -30,18 +30,36 @@ describe("create-exam-paper AI-fill capability", () => {
     "utf8",
   );
 
-  it("calls requireCapability before credit deduction for AI modes", () => {
-    expect(src).toMatch(/requireCapability\s*\(/);
+  it("resolves the capability-aware plan before credit deduction", () => {
+    // The AI-fill gate lives in decideGenerationPlan, which is fed hasCapability.
+    expect(src).toMatch(/decideGenerationPlan\s*\(/);
+    expect(src).toMatch(/hasCapability\s*\(/);
     expect(src).toContain("gov_exam_ai_fill");
-    const capIdx = src.lastIndexOf("requireCapability(");
+
+    const planIdx = src.lastIndexOf("decideGenerationPlan(");
     const creditIdx = src.lastIndexOf("deductCreditsAtomic(");
-    expect(capIdx).toBeGreaterThan(0);
-    expect(creditIdx).toBeGreaterThan(capIdx);
+    expect(planIdx).toBeGreaterThan(0);
+    expect(creditIdx).toBeGreaterThan(planIdx);
+  });
+
+  it("refuses a blocked plan before spending credits", () => {
+    const blockedIdx = src.indexOf('plan.kind === "blocked"');
+    const creditIdx = src.lastIndexOf("deductCreditsAtomic(");
+    expect(blockedIdx).toBeGreaterThan(0);
+    expect(creditIdx).toBeGreaterThan(blockedIdx);
+    expect(src).toContain("blockedPlanPayload");
   });
 
   it("keeps official previous papers outside the AI-fill gate", () => {
-    expect(src).toContain("official_previous");
-    expect(src).toContain('generated_mock');
-    expect(src).toContain("aiFillModes");
+    const planSrc = fs.readFileSync(
+      path.join(root, "supabase/functions/_shared/govGenerationPlan.ts"),
+      "utf8",
+    );
+    // official_previous is deliberately absent from the AI-eligible set, so a
+    // reproduction of a real paper can never be padded with generated questions.
+    const eligible = planSrc.match(/AI_ELIGIBLE_MODES = new Set\(\[([^\]]*)\]\)/);
+    expect(eligible).not.toBeNull();
+    expect(eligible![1]).toContain("generated_mock");
+    expect(eligible![1]).not.toContain("official_previous");
   });
 });

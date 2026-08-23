@@ -2,7 +2,7 @@
 // useSessionOrchestrator — Manages mock/live session lifecycle
 // ─────────────────────────────────────────────────────────────────
 
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useAuthStore } from "@/store/userStore";
@@ -36,6 +36,7 @@ interface CreateSessionParams {
 
 export function useSessionOrchestrator() {
   const store = useSessionStore;
+  const hintAbortRef = useRef<AbortController | null>(null);
 
   const createSession = useCallback(async (params: CreateSessionParams) => {
     const sessionId = params.session_id ?? store.getState().session_id ?? crypto.randomUUID();
@@ -76,6 +77,24 @@ export function useSessionOrchestrator() {
     store.getState().setQuestions(mapped);
   }, []);
 
+  const appendAndActivateQuestion = useCallback((question: SessionQuestion | any) => {
+    const sessionId = store.getState().session_id ?? "";
+    const nextNumber = store.getState().questions.length + 1;
+    const mapped: SessionQuestion = {
+      id: question.id ?? crypto.randomUUID(),
+      session_id: question.session_id || sessionId,
+      question_number: question.question_number ?? nextNumber,
+      question_text:
+        question.question_text ?? question.question ?? question.text ?? String(question),
+      question_type: question.question_type ?? question.type ?? "behavioural",
+      expected_duration_seconds: question.expected_duration_seconds ?? 120,
+      difficulty: question.difficulty ?? "medium",
+      tags: question.tags ?? [],
+      company_specific: question.company_specific ?? false,
+    };
+    store.getState().appendAndActivateQuestion(mapped);
+  }, []);
+
   const nextQuestion = useCallback(() => {
     store.getState().advanceQuestion();
   }, []);
@@ -84,9 +103,17 @@ export function useSessionOrchestrator() {
     store.getState().setStatus("completed");
   }, []);
 
+  const cancelHintRequest = useCallback(() => {
+    hintAbortRef.current?.abort();
+    hintAbortRef.current = null;
+  }, []);
+
   const requestHint = useCallback(async (questionText: string) => {
     const overlay = useOverlayStore.getState();
     const session = store.getState();
+    if (session.status === "completed" || session.status === "abandoned") {
+      return;
+    }
     const cfg = session.config as { instructions?: string; role?: string; company?: string } | null;
     const resumeSummary =
       typeof overlay.resume_context === "string"
@@ -107,6 +134,12 @@ export function useSessionOrchestrator() {
           company: cfg?.company ?? null,
         })
       : resumeSummary || "None provided.";
+
+    // Re-check after async context build — session may have ended.
+    if (store.getState().status === "completed" || store.getState().status === "abandoned") {
+      return;
+    }
+
     const transcript =
       useAudioStore.getState().transcript?.full_transcript ?? "";
 
@@ -116,6 +149,11 @@ export function useSessionOrchestrator() {
       text: questionText,
       timestamp: Date.now(),
     });
+
+    hintAbortRef.current?.abort();
+    const controller = new AbortController();
+    hintAbortRef.current = controller;
+    const hintSessionId = session.session_id;
 
     try {
       overlay.setHintState("generating");
@@ -132,7 +170,17 @@ export function useSessionOrchestrator() {
       };
       const data = await generateHint(payload, {
         idempotencyKey: hintIdempotencyKey(session.session_id, questionText),
+        signal: controller.signal,
       });
+
+      if (
+        controller.signal.aborted ||
+        store.getState().session_id !== hintSessionId ||
+        store.getState().status === "completed" ||
+        store.getState().status === "abandoned"
+      ) {
+        return;
+      }
 
       const hint = typeof data?.hints === "string" ? data.hints : String(data?.hints ?? "");
       const isDegraded =
@@ -165,6 +213,15 @@ export function useSessionOrchestrator() {
         timestamp: Date.now(),
       });
     } catch (err) {
+      if (controller.signal.aborted) return;
+      if (
+        store.getState().session_id !== hintSessionId ||
+        store.getState().status === "completed" ||
+        store.getState().status === "abandoned"
+      ) {
+        return;
+      }
+
       const msg = getAiUserFacingError(err);
       console.error("[useSessionOrchestrator] requestHint failed:", err);
 
@@ -187,13 +244,19 @@ export function useSessionOrchestrator() {
         timestamp: Date.now(),
       });
     } finally {
-      overlay.setChatGenerating?.(false);
+      if (hintAbortRef.current === controller) {
+        hintAbortRef.current = null;
+      }
+      if (!controller.signal.aborted) {
+        overlay.setChatGenerating?.(false);
+      }
     }
   }, []);
 
   return {
     createSession,
     setQuestions,
+    appendAndActivateQuestion,
     get currentQuestion() {
       return store.getState().current_question;
     },
@@ -206,5 +269,6 @@ export function useSessionOrchestrator() {
     nextQuestion,
     completeSession,
     requestHint,
+    cancelHintRequest,
   };
 }

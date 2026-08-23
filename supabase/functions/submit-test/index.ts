@@ -10,6 +10,7 @@ import {
   log,
 } from "../_shared/utils.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
+import { withBrowserCors } from "../_shared/cors.ts";
 import {
   checkRateLimitAsync,
   createRateLimitKey,
@@ -383,12 +384,13 @@ async function updateTopicPerformanceBestEffort(
 /*                                   HANDLER                                  */
 /* -------------------------------------------------------------------------- */
 
-Deno.serve(async (req: Request) => {
+Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
   try {
     const auth = await requireAuth(req);
+    const userId = auth.userId;
     const db = createServiceClient();
 
     const rateLimitResult = await checkRateLimitAsync(db, {
@@ -396,17 +398,18 @@ Deno.serve(async (req: Request) => {
       ...RATE_LIMIT_PRESETS.SESSION_ACTION,
     });
     if (!rateLimitResult.allowed) {
-      return rateLimitResponse(rateLimitResult);
+      return rateLimitResponse(rateLimitResult, req);
     }
 
-    const body = await parseBody<{ test_id: string }>(req);
+    const body = await parseBody<{ test_id: string; idempotencyKey?: string }>(req);
     const testId = safeString(body?.test_id);
+    const _submitKey = safeString(body?.idempotencyKey) || (testId ? `submit:${testId}` : "");
 
     if (!testId) {
-      return errorResponse("Missing test_id", "VALIDATION_ERROR", 400);
+      return errorResponse("Missing test_id", "VALIDATION_ERROR", 400, req);
     }
 
-    const userId = auth.userId;
+    log(FN, "info", "submit accepted", { testId, submitKey: _submitKey || "none" });
 
     /* -------------------------- FETCH TEST -------------------------- */
     const { data: testRaw, error: testErr } = await db
@@ -417,7 +420,7 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (testErr || !testRaw) {
-      return errorResponse("Test not found or access denied", "NOT_FOUND", 404);
+      return errorResponse("Test not found or access denied", "NOT_FOUND", 404, req);
     }
 
     const timedOut = isExamExpired(
@@ -437,7 +440,7 @@ Deno.serve(async (req: Request) => {
         already_completed: true,
         expired: timedOut,
         analysis: existing ?? null,
-      });
+      }, undefined, 200, req);
     }
 
     const questionIds = Array.isArray(testRaw.question_ids)
@@ -445,7 +448,7 @@ Deno.serve(async (req: Request) => {
       : [];
 
     if (questionIds.length === 0) {
-      return errorResponse("Test has no questions", "VALIDATION_ERROR", 400);
+      return errorResponse("Test has no questions", "VALIDATION_ERROR", 400, req);
     }
 
     /* -------------------- FETCH QUESTIONS & RESPONSES -------------------- */
@@ -464,11 +467,11 @@ Deno.serve(async (req: Request) => {
     ]);
 
     if (responseResult.error) {
-      return errorResponse("Failed to fetch test responses", "DB_ERROR", 500);
+      return errorResponse("Failed to fetch test responses", "DB_ERROR", 500, req);
     }
 
     if (questionResult.error) {
-      return errorResponse("Failed to fetch questions", "DB_ERROR", 500);
+      return errorResponse("Failed to fetch questions", "DB_ERROR", 500, req);
     }
 
     const questionMap: Record<string, QuestionRow> = {};
@@ -699,7 +702,7 @@ Deno.serve(async (req: Request) => {
         already_completed: true,
         expired: timedOut,
         analysis: existing ?? null,
-      });
+      }, undefined, 200, req);
     } else {
       const { data: analysisRow } = await db
         .from("test_analyses")
@@ -859,10 +862,10 @@ Deno.serve(async (req: Request) => {
       rank_tier: rankTier,
       rank_status: rankStatus,
       analysis: finalAnalysis,
-    });
+    }, undefined, 200, req);
   } catch (err) {
     if (err instanceof Response) return err;
-    log(FN, "error", "Unhandled error", err);
-    return errorResponse("Internal error", "INTERNAL", 500);
+    log(FN, "error", "Unhandled error", err instanceof Error ? err.message : "unknown");
+    return errorResponse("Something went wrong. Please try again.", "INTERNAL_ERROR", 500, req);
   }
-});
+}));

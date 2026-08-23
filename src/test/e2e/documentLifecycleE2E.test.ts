@@ -38,7 +38,7 @@ describe("Document Lifecycle E2E Suite", () => {
 
     // 4. Invalid File Rejection
     const invalidExe = new File(["malicious"], "exploit.exe", { type: "application/x-msdownload" });
-    expect(validateDocumentFile(invalidExe, "resume")).toContain("Unsupported document extension");
+    expect(validateDocumentFile(invalidExe, "resume")).toContain("Unsupported file format");
 
     // 5. Mock Interview Onboarding Consumption
     const mockOnboardingState = {

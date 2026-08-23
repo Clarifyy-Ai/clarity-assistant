@@ -44,18 +44,126 @@ export type GovExamSearchResult = {
   primaryActions: readonly string[];
 };
 
-export async function searchGovExams(params: {
-  q?: string;
-  family?: string;
-}): Promise<{
+export type GovExamSearchPagination = {
+  page: number;
+  pageSize: number;
+  total: number;
+};
+
+export type GovExamSearchSuccess = {
+  success: true;
   results: GovExamSearchResult[];
-  disclaimer: string;
+  disclaimer?: string;
   count: number;
-}> {
-  return fetchEdgeJson("search-exams", {
-    q: params.q ?? "",
-    family: params.family ?? "",
-  });
+  pagination: GovExamSearchPagination;
+};
+
+export type GovExamSearchFailure = {
+  success: false;
+  code: string;
+  error?: string;
+};
+
+/**
+ * Raw shape on the wire. `success` stays a plain boolean so the success and
+ * failure branches can be narrowed from one payload instead of an intersection
+ * of `true` and `false` (which collapses to `never`).
+ */
+type GovExamSearchWire = {
+  success?: boolean;
+  code?: string;
+  error?: string;
+  results?: GovExamSearchResult[];
+  pagination?: GovExamSearchPagination;
+  count?: number;
+  disclaimer?: string;
+};
+
+export async function searchGovExams(
+  params: {
+    q?: string;
+    family?: string;
+    page?: number;
+    pageSize?: number;
+  },
+  options?: { signal?: AbortSignal },
+): Promise<GovExamSearchSuccess> {
+  const payload = await fetchEdgeJson<GovExamSearchWire>(
+    "search-exams",
+    {
+      q: params.q ?? "",
+      family: params.family ?? "",
+      page: params.page ?? 1,
+      pageSize: params.pageSize ?? 20,
+    },
+    { signal: options?.signal },
+  );
+
+  if (payload?.success === false) {
+    const code = String(payload.code ?? "SEARCH_SERVICE_UNAVAILABLE");
+    const err = new Error(
+      payload.error ||
+        (code === "SEARCH_SERVICE_UNAVAILABLE"
+          ? "Exam search is temporarily unavailable. Please try again."
+          : "Exam search failed."),
+    ) as Error & { code?: string };
+    err.code = code;
+    throw err;
+  }
+
+  const results = Array.isArray(payload?.results) ? payload.results : [];
+  const pagination = payload?.pagination ?? {
+    page: params.page ?? 1,
+    pageSize: params.pageSize ?? 20,
+    total: payload?.count ?? results.length,
+  };
+
+  return {
+    success: true,
+    results,
+    disclaimer: payload?.disclaimer ?? "",
+    count: payload?.count ?? results.length,
+    pagination,
+  };
+}
+
+export function isSearchUnavailableError(err: unknown): boolean {
+  const code = String((err as { code?: string } | null)?.code ?? "");
+  return (
+    code === "SEARCH_SERVICE_UNAVAILABLE" ||
+    code === "SERVICE_UNAVAILABLE" ||
+    code === "PROVIDER_UNAVAILABLE" ||
+    code === "SEARCH_UNAVAILABLE"
+  );
+}
+
+export function mapGovSearchError(err: unknown): {
+  code: "RATE_LIMITED" | "INVALID_QUERY" | "SEARCH_UNAVAILABLE" | "SEARCH_FAILED";
+  message: string;
+} {
+  const code = String((err as { code?: string } | null)?.code ?? "");
+  if (code === "RATE_LIMITED" || code === "RATE_LIMIT_BACKEND_UNAVAILABLE") {
+    return {
+      code: "RATE_LIMITED",
+      message: "Too many searches. Please wait a moment and try again.",
+    };
+  }
+  if (code === "INVALID_QUERY" || code === "VALIDATION_ERROR" || code === "BAD_REQUEST") {
+    return {
+      code: "INVALID_QUERY",
+      message: "That search query isn't valid. Try a shorter keyword.",
+    };
+  }
+  if (isSearchUnavailableError(err)) {
+    return {
+      code: "SEARCH_UNAVAILABLE",
+      message: "Exam search is temporarily unavailable. Please try again.",
+    };
+  }
+  return {
+    code: "SEARCH_FAILED",
+    message: "Exam search failed. Please try again.",
+  };
 }
 
 export type CreateExamPaperRequest = {
@@ -90,6 +198,8 @@ export type PaperJobResult = {
   creditsCharged?: number;
   available?: number;
   required?: number;
+  requested?: number;
+  balance?: number;
   idempotentReplay?: boolean;
 };
 

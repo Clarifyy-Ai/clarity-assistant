@@ -1,59 +1,44 @@
 // supabase/functions/_shared/cors.ts
 //
-// Shared CORS helpers for Supabase Edge Functions.
+// Shared CORS contract for every browser-facing Supabase Edge Function.
 //
 // SECURITY PURPOSE:
-// - Allow only trusted browser origins
-// - Support local development safely
-// - Handle OPTIONS preflight consistently
-// - Avoid wildcard CORS with credentials
-// - Allow required app headers such as Authorization, CSRF, BYOK, and Idempotency-Key
+// - Allow only trusted browser origins (never wildcard + credentials)
+// - Handle OPTIONS before authentication / business logic
+// - Attach CORS + correlation IDs to every response path, including errors
+// - Keep CORS as a browser access control, not an authentication substitute
 //
 // HOW TO CONFIGURE:
 //
-// Set the ALLOWED_ORIGINS secret in Supabase Dashboard:
+// ALLOWED_ORIGINS — comma-separated explicit origins
+//   https://clarify.ai.sltfinanceindia.com,https://clarityapp.ai,https://www.clarityapp.ai
 //
-// Settings → Edge Functions → Secrets → Add new secret
-//
-// Key:
-// ALLOWED_ORIGINS
-//
-// Value example:
-// https://clarify.ai.sltfinanceindia.com,https://clarityapp.ai,https://www.clarityapp.ai
-//
-// Localhost origins are allowed only in non-production environments.
+// ALLOW_LOCALHOST_ORIGINS — "true" (default) or "false"
+// ALLOW_PREVIEW_ORIGINS — "true" (default) or "false" (Lovable preview hosts)
+// ALLOW_ELECTRON_NULL_ORIGIN — "true" (default) or "false" (file:// Electron)
+// APP_ENV / ENVIRONMENT / DENO_ENV — production vs non-production labels
 
-function isProductionEnvironment(): boolean {
-  const appEnv = (Deno.env.get("APP_ENV") ?? "").trim().toLowerCase();
-  const environment = (Deno.env.get("ENVIRONMENT") ?? "").trim().toLowerCase();
-  const denoEnv = (Deno.env.get("DENO_ENV") ?? "").trim().toLowerCase();
+export type CorsEnvReader = {
+  get(key: string): string | undefined;
+};
 
-  const nonProdLabels = ["development", "dev", "local", "preview", "staging", "stage", "test"];
-  if (
-    nonProdLabels.includes(appEnv) ||
-    nonProdLabels.includes(environment) ||
-    ["development", "dev", "local", "test"].includes(denoEnv)
-  ) {
-    return false;
-  }
-  if (
-    appEnv === "production" ||
-    appEnv === "prod" ||
-    environment === "production" ||
-    environment === "prod" ||
-    denoEnv === "production"
-  ) {
-    return true;
-  }
+const DEFAULT_ENV: CorsEnvReader = {
+  get(key: string): string | undefined {
+    try {
+      const deno = (globalThis as {
+        Deno?: { env?: { get?: (name: string) => string | undefined } };
+      }).Deno;
+      return deno?.env?.get?.(key);
+    } catch {
+      return undefined;
+    }
+  },
+};
 
-  // Default fail-closed when unset (typical Supabase Edge runtime).
-  return true;
-}
-
-const isProduction = isProductionEnvironment();
-
+let envReader: CorsEnvReader = DEFAULT_ENV;
 let cachedOrigins: Set<string> | null = null;
-let cachedEnvString: string | null = null;
+let cachedOriginKey: string | null = null;
+let serveGuardInstalled = false;
 
 const LOCAL_DEV_ORIGINS = [
   "http://localhost:3000",
@@ -78,6 +63,18 @@ const KNOWN_PRODUCTION_ORIGINS = [
   "https://app.clarityapp.ai",
 ];
 
+/** Custom-protocol Electron shells (file:// uses Origin: null, handled separately). */
+const KNOWN_ELECTRON_ORIGINS = [
+  "app://.",
+  "clarify-coach://.",
+];
+
+const PREVIEW_HOST_PATTERNS: RegExp[] = [
+  /\.lovable\.app$/i,
+  /\.lovable\.dev$/i,
+  /\.lovableproject\.com$/i,
+];
+
 const ALLOWED_METHODS = [
   "GET",
   "POST",
@@ -95,30 +92,66 @@ const ALLOWED_HEADERS = [
   "x-client-info",
   "x-app-name",
   "x-app-version",
-
-  // CSRF protection from frontend apiClient.ts
   "x-csrf-token",
-
-  // Idempotency for billing/credit/state-changing actions
-  // Clients send both casings depending on the API helper.
   "idempotency-key",
   "x-idempotency-key",
-
-  // Optional webhook/signature headers if helper is reused
   "stripe-signature",
-
-  // Client correlation (fetchEdge / apiClient)
   "x-request-id",
   "x-correlation-id",
-
-  // Privacy: AI training opt-out from Settings → Privacy
   "x-ai-training-consent",
 ].join(", ");
+
+const EXPOSE_HEADERS = [
+  "x-request-id",
+  "x-correlation-id",
+  "retry-after",
+  "x-ratelimit-limit",
+  "x-ratelimit-remaining",
+  "x-ratelimit-reset",
+].join(", ");
+
+function readEnv(key: string): string {
+  return (envReader.get(key) ?? "").trim();
+}
+
+function envFlag(key: string, defaultValue: boolean): boolean {
+  const raw = readEnv(key).toLowerCase();
+  if (!raw) return defaultValue;
+  if (["1", "true", "yes", "on"].includes(raw)) return true;
+  if (["0", "false", "no", "off"].includes(raw)) return false;
+  return defaultValue;
+}
+
+function isProductionEnvironment(): boolean {
+  const appEnv = readEnv("APP_ENV").toLowerCase();
+  const environment = readEnv("ENVIRONMENT").toLowerCase();
+  const denoEnv = readEnv("DENO_ENV").toLowerCase();
+
+  const nonProdLabels = ["development", "dev", "local", "preview", "staging", "stage", "test"];
+  if (
+    nonProdLabels.includes(appEnv) ||
+    nonProdLabels.includes(environment) ||
+    ["development", "dev", "local", "test"].includes(denoEnv)
+  ) {
+    return false;
+  }
+  if (
+    appEnv === "production" ||
+    appEnv === "prod" ||
+    environment === "production" ||
+    environment === "prod" ||
+    denoEnv === "production"
+  ) {
+    return true;
+  }
+
+  // Default fail-closed when unset (typical Supabase Edge runtime).
+  return true;
+}
 
 function isValidOrigin(origin: string): boolean {
   try {
     const url = new URL(origin);
-
     return url.protocol === "http:" || url.protocol === "https:";
   } catch {
     return false;
@@ -127,16 +160,9 @@ function isValidOrigin(origin: string): boolean {
 
 function normalizeOrigin(origin: string): string | null {
   const trimmed = origin.trim();
-
-  if (!trimmed || !isValidOrigin(trimmed)) {
-    return null;
-  }
-
+  if (!trimmed || !isValidOrigin(trimmed)) return null;
   try {
-    const url = new URL(trimmed);
-
-    // Normalize by removing trailing slash.
-    return url.origin;
+    return new URL(trimmed).origin;
   } catch {
     return null;
   }
@@ -144,25 +170,34 @@ function normalizeOrigin(origin: string): string | null {
 
 function addOriginIfValid(origins: Set<string>, origin: string): void {
   const normalized = normalizeOrigin(origin);
+  if (normalized) origins.add(normalized);
+}
 
-  if (normalized) {
-    origins.add(normalized);
-  }
+function originCacheKey(): string {
+  return [
+    readEnv("ALLOWED_ORIGINS"),
+    readEnv("ALLOW_LOCALHOST_ORIGINS"),
+    readEnv("ALLOW_PREVIEW_ORIGINS"),
+    readEnv("ALLOW_ELECTRON_NULL_ORIGIN"),
+    readEnv("APP_ENV"),
+    readEnv("ENVIRONMENT"),
+    readEnv("DENO_ENV"),
+  ].join("|");
 }
 
 function getAllowedOrigins(): Set<string> {
-  const currentEnv = Deno.env.get("ALLOWED_ORIGINS") ?? "";
-
-  if (cachedOrigins && cachedEnvString === currentEnv) {
+  const key = originCacheKey();
+  if (cachedOrigins && cachedOriginKey === key) {
     return cachedOrigins;
   }
 
   const origins = new Set<string>();
+  const isProduction = isProductionEnvironment();
 
-  // Loopback is always allowed. CORS is not auth — JWT is still required.
-  // Remote Edge + local Vite (http://127.0.0.1:5000) is the closed-beta workflow.
-  for (const origin of LOCAL_DEV_ORIGINS) {
-    addOriginIfValid(origins, origin);
+  if (envFlag("ALLOW_LOCALHOST_ORIGINS", true)) {
+    for (const origin of LOCAL_DEV_ORIGINS) {
+      addOriginIfValid(origins, origin);
+    }
   }
 
   if (isProduction) {
@@ -171,52 +206,41 @@ function getAllowedOrigins(): Set<string> {
     }
   }
 
-  if (currentEnv.trim().length > 0) {
-    for (const origin of currentEnv.split(",")) {
+  for (const origin of KNOWN_ELECTRON_ORIGINS) {
+    origins.add(origin);
+  }
+
+  const configured = readEnv("ALLOWED_ORIGINS");
+  if (configured.length > 0) {
+    for (const origin of configured.split(",")) {
       addOriginIfValid(origins, origin);
     }
   } else if (isProduction) {
     console.error(
       "[cors] ALLOWED_ORIGINS secret not set in production. " +
-        "Non-localhost browser origins will be rejected. " +
-        "Set ALLOWED_ORIGINS in Supabase Dashboard → Edge Functions → Secrets."
+        "Non-localhost browser origins outside the known production list will be rejected. " +
+        "Set ALLOWED_ORIGINS in Supabase Dashboard → Edge Functions → Secrets.",
     );
   } else {
     console.warn(
-      "[cors] ALLOWED_ORIGINS not set — only localhost dev origins are allowed."
+      "[cors] ALLOWED_ORIGINS not set — only localhost / configured preview origins are allowed.",
     );
   }
 
   cachedOrigins = origins;
-  cachedEnvString = currentEnv;
-
+  cachedOriginKey = key;
   return origins;
 }
 
 function getRequestOrigin(req: Request): string | null {
   const rawOrigin = req.headers.get("origin") ?? req.headers.get("Origin");
-
-  if (!rawOrigin) {
-    return null;
-  }
-
-  // Electron loadFile / opaque origins send the literal Origin: null
-  if (rawOrigin.trim() === "null") {
-    return "null";
-  }
-
+  if (!rawOrigin) return null;
+  if (rawOrigin.trim() === "null") return "null";
   return normalizeOrigin(rawOrigin);
 }
 
-/** Preview hosts used by Lovable / staging. CORS is not an auth boundary — JWT still required. */
-const PREVIEW_HOST_PATTERNS: RegExp[] = [
-  /\.lovable\.app$/i,
-  /\.lovable\.dev$/i,
-  /\.lovableproject\.com$/i,
-];
-
 function isPreviewOrigin(origin: string): boolean {
-  if (PREVIEW_HOST_PATTERNS.length === 0) return false;
+  if (!envFlag("ALLOW_PREVIEW_ORIGINS", true)) return false;
   try {
     const { protocol, hostname } = new URL(origin);
     if (protocol !== "https:") return false;
@@ -227,7 +251,10 @@ function isPreviewOrigin(origin: string): boolean {
 }
 
 function isOriginAllowedForCors(requestOrigin: string | null): boolean {
-  if (!requestOrigin || requestOrigin === "null") return true;
+  if (!requestOrigin) return true;
+  if (requestOrigin === "null") {
+    return envFlag("ALLOW_ELECTRON_NULL_ORIGIN", true);
+  }
   if (getAllowedOrigins().has(requestOrigin)) return true;
   if (isPreviewOrigin(requestOrigin)) return true;
   return false;
@@ -237,8 +264,32 @@ export function isOriginAllowed(req: Request): boolean {
   return isOriginAllowedForCors(getRequestOrigin(req));
 }
 
+export function resolveCorrelationId(req: Request): string {
+  const fromHeader =
+    req.headers.get("x-request-id")?.trim() ||
+    req.headers.get("x-correlation-id")?.trim();
+  if (fromHeader && fromHeader.length > 0 && fromHeader.length <= 128) {
+    return fromHeader;
+  }
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  }
+}
+
+export function functionNameFromRequest(req: Request): string {
+  try {
+    const parts = new URL(req.url).pathname.split("/").filter(Boolean);
+    return parts[parts.length - 1] || "edge-function";
+  } catch {
+    return "edge-function";
+  }
+}
+
 /**
  * Returns CORS headers for a given request.
+ * Credentialed requests never receive Access-Control-Allow-Origin: *.
  */
 export function getCorsHeaders(req: Request): Record<string, string> {
   const requestOrigin = getRequestOrigin(req);
@@ -246,11 +297,12 @@ export function getCorsHeaders(req: Request): Record<string, string> {
   const headers: Record<string, string> = {
     "Access-Control-Allow-Methods": ALLOWED_METHODS,
     "Access-Control-Allow-Headers": ALLOWED_HEADERS,
+    "Access-Control-Expose-Headers": EXPOSE_HEADERS,
     "Access-Control-Max-Age": "86400",
-    "Vary": "Origin",
+    Vary: "Origin",
   };
 
-  if (requestOrigin === "null") {
+  if (requestOrigin === "null" && isOriginAllowedForCors("null")) {
     headers["Access-Control-Allow-Origin"] = "null";
   } else if (requestOrigin && isOriginAllowedForCors(requestOrigin)) {
     headers["Access-Control-Allow-Origin"] = requestOrigin;
@@ -279,7 +331,6 @@ export function handleCors(req: Request): Response | null {
 
   const requestOrigin = getRequestOrigin(req);
 
-  // No Origin header means non-browser/server-to-server request.
   if (!requestOrigin) {
     return new Response(null, {
       status: 204,
@@ -289,9 +340,9 @@ export function handleCors(req: Request): Response | null {
 
   if (!isOriginAllowedForCors(requestOrigin)) {
     console.warn("[cors] Preflight rejected for origin:", requestOrigin);
-
     return new Response(
       JSON.stringify({
+        success: false,
         error: "Origin not allowed.",
         code: "ORIGIN_NOT_ALLOWED",
       }),
@@ -300,9 +351,9 @@ export function handleCors(req: Request): Response | null {
         headers: {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",
-          "Vary": "Origin",
+          Vary: "Origin",
         },
-      }
+      },
     );
   }
 
@@ -312,18 +363,29 @@ export function handleCors(req: Request): Response | null {
   });
 }
 
-/**
- * Adds CORS headers to an existing response.
- *
- * Useful when shared helpers return Response objects without CORS headers.
- */
-export function withCorsHeaders(req: Request, response: Response): Response {
-  const headers = new Headers(response.headers);
-  const corsHeaders = getCorsHeaders(req);
-
-  for (const [key, value] of Object.entries(corsHeaders)) {
-    headers.set(key, value);
+function mergeHeaders(target: Headers, source: Record<string, string>): void {
+  for (const [key, value] of Object.entries(source)) {
+    target.set(key, value);
   }
+}
+
+/**
+ * Adds CORS, security, and correlation headers to an existing response.
+ * Safe to call more than once.
+ */
+export function applyCors(
+  req: Request,
+  response: Response,
+  correlationId?: string,
+): Response {
+  const headers = new Headers(response.headers);
+  mergeHeaders(headers, getCorsHeaders(req));
+
+  const cid = correlationId ?? resolveCorrelationId(req);
+  headers.set("x-request-id", headers.get("x-request-id") || cid);
+  headers.set("x-correlation-id", headers.get("x-correlation-id") || cid);
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("Cache-Control", headers.get("Cache-Control") ?? "no-store");
 
   return new Response(response.body, {
     status: response.status,
@@ -333,9 +395,12 @@ export function withCorsHeaders(req: Request, response: Response): Response {
 }
 
 /**
- * Returns security headers that should be applied to all edge function responses.
- * Optionally includes CORS headers if origin is provided and allowed.
+ * Adds CORS headers to an existing response.
  */
+export function withCorsHeaders(req: Request, response: Response): Response {
+  return applyCors(req, response);
+}
+
 export function securityHeaders(origin?: string): Record<string, string> {
   const headers: Record<string, string> = {
     "X-Content-Type-Options": "nosniff",
@@ -350,33 +415,187 @@ export function securityHeaders(origin?: string): Record<string, string> {
     headers["Access-Control-Allow-Origin"] = origin;
     headers["Access-Control-Allow-Headers"] = ALLOWED_HEADERS;
     headers["Access-Control-Allow-Methods"] = ALLOWED_METHODS;
+    headers["Access-Control-Expose-Headers"] = EXPOSE_HEADERS;
     headers["Access-Control-Max-Age"] = "86400";
+    if (origin !== "null") {
+      headers["Access-Control-Allow-Credentials"] = "true";
+    }
   }
 
   return headers;
 }
 
-/**
- * Wraps a Response with both CORS and security headers.
- * Preferred over withCorsHeaders for new code.
- */
 export function withSecurityHeaders(req: Request, response: Response): Response {
-  const headers = new Headers(response.headers);
-  const requestOrigin = getRequestOrigin(req);
-  const allHeaders = securityHeaders(requestOrigin ?? undefined);
-
-  for (const [key, value] of Object.entries(allHeaders)) {
-    headers.set(key, value);
-  }
-
+  const wrapped = applyCors(req, response);
+  const headers = new Headers(wrapped.headers);
+  const extra = securityHeaders(getRequestOrigin(req) ?? undefined);
+  mergeHeaders(headers, extra);
   headers.set("Vary", "Origin");
-  if (requestOrigin && isOriginAllowedForCors(requestOrigin)) {
-    headers.set("Access-Control-Allow-Credentials", "true");
-  }
-
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
+  return new Response(wrapped.body, {
+    status: wrapped.status,
+    statusText: wrapped.statusText,
     headers,
   });
 }
+
+export function corsJson(
+  req: Request,
+  status: number,
+  body: unknown,
+  extraHeaders: Record<string, string> = {},
+): Response {
+  const correlationId = resolveCorrelationId(req);
+  return applyCors(
+    req,
+    new Response(JSON.stringify(body), {
+      status,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+        ...extraHeaders,
+      },
+    }),
+    correlationId,
+  );
+}
+
+export function corsSuccess(
+  req: Request,
+  data: unknown,
+  status = 200,
+): Response {
+  const correlationId = resolveCorrelationId(req);
+  return corsJson(req, status, {
+    success: true,
+    data,
+    correlation_id: correlationId,
+    correlationId,
+  });
+}
+
+export function corsError(
+  req: Request,
+  status: number,
+  code: string,
+  message: string,
+): Response {
+  const correlationId = resolveCorrelationId(req);
+  return corsJson(req, status, {
+    success: false,
+    error: message,
+    code,
+    correlation_id: correlationId,
+    correlationId,
+  });
+}
+
+export function unexpectedErrorResponse(
+  req: Request,
+  functionName: string,
+  error: unknown,
+): Response {
+  const correlationId = resolveCorrelationId(req);
+  const err = error instanceof Error ? error : new Error(String(error));
+  console.error(
+    JSON.stringify({
+      level: "error",
+      functionName,
+      correlationId,
+      name: err.name,
+      message: err.message,
+    }),
+  );
+
+  const looksLikeInfra =
+    /fetch failed|network|timeout|temporar|unavailable|ECONNREFUSED|503|502/i.test(
+      err.message,
+    );
+
+  return corsError(
+    req,
+    looksLikeInfra ? 503 : 500,
+    looksLikeInfra ? "SERVICE_UNAVAILABLE" : "INTERNAL_ERROR",
+    looksLikeInfra
+      ? "The service is temporarily unavailable. Please try again."
+      : "Something went wrong. Please try again.",
+  );
+}
+
+export function withBrowserCors(
+  functionName: string,
+  handler: (req: Request) => Promise<Response> | Response,
+): (req: Request) => Promise<Response> {
+  return async (req: Request): Promise<Response> => {
+    const correlationId = resolveCorrelationId(req);
+    const name = functionName || functionNameFromRequest(req);
+    try {
+      const preflight = handleCors(req);
+      if (preflight) {
+        return applyCors(req, preflight, correlationId);
+      }
+      const response = await handler(req);
+      return applyCors(req, response, correlationId);
+    } catch (error) {
+      if (error instanceof Response) {
+        return applyCors(req, error, correlationId);
+      }
+      return unexpectedErrorResponse(req, name, error);
+    }
+  };
+}
+
+type ServeHandler = (req: Request, info?: unknown) => Response | Promise<Response>;
+
+function wrapServeHandler(handler: ServeHandler): ServeHandler {
+  const wrapped = withBrowserCors("edge-function", (req) => handler(req));
+  return (req: Request, _info?: unknown) => wrapped(req);
+}
+
+/**
+ * Wraps Deno.serve so every Edge Function that imports this module gets the
+ * shared CORS contract, including error / rate-limit / thrown-exception paths.
+ */
+export function installDenoServeCorsGuard(): void {
+  if (serveGuardInstalled) return;
+  const deno = (globalThis as {
+    Deno?: {
+      serve?: ((...args: unknown[]) => unknown) & { __clarifyCorsWrapped?: boolean };
+    };
+  }).Deno;
+  if (!deno || typeof deno.serve !== "function") return;
+  if (deno.serve.__clarifyCorsWrapped) {
+    serveGuardInstalled = true;
+    return;
+  }
+
+  const originalServe = deno.serve.bind(deno) as (...args: unknown[]) => unknown;
+  const wrappedServe = ((...args: unknown[]) => {
+    if (typeof args[0] === "function") {
+      return originalServe(wrapServeHandler(args[0] as ServeHandler));
+    }
+    if (args.length >= 2 && typeof args[1] === "function") {
+      return originalServe(args[0], wrapServeHandler(args[1] as ServeHandler));
+    }
+    return originalServe(...args);
+  }) as typeof deno.serve;
+  wrappedServe.__clarifyCorsWrapped = true;
+  deno.serve = wrappedServe;
+  serveGuardInstalled = true;
+}
+
+export function resetCorsCacheForTests(): void {
+  cachedOrigins = null;
+  cachedOriginKey = null;
+}
+
+export function setCorsEnvForTests(reader: CorsEnvReader): void {
+  envReader = reader;
+  resetCorsCacheForTests();
+}
+
+export function restoreCorsEnvForTests(): void {
+  envReader = DEFAULT_ENV;
+  resetCorsCacheForTests();
+}
+
+installDenoServeCorsGuard();

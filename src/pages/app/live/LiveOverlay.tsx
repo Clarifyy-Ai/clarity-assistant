@@ -34,6 +34,14 @@ import {
 } from "@/lib/session/lastPracticeSetup";
 import { saveLastSessionSummary } from "@/lib/session/lastSessionSummary";
 import { resolveQuestionFromTranscript } from "@/lib/session/liveQuestionFromTranscript";
+import { restoreOwnedSession, heartbeatOwnedSession } from "@/lib/api/sessions";
+import { handleSessionStartError } from "@/lib/billing/sessionStartErrors";
+import {
+  terminalExplanation,
+  terminalTitle,
+} from "@/lib/session/sessionStartEligibility";
+import { useAuthStore } from "@/store/authStore";
+import { ApiClientError } from "@/lib/api/apiClient";
 
 const PREP_LABELS = [
   "Analysing your profile…",
@@ -65,12 +73,14 @@ function LiveOverlaySession() {
   const navigate = useNavigate();
   const sessionStatus = useSessionStore((s) => s.status);
   const isMobile = useIsMobile();
+  const authUserId = useAuthStore((s) => s.user?.id);
 
   const skipWizardRef = useRef(Boolean(peekPendingPracticeSetup()));
-  const [phase, setPhase] = useState<"setup" | "starting" | "active">("setup");
+  const [phase, setPhase] = useState<"setup" | "starting" | "active" | "expired">("setup");
   const [config, setConfig] = useState<LiveSessionConfig>(DEFAULT_CONFIG);
   const [lastSessionId, setLastSessionId] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
+  const [terminalReason, setTerminalReason] = useState<string | null>(null);
 
   const hasStartedRef = useRef(false);
   const didEndRef = useRef(false);
@@ -169,6 +179,11 @@ function LiveOverlaySession() {
         setPhase("active");
       })
       .catch((err: unknown) => {
+        if (handleSessionStartError(err)) {
+          hasStartedRef.current = false;
+          setPhase("setup");
+          return;
+        }
         const message = err instanceof Error ? err.message : "Failed to start live session";
         toast.error(message);
         setStartError(message);
@@ -186,16 +201,68 @@ function LiveOverlaySession() {
     useOverlayStore.getState().showOverlay();
   }, [phase]);
 
-  // ── Cleanup on unmount ───────────────────────────────────────────────────
+  // ── Cleanup on unmount: do NOT end the server session. Refresh must restore. ──
   useEffect(() => {
     return () => {
-      if (hasStartedRef.current && !didEndRef.current) {
-        endSessionRef.current();
-      }
       useOverlayStore.getState().hideOverlay();
-      useOverlayStore.getState().resetSessionState();
     };
   }, []);
+
+  useEffect(() => {
+    if (!authUserId || phase === "starting") return;
+    let cancelled = false;
+    void restoreOwnedSession({ session_type: "rehearsal" })
+      .then((restored) => {
+        if (cancelled) return;
+        if (restored.reason === "SESSION_EXPIRED" || restored.lifecycle_status === "EXPIRED") {
+          setLastSessionId(restored.session_id ?? null);
+          setTerminalReason(restored.terminal_reason ?? "SESSION_TIMEOUT");
+          setPhase("expired");
+          useSessionStore.getState().setStatus("abandoned");
+          return;
+        }
+        if (restored.found && restored.session_id && restored.reason === "ACTIVE") {
+          useSessionStore.getState().setSessionId(restored.session_id);
+          useSessionStore.getState().setStatus("active");
+          setLastSessionId(restored.session_id);
+          setPhase("active");
+        }
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        if (err instanceof ApiClientError && err.code === "SESSION_EXPIRED") {
+          setTerminalReason("SESSION_TIMEOUT");
+          setPhase("expired");
+          useSessionStore.getState().setStatus("abandoned");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [authUserId]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const sessionId = useSessionStore.getState().session_id;
+      if (!sessionId || phase !== "active") return;
+      void heartbeatOwnedSession(sessionId).then((result) => {
+        if (result.reason === "SESSION_EXPIRED") {
+          setTerminalReason(result.terminal_reason ?? "SESSION_TIMEOUT");
+          setPhase("expired");
+          useSessionStore.getState().setStatus("abandoned");
+        }
+      }).catch((err: unknown) => {
+        if (err instanceof ApiClientError && err.code === "SESSION_EXPIRED") {
+          setTerminalReason("SESSION_TIMEOUT");
+          setPhase("expired");
+          useSessionStore.getState().setStatus("abandoned");
+        }
+      });
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [phase]);
 
   // ── Stop session ─────────────────────────────────────────────────────────
   const handleStop = useCallback(async () => {
@@ -457,12 +524,14 @@ function LiveOverlaySession() {
             </>
           ) : (
             <>
-              <p className="text-lg font-semibold text-foreground">Session Ended</p>
+              <p className="text-lg font-semibold text-foreground">
+                {terminalTitle(phase === "expired" ? "SESSION_TIMEOUT" : terminalReason)}
+              </p>
               <p className="text-sm text-muted-foreground max-w-sm">
-                Review your results or start a new session.
+                {terminalExplanation(phase === "expired" ? "SESSION_TIMEOUT" : terminalReason)}
               </p>
               <div className="flex items-center justify-center gap-3 mt-3 flex-wrap">
-                {lastSessionId && (
+                {lastSessionId && terminalReason === "USER_ENDED" && (
                   <Link
                     to={`/app/scorecard/${lastSessionId}`}
                     className="inline-flex items-center gap-2 px-4 py-2 bg-brand-500/20 hover:bg-brand-500/30 text-brand-300 text-sm font-medium rounded-xl transition-all"
@@ -475,7 +544,10 @@ function LiveOverlaySession() {
                   variant="secondary"
                   size="sm"
                   leftIcon={<RefreshCw className="w-4 h-4" />}
-                  onClick={() => setPhase("setup")}
+                  onClick={() => {
+                    setTerminalReason(null);
+                    setPhase("setup");
+                  }}
                 >
                   Start New Session
                 </Button>

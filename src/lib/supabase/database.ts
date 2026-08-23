@@ -255,12 +255,28 @@ export const profilesDB = {
 // ─── User roles ───────────────────────────────────────────────────────────────
 
 export const userRolesDB = {
+  /**
+   * Resolve whether the *current* JWT user holds a role.
+   * Admin checks go through SECURITY DEFINER `is_admin()` so RLS on
+   * `user_roles` cannot stall bootstrap. Other roles use an own-row select.
+   */
   async hasRole(userId: string, role: string): Promise<boolean> {
+    if (role === "admin") {
+      const { data, error } = await supabase.rpc("is_admin");
+      if (error) {
+        throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+          table: "user_roles",
+          operation: "hasRole",
+        });
+      }
+      return Boolean(data);
+    }
+
     const { data, error } = await supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", userId)
-      .eq("role", role as any)
+      .eq("role", role as never)
       .maybeSingle();
 
     if (error) {
@@ -366,7 +382,13 @@ export const sessionsDB = {
     return data;
   },
 
-  /** Idempotent complete: already-completed sessions are returned as-is. */
+  /**
+   * Idempotent complete. `completed` and `abandoned` are both terminal, so a
+   * repeat call never re-classifies a session the server already finalized.
+   *
+   * Terminal transitions belong to the `end-session` Edge Function; this stays
+   * for legacy callers with no server round-trip.
+   */
   async completeForUser(
     sessionId: string,
     userId: string,
@@ -384,12 +406,39 @@ export const sessionsDB = {
         operation: "completeForUser",
       });
     }
-    if (existing?.status === "completed") return existing as Tables<"sessions">;
+    if (existing?.status === "completed" || existing?.status === "abandoned") return existing as Tables<"sessions">;
     return sessionsDB.updateForUser(sessionId, userId, {
       ...updates,
       status: "completed",
       ended_at: updates.ended_at ?? new Date().toISOString(),
     });
+  },
+
+  /**
+   * Metrics-only write for a session the server has already finalized.
+   * Cannot touch status / lifecycle_status / terminal_reason / ended_at /
+   * duration_seconds — those are server-authoritative via end_owned_session.
+   */
+  async saveMetricsForUser(
+    sessionId: string,
+    userId: string,
+    metrics: Omit<
+      TablesUpdate<"sessions">,
+      | "id"
+      | "user_id"
+      | "status"
+      | "lifecycle_status"
+      | "terminal_reason"
+      | "ended_at"
+      | "duration_seconds"
+      | "expires_at"
+    >,
+  ): Promise<Tables<"sessions"> | null> {
+    return sessionsDB.updateForUser(
+      sessionId,
+      userId,
+      metrics as TablesUpdate<"sessions">,
+    );
   },
 
   async end(sessionId: string, summary?: string): Promise<Tables<"sessions">> {
@@ -1608,6 +1657,7 @@ export const answerBankDB = {
       .from("answer_bank")
       .select("*")
       .eq("user_id", userId)
+      .is("deleted_at", null)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -1627,6 +1677,7 @@ export const answerBankDB = {
           .select("*")
           .eq("id", id)
           .eq("user_id", userId)
+          .is("deleted_at", null)
           .single(),
       { table: "answer_bank", operation: "getById" }
     );
@@ -1644,6 +1695,7 @@ export const answerBankDB = {
           .update({ ...updates, updated_at: new Date().toISOString() })
           .eq("id", id)
           .eq("user_id", userId)
+          .is("deleted_at", null)
           .select()
           .single(),
       { table: "answer_bank", operation: "update" }
@@ -1680,10 +1732,14 @@ export const answerBankDB = {
     );
   },
 
+  /**
+   * Upsert by primary key only. Do not use nonexistent columns (e.g. session_id).
+   * Prefer create/update for normal Answer Bank flows.
+   */
   async upsert(
     userId: string,
-    row: Omit<TablesInsert<"answer_bank">, "user_id">,
-    onConflict = "user_id,session_id,question_text",
+    row: Omit<TablesInsert<"answer_bank">, "user_id"> & { id?: string },
+    onConflict = "id",
   ): Promise<void> {
     const { error } = await supabase.from("answer_bank").upsert(
       { ...row, user_id: userId } as TablesInsert<"answer_bank">,

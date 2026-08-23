@@ -6,7 +6,7 @@
 import { SUPPORT_EMAIL } from "@/lib/constants/contact";
 
 export const PROFILE_FRIENDLY_ERROR =
-  "We're having trouble loading your profile. Please try again.";
+  "Unable to load your account information.";
 
 export function supportMailto(subject = "Clarify AI account help"): string {
   return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`;

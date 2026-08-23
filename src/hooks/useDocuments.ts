@@ -8,6 +8,7 @@ import { answerBankDB, documentsDB, jobDescriptionsDB, resumesDB } from "@/lib/s
 import { useDocumentStore } from "@/store/documentStore";
 import { useAnswerBankStore } from "@/store/answerBankStore";
 import { useAuthStore } from "@/store/userStore";
+import { subscribeFocusRecovery } from "@/lib/focusRecovery";
 import { callGemini } from "@/lib/ai/geminiClient";
 import { generateId } from "@/lib/utils";
 import { getMimeType } from "@/lib/utils/fileUtils";
@@ -71,15 +72,22 @@ export function useDocuments(options?: UseDocumentsOptions) {
 
   useEffect(() => {
     if (!user || options?.skipInitialLoad) return;
-    loadDocuments();
-    loadAnswerBank();
+    void loadDocuments();
+    void loadAnswerBank();
+    return subscribeFocusRecovery((plan) => {
+      if (plan.revalidate.includes("documents")) {
+        void loadDocuments();
+        void loadAnswerBank();
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, options?.skipInitialLoad]);
 
   // ── Load documents ────────────────────────────────────────────
 
   async function loadDocuments(): Promise<void> {
     if (!user) return;
-    docStore.setIsLoading(true);
+    docStore.setIsLoading(docStore.resumes.length === 0 && docStore.jds.length === 0);
     try {
       const [resumeRows, jdRows] = await Promise.all([
         resumesDB.listByUserId(user.id),
@@ -129,7 +137,9 @@ export function useDocuments(options?: UseDocumentsOptions) {
 
   async function loadAnswerBank(): Promise<void> {
     if (!user) return;
-    answerStore.setIsLoading(true);
+    if (answerStore.answers.length === 0) {
+      answerStore.setIsLoading(true);
+    }
     try {
       const data = await answerBankDB.listByUserId(user.id);
       if (!mountedRef.current) return;
@@ -336,27 +346,58 @@ export function useDocuments(options?: UseDocumentsOptions) {
       }
     } catch (err) {
       console.error("[useDocuments] parseResume failed:", err);
-      const code = (err as { code?: string })?.code;
+      const code = String((err as { code?: string })?.code ?? "").toUpperCase();
       if (code === "DUPLICATE_DOCUMENT") {
         const { toast } = await import("sonner");
         toast.message("This file was already uploaded. Opening the existing document — no extra charge.");
         if (mountedRef.current) await loadDocuments();
         return;
       }
-      const message =
-        err instanceof Error ? err.message : "Resume parsing failed. Please try again.";
+
+      const isCredits =
+        code === "INSUFFICIENT_CREDITS" ||
+        code === "PAYMENT_REQUIRED" ||
+        code === "NO_CREDITS";
+      const isProvider =
+        code === "PROVIDER_UNAVAILABLE" ||
+        code === "AI_PROVIDER_UNAVAILABLE" ||
+        code === "PARSER_UNAVAILABLE" ||
+        (err as { status?: number })?.status === 502 ||
+        (err as { status?: number })?.status === 503;
+
+      const { getAiUserFacingError, openUpgradeIfInsufficientCredits } = await import(
+        "@/lib/network/aiErrorUx"
+      );
+      openUpgradeIfInsufficientCredits(err);
+      const message = getAiUserFacingError(err);
+
+      if (isCredits) {
+        toast.error(message);
+        if (mountedRef.current) await loadDocuments();
+        throw err instanceof Error ? err : new Error(message);
+      }
+
+      // Only persist parse/provider failures as document parse status — never credit failures.
+      const parseLabel = isProvider
+        ? "Parser temporarily unavailable. Please retry."
+        : code === "PARSE_FAILED" || code === "PARSER_FAILED"
+          ? "We could not read this resume. Try PDF, DOCX, or TXT."
+          : message;
       try {
         await resumesDB.update(resumeId, {
-          content: JSON.stringify({ _parse_error: message }),
+          content: JSON.stringify({
+            _parse_error: parseLabel,
+            _error_code: code || (isProvider ? "PARSER_UNAVAILABLE" : "PARSER_FAILED"),
+          }),
         });
       } catch {
-        // best-effort: status flip still surfaces via toast
+        // best-effort
       }
-      toast.error(message);
+      toast.error(parseLabel);
       if (mountedRef.current) {
         await loadDocuments();
       }
-      throw err instanceof Error ? err : new Error(message);
+      throw err instanceof Error ? err : new Error(parseLabel);
     } finally {
       if (mountedRef.current) setIsParsing(false);
     }

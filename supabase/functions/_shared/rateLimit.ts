@@ -9,6 +9,8 @@
 // This file is still useful as a baseline guard and can later be upgraded
 // without changing every function's rate-limit call sites.
 
+import { applyCors } from "./cors.ts";
+
 export type RateLimitResult = {
   allowed: boolean;
   limit: number;
@@ -39,6 +41,7 @@ export const RATE_LIMIT_CLASS: Record<string, RateLimitClass> = {
   "ai-hub-router": "strict_fail_closed",
   "support-chat": "controlled_degradation_candidate",
   "analytics-dashboard": "controlled_degradation_candidate",
+  "compare-sessions": "controlled_degradation_candidate",
   "record-referral": "controlled_degradation_candidate",
   ping: "controlled_degradation_candidate",
 };
@@ -178,41 +181,43 @@ export function checkRateLimit(options: RateLimitOptions): RateLimitResult {
  * Returns a standard JSON 429 (quota) or 503 (backend outage) response.
  * Sensitive endpoints remain fail-closed — never bypass.
  */
-export function rateLimitResponse(result: RateLimitResult): Response {
-  if (result.backendFailure) {
-    return new Response(
-      JSON.stringify({
-        error: "Temporary service unavailability. Please try again shortly.",
-        code: "RATE_LIMIT_BACKEND_UNAVAILABLE",
-        retryAfterSeconds: result.retryAfterSeconds || 5,
-      }),
-      {
-        status: 503,
-        headers: {
-          "Content-Type": "application/json",
-          "Retry-After": String(result.retryAfterSeconds || 5),
+export function rateLimitResponse(result: RateLimitResult, req?: Request): Response {
+  const response = result.backendFailure
+    ? new Response(
+        JSON.stringify({
+          success: false,
+          error: "Temporary service unavailability. Please try again shortly.",
+          code: "RATE_LIMIT_BACKEND_UNAVAILABLE",
+          retryAfterSeconds: result.retryAfterSeconds || 5,
+        }),
+        {
+          status: 503,
+          headers: {
+            "Content-Type": "application/json",
+            "Retry-After": String(result.retryAfterSeconds || 5),
+          },
         },
-      },
-    );
-  }
+      )
+    : new Response(
+        JSON.stringify({
+          success: false,
+          error: "Rate limit exceeded.",
+          code: "RATE_LIMITED",
+          retryAfterSeconds: result.retryAfterSeconds,
+        }),
+        {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json",
+            "Retry-After": String(result.retryAfterSeconds),
+            "X-RateLimit-Limit": String(result.limit),
+            "X-RateLimit-Remaining": String(result.remaining),
+            "X-RateLimit-Reset": String(Math.ceil(result.resetAt / 1000)),
+          },
+        },
+      );
 
-  return new Response(
-    JSON.stringify({
-      error: "Rate limit exceeded.",
-      code: "RATE_LIMITED",
-      retryAfterSeconds: result.retryAfterSeconds,
-    }),
-    {
-      status: 429,
-      headers: {
-        "Content-Type": "application/json",
-        "Retry-After": String(result.retryAfterSeconds),
-        "X-RateLimit-Limit": String(result.limit),
-        "X-RateLimit-Remaining": String(result.remaining),
-        "X-RateLimit-Reset": String(Math.ceil(result.resetAt / 1000)),
-      },
-    }
-  );
+  return req ? applyCors(req, response) : response;
 }
 
 /**
@@ -279,8 +284,9 @@ export const RATE_LIMIT_PRESETS = {
     windowMs: 24 * 60 * 60 * 1000,
   },
 
+  /** 6/hour covers all 5 Settings export types + one retry. */
   DATA_EXPORT: {
-    limit: 2,
+    limit: 6,
     windowMs: 60 * 60 * 1000,
   },
 
@@ -381,12 +387,17 @@ export async function enforceDataExportRateLimitAsync(
       args: Record<string, unknown>
     ) => Promise<{ data: unknown; error: { message: string } | null }>;
   },
-  userId: string
+  userId: string,
+  req?: Request
 ): Promise<Response | null> {
-  return enforceRateLimitAsync(adminClient, {
-    key: createRateLimitKey("export-user-data", userId),
-    ...RATE_LIMIT_PRESETS.DATA_EXPORT,
-  });
+  return enforceRateLimitAsync(
+    adminClient,
+    {
+      key: createRateLimitKey("export-user-data", userId),
+      ...RATE_LIMIT_PRESETS.DATA_EXPORT,
+    },
+    req
+  );
 }
 
 /**
@@ -502,11 +513,12 @@ export async function enforceRateLimitAsync(
       args: Record<string, unknown>
     ) => Promise<{ data: unknown; error: { message: string } | null }>;
   },
-  options: RateLimitOptions
+  options: RateLimitOptions,
+  req?: Request
 ): Promise<Response | null> {
   const result = await checkRateLimitAsync(adminClient, options);
   if (!result.allowed) {
-    return rateLimitResponse(result);
+    return rateLimitResponse(result, req);
   }
   return null;
 }

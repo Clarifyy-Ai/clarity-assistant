@@ -9,6 +9,7 @@ import { BookOpen, Edit, Trash2, Save, X, Loader2, ArrowLeft, AlertCircle, Mic }
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { answerBankLoadErrorMessage, userFacingDbError } from "@/lib/errors/userFacingDbError";
 import {
   draftFromAnswerBankEntry,
   practiceContextLaunchPath,
@@ -56,7 +57,7 @@ export default function AnswerDetail() {
         setAnswer(data);
         setEditText(data.answer_text ?? "");
       } catch (err) {
-        const msg = err instanceof Error ? err.message : "Failed to load answer";
+        const msg = answerBankLoadErrorMessage(PRODUCT_NAMES.answerBank);
         setFetchError(msg);
         setAnswer(null);
       } finally {
@@ -134,12 +135,7 @@ export default function AnswerDetail() {
     );
   }
 
-  const answerAny = answer as any;
-  const star = answerAny.star_breakdown as
-    | { situation?: string; task?: string; action?: string; result?: string }
-    | null
-    | undefined;
-  const tags = (answerAny.tags ?? []) as string[];
+  const tags = (answer.tags ?? []) as string[];
 
   return (
     <div>
@@ -148,7 +144,7 @@ export default function AnswerDetail() {
         description={`${answer.category ?? "General"} · ${answer.source === "prep_lab" ? "Prep Lab" : "Manual"}`}
         icon={<BookOpen className="w-5 h-5 text-primary" />}
         breadcrumbs={[
-          { label: "Answer Bank", href: "/app/answers" },
+          { label: PRODUCT_NAMES.answerBank, href: "/app/answers" },
           { label: "Detail" },
         ]}
         actions={
@@ -192,7 +188,7 @@ export default function AnswerDetail() {
                 className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
               />
               <div className="flex gap-2">
-                <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}
+                <Button variant="primary" size="sm" onClick={() => void handleSave()} disabled={saving}
                   leftIcon={saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}>
                   Save
                 </Button>
@@ -209,36 +205,6 @@ export default function AnswerDetail() {
           )}
         </Card>
 
-        {star && (
-          <Card>
-            <h3 className="text-sm font-semibold text-foreground mb-3">STAR Breakdown</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {(["situation", "task", "action", "result"] as const).map((key) => (
-                <div key={key} className="p-3 rounded-xl bg-muted/50 border border-border">
-                  <p className="text-[10px] font-semibold text-primary uppercase mb-1">{key}</p>
-                  <p className="text-xs text-foreground">{star[key] || "—"}</p>
-                </div>
-              ))}
-            </div>
-          </Card>
-        )}
-
-        {answerAny.ai_feedback && (
-          <Card>
-            <h3 className="text-sm font-semibold text-foreground mb-2">AI Feedback</h3>
-            <div className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
-              {answerAny.ai_feedback}
-            </div>
-          </Card>
-        )}
-
-        {answerAny.score != null && (
-          <Card className="text-center">
-            <p className="text-[10px] text-muted-foreground uppercase mb-1">Quality Score</p>
-            <p className="text-2xl font-bold text-foreground">{answerAny.score}<span className="text-sm text-muted-foreground">/100</span></p>
-          </Card>
-        )}
-
         {tags.length > 0 && (
           <Card>
             <h3 className="text-sm font-semibold text-foreground mb-2">Tags</h3>
@@ -253,7 +219,9 @@ export default function AnswerDetail() {
         )}
 
         <p className="text-[11px] text-muted-foreground">
-          Created {new Date(answer.created_at).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}
+          Created {answer.created_at
+            ? new Date(answer.created_at).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })
+            : "—"}
         </p>
       </div>
 

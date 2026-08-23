@@ -42,6 +42,11 @@ import {
 import { deductCreditsAtomic, createServiceClient } from "../_shared/supabase.ts";
 import { bannedResponse, isUserBanned } from "../_shared/banCheck.ts";
 import { resolveActionCost } from "../_shared/creditEconomics.ts";
+import {
+  buildCreditDenialBody,
+  classifyCreditFailure,
+  httpStatusForCreditCode,
+} from "../_shared/creditAuthority.ts";
 
 const FUNCTION_NAME = "deduct-credits";
 
@@ -280,8 +285,8 @@ Deno.serve(async (req: Request) => {
   });
 
   if (!result.success) {
-    const message = result.error ?? "Credit deduction failed.";
-    const isInsufficient = message.toLowerCase().includes("insufficient");
+    const body = buildCreditDenialBody(result, serverCost);
+    const code = classifyCreditFailure(result.error, result.code);
 
     await logBillingAudit({
       req,
@@ -290,17 +295,15 @@ Deno.serve(async (req: Request) => {
       resourceId: data.session_id ?? data.reference_id ?? null,
       status: "failure",
       metadata: {
-        reason: message,
+        reason: body.error,
         creditAction: data.action,
-        cost: data.cost,
+        cost: serverCost,
+        code,
         idempotencyKey,
       },
     });
 
-    return json(corsHeaders, isInsufficient ? 402 : 500, {
-      error: isInsufficient ? message : "Credit deduction failed.",
-      code: isInsufficient ? "PAYMENT_REQUIRED" : "CREDIT_DEDUCTION_FAILED",
-    });
+    return json(corsHeaders, httpStatusForCreditCode(code), body);
   }
 
   await logBillingAudit({

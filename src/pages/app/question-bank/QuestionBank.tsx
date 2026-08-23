@@ -31,6 +31,9 @@ import {
 } from "@/lib/question-bank/importQuestions";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 import { questionFingerprint } from "@/lib/gov-exam/validators/similarity";
+import { ASSESSMENT_ROLE_SLUGS, REVIEW_STATUSES } from "@/lib/assessments/taxonomy";
+import { isAssessmentReadyQuestion } from "@/lib/assessments/questionQuality";
+import { userFacingDbError } from "@/lib/errors/userFacingDbError";
 import { cn } from "@/lib/utils";
 
 type BankRow = {
@@ -50,6 +53,9 @@ type BankRow = {
   options: Array<{ label: string; text: string }> | null;
   correct_answer: string;
   explanation: string | null;
+  eligible_roles?: string[] | null;
+  cross_functional?: boolean | null;
+  review_status?: string | null;
 };
 
 const EMPTY_FORM = {
@@ -67,6 +73,9 @@ const EMPTY_FORM = {
   tags: "",
   license_type: "USER_OWNED" as LicenseType,
   source: "USER_UPLOAD",
+  eligible_roles: [] as string[],
+  cross_functional: false,
+  review_status: "unreviewed" as const,
 };
 
 export default function QuestionBankPage() {
@@ -94,15 +103,16 @@ export default function QuestionBankPage() {
     let query = supabase
       .from("questions")
       .select(
-        "id,question_text,question_type,category,subject,topic,difficulty,tags,license_type,publish_status,source,created_at,uploaded_by,options,correct_answer,explanation",
+        "id,question_text,question_type,category,subject,topic,difficulty,tags,license_type,publish_status,source,created_at,uploaded_by,options,correct_answer,explanation,eligible_roles,cross_functional,review_status",
       )
       .order("created_at", { ascending: false })
       .limit(200);
     if (!isAdmin) query = query.eq("uploaded_by", user.id);
     const { data, error } = await query;
     if (error) {
-      setLoadError(error.message);
-      toast.error(error.message);
+      const msg = userFacingDbError(error, "load");
+      setLoadError(msg);
+      toast.error(msg);
       setRows([]);
     } else {
       setRows((data as BankRow[]) ?? []);
@@ -178,13 +188,20 @@ export default function QuestionBankPage() {
       exam_type: "CLARIFY_ORIGINAL",
       is_public: false,
       publish_status: "draft",
+      ...(isAdmin
+        ? {
+            eligible_roles: form.eligible_roles,
+            cross_functional: form.cross_functional,
+            review_status: form.review_status,
+          }
+        : {}),
     };
     const { error } = editingId
       ? await supabase.from("questions").update(payload).eq("id", editingId)
       : await supabase.from("questions").insert(payload);
     setSaving(false);
     if (error) {
-      toast.error(error.message);
+      toast.error(userFacingDbError(error, "save"));
       return;
     }
     toast.success(editingId ? "Question updated." : "Question created.");
@@ -199,11 +216,40 @@ export default function QuestionBankPage() {
       toast.error("UNKNOWN license content cannot be published.");
       return;
     }
+    if (publish_status === "published") {
+      const quality = isAssessmentReadyQuestion({
+        question_text: row.question_text,
+        question_type: row.question_type,
+        options: row.options,
+        correct_answer: row.correct_answer,
+        explanation: row.explanation,
+        difficulty: row.difficulty,
+        category: row.category,
+        subject: row.subject,
+        topic: row.topic,
+        publish_status: "published",
+        review_status: row.review_status ?? "approved",
+        license_type: row.license_type,
+      });
+      if (!quality) {
+        toast.error("This question is missing required fields (text, options, answer, explanation, or difficulty) and cannot be published.");
+        return;
+      }
+    }
+    const patch: {
+      publish_status: "draft" | "published" | "archived";
+      is_public: boolean;
+      review_status?: "unreviewed" | "approved" | "rejected";
+    } = {
+      publish_status,
+      is_public: publish_status === "published",
+    };
+    if (isAdmin && publish_status === "published") patch.review_status = "approved";
     const { error } = await supabase
       .from("questions")
-      .update({ publish_status, is_public: publish_status === "published" })
+      .update(patch)
       .eq("id", id);
-    if (error) toast.error(error.message);
+    if (error) toast.error(userFacingDbError(error, "save"));
     else void load();
   }
 
@@ -230,7 +276,7 @@ export default function QuestionBankPage() {
       is_public: false,
       publish_status: "draft",
     });
-    if (error) toast.error(error.message);
+    if (error) toast.error(userFacingDbError(error, "save"));
     else {
       toast.success("Duplicated as draft.");
       void load();
@@ -266,7 +312,7 @@ export default function QuestionBankPage() {
     setImportReport(report);
     if (!user?.id || report.records.length === 0) return;
     const { error } = await supabase.from("questions").insert(report.records.map((r) => toBankInsert(r, user.id)));
-    if (error) toast.error(error.message);
+    if (error) toast.error(userFacingDbError(error, "save"));
     else {
       toast.success(`Imported ${report.imported} questions.`);
       void load();
@@ -373,6 +419,46 @@ export default function QuestionBankPage() {
               </Select>
             </div>
             <Input value={form.tags} placeholder="Tags (comma separated)" onChange={(e) => setForm({ ...form, tags: e.target.value })} />
+            {isAdmin && (
+              <>
+                <Select value={form.review_status} onValueChange={(v) => setForm({ ...form, review_status: v as typeof form.review_status })}>
+                  <SelectTrigger><SelectValue placeholder="Review status" /></SelectTrigger>
+                  <SelectContent>
+                    {REVIEW_STATUSES.map((status) => (
+                      <SelectItem key={status} value={status}>{status}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <label className="flex items-center gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={form.cross_functional}
+                    onChange={(e) => setForm({ ...form, cross_functional: e.target.checked })}
+                  />
+                  Cross-functional (may appear in overlapping templates)
+                </label>
+                <fieldset className="space-y-1">
+                  <legend className="text-xs text-muted-foreground">Assessment eligibility</legend>
+                  <div className="flex flex-wrap gap-2">
+                    {ASSESSMENT_ROLE_SLUGS.map((role) => (
+                      <label key={role} className="flex items-center gap-1 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={form.eligible_roles.includes(role)}
+                          onChange={(e) => {
+                            const next = e.target.checked
+                              ? [...form.eligible_roles, role]
+                              : form.eligible_roles.filter((item) => item !== role);
+                            setForm({ ...form, eligible_roles: next });
+                          }}
+                        />
+                        {role}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              </>
+            )}
             <Textarea value={form.explanation} placeholder="Explanation" onChange={(e) => setForm({ ...form, explanation: e.target.value })} />
             <Button onClick={() => void saveQuestion()} loading={saving} leftIcon={<Plus className="h-4 w-4" />}>
               {editingId ? "Save changes" : "Create"}
@@ -463,6 +549,8 @@ export default function QuestionBankPage() {
                     <p className="text-sm font-medium break-words">{row.question_text}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {row.category ?? row.subject} · {row.topic} · {row.difficulty} · {row.question_type} · {row.license_type} · {row.publish_status}
+                      {row.review_status ? ` · ${row.review_status}` : ""}
+                      {(row.eligible_roles ?? []).length > 0 ? ` · ${row.eligible_roles?.join(", ")}` : ""}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Button size="xs" variant="outline" onClick={() => setPreview(row)}>Preview</Button>
@@ -484,6 +572,9 @@ export default function QuestionBankPage() {
                           tags: (row.tags ?? []).join(", "),
                           license_type: (row.license_type as LicenseType) ?? "USER_OWNED",
                           source: row.source ?? "USER_UPLOAD",
+                          eligible_roles: row.eligible_roles ?? [],
+                          cross_functional: Boolean(row.cross_functional),
+                          review_status: (row.review_status as typeof EMPTY_FORM.review_status) ?? "unreviewed",
                         });
                       }}>Edit</Button>
                       <Button size="xs" variant="outline" leftIcon={<Copy className="h-3 w-3" />} onClick={() => void duplicate(row)}>Duplicate</Button>
@@ -493,7 +584,22 @@ export default function QuestionBankPage() {
                       {row.publish_status === "published" && (
                         <Button size="xs" variant="outline" onClick={() => void setStatusFor(row.id, "draft")}>Unpublish</Button>
                       )}
-                      <Button size="xs" variant="ghost" onClick={() => void setStatusFor(row.id, "archived")}>Archive</Button>
+                      {isAdmin && row.review_status !== "approved" && (
+                        <Button size="xs" variant="outline" onClick={() => void supabase.from("questions").update({ review_status: "approved" }).eq("id", row.id).then(({ error }) => { if (error) toast.error(userFacingDbError(error, "save")); else void load(); })}>
+                          Approve
+                        </Button>
+                      )}
+                      {isAdmin && row.review_status !== "rejected" && (
+                        <Button size="xs" variant="outline" onClick={() => void supabase.from("questions").update({ review_status: "rejected", publish_status: "draft", is_public: false }).eq("id", row.id).then(({ error }) => { if (error) toast.error(userFacingDbError(error, "save")); else void load(); })}>
+                          Reject
+                        </Button>
+                      )}
+                      {isAdmin && row.publish_status !== "archived" && (
+                        <Button size="xs" variant="ghost" onClick={() => void setStatusFor(row.id, "archived")}>Disable</Button>
+                      )}
+                      {!isAdmin && (
+                        <Button size="xs" variant="ghost" onClick={() => void setStatusFor(row.id, "archived")}>Archive</Button>
+                      )}
                     </div>
                   </Card>
                 </li>

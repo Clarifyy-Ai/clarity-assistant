@@ -17,7 +17,7 @@ import {
 } from "../_shared/cors.ts";
 
 import { authenticateRequest } from "../_shared/auth.ts";
-import { bannedResponse, isUserBanned } from "../_shared/banCheck.ts";
+import { isUserBanned } from "../_shared/banCheck.ts";
 
 import {
   checkRateLimitAsync,
@@ -36,15 +36,17 @@ import {
 } from "../_shared/audit.ts";
 
 import { createServiceClient } from "../_shared/supabase.ts";
+import { capDurationMinutes } from "../_shared/freeTier.ts";
+import { requireCapability, type Capability } from "../_shared/requireCapability.ts";
 import {
-  capDurationMinutes,
-  FREE_TIER_DAILY_SESSION_LIMIT,
-  isFreePlan,
-} from "../_shared/freeTier.ts";
+  eligibilityUserMessage,
+  httpStatusForEligibilityReason,
+  isAiProviderConfigured,
+  type EligibilityRpc,
+} from "../_shared/sessionStartEligibility.ts";
+import { rpcJson } from "../_shared/sessionLifecycleRpc.ts";
 
 const FUNCTION_NAME = "start-session";
-
-const SESSION_LOOKBACK_HOURS = 24;
 
 const allowedSessionTypes = [
   "mock",
@@ -194,6 +196,22 @@ const startSessionSchema = z.object({
     .enum(["answer_bank", "manual", "interview_day"])
     .nullable()
     .optional(),
+
+  action: z
+    .enum(["start", "eligibility", "restore", "heartbeat"])
+    .optional()
+    .default("start"),
+
+  session_id: z
+    .string()
+    .uuid("Invalid session ID.")
+    .nullable()
+    .optional(),
+
+  check_only: z
+    .boolean()
+    .optional()
+    .default(false),
 });
 
 type StartSessionRequest = z.infer<typeof startSessionSchema>;
@@ -499,6 +517,43 @@ function buildConfig(input: {
   };
 }
 
+function capabilityForSessionType(sessionType: SessionType): Capability {
+  if (sessionType === "live" || sessionType === "rehearsal") return "live_rehearsal";
+  return "mock_interview";
+}
+
+function eligibilityPayload(data: EligibilityRpc, reason: string) {
+  return {
+    allowed: reason === "ALLOWED",
+    reason,
+    error: reason === "ALLOWED" ? undefined : eligibilityUserMessage(reason, data),
+    code: reason === "ALLOWED" ? undefined : reason,
+    used: data.used ?? null,
+    limit: data.limit ?? null,
+    reset_at: data.reset_at ?? null,
+    upgrade_available: data.upgrade_available ?? reason === "DAILY_LIMIT_REACHED",
+    session_id: data.session_id,
+    reused: data.reused,
+    started_at: data.started_at,
+    expires_at: data.expires_at ?? null,
+    status: data.status,
+    lifecycle_status: data.lifecycle_status,
+    terminal_reason: data.terminal_reason ?? null,
+    found: data.found,
+    duration_seconds: data.duration_seconds ?? null,
+    ended_at: data.ended_at ?? null,
+  };
+}
+
+function eligibilityHttp(
+  corsHeaders: HeadersInit,
+  data: EligibilityRpc,
+  reason: string,
+): Response {
+  const status = httpStatusForEligibilityReason(reason);
+  return json(corsHeaders, status, eligibilityPayload(data, reason));
+}
+
 Deno.serve(async (req: Request) => {
   const corsResponse = handleCors(req);
 
@@ -507,6 +562,8 @@ Deno.serve(async (req: Request) => {
   }
 
   const corsHeaders = getCorsHeaders(req);
+
+  try {
 
   if (req.method !== "POST") {
     return json(corsHeaders, 405, {
@@ -562,50 +619,112 @@ Deno.serve(async (req: Request) => {
   }
 
   const body = validation.data;
+  const action = body.check_only ? "eligibility" : (body.action ?? "start");
+  const idempotencyKey = req.headers.get("Idempotency-Key")?.trim() || null;
 
   if (await isUserBanned(db, user.id)) {
-    return withCorsHeaders(req, bannedResponse(corsHeaders));
+    return eligibilityHttp(corsHeaders, {}, "ACCOUNT_RESTRICTED");
   }
 
-  // ── Free-tier enforcement ──
   const { data: profile } = await db
     .from("profiles")
     .select("plan_id, credits")
     .eq("id", user.id)
-    .single();
-
-  if (!profile?.plan_id || profile.plan_id === "free") {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const { count } = await db
-      .from("sessions")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .gte("created_at", today.toISOString());
-
-    if ((count ?? 0) >= FREE_TIER_DAILY_SESSION_LIMIT) {
-      return json(corsHeaders, 403, {
-        error: "Daily session limit reached",
-        code: "FREE_TIER_SESSION_LIMIT",
-        message:
-          `Free plan allows ${FREE_TIER_DAILY_SESSION_LIMIT} sessions per day (5 min each). Upgrade to Pro for longer sessions.`,
-        upgrade_url: "/pricing",
-      });
-    }
-
-    if ((profile?.credits ?? 0) <= 0) {
-      return json(corsHeaders, 403, {
-        error: "No credits remaining",
-        code: "NO_CREDITS",
-        message:
-          "You have no credits remaining. Upgrade to Pro for 1,400 credits/month.",
-        upgrade_url: "/pricing",
-      });
-    }
-  }
+    .maybeSingle();
 
   const sessionType = toDbSessionType(toSessionType(body));
+  const capabilityGate = requireCapability(
+    profile?.plan_id ?? "free",
+    capabilityForSessionType(sessionType),
+    req,
+  );
+  if (capabilityGate && action === "start") {
+    return json(corsHeaders, 403, {
+      ...eligibilityPayload({}, "CAPABILITY_REQUIRED"),
+      error: "This session type requires a supported plan.",
+      code: "CAPABILITY_REQUIRED",
+    });
+  }
+
+  if (action === "eligibility") {
+    const { data, error } = await rpcJson(db, "session_start_eligibility", {
+      p_user_id: user.id,
+    });
+    if (error) {
+      console.error("[start-session] eligibility rpc:", error);
+      return json(corsHeaders, 500, {
+        error: "Could not check session eligibility.",
+        code: "INTERNAL_ERROR",
+      });
+    }
+    let reason = String(data.reason ?? (data.allowed ? "ALLOWED" : "ACCOUNT_RESTRICTED"));
+    if (reason === "ALLOWED" && !isAiProviderConfigured()) {
+      reason = "PROVIDER_UNAVAILABLE";
+    }
+    if (reason === "ALLOWED") {
+      return json(corsHeaders, 200, eligibilityPayload(data, "ALLOWED"));
+    }
+    return eligibilityHttp(corsHeaders, data, reason);
+  }
+
+  if (action === "restore" || action === "heartbeat") {
+    const { data, error } = await rpcJson(db, "restore_owned_session", {
+      p_user_id: user.id,
+      p_session_id: body.session_id ?? null,
+      p_type: sessionType,
+    });
+    if (error) {
+      console.error("[start-session] restore rpc:", error);
+      return json(corsHeaders, 500, {
+        error: "Could not restore session.",
+        code: "INTERNAL_ERROR",
+      });
+    }
+    if (data.reason === "SESSION_EXPIRED" || data.expired) {
+      return json(corsHeaders, 409, {
+        error: "This practice session has expired and can no longer accept new actions.",
+        code: "SESSION_EXPIRED",
+        reason: "SESSION_EXPIRED",
+        session_id: data.session_id,
+        terminal_reason: data.terminal_reason ?? "SESSION_TIMEOUT",
+        status: data.status,
+        lifecycle_status: data.lifecycle_status ?? "EXPIRED",
+        duration_seconds: data.duration_seconds ?? null,
+        ended_at: data.ended_at ?? null,
+      });
+    }
+    if (!data.found) {
+      return json(corsHeaders, 200, {
+        found: false,
+        reason: "NONE",
+        code: "NONE",
+      });
+    }
+    if (action === "heartbeat" && data.session_id) {
+      await db
+        .from("sessions")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("id", data.session_id)
+        .eq("user_id", user.id)
+        .in("status", ["pending", "active", "paused"]);
+    }
+    return json(corsHeaders, 200, {
+      found: true,
+      reason: "ACTIVE",
+      session_id: data.session_id,
+      status: data.status,
+      lifecycle_status: data.lifecycle_status,
+      started_at: data.started_at,
+      expires_at: data.expires_at,
+      type: data.type ?? sessionType,
+      reused: true,
+    });
+  }
+
+  if (!isAiProviderConfigured()) {
+    return eligibilityHttp(corsHeaders, {}, "PROVIDER_UNAVAILABLE");
+  }
+
   const isPractice = body.is_practice || sessionType !== "live";
   const sessionTags = buildSessionTags({ sessionType, isPractice });
   const company = sanitizeShortText(body.company);
@@ -615,12 +734,7 @@ Deno.serve(async (req: Request) => {
     body.duration_minutes,
   );
   const questionCount = body.question_count;
-
   const nowIso = new Date().toISOString();
-  const sinceIso = new Date(
-    Date.now() - SESSION_LOOKBACK_HOURS * 60 * 60 * 1000
-  ).toISOString();
-
   const config = buildConfig({
     body,
     sessionType,
@@ -629,260 +743,146 @@ Deno.serve(async (req: Request) => {
     company,
     role,
   });
-
   const practiceContextId = body.practice_context_id ?? null;
   const sourceType = body.source_type ?? (practiceContextId ? "answer_bank" : null);
 
-  try {
-    if (practiceContextId) {
-      const { data: ctxRow, error: ctxErr } = await db
-        .from("practice_contexts")
-        .select("id, user_id, status")
-        .eq("id", practiceContextId)
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (ctxErr) {
-        console.error("[start-session] practice_context lookup:", ctxErr.message);
-        return json(corsHeaders, 500, {
-          error: "Could not start session.",
-          code: "SESSION_LOOKUP_FAILED",
-        });
-      }
-      if (!ctxRow) {
-        return json(corsHeaders, 404, {
-          error: "Practice context not found.",
-          code: "PRACTICE_CONTEXT_NOT_FOUND",
-        });
-      }
-      const ctxStatus = String((ctxRow as { status?: string }).status ?? "");
-      if (ctxStatus === "consumed" || ctxStatus === "expired") {
-        return json(corsHeaders, 409, {
-          error: "This practice launch was already used.",
-          code: "PRACTICE_CONTEXT_CONSUMED",
-        });
-      }
-    }
-
-    await db
-      .from("sessions")
-      .update({
-        status: "abandoned",
-        ended_at: nowIso,
-      })
+  if (practiceContextId) {
+    const { data: ctxRow, error: ctxErr } = await db
+      .from("practice_contexts")
+      .select("id, user_id, status")
+      .eq("id", practiceContextId)
       .eq("user_id", user.id)
-      .eq("type", sessionType)
-      .in("status", ["pending", "active"])
-      .lt("created_at", sinceIso);
-
-    const { data: existingData, error: lookupError } = await db
-      .from("sessions")
-      .select("id, created_at, status, practice_context_id")
-      .eq("user_id", user.id)
-      .eq("type", sessionType)
-      .in("status", ["pending", "active"])
-      .gte("created_at", sinceIso)
-      .order("created_at", {
-        ascending: false,
-      })
-      .limit(1)
       .maybeSingle();
-
-    if (lookupError) {
-      console.error("[start-session] Lookup error:", lookupError.message);
-
+    if (ctxErr) {
+      console.error("[start-session] practice_context lookup:", ctxErr.message);
       return json(corsHeaders, 500, {
         error: "Could not start session.",
         code: "SESSION_LOOKUP_FAILED",
       });
     }
-
-    const existing = existingData as ExistingSessionRow | null;
-    const canReuse = existing?.id
-      ? shouldReuseExistingSession({
-          existingStatus: existing.status,
-          existingContextId: existing.practice_context_id ?? null,
-          requestContextId: practiceContextId,
-        })
-      : false;
-
-    if (existing?.id && !canReuse) {
-      await db
-        .from("sessions")
-        .update({
-          status: "abandoned",
-          ended_at: nowIso,
-        })
-        .eq("id", existing.id)
-        .eq("user_id", user.id)
-        .in("status", ["pending", "active"]);
-    }
-
-    if (existing?.id && canReuse) {
-      const { error: activationError } = await db
-        .from("sessions")
-        .update({
-          status: "active",
-          started_at: nowIso,
-        })
-        .eq("id", existing.id)
-        .eq("user_id", user.id);
-
-      if (activationError) {
-        console.error(
-          "[start-session] Reuse activation error:",
-          activationError.message
-        );
-
-        return json(corsHeaders, 500, {
-          error: "Could not start session.",
-          code: "SESSION_ACTIVATION_FAILED",
-        });
-      }
-
-      await logAuditEventFromRequest({
-        req,
-        userId: user.id,
-        action: "SESSION_START",
-        resourceType: "session",
-        resourceId: existing.id,
-        status: "success",
-        metadata: {
-          reused: true,
-          sessionType,
-          interviewType: config.interview_type,
-          questionCount,
-          durationMinutes,
-        },
-      });
-
-      return json(corsHeaders, 200, {
-        session_id: existing.id,
-        config,
-        started_at: nowIso,
-        reused: true,
+    if (!ctxRow) {
+      return json(corsHeaders, 404, {
+        error: "Practice context not found.",
+        code: "PRACTICE_CONTEXT_NOT_FOUND",
       });
     }
+    const ctxStatus = String((ctxRow as { status?: string }).status ?? "");
+    if (ctxStatus === "consumed" || ctxStatus === "expired") {
+      return json(corsHeaders, 409, {
+        error: "This practice launch was already used.",
+        code: "PRACTICE_CONTEXT_CONSUMED",
+      });
+    }
+  }
 
-    // resume_id may point at public.resumes, but sessions.document_id /
-    // sessions.jd_id FK to public.documents — drop invalid IDs instead of 500.
-    const documentId = await resolveDocumentsFk(db, body.resume_id);
-    const jdId = await resolveDocumentsFk(db, body.jd_id);
+  const documentId = await resolveDocumentsFk(db, body.resume_id);
+  const jdId = await resolveDocumentsFk(db, body.jd_id);
 
-    const { data: createdData, error: insertError } = await db
-      .from("sessions")
-      .insert({
-        user_id: user.id,
-        type: sessionType,
-        status: "active",
-        model_used: toDbModelEnum(config.model as string),
-        title: buildSessionTitle({
-          sessionType,
-          company,
-        }),
-        document_id: documentId,
-        jd_id: jdId,
-        started_at: nowIso,
-        ended_at: null,
-        updated_at: nowIso,
-        tags: sessionTags.length > 0 ? sessionTags : null,
-        practice_context_id: practiceContextId,
-        source_type: sourceType,
+  const { data: started, error: startErr } = await rpcJson(db, "start_owned_session", {
+    p_user_id: user.id,
+    p_type: sessionType,
+    p_title: buildSessionTitle({ sessionType, company }),
+    p_document_id: documentId,
+    p_jd_id: jdId,
+    p_model_used: toDbModelEnum(config.model as string),
+    p_tags: sessionTags.length > 0 ? sessionTags : null,
+    p_practice_context_id: practiceContextId,
+    p_source_type: sourceType,
+    p_duration_minutes: durationMinutes,
+    p_idempotency_key: idempotencyKey,
+  });
+
+  if (startErr) {
+    console.error("[start-session] start rpc:", startErr);
+    return json(corsHeaders, 500, {
+      error: "Could not create session.",
+      code: "SESSION_CREATE_FAILED",
+    });
+  }
+
+  if (!started.ok || started.allowed === false) {
+    const reason = String(started.reason ?? "ACCOUNT_RESTRICTED");
+    return eligibilityHttp(corsHeaders, started, reason);
+  }
+
+  if (!started.session_id) {
+    return json(corsHeaders, 500, {
+      error: "Could not create session.",
+      code: "SESSION_CREATE_FAILED",
+    });
+  }
+
+  if (practiceContextId && started.reused !== true) {
+    const { data: consumed, error: consumeErr } = await db
+      .from("practice_contexts")
+      .update({
+        status: "consumed",
+        consumed_at: nowIso,
       })
+      .eq("id", practiceContextId)
+      .eq("user_id", user.id)
+      .eq("status", "open")
       .select("id")
-      .single();
-
-    if (insertError || !createdData) {
-      console.error(
-        "[start-session] Insert error:",
-        insertError?.message,
-        insertError?.code,
-        insertError?.details,
-      );
-
-      return json(corsHeaders, 500, {
-        error: "Could not create session.",
-        code: "SESSION_CREATE_FAILED",
+      .maybeSingle();
+    if (consumeErr) {
+      console.error("[start-session] consume context:", consumeErr.message);
+    } else if (!consumed) {
+      await rpcJson(db, "end_owned_session", {
+        p_user_id: user.id,
+        p_session_id: started.session_id,
+        p_terminal_reason: "CANCELLED",
+        p_lifecycle_status: "CANCELLED",
+      });
+      return json(corsHeaders, 409, {
+        error: "This practice launch was already used.",
+        code: "PRACTICE_CONTEXT_CONSUMED",
       });
     }
+  }
 
-    const created = createdData as CreatedSessionRow;
-
-    if (practiceContextId) {
-      const { data: consumed, error: consumeErr } = await db
-        .from("practice_contexts")
-        .update({
-          status: "consumed",
-          consumed_at: nowIso,
-        })
-        .eq("id", practiceContextId)
-        .eq("user_id", user.id)
-        .eq("status", "open")
-        .select("id")
-        .maybeSingle();
-      if (consumeErr) {
-        console.error("[start-session] consume context:", consumeErr.message);
-      } else if (!consumed) {
-        await db
-          .from("sessions")
-          .update({ status: "abandoned", ended_at: nowIso })
-          .eq("id", created.id)
-          .eq("user_id", user.id);
-        return json(corsHeaders, 409, {
-          error: "This practice launch was already used.",
-          code: "PRACTICE_CONTEXT_CONSUMED",
-        });
-      }
-    }
-
+  try {
     await logAuditEventFromRequest({
       req,
       userId: user.id,
       action: "SESSION_START",
       resourceType: "session",
-      resourceId: created.id,
+      resourceId: started.session_id,
       status: "success",
       metadata: {
-        reused: false,
+        reused: Boolean(started.reused),
         sessionType,
         interviewType: config.interview_type,
         questionCount,
         durationMinutes,
       },
     });
+  } catch (auditErr) {
+    console.warn("[start-session] audit failed:", auditErr);
+  }
 
-    return json(corsHeaders, 200, {
-      session_id: created.id,
-      config,
-      started_at: nowIso,
-      reused: false,
-    });
+  return json(corsHeaders, 200, {
+    session_id: started.session_id,
+    config,
+    started_at: started.started_at ?? nowIso,
+    expires_at: started.expires_at ?? null,
+    reused: Boolean(started.reused),
+    status: started.status ?? "active",
+    lifecycle_status: started.lifecycle_status ?? "IN_PROGRESS",
+  });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unexpected start-session error.";
-
     console.error("[start-session] Unhandled error:", message);
-
-    await logAuditEventFromRequest({
-      req,
-      userId: user.id,
-      action: "SESSION_START",
-      resourceType: "session",
-      resourceId: null,
-      status: "failure",
-      metadata: {
-        reason: message,
-        sessionType,
-      },
-    });
-
-    return json(corsHeaders, 500, {
-      error: "Internal server error.",
-      code: "INTERNAL_ERROR",
-    });
+    try {
+      return json(getCorsHeaders(req), 500, {
+        error: "Could not start session.",
+        code: "INTERNAL_ERROR",
+      });
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Could not start session.", code: "INTERNAL_ERROR" }),
+        { status: 500, headers: { "Content-Type": "application/json" } },
+      );
+    }
   }
 });
-//
-// Production hardening included:
-// - CORS handling
-// - POST-only method enforcement
-// - centralized JWT authentication

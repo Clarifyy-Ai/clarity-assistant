@@ -13,9 +13,9 @@ import {
 import { cn } from "@/lib/utils";
 import type { LiveSessionConfig } from "@/types/session.types";
 import type { PreferredAIModel, HintStyle, UserProfile } from "@/types/user.types";
-import { runAudioPreflight, type PreflightReport } from "@/lib/validators/audioValidator";
-import { createLevelAnalyser, enumerateAudioDevices, enumerateAudioOutputDevices, playSpeakerTestTone } from "@/lib/audio/audioCapture";
-import type { AudioDevice } from "@/types/audio.types";
+import { useDevicePrecheck } from "@/hooks/useDevicePrecheck";
+import { DevicePrecheckCards } from "@/components/session/DevicePrecheckCards";
+import { isLocalAudioReadyForVoice, MicState, SpeakerState, SttState } from "@/lib/audio/precheckStates";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { practiceContextsDB } from "@/lib/supabase/database";
@@ -53,7 +53,6 @@ import {
 } from "@/lib/ai/providerAvailability";
 import { useUIStore } from "@/store/uiStore";
 import { toast } from "sonner";
-import { useAudioStore } from "@/store/audioStore";
 import {
   formatPracticeSetupSummary,
   clearPracticeSetupDraft,
@@ -261,24 +260,9 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   // Step 6 — Connect
   const [enableSystemAudio, setEnableSystemAudio] = useState(true);
   const [stealthMode,        setStealthMode]       = useState(false);
-  const [micPermission,      setMicPermission]     = useState<"unknown" | "granted" | "denied" | "checking">("unknown");
-  const [micDevices,         setMicDevices]        = useState<AudioDevice[]>([]);
-  const [selectedMicId,      setSelectedMicId]     = useState<string | null>(null);
-  const [speakerDevices,     setSpeakerDevices]    = useState<AudioDevice[]>([]);
-  const [selectedSpeakerId,  setSelectedSpeakerId] = useState<string | null>(null);
-  const [speakerTested,      setSpeakerTested]     = useState(false);
-  const [audioLevel,         setAudioLevel]        = useState(0);
-  const permissionStreamRef = useRef<MediaStream | null>(null);
-  const levelAnalyserRef = useRef<ReturnType<typeof createLevelAnalyser> | null>(null);
-  const levelTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const deepgramStatus = useAudioStore((state) => state.deepgram_status);
-  const isCapturingAudio = useAudioStore((state) => state.streams?.is_capturing ?? false);
-  const [speakerTesting,     setSpeakerTesting]    = useState(false);
   const [isOnline,           setIsOnline]          = useState(
     typeof navigator !== "undefined" ? navigator.onLine : true,
   );
-  const [preflight,          setPreflight]         = useState<PreflightReport | null>(null);
-  const [preflightLoading,   setPreflightLoading]  = useState(false);
   const [visibilityAck,      setVisibilityAck]     = useState(false);
   const [responsibleUseAck,  setResponsibleUseAck] = useState(false);
 
@@ -377,6 +361,15 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const connectStep = 4;
   const resumeStep = 2;
   const voiceRequired = textVoiceMode === "voice";
+  const devicePrecheck = useDevicePrecheck({
+    enabled: voiceRequired,
+    autoRunMic: step === connectStep && voiceRequired,
+    autoRunSttAfterMic: true,
+  });
+  const localAudioReady = !voiceRequired || isLocalAudioReadyForVoice(
+    devicePrecheck.micState,
+    devicePrecheck.speakerState,
+  );
 
   // Keep step in range when switching mobile ↔ desktop layouts (avoids
   // activeSteps[step - 1] being undefined → TypeError reading `.label`).
@@ -486,128 +479,6 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   }
 
   useEffect(() => {
-    if (navigator.permissions) {
-      navigator.permissions.query({ name: "microphone" as PermissionName }).then((result) => {
-        if (result.state === "granted") setMicPermission("granted");
-        else if (result.state === "denied") setMicPermission("denied");
-      }).catch((err) => {
-        console.error("[PreSessionSetupWizard] microphone permissions query failed:", err);
-      });
-    }
-  }, []);
-
-  const checkMicPermission = async () => {
-    setMicPermission("checking");
-    try {
-      const constraints: MediaStreamConstraints = {
-        audio: selectedMicId
-          ? { deviceId: { exact: selectedMicId } }
-          : true,
-      };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      permissionStreamRef.current?.getTracks().forEach((track) => track.stop());
-      permissionStreamRef.current = stream;
-      setMicPermission("granted");
-      const devices = await enumerateAudioDevices();
-      setMicDevices(devices);
-      if (!selectedMicId && devices.length > 0) {
-        setSelectedMicId((devices.find((d) => d.isDefault) ?? devices[0]).deviceId);
-      }
-      const outputs = await enumerateAudioOutputDevices();
-      setSpeakerDevices(outputs);
-      if (!selectedSpeakerId && outputs.length > 0) {
-        setSelectedSpeakerId((outputs.find((d) => d.isDefault) ?? outputs[0]).deviceId);
-      }
-    } catch {
-      setMicPermission("denied");
-    }
-  };
-
-  useEffect(() => {
-    if (!voiceRequired || micPermission !== "granted") return;
-    const stream = permissionStreamRef.current;
-    if (!stream) return;
-    levelAnalyserRef.current?.disconnect();
-    if (levelTimerRef.current) clearInterval(levelTimerRef.current);
-    try {
-      levelAnalyserRef.current = createLevelAnalyser(stream);
-      levelTimerRef.current = setInterval(() => {
-        setAudioLevel(levelAnalyserRef.current?.getLevel() ?? 0);
-      }, 100);
-    } catch {
-      setAudioLevel(0);
-    }
-    return () => {
-      if (levelTimerRef.current) clearInterval(levelTimerRef.current);
-      levelTimerRef.current = null;
-      levelAnalyserRef.current?.disconnect();
-      levelAnalyserRef.current = null;
-      permissionStreamRef.current?.getTracks().forEach((track) => track.stop());
-      permissionStreamRef.current = null;
-    };
-  }, [micPermission, voiceRequired]);
-
-  useEffect(() => {
-    if (step !== connectStep || !voiceRequired) return;
-    let cancelled = false;
-    setPreflightLoading(true);
-    void runAudioPreflight()
-      .then((report) => {
-        if (!cancelled) setPreflight(report);
-      })
-      .finally(() => {
-        if (!cancelled) setPreflightLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [step, micPermission, connectStep, voiceRequired]);
-
-  // Auto-prompt mic when landing on Connect (QA-078) — skip if already decided.
-  useEffect(() => {
-    if (step !== connectStep || !voiceRequired) return;
-    if (micPermission !== "unknown") return;
-    void checkMicPermission();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- prompt once per visit to Connect
-  }, [step, connectStep, voiceRequired]);
-
-  useEffect(() => {
-    if (micPermission !== "granted") return;
-    void enumerateAudioDevices()
-      .then((devices) => {
-        setMicDevices(devices);
-        if (!selectedMicId && devices.length > 0) {
-          setSelectedMicId((devices.find((d) => d.isDefault) ?? devices[0]).deviceId);
-        }
-      })
-      .catch(() => {});
-    void enumerateAudioOutputDevices()
-      .then((outputs) => {
-        setSpeakerDevices(outputs);
-        if (!selectedSpeakerId && outputs.length > 0) {
-          setSelectedSpeakerId((outputs.find((d) => d.isDefault) ?? outputs[0]).deviceId);
-        }
-      })
-      .catch(() => {});
-  }, [micPermission, selectedMicId, selectedSpeakerId]);
-
-  async function handleSpeakerTest() {
-    setSpeakerTesting(true);
-    try {
-      const ok = await playSpeakerTestTone(selectedSpeakerId);
-      if (ok) {
-        setSpeakerTested(true);
-        toast.success("Speaker test played — confirm you heard the beep.");
-      } else {
-        setSpeakerTested(false);
-        toast.error("Could not play speaker test. Check your output device.");
-      }
-    } finally {
-      setSpeakerTesting(false);
-    }
-  }
-
-  useEffect(() => {
     const on = () => setIsOnline(true);
     const off = () => setIsOnline(false);
     window.addEventListener("online", on);
@@ -634,12 +505,18 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     const gate = canStartCoachingSession({
       visibilityAcknowledged: visibilityAck,
       responsibleUseAcknowledged: responsibleUseAck,
-      micGranted: !voiceRequired || micPermission === "granted",
+      micGranted: !voiceRequired || devicePrecheck.micState === MicState.READY,
     });
-    if (!gate.ok) return;
-    if (voiceRequired && preflight && !preflight.ready) return;
+    if (gate.ok === false) {
+      toast.message(gate.reason);
+      return;
+    }
+    if (voiceRequired && devicePrecheck.micState !== MicState.READY) {
+      toast.message("Finish the microphone check before starting. Transcription issues do not block the microphone.");
+      return;
+    }
     if (!isOnline) return;
-    if (voiceRequired && !speakerTested) {
+    if (voiceRequired && devicePrecheck.speakerState !== SpeakerState.READY) {
       toast.message("Play the speaker test so we know you can hear session audio.");
       return;
     }
@@ -673,7 +550,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       context_document_ids: contextDocIds,
       language,
       duration_minutes:     durationMinutes > 0 ? durationMinutes : undefined,
-      mic_device_id:        selectedMicId || null,
+      mic_device_id:        devicePrecheck.selectedMicId || null,
       practice_context_id:  practiceContextId,
       source_type:          practiceContextId ? "answer_bank" : undefined,
       seniority: seniority || null,
@@ -1064,6 +941,8 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                   return (
                     <button
                       key={opt.value}
+                      type="button"
+                      data-testid={`session-call-type-${opt.value}`}
                       onClick={() => setSessionCallType(opt.value)}
                       className={cn(
                         "flex flex-col items-start gap-2 p-4 rounded-xl border text-left transition-all",
@@ -1715,58 +1594,33 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
               </>
               )}
 
-              {preflightLoading && (
-                <p className="text-xs text-muted-foreground text-center">Checking audio readiness…</p>
-              )}
-              {preflight && preflight.errors.length > 0 && micPermission !== "denied" && (
-                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 space-y-1">
-                  {preflight.errors.map((err) => (
-                    <p key={err} className="text-xs text-red-400">{err}</p>
-                  ))}
-                </div>
-              )}
-              {preflight && preflight.warnings.length > 0 && (
-                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 space-y-1">
-                  {preflight.warnings.map((w) => (
-                    <p key={w} className="text-xs text-amber-600 dark:text-amber-300">{w}</p>
-                  ))}
-                </div>
-              )}
+              <DevicePrecheckCards
+                voiceRequired={voiceRequired}
+                micState={devicePrecheck.micState}
+                speakerState={devicePrecheck.speakerState}
+                sttState={devicePrecheck.sttState}
+                micDevices={devicePrecheck.micDevices}
+                speakerDevices={devicePrecheck.speakerDevices}
+                selectedMicId={devicePrecheck.selectedMicId}
+                selectedSpeakerId={devicePrecheck.selectedSpeakerId}
+                deviceLabel={devicePrecheck.deviceLabel}
+                peakRms={devicePrecheck.peakRms}
+                usedFallback={devicePrecheck.usedFallback}
+                micError={devicePrecheck.micError}
+                sttMessage={devicePrecheck.sttMessage}
+                outputSelectable={devicePrecheck.outputSelectable}
+                speakerPlaying={devicePrecheck.speakerPlaying}
+                onRecheckMic={() => void devicePrecheck.runMicCheck()}
+                onChangeMic={devicePrecheck.changeMicDevice}
+                onPlaySpeaker={() => void devicePrecheck.runSpeakerCheck()}
+                onChangeSpeaker={devicePrecheck.changeSpeakerDevice}
+                onRecheckStt={() => void devicePrecheck.runSttCheck()}
+              />
 
-              <div className="rounded-xl border border-border bg-secondary/20 p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-foreground">Audio activity</span>
-                  <span className="text-[11px] text-muted-foreground">
-                    {voiceRequired ? `${Math.round(audioLevel * 100)}%` : "Text-only mode"}
-                  </span>
-                </div>
-                <div
-                  role="progressbar"
-                  aria-label="Microphone audio level"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={Math.round(audioLevel * 100)}
-                  className="h-2 overflow-hidden rounded-full bg-muted"
-                >
-                  <div className="h-full rounded-full bg-emerald-500 transition-[width]" style={{ width: `${Math.min(100, Math.round(audioLevel * 100))}%` }} />
-                </div>
-                {voiceRequired && micPermission === "granted" && audioLevel < 0.01 && (
-                  <p className="text-[11px] text-amber-300">Speak near the selected microphone to confirm activity.</p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                 <div className="rounded-lg border border-border px-3 py-2">
-                  <span className="text-muted-foreground">STT / WebSocket</span>
-                  <strong className="ml-2 capitalize text-foreground">{voiceRequired ? deepgramStatus : "not required"}</strong>
-                </div>
-                <div className="rounded-lg border border-border px-3 py-2 text-xs">
                   <span className="text-muted-foreground">Desktop application</span>
                   <strong className="ml-2 text-foreground">{isElectronApp() ? "available" : "optional — browser mode active"}</strong>
-                </div>
-                <div className="rounded-lg border border-border px-3 py-2">
-                  <span className="text-muted-foreground">Audio</span>
-                  <strong className="ml-2 text-foreground">{isCapturingAudio ? "capturing" : voiceRequired ? "ready to connect" : "text input"}</strong>
                 </div>
                 <div className="rounded-lg border border-border px-3 py-2">
                   <span className="text-muted-foreground">Network</span>
@@ -1826,141 +1680,12 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 </div>
               </label>
 
-              {micPermission === "granted" && micDevices.length > 0 && (
-                <div>
-                  <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-1.5">
-                    <Volume2 className="w-3.5 h-3.5" /> Microphone
-                  </label>
-                  <select
-                    value={selectedMicId ?? ""}
-                    onChange={(e) => setSelectedMicId(e.target.value || null)}
-                    className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 text-sm"
-                  >
-                    {micDevices.map((d) => (
-                      <option key={d.deviceId} value={d.deviceId}>
-                        {d.label || `Microphone ${d.deviceId.slice(0, 6)}`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {micPermission === "granted" && (
-                <div className="space-y-2">
-                  <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                    <Volume2 className="w-3.5 h-3.5" /> Speakers / headphones
-                  </label>
-                  {speakerDevices.length > 0 ? (
-                    <select
-                      value={selectedSpeakerId ?? ""}
-                      onChange={(e) => {
-                        setSelectedSpeakerId(e.target.value || null);
-                        setSpeakerTested(false);
-                      }}
-                      className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 text-sm"
-                    >
-                      {speakerDevices.map((d) => (
-                        <option key={d.deviceId} value={d.deviceId}>
-                          {d.label || `Speaker ${d.deviceId.slice(0, 6)}`}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <p className="text-[11px] text-muted-foreground">
-                      Using system default output. Play a test tone to confirm you can hear audio.
-                    </p>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => void handleSpeakerTest()}
-                    disabled={speakerTesting}
-                    className={cn(
-                      "w-full py-2.5 border font-medium rounded-xl transition-all flex items-center justify-center gap-2 text-sm",
-                      speakerTested
-                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                        : "bg-secondary/40 hover:bg-secondary/60 border-border text-foreground",
-                    )}
-                  >
-                    {speakerTesting ? (
-                      <>
-                        <div className="w-3.5 h-3.5 border-2 border-muted-foreground/30 border-t-foreground rounded-full animate-spin" />
-                        Playing test…
-                      </>
-                    ) : speakerTested ? (
-                      <>
-                        <CheckCircle2 className="w-4 h-4" />
-                        Speaker OK — play again
-                      </>
-                    ) : (
-                      <>
-                        <Volume2 className="w-4 h-4" />
-                        Play speaker test
-                      </>
-                    )}
-                  </button>
-                  {!speakerTested && (
-                    <p className="text-[10px] text-muted-foreground">
-                      Required before starting so you can hear coaching audio.
-                    </p>
-                  )}
-                </div>
-              )}
-
               {!isOnline && (
                 <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
                   <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">
                     You appear to be offline. Reconnect before starting a session.
                   </p>
                 </div>
-              )}
-
-              {micPermission === "denied" && (
-                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 space-y-3">
-                  <div className="flex items-start gap-2.5">
-                    <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-xs text-red-400 font-semibold">Microphone access blocked</p>
-                      <p className="text-[11px] text-red-400/70 mt-0.5 leading-relaxed">
-                        Your browser has blocked microphone access. Click the camera/lock icon in the address bar and allow microphone, then click "Try again" below.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={checkMicPermission}
-                      className="flex-1 py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-300 font-medium rounded-lg transition-all text-xs flex items-center justify-center gap-1.5"
-                    >
-                      <Volume2 className="w-3.5 h-3.5" />
-                      Try again
-                    </button>
-                    <button
-                      onClick={() => window.location.reload()}
-                      className="flex-1 py-2 bg-secondary/40 hover:bg-secondary/60 border border-border text-muted-foreground font-medium rounded-lg transition-all text-xs"
-                    >
-                      Reload page
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {micPermission !== "granted" && micPermission !== "denied" && (
-                <button
-                  onClick={checkMicPermission}
-                  disabled={micPermission === "checking"}
-                  className="w-full py-2.5 bg-secondary/40 hover:bg-secondary/60 border border-border text-foreground font-medium rounded-xl transition-all flex items-center justify-center gap-2 text-sm"
-                >
-                  {micPermission === "checking" ? (
-                    <>
-                      <div className="w-3.5 h-3.5 border-2 border-muted-foreground/30 border-t-foreground rounded-full animate-spin" />
-                      Checking permissions…
-                    </>
-                  ) : (
-                    <>
-                      <Volume2 className="w-4 h-4" />
-                      Allow microphone access
-                    </>
-                  )}
-                </button>
               )}
             </div>
           )}
@@ -2024,6 +1749,12 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
             </button>
           )}
         {isLastStep && <AudioOkBadge />}
+        {isLastStep && voiceRequired && devicePrecheck.micState === MicState.READY &&
+          (devicePrecheck.sttState === SttState.STT_UNAVAILABLE || devicePrecheck.sttState === SttState.STT_ERROR) && (
+          <p role="status" className="text-xs text-amber-700 dark:text-amber-300">
+            Microphone ready. Transcription service is temporarily unavailable.
+          </p>
+        )}
 
         {stepBlocker && !isLastStep && (
           <p role="status" className="text-xs text-amber-600 dark:text-amber-400">
@@ -2061,22 +1792,20 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
               onClick={handleStart}
               disabled={
                 Boolean(startBlocker) ||
-                (voiceRequired && micPermission !== "granted") ||
+                (voiceRequired && !localAudioReady) ||
+                devicePrecheck.micState === MicState.CHECKING ||
                 !visibilityAck ||
                 !responsibleUseAck ||
-                preflightLoading ||
-                !isOnline ||
-                (voiceRequired && !speakerTested)
+                !isOnline
               }
               className={cn(
                 "flex-1 py-3.5 font-semibold rounded-xl transition-all flex items-center justify-center gap-2",
                 Boolean(startBlocker) ||
-                  (voiceRequired && micPermission !== "granted") ||
+                  (voiceRequired && !localAudioReady) ||
+                  devicePrecheck.micState === MicState.CHECKING ||
                   !visibilityAck ||
                   !responsibleUseAck ||
-                  preflightLoading ||
-                  !isOnline ||
-                  (voiceRequired && !speakerTested)
+                  !isOnline
                   ? "bg-muted text-muted-foreground cursor-not-allowed"
                   : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-foreground"
               )}

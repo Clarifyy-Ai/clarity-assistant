@@ -19,8 +19,9 @@ import {
   Brain, Mic, Volume2, TrendingUp,
   ThumbsUp, Share2, RefreshCw, AlertTriangle,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { cn } from "@/lib/utils";
+import { messageFromExportCaught } from "@/lib/export/exportUserFacingError";
 
 export default function SessionDetail() {
   const { id }   = useParams<{ id: string }>();
@@ -212,7 +213,7 @@ export default function SessionDetail() {
                 });
                 toast.success("PDF downloaded");
               } catch (err) {
-                toast.error(err instanceof Error ? err.message : "PDF export failed");
+                toast.error(messageFromExportCaught(err));
               }
             }}
           >

@@ -11,6 +11,7 @@ import type { CoachingContext } from "@/types/ai.types";
 import { retry } from "@/lib/utils";
 import { fetchEdge, fetchEdgeJson, getAuthHeaders } from "@/lib/network/fetchEdge";
 import { createIdempotencyKey } from "@/lib/api/functions";
+import { ApiClientError } from "@/lib/api/apiClient";
 
 export type GeminiModel =
   | "gemini-2.5-flash"
@@ -35,6 +36,8 @@ export interface GeminiStreamOptions {
   simpleLanguage?: boolean;
   callType?: "interview" | "regular_call";
   language?: string;
+  /** Stable key so retries / double-clicks do not double-charge. */
+  idempotencyKey?: string;
   onChunk: (chunk: string) => void;
   onDone: (fullText: string) => void;
   onError: (error: Error) => void;
@@ -138,10 +141,18 @@ export async function streamFullAnswer(opts: GeminiStreamOptions): Promise<void>
     mode: opts.mode ?? null,
   };
 
+  const idempotencyKey =
+    opts.idempotencyKey ??
+    (typeof opts.questionId === "string" && opts.questionId.length >= 16
+      ? opts.questionId
+      : createIdempotencyKey("generate-answer"));
+
   try {
     // Ensure correct headers for SSE
     const headers = await getAuthHeaders({
       Accept: "text/event-stream",
+      "Idempotency-Key": idempotencyKey,
+      "x-idempotency-key": idempotencyKey,
     });
 
     const response = await fetchEdge("generate-answer", body, {
@@ -152,15 +163,37 @@ export async function streamFullAnswer(opts: GeminiStreamOptions): Promise<void>
     });
 
     if (!response.ok) {
-      if (response.status === 402) {
-        throw new Error("Insufficient credits. Please top up to generate full answers.");
-      }
       const errText = await response.text().catch(() => `HTTP ${response.status}`);
-      throw new Error(`generate-answer failed: ${response.status} — ${errText}`);
+      let parsed: { error?: string; code?: string; message?: string } | null = null;
+      try {
+        parsed = JSON.parse(errText) as {
+          error?: string;
+          code?: string;
+          message?: string;
+        };
+      } catch {
+        parsed = null;
+      }
+      const code = String(parsed?.code ?? "").toUpperCase() || "API_ERROR";
+      const message =
+        parsed?.error ||
+        parsed?.message ||
+        (response.status === 402
+          ? "Insufficient credits. Please top up to generate full answers."
+          : `AI Help failed (${response.status}).`);
+      throw new ApiClientError({
+        message,
+        status: response.status,
+        code,
+      });
     }
 
     if (!response.body) {
-      throw new Error("generate-answer returned an empty response body.");
+      throw new ApiClientError({
+        message: "AI Help returned an empty response.",
+        status: 502,
+        code: "PROVIDER_UNAVAILABLE",
+      });
     }
 
     await consumeSSEStream(response.body, onChunk, onDone, onError, signal);

@@ -22,6 +22,7 @@ import {
   type Block, ensureBlocks, blocksToPlainText, makeTextBlock, newId,
 } from "@/components/admin/blocks";
 import { QUESTION_EXAM_TYPE_OPTIONS } from "@/lib/mock-test/examTypes";
+import { ASSESSMENT_ROLE_SLUGS, REVIEW_STATUSES } from "@/lib/assessments/taxonomy";
 
 const EXAMS = [...QUESTION_EXAM_TYPE_OPTIONS];
 const DIFFICULTIES = ["EASY", "MEDIUM", "HARD"];
@@ -229,6 +230,10 @@ interface EditorState {
   marksNegative: number;
   isVerified: boolean;
   isPublic: boolean;
+  category: string;
+  eligibleRoles: string[];
+  crossFunctional: boolean;
+  reviewStatus: string;
 }
 
 function makeEmpty(): EditorState {
@@ -247,6 +252,10 @@ function makeEmpty(): EditorState {
     marksNegative: 1,
     isVerified: true,
     isPublic: true,
+    category: "",
+    eligibleRoles: [],
+    crossFunctional: false,
+    reviewStatus: "unreviewed",
   };
 }
 
@@ -299,6 +308,10 @@ function EditorView({ id }: { id?: string }) {
           marksNegative: Number(r.marks_negative ?? 1),
           isVerified: !!r.is_verified,
           isPublic: !!r.is_public,
+          category: (r as { category?: string | null }).category ?? r.subject ?? "",
+          eligibleRoles: ((r as { eligible_roles?: string[] | null }).eligible_roles ?? []) as string[],
+          crossFunctional: Boolean((r as { cross_functional?: boolean | null }).cross_functional),
+          reviewStatus: (r as { review_status?: string | null }).review_status ?? "unreviewed",
         });
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Failed to load question");
@@ -345,6 +358,10 @@ function EditorView({ id }: { id?: string }) {
         is_public: state.isPublic,
         question_type: "MCQ",
         uploaded_by: user.id,
+        category: state.category.trim() || state.subject.trim(),
+        eligible_roles: state.eligibleRoles,
+        cross_functional: state.crossFunctional,
+        review_status: state.reviewStatus,
       };
 
       if (isNew) {
@@ -537,6 +554,41 @@ function EditorView({ id }: { id?: string }) {
                 />
                 Public (visible to all students)
               </label>
+              <Field label="Category">
+                <Input value={state.category} onChange={(e) => setState((s) => ({ ...s, category: e.target.value }))} placeholder="Backend" />
+              </Field>
+              <Field label="Review status">
+                <Select value={state.reviewStatus} onValueChange={(v) => setState((s) => ({ ...s, reviewStatus: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{REVIEW_STATUSES.map((status) => <SelectItem key={status} value={status}>{status}</SelectItem>)}</SelectContent>
+                </Select>
+              </Field>
+              <label className="flex items-center gap-2 text-xs cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={state.crossFunctional}
+                  onChange={(e) => setState((s) => ({ ...s, crossFunctional: e.target.checked }))}
+                />
+                Cross-functional
+              </label>
+              <fieldset className="space-y-1">
+                <legend className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Assessment eligibility</legend>
+                {ASSESSMENT_ROLE_SLUGS.map((role) => (
+                  <label key={role} className="flex items-center gap-2 text-xs cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={state.eligibleRoles.includes(role)}
+                      onChange={(e) => setState((s) => ({
+                        ...s,
+                        eligibleRoles: e.target.checked
+                          ? [...s.eligibleRoles, role]
+                          : s.eligibleRoles.filter((item) => item !== role),
+                      }))}
+                    />
+                    {role}
+                  </label>
+                ))}
+              </fieldset>
             </CardContent>
           </Card>
         </div>

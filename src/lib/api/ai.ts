@@ -42,6 +42,12 @@ export type GenerateQuestionsRequest = {
   job_description?: string;
   focus_areas?: string[];
   session_id?: string | null;
+  /** Already-used question texts — provider must not repeat these. */
+  exclude_questions?: string[];
+  /** When true (default), edge may return approved bank fallback on AI failure. */
+  allow_fallback?: boolean;
+  /** Mock sessions skip credit deduction when true. */
+  free_session?: boolean;
 
   // ── Legacy aliases (deprecated — normalize in generateQuestions()) ──
   /** @deprecated use `type` */
@@ -56,6 +62,8 @@ export type GenerateQuestionsRequest = {
 export type GenerateQuestionsResponse = {
   success: boolean;
   request_id: string;
+  source?: "ai" | "fallback";
+  cached?: boolean;
   // Root-level (current edge fn response shape)
   questions: GeneratedQuestion[];
   count: number;
@@ -63,6 +71,7 @@ export type GenerateQuestionsResponse = {
   data?: {
     questions: GeneratedQuestion[];
     count: number;
+    source?: "ai" | "fallback";
   };
 };
 
@@ -189,6 +198,7 @@ export async function generateHint(
     {
       idempotencyKey:
         options.idempotencyKey ?? createIdempotencyKey("generate-hint"),
+      signal: options.signal,
     }
   );
 }

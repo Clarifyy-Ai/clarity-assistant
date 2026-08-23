@@ -3,7 +3,7 @@
  * enforced at the API layer; schema rejects invalid payloads before submit).
  */
 import { describe, it, expect } from "vitest";
-import { signupSchema } from "@/lib/validators/authSchemas";
+import { loginSchema, signupSchema } from "@/lib/validators/authSchemas";
 
 const VALID_SIGNUP = {
   fullName: "Jane Smith",
@@ -75,5 +75,20 @@ describe("signupSchema — T-0569 invalid / duplicate-prone registration", () =>
       email: "not-an-email",
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("loginSchema — email normalize, password preservation", () => {
+  it("trims and lowercases email without changing the password", () => {
+    const password = "  Str0ng!Pass  ";
+    const result = loginSchema.safeParse({
+      email: "  Free.User@Example.COM ",
+      password,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.email).toBe("free.user@example.com");
+      expect(result.data.password).toBe(password);
+    }
   });
 });

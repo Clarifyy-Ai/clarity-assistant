@@ -41,12 +41,112 @@ export function isNonRetryableAuthError(error: unknown): boolean {
 
 export const SESSION_EXPIRED_REASON = "session_expired" as const;
 export const SESSION_EXPIRED_MESSAGE =
-  "Your session expired. Please sign in again.";
+  "Your session has expired. Please sign in again.";
 
 /** Shown when a sign-out in another browser tab ended this tab's session too. */
 export const SIGNED_OUT_ELSEWHERE_REASON = "signed_out_elsewhere" as const;
 export const SIGNED_OUT_ELSEWHERE_MESSAGE =
   "You were signed out because this account signed out in another tab.";
+
+const AUTH_END_REASON_STORAGE_KEY = "clarify_auth_end_reason";
+const LOGOUT_BROADCAST_STORAGE_KEY = "clarify_auth_logout_broadcast";
+const LOGOUT_BROADCAST_MAX_AGE_MS = 8_000;
+
+export type AuthEndReason =
+  | typeof SESSION_EXPIRED_REASON
+  | typeof SIGNED_OUT_ELSEWHERE_REASON;
+
+export function persistAuthEndReason(reason: AuthEndReason): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(AUTH_END_REASON_STORAGE_KEY, reason);
+  } catch {
+    // Ignore quota / private-mode failures.
+  }
+}
+
+export function peekAuthEndReason(): AuthEndReason | null {
+  if (typeof sessionStorage === "undefined") return null;
+  try {
+    const value = sessionStorage.getItem(AUTH_END_REASON_STORAGE_KEY);
+    if (value === SESSION_EXPIRED_REASON || value === SIGNED_OUT_ELSEWHERE_REASON) {
+      return value;
+    }
+  } catch {
+    // Ignore storage failures.
+  }
+  return null;
+}
+
+export function consumeAuthEndReason(): AuthEndReason | null {
+  const value = peekAuthEndReason();
+  if (typeof sessionStorage === "undefined" || !value) return value;
+  try {
+    sessionStorage.removeItem(AUTH_END_REASON_STORAGE_KEY);
+  } catch {
+    // Ignore storage failures.
+  }
+  return value;
+}
+
+/** Call before `signOut()` so other tabs can distinguish logout from expiry. */
+export function markExplicitLogoutBroadcast(): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(LOGOUT_BROADCAST_STORAGE_KEY, String(Date.now()));
+  } catch {
+    // Ignore quota / private-mode failures.
+  }
+}
+
+export function hasRecentLogoutBroadcast(
+  nowMs = Date.now(),
+  maxAgeMs = LOGOUT_BROADCAST_MAX_AGE_MS,
+): boolean {
+  if (typeof localStorage === "undefined") return false;
+  try {
+    const raw = localStorage.getItem(LOGOUT_BROADCAST_STORAGE_KEY);
+    if (!raw) return false;
+    const ts = Number(raw);
+    return Number.isFinite(ts) && nowMs - ts >= 0 && nowMs - ts < maxAgeMs;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Other tabs observe the logout broadcast key via the `storage` event.
+ * This is more reliable than relying solely on GoTrue SIGNED_OUT when
+ * network logout is mocked or delayed.
+ */
+export function subscribeCrossTabLogoutBroadcast(
+  onLogout: () => void,
+): () => void {
+  if (typeof window === "undefined") {
+    return () => undefined;
+  }
+  const handler = (event: StorageEvent) => {
+    if (event.storageArea && event.storageArea !== localStorage) return;
+    if (event.key !== LOGOUT_BROADCAST_STORAGE_KEY) return;
+    if (event.newValue == null) return;
+    onLogout();
+  };
+  window.addEventListener("storage", handler);
+  return () => window.removeEventListener("storage", handler);
+}
+
+/**
+ * Unexpected SIGNED_OUT (not the tab that clicked Log out):
+ * a recent logout broadcast means another tab signed out; otherwise the
+ * refresh token failed and the session expired.
+ */
+export function classifyUnexpectedSignedOut(opts: {
+  recentLogoutBroadcast: boolean;
+}): AuthEndReason {
+  return opts.recentLogoutBroadcast
+    ? SIGNED_OUT_ELSEWHERE_REASON
+    : SESSION_EXPIRED_REASON;
+}
 
 /**
  * Normalize browser + Electron hash-router locations to an app path.
@@ -93,9 +193,11 @@ function isProtectedAppPath(path: string): boolean {
  * keep retrying. Supports Electron hash-router (`/#/app/...`) locations.
  */
 function redirectToLoginWithReason(
-  reason: string,
+  reason: AuthEndReason,
   currentPath?: string | null,
 ): void {
+  persistAuthEndReason(reason);
+
   if (typeof window === "undefined") {
     return;
   }

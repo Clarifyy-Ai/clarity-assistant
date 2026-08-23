@@ -96,6 +96,25 @@ describe("exam template engine", () => {
     expect(hasDuplicateQuestionIds(assembled.questionIds)).toBe(false);
     expect(assembled.questionIds).not.toContain("x");
   });
+
+  it("does not leak CSS questions into a Backend Developer blueprint", () => {
+    const backend: ExamBlueprint = {
+      ...blueprint,
+      id: "backend-developer",
+      slug: "backend-developer",
+      role_slug: "backend-developer",
+      question_count: 2,
+      category_distribution: { Backend: 50, SQL: 50 },
+    };
+    const pool = [
+      { id: "b", category: "Backend", difficulty: "EASY", license_type: "ORIGINAL", publish_status: "published", is_public: true, eligible_roles: ["backend-developer"] },
+      { id: "s", category: "SQL", difficulty: "MEDIUM", license_type: "ORIGINAL", publish_status: "published", is_public: true, eligible_roles: ["backend-developer"] },
+      { id: "css", category: "CSS", difficulty: "EASY", license_type: "ORIGINAL", publish_status: "published", is_public: true, eligible_roles: ["frontend-developer"] },
+    ];
+    const assembled = assembleExamInstance(backend, pool, { seed: 3 });
+    expect(assembled.questionIds).not.toContain("css");
+    expect(assembled.questionIds.sort()).toEqual(["b", "s"]);
+  });
 });
 
 describe("learning progress", () => {

@@ -5,8 +5,8 @@
 // - magic-link emails
 // - password recovery links
 //
-// Supabase detects the session from the URL automatically because
-// detectSessionInUrl is enabled in the Supabase client.
+// Supabase consumes ?code= / hash tokens only on callback and recovery URLs
+// (detectSessionInUrl is path-gated so /login leftover params cannot 400).
 //
 // SECURITY PURPOSE:
 // - Avoid open redirects

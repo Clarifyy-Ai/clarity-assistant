@@ -1,7 +1,9 @@
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
-import { createIdempotencyKey } from "@/lib/api/functions";
+import { prepToolContentIdempotencyKey } from "@/lib/network/idempotency";
+import { sha256 } from "@/lib/utils/hashUtils";
 import {
   getAiUserFacingError,
+  isAiProviderUnavailableError,
   isInsufficientCreditsError,
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
@@ -25,9 +27,20 @@ import { answerBankDB } from "@/lib/supabase/database";
 import { Whiteboard, type WhiteboardHandle } from "@/components/prep/Whiteboard";
 import { SYSTEM_DESIGN_PRESETS } from "@/lib/prep/systemDesignPresets";
 import { splitMarkdownSections } from "@/lib/prep/structuredOutput";
+import { validateSystemDesignOutput } from "@/lib/prep/systemDesignOutput";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 
 type Difficulty = "easy" | "medium" | "hard";
+
+type GenPhase =
+  | "IDLE"
+  | "VALIDATING"
+  | "GENERATING"
+  | "VALIDATING_OUTPUT"
+  | "COMPLETED"
+  | "FAILED";
+
+type SavePhase = "IDLE" | "SAVING" | "SAVED" | "SAVE_FAILED";
 
 interface DesignTopic {
   id: string;
@@ -57,6 +70,10 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   Media: <Server className="w-3.5 h-3.5" />,
 };
 
+const AI_UNAVAILABLE = "AI is temporarily unavailable. Please try again.";
+const SAVE_FAILED_MSG =
+  "We generated the design, but couldn't save it. Please retry.";
+
 function normalizeDifficulty(value: string | null | undefined): Difficulty {
   const v = (value ?? "medium").toLowerCase();
   if (v === "easy" || v === "medium" || v === "hard") return v;
@@ -67,6 +84,7 @@ export default function SystemDesign() {
   const credits = useCredits();
   const { user } = useAuthStore();
   const whiteboardRef = useRef<WhiteboardHandle>(null);
+  const inflightKeyRef = useRef<string | null>(null);
   const prefersReducedMotion = usePrefersReducedMotion();
   const [activePreset, setActivePreset] = useState<string | null>(null);
   /** 'auto' follows reduced-motion preference; user can override. */
@@ -79,10 +97,16 @@ export default function SystemDesign() {
   const [selected, setSelected]   = useState<string | null>(null);
   const [notes, setNotes]         = useState("");
   const [breakdown, setBreakdown] = useState("");
-  const [loading, setLoading]     = useState(false);
-  const [saved, setSaved]         = useState(false);
+  const [genPhase, setGenPhase]   = useState<GenPhase>("IDLE");
+  const [savePhase, setSavePhase] = useState<SavePhase>("IDLE");
   const [savedAnswerId, setSavedAnswerId] = useState<string | null>(null);
   const [error, setError]         = useState<string | null>(null);
+
+  const generating =
+    genPhase === "VALIDATING" ||
+    genPhase === "GENERATING" ||
+    genPhase === "VALIDATING_OUTPUT";
+  const saving = savePhase === "SAVING";
 
   useEffect(() => {
     let cancelled = false;
@@ -120,53 +144,101 @@ export default function SystemDesign() {
     [breakdown],
   );
 
+  function buildInput(topic: DesignTopic, candidateNotes: string): string {
+    return `Topic: ${topic.title}\n\nPrompt: ${topic.prompt}\n\nKey areas: ${topic.keyAreas.join(", ")}${candidateNotes ? `\n\nCandidate notes:\n${candidateNotes}` : ""}`;
+  }
+
   async function getAIBreakdown() {
-    if (!activeTopic || !credits.canAfford("system_design")) return;
-    setLoading(true);
+    if (!activeTopic || generating || saving) return;
+    if (!credits.canAfford("system_design")) return;
+
+    setGenPhase("VALIDATING");
     setError(null);
-    setBreakdown("");
 
     try {
-      const input = `Topic: ${activeTopic.title}\n\nPrompt: ${activeTopic.prompt}\n\nKey areas: ${activeTopic.keyAreas.join(", ")}${notes ? `\n\nCandidate notes:\n${notes}` : ""}`;
+      const input = buildInput(activeTopic, notes);
+      const contentHash = await sha256(input);
+      const idempotencyKey =
+        inflightKeyRef.current ??
+        prepToolContentIdempotencyKey("system_design", contentHash);
+      inflightKeyRef.current = idempotencyKey;
+
+      setGenPhase("GENERATING");
       const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
         tool_id: "system_design",
         input,
       }, {
         headers: {
-          "Idempotency-Key": createIdempotencyKey("prep-tool"),
+          "x-idempotency-key": idempotencyKey,
         },
       });
-      setBreakdown(data.result ?? "Breakdown unavailable.");
+
+      setGenPhase("VALIDATING_OUTPUT");
+      const result = typeof data.result === "string" ? data.result.trim() : "";
+      const validation = validateSystemDesignOutput(result);
+      if (validation.ok === false) {
+        setGenPhase("FAILED");
+        setError(validation.reason);
+        toast.error(validation.reason);
+        await refreshCredits().catch(() => undefined);
+        return;
+      }
+
+      setBreakdown(result);
+      setGenPhase("COMPLETED");
+      inflightKeyRef.current = null;
       await refreshCredits();
     } catch (err) {
       openUpgradeIfInsufficientCredits(err);
+      const message = isAiProviderUnavailableError(err)
+        ? AI_UNAVAILABLE
+        : getAiUserFacingError(err);
+      setGenPhase("FAILED");
+      setError(message);
+      toast.error(message);
+      // Keep inflight key on failure so Retry of the same input does not double-charge.
       if (isInsufficientCreditsError(err)) {
-        setError(getAiUserFacingError(err));
-        toast.error(getAiUserFacingError(err));
-      } else {
-        setBreakdown(getOfflineBreakdown(activeTopic));
-        toast.info("Using offline breakdown — AI unavailable.");
+        // credit denial — keep key for retry of same content
       }
+      await refreshCredits().catch(() => undefined);
     }
-    setLoading(false);
   }
 
   async function saveDesignNotes() {
-    if (!user || !activeTopic || !notes.trim()) return;
+    if (!user || !activeTopic || saving) return;
+    const hasContent = notes.trim() || breakdown.trim();
+    if (!hasContent) return;
+
+    setSavePhase("SAVING");
     try {
+      const answerText = notes.trim()
+        ? `${notes.trim()}\n\n--- AI Breakdown ---\n${breakdown}`
+        : breakdown;
       const created = await answerBankDB.create(user.id, {
         question_text: `System Design: ${activeTopic.title}`,
-        answer_text: `${notes}\n\n--- AI Breakdown ---\n${breakdown}`,
+        answer_text: answerText,
         category: "System Design",
         source: "prep_lab",
       });
-      setSaved(true);
+      setSavePhase("SAVED");
       setSavedAnswerId(created.id);
       toast.success("Design notes saved to Answer Bank");
-      setTimeout(() => setSaved(false), 2500);
+      setTimeout(() => setSavePhase("IDLE"), 2500);
     } catch {
-      toast.error("Failed to save — please try again");
+      setSavePhase("SAVE_FAILED");
+      toast.error(SAVE_FAILED_MSG);
     }
+  }
+
+  function selectTopic(id: string) {
+    if (generating || saving) return;
+    setSelected(id);
+    setBreakdown("");
+    setNotes("");
+    setError(null);
+    setGenPhase("IDLE");
+    setSavePhase("IDLE");
+    inflightKeyRef.current = null;
   }
 
   return (
@@ -184,9 +256,10 @@ export default function SystemDesign() {
       <PrepToolShell
         title="Structured design"
         description="Generate a breakdown, then save exactly once to Answer Bank."
-        isGenerating={loading}
+        isGenerating={generating}
         generationLabel="Generating system design sections…"
         error={error}
+        onRetry={() => void getAIBreakdown()}
       >
       {savedAnswerId && (
         <SaveToAnswerBankConfirm
@@ -246,7 +319,8 @@ export default function SystemDesign() {
           {topics?.map((topic) => (
             <button
               key={topic.id}
-              onClick={() => { setSelected(topic.id); setBreakdown(""); setNotes(""); setError(null); setSaved(false); }}
+              type="button"
+              onClick={() => selectTopic(topic.id)}
               className={cn(
                 "w-full text-left px-4 py-3 rounded-xl border transition-all",
                 selected === topic.id
@@ -288,7 +362,13 @@ export default function SystemDesign() {
                 <p className="text-xs font-medium text-foreground mb-2">Your design notes</p>
                 <textarea
                   value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
+                  onChange={(e) => {
+                    setNotes(e.target.value);
+                    inflightKeyRef.current = null;
+                    if (genPhase === "COMPLETED" || genPhase === "FAILED") {
+                      setGenPhase("IDLE");
+                    }
+                  }}
                   placeholder="Sketch your approach here — components, data flow, scaling strategy…"
                   rows={5}
                   className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
@@ -304,13 +384,28 @@ export default function SystemDesign() {
                 </Card>
               )}
 
+              {savePhase === "SAVE_FAILED" && (
+                <Card className="border-amber-500/20 bg-amber-500/5">
+                  <p className="text-sm text-amber-200">{SAVE_FAILED_MSG}</p>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() => void saveDesignNotes()}
+                    disabled={saving}
+                  >
+                    Retry save
+                  </Button>
+                </Card>
+              )}
+
               <div className="flex gap-3">
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={getAIBreakdown}
-                  disabled={loading || !credits.canAfford("system_design")}
-                  loading={loading}
+                  onClick={() => void getAIBreakdown()}
+                  disabled={generating || saving || !credits.canAfford("system_design")}
+                  loading={generating}
                   leftIcon={<Sparkles className="w-3.5 h-3.5" />}
                   fullWidth
                 >
@@ -318,17 +413,19 @@ export default function SystemDesign() {
                 </Button>
                 {(notes.trim() || breakdown) && (
                   <Button
-                    variant={saved ? "success" : "secondary"}
+                    variant={savePhase === "SAVED" ? "success" : "secondary"}
                     size="sm"
-                    onClick={saveDesignNotes}
-                    leftIcon={saved ? <CheckCircle className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
+                    onClick={() => void saveDesignNotes()}
+                    disabled={saving || generating}
+                    loading={saving}
+                    leftIcon={savePhase === "SAVED" ? <CheckCircle className="w-3.5 h-3.5" /> : <Save className="w-3.5 h-3.5" />}
                   >
-                    {saved ? "Saved!" : "Save"}
+                    {savePhase === "SAVED" ? "Saved!" : "Save"}
                   </Button>
                 )}
               </div>
 
-              {breakdown && (
+              {breakdown && genPhase === "COMPLETED" && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between px-0.5">
                     <p className="text-xs font-semibold text-primary uppercase tracking-widest flex items-center gap-1.5">
@@ -395,8 +492,4 @@ export default function SystemDesign() {
       </PrepToolShell>
     </div>
   );
-}
-
-function getOfflineBreakdown(topic: DesignTopic): string {
-  return `## ${topic.title} — Design Breakdown (Offline)\n\n### 1. Requirements\n- Functional: Core features implied by the prompt\n- Non-functional: Scalability, availability, latency, consistency\n- Capacity estimation: Estimate reads/writes per second, storage needs\n\n### 2. High-Level Architecture\nKey components to consider: ${topic.keyAreas.join(", ")}\n\n### 3. Component Deep-Dive\nFor each component, discuss:\n- What technology/service would you use?\n- How does data flow between components?\n- What are the scaling strategies?\n\n### 4. Data Model\n- What tables/collections do you need?\n- What are the access patterns?\n- SQL vs NoSQL tradeoffs for this use case\n\n### 5. Scaling & Tradeoffs\n- Horizontal vs vertical scaling\n- Caching strategies (CDN, application cache, database cache)\n- CAP theorem tradeoffs for this system\n- What would you sacrifice and why?\n\n### 6. Monitoring & Reliability\n- Key metrics to monitor\n- Failure scenarios and mitigation\n- Data backup and recovery strategy`;
 }

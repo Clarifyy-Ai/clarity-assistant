@@ -1,11 +1,59 @@
-// export-user-data/index.ts — FIXED & SECURE VERSION
+// export-user-data/index.ts — GDPR data export (JWT ownership, RL, idempotency)
 
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
-import { createServiceClient } from "../_shared/supabase.ts";
 import {
-  enforceDataExportRateLimitAsync,
-} from "../_shared/rateLimit.ts";
+  createServiceClient,
+  getIdempotentResponse,
+  storeIdempotentResponse,
+} from "../_shared/supabase.ts";
+import { enforceDataExportRateLimitAsync } from "../_shared/rateLimit.ts";
+import { logDataExportAudit } from "../_shared/audit.ts";
+
+const ALLOWED_TYPES = new Set([
+  "full",
+  "sessions",
+  "transcripts",
+  "answers",
+  "interviews",
+]);
+
+function jsonError(
+  req: Request,
+  status: number,
+  code: string,
+  error: string,
+): Response {
+  return new Response(JSON.stringify({ error, code }), {
+    status,
+    headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+  });
+}
+
+function exportAttachment(req: Request, type: string, exportData: Record<string, unknown>): Response {
+  const jsonBlob = JSON.stringify(exportData, null, 2);
+  const encoded = new TextEncoder().encode(jsonBlob);
+  return new Response(encoded, {
+    headers: {
+      ...getCorsHeaders(req),
+      "Content-Type": "application/json",
+      "Content-Disposition": `attachment; filename="clarify-ai-export-${type}.json"`,
+    },
+  });
+}
+
+function readIdempotencyKey(req: Request, body: Record<string, unknown> | null): string | null {
+  const header =
+    req.headers.get("idempotency-key") ??
+    req.headers.get("x-idempotency-key");
+  const fromBody =
+    body && typeof body.idempotencyKey === "string"
+      ? body.idempotencyKey
+      : null;
+  const raw = (header ?? fromBody ?? "").trim();
+  if (!raw || !/^[A-Za-z0-9._:-]{16,150}$/.test(raw)) return null;
+  return raw.slice(0, 150);
+}
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
@@ -15,43 +63,64 @@ Deno.serve(async (req) => {
     const auth = await authenticateRequest(req);
     if (auth.error) return auth.error;
     const user = auth.context.user;
-
+    const user_id = user.id;
     const db = createServiceClient();
-    const rateLimited = await enforceDataExportRateLimitAsync(db, user.id);
+
+    /* ---------------------------------------------------
+       VALIDATE BODY (before rate limit — invalid type must not burn quota)
+    --------------------------------------------------- */
+    const body = await req.json().catch(() => null) as Record<string, unknown> | null;
+    const requestedType =
+      body && typeof body === "object" ? body.type : undefined;
+    const type =
+      typeof requestedType === "string"
+        ? requestedType.trim().toLowerCase()
+        : "full";
+
+    if (!ALLOWED_TYPES.has(type)) {
+      return jsonError(
+        req,
+        400,
+        "INVALID_EXPORT_TYPE",
+        "Unsupported export type.",
+      );
+    }
+
+    const idempotencyKey = readIdempotencyKey(req, body);
+    const idempotencyAction = `export_user_data_${type}`;
+
+    if (idempotencyKey) {
+      const prior = await getIdempotentResponse(db, idempotencyKey, {
+        userId: user_id,
+        action: idempotencyAction,
+      });
+      if (
+        prior?.success &&
+        prior.payload &&
+        typeof prior.payload === "object" &&
+        prior.payload.exportData &&
+        typeof prior.payload.exportData === "object"
+      ) {
+        return exportAttachment(
+          req,
+          type,
+          prior.payload.exportData as Record<string, unknown>,
+        );
+      }
+    }
+
+    /* ---------------------------------------------------
+       RATE LIMIT (after validate; CORS on 429/503)
+    --------------------------------------------------- */
+    const rateLimited = await enforceDataExportRateLimitAsync(db, user_id, req);
     if (rateLimited) return rateLimited;
 
     /* ---------------------------------------------------
-       VALIDATE BODY
+       BUILD EXPORT (server-authoritative, user-scoped)
     --------------------------------------------------- */
-    const body = await req.json().catch(() => null);
-    const requestedType = body && typeof body === "object"
-      ? (body as Record<string, unknown>).type
-      : undefined;
-    const type = typeof requestedType === "string" ? requestedType.trim().toLowerCase() : "full";
-    const allowedTypes = new Set(["full", "sessions", "transcripts", "answers", "interviews"]);
-    if (!allowedTypes.has(type)) {
-      return new Response(
-        JSON.stringify({
-          error: "Unsupported export type.",
-          code: "INVALID_EXPORT_TYPE",
-        }),
-        {
-          status: 400,
-          headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
-        },
-      );
-    }
-    const user_id = user.id;
-
-    /* ---------------------------------------------------
-       START EXPORT STRUCT
-    --------------------------------------------------- */
-    const exportData: Record<string, any> = {};
+    const exportData: Record<string, unknown> = {};
     let sessionIds: string[] = [];
 
-    /* ---------------------------------------------------
-       EXPORT SESSIONS
-    --------------------------------------------------- */
     if (type === "full" || type === "sessions" || type === "transcripts") {
       const { data: sessions, error: sErr } = await db
         .from("sessions")
@@ -62,12 +131,9 @@ Deno.serve(async (req) => {
       if (sErr) throw sErr;
 
       exportData.sessions = sessions ?? [];
-      sessionIds = sessions?.map((s: any) => s.id) ?? [];
+      sessionIds = (sessions ?? []).map((s: { id: string }) => s.id);
     }
 
-    /* ---------------------------------------------------
-       EXPORT TRANSCRIPTS
-    --------------------------------------------------- */
     if (type === "full" || type === "transcripts") {
       const ids = sessionIds.length ? sessionIds : ["-no-sessions-"];
 
@@ -81,9 +147,6 @@ Deno.serve(async (req) => {
       exportData.transcripts = answers ?? [];
     }
 
-    /* ---------------------------------------------------
-       ANSWER BANK
-    --------------------------------------------------- */
     if (type === "full" || type === "answers") {
       const { data: bank, error: bErr } = await db
         .from("answer_bank")
@@ -95,9 +158,6 @@ Deno.serve(async (req) => {
       exportData.answer_bank = bank ?? [];
     }
 
-    /* ---------------------------------------------------
-       INTERVIEWS
-    --------------------------------------------------- */
     if (type === "full" || type === "interviews") {
       const { data: interviews, error: iErr } = await db
         .from("interviews")
@@ -109,14 +169,11 @@ Deno.serve(async (req) => {
       exportData.interviews = interviews ?? [];
     }
 
-    /* ---------------------------------------------------
-       PROFILE + DEBRIEFS
-    --------------------------------------------------- */
     if (type === "full") {
       const { data: profile, error: pErr } = await db
         .from("profiles")
         .select(
-          "full_name, email, plan, created_at, experience_level, target_role"
+          "full_name, email, plan, created_at, experience_level, target_role",
         )
         .eq("id", user_id)
         .maybeSingle();
@@ -135,48 +192,36 @@ Deno.serve(async (req) => {
       exportData.debriefs = debriefs ?? [];
     }
 
-    /* ---------------------------------------------------
-       FINAL METADATA
-    --------------------------------------------------- */
     exportData.exported_at = new Date().toISOString();
     exportData.user_id = user_id;
 
-    /* ---------------------------------------------------
-       AUDIT LOG (Optional but recommended)
-    --------------------------------------------------- */
-    const { error: auditError } = await db.from("audit_logs")
-      .insert({
-        user_id,
-        event: "export_user_data",
-        created_at: new Date().toISOString(),
-      });
-    if (auditError) {
-      console.error("[export-user-data] audit log failed:", auditError.message);
+    await logDataExportAudit({
+      req,
+      userId: user_id,
+      status: "success",
+      metadata: { type },
+    });
+
+    if (idempotencyKey) {
+      await storeIdempotentResponse(
+        db,
+        idempotencyKey,
+        {
+          success: true,
+          payload: { exportData, type },
+        },
+        { userId: user_id, action: idempotencyAction },
+      );
     }
 
-    /* ---------------------------------------------------
-       RETURN FILE
-    --------------------------------------------------- */
-    const jsonBlob = JSON.stringify(exportData, null, 2);
-    const encoded = new TextEncoder().encode(jsonBlob);
-
-    return new Response(encoded, {
-      headers: {
-        ...getCorsHeaders(req), "Content-Type": "application/json",
-        "Content-Disposition": `attachment; filename="clarify-ai-export-${type}.json"`,
-      },
-    });
+    return exportAttachment(req, type, exportData);
   } catch (err) {
     console.error("[export-user-data] error:", err);
-    return new Response(
-      JSON.stringify({
-        error: "We couldn't prepare your export. Please try again in a moment.",
-        code: "EXPORT_FAILED",
-      }),
-      {
-        status: 500,
-        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
-      }
+    return jsonError(
+      req,
+      500,
+      "EXPORT_FAILED",
+      "We couldn't prepare your export. Please try again in a moment.",
     );
   }
 });

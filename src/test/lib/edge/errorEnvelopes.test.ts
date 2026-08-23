@@ -48,6 +48,16 @@ describe("edge function error envelope contracts", () => {
     expect(body.success).toBe(true);
   });
 
+  it("create-exam-paper credit denial is structured and not PAYMENT_REQUIRED", () => {
+    const body: Envelope = {
+      error: "You need 3 credits, but only 2 are available.",
+      code: "INSUFFICIENT_CREDITS",
+    };
+    assertSafeEnvelope(body);
+    expect(body.code).toBe("INSUFFICIENT_CREDITS");
+    expect(body.code).not.toBe("PAYMENT_REQUIRED");
+  });
+
   it("delete-account confirmation and operation states", () => {
     const missing: Envelope = {
       error: "Confirmation required",
@@ -80,5 +90,35 @@ describe("edge function error envelope contracts", () => {
       code: "INTERNAL_ERROR",
     };
     assertSafeEnvelope(body);
+  });
+
+  it("compare-sessions uses structured codes without PostgREST internals", () => {
+    const body: Envelope = {
+      error: "One of those sessions could not be found.",
+      code: "SESSION_NOT_FOUND",
+    };
+    assertSafeEnvelope(body);
+    expect(JSON.stringify(body)).not.toMatch(/PGRST|session_questions/i);
+  });
+
+  it("start-session daily limit is structured and not 502", () => {
+    const body: Envelope = {
+      error: "You've reached today's session limit (3 of 3).",
+      code: "DAILY_LIMIT_REACHED",
+    };
+    assertSafeEnvelope(body);
+    expect(body.code).toBe("DAILY_LIMIT_REACHED");
+  });
+
+  it("end-session duplicate end is idempotent", () => {
+    const body = {
+      session_id: "s1",
+      status: "completed",
+      terminal_reason: "USER_ENDED",
+      already_terminal: true,
+      duration_seconds: 120,
+    };
+    expect(body.already_terminal).toBe(true);
+    expect(body.duration_seconds).toBeGreaterThanOrEqual(0);
   });
 });

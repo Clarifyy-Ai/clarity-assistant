@@ -42,6 +42,7 @@ import {
   setPendingPlan,
 } from "@/lib/billing/pendingPlan";
 import {
+  consumeAuthEndReason,
   SESSION_EXPIRED_MESSAGE,
   SESSION_EXPIRED_REASON,
   SIGNED_OUT_ELSEWHERE_MESSAGE,
@@ -158,6 +159,7 @@ export default function Login(): JSX.Element {
   const isAdmin = useAuthStore((state) => state.isAdmin);
   const isProfileLoaded = useAuthStore((state) => state.isProfileLoaded);
   const signInWithEmail = useAuthStore((state) => state.signInWithEmail);
+  const storeError = useAuthStore((state) => state.error);
 
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(
@@ -191,7 +193,13 @@ export default function Login(): JSX.Element {
   useEffect(() => {
     const message = searchParams.get("message");
     const errorCode = searchParams.get("error");
-    const reason = searchParams.get("reason");
+    const storedReason = consumeAuthEndReason();
+    const queryReason =
+      searchParams.get("reason") ??
+      (typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("reason")
+        : null);
+    const reason = queryReason ?? storedReason;
     if (reason === SESSION_EXPIRED_REASON) {
       setAuthError(SESSION_EXPIRED_MESSAGE);
     } else if (reason === SIGNED_OUT_ELSEWHERE_REASON) {
@@ -375,6 +383,7 @@ export default function Login(): JSX.Element {
   }, [lockedUntil, lockTick]);
 
   const isFormValid = isValid;
+  const displayedError = authError ?? storeError;
 
   function handleRememberMeChange(checked: boolean): void {
     setRememberMe(checked);
@@ -580,7 +589,7 @@ export default function Login(): JSX.Element {
               </Button>
             </div>
           ) : (
-          <>
+          <div>
           <div className="grid grid-cols-2 gap-2">
             {isOAuthProviderEnabled("google") ? <GoogleOAuthButton /> : null}
             {isOAuthProviderEnabled("github") ? <GithubOAuthButton /> : null}
@@ -682,10 +691,10 @@ export default function Login(): JSX.Element {
               </div>
             )}
 
-            {authError && !isLocked && (
+            {displayedError && !isLocked && (
               <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-3 py-2.5">
                 <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{authError}</span>
+                <span>{displayedError}</span>
               </div>
             )}
 
@@ -694,7 +703,12 @@ export default function Login(): JSX.Element {
               variant="primary"
               size="md"
               loading={isSubmitting}
-              disabled={isLocked || isSubmitting || !isFormValid}
+              disabled={
+                isLocked ||
+                isSubmitting ||
+                authStatus === "loading" ||
+                !isFormValid
+              }
               fullWidth
             >
               {isLocked ? `Locked (${lockMinsLeft}m)` : "Sign in"}
@@ -710,7 +724,7 @@ export default function Login(): JSX.Element {
               Sign up free
             </Link>
           </p>
-          </>
+          </div>
           )}
     </AuthShell>
   );

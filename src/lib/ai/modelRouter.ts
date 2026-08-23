@@ -46,6 +46,8 @@ export interface RouteAnswerGenerationOptions {
   /** Sessionless fallback when sessionId is absent (mock | warmup | rehearsal | practice). */
   mode?: string;
   screenshotBase64?: string | null;
+  /** Idempotency key for generate-answer credit deduction. */
+  idempotencyKey?: string;
   onToken: (chunk: string) => void;
   onDone: (fullText: string) => void;
   onError?: (error: Error) => void;
@@ -169,6 +171,7 @@ export async function routeAnswerGeneration(opts: RouteAnswerGenerationOptions):
       mode: opts.mode,
       screenshotBase64: opts.screenshotBase64 ?? null,
       simpleLanguage: (opts.context as { simple_language?: boolean }).simple_language ?? false,
+      idempotencyKey: opts.idempotencyKey,
       onChunk: (chunk) => opts.onToken(chunk),
       onDone: (fullText) => {
         useNetworkStore.getState().recordAIResponseTime(Date.now() - start);
@@ -197,6 +200,7 @@ export async function routeHint(opts: RouteHintOptions): Promise<void> {
         context: opts.context,
         sessionId: opts.sessionId,
         mode: opts.isLive ? "rehearsal" : "mock",
+        idempotencyKey: opts.questionId,
         onToken: opts.onChunk,
         onDone: (fullText) => void opts.onDone(fullText),
         onError: (err) => opts.onError(err),

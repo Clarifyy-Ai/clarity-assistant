@@ -61,8 +61,12 @@ Deno.serve(async (req: Request) => {
 
     const { data: sessions, error: sessErr, count: totalCount } = await db
       .from("sessions")
-      .select("*", { count: "exact" })
+      .select(
+        "id,user_id,title,type,status,lifecycle_status,deleted_at,started_at,ended_at,created_at,questions_asked,answers_generated,avg_wpm,filler_words,tags",
+        { count: "exact" },
+      )
       .eq("user_id", user.id)
+      .is("deleted_at", null)
       .gte("created_at", since.toISOString())
       .not("tags", "cs", "{private}")
       .order("created_at", { ascending: false })
@@ -80,6 +84,15 @@ Deno.serve(async (req: Request) => {
       .gte("created_at", since.toISOString());
 
     if (scErr) throw scErr;
+
+    const sessionIds = (sessions ?? []).map((s: { id: string }) => s.id);
+    const { data: answerRows } = sessionIds.length
+      ? await db
+        .from("session_answers")
+        .select("session_id,answer")
+        .eq("user_id", user.id)
+        .in("session_id", sessionIds)
+      : { data: [] as { session_id: string; answer: string | null }[] };
 
     /* ---------------------------
        FETCH PROFILE (SAFE)
@@ -114,8 +127,30 @@ Deno.serve(async (req: Request) => {
     --------------------------- */
     const totalSessions = sessionList.length;
 
+    const sessionDurationSeconds = (
+      session: { started_at?: string | null; ended_at?: string | null },
+    ): number | null => {
+      if (!session.started_at || !session.ended_at) return null;
+      const start = Date.parse(session.started_at);
+      const end = Date.parse(session.ended_at);
+      if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
+      const seconds = Math.round((end - start) / 1000);
+      return seconds >= 0 ? seconds : null;
+    };
+
+    const companyFromTitle = (title: string | null | undefined): string | null => {
+      if (!title) return null;
+      const parts = title.split(/\s+[—–-]\s+/);
+      if (parts.length < 2) return null;
+      const company = parts.slice(1).join(" — ").trim();
+      return company.length > 0 ? company : null;
+    };
+
     const totalMinutes =
-      sessionList.reduce((sum, s) => sum + (s.duration_seconds ?? 0), 0) / 60;
+      sessionList.reduce((sum, s) => {
+        const duration = sessionDurationSeconds(s);
+        return duration === null ? sum : sum + duration;
+      }, 0) / 60;
 
     const scores = scorecardList
       .map((s) => s.overall_score)
@@ -167,7 +202,7 @@ Deno.serve(async (req: Request) => {
     for (const sc of scorecardList) {
       if (typeof sc.overall_score !== "number") continue;
       const session = sessionList.find((s) => s.id === sc.session_id);
-      const label = session?.interview_type ?? "behavioral";
+      const label = session?.type ?? "session";
       const cur = byType.get(label) ?? { sum: 0, count: 0, sessions: 0 };
       cur.sum += sc.overall_score;
       cur.count += 1;
@@ -180,29 +215,62 @@ Deno.serve(async (req: Request) => {
       session_count: v.sessions,
     }));
 
+    const answersBySession = new Map<string, { total: number; answered: number }>();
+    for (const row of answerRows ?? []) {
+      const sid = String((row as { session_id?: string }).session_id ?? "");
+      if (!sid) continue;
+      const cur = answersBySession.get(sid) ?? { total: 0, answered: 0 };
+      cur.total += 1;
+      const answer = (row as { answer?: string | null }).answer;
+      if (typeof answer === "string" && answer.trim().length > 0) cur.answered += 1;
+      answersBySession.set(sid, cur);
+    }
+
     const recentSessions = sessionList.slice(0, 50).map((s) => {
       const sc = scorecardList.find((x) => x.session_id === s.id);
       const hasScore = typeof sc?.overall_score === "number";
-      const incomplete =
-        (s.status === "incomplete" || s.status === "abandoned") ||
-        (!hasScore && (s.question_count ?? 0) === 0);
+      const status = String(s.status ?? "").toLowerCase();
+      const life = String(s.lifecycle_status ?? "").toUpperCase();
+      const completion_state =
+        status === "abandoned" ? "invalid" :
+        status === "completed" || life === "COMPLETED" || life === "ANALYZED" ? "completed" :
+        "incomplete";
+      const duration = sessionDurationSeconds(s);
+      const answerStats = answersBySession.get(s.id);
+      const question_count = answerStats
+        ? answerStats.total
+        : (typeof s.questions_asked === "number" ? s.questions_asked : null);
+      const answered_count = answerStats
+        ? answerStats.answered
+        : (typeof s.answers_generated === "number" ? s.answers_generated : null);
 
       return {
         session_id: s.id,
-        date: s.created_at,
-        mode: s.mode ?? "mock",
-        interview_type: s.interview_type ?? "behavioral",
-        company: s.company ?? null,
+        date: s.started_at ?? s.created_at,
+        started_at: s.started_at ?? null,
+        ended_at: s.ended_at ?? null,
+        title: s.title ?? null,
+        mode: s.type ?? "mock",
+        company: companyFromTitle(s.title),
+        status,
+        completion_state,
         overall_score: hasScore ? sc!.overall_score : null,
-        score_status: incomplete ? "not_scored" : hasScore ? "scored" : "not_scored",
+        score_status: hasScore ? "scored" : "not_scored",
+        comparable: completion_state === "completed" && hasScore,
         filler_rate: sc && typeof scorecardMetric(sc, "filler_rate") === "number"
           ? scorecardMetric(sc, "filler_rate") as number
           : null,
         wpm_avg: sc && typeof scorecardMetric(sc, "wpm_avg") === "number"
           ? scorecardMetric(sc, "wpm_avg") as number
-          : null,
-        duration_minutes: Math.round((s.duration_seconds ?? 0) / 60),
-        question_count: s.question_count ?? 0,
+          : (typeof s.avg_wpm === "number" ? s.avg_wpm : null),
+        duration_seconds: duration,
+        duration_minutes: duration === null ? null : Math.round(duration / 60),
+        question_count,
+        answered_count,
+        unanswered_count:
+          typeof question_count === "number" && typeof answered_count === "number"
+            ? Math.max(0, question_count - answered_count)
+            : null,
       };
     });
 
@@ -274,19 +342,13 @@ Deno.serve(async (req: Request) => {
       current_streak: profile?.streak_days ?? 0,
       longest_streak: profile?.longest_streak ?? 0,
 
-      avg_filler_rate:
-        scorecardList.reduce((sum, sc) => sum + (typeof scorecardMetric(sc, "filler_rate") === "number"
-          ? scorecardMetric(sc, "filler_rate") as number
-          : 0), 0) /
-        (scorecardList.length || 1),
+      avg_filler_rate: avgOf(scorecardList, "filler_rate"),
 
       avg_filler_delta_30d: fillerDelta30d,
 
-      avg_wpm:
-        scorecardList.reduce((sum, sc) => sum + (typeof scorecardMetric(sc, "wpm_avg") === "number"
-          ? scorecardMetric(sc, "wpm_avg") as number
-          : 0), 0) /
-        (scorecardList.length || 1),
+      avg_wpm: avgOf(scorecardList, "wpm_avg") === null
+        ? null
+        : Math.round(avgOf(scorecardList, "wpm_avg") as number),
 
       recent_sessions: recentSessions,
       confidence_trend: confidenceTrend,

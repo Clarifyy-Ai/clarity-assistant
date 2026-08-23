@@ -1,22 +1,25 @@
 import { PUBLISHABLE_LICENSES, type LicenseType } from "@/lib/content/license";
+import { isAssessmentReadyQuestion } from "@/lib/assessments/questionQuality";
+import {
+  isEligibleAssessmentQuestion,
+  type TaxonomyQuestion,
+  type TemplateTaxonomy,
+} from "@/lib/assessments/taxonomy";
 
 export type Difficulty = "EASY" | "MEDIUM" | "HARD";
 
-export type BankQuestionLite = {
+export type BankQuestionLite = TaxonomyQuestion & {
   id: string;
-  category?: string | null;
-  subject?: string | null;
-  topic?: string | null;
-  difficulty?: string | null;
-  license_type?: string | null;
-  publish_status?: string | null;
-  is_public?: boolean | null;
-  uploaded_by?: string | null;
-  created_by?: string | null;
+  question_text?: string | null;
+  question_type?: string | null;
+  options?: unknown;
+  correct_answer?: string | null;
+  explanation?: string | null;
 };
 
 export type ExamBlueprint = {
   id: string;
+  slug?: string;
   title: string;
   question_count: number;
   duration_minutes: number;
@@ -25,6 +28,10 @@ export type ExamBlueprint = {
   marks_negative: number;
   randomize: boolean;
   max_attempts?: number | null;
+  strict_taxonomy?: boolean | null;
+  role_slug?: string | null;
+  is_active?: boolean | null;
+  is_published?: boolean | null;
   difficulty_distribution: Partial<Record<Difficulty, number>>;
   category_distribution: Record<string, number>;
 };
@@ -33,6 +40,8 @@ export type AssemblyResult = {
   questionIds: string[];
   unfilled: number;
   usedCategories: string[];
+  availableCount: number;
+  requestedCount: number;
 };
 
 function mulberry32(seed: number): () => number {
@@ -61,16 +70,47 @@ function matchesCategory(question: BankQuestionLite, category: string): boolean 
     .some((value) => String(value).trim().toLowerCase() === target);
 }
 
+function asTemplate(blueprint: ExamBlueprint): TemplateTaxonomy {
+  return {
+    slug: blueprint.slug || blueprint.id,
+    role_slug: blueprint.role_slug || blueprint.slug || blueprint.id,
+    category_distribution: blueprint.category_distribution,
+    strict_taxonomy: blueprint.strict_taxonomy !== false,
+    is_active: blueprint.is_active !== false,
+    is_published: blueprint.is_published !== false,
+  };
+}
+
 export function isEligibleForPublicAssessment(
   question: BankQuestionLite,
   userId?: string | null,
 ): boolean {
   if (question.publish_status !== "published") return false;
+  if (question.review_status === "rejected" || question.review_status === "unreviewed") return false;
   const license = (question.license_type ?? "UNKNOWN") as LicenseType;
   if (!PUBLISHABLE_LICENSES.includes(license)) return false;
+  if (!isAssessmentReadyQuestion(question) && question.question_text) return false;
   if (question.is_public) return true;
   if (!userId) return false;
   return question.uploaded_by === userId || question.created_by === userId;
+}
+
+export function filterEligibleTemplateQuestions(
+  blueprint: ExamBlueprint,
+  pool: BankQuestionLite[],
+  userId?: string | null,
+): BankQuestionLite[] {
+  const template = asTemplate(blueprint);
+  const seen = new Set<string>();
+  const eligible: BankQuestionLite[] = [];
+  for (const question of pool) {
+    if (seen.has(question.id)) continue;
+    if (!isEligibleForPublicAssessment(question, userId)) continue;
+    if (!isEligibleAssessmentQuestion(question, template, userId)) continue;
+    seen.add(question.id);
+    eligible.push(question);
+  }
+  return eligible;
 }
 
 export function assembleExamInstance(
@@ -79,7 +119,7 @@ export function assembleExamInstance(
   options?: { seed?: number; userId?: string | null },
 ): AssemblyResult {
   const rand = mulberry32(options?.seed ?? Date.now() % 1_000_000);
-  const eligible = pool.filter((q) => isEligibleForPublicAssessment(q, options?.userId));
+  const eligible = filterEligibleTemplateQuestions(blueprint, pool, options?.userId);
   const picked = new Set<string>();
   const usedCategories: string[] = [];
 
@@ -117,21 +157,23 @@ export function assembleExamInstance(
   }
 
   const questionIds = [...picked];
-  if (blueprint.randomize) {
-    return {
-      questionIds: shuffle(questionIds, rand).slice(0, total),
-      unfilled: Math.max(0, total - Math.min(questionIds.length, total)),
-      usedCategories,
-    };
-  }
+  const selected = blueprint.randomize
+    ? shuffle(questionIds, rand).slice(0, total)
+    : questionIds.slice(0, total);
 
   return {
-    questionIds: questionIds.slice(0, total),
-    unfilled: Math.max(0, total - Math.min(questionIds.length, total)),
+    questionIds: selected,
+    unfilled: Math.max(0, total - selected.length),
     usedCategories,
+    availableCount: eligible.length,
+    requestedCount: total,
   };
 }
 
 export function hasDuplicateQuestionIds(ids: string[]): boolean {
   return new Set(ids).size !== ids.length;
+}
+
+export function inventoryAllowsStart(result: AssemblyResult): boolean {
+  return result.unfilled === 0 && result.questionIds.length === result.requestedCount;
 }

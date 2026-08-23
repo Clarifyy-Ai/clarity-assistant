@@ -64,13 +64,30 @@ export interface WeaknessArea {
 // ── Session Comparison ────────────────────────────────────────────
 
 export interface SessionComparisonData {
+  source_version: string;
+  baseline_rule: "older_session";
+  timezone: string;
+  baseline: SessionAnalyticsSummary;
+  comparison: SessionAnalyticsSummary;
   session_a: SessionAnalyticsSummary;
   session_b: SessionAnalyticsSummary;
-  score_delta: number;
-  filler_delta: number;            // negative = improvement
-  wpm_delta: number;
+  score_delta: number | null;
+  filler_delta: number | null;
+  wpm_delta: number | null;
   improvement_areas: string[];
   regression_areas: string[];
+  deltas?: {
+    overall_score: number | null;
+    communication: number | null;
+    technical: number | null;
+    problem_solving: number | null;
+    confidence: number | null;
+    filler_rate: number | null;
+    wpm_avg: number | null;
+    duration_seconds: number | null;
+    question_count: number | null;
+    answered_count: number | null;
+  };
 }
 
 export type AnalyticsScoreStatus =
@@ -83,15 +100,24 @@ export type AnalyticsScoreStatus =
 export interface SessionAnalyticsSummary {
   session_id: string;
   date: string;
-  mode: SessionMode;
-  interview_type: InterviewType;
+  started_at?: string | null;
+  ended_at?: string | null;
+  mode: SessionMode | string;
+  interview_type?: InterviewType | string | null;
   company: string | null;
+  title?: string | null;
+  status?: string | null;
+  completion_state?: "completed" | "incomplete" | "deleted" | "invalid";
   overall_score: number | null;
   score_status: AnalyticsScoreStatus;
   filler_rate: number | null;
   wpm_avg: number | null;
-  duration_minutes: number;
-  question_count: number;
+  duration_minutes: number | null;
+  duration_seconds?: number | null;
+  question_count: number | null;
+  answered_count?: number | null;
+  unanswered_count?: number | null;
+  comparable?: boolean;
 }
 
 // ── Leaderboard ───────────────────────────────────────────────────
@@ -120,11 +146,11 @@ export interface AnalyticsDashboardData {
   // Summary cards
   total_sessions: number;
   total_practice_hours: number;
-  avg_confidence_score: number;
-  avg_confidence_delta_30d: number; // positive = improved
-  avg_filler_rate: number;
-  avg_filler_delta_30d: number;
-  avg_wpm: number;
+  avg_confidence_score: number | null;
+  avg_confidence_delta_30d: number | null; // positive = improved
+  avg_filler_rate: number | null;
+  avg_filler_delta_30d: number | null;
+  avg_wpm: number | null;
   current_streak: number;
   longest_streak: number;
   total_xp: number;

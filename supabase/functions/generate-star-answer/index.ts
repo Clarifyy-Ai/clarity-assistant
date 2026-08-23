@@ -13,6 +13,7 @@ import {
   getAdminClient,
 } from "../_shared/utils.ts";
 import { deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
+import { creditDenialResponse } from "../_shared/creditAuthority.ts";
 import { generateWithFallback } from "../_shared/aiProvider.ts";
 import type { STARAnswer, ModelId } from "../_shared/types.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
@@ -27,6 +28,10 @@ import {
   parseStructuredJson,
   REPAIR_JSON_PROMPT,
 } from "../_shared/structuredParse.ts";
+import {
+  assessStarFactualIntegrity,
+  FACTUAL_INTEGRITY_SYSTEM_RULE,
+} from "../_shared/factualIntegrity.ts";
 
 // Sanitize text to protect prompt
 function sanitize(input: any, max = 2000): string {
@@ -108,19 +113,18 @@ Deno.serve(async (req: Request) => {
     // DEDUCT CREDITS (atomic + idempotent)
     // -------------------------------
     const starCost = creditCost("star_builder");
+    const idempotencyKey =
+      req.headers.get("x-idempotency-key") ??
+      req.headers.get("Idempotency-Key") ??
+      null;
     const creditResult = await deductCreditsAtomic({
       userId,
       action: "generate_star",
       cost: starCost,
-      idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+      idempotencyKey,
     });
     if (!creditResult.success) {
-      return errorResponse(
-        creditResult.error ?? "Insufficient credits.",
-        "INSUFFICIENT_CREDITS",
-        402,
-        req
-      );
+      return creditDenialResponse(req, creditResult, starCost);
     }
 
     // -------------------------------
@@ -128,7 +132,7 @@ Deno.serve(async (req: Request) => {
     // -------------------------------
     const contextParts: string[] = [];
 
-    if (resumeText) contextParts.push(`Resume:\n${resumeText}`);
+    if (resumeText) contextParts.push(`Resume / draft:\n${resumeText}`);
     if (jobDescription) contextParts.push(`Job Description:\n${jobDescription}`);
     if (company) contextParts.push(`Target Company: ${company}`);
     if (role) contextParts.push(`Target Role: ${role}`);
@@ -140,14 +144,15 @@ Deno.serve(async (req: Request) => {
 
     const systemPrompt = `
 You are an expert interview coach specialising in the STAR method.
-Generate compelling, specific, and authentic STAR-format answers.
-Use metrics wherever possible.
+Structure and polish a STAR-format answer using ONLY facts from the candidate context and question.
+${FACTUAL_INTEGRITY_SYSTEM_RULE}
+If the draft is thin, improve structure and language, and use [NEEDS EVIDENCE] or [Add measurable result if available] where facts are missing.
 Return ONLY a valid JSON object — no quotes outside JSON, no markdown fences.
 ${context}
 `.trim();
 
     const userPrompt = `
-Generate a complete STAR answer for this behavioural interview question:
+Produce a complete STAR answer for this behavioural interview question (preserve user facts; do not invent):
 
 "${questionText}"
 
@@ -186,7 +191,12 @@ Return ONLY this JSON:
         cost: starCost,
         reason: "generate-star-answer AI call failure",
       });
-      return errorResponse("AI service failed.", "AI_ERROR", 502, req);
+      return errorResponse(
+        "AI improvement is temporarily unavailable.",
+        "PROVIDER_UNAVAILABLE",
+        502,
+        req
+      );
     }
 
     // -------------------------------
@@ -225,6 +235,26 @@ Return ONLY this JSON:
       });
       return errorResponse(AI_RESPONSE_INVALID_MESSAGE, AI_RESPONSE_INVALID, 422, req);
     }
+
+    const sourceBaseline = [questionText, resumeText, jobDescription, company, role]
+      .filter(Boolean)
+      .join("\n");
+    const outputText = [
+      normalized.situation,
+      normalized.task,
+      normalized.action,
+      normalized.result,
+      normalized.fullAnswer,
+    ].join("\n");
+    const factual = assessStarFactualIntegrity(sourceBaseline, outputText);
+    if (!factual.ok) {
+      await refundCredits({
+        userId,
+        cost: starCost,
+        reason: "generate-star-answer factual integrity failed",
+      });
+      return errorResponse(AI_RESPONSE_INVALID_MESSAGE, AI_RESPONSE_INVALID, 422, req);
+    }
     star = normalized;
 
     // -------------------------------
@@ -242,7 +272,7 @@ Return ONLY this JSON:
     return successResponse(star, {
       model,
       tokensUsed: aiResult.totalTokens,
-      creditsCharged: 10,
+      creditsCharged: starCost,
       latencyMs: aiResult.latencyMs,
     }, 200, req);
   } catch (err) {

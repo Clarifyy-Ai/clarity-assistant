@@ -164,6 +164,7 @@ export function useGamification() {
         profile.longest_streak ?? 0,
         profile.last_active_date ?? null,
       );
+      setIsLoading(false);
     }
 
     void loadGamificationExtras();
@@ -175,7 +176,12 @@ export function useGamification() {
       return;
     }
 
-    setIsLoading(true);
+    const alreadyHydrated =
+      useGamificationStore.getState().unlocked_badges.length > 0 ||
+      useGamificationStore.getState().xp > 0;
+    if (!alreadyHydrated) {
+      setIsLoading(true);
+    }
 
     try {
       const [badgeIds, challenge] = await Promise.all([

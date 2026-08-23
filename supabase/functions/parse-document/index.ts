@@ -42,31 +42,31 @@ function looksBinary(bytes: Uint8Array): boolean {
   for (let i = 0; i < sample.length; i++) {
     if (sample[i] === 0) nul++;
   }
-
-  async function extractZipText(bytes: Uint8Array, xlsx: boolean): Promise<string | null> {
-    try {
-      const zip = await JSZip.loadAsync(bytes);
-      const fileName = xlsx ? "xl/sharedStrings.xml" : "word/document.xml";
-      const file = zip.file(fileName);
-      if (!file) return null;
-      const xml = await file.async("string");
-      return xml
-        .replace(/<\/(?:w:p|row|si)>/g, "\n")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
-        .replace(/\s+/g, " ").trim().slice(0, 50000) || null;
-    } catch {
-      return null;
-    }
-  }
-
-  function response(req: Request, body: Record<string, unknown>, status = 200) {
-    return new Response(JSON.stringify(body), {
-      status,
-      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
-    });
-  }
   return nul > 4;
+}
+
+async function extractZipText(bytes: Uint8Array, xlsx: boolean): Promise<string | null> {
+  try {
+    const zip = await JSZip.loadAsync(bytes);
+    const fileName = xlsx ? "xl/sharedStrings.xml" : "word/document.xml";
+    const file = zip.file(fileName);
+    if (!file) return null;
+    const xml = await file.async("string");
+    return xml
+      .replace(/<\/(?:w:p|row|si)>/g, "\n")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+      .replace(/\s+/g, " ").trim().slice(0, 50000) || null;
+  } catch {
+    return null;
+  }
+}
+
+function response(req: Request, body: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+  });
 }
 
 async function extractWithGemini(

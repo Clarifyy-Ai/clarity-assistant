@@ -40,13 +40,23 @@ function errorCode(err: unknown): string {
 
 /** True when the failure is an out-of-credits / payment-required response. */
 export function isInsufficientCreditsError(err: unknown): boolean {
-  const status = errorStatus(err);
-  if (status === 402) return true;
-
   const code = errorCode(err).toUpperCase();
   if (
+    code === "MAX_ATTEMPTS_REACHED" ||
+    code === "CAPABILITY_REQUIRED" ||
+    code === "PLAN_UPGRADE_REQUIRED" ||
+    code === "QUESTION_INVENTORY_INSUFFICIENT" ||
+    code === "INSUFFICIENT_APPROVED_QUESTIONS" ||
+    code === "CREDIT_SERVICE_UNAVAILABLE" ||
+    code === "PROVIDER_UNAVAILABLE" ||
+    code === "ACCOUNT_RESTRICTED" ||
+    code === "INVALID_OPERATION"
+  ) {
+    return false;
+  }
+
+  if (
     code === "INSUFFICIENT_CREDITS" ||
-    code === "PAYMENT_REQUIRED" ||
     code === "NO_CREDITS" ||
     code === "BILLING_001" ||
     code === "BILL_001"
@@ -54,11 +64,18 @@ export function isInsufficientCreditsError(err: unknown): boolean {
     return true;
   }
 
+  if (code === "PAYMENT_REQUIRED") {
+    return true;
+  }
+
+  const status = errorStatus(err);
+  if (status === 402) {
+    return true;
+  }
+
   const msg = errorText(err).toLowerCase();
   return (
     msg.includes("insufficient credits") ||
-    msg.includes("payment_required") ||
-    msg.includes("payment required") ||
     msg.includes("out of credits") ||
     msg.includes("no credits")
   );
@@ -69,7 +86,14 @@ function isAiTemporarilyUnavailableError(err: unknown): boolean {
   if (status === 502 || status === 503) return true;
 
   const code = errorCode(err).toUpperCase();
-  if (code === "AI_ERROR" || code === "PROVIDER_UNAVAILABLE") return true;
+  if (
+    code === "AI_ERROR" ||
+    code === "PROVIDER_UNAVAILABLE" ||
+    code === "AI_PROVIDER_UNAVAILABLE" ||
+    code === "BAD_GATEWAY"
+  ) {
+    return true;
+  }
 
   const msg = errorText(err).toLowerCase();
   return (
@@ -77,8 +101,14 @@ function isAiTemporarilyUnavailableError(err: unknown): boolean {
     msg.includes("credits refunded") ||
     msg.includes("ai_error") ||
     msg.includes("provider_unavailable") ||
+    msg.includes("ai_provider_unavailable") ||
     msg.includes("service unavailable")
   );
+}
+
+/** True when the AI provider failed (502/503) — not a credit or validation failure. */
+export function isAiProviderUnavailableError(err: unknown): boolean {
+  return isAiTemporarilyUnavailableError(err) && !isInsufficientCreditsError(err);
 }
 
 /** Network / CORS / gateway failures that should never name Edge Functions. */
@@ -102,8 +132,46 @@ function isUnreachableOrCorsError(err: unknown): boolean {
  * Never surfaces raw "Edge Function … HTTP …" when a cleaner message exists.
  */
 export function getAiUserFacingError(err: unknown): string {
-  if (isInsufficientCreditsError(err)) {
+  const code = errorCode(err).toUpperCase();
+  const details = err instanceof ApiClientError ? (err.details as Record<string, unknown> | undefined) : undefined;
+  const balance = Number(details?.balance);
+  const cost = Number(details?.cost ?? details?.required);
+
+  if (code === "INSUFFICIENT_CREDITS") {
+    if (Number.isFinite(cost) && Number.isFinite(balance)) {
+      return `You need ${cost} credits, but only ${balance} are available.`;
+    }
     return CREDITS_NEEDED_MESSAGE;
+  }
+
+  if (isInsufficientCreditsError(err) && code !== "PAYMENT_REQUIRED") {
+    return CREDITS_NEEDED_MESSAGE;
+  }
+
+  if (code === "PAYMENT_REQUIRED") {
+    return "Payment is required to continue. Update your billing details or complete checkout.";
+  }
+
+  if (code === "MAX_ATTEMPTS_REACHED") {
+    const resetAt = typeof details?.resetAt === "string" ? details.resetAt : typeof details?.reset_at === "string" ? details.reset_at : null;
+    let resetLabel = "the next reset";
+    if (resetAt) {
+      const d = new Date(resetAt);
+      if (!Number.isNaN(d.getTime())) resetLabel = d.toLocaleString();
+    }
+    return `You have reached today's attempt limit. Try again after ${resetLabel}.`;
+  }
+
+  if (code === "QUESTION_INVENTORY_INSUFFICIENT" || code === "INSUFFICIENT_APPROVED_QUESTIONS") {
+    const available = Number(details?.available);
+    if (Number.isFinite(available)) {
+      return `Only ${available} approved questions are available for this configuration.`;
+    }
+    return "Not enough approved questions are available for this configuration.";
+  }
+
+  if (code === "CREDIT_SERVICE_UNAVAILABLE") {
+    return "Credits couldn't be verified right now. Please try again.";
   }
 
   const quotaMsg = errorText(err).toLowerCase();
@@ -125,7 +193,6 @@ export function getAiUserFacingError(err: unknown): string {
 
   const raw = errorText(err).trim();
   const rawLower = raw.toLowerCase();
-  const code = errorCode(err).toUpperCase();
   // Transient credit ledger races — not "out of credits"; ask for a retry.
   if (
     code === "CREDIT_DEDUCTION_FAILED" ||

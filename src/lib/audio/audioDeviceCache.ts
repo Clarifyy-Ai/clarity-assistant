@@ -1,4 +1,5 @@
-// ✅ FIX P4-A: Cache enumerateDevices results for 30s to avoid repeated permission prompts.
+// Cache enumerateDevices results for 30s. Request getUserMedia only when labels
+// are missing so we do not stop another owner's live tracks.
 
 import type { AudioDevice } from "@/types/audio.types";
 
@@ -9,18 +10,29 @@ let cacheExpiresAt = 0;
 let inflight: Promise<AudioDevice[]> | null = null;
 
 async function enumerateFresh(): Promise<AudioDevice[]> {
-  const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  tempStream.getTracks().forEach((t) => t.stop());
+  if (!navigator.mediaDevices?.enumerateDevices) return [];
 
-  const devices = await navigator.mediaDevices.enumerateDevices();
-  return devices
-    .filter((d) => d.kind === "audioinput")
-    .map((d, i) => ({
-      deviceId: d.deviceId,
-      label: d.label || `Microphone ${i + 1}`,
-      kind: "audioinput" as const,
-      isDefault: d.deviceId === "default" || i === 0,
-    }));
+  let tempStream: MediaStream | null = null;
+  try {
+    const existing = await navigator.mediaDevices.enumerateDevices();
+    const inputs = existing.filter((d) => d.kind === "audioinput");
+    const hasLabels = inputs.some((d) => Boolean(d.label));
+    if (!hasLabels && navigator.mediaDevices.getUserMedia) {
+      tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    }
+
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices
+      .filter((d) => d.kind === "audioinput")
+      .map((d, i) => ({
+        deviceId: d.deviceId,
+        label: d.label || `Microphone ${i + 1}`,
+        kind: "audioinput" as const,
+        isDefault: d.deviceId === "default" || i === 0,
+      }));
+  } finally {
+    tempStream?.getTracks().forEach((t) => t.stop());
+  }
 }
 
 export function invalidateAudioDeviceCache(): void {

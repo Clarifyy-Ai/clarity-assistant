@@ -16,6 +16,10 @@ export type { AudioChunk, AudioFormat, AudioProcessorConfig, AudioProcessorStats
 
 // ─── Deepgram ─────────────────────────────────────────────────────────────────
 export { DeepgramClient } from "./deepgramClient";
+export { runLocalMicCheck } from "./localMicPrecheck";
+export { checkSttHealth } from "./sttHealthCheck";
+export { runSpeakerTest, cancelSpeakerTest } from "./speakerTest";
+export { MicState, SpeakerState, SttState } from "./precheckStates";
 export { DeepgramStreamClient } from "./deepgramStream";
 export type { DeepgramStreamOptions } from "./deepgramStream";
 

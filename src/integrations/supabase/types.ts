@@ -1364,6 +1364,7 @@ export type Database = {
       company_research: {
         Row: {
           company_name: string
+          company_name_normalized: string
           created_at: string
           culture: string | null
           id: string
@@ -1375,6 +1376,7 @@ export type Database = {
         }
         Insert: {
           company_name: string
+          company_name_normalized?: string
           created_at?: string
           culture?: string | null
           id?: string
@@ -1386,6 +1388,7 @@ export type Database = {
         }
         Update: {
           company_name?: string
+          company_name_normalized?: string
           created_at?: string
           culture?: string | null
           id?: string
@@ -2169,6 +2172,7 @@ export type Database = {
           difficulty_distribution: Json
           duration_minutes: number
           id: string
+          is_active: boolean
           is_published: boolean
           marks_negative: number
           marks_positive: number
@@ -2176,7 +2180,9 @@ export type Database = {
           passing_percentage: number
           question_count: number
           randomize: boolean
+          role_slug: string
           slug: string
+          strict_taxonomy: boolean
           title: string
           updated_at: string
         }
@@ -2188,6 +2194,7 @@ export type Database = {
           difficulty_distribution?: Json
           duration_minutes: number
           id?: string
+          is_active?: boolean
           is_published?: boolean
           marks_negative?: number
           marks_positive?: number
@@ -2195,7 +2202,9 @@ export type Database = {
           passing_percentage?: number
           question_count: number
           randomize?: boolean
+          role_slug?: string
           slug: string
+          strict_taxonomy?: boolean
           title: string
           updated_at?: string
         }
@@ -2207,6 +2216,7 @@ export type Database = {
           difficulty_distribution?: Json
           duration_minutes?: number
           id?: string
+          is_active?: boolean
           is_published?: boolean
           marks_negative?: number
           marks_positive?: number
@@ -2214,7 +2224,9 @@ export type Database = {
           passing_percentage?: number
           question_count?: number
           randomize?: boolean
+          role_slug?: string
           slug?: string
+          strict_taxonomy?: boolean
           title?: string
           updated_at?: string
         }
@@ -5024,6 +5036,7 @@ export type Database = {
           created_by: string | null
           difficulty: string | null
           downvotes: number | null
+          eligible_roles: string[]
           exam_type: string | null
           explanation: string | null
           explanation_blocks: Json | null
@@ -5046,6 +5059,7 @@ export type Database = {
           question_html: string | null
           question_text: string
           question_type: string
+          review_status: string
           source: string | null
           source_paper: string | null
           source_year: number | null
@@ -5057,6 +5071,7 @@ export type Database = {
           updated_at: string | null
           uploaded_by: string | null
           upvotes: number | null
+          cross_functional: boolean
         }
         Insert: {
           bank_id?: string | null
@@ -5066,8 +5081,10 @@ export type Database = {
           correct_answer: string
           created_at?: string | null
           created_by?: string | null
+          cross_functional?: boolean
           difficulty?: string | null
           downvotes?: number | null
+          eligible_roles?: string[]
           exam_type?: string | null
           explanation?: string | null
           explanation_blocks?: Json | null
@@ -5090,6 +5107,7 @@ export type Database = {
           question_html?: string | null
           question_text: string
           question_type?: string
+          review_status?: string
           source?: string | null
           source_paper?: string | null
           source_year?: number | null
@@ -5110,8 +5128,10 @@ export type Database = {
           correct_answer?: string
           created_at?: string | null
           created_by?: string | null
+          cross_functional?: boolean
           difficulty?: string | null
           downvotes?: number | null
+          eligible_roles?: string[]
           exam_type?: string | null
           explanation?: string | null
           explanation_blocks?: Json | null
@@ -5134,6 +5154,7 @@ export type Database = {
           question_html?: string | null
           question_text?: string
           question_type?: string
+          review_status?: string
           source?: string | null
           source_paper?: string | null
           source_year?: number | null
@@ -6135,6 +6156,10 @@ export type Database = {
           deleted_at: string | null
           document_id: string | null
           ended_at: string | null
+          expires_at: string | null
+          terminal_reason: string | null
+          duration_seconds: number | null
+          start_idempotency_key: string | null
           filler_words: number | null
           hints_used: number | null
           id: string
@@ -6167,6 +6192,10 @@ export type Database = {
           deleted_at?: string | null
           document_id?: string | null
           ended_at?: string | null
+          expires_at?: string | null
+          terminal_reason?: string | null
+          duration_seconds?: number | null
+          start_idempotency_key?: string | null
           filler_words?: number | null
           hints_used?: number | null
           id?: string
@@ -6199,6 +6228,10 @@ export type Database = {
           deleted_at?: string | null
           document_id?: string | null
           ended_at?: string | null
+          expires_at?: string | null
+          terminal_reason?: string | null
+          duration_seconds?: number | null
+          start_idempotency_key?: string | null
           filler_words?: number | null
           hints_used?: number | null
           id?: string
@@ -7218,7 +7251,7 @@ export type Database = {
         Returns: number
       }
       assemble_assessment_from_template: {
-        Args: { p_template_id: string }
+        Args: { p_idempotency_key?: string; p_template_id: string }
         Returns: Json
       }
       bulk_update_users: {
@@ -7227,6 +7260,43 @@ export type Database = {
       }
       check_free_tier_limits: {
         Args: { p_action: string; p_user_id: string }
+        Returns: Json
+      }
+      session_start_eligibility: {
+        Args: { p_user_id: string }
+        Returns: Json
+      }
+      start_owned_session: {
+        Args: {
+          p_user_id: string
+          p_type: string
+          p_title?: string | null
+          p_document_id?: string | null
+          p_jd_id?: string | null
+          p_model_used?: string | null
+          p_tags?: string[] | null
+          p_practice_context_id?: string | null
+          p_source_type?: string | null
+          p_duration_minutes?: number
+          p_idempotency_key?: string | null
+        }
+        Returns: Json
+      }
+      end_owned_session: {
+        Args: {
+          p_user_id: string
+          p_session_id: string
+          p_terminal_reason?: string
+          p_lifecycle_status?: string | null
+        }
+        Returns: Json
+      }
+      restore_owned_session: {
+        Args: {
+          p_user_id: string
+          p_session_id?: string | null
+          p_type?: string | null
+        }
         Returns: Json
       }
       check_rate_limit: {
@@ -7286,6 +7356,17 @@ export type Database = {
         Args: { p_action: string; p_cost: number; p_session_id?: string }
         Returns: Json
       }
+      deduct_credits_service: {
+        Args: {
+          p_user_id: string
+          p_action: string
+          p_cost: number
+          p_session_id?: string
+          p_idempotency_key?: string
+          p_request_hash?: string
+        }
+        Returns: Json
+      }
       delete_expired_session_data: { Args: never; Returns: Json }
       ensure_my_referral_code: { Args: never; Returns: string }
       get_admin_dau_mau: {
@@ -7326,6 +7407,10 @@ export type Database = {
           stage_id: string
           status: string
         }[]
+      }
+      get_spendable_credits: {
+        Args: { p_user_id: string }
+        Returns: Json
       }
       get_my_referrals: {
         Args: never

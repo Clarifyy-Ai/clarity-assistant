@@ -235,6 +235,42 @@ export function subscribeToNotifications(
   });
 }
 
+export function subscribeToNotificationFeed(
+  userId: string,
+  handlers: {
+    onInsert?: (row: Record<string, unknown>) => void;
+    onUpdate?: (row: Record<string, unknown>) => void;
+    onDelete?: (oldRow: Record<string, unknown>) => void;
+  },
+): () => void {
+  const channelName = `notifications-feed-${userId}`;
+  const channel = supabase
+    .channel(channelName)
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
+      (payload) => handlers.onInsert?.(payload.new as Record<string, unknown>),
+    )
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
+      (payload) => handlers.onUpdate?.(payload.new as Record<string, unknown>),
+    )
+    .on(
+      "postgres_changes",
+      { event: "DELETE", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` },
+      (payload) => handlers.onDelete?.(payload.old as Record<string, unknown>),
+    )
+    .subscribe();
+
+  registerChannel(channelName, channel);
+  return () => removeChannel(channelName);
+}
+
+export function getActiveChannelCount(): number {
+  return activeChannels.size;
+}
+
 export function subscribeToCredits(
   userId: string,
   onUpdate: (credits: Record<string, unknown>) => void

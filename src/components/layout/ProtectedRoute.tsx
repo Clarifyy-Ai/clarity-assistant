@@ -10,6 +10,7 @@ import { isElectronApp } from "@/lib/platform/isElectron";
 import { openInBrowser } from "@/lib/platform/openInBrowser";
 import { Button } from "@/components/ui/Button";
 import { buildLoginUrl } from "@/lib/auth/safeReturnTo";
+import { peekAuthEndReason } from "@/lib/auth/sessionErrors";
 import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
 import { logger, LogEvents } from "@/lib/logger";
 import {
@@ -17,6 +18,7 @@ import {
   PROFILE_FRIENDLY_ERROR,
   supportMailto,
 } from "@/lib/auth/recoveryActions";
+import { canRetryAccountRecovery } from "@/lib/auth/accountBootstrap";
 import { SUPPORT_EMAIL } from "@/lib/constants/contact";
 import { useClaimStoredReferral } from "@/hooks/useClaimStoredReferral";
 import {
@@ -33,14 +35,16 @@ interface ProtectedRouteProps {
   children?: React.ReactNode;
 }
 
-const ADMIN_ROLE_WAIT_MS = 8_000;
+const ADMIN_ROLE_WAIT_MS = 6_000;
 
 function AccountLoadErrorCard({
   message,
   loginPath,
+  canRetry,
 }: {
   message: string;
   loginPath: string;
+  canRetry: boolean;
 }): JSX.Element {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -49,7 +53,7 @@ function AccountLoadErrorCard({
           <AlertCircle className="h-5 w-5 text-destructive mt-1 flex-shrink-0" />
           <div>
             <h2 className="text-lg font-semibold mb-2">
-              We couldn&apos;t load your account
+              Unable to load your account information
             </h2>
             <p className="text-sm text-muted-foreground mb-4">
               {message || PROFILE_FRIENDLY_ERROR}
@@ -57,16 +61,12 @@ function AccountLoadErrorCard({
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
+                disabled={!canRetry}
                 onClick={() => {
-                  const auth = useAuthStore.getState();
-                  if (auth.user?.id) {
-                    void auth.loadProfile();
-                  } else {
-                    void auth.initialize();
-                  }
+                  void useAuthStore.getState().retryAccountLoad();
                 }}
               >
-                Try again
+                Retry
               </Button>
               <Button type="button" variant="outline" onClick={hardReloadApp}>
                 Reload
@@ -112,6 +112,8 @@ export const ProtectedRoute = memo(function ProtectedRoute({
   children,
 }: ProtectedRouteProps) {
   const status = useAuthStore((s) => s.status);
+  const accountPhase = useAuthStore((s) => s.accountPhase);
+  const recoveryAttempts = useAuthStore((s) => s.recoveryAttempts);
   const user = useAuthStore((s) => s.user);
   const profile = useAuthStore((s) => s.profile);
   const error = useAuthStore((s) => s.error);
@@ -123,21 +125,30 @@ export const ProtectedRoute = memo(function ProtectedRoute({
   const location = useLocation();
   const [adminWaitExpired, setAdminWaitExpired] = useState(false);
   const [mfaAal, setMfaAal] = useState<"pending" | "ok" | "block">("pending");
+  const [mfaVerifiedUserId, setMfaVerifiedUserId] = useState<string | null>(null);
   useClaimStoredReferral(user?.id);
 
   const isLoginPath =
     location.pathname === "/login" || location.pathname.startsWith("/login/");
+
+  const userId = user?.id;
 
   useEffect(() => {
     if (isLoginPath) {
       setMfaAal("ok");
       return;
     }
-    if (!user || status === "unauthenticated" || status === "idle" || status === "loading") {
+    if (!userId || status === "unauthenticated" || status === "idle" || status === "loading") {
       setMfaAal("ok");
+      setMfaVerifiedUserId(null);
       return;
     }
     if (status !== "authenticated") {
+      setMfaAal("ok");
+      return;
+    }
+
+    if (mfaVerifiedUserId === userId) {
       setMfaAal("ok");
       return;
     }
@@ -151,7 +162,12 @@ export const ProtectedRoute = memo(function ProtectedRoute({
           await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
         const decision = evaluateMfaAssurance({ error, aal });
         if (cancelled) return;
-        setMfaAal(decision === "allow" ? "ok" : "block");
+        if (decision === "allow") {
+          setMfaVerifiedUserId(userId);
+          setMfaAal("ok");
+        } else {
+          setMfaAal("block");
+        }
       } catch {
         if (!cancelled) setMfaAal("block");
       }
@@ -160,7 +176,7 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     return () => {
       cancelled = true;
     };
-  }, [user, status, isLoginPath]);
+  }, [userId, status, isLoginPath, mfaVerifiedUserId]);
 
   useEffect(() => {
     if (!(requireAdmin && isProfileLoaded && !isAdminResolved)) {
@@ -174,17 +190,22 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     return () => window.clearTimeout(t);
   }, [requireAdmin, isProfileLoaded, isAdminResolved]);
 
-  // FIX Issue 14: blank screen during auth hydration to prevent flash of protected content
-  if (status === "idle" || status === "loading") {
+  // Wait for authoritative account context. Never render protected pages
+  // while session/profile are still resolving.
+  if (
+    accountPhase === "INITIALIZING" ||
+    accountPhase === "ACCOUNT_LOADING" ||
+    accountPhase === "AUTHENTICATED"
+  ) {
     return <AppLoadingFallback />;
   }
 
-  // 2) Error — recoverable: Retry / Reload / Contact support / Login
-  if (status === "error") {
+  if (accountPhase === "RECOVERY_REQUIRED" || status === "error") {
     return (
       <AccountLoadErrorCard
         message={error || PROFILE_FRIENDLY_ERROR}
         loginPath={loginPath}
+        canRetry={canRetryAccountRecovery(recoveryAttempts)}
       />
     );
   }
@@ -193,7 +214,11 @@ export const ProtectedRoute = memo(function ProtectedRoute({
   if (!user || status === "unauthenticated") {
     const returnTo = `${location.pathname}${location.search}${location.hash}`;
     // Prefer pathname + search object so returnTo is never dropped by path-only parsing.
-    const loginHref = buildLoginUrl({ loginPath, returnTo });
+    const loginHref = buildLoginUrl({
+      loginPath,
+      returnTo,
+      reason: peekAuthEndReason() ?? undefined,
+    });
     const qIndex = loginHref.indexOf("?");
     const to =
       qIndex >= 0
@@ -342,8 +367,9 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     if (isProfileLoaded && adminWaitExpired) {
       return (
         <AccountLoadErrorCard
-          message="We couldn't verify your admin permissions. Please try again."
+          message="Unable to load your account information."
           loginPath={loginPath}
+          canRetry={canRetryAccountRecovery(recoveryAttempts)}
         />
       );
     }

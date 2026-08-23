@@ -119,6 +119,10 @@ export interface SessionRow {
   title:              string | null;
   type:               "live" | "mock" | "warmup" | "rehearsal" | "room";
   status:             "pending" | "active" | "paused" | "completed" | "abandoned";
+  lifecycle_status:   string | null;
+  terminal_reason:    string | null;
+  duration_seconds:   number | null;
+  expires_at:         ISODate | null;
   interview_id:       UUID | null;
   company_id:         UUID | null;
   document_id:        UUID | null;
@@ -149,7 +153,9 @@ export interface SessionUpdate extends Partial<Omit<SessionRow, "id" | "user_id"
   updated_at?: ISODate;
 }
 
-// ─── Table: session_questions ─────────────────────────────────────────────────
+// ─── Table: session_questions (NOT in live Postgres) ──────────────────────────
+// Live Clarify.AI stores questions/answers on `session_answers`.
+// Do not nest `session_questions(...)` in PostgREST selects.
 
 export interface SessionQuestionRow {
   id:              UUID;

@@ -10,6 +10,7 @@ export const INTERVIEW_LIFECYCLE_STATES = [
   "READY",
   "IN_PROGRESS",
   "PAUSED",
+  "ENDING",
   "COMPLETED",
   "PROCESSING",
   "ANALYZED",
@@ -17,6 +18,7 @@ export const INTERVIEW_LIFECYCLE_STATES = [
   "INTERRUPTED",
   "RECOVERABLE_ERROR",
   "FAILED",
+  "EXPIRED",
 ] as const;
 
 export type InterviewLifecycleState = (typeof INTERVIEW_LIFECYCLE_STATES)[number];
@@ -34,13 +36,16 @@ const TRANSITIONS: Record<InterviewLifecycleState, readonly InterviewLifecycleSt
   READY: ["IN_PROGRESS", "DEVICE_CHECK", "CANCELLED", "FAILED"],
   IN_PROGRESS: [
     "PAUSED",
+    "ENDING",
     "COMPLETED",
     "INTERRUPTED",
     "RECOVERABLE_ERROR",
     "CANCELLED",
     "FAILED",
+    "EXPIRED",
   ],
-  PAUSED: ["IN_PROGRESS", "COMPLETED", "CANCELLED", "INTERRUPTED", "FAILED"],
+  PAUSED: ["IN_PROGRESS", "ENDING", "COMPLETED", "CANCELLED", "INTERRUPTED", "FAILED", "EXPIRED"],
+  ENDING: ["COMPLETED", "FAILED", "CANCELLED"],
   COMPLETED: ["PROCESSING", "ANALYZED"],
   PROCESSING: ["ANALYZED", "RECOVERABLE_ERROR", "FAILED"],
   ANALYZED: [],
@@ -48,6 +53,7 @@ const TRANSITIONS: Record<InterviewLifecycleState, readonly InterviewLifecycleSt
   INTERRUPTED: ["READY", "IN_PROGRESS", "CANCELLED", "FAILED"],
   RECOVERABLE_ERROR: ["DEVICE_CHECK", "READY", "IN_PROGRESS", "CANCELLED", "FAILED"],
   FAILED: [],
+  EXPIRED: [],
 };
 
 const LEGACY_TO_LIFECYCLE: Record<LegacySessionStatus, InterviewLifecycleState> = {
@@ -71,6 +77,8 @@ const LIFECYCLE_TO_LEGACY: Record<InterviewLifecycleState, LegacySessionStatus> 
   INTERRUPTED: "abandoned",
   RECOVERABLE_ERROR: "paused",
   FAILED: "abandoned",
+  ENDING: "active",
+  EXPIRED: "abandoned",
 };
 
 export function isInterviewLifecycleState(value: unknown): value is InterviewLifecycleState {

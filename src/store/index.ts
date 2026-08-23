@@ -19,7 +19,7 @@ export {
   selectSubscriptionActive,
 } from "./authStore";
 
-export type { AuthStatus, AuthState, AuthActions, AuthStore } from "./authStore";
+export type { AuthStatus, AccountPhase, AuthState, AuthActions, AuthStore } from "./authStore";
 
 export {
   useGlobalStore,

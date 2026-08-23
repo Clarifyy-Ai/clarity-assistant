@@ -2,6 +2,7 @@ import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { prepToolIdempotencyKey } from "@/lib/network/idempotency";
 import {
   getAiUserFacingError,
+  isAiProviderUnavailableError,
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
 import { refreshCredits } from "@/lib/billing/creditsManager";
@@ -20,12 +21,17 @@ import {
 } from "@/components/prep/StarBuilderForm";
 import { PrepToolShell } from "@/components/prep/PrepToolShell";
 import {
-  Star, Sparkles, Save, Loader2, BookOpen, Trash2, Pencil, Filter,
+  Star, Sparkles, Save, Loader2, BookOpen, Trash2, Pencil, Filter, ArrowLeft,
 } from "lucide-react";
+import {
+  assessStarFactualIntegrity,
+  starSectionsToText,
+} from "@/lib/prep/starFactualIntegrity";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { answerBankDB } from "@/lib/supabase/database";
 
@@ -37,19 +43,36 @@ const EXAMPLES = [
 ];
 
 type StarStory = Tables<"answer_bank">;
+type AiPhase = "IDLE" | "GENERATING" | "GENERATED" | "GENERATION_FAILED";
+type SavePhase = "IDLE" | "SAVING" | "SAVED" | "SAVE_FAILED";
 
 const EMPTY_STAR: StarFields = { situation: "", task: "", action: "", result: "" };
+const AI_REWRITE_UNAVAILABLE = "AI improvement is temporarily unavailable.";
+const SAVE_FAILED_MSG =
+  "Your improvement was generated but could not be saved.";
 
 export default function StarBuilder() {
   const { user } = useAuthStore();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnTo = searchParams.get("returnTo");
+  const backHref =
+    returnTo && returnTo.startsWith("/app/") && !returnTo.startsWith("//")
+      ? returnTo
+      : "/app/prep";
 
   const [question, setQuestion] = useState("");
   const [star, setStar] = useState<StarFields>(EMPTY_STAR);
   const [competencyTag, setCompetencyTag] = useState("");
-  const [polishing, setPolishing] = useState(false);
+  const [aiPhase, setAiPhase] = useState<AiPhase>("IDLE");
   const [polishError, setPolishError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [savePhase, setSavePhase] = useState<SavePhase>("IDLE");
   const polishKeyRef = useRef<string | null>(null);
+  const originalStarRef = useRef<StarFields | null>(null);
+  const [hasOriginalDraft, setHasOriginalDraft] = useState(false);
+  const polishing = aiPhase === "GENERATING";
+  const saving = savePhase === "SAVING";
+  const dirtyRef = useRef(false);
 
   const [stories, setStories] = useState<StarStory[]>([]);
   const [loadingStories, setLoadingStories] = useState(true);
@@ -101,6 +124,12 @@ export default function StarBuilder() {
     setStar(EMPTY_STAR);
     setCompetencyTag("");
     setEditingId(null);
+    setAiPhase("IDLE");
+    setSavePhase("IDLE");
+    setPolishError(null);
+    originalStarRef.current = null;
+    setHasOriginalDraft(false);
+    dirtyRef.current = false;
   }
 
   function loadStoryIntoForm(story: StarStory) {
@@ -109,6 +138,22 @@ export default function StarBuilder() {
     setStar(parseSavedStarAnswer(story.answer_text));
     const extraTag = story.tags?.find((t) => t !== "star") ?? "";
     setCompetencyTag(extraTag);
+    dirtyRef.current = false;
+    setSavePhase("IDLE");
+  }
+
+  function handleBack() {
+    if (polishing || saving) {
+      toast.message("Please wait until saving or AI rewrite finishes.");
+      return;
+    }
+    if (dirtyRef.current && hasContent && savePhase !== "SAVED") {
+      const leave = window.confirm(
+        "You have unsaved STAR changes. Leave without saving?",
+      );
+      if (!leave) return;
+    }
+    navigate(backHref);
   }
 
   async function handlePolish() {
@@ -118,7 +163,10 @@ export default function StarBuilder() {
     }
     if (polishing) return;
 
-    setPolishing(true);
+    // Preserve original before any AI overwrite.
+    originalStarRef.current = { ...star };
+    setHasOriginalDraft(true);
+    setAiPhase("GENERATING");
     setPolishError(null);
     const idempotencyKey =
       polishKeyRef.current ?? prepToolIdempotencyKey("star_method");
@@ -136,32 +184,81 @@ export default function StarBuilder() {
         },
       });
 
-      const text = data?.result ?? "";
-      if (text) {
-        const parts = parseStarResponse(text);
-        setStar((prev) => ({
-          situation: parts.situation || prev.situation,
-          task: parts.task || prev.task,
-          action: parts.action || prev.action,
-          result: parts.result || prev.result,
-        }));
-        toast.success("Answer polished with AI!");
+      const text = typeof data?.result === "string" ? data.result.trim() : "";
+      if (!text) {
+        setStar(originalStarRef.current);
+        setAiPhase("GENERATION_FAILED");
+        setPolishError(AI_REWRITE_UNAVAILABLE);
+        toast.error(AI_REWRITE_UNAVAILABLE);
+        await refreshCredits().catch(() => undefined);
+        return;
       }
+
+      const parts = parseStarResponse(text);
+      const hasParsed =
+        Boolean(parts.situation?.trim()) ||
+        Boolean(parts.task?.trim()) ||
+        Boolean(parts.action?.trim()) ||
+        Boolean(parts.result?.trim());
+      if (!hasParsed) {
+        setStar(originalStarRef.current);
+        setAiPhase("GENERATION_FAILED");
+        setPolishError(AI_REWRITE_UNAVAILABLE);
+        toast.error(AI_REWRITE_UNAVAILABLE);
+        await refreshCredits().catch(() => undefined);
+        return;
+      }
+
+      const next: StarFields = {
+        situation: parts.situation || star.situation,
+        task: parts.task || star.task,
+        action: parts.action || star.action,
+        result: parts.result || star.result,
+      };
+      const factual = assessStarFactualIntegrity(input, starSectionsToText(next));
+      if (!factual.ok) {
+        setStar(originalStarRef.current);
+        setAiPhase("GENERATION_FAILED");
+        setPolishError(AI_REWRITE_UNAVAILABLE);
+        toast.error(AI_REWRITE_UNAVAILABLE);
+        await refreshCredits().catch(() => undefined);
+        return;
+      }
+
+      setStar(next);
+      dirtyRef.current = true;
+      setAiPhase("GENERATED");
       polishKeyRef.current = null;
-      await refreshCredits();
+      toast.success("Answer polished with AI. Save to keep it.");
+      await refreshCredits().catch(() => undefined);
     } catch (err) {
+      if (originalStarRef.current) setStar(originalStarRef.current);
       openUpgradeIfInsufficientCredits(err);
-      const message = getAiUserFacingError(err);
+      const message = isAiProviderUnavailableError(err)
+        ? AI_REWRITE_UNAVAILABLE
+        : getAiUserFacingError(err);
+      setAiPhase("GENERATION_FAILED");
       setPolishError(message);
       toast.error(message);
-    } finally {
-      setPolishing(false);
+      await refreshCredits().catch(() => undefined);
+    }
+  }
+
+  function rejectAiDraft() {
+    if (originalStarRef.current) {
+      setStar(originalStarRef.current);
+      originalStarRef.current = null;
+      setHasOriginalDraft(false);
+      setAiPhase("IDLE");
+      setPolishError(null);
+      toast.message("Restored your original STAR content.");
     }
   }
 
   async function handleSave() {
     if (!user?.id || !hasContent) return;
-    setSaving(true);
+    if (saving) return;
+    setSavePhase("SAVING");
     try {
       const answerText = buildStarAnswerText(star);
       const tags = ["star", ...(competencyTag.trim() ? [competencyTag.trim().toLowerCase()] : [])];
@@ -184,12 +281,13 @@ export default function StarBuilder() {
         toast.success("Saved to STAR library!");
       }
 
+      dirtyRef.current = false;
+      setSavePhase("SAVED");
       resetForm();
       await loadStories();
     } catch {
-      toast.error("Failed to save answer.");
-    } finally {
-      setSaving(false);
+      setSavePhase("SAVE_FAILED");
+      toast.error(SAVE_FAILED_MSG);
     }
   }
 
@@ -217,10 +315,23 @@ export default function StarBuilder() {
         icon={<Star className="w-5 h-5 text-amber-400" />}
         breadcrumbs={[
           { label: "Dashboard", href: "/app/dashboard" },
-          { label: PRODUCT_NAMES.prepLab, href: "/app/prep" },
+          ...(returnTo === "/app/plan"
+            ? [{ label: "Practice plan", href: "/app/plan" }]
+            : [{ label: PRODUCT_NAMES.prepLab, href: "/app/prep" }]),
           { label: "STAR Builder" },
         ]}
       />
+
+      <div className="mb-4">
+        <button
+          type="button"
+          onClick={handleBack}
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          {returnTo === "/app/plan" ? "Back to practice plan" : "Back"}
+        </button>
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
@@ -234,38 +345,69 @@ export default function StarBuilder() {
           >
           <StarBuilderForm
             question={question}
-            onQuestionChange={setQuestion}
+            onQuestionChange={(value) => {
+              dirtyRef.current = true;
+              setQuestion(value);
+              setSavePhase("IDLE");
+            }}
             star={star}
-            onStarChange={(key, value) => setStar((prev) => ({ ...prev, [key]: value }))}
+            onStarChange={(key, value) => {
+              dirtyRef.current = true;
+              setStar((prev) => ({ ...prev, [key]: value }));
+              setSavePhase("IDLE");
+            }}
             competencyTag={competencyTag}
-            onCompetencyTagChange={setCompetencyTag}
+            onCompetencyTagChange={(value) => {
+              dirtyRef.current = true;
+              setCompetencyTag(value);
+              setSavePhase("IDLE");
+            }}
             layout="stack"
             questionPlaceholder="e.g. Tell me about a time you led a team..."
           />
 
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
             <Button
               variant="primary"
               onClick={() => void handlePolish()}
               disabled={polishing || !hasContent}
               leftIcon={polishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
             >
-              {polishing ? "Polishing..." : `AI Polish (${AI_CREDIT_COSTS.polish_star} credits)`}
+              {polishing
+                ? "Polishing..."
+                : `AI Polish (${AI_CREDIT_COSTS.star_builder} credits)`}
             </Button>
+            {aiPhase === "GENERATED" && hasOriginalDraft && (
+              <Button variant="ghost" size="sm" onClick={rejectAiDraft}>
+                Restore original
+              </Button>
+            )}
             <Button
               variant="secondary"
               onClick={() => void handleSave()}
               disabled={saving || !hasContent}
               leftIcon={saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             >
-              {editingId ? "Update story" : "Save to library"}
+              {savePhase === "SAVE_FAILED"
+                ? "Retry save"
+                : saving
+                  ? "Saving…"
+                  : editingId
+                    ? "Update story"
+                    : "Save to library"}
             </Button>
+            {savePhase === "SAVED" && (
+              <span className="text-xs text-emerald-600 dark:text-emerald-400">Saved</span>
+            )}
             {editingId && (
               <Button variant="ghost" onClick={resetForm}>
                 Cancel edit
               </Button>
             )}
           </div>
+          {savePhase === "SAVE_FAILED" && (
+            <p className="text-sm text-amber-400">{SAVE_FAILED_MSG}</p>
+          )}
           </PrepToolShell>
 
           <Card>

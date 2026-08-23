@@ -19,7 +19,6 @@ export const DOCUMENT_UPLOAD_LIMITS: Record<DocumentCategory, number> = {
 
 const MIME_BY_EXTENSION: Record<string, string[]> = {
   pdf: ["application/pdf"],
-  doc: ["application/msword"],
   docx: ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
   txt: ["text/plain"],
   csv: ["text/csv", "application/csv", "application/vnd.ms-excel"],
@@ -28,6 +27,23 @@ const MIME_BY_EXTENSION: Record<string, string[]> = {
     "application/zip",
   ],
 };
+
+/** Legacy .doc is not supported by parsers — keep explicit rejection message. */
+const UNSUPPORTED_EXTENSIONS = new Set(["doc", "png", "jpg", "jpeg", "gif", "webp", "bmp"]);
+
+export const LIBRARY_ACCEPT =
+  ".pdf,.docx,.txt,.csv,.xlsx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+export const RESUME_ACCEPT =
+  ".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain";
+
+export const LIBRARY_ACCEPT_LABEL = "PDF, DOCX, TXT, CSV, XLSX · Max 20 MB";
+export const RESUME_ACCEPT_LABEL = "PDF, DOCX, or TXT · Max 10 MB";
+export const UNSUPPORTED_FORMAT_MESSAGE =
+  "Unsupported file format. Please upload a supported document.";
+export const INVALID_RESUME_MESSAGE =
+  "Invalid file. Upload a supported resume.";
+
 
 export function getDocumentExtension(name: string): string {
   const dot = name.lastIndexOf(".");
@@ -123,8 +139,17 @@ export function validateDocumentFile(
     return "Invalid filename: path traversal sequence detected.";
   }
   const extension = getDocumentExtension(file.name);
+  if (UNSUPPORTED_EXTENSIONS.has(extension)) {
+    return UNSUPPORTED_FORMAT_MESSAGE;
+  }
   if (!extension || !MIME_BY_EXTENSION[extension]) {
-    return "Unsupported document extension.";
+    return UNSUPPORTED_FORMAT_MESSAGE;
+  }
+  if (category === "resume" && !["pdf", "docx", "txt"].includes(extension)) {
+    return INVALID_RESUME_MESSAGE;
+  }
+  if (category === "library" && !["pdf", "docx", "txt", "csv", "xlsx"].includes(extension)) {
+    return UNSUPPORTED_FORMAT_MESSAGE;
   }
   if (file.size <= 0) return "The selected file is empty.";
   if (file.name.length > 180) return "Filename must be 180 characters or fewer.";

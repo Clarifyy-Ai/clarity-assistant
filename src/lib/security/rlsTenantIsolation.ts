@@ -11,6 +11,8 @@ export type IsolationTable = {
 };
 
 export const USER_OWNED_TABLES: IsolationTable[] = [
+  { table: "profiles", ownerColumn: "id", crossUserSelect: "denied" },
+  { table: "user_roles", ownerColumn: "user_id", crossUserSelect: "admin_only" },
   { table: "sessions", ownerColumn: "user_id", crossUserSelect: "denied" },
   { table: "resumes", ownerColumn: "user_id", crossUserSelect: "denied" },
   { table: "job_descriptions", ownerColumn: "user_id", crossUserSelect: "denied" },
@@ -41,7 +43,16 @@ export const PLATFORM_CATALOG_TABLES = [
   "gov_exams",
   "gov_exam_stages",
   "questions",
+  "exam_templates",
 ] as const;
+
+export function canUserModifyExamTemplate(opts: { viewerIsAdmin?: boolean }): boolean {
+  return Boolean(opts.viewerIsAdmin);
+}
+
+export function canUserModifyQuestionEligibility(opts: { viewerIsAdmin?: boolean }): boolean {
+  return Boolean(opts.viewerIsAdmin);
+}
 
 export function rlsPredicate(table: IsolationTable, viewerId: string): string {
   return `${table.table}.${table.ownerColumn} = '${viewerId}'`;
