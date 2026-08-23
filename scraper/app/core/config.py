@@ -1,10 +1,39 @@
 """Application configuration loaded from environment variables."""
 from __future__ import annotations
 
+import json
 from functools import lru_cache
+from urllib.parse import urlparse
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def parse_cors_origins(value: object) -> list[str]:
+    """Accept CSV, JSON array, or empty — Render env vars are always strings.
+
+    pydantic-settings JSON-decodes ``list[str]`` fields before validators run,
+    so a plain CSV like ``https://a.com,https://b.com`` crashes startup.
+    We therefore load CORS_ORIGINS as a string and parse it here.
+    """
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple, set)):
+        items = [str(item).strip().strip('"').strip("'") for item in value]
+        return [item for item in items if item]
+    text = str(value).strip()
+    if not text:
+        return []
+    if text[0] in "\"'" and text[-1] == text[0]:
+        text = text[1:-1].strip()
+    if text.startswith("["):
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, list):
+            return parse_cors_origins(parsed)
+    return [part.strip().strip('"').strip("'") for part in text.split(",") if part.strip()]
 
 
 class Settings(BaseSettings):
@@ -31,8 +60,9 @@ class Settings(BaseSettings):
         "clarity-exam-scraper/1.0 (+admin)", alias="SCRAPE_USER_AGENT"
     )
 
-    # CORS — comma-separated list of allowed origins
-    cors_origins: list[str] = Field(default_factory=list, alias="CORS_ORIGINS")
+    # CORS — keep as str so EnvSettingsSource does not JSON-decode and crash.
+    # Use the ``cors_origins`` property for the parsed list.
+    cors_origins_raw: str = Field(default="", alias="CORS_ORIGINS")
     cors_origin_regex: str = Field("", alias="CORS_ORIGIN_REGEX")
 
     # Service
@@ -75,18 +105,13 @@ class Settings(BaseSettings):
         180, alias="DOCUMENT_WORKER_LEASE_SECONDS"
     )
 
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def _split_csv(cls, v):
-        if isinstance(v, str):
-            return [s.strip() for s in v.split(",") if s.strip()]
-        return v or []
+    @property
+    def cors_origins(self) -> list[str]:
+        return parse_cors_origins(self.cors_origins_raw)
 
     @field_validator("supabase_url", "supabase_jwks_url", mode="after")
     @classmethod
     def _require_https_url(cls, v: str) -> str:
-        from urllib.parse import urlparse
-
         parsed = urlparse(v.strip())
         if parsed.scheme != "https" or not parsed.netloc:
             raise ValueError("Supabase URLs must use HTTPS")
@@ -140,16 +165,13 @@ class Settings(BaseSettings):
             raise ValueError("scrape concurrency must be at least 1")
         return v
 
-    @field_validator("cors_origins")
-    @classmethod
-    def _validate_origins(cls, v: list[str]) -> list[str]:
-        from urllib.parse import urlparse
-
-        for origin in v:
+    @model_validator(mode="after")
+    def _validate_origins(self) -> Settings:
+        for origin in self.cors_origins:
             parsed = urlparse(origin)
             if parsed.scheme not in {"http", "https"} or not parsed.netloc:
                 raise ValueError(f"Invalid CORS origin: {origin}")
-        return v
+        return self
 
     @field_validator("scrape_daily_hour_utc", mode="before")
     @classmethod
