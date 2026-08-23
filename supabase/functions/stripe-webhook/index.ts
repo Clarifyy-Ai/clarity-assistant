@@ -1,6 +1,7 @@
 // stripe-webhook/index.ts
 //
-// Inbound Stripe webhook. Signature handling stays fail-closed.
+// RETIRED payment surface. Stripe is not an active billing provider.
+// Signature handling stays fail-closed so forged events cannot mint credits.
 // Clarify AI launch billing is Razorpay one-time purchases — this
 // endpoint never grants plan entitlements or credits.
 
@@ -150,7 +151,12 @@ Deno.serve(async (req) => {
     });
 
     return new Response(
-      JSON.stringify({ received: true, ignored: true }),
+      JSON.stringify({
+        received: true,
+        ignored: true,
+        status: "retired",
+        reason: "stripe_unused_razorpay_only",
+      }),
       { status: 200, headers: { ...headers, "Content-Type": "application/json" } },
     );
   } catch (err) {

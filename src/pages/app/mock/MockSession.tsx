@@ -1986,7 +1986,28 @@ export default function MockSession() {
               onManualQuestion={(q: string) => {
                 if (!isMockSessionMutable(lifecycleRef.current)) return;
                 useOverlayStore.getState().setCurrentQuestion(q);
-                void orchestrator.requestHint(q);
+                const sessionId = sessionIdFromStore;
+                if (
+                  !sessionId ||
+                  !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+                    sessionId,
+                  )
+                ) {
+                  return;
+                }
+                void import("@/lib/ai/coachChatSession").then(({ submitCoachChatMessage }) =>
+                  submitCoachChatMessage({
+                    message: q,
+                    sessionId,
+                    currentQuestion:
+                      useOverlayStore.getState().current_question?.trim() || q,
+                    recentTranscript: "",
+                    resumeContext:
+                      typeof useOverlayStore.getState().resume_context === "object"
+                        ? useOverlayStore.getState().resume_context?.summary ?? ""
+                        : String(useOverlayStore.getState().resume_context ?? ""),
+                  }),
+                );
               }}
               isPreparingSession={false}
             />

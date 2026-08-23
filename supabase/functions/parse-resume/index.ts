@@ -431,7 +431,7 @@ Deno.serve(async (req) => {
 
     const planId = profileRow?.plan_id ?? "free";
 
-    const capabilityGate = requireCapabilityForFunction(planId, "parse-resume", req);
+    const capabilityGate = await requireCapabilityForFunction(planId, "parse-resume", req);
     if (capabilityGate) return capabilityGate;
 
     // P0-4: First resume parse during onboarding is free once; later parses charge.

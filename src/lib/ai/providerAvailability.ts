@@ -92,18 +92,16 @@ export async function refreshProviderAvailability(): Promise<ProviderFlags> {
         },
       });
       const json = (await res.json().catch(() => null)) as
-        | { providers?: Partial<ProviderFlags> }
+        | { status?: string; providers?: unknown }
         | null;
-      if (json?.providers && typeof json.providers === "object") {
-        flags = {
-          gemini: json.providers.gemini !== false,
-          openai: json.providers.openai === true,
-          anthropic: json.providers.anthropic === true,
-          deepgram: json.providers.deepgram !== false,
-        };
-        loaded = true;
-        emit();
+      // Public /ping is liveness only and must never leak provider inventory.
+      // Keep last-known flags; operation errors update availability via
+      // noteProviderFailureFromError. start-session.readiness is authoritative.
+      if (json && typeof json === "object" && "providers" in json && json.providers) {
+        console.warn("[providerAvailability] ignoring public provider inventory");
       }
+      loaded = true;
+      emit();
     } catch {
       // Keep last known flags — do not mark Gemini down on a probe failure.
     } finally {
@@ -155,6 +153,7 @@ export function noteProviderFailureFromError(err: unknown): void {
 export function isModelProviderAvailable(
   model: PreferredAIModel | string | null | undefined,
 ): boolean {
+  if (!loaded) return true;
   return isProviderConfigured(providerForModel(model));
 }
 

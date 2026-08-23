@@ -32,8 +32,14 @@ interface RevenueMetrics {
   activeSubscribers: number;
   churnRate:         number;
   ltv:               number;
+  /** Actual paid Razorpay order sum (paise) in window. */
   totalRevenue:      number;
+  /** Paid credit-pack orders (paise). */
   creditRevenue:     number;
+  /** Paid plan/product orders (paise). */
+  planOrderPaise:    number;
+  /** Promotional / admin / referral credit grants (credits, not INR). */
+  promoGrantCredits: number;
   /** INR paise from paid Razorpay orders in the selected window. */
   inrRevenuePaise:   number;
 }
@@ -216,10 +222,44 @@ export default function AdminRevenue() {
         setMrrIsEstimated(subscriptionCatalog === 0);
 
         let inrRevenuePaise = 0;
+        let creditPackPaise = 0;
+        let planOrderPaise = 0;
+        let promoGrantCredits = 0;
         try {
           inrRevenuePaise = await creditsDB.sumRazorpayPaidPaiseSince(sinceIso);
         } catch {
           inrRevenuePaise = 0;
+        }
+
+        try {
+          const { data: paidOrders } = await supabase
+            .from("payment_orders")
+            .select("amount_paise, product_type, status, paid_at, credits_granted")
+            .in("status", ["paid", "fulfilled"])
+            .gte("paid_at", sinceIso);
+          for (const o of paidOrders ?? []) {
+            const paise = Number(o.amount_paise) || 0;
+            const pt = String(o.product_type ?? "");
+            if (pt.includes("credit")) creditPackPaise += paise;
+            else planOrderPaise += paise;
+          }
+        } catch {
+          /* payment_orders may be empty or RLS-gated */
+        }
+
+        try {
+          const ledger = await creditsDB.listRecent(500);
+          promoGrantCredits = ledger
+            .filter((tx) => {
+              const a = String(tx.action ?? "").toLowerCase();
+              return (
+                Number(tx.amount) > 0 &&
+                (a.includes("promo") || a.includes("grant") || a.includes("admin") || a.includes("referral"))
+              );
+            })
+            .reduce((s, tx) => s + (Number(tx.amount) || 0), 0);
+        } catch {
+          promoGrantCredits = 0;
         }
 
         // MRR growth vs previous snapshot (subscription-based)
@@ -275,9 +315,11 @@ export default function AdminRevenue() {
           activeSubscribers: activeCount,
           churnRate,
           ltv,
-          totalRevenue:      mrr,
-          creditRevenue:     0,
-          inrRevenuePaise,
+          totalRevenue:      planOrderPaise + creditPackPaise,
+          creditRevenue:     creditPackPaise,
+          inrRevenuePaise:   inrRevenuePaise || planOrderPaise + creditPackPaise,
+          promoGrantCredits,
+          planOrderPaise,
         });
       }
     } catch (err) {
@@ -399,12 +441,26 @@ export default function AdminRevenue() {
         />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <MetricCard
-          title="Collected (period)"
+          title="Actual collected (period)"
           value={metrics ? formatInrPaise(metrics.inrRevenuePaise) : "—"}
-          subtitle="Paid Razorpay orders in selected range"
+          subtitle="Paid Razorpay payment_orders"
           icon={CreditCard}
+          loading={isLoading}
+        />
+        <MetricCard
+          title="Credit-pack payments"
+          value={metrics ? formatInrPaise(metrics.creditRevenue) : "—"}
+          subtitle="Actual paid credit products (not grants)"
+          icon={DollarSign}
+          loading={isLoading}
+        />
+        <MetricCard
+          title="Promo / admin grants"
+          value={metrics ? formatNumber(metrics.promoGrantCredits) : "—"}
+          subtitle="Credit units granted (not INR revenue)"
+          icon={TrendingUp}
           loading={isLoading}
         />
       </div>

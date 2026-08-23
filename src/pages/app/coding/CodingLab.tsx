@@ -94,26 +94,26 @@ export default function CodingLabPage() {
       {isPreview && !isAdmin ? (
         <EmptyState
           icon={Code2}
-          title="Coding lab is in preview"
-          description="Published assessments will appear here. This is not unrestricted cloud execution."
+          title="No published problems yet"
+          description="Content is unpublished. Published assessments will appear here."
         />
       ) : (
       <>
-      {(isAdmin || !isPreview) && (
+      {isAdmin && (
       <Card className="mb-4 space-y-3">
         <h2 className="text-sm font-semibold">Create coding question</h2>
         <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" />
         <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Problem statement" />
         <Textarea className="font-mono text-xs" value={starter} onChange={(e) => setStarter(e.target.value)} />
         <Button onClick={() => void createQuestion()}>Create question</Button>
-        {isAdmin && <p className="text-xs text-muted-foreground">Admin authoring enabled.</p>}
+        <p className="text-xs text-muted-foreground">Admin authoring enabled.</p>
       </Card>
       )}
       {isPreview ? (
         <EmptyState
           icon={Code2}
-          title="Coding lab is in preview"
-          description="Published assessments will appear here. This is not unrestricted cloud execution."
+          title="No published problems yet"
+          description="Content is unpublished. Use the form above to create the first problem."
         />
       ) : (
       <div className={STACK_GRID}>

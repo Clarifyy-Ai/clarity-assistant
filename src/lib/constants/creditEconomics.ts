@@ -7,6 +7,17 @@
  * - Credit packs ≈ $0.08–0.16 per credit (premium vs subscription → drives upgrades)
  */
 
+/** Bump when plan prices, allotments, or action costs change. */
+export const CREDIT_CATALOG_VERSION = "credit_catalog_v2";
+
+export const PLAN_STATUS = {
+  free: "active",
+  starter: "deprecated",
+  pro: "active",
+  elite: "deprecated",
+  enterprise: "active",
+} as const;
+
 export const CREDIT_ECONOMICS = {
   API_COST_CENTS_PER_CREDIT: 1,
   TARGET_GROSS_MARGIN: 0.5,
@@ -27,7 +38,7 @@ export const PLAN_PRICE_CENTS_MONTHLY = {
   free: 0,
   starter: 0,
   pro: 2_900,
-  elite: 2_900,
+  elite: 7_900,
   enterprise: 7_900,
 } as const;
 

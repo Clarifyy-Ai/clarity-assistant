@@ -60,6 +60,7 @@ import { extractBYOK } from "../_shared/utils.ts";
 import { executeHybridOperation } from "../_shared/hybridExecute.ts";
 import { callPythonProcess } from "../_shared/pythonClient.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
+import { normalizePythonCoachData } from "../_shared/practiceCoachContract.ts";
 
 const FUNCTION_NAME = "generate-hint";
 const CREDIT_COST = creditCost("live_hint");
@@ -318,18 +319,6 @@ type HintHybridData = {
   model: string;
 };
 
-function extractPythonHints(data: unknown): string {
-  if (!data || typeof data !== "object") return "";
-  const obj = data as Record<string, unknown>;
-  return (
-    (typeof obj.hints === "string" && obj.hints) ||
-    (Array.isArray(obj.hints) && obj.hints.map(String).join("\n")) ||
-    (typeof obj.reply === "string" && obj.reply) ||
-    (typeof obj.coaching === "string" && obj.coaching) ||
-    ""
-  );
-}
-
 async function parseAndValidateRequest(
   req: Request,
   corsHeaders: HeadersInit
@@ -448,7 +437,7 @@ Deno.serve(async (req: Request) => {
   const db = createServiceClient();
 
   const planId = await resolveUserPlanId(user.id);
-  const capabilityGate = requireCapabilityForFunction(planId, FUNCTION_NAME, req);
+  const capabilityGate = await requireCapabilityForFunction(planId, FUNCTION_NAME, req);
   if (capabilityGate) {
     return withCorsHeaders(req, capabilityGate);
   }
@@ -586,7 +575,7 @@ Deno.serve(async (req: Request) => {
         operationId: ctx.operationId,
         correlationId: ctx.correlationId,
         payload: {
-          mode: "hint",
+          operation_type: "hint",
           question: body.question,
           transcript: body.transcript,
           interview_type: body.interview_type,
@@ -595,7 +584,12 @@ Deno.serve(async (req: Request) => {
         },
       });
       if (!py.ok) return null;
-      const hintsRaw = extractPythonHints(py.data);
+      const normalized = normalizePythonCoachData(py.data);
+      if (!normalized) return null;
+      const hintsRaw =
+        normalized.hints.length > 0
+          ? normalized.hints.map((h) => (h.startsWith("•") ? h : `• ${h}`)).join("\n")
+          : normalized.reply;
       if (!hintsRaw.trim()) return null;
       return {
         request_id: requestId,

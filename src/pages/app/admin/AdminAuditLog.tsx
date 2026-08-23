@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -14,6 +14,9 @@ import { Search, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { logger } from "@/lib/logger";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { EmptyState } from "@/components/common/EmptyState";
+import { toAdminUserMessage } from "@/lib/admin/adminErrors";
 
 interface AuditRow {
   id: string;
@@ -29,15 +32,51 @@ interface AuditRow {
 
 const PAGE_SIZE = 50;
 
+/** Deterministic filter values — not derived from the current page. */
+const AUDIT_TARGET_TYPES = [
+  "user",
+  "feature_flag",
+  "question",
+  "promo_code",
+  "billing_settings",
+  "blog_post",
+  "help_article",
+  "learning_course",
+  "community_post",
+  "gov_exam",
+  "gov_source",
+  "gov_paper",
+  "question_translation",
+  "model_pricing",
+] as const;
+
+const AUDIT_ACTIONS = [
+  "ban",
+  "unban",
+  "grant_pro",
+  "add_credits",
+  "make_admin",
+  "demote_admin",
+  "feature_flag_update",
+  "publish",
+  "unpublish",
+  "verify",
+  "reject",
+  "update",
+  "create",
+  "delete",
+] as const;
+
 export default function AdminAuditLog() {
   const [rows, setRows] = useState<AuditRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  // Filters
   const [actionQuery, setActionQuery] = useState("");
+  const [actionPreset, setActionPreset] = useState<string>("all");
   const [targetType, setTargetType] = useState<string>("all");
   const [from, setFrom] = useState<string>("");
   const [to, setTo] = useState<string>("");
@@ -46,6 +85,7 @@ export default function AdminAuditLog() {
     let cancelled = false;
     async function load() {
       setLoading(true);
+      setLoadError(null);
       try {
         let q = (supabase as any)
           .from("admin_audit_log")
@@ -53,7 +93,8 @@ export default function AdminAuditLog() {
           .order("created_at", { ascending: false })
           .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
 
-        if (actionQuery.trim()) q = q.ilike("action", `%${actionQuery.trim()}%`);
+        const actionFilter = actionPreset !== "all" ? actionPreset : actionQuery.trim();
+        if (actionFilter) q = q.ilike("action", `%${actionFilter}%`);
         if (targetType !== "all") q = q.eq("target_type", targetType);
         if (from) q = q.gte("created_at", new Date(from).toISOString());
         if (to) q = q.lte("created_at", new Date(`${to}T23:59:59`).toISOString());
@@ -66,7 +107,9 @@ export default function AdminAuditLog() {
       } catch (err) {
         if (!cancelled) {
           logger.error("admin.audit_log.load.failed", { error: err });
-          toast.error(err instanceof Error ? err.message : "Failed to load audit log");
+          const msg = toAdminUserMessage(err, undefined, "AdminAuditLog");
+          setLoadError(msg);
+          toast.error(msg);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -74,16 +117,15 @@ export default function AdminAuditLog() {
     }
     void load();
     return () => { cancelled = true; };
-  }, [page, actionQuery, targetType, from, to]);
-
-  const targetTypes = useMemo(() => {
-    const set = new Set<string>();
-    rows.forEach((r) => r.target_type && set.add(r.target_type));
-    return Array.from(set).sort();
-  }, [rows]);
+  }, [page, actionQuery, actionPreset, targetType, from, to]);
 
   const resetFilters = () => {
-    setActionQuery(""); setTargetType("all"); setFrom(""); setTo(""); setPage(0);
+    setActionQuery("");
+    setActionPreset("all");
+    setTargetType("all");
+    setFrom("");
+    setTo("");
+    setPage(0);
   };
 
   const maxPage = Math.max(0, Math.ceil(total / PAGE_SIZE) - 1);
@@ -100,127 +142,115 @@ export default function AdminAuditLog() {
         <Badge variant="red" size="sm">{total.toLocaleString()} events</Badge>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Filter by action…"
-            value={actionQuery}
-            onChange={(e) => { setActionQuery(e.target.value); setPage(0); }}
-            className="pl-8 h-8 text-sm"
-          />
-        </div>
-
-        <Select value={targetType} onValueChange={(v) => { setTargetType(v); setPage(0); }}>
-          <SelectTrigger className="w-[160px] h-8 text-sm">
-            <SelectValue placeholder="Target type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All targets</SelectItem>
-            {targetTypes.map((t) => (
-              <SelectItem key={t} value={t}>{t}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        <Input
-          type="date" value={from}
-          onChange={(e) => { setFrom(e.target.value); setPage(0); }}
-          className="h-8 text-sm w-[150px]"
+      {loadError && (
+        <InlineErrorRetry
+          message={loadError}
+          onRetry={() => {
+            setPage(0);
+            setLoadError(null);
+          }}
         />
-        <Input
-          type="date" value={to}
-          onChange={(e) => { setTo(e.target.value); setPage(0); }}
-          className="h-8 text-sm w-[150px]"
-        />
+      )}
 
-        <Button variant="ghost" size="sm" onClick={resetFilters}>
-          <RotateCcw className="h-3.5 w-3.5 mr-1.5" /> Reset
-        </Button>
-      </div>
-
-      <Card padding="none">
-        <CardHeader className="px-5 pt-4">
-          <CardTitle>Events</CardTitle>
-          <CardDescription>
-            Page {page + 1} of {maxPage + 1} · {rows.length} on this page
-          </CardDescription>
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Filters</CardTitle>
+          <CardDescription>Target types and actions are fixed enums, not page-local.</CardDescription>
         </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>When</TableHead>
-                <TableHead>Action</TableHead>
-                <TableHead>Target</TableHead>
-                <TableHead>Admin</TableHead>
-                <TableHead>IP</TableHead>
-                <TableHead className="text-right">Diff</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">Loading…</TableCell></TableRow>
-              ) : rows.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-12 text-muted-foreground">No events match your filters.</TableCell></TableRow>
-              ) : (
-                rows.map((r) => {
-                  const isOpen = expanded === r.id;
-                  return (
-                    <>
-                      <TableRow key={r.id} className="cursor-pointer" onClick={() => setExpanded(isOpen ? null : r.id)}>
-                        <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                          {format(new Date(r.created_at), "MMM d, HH:mm:ss")}
-                        </TableCell>
-                        <TableCell><code className="text-xs font-mono">{r.action}</code></TableCell>
-                        <TableCell className="text-xs">
-                          {r.target_type ? <Badge variant="default" size="sm">{r.target_type}</Badge> : <span className="text-muted-foreground">—</span>}
-                          {r.target_id && <span className="ml-2 font-mono text-muted-foreground">{r.target_id.slice(0, 8)}</span>}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">{r.admin_id?.slice(0, 8) ?? "—"}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{r.ip_address ?? "—"}</TableCell>
-                        <TableCell className="text-right text-xs text-primary">{isOpen ? "Hide" : "View"}</TableCell>
-                      </TableRow>
-                      {isOpen && (
-                        <TableRow key={`${r.id}-d`}>
-                          <TableCell colSpan={6} className="bg-muted/30">
-                            <div className="grid grid-cols-2 gap-4 p-2 text-xs">
-                              <div>
-                                <p className="font-semibold mb-1 text-muted-foreground">Old value</p>
-                                <pre className="bg-background border border-border rounded p-2 overflow-auto max-h-60">{JSON.stringify(r.old_value, null, 2)}</pre>
-                              </div>
-                              <div>
-                                <p className="font-semibold mb-1 text-muted-foreground">New value</p>
-                                <pre className="bg-background border border-border rounded p-2 overflow-auto max-h-60">{JSON.stringify(r.new_value, null, 2)}</pre>
-                              </div>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
+        <CardContent className="flex flex-wrap gap-3">
+          <div className="relative min-w-[180px] flex-1">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              className="pl-8"
+              placeholder="Search action…"
+              value={actionQuery}
+              onChange={(e) => { setActionQuery(e.target.value); setActionPreset("all"); setPage(0); }}
+            />
+          </div>
+          <Select value={actionPreset} onValueChange={(v) => { setActionPreset(v); setActionQuery(""); setPage(0); }}>
+            <SelectTrigger className="w-[180px]"><SelectValue placeholder="Action" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All actions</SelectItem>
+              {AUDIT_ACTIONS.map((a) => (
+                <SelectItem key={a} value={a}>{a}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={targetType} onValueChange={(v) => { setTargetType(v); setPage(0); }}>
+            <SelectTrigger className="w-[180px]"><SelectValue placeholder="Target type" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All targets</SelectItem>
+              {AUDIT_TARGET_TYPES.map((t) => (
+                <SelectItem key={t} value={t}>{t}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input type="date" className="w-[150px]" value={from} onChange={(e) => { setFrom(e.target.value); setPage(0); }} />
+          <Input type="date" className="w-[150px]" value={to} onChange={(e) => { setTo(e.target.value); setPage(0); }} />
+          <Button type="button" variant="outline" size="sm" onClick={resetFilters}>
+            <RotateCcw className="mr-1 h-3.5 w-3.5" /> Reset
+          </Button>
         </CardContent>
       </Card>
 
-      {/* Pagination */}
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-muted-foreground">
-          Showing {rows.length ? page * PAGE_SIZE + 1 : 0}–{page * PAGE_SIZE + rows.length} of {total}
-        </span>
-        <div className="flex gap-2">
-          <Button variant="ghost" size="sm" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
-            <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Prev
-          </Button>
-          <Button variant="ghost" size="sm" disabled={page >= maxPage} onClick={() => setPage((p) => Math.min(maxPage, p + 1))}>
-            Next <ChevronRight className="h-3.5 w-3.5 ml-1" />
-          </Button>
-        </div>
-      </div>
+      <Card>
+        <CardContent className="pt-6">
+          {loading ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : rows.length === 0 ? (
+            <EmptyState title="No audit events" description="No rows match these filters." />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>When</TableHead>
+                  <TableHead>Action</TableHead>
+                  <TableHead>Target</TableHead>
+                  <TableHead>Admin</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((r) => (
+                  <Fragment key={r.id}>
+                    <TableRow className="cursor-pointer" onClick={() => setExpanded(expanded === r.id ? null : r.id)}>
+                      <TableCell className="whitespace-nowrap text-xs">
+                        {format(new Date(r.created_at), "yyyy-MM-dd HH:mm")}
+                      </TableCell>
+                      <TableCell><Badge variant="secondary">{r.action}</Badge></TableCell>
+                      <TableCell className="text-xs">
+                        {r.target_type ?? "—"}{r.target_id ? ` · ${r.target_id.slice(0, 8)}…` : ""}
+                      </TableCell>
+                      <TableCell className="font-mono text-xs">{r.admin_id.slice(0, 8)}…</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {expanded === r.id ? "Hide" : "Details"}
+                      </TableCell>
+                    </TableRow>
+                    {expanded === r.id && (
+                      <TableRow>
+                        <TableCell colSpan={5}>
+                          <pre className="max-h-48 overflow-auto rounded bg-muted/40 p-3 text-[11px]">
+                            {JSON.stringify({ old: r.old_value, new: r.new_value, ip: r.ip_address }, null, 2)}
+                          </pre>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+          <div className="mt-4 flex items-center justify-between">
+            <Button type="button" variant="outline" size="sm" disabled={page <= 0} onClick={() => setPage((p) => p - 1)}>
+              <ChevronLeft className="h-4 w-4" /> Prev
+            </Button>
+            <span className="text-xs text-muted-foreground">Page {page + 1} / {maxPage + 1}</span>
+            <Button type="button" variant="outline" size="sm" disabled={page >= maxPage} onClick={() => setPage((p) => p + 1)}>
+              Next <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { NavLink, Outlet, Link } from "react-router-dom";
+import { useState, useEffect, useMemo } from "react";
+import { NavLink, Outlet, Link, useLocation, Navigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import { logger } from "@/lib/logger";
 import {
@@ -19,8 +19,18 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 
-type AdminNavItem = { to: string; icon: React.ElementType; label: string };
+type AdminNavItem = { to: string; icon: React.ElementType; label: string; staff?: "admin" | "staff" };
 type AdminNavSection = { label: string; items: AdminNavItem[] };
+
+const MODERATOR_PATHS = [
+  "/app/admin/community",
+  "/app/admin/questions",
+  "/app/admin/gov/question-review",
+];
+
+function isModeratorAllowedPath(pathname: string): boolean {
+  return MODERATOR_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
 
 const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
   {
@@ -35,11 +45,13 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
   {
     label: "Content",
     items: [
-      { to: "/app/admin/questions",      icon: FileText,       label: "Questions"     },
+      { to: "/app/admin/questions",      icon: FileText,       label: "Questions", staff: "staff" },
       { to: "/app/admin/bulk-upload",    icon: Upload,         label: "Bulk Upload"   },
       { to: "/app/admin/seed-questions", icon: Database,       label: "Seed / Import" },
-      { to: "/app/admin/community",      icon: MessageSquare,  label: "Q&A Moderation"},
+      { to: "/app/admin/community",      icon: MessageSquare,  label: "Q&A Moderation", staff: "staff" },
       { to: "/app/admin/learning",       icon: BookOpen,       label: "Learning Hub"  },
+      { to: "/app/admin/blog",           icon: FileText,       label: "Blog"          },
+      { to: "/app/admin/help-articles",  icon: BookOpen,       label: "Help Articles" },
     ],
   },
   {
@@ -48,7 +60,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { to: "/app/admin/gov/sources",          icon: Link2,      label: "Sources"       },
       { to: "/app/admin/gov/ingest",           icon: FileUp,     label: "PDF Ingest"    },
       { to: "/app/admin/gov/exams",            icon: BookOpen,   label: "Exam Registry" },
-      { to: "/app/admin/gov/question-review",  icon: ListChecks, label: "Q Review"      },
+      { to: "/app/admin/gov/question-review",  icon: ListChecks, label: "Q Review", staff: "staff" },
       { to: "/app/admin/gov/paper-review",     icon: FileStack,  label: "Paper Review"  },
       { to: "/app/admin/gov/translations",     icon: Languages,  label: "Translations"  },
     ],
@@ -67,17 +79,23 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { to: "/app/admin",                 icon: LayoutDashboard, label: "Dashboard"       },
       { to: "/app/admin/analytics",       icon: BarChart2,       label: "Analytics"       },
       { to: "/app/admin/feature-flags",   icon: Flag,            label: "Feature Flags"   },
-      { to: "/app/admin/security-config", icon: Shield,          label: "Security Config" },
+      { to: "/app/admin/diagnostics",     icon: Shield,          label: "Diagnostics"     },
       { to: "/app/admin/model-costs",     icon: Cpu,             label: "Model Costs"     },
       { to: "/app/admin/ai-hub",          icon: Bot,             label: "AI Hub"          },
     ],
   },
 ];
 
-function AdminNavLinks({ onNavigate }: { onNavigate?: () => void }) {
+function AdminNavLinks({
+  sections,
+  onNavigate,
+}: {
+  sections: AdminNavSection[];
+  onNavigate?: () => void;
+}) {
   return (
     <>
-      {ADMIN_NAV_SECTIONS.map((section) => (
+      {sections.map((section) => (
         <div key={section.label} className="pt-2 first:pt-0">
           <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
             {section.label}
@@ -108,24 +126,36 @@ function AdminNavLinks({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 export default function AdminLayout() {
-  const { isAdmin, isAdminResolved, isProfileLoaded } = useAuthStore();
+  const { isAdmin, isModerator, isAdminResolved, isProfileLoaded } = useAuthStore();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const location = useLocation();
+  const isStaff = isAdmin || isModerator;
+
+  const navSections = useMemo(() => {
+    if (isAdmin) return ADMIN_NAV_SECTIONS;
+    return ADMIN_NAV_SECTIONS
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) => item.staff === "staff"),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [isAdmin]);
 
   useEffect(() => {
-    if (isProfileLoaded && isAdminResolved && !isAdmin) {
+    if (isProfileLoaded && isAdminResolved && !isStaff) {
       logger.warn("route.rbac.access_denied", {
         route: window.location.pathname,
-        reason: "User lacks admin role",
+        reason: "User lacks staff role",
       });
     }
-  }, [isProfileLoaded, isAdminResolved, isAdmin]);
+  }, [isProfileLoaded, isAdminResolved, isStaff]);
 
   // Wait for a definitive user_roles result — abort/timeout must not redirect.
   if (!isProfileLoaded || !isAdminResolved) {
     return <AppLoadingFallback />;
   }
 
-  if (!isAdmin) {
+  if (!isStaff) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 space-y-4">
@@ -144,6 +174,10 @@ export default function AdminLayout() {
         </div>
       </div>
     );
+  }
+
+  if (isModerator && !isAdmin && !isModeratorAllowedPath(location.pathname)) {
+    return <Navigate to="/app/admin/community" replace />;
   }
 
   return (
@@ -170,17 +204,17 @@ export default function AdminLayout() {
             <SheetHeader className="p-4 border-b border-border text-left">
               <SheetTitle className="flex items-center gap-2 text-sm">
                 <Shield className="w-5 h-5 text-red-400" aria-hidden="true" />
-                Admin
+                {isAdmin ? "Admin" : "Moderation"}
               </SheetTitle>
             </SheetHeader>
             <nav className="p-3 space-y-3" aria-label="Admin navigation">
-              <AdminNavLinks onNavigate={() => setMobileOpen(false)} />
+              <AdminNavLinks sections={navSections} onNavigate={() => setMobileOpen(false)} />
             </nav>
           </SheetContent>
         </Sheet>
         <div className="flex items-center gap-2">
           <Shield className="w-4 h-4 text-red-400" aria-hidden="true" />
-          <span className="text-sm font-semibold">Admin</span>
+          <span className="text-sm font-semibold">{isAdmin ? "Admin" : "Moderation"}</span>
         </div>
       </header>
 
@@ -189,13 +223,15 @@ export default function AdminLayout() {
         <div className="p-4 border-b border-border">
           <div className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-red-400" aria-hidden="true" />
-            <span className="text-sm font-bold text-foreground">Admin</span>
+            <span className="text-sm font-bold text-foreground">{isAdmin ? "Admin" : "Moderation"}</span>
           </div>
-          <p className="text-[10px] text-muted-foreground mt-0.5">Clarify AI control panel</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            {isAdmin ? "Clarify AI control panel" : "Content moderation"}
+          </p>
         </div>
 
         <nav className="flex-1 p-3 space-y-3" aria-label="Admin navigation">
-          <AdminNavLinks />
+          <AdminNavLinks sections={navSections} />
         </nav>
 
         <div className="p-3 border-t border-border space-y-1">

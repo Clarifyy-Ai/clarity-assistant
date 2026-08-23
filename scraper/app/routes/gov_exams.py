@@ -13,6 +13,8 @@ from app.gov_exams.observability import gov_exam_log
 from app.gov_exams.schemas import (
     AvailabilityRequest,
     AvailabilityResponse,
+    BuildPaperRequest,
+    BuildPaperResponse,
     ProcessJobRequest,
     ProcessJobResponse,
     SelectRequest,
@@ -169,3 +171,116 @@ async def process_job(
             },
         )
     return result
+
+
+@router.post("/build-paper", response_model=BuildPaperResponse)
+async def build_paper(
+    body: BuildPaperRequest,
+    request: InternalRequest = Depends(require_internal_auth),
+) -> BuildPaperResponse:
+    """
+    Deterministic paper construction entrypoint.
+
+    Delegates to the hybrid job processor for the given job_id. Edge may call
+    this after enqueueing a gov_paper_generation_jobs row. AI is optional;
+    bank + Python deterministic fill are preferred when permitted by mode.
+    """
+    correlation = body.correlation_id or request.request_id
+    settings = get_factory_settings()
+    repo = PaperRepository(settings)
+
+    gov_exam_log(
+        "build_paper_received",
+        operation_id=correlation,
+        job_id=body.job_id,
+        correlation_id=correlation,
+        exam_id=body.exam_id,
+        mode=body.mode,
+        sources=body.question_sources,
+    )
+
+    job = await asyncio.to_thread(repo.get_job, body.job_id)
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "JOB_NOT_FOUND",
+                "message": "Unknown gov paper generation job.",
+                "retryable": False,
+                "stage": "build_paper",
+                "correlation_id": correlation,
+            },
+        )
+
+    result = await process_gov_exam_job(
+        job,
+        settings=settings,
+        repo=repo,
+        correlation_id=correlation,
+    )
+
+    mix = {
+        k: v
+        for k, v in {
+            "approved_bank": result.bank_count or 0,
+            "ai_generated_practice": result.ai_count or 0,
+            "generated_practice": result.deterministic_count or 0,
+        }.items()
+        if v
+    }
+
+    if not result.success:
+        return BuildPaperResponse(
+            success=False,
+            job_id=body.job_id,
+            status=result.status,
+            source_distribution=mix,
+            validation_status="failed",
+            missing_slots=0,
+            error_code=result.error_code,
+            error_message=result.error_message,
+            retryable=result.retryable,
+        )
+
+    selected: list[str] = []
+    generated: list[str] = []
+    if result.paper_id:
+        try:
+            links = await asyncio.to_thread(
+                lambda: repo.db.table("gov_generated_paper_questions")
+                .select("question_id, source_class, question_source_type")
+                .eq("paper_id", result.paper_id)
+                .order("sort_order")
+                .execute()
+            )
+            for row in links.data or []:
+                qid = str(row.get("question_id") or "")
+                if not qid:
+                    continue
+                st = str(row.get("question_source_type") or row.get("source_class") or "")
+                if st in ("generated", "generated_practice", "ai_generated_practice"):
+                    generated.append(qid)
+                else:
+                    selected.append(qid)
+        except Exception:  # noqa: BLE001
+            pass
+
+    return BuildPaperResponse(
+        success=True,
+        job_id=body.job_id,
+        status=result.status,
+        selected_question_ids=selected,
+        generated_question_ids=generated,
+        source_distribution=mix or (result.source_mix or {}),
+        validation_status="passed",
+        missing_slots=0,
+        paper_id=result.paper_id,
+        mock_test_id=result.mock_test_id,
+        question_count=result.question_count,
+        paper_structure={
+            "paper_source": result.paper_source,
+            "source_mix": mix,
+            "mode": body.mode,
+            "language": body.language,
+        },
+    )

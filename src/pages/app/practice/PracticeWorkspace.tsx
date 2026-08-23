@@ -329,7 +329,11 @@ export default function PracticeWorkspacePage() {
             ended_at: new Date().toISOString(),
             answers: packed,
             skipped,
-            scores,
+            scores: {
+              ...scores,
+              preview: true,
+              scoring_authority: "client_preview",
+            },
             notes,
             current_index: index,
             elapsed_seconds: seconds,
@@ -359,7 +363,11 @@ export default function PracticeWorkspacePage() {
           notes,
           answers: packed,
           skipped,
-          scores,
+          scores: {
+            ...scores,
+            preview: true,
+            scoring_authority: "client_preview",
+          },
         });
         if (error) {
           toast.error(error.message);

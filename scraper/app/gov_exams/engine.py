@@ -8,11 +8,18 @@ from typing import Any
 from app.gov_exams.availability import MIN_CUSTOM_PRACTICE, load_eligible_bank
 from app.gov_exams.deterministic_generate import (
     PRACTICE_DISCLAIMER,
+    PRACTICE_SOURCE_TYPE,
     generate_practice_variants,
 )
 from app.gov_exams.observability import gov_exam_log
 from app.gov_exams.schemas import ProcessJobResponse
 from app.gov_exams.selection import seeded_shuffle
+from app.gov_exams.source_priority import (
+    normalize_source_type,
+    resolve_paper_source,
+    sort_by_source_priority,
+    summarize_source_mix,
+)
 from app.paper_factory.ai import MCQGenerator
 from app.paper_factory.blueprint import validate_assembled_paper
 from app.paper_factory.config import FactorySettings
@@ -25,7 +32,7 @@ from app.paper_factory.factory import (
 from app.paper_factory.generator import generate_for_slots
 from app.paper_factory.models import PaperFactoryError, PaperQuestion, PaperResult
 from app.paper_factory.repository import BankQuestion, PaperRepository, _uuid_or_none
-from app.paper_factory.validate import CandidateValidator
+from app.paper_factory.validate import CandidateValidator, MIN_QUALITY_SCORE, score_assembled_question
 
 AI_ELIGIBLE_MODES = frozenset({"generated_mock", "custom_mock", "adaptive"})
 EXACT_MODES = frozenset({"official_previous", "generated_mock"})
@@ -187,13 +194,24 @@ async def process_gov_exam_job(
                 topic=row.topic,
                 difficulty=row.difficulty,
                 is_verified=True,
+                source=row.source,
+                source_type="",
             )
             for row in bank_rows
         ]
 
         validator = CandidateValidator()
         validator.seed_existing((q.question_text, q.options) for q in bank_for_match)
-        shuffled = seeded_shuffle(bank_for_match, seed)
+        # Prefer official/verified bank rows before generic approved bank.
+        prioritized = sort_by_source_priority(
+            bank_for_match,
+            get_source=lambda q: normalize_source_type(
+                source=q.source,
+                source_type=q.source_type,
+                source_class="bank",
+            ),
+        )
+        shuffled = seeded_shuffle(prioritized, seed)
         buckets = match_bank_to_sections(shuffled, blueprint)
 
         bank_selected: dict[str, list[PaperQuestion]] = defaultdict(list)
@@ -201,6 +219,16 @@ async def process_gov_exam_job(
         for section in blueprint.sections:
             available = buckets.get(section.code, [])[: section.question_count]
             for item in available:
+                scored = score_assembled_question(
+                    stem=item.question_text,
+                    options=list(item.options),
+                    correct_index=item.correct_index,
+                    explanation=str(getattr(item, "explanation", "") or ""),
+                    peers=[q.question_text for q in bank_selected[section.code]],
+                    source_confidence=0.85 if item.is_verified else 0.7,
+                )
+                if scored < MIN_QUALITY_SCORE:
+                    continue
                 bank_selected[section.code].append(
                     PaperQuestion(
                         question_text=item.question_text,
@@ -214,7 +242,7 @@ async def process_gov_exam_job(
                         marks_negative=blueprint.negative_mark,
                         source_class="bank",
                         question_id=item.id,
-                        quality_score=100.0 if item.is_verified else 70.0,
+                        quality_score=scored,
                     )
                 )
             bank_count += len(available)
@@ -224,6 +252,7 @@ async def process_gov_exam_job(
 
         ai_count = 0
         deterministic_count = 0
+        deterministic_ids: set[str] = set()
         report = None
         need_fallback = False
 
@@ -290,6 +319,16 @@ async def process_gov_exam_job(
             for item in leftovers:
                 if len(questions) >= blueprint.total_questions:
                     break
+                leftover_score = score_assembled_question(
+                    stem=item.question_text,
+                    options=list(item.options),
+                    correct_index=item.correct_index,
+                    explanation=str(getattr(item, "explanation", "") or ""),
+                    peers=[q.question_text for q in questions],
+                    source_confidence=0.7,
+                )
+                if leftover_score < MIN_QUALITY_SCORE:
+                    continue
                 questions.append(
                     PaperQuestion(
                         question_text=item.question_text,
@@ -303,49 +342,90 @@ async def process_gov_exam_job(
                         marks_negative=blueprint.negative_mark,
                         source_class="bank",
                         question_id=item.id,
-                        quality_score=90.0,
+                        quality_score=leftover_score,
                     )
                 )
             bank_count = sum(1 for q in questions if q.source_class == "bank")
 
             remaining = blueprint.total_questions - len(questions)
             if remaining > 0 and allow_det:
-                variants = generate_practice_variants(count=remaining, seed=seed)
+                # Section-aware deterministic fill — never dump all into one section.
+                section_shortfalls: dict[str, int] = {}
+                for section in blueprint.sections:
+                    have = sum(
+                        1 for q in questions if q.section_code == section.code
+                    )
+                    need = max(0, section.question_count - have)
+                    if need:
+                        section_shortfalls[section.code] = need
+                # If sections already full but total short (edge case), fill default.
+                if not section_shortfalls and remaining > 0:
+                    section_shortfalls[default_section] = remaining
+
                 owner = _uuid_or_none(settings.system_user_id) or _uuid_or_none(user_id)
                 exam_type = exam.legacy_exam_type or exam.code or exam.name
-                rows = [
-                    v.to_insert_row(exam_type=exam_type, owner=owner, language=language)
-                    for v in variants
-                ]
-                inserted_ids: list[str] = []
-                for start in range(0, len(rows), 50):
-                    chunk = rows[start : start + 50]
+                section_by_code = {s.code: s for s in blueprint.sections}
+                deterministic_ids = set()
+                inserted_total = 0
+                for section_code, need in section_shortfalls.items():
+                    if inserted_total >= remaining:
+                        break
+                    take = min(need, remaining - inserted_total)
+                    section = section_by_code.get(section_code)
+                    variants = generate_practice_variants(
+                        count=take,
+                        seed=f"{seed}:{section_code}",
+                        section_code=section_code,
+                        section_name=section.name if section else section_code,
+                    )
+                    rows = [
+                        v.to_insert_row(
+                            exam_type=exam_type, owner=owner, language=language
+                        )
+                        for v in variants
+                    ]
+                    inserted_ids: list[str] = []
+                    for start in range(0, len(rows), 50):
+                        chunk = rows[start : start + 50]
 
-                    def _insert(c: list[dict[str, Any]] = chunk) -> Any:
-                        return repo.db.table("questions").insert(c).execute()
+                        def _insert(c: list[dict[str, Any]] = chunk) -> Any:
+                            return repo.db.table("questions").insert(c).execute()
 
-                    result = await asyncio.to_thread(_insert)
-                    inserted_ids.extend(str(r["id"]) for r in (result.data or []))
+                        result = await asyncio.to_thread(_insert)
+                        inserted_ids.extend(str(r["id"]) for r in (result.data or []))
 
-                for variant, qid in zip(variants, inserted_ids):
-                    questions.append(
-                        PaperQuestion(
-                            question_text=variant.question_text,
+                    for variant, qid in zip(variants, inserted_ids):
+                        det_score = score_assembled_question(
+                            stem=variant.question_text,
                             options=list(variant.options),
                             correct_index=variant.correct_index,
-                            section_code=default_section,
-                            subject=variant.subject,
-                            topic=variant.topic,
-                            difficulty=variant.difficulty,
                             explanation=variant.explanation,
-                            marks_positive=blueprint.marks_per_question,
-                            marks_negative=blueprint.negative_mark,
-                            source_class="generated",
-                            question_id=qid,
-                            quality_score=55.0,
+                            peers=[q.question_text for q in questions],
+                            source_confidence=0.55,
                         )
-                    )
-                deterministic_count = len(inserted_ids)
+                        if det_score < MIN_QUALITY_SCORE:
+                            continue
+                        questions.append(
+                            PaperQuestion(
+                                question_text=variant.question_text,
+                                options=list(variant.options),
+                                correct_index=variant.correct_index,
+                                section_code=section_code,
+                                subject=variant.subject,
+                                topic=variant.topic,
+                                difficulty=variant.difficulty,
+                                explanation=variant.explanation,
+                                marks_positive=blueprint.marks_per_question,
+                                marks_negative=blueprint.negative_mark,
+                                source_class="generated",
+                                question_id=qid,
+                                quality_score=det_score,
+                            )
+                        )
+                        deterministic_ids.add(qid)
+                    inserted_total += len(inserted_ids)
+
+                deterministic_count = inserted_total
 
         if len(questions) < blueprint.total_questions:
             if mode in EXACT_MODES:
@@ -436,8 +516,35 @@ async def process_gov_exam_job(
             warnings=[PRACTICE_DISCLAIMER] if deterministic_count else [],
         )
         provenance = result.provenance_json()
+        question_source_types: list[str] = []
+        for q in questions:
+            if q.source_class == "previous_year":
+                st = "official_verified"
+            elif q.source_class == "generated":
+                if q.question_id and q.question_id in deterministic_ids:
+                    st = PRACTICE_SOURCE_TYPE
+                else:
+                    st = "ai_generated_practice"
+            else:
+                st = normalize_source_type(source_class="bank")
+            question_source_types.append(st)
+            setattr(q, "question_source_type", st)
+
+        mix = {
+            k: v
+            for k, v in {
+                "approved_bank": bank_count,
+                "generated_practice": deterministic_count,
+                "ai_generated_practice": ai_count,
+            }.items()
+            if v > 0
+        }
+        paper_source = resolve_paper_source(mix, mode=mode)
         provenance["deterministic_python"] = deterministic_count
         provenance["generator"] = "python_hybrid_engine"
+        provenance["source_mix"] = mix
+        provenance["paper_source"] = paper_source
+        provenance["question_source_types"] = summarize_source_mix(question_source_types)
         if deterministic_count:
             provenance["disclaimer"] = PRACTICE_DISCLAIMER
 
@@ -449,9 +556,17 @@ async def process_gov_exam_job(
             job_id=job_id,
             quality_score=quality,
             provenance=provenance,
+            paper_source=paper_source,
+            source_mix=mix,
         )
         await asyncio.to_thread(
             repo.complete_job, job_id, paper_id=paper_id, mock_test_id=mock_test_id
+        )
+        await asyncio.to_thread(
+            repo.patch_job_source_mix,
+            job_id,
+            mix=mix,
+            missing_count=max(0, blueprint.total_questions - len(questions)),
         )
 
         gov_exam_log(
@@ -477,6 +592,8 @@ async def process_gov_exam_job(
             bank_count=bank_count,
             ai_count=ai_count,
             deterministic_count=deterministic_count,
+            source_mix=mix,
+            paper_source=paper_source,
         )
 
     except PaperFactoryError as exc:

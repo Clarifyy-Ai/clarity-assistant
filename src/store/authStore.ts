@@ -101,7 +101,7 @@ const AUTH_SESSION_TIMEOUT_MS = isElectronApp()
 
 const PROFILE_ERROR_MESSAGE = AUTH_ACCOUNT_FRIENDLY_ERROR;
 
-const roleInFlight = createInFlightMap<{ resolved: boolean; isAdmin: boolean }>();
+const roleInFlight = createInFlightMap<{ resolved: boolean; isAdmin: boolean; isModerator: boolean }>();
 
 /**
  * Resolve admin role with one retry on timeout/network failure.
@@ -111,7 +111,7 @@ const roleInFlight = createInFlightMap<{ resolved: boolean; isAdmin: boolean }>(
  */
 async function resolveAdminRole(
   userId: string
-): Promise<{ resolved: boolean; isAdmin: boolean }> {
+): Promise<{ resolved: boolean; isAdmin: boolean; isModerator: boolean }> {
   return roleInFlight.run(userId, async () => {
     const startedAt = Date.now();
     logger.info(LogEvents.AUTH_ROLE_LOAD_STARTED, {
@@ -128,14 +128,20 @@ async function resolveAdminRole(
 
     try {
       const isAdmin = await attempt();
+      let isModerator = false;
+      try {
+        isModerator = await userRolesDB.hasRole(userId, "moderator");
+      } catch {
+        isModerator = false;
+      }
       logger.info(LogEvents.AUTH_ROLE_LOAD_SUCCEEDED, {
         operation: "role.load",
         attempt: 1,
         durationMs: Date.now() - startedAt,
         outcome: "succeeded",
-        authState: isAdmin ? "admin" : "non_admin",
+        authState: isAdmin ? "admin" : isModerator ? "moderator" : "non_admin",
       });
-      return { resolved: true, isAdmin };
+      return { resolved: true, isAdmin, isModerator };
     } catch (err) {
       if (isNonRetryableAuthError(err)) {
         logger.warn(LogEvents.AUTH_ROLE_LOAD_FAILED, {
@@ -150,7 +156,7 @@ async function resolveAdminRole(
           "[authStore] Admin role check: non-retryable auth error",
           getErrorMessage(err),
         );
-        return { resolved: true, isAdmin: false };
+        return { resolved: true, isAdmin: false, isModerator: false };
       }
       if (isTimeoutError(err)) {
         logger.warn(LogEvents.AUTH_ROLE_LOAD_TIMED_OUT, {
@@ -170,14 +176,20 @@ async function resolveAdminRole(
       console.warn("[authStore] Admin role check failed; retrying once:", err);
       try {
         const isAdmin = await attempt();
+        let isModerator = false;
+        try {
+          isModerator = await userRolesDB.hasRole(userId, "moderator");
+        } catch {
+          isModerator = false;
+        }
         logger.info(LogEvents.AUTH_ROLE_LOAD_SUCCEEDED, {
           operation: "role.load",
           attempt: 2,
           durationMs: Date.now() - startedAt,
           outcome: "succeeded",
-          authState: isAdmin ? "admin" : "non_admin",
+          authState: isAdmin ? "admin" : isModerator ? "moderator" : "non_admin",
         });
-        return { resolved: true, isAdmin };
+        return { resolved: true, isAdmin, isModerator };
       } catch (retryErr) {
         const retryTimedOut = isTimeoutError(retryErr);
         logger.error(
@@ -197,7 +209,7 @@ async function resolveAdminRole(
           "[authStore] Admin role check retry failed; failing closed (non-admin):",
           retryErr,
         );
-        return { resolved: true, isAdmin: false };
+        return { resolved: true, isAdmin: false, isModerator: false };
       }
     }
   });
@@ -212,6 +224,7 @@ export interface AuthState {
   isProfileLoaded: boolean;
   error: string | null;
   isAdmin: boolean;
+  isModerator: boolean;
   /** True only after a successful user_roles read (admin or not). Abort/timeout leave this false. */
   isAdminResolved: boolean;
   isOnboarded: boolean;
@@ -268,6 +281,7 @@ function buildInitialAuthState(): AuthState {
       isProfileLoaded: false,
       error: null,
       isAdmin: false,
+      isModerator: false,
       isAdminResolved: false,
       isOnboarded: false,
       planId: "free",
@@ -287,6 +301,7 @@ function buildInitialAuthState(): AuthState {
     isProfileLoaded: false,
     error: null,
     isAdmin: false,
+    isModerator: false,
     isAdminResolved: false,
     isOnboarded: false,
     planId: "free",
@@ -353,7 +368,7 @@ export function getProfileCacheAgeMs(now = Date.now()): number | null {
 /** Apply role flags without blocking profile resolution. */
 function applyAdminRoleResult(
   userId: string,
-  roleResult: { resolved: boolean; isAdmin: boolean },
+  roleResult: { resolved: boolean; isAdmin: boolean; isModerator: boolean },
   set: (fn: (state: AuthStore) => void) => void,
   get: () => AuthStore,
 ): void {
@@ -361,6 +376,7 @@ function applyAdminRoleResult(
   if (get().user?.id !== userId) return;
   set((state) => {
     state.isAdmin = roleResult.isAdmin;
+    state.isModerator = roleResult.isModerator;
     state.isAdminResolved = true;
   });
 }
@@ -1376,6 +1392,7 @@ export const useAuthStore = create<AuthStore>()(
                 state.error = userFacingAccountError(kind);
                 state.isProfileLoaded = false;
                 state.isAdmin = false;
+                state.isModerator = false;
                 // Profile failed hard — do not claim a definitive non-admin role.
                 state.isAdminResolved = false;
               });
@@ -1559,6 +1576,7 @@ export const useAuthStore = create<AuthStore>()(
               state.isProfileLoaded = false;
               state.error = null;
               state.isAdmin = false;
+              state.isModerator = false;
               state.isAdminResolved = false;
               state.isOnboarded = false;
               state.planId = "free";

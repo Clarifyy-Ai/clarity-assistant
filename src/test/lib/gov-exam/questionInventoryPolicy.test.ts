@@ -90,4 +90,18 @@ describe("AI-assisted generation", () => {
     expect(decision.mode).toBe("blocked");
     expect(decision.customPracticeMax).toBe(21);
   });
+
+  it("allows hybrid deterministic fill when Python is available without AI", () => {
+    const decision = decideQuestionInventory({
+      available: 21,
+      requested: 100,
+      aiFillAvailable: false,
+      pythonFillAvailable: true,
+    });
+
+    expect(decision.canGenerateRequested).toBe(true);
+    expect(decision.mode).toBe("hybrid_deterministic");
+    expect(decision.deterministicQuestions).toBe(79);
+    expect(generateButtonLabel(decision)).toContain("Realistic Mock");
+  });
 });

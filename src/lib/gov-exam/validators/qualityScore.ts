@@ -1,5 +1,7 @@
 /**
- * Independent composite quality score — never trusts generator self-score.
+ * UX preview of paper-question quality.
+ * Authoritative scoring is Edge `govQualityScore` + Python `validate.quality_score`
+ * using shared/algorithm-catalog.json (`gov_question_quality_v2`).
  */
 
 import {
@@ -23,6 +25,12 @@ import {
   type LinearSeatingPuzzle,
   type SyllogismProblem,
 } from "@/lib/gov-exam/validators/reasoningValidator";
+import {
+  MIN_BANK_QUESTION_QUALITY as CATALOG_MIN_QUALITY,
+  QUALITY_ALGORITHM_VERSION,
+  QUALITY_WEIGHTS,
+} from "@/lib/gov-exam/algorithmCatalog";
+import { DEDUP_POLICY } from "@/lib/gov-exam/algorithmCatalog";
 
 export type QualityComponent = {
   id: string;
@@ -38,6 +46,8 @@ export type QualityScoreResult = {
   components: QualityComponent[];
   hardFail: boolean;
   hardFailCodes: string[];
+  algorithm_version?: string;
+  preview?: boolean;
 };
 
 export type QualityScoreInput = {
@@ -69,7 +79,7 @@ export function scoreQuestionQuality(input: QualityScoreInput): QualityScoreResu
   const mcq = validateSingleCorrectMcq(input.mcq);
   components.push({
     id: "mcq_structure",
-    weight: 0.25,
+    weight: QUALITY_WEIGHTS.mcq_structure,
     score: mcq.ok ? 1 : 0,
     passed: mcq.ok,
     detail: mcq.ok === false ? mcq.message : undefined,
@@ -82,7 +92,7 @@ export function scoreQuestionQuality(input: QualityScoreInput): QualityScoreResu
   });
   components.push({
     id: "answer_uniqueness",
-    weight: 0.2,
+    weight: QUALITY_WEIGHTS.answer_uniqueness,
     score: uniq.ok ? 1 : 0,
     passed: uniq.ok,
     detail: uniq.ok === false ? uniq.message : undefined,
@@ -91,7 +101,7 @@ export function scoreQuestionQuality(input: QualityScoreInput): QualityScoreResu
 
   // Intra-paper similarity: 1 if no peer conflict
   const peers = input.peers ?? [];
-  const thresh = input.nearDupThreshold ?? 0.88;
+  const thresh = input.nearDupThreshold ?? DEDUP_POLICY.stem_only_conflict;
   let simScore = 1;
   let simPassed = true;
   let simDetail: string | undefined;
@@ -112,7 +122,7 @@ export function scoreQuestionQuality(input: QualityScoreInput): QualityScoreResu
   }
   components.push({
     id: "similarity",
-    weight: 0.2,
+    weight: QUALITY_WEIGHTS.similarity,
     score: simScore,
     passed: simPassed,
     detail: simDetail,
@@ -124,7 +134,7 @@ export function scoreQuestionQuality(input: QualityScoreInput): QualityScoreResu
     stemLen < 8 ? 0 : stemLen < 20 ? 0.5 : stemLen > 1200 ? 0.6 : 1;
   components.push({
     id: "stem_length",
-    weight: 0.1,
+    weight: QUALITY_WEIGHTS.stem_length,
     score: lengthScore,
     passed: stemLen >= 8,
     detail: stemLen < 8 ? "Stem too short." : undefined,
@@ -134,7 +144,7 @@ export function scoreQuestionQuality(input: QualityScoreInput): QualityScoreResu
   const expl = Boolean(input.hasExplanation ?? input.mcq.explanation?.trim());
   components.push({
     id: "explanation_present",
-    weight: 0.05,
+    weight: QUALITY_WEIGHTS.explanation_present,
     score: expl ? 1 : 0.4,
     passed: true,
   });
@@ -142,7 +152,7 @@ export function scoreQuestionQuality(input: QualityScoreInput): QualityScoreResu
   const src = clamp01(input.sourceConfidence ?? 0.7);
   components.push({
     id: "source_confidence",
-    weight: 0.1,
+    weight: QUALITY_WEIGHTS.source_confidence,
     score: src,
     passed: src >= 0.4,
     detail: src < 0.4 ? "Low source confidence." : undefined,
@@ -153,7 +163,7 @@ export function scoreQuestionQuality(input: QualityScoreInput): QualityScoreResu
     const q = validateQuantTemplate(input.quantTemplate);
     components.push({
       id: "quant_template",
-      weight: 0.1,
+      weight: QUALITY_WEIGHTS.quant_template,
       score: q.ok ? 1 : 0,
       passed: q.ok,
       detail: q.ok === false ? q.message : undefined,
@@ -163,7 +173,7 @@ export function scoreQuestionQuality(input: QualityScoreInput): QualityScoreResu
     // Soft: no params available — don't hard-fail
     components.push({
       id: "quant_template",
-      weight: 0.05,
+      weight: QUALITY_WEIGHTS.quant_template * 0.5,
       score: hasDivByZeroParams({}) ? 0 : 0.85,
       passed: true,
     });
@@ -173,7 +183,7 @@ export function scoreQuestionQuality(input: QualityScoreInput): QualityScoreResu
     const s = validateSyllogismUniqueness(input.syllogism);
     components.push({
       id: "reasoning_syllogism",
-      weight: 0.1,
+      weight: QUALITY_WEIGHTS.reasoning_syllogism,
       score: s.ok ? 1 : 0,
       passed: s.ok,
       detail: s.ok === false ? s.message : undefined,
@@ -185,7 +195,7 @@ export function scoreQuestionQuality(input: QualityScoreInput): QualityScoreResu
     const s = validateLinearSeatingUniqueness(input.seating);
     components.push({
       id: "reasoning_seating",
-      weight: 0.1,
+      weight: QUALITY_WEIGHTS.reasoning_seating,
       score: s.ok ? 1 : 0,
       passed: s.ok,
       detail: s.ok === false ? s.message : undefined,
@@ -197,7 +207,7 @@ export function scoreQuestionQuality(input: QualityScoreInput): QualityScoreResu
   const fp = questionFingerprint(input.mcq.question_text, input.mcq.options);
   components.push({
     id: "fingerprint",
-    weight: 0.05,
+    weight: QUALITY_WEIGHTS.fingerprint,
     score: fp.length > 4 ? 1 : 0,
     passed: fp.length > 4,
   });
@@ -208,7 +218,14 @@ export function scoreQuestionQuality(input: QualityScoreInput): QualityScoreResu
   const hardFail = hardFailCodes.length > 0;
   const score = hardFail ? 0 : Math.round(weighted * 1000) / 10; // 0–100 one decimal
 
-  return { score, components, hardFail, hardFailCodes: [...new Set(hardFailCodes)] };
+  return {
+    score,
+    components,
+    hardFail,
+    hardFailCodes: [...new Set(hardFailCodes)],
+    algorithm_version: QUALITY_ALGORITHM_VERSION,
+    preview: true,
+  };
 }
 
 /** Mean of per-question scores; hard-failed questions count as 0. */
@@ -227,4 +244,4 @@ export function scorePaperQuality(
 }
 
 /** Minimum quality to accept a bank item into a paper during assembly. */
-export const MIN_BANK_QUESTION_QUALITY = 40;
+export const MIN_BANK_QUESTION_QUALITY = CATALOG_MIN_QUALITY;

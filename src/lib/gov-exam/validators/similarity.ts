@@ -7,6 +7,8 @@
  * production near-dup detection must keep working with n-gram/Jaccard alone.
  */
 
+import { DEDUP_POLICY } from "@/lib/gov-exam/algorithmCatalog";
+
 const LATEX_OR_GREEK: Array<[RegExp, string]> = [
   [/\\alpha|α/gi, " alpha "],
   [/\\beta|β/gi, " beta "],
@@ -112,13 +114,12 @@ export function similarityBreakdown(a: string, b: string): SimilarityBreakdown {
 
 /**
  * Near-duplicate when any strong signal fires.
- * Default threshold 0.88 — slightly stricter than legacy 0.92 containment-only path
- * because n-gram Jaccard catches paraphrases that token Jaccard misses.
+ * Stem-only screen uses canonical `stem_only_conflict` (gov_question_dedup_v2).
  */
 export function isNearDuplicate(
   a: string,
   b: string,
-  threshold = 0.88,
+  threshold = DEDUP_POLICY.stem_only_conflict,
 ): boolean {
   const d = similarityBreakdown(a, b);
   if (d.exact) return true;
@@ -136,7 +137,7 @@ export type NearDupPair = {
 /** Pairwise near-dupes within a paper (O(n²); fine for ≤200 Qs). */
 export function findNearDuplicatesInSet(
   texts: string[],
-  threshold = 0.88,
+  threshold = DEDUP_POLICY.stem_only_conflict,
 ): NearDupPair[] {
   const pairs: NearDupPair[] = [];
   for (let i = 0; i < texts.length; i++) {
@@ -160,7 +161,7 @@ export function findNearDuplicatesInSet(
 export function conflictsWithSelected(
   candidate: string,
   selectedTexts: string[],
-  threshold = 0.88,
+  threshold = DEDUP_POLICY.stem_only_conflict,
 ): boolean {
   for (const prev of selectedTexts) {
     if (isNearDuplicate(candidate, prev, threshold)) return true;
@@ -241,7 +242,7 @@ export function isNearDuplicateWithOptionalEmbedding(
     weights?: { lexical?: number; embedding?: number };
   },
 ): boolean {
-  const threshold = opts?.threshold ?? 0.88;
+  const threshold = opts?.threshold ?? DEDUP_POLICY.stem_only_conflict;
   const lexical = similarityBreakdown(a, b).score;
   let embedding: number | undefined;
   if (opts?.embeddingA && opts?.embeddingB) {

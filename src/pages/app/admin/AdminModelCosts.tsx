@@ -1,9 +1,15 @@
 import { useState, useEffect } from "react";
 import { creditsDB } from "@/lib/supabase/database";
 import { supabase } from "@/integrations/supabase/client";
-import { formatNumber, formatUsdCentsAsInr, formatPercent } from "@/lib/utils/formatters";
+import { formatNumber, formatUsdCentsAsInr } from "@/lib/utils/formatters";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { subDays } from "date-fns";
+import { toast } from "sonner";
+import { writeAdminAudit } from "@/lib/admin/writeAdminAudit";
+import { adminActionFailedMessage, toAdminUserMessage } from "@/lib/admin/adminErrors";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { EmptyState } from "@/components/common/EmptyState";
+import { Input } from "@/components/ui/Input";
 
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
@@ -91,25 +97,46 @@ function buildCreditCostRows(): FeatureCreditCost[] {
 export default function AdminModelCosts() {
   const [modelStats,   setModelStats]   = useState<ModelUsageStat[]>([]);
   const [creditCosts,  setCreditCosts]  = useState<FeatureCreditCost[]>(buildCreditCostRows);
+  const [pricingRows,  setPricingRows]  = useState<Array<{
+    id: string;
+    model: string;
+    cost_per_1k_in: number;
+    cost_per_1k_out: number;
+    credits_per_call: number;
+    is_active: boolean;
+  }>>([]);
   const [dateRange,    setDateRange]    = useState<DateRange>("30d");
   const [isLoading,    setIsLoading]    = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const fetchData = async (showRefresh = false) => {
     if (showRefresh) setIsRefreshing(true);
     else             setIsLoading(true);
+    setLoadError(null);
 
     try {
       const days = dateRange === "7d" ? 7 : dateRange === "30d" ? 30 : 90;
       const since = subDays(new Date(), days).toISOString();
 
-      const [creditData, usageRes] = await Promise.all([
+      const [creditData, usageRes, pricingRes] = await Promise.all([
         creditsDB.listRecent(2000),
         supabase
           .from("ai_usage_logs" as "profiles")
           .select("model, input_tokens, output_tokens, cost_microcents, latency_ms")
           .gte("created_at", since),
+        supabase
+          .from("model_pricing")
+          .select("id, model, cost_per_1k_in, cost_per_1k_out, credits_per_call, is_active")
+          .order("model"),
       ]);
+
+      if (pricingRes.error) {
+        // Table may be empty or RLS — show empty pricing, not fake costs
+        setPricingRows([]);
+      } else {
+        setPricingRows((pricingRes.data as typeof pricingRows) ?? []);
+      }
 
       const data = creditData;
 
@@ -180,11 +207,42 @@ export default function AdminModelCosts() {
       );
     } catch (err) {
       console.error("[AdminModelCosts] fetch error:", err);
+      setLoadError(toAdminUserMessage(err, undefined, "AdminModelCosts"));
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
   };
+
+  async function savePricingRow(row: (typeof pricingRows)[number]) {
+    const { error } = await supabase
+      .from("model_pricing")
+      .update({
+        cost_per_1k_in: row.cost_per_1k_in,
+        cost_per_1k_out: row.cost_per_1k_out,
+        credits_per_call: row.credits_per_call,
+        is_active: row.is_active,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", row.id);
+    if (error) {
+      toast.error(adminActionFailedMessage(error));
+      return;
+    }
+    await writeAdminAudit({
+      action: "update",
+      targetType: "model_pricing",
+      targetId: row.id,
+      newValue: {
+        model: row.model,
+        cost_per_1k_in: row.cost_per_1k_in,
+        cost_per_1k_out: row.cost_per_1k_out,
+        credits_per_call: row.credits_per_call,
+        is_active: row.is_active,
+      },
+    });
+    toast.success("Model pricing saved");
+  }
 
   useEffect(() => { void fetchData(); }, [dateRange]);
 
@@ -199,7 +257,7 @@ export default function AdminModelCosts() {
         <div>
           <h1 className="text-xl font-bold text-foreground">Model Costs</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            AI token usage, per-model costs, and credit pricing configuration.
+            Usage telemetry plus server <code className="text-[11px]">model_pricing</code> configuration.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -220,6 +278,10 @@ export default function AdminModelCosts() {
           </Button>
         </div>
       </div>
+
+      {loadError && (
+        <InlineErrorRetry message={loadError} onRetry={() => void fetchData(true)} />
+      )}
 
       {/* Summary KPIs */}
       <div className="grid grid-cols-3 gap-4">
@@ -244,6 +306,92 @@ export default function AdminModelCosts() {
         ))}
       </div>
 
+      <Card padding="none">
+        <CardHeader className="px-5 pt-4">
+          <CardTitle className="text-base">Server model pricing</CardTitle>
+          <CardDescription>
+            Rows from <code className="text-[11px]">model_pricing</code>. Saves persist to the database.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0 overflow-x-auto">
+          {pricingRows.length === 0 && !isLoading ? (
+            <div className="p-6">
+              <EmptyState title="No pricing rows" description="model_pricing has no rows yet." />
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Model</TableHead>
+                  <TableHead>Cost / 1k in</TableHead>
+                  <TableHead>Cost / 1k out</TableHead>
+                  <TableHead>Credits / call</TableHead>
+                  <TableHead>Active</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {pricingRows.map((row, idx) => (
+                  <TableRow key={row.id}>
+                    <TableCell className="font-mono text-xs">{row.model}</TableCell>
+                    <TableCell>
+                      <Input
+                        type="number"
+                        className="h-8 w-24"
+                        value={row.cost_per_1k_in}
+                        onChange={(e) => {
+                          const next = [...pricingRows];
+                          next[idx] = { ...row, cost_per_1k_in: Number(e.target.value) || 0 };
+                          setPricingRows(next);
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        type="number"
+                        className="h-8 w-24"
+                        value={row.cost_per_1k_out}
+                        onChange={(e) => {
+                          const next = [...pricingRows];
+                          next[idx] = { ...row, cost_per_1k_out: Number(e.target.value) || 0 };
+                          setPricingRows(next);
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        type="number"
+                        className="h-8 w-20"
+                        value={row.credits_per_call}
+                        onChange={(e) => {
+                          const next = [...pricingRows];
+                          next[idx] = { ...row, credits_per_call: Number(e.target.value) || 0 };
+                          setPricingRows(next);
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        checked={row.is_active}
+                        onChange={(e) => {
+                          const next = [...pricingRows];
+                          next[idx] = { ...row, is_active: e.target.checked };
+                          setPricingRows(next);
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Button size="xs" onClick={() => void savePricingRow(row)}>Save</Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Model usage table */}
       <Card padding="none">
         <CardHeader className="px-5 pt-4">
@@ -251,7 +399,7 @@ export default function AdminModelCosts() {
             <Bot className="h-4 w-4 text-primary" />
             Model Usage Breakdown
           </CardTitle>
-          <CardDescription>Cost, token consumption, and error rates per model.</CardDescription>
+          <CardDescription>Cost and token consumption per model. Error rate is shown only when telemetry exists.</CardDescription>
         </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
           <Table>
@@ -298,10 +446,8 @@ export default function AdminModelCosts() {
                       <TableCell className="text-right font-medium tabular-nums">{formatUsdCentsAsInr(model.costUSDCents)}</TableCell>
                       <TableCell className="text-right tabular-nums text-green-600">{formatNumber(model.revenueCredits)}</TableCell>
                       <TableCell className="text-right tabular-nums text-muted-foreground">{model.avgLatencyMs}ms</TableCell>
-                      <TableCell className="text-right">
-                        <span className={model.errorRate > 0.01 ? "text-red-500" : "text-green-600"}>
-                          {formatPercent(model.errorRate)}
-                        </span>
+                      <TableCell className="text-right text-muted-foreground text-xs">
+                        Not available
                       </TableCell>
                     </TableRow>
                   ))

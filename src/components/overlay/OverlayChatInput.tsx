@@ -56,7 +56,7 @@ export function OverlayChatInput({ onSubmit }: OverlayChatInputProps) {
           }}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          placeholder="Ask a question…"
+          placeholder="Ask your coach…"
           className="flex-1 bg-transparent text-white/85 placeholder:text-white/25 text-[13px] focus:outline-none"
           aria-label="Chat message"
           autoComplete="off"

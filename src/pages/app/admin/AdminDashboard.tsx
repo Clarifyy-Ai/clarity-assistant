@@ -21,6 +21,10 @@ import { type PlanId } from "@/lib/constants/pricing";
 import { formatInrPaise, razorpayPaiseForPlan } from "@/lib/billing/priceCalculator";
 import { formatUsdAmountAsInr } from "@/lib/utils/formatters";
 import {
+  runAdminHealthChecks,
+  type HealthCheck,
+} from "@/pages/app/admin/AdminDiagnostics";
+import {
   Bar,
   BarChart,
   CartesianGrid,
@@ -73,6 +77,41 @@ function AdminStatCard({
         <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
           <Icon className="h-5 w-5 text-primary" />
         </div>
+      </div>
+    </Card>
+  );
+}
+
+function DashboardHealthStrip() {
+  const [checks, setChecks] = useState<HealthCheck[]>([]);
+
+  useEffect(() => {
+    void runAdminHealthChecks()
+      .then(setChecks)
+      .catch(() => setChecks([]));
+  }, []);
+
+  if (checks.length === 0) return null;
+
+  const fail = checks.filter((c) => c.status === "FAIL").length;
+  const warn = checks.filter((c) => c.status === "WARNING" || c.status === "NOT_CONFIGURED").length;
+  const pass = checks.filter((c) => c.status === "PASS").length;
+
+  return (
+    <Card className="p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Operational health</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {pass} pass · {warn} warn/not configured · {fail} fail
+          </p>
+        </div>
+        <Link
+          to="/app/admin/diagnostics"
+          className="text-sm text-primary hover:underline"
+        >
+          Open diagnostics
+        </Link>
       </div>
     </Card>
   );
@@ -183,6 +222,8 @@ export default function AdminDashboard() {
       {error && !loading && (
         <InlineErrorRetry message={error} onRetry={() => void fetchStats()} />
       )}
+
+      <DashboardHealthStrip />
 
       {loading ? (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

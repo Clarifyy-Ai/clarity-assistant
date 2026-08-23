@@ -18,6 +18,7 @@ const PRIVATE_MODE_ALLOWLIST = new Set([
   "record-referral",
   // GDPR data export is a data-rights operation, not cloud AI.
   "export-user-data",
+  "moderate-content",
 ]);
 
 /** Edge functions that do not deduct credits — skip balance refresh. */
@@ -35,6 +36,8 @@ const CREDIT_REFRESH_SKIP = new Set([
   "assemble-assessment",
   "start-session",
   "end-session",
+  "hybrid-health",
+  "moderate-content",
 ]);
 
 /** Non-AI functions should not blame an "AI request" on CORS / network failure. */
@@ -60,6 +63,8 @@ const OPERATIONAL_EDGE_FNS = new Set([
   "start-session",
   "end-session",
   "export-user-data",
+  "hybrid-health",
+  "moderate-content",
 ]);
 
 /** Mutating calls that must not be retried by the browser after a network/CORS glitch. */
@@ -86,6 +91,7 @@ const NO_NETWORK_RETRY_FNS = new Set([
   // Payment order creation / verify must never storm on TypeError retries.
   "razorpay-create-order",
   "razorpay-verify-payment",
+  "moderate-content",
 ]);
 
 function unreachableUserMessage(fnName: string): string {

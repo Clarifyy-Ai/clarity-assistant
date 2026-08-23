@@ -19,11 +19,13 @@ import {
 } from "@/lib/audio/micDevicePersistence";
 import { invalidateAudioDeviceCache } from "@/lib/audio/audioDeviceCache";
 import {
+  AiState,
   MicState,
   SpeakerState,
   SttState,
   createOperationGuard,
 } from "@/lib/audio/precheckStates";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 
 export type UseDevicePrecheckOptions = {
   enabled: boolean;
@@ -39,6 +41,7 @@ export function useDevicePrecheck({
   const [micState, setMicState] = useState<MicState>(MicState.NOT_CHECKED);
   const [speakerState, setSpeakerState] = useState<SpeakerState>(SpeakerState.NOT_CHECKED);
   const [sttState, setSttState] = useState<SttState>(SttState.STT_NOT_CHECKED);
+  const [aiState, setAiState] = useState<AiState>(AiState.AI_NOT_CHECKED);
   const [micDevices, setMicDevices] = useState<AudioDevice[]>([]);
   const [speakerDevices, setSpeakerDevices] = useState<AudioDevice[]>([]);
   const [selectedMicId, setSelectedMicId] = useState<string | null>(() => loadPersistedMicDeviceId());
@@ -206,6 +209,25 @@ export function useDevicePrecheck({
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetchEdgeJson<{
+          readiness?: { ai?: boolean; transcription?: boolean };
+        }>("start-session", { action: "eligibility", type: "practice" });
+        if (cancelled) return;
+        setAiState(res?.readiness?.ai === false ? AiState.AI_UNAVAILABLE : AiState.AI_READY);
+      } catch {
+        if (!cancelled) setAiState(AiState.AI_NOT_CHECKED);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
+
+  useEffect(() => {
     if (!enabled) {
       autoStartedRef.current = false;
       cleanupPending();
@@ -231,6 +253,7 @@ export function useDevicePrecheck({
     micState,
     speakerState,
     sttState,
+    aiState,
     micDevices,
     speakerDevices,
     selectedMicId,

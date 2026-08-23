@@ -9,8 +9,16 @@ import { ENV } from "@/lib/env";
 import { getPlanDisplayName } from "@/lib/constants/pricing";
 import { normalizePlanId } from "./planIds";
 import { resolveCanonicalBillingStatus } from "./canonicalBillingStatus";
+import {
+  CREDIT_CATALOG_VERSION,
+  PLAN_MONTHLY_CREDITS,
+  PLAN_PRICE_CENTS_MONTHLY,
+  PLAN_PRICE_CENTS_YEARLY,
+  PLAN_STATUS,
+} from "@/lib/constants/creditEconomics";
 
 export { normalizePlanId } from "./planIds";
+export { CREDIT_CATALOG_VERSION };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Plan Definitions
@@ -43,6 +51,7 @@ export interface Plan {
   features: PlanFeature[];
   isPopular?: boolean;
   color: string;
+  deprecated?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -55,10 +64,9 @@ export const PLANS: Record<PlanId, Plan> = {
     name: "Free",
     displayName: "Free",
     tagline: "Get started — no card required",
-    monthlyPrice: 0,
-    yearlyPrice: 0,
-    // Launch source of truth: src/lib/constants/creditEconomics.ts
-    creditsPerMonth: 50,
+    monthlyPrice: PLAN_PRICE_CENTS_MONTHLY.free,
+    yearlyPrice: PLAN_PRICE_CENTS_YEARLY.free,
+    creditsPerMonth: PLAN_MONTHLY_CREDITS.free,
     color: "slate",
     features: [
       {
@@ -125,9 +133,9 @@ export const PLANS: Record<PlanId, Plan> = {
     name: "Pro",
     displayName: "Pro",
     tagline: "Legacy tier (deprecated)",
-    monthlyPrice: 0,
-    yearlyPrice: 0,
-    creditsPerMonth: 50,
+    monthlyPrice: PLAN_PRICE_CENTS_MONTHLY.starter,
+    yearlyPrice: PLAN_PRICE_CENTS_YEARLY.starter,
+    creditsPerMonth: PLAN_MONTHLY_CREDITS.starter,
     stripePriceIdMonthly: ENV.STRIPE_PRICE_STARTER_MONTHLY,
     stripePriceIdYearly: ENV.STRIPE_PRICE_STARTER_YEARLY,
     color: "blue",
@@ -195,9 +203,9 @@ export const PLANS: Record<PlanId, Plan> = {
     name: "Pro",
     displayName: "Pro",
     tagline: "Everything you need to land the role",
-    monthlyPrice: 2_900,
-    yearlyPrice: 27_840, // annual cents = monthly×12×0.8 (true 20%); display monthly = yearlyPrice/12
-    creditsPerMonth: 1_400,
+    monthlyPrice: PLAN_PRICE_CENTS_MONTHLY.pro,
+    yearlyPrice: PLAN_PRICE_CENTS_YEARLY.pro,
+    creditsPerMonth: PLAN_MONTHLY_CREDITS.pro,
     stripePriceIdMonthly: ENV.STRIPE_PRICE_PRO_MONTHLY,
     stripePriceIdYearly: ENV.STRIPE_PRICE_PRO_YEARLY,
     color: "violet",
@@ -267,9 +275,10 @@ export const PLANS: Record<PlanId, Plan> = {
     name: "Pro",
     displayName: "Pro",
     tagline: "Legacy tier (deprecated)",
-    monthlyPrice: 7_900,
-    yearlyPrice: 75_840, // annual cents = monthly×12×0.8 (true 20%); display monthly = yearlyPrice/12
-    creditsPerMonth: 1_000,
+    monthlyPrice: PLAN_PRICE_CENTS_MONTHLY.elite,
+    yearlyPrice: PLAN_PRICE_CENTS_YEARLY.elite,
+    creditsPerMonth: PLAN_MONTHLY_CREDITS.elite,
+    deprecated: PLAN_STATUS.elite === "deprecated",
     stripePriceIdMonthly: ENV.STRIPE_PRICE_ELITE_MONTHLY,
     stripePriceIdYearly: ENV.STRIPE_PRICE_ELITE_YEARLY,
     color: "amber",
@@ -338,9 +347,9 @@ export const PLANS: Record<PlanId, Plan> = {
     name: "Max",
     displayName: "Max",
     tagline: "Higher credits for power users",
-    monthlyPrice: 7_900,
-    yearlyPrice: 75_840, // annual cents = monthly×12×0.8 (true 20%); display monthly = yearlyPrice/12
-    creditsPerMonth: 4_000,
+    monthlyPrice: PLAN_PRICE_CENTS_MONTHLY.enterprise,
+    yearlyPrice: PLAN_PRICE_CENTS_YEARLY.enterprise,
+    creditsPerMonth: PLAN_MONTHLY_CREDITS.enterprise,
     stripePriceIdMonthly: ENV.STRIPE_PRICE_ENTERPRISE_MONTHLY,
     stripePriceIdYearly: ENV.STRIPE_PRICE_ENTERPRISE_YEARLY,
     color: "emerald",

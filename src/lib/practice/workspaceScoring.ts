@@ -30,6 +30,9 @@ export type PracticeScores = {
   areasToImprove: string[];
   rubricNote: string;
   qualityClasses?: AnswerQualityClass[];
+  /** Client preview only — official interview scores come from generate-scorecard. */
+  preview?: boolean;
+  scoring_authority?: "client_preview";
 };
 
 function clamp(n: number): number {

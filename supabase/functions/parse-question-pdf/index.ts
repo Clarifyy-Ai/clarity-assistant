@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
     );
     if (rateLimited) return rateLimited;
 
-    const capabilityGate = requireCapabilityForFunction(auth.planId, "parse-question-pdf", req);
+    const capabilityGate = await requireCapabilityForFunction(auth.planId, "parse-question-pdf", req);
     if (capabilityGate) return capabilityGate;
 
     const pdf = await extractPdf(req);

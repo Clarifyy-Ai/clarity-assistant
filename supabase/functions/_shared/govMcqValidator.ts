@@ -2,6 +2,8 @@
  * Similarity + MCQ validation for create-exam-paper (mirrors src/lib/gov-exam).
  */
 
+import { DEDUP_POLICY } from "./algorithmCatalog.ts";
+
 const LATEX_OR_GREEK: Array<[RegExp, string]> = [
   [/\\alpha|α/gi, " alpha "],
   [/\\beta|β/gi, " beta "],
@@ -100,7 +102,11 @@ export function similarityBreakdown(a: string, b: string): SimilarityBreakdown {
   return { exact, containment, tokenJaccard: tj, ngramJaccard: nj, score };
 }
 
-export function isNearDuplicate(a: string, b: string, threshold = 0.88): boolean {
+export function isNearDuplicate(
+  a: string,
+  b: string,
+  threshold = DEDUP_POLICY.stem_only_conflict,
+): boolean {
   const d = similarityBreakdown(a, b);
   if (d.exact) return true;
   return d.score >= threshold;
@@ -109,7 +115,7 @@ export function isNearDuplicate(a: string, b: string, threshold = 0.88): boolean
 export function conflictsWithSelected(
   candidate: string,
   selectedTexts: string[],
-  threshold = 0.88,
+  threshold = DEDUP_POLICY.stem_only_conflict,
 ): boolean {
   for (const prev of selectedTexts) {
     if (isNearDuplicate(candidate, prev, threshold)) return true;
@@ -119,7 +125,7 @@ export function conflictsWithSelected(
 
 export function findNearDuplicatesInSet(
   texts: string[],
-  threshold = 0.88,
+  threshold = DEDUP_POLICY.stem_only_conflict,
 ): Array<{ i: number; j: number; score: number }> {
   const pairs: Array<{ i: number; j: number; score: number }> = [];
   for (let i = 0; i < texts.length; i++) {

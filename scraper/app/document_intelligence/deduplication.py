@@ -82,8 +82,8 @@ class QuestionDeduplicationEngine:
     def __init__(
         self,
         exact_threshold: float = 1.0,
-        near_dup_threshold: float = 0.85,
-        template_clone_threshold: float = 0.85,
+        near_dup_threshold: float = 0.65,
+        template_clone_threshold: float = 0.9,
     ) -> None:
         self.exact_threshold = exact_threshold
         self.near_dup_threshold = near_dup_threshold
@@ -136,9 +136,9 @@ class QuestionDeduplicationEngine:
 
         if is_template_clone:
             decision = "template_clone"
-        elif composite_score >= self.near_dup_threshold or (opt_overlap >= 0.8 and stem_max_sim >= 0.6) or stem_max_sim >= 0.85:
+        elif composite_score >= self.near_dup_threshold or (opt_overlap >= 0.8 and stem_max_sim >= 0.5) or stem_max_sim >= 0.8:
             decision = "near_duplicate"
-        elif composite_score >= 0.50 or (opt_overlap > 0.4 and stem_max_sim >= 0.4):
+        elif composite_score >= 0.45 or (opt_overlap > 0.4 and stem_max_sim >= 0.35):
             decision = "flagged_for_review"
         else:
             decision = "unique"

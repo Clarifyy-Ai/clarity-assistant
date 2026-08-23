@@ -44,28 +44,75 @@ All responses use a consistent envelope:
 ## Functions
 
 ### `ai-coach-chat`
-**POST** — Chat with the AI interview coach.
+**POST** — Multi-turn AI interview coach chat (SSE). Overlay Chat tab (Live and Mock).
+
+**Credits:** 2 (`ai_coach_message`)  
+**Rate limit:** 5 requests / 60s per user  
+**Auth:** Bearer JWT required · capability `live_rehearsal` · active owned session
 
 ```jsonc
 // Request
 {
-  "message": "How do I answer 'tell me about yourself'?",
-  "conversationId": "uuid",          // optional — continues existing thread
-  "context": {                        // optional
-    "targetRole": "Senior Engineer",
-    "company": "Google"
+  "session_id": "uuid",                 // required — active session you own
+  "conversation_id": "uuid" | null,     // optional — must match session thread
+  "message": "How should I structure this?",
+  "context": {
+    "current_question": "Tell me about yourself",
+    "recent_transcript": "...",         // bounded
+    "resume_context": "...",
+    "job_description": "...",
+    "recent_answers": ["..."]
   },
-  "model": "gpt-4o"                   // optional, default: gpt-4o
+  "coach_tone": "encouraging",          // encouraging|direct|formal|casual
+  "hint_style": "short_hints",          // short_hints|keywords_only|full_answer
+  "model": "gemini-2.5-flash"           // optional; Gemini family only
 }
 
-// Response data
+// Headers
+// Authorization: Bearer <access_token>
+// Idempotency-Key: <stable key>
+// Accept: text/event-stream
+```
+
+**Response:** `text/event-stream` (SSE)
+
+```jsonc
+// data: meta
+{ "type": "meta", "conversation_id": "uuid", "message_id": "uuid", "correlation_id": "uuid" }
+
+// data: text chunks
+{ "text": "partial…" }
+
+// data: done
 {
-  "reply": "Great question! Structure your answer as...",
-  "conversationId": "uuid",
-  "messageId": "uuid"
+  "type": "done",
+  "success": true,
+  "conversation_id": "uuid",
+  "message_id": "uuid",
+  "reply": "full coaching reply",
+  "source": "ai" | "python" | "deterministic",
+  "correlation_id": "uuid",
+  "provider": "gemini" | "python" | "deterministic",
+  "model": "gemini-2.5-flash"
 }
 ```
-**Credits:** 2
+
+Pre-stream errors are JSON (not SSE):
+
+| Code | HTTP | Meaning |
+|---|---|---|
+| `AUTH_REQUIRED` / `AUTH_INVALID` | 401 | Missing/invalid JWT |
+| `PAYMENT_REQUIRED` | 402 | Insufficient credits |
+| `VALIDATION_ERROR` | 422 | Bad payload / injection |
+| `RATE_LIMITED` | 429 | Too many requests |
+| `SESSION_NOT_FOUND` / `INVALID_SESSION_STATE` | 404/400 | Session issues |
+| `AI_UNAVAILABLE` | via SSE `type:error` | Provider + Python + deterministic all failed (credits refunded) |
+
+**Fallback:** Gemini → Python `/v1/process` `practice_coach` (`operation_type: coach_chat`) → deterministic template. One credit deduction per logical message.
+
+**Persistence:** `coach_conversations` (1 per session) + `coach_messages` (user/coach roles). History is loaded from DB (last 12 turns sent to the model).
+
+**Not used for:** full spoken answers (`generate-answer`) or 3-bullet hints (`generate-hint`).
 
 ---
 

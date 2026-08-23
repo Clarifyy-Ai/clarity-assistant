@@ -813,7 +813,7 @@ Deno.serve(async (req: Request) => {
   const db = createServiceClient();
 
   const planId = await resolveUserPlanId(userId);
-  const capabilityGate = requireCapabilityForFunction(planId, FUNCTION_NAME, req);
+  const capabilityGate = await requireCapabilityForFunction(planId, FUNCTION_NAME, req);
   if (capabilityGate) return withCorsHeaders(req, capabilityGate);
 
   const rateLimited = await enforceAiRateLimitAsync(db, FUNCTION_NAME, userId);

@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
     }
 
     const { data: profile } = await db.from("profiles").select("plan_id").eq("id", user.id).maybeSingle();
-    const capability = requireCapabilityForFunction(profile?.plan_id, "parse-document", req);
+    const capability = await requireCapabilityForFunction(profile?.plan_id, "parse-document", req);
     if (capability) return capability;
 
     const { data: existing } = await db
@@ -151,7 +151,14 @@ Deno.serve(async (req) => {
       });
     }
 
-    return json(req, { success: true, jobId: job.id, state: job.status, attemptCount: job.attempt_count, correlationId }, 202);
+    return json(req, {
+      success: true,
+      jobId: job.id,
+      state: job.status,
+      attemptCount: job.attempt_count,
+      pythonConfigured: isPythonConfigured(),
+      correlationId,
+    }, 202);
   } catch (error) {
     console.error("[create-document-processing-job]", error);
     return json(req, { success: false, error: safeError("INTERNAL_ERROR", "Processing job could not be created.", "queueing", correlationId, true) }, 500);

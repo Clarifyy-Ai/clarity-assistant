@@ -40,9 +40,9 @@ export function OverlayChatPanel({ onSubmit }: OverlayChatPanelProps) {
             <div className="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/15 flex items-center justify-center mb-3 shadow-lg shadow-indigo-500/10">
               <MessageSquare className="w-5 h-5 text-indigo-400" />
             </div>
-            <p className="text-[13px] font-semibold text-white/60">Ask anything</p>
-            <p className="text-[12px] text-white/25 mt-1 max-w-[190px] leading-relaxed">
-              Get AI-powered guidance during your interview.
+            <p className="text-[13px] font-semibold text-white/60">Ask your coach</p>
+            <p className="text-[12px] text-white/25 mt-1 max-w-[200px] leading-relaxed">
+              Get guidance about the current question, strategy, structure, or response.
             </p>
           </div>
         )}
@@ -123,7 +123,9 @@ function ChatBubble({ message }: { message: ChatMessage }) {
             : "bg-white/[0.05] text-white/80 rounded-bl-sm border border-white/[0.08]"
         )}
       >
-        <p className="whitespace-pre-wrap break-words">{safeText || "…"}</p>
+        <p className="whitespace-pre-wrap break-words">
+          {safeText || (message.pending ? "…" : "…")}
+        </p>
         <p className={cn("text-[10px] mt-1.5", isUser ? "text-indigo-300/35 text-right" : "text-white/20")}>
           {timeStr}
         </p>

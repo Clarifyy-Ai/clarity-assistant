@@ -244,6 +244,7 @@ function scoreQuestion(
   return { correct: false, score: 0 };
 }
 
+/** RETIRED: non-transactional writes. Do not call — claim_and_complete_test is atomic. */
 async function completeTestFallback(
   db: ReturnType<typeof createServiceClient>,
   args: {
@@ -714,12 +715,18 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
       p_strong_topics: analysisPayload.strong_topics,
       p_time_analysis: analysisPayload.time_analysis,
       p_predicted_percentile: analysisPayload.predicted_percentile ?? 0,
+      p_responses: responseUpserts,
+      p_algorithm_version: "mock_test_score_v1",
     });
 
     if (claimResult.error) {
-      log(FN, "warn", "claim_and_complete_test failed, using fallback", claimResult.error);
-
-      finalAnalysis = await completeTestFallback(db, analysisPayload);
+      log(FN, "error", "claim_and_complete_test failed; refusing partial write", claimResult.error);
+      return errorResponse(
+        "Could not finalize this test. Please retry — no partial result was saved.",
+        "TEST_FINALIZE_FAILED",
+        503,
+        req,
+      );
     } else if ((claimResult.data as { already_completed?: boolean } | null)?.already_completed) {
       const { data: existing } = await db
         .from("test_analyses")
@@ -753,16 +760,7 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
       finalAnalysis = analysisRow ?? null;
     }
 
-    /* ------------------------ SAVE RESPONSES ------------------------ */
-    if (responseUpserts.length > 0) {
-      const { error: responseUpsertError } = await db
-        .from("test_responses")
-        .upsert(responseUpserts, { onConflict: "test_id,question_id" });
-
-      if (responseUpsertError) {
-        log(FN, "warn", "Failed to upsert response correctness", responseUpsertError);
-      }
-    }
+    /* Responses persist inside claim_and_complete_test — no separate write. */
 
     /* ------------------- ADD WRONG ANSWERS TO REVISION ------------------- */
     if (wrongQuestionIds.length > 0) {

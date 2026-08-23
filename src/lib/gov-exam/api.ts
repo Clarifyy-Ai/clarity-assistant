@@ -549,6 +549,7 @@ export type ExamPaperAvailability = {
     generator: string;
     bankQuestions: number;
     aiQuestions: number;
+    deterministicQuestions?: number;
     requested: number;
     paperClass: string;
   };

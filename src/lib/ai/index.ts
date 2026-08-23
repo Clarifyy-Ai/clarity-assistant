@@ -1,8 +1,9 @@
 // ─── AI Clients ───────────────────────────────────────────────────────────────
 export { streamClaudeHint } from "./anthropicClient";
 export type { ClaudeStreamOptions } from "./anthropicClient";
-export { streamOpenAIHint } from "./openaiClient";
-export type { OpenAIStreamOptions } from "./openaiClient";
+export { streamOpenAIHint, streamCoachChat } from "./openaiClient";
+export type { OpenAIStreamOptions, CoachChatStreamOptions } from "./openaiClient";
+export { submitCoachChatMessage, loadCoachChatHistory } from "./coachChatSession";
 export { streamGeminiHint, consumeSSEStream } from "./geminiClient";
 export type { GeminiStreamOptions, GeminiModel } from "./geminiClient";
 

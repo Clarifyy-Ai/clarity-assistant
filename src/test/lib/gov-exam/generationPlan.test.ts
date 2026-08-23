@@ -19,6 +19,7 @@ describe("decideGenerationPlan", () => {
     expect(plan.skipAiFill).toBe(true);
     expect(plan.bankContribution).toBe(20);
     expect(plan.aiContribution).toBe(0);
+    expect(plan.deterministicContribution).toBe(0);
   });
 
   it("generates the shortfall when the caller has the AI capability", () => {
@@ -27,33 +28,55 @@ describe("decideGenerationPlan", () => {
       available: 21,
       mode: "generated_mock",
       canUseAi: true,
+      pythonWorkerEnabled: true,
     });
 
     expect(plan.kind).toBe("ai_assisted");
     expect(plan.skipAiFill).toBe(false);
     expect(plan.bankContribution).toBe(21);
     expect(plan.aiContribution).toBe(79);
+    expect(plan.allowDeterministicFill).toBe(true);
     expect(plan.paperClass).toBe("ai_generated");
   });
 
-  it("generates a full paper for an exam with an empty bank", () => {
+  it("uses hybrid deterministic fill when AI is unavailable but Python is up", () => {
+    const plan = decideGenerationPlan({
+      requested: 100,
+      available: 21,
+      mode: "generated_mock",
+      canUseAi: false,
+      pythonWorkerEnabled: true,
+    });
+
+    expect(plan.kind).toBe("hybrid_deterministic");
+    expect(plan.skipAiFill).toBe(true);
+    expect(plan.allowDeterministicFill).toBe(true);
+    expect(plan.deterministicContribution).toBe(79);
+    expect(plan.aiContribution).toBe(0);
+    expect(plan.generator).toBe("python_paper_factory");
+    expect(plan.paperClass).toBe("realistic_mock");
+  });
+
+  it("generates a full paper for an exam with an empty bank via AI", () => {
     const plan = decideGenerationPlan({
       requested: 100,
       available: 0,
       mode: "generated_mock",
       canUseAi: true,
+      pythonWorkerEnabled: true,
     });
 
     expect(plan.kind).toBe("ai_assisted");
     expect(plan.aiContribution).toBe(100);
   });
 
-  it("blocks with CAPABILITY_REQUIRED when AI is unavailable to the plan", () => {
+  it("blocks with CAPABILITY_REQUIRED when neither AI nor Python can fill", () => {
     const plan = decideGenerationPlan({
       requested: 100,
       available: 21,
       mode: "generated_mock",
       canUseAi: false,
+      pythonWorkerEnabled: false,
     });
 
     expect(plan.kind).toBe("blocked");
@@ -67,18 +90,20 @@ describe("decideGenerationPlan", () => {
       available: 21,
       mode: "official_previous",
       canUseAi: true,
+      pythonWorkerEnabled: true,
     });
 
     expect(plan.kind).toBe("blocked");
     expect(plan.reasonCode).toBe("CONTENT_INSUFFICIENT");
     expect(plan.skipAiFill).toBe(true);
+    expect(plan.allowDeterministicFill).toBe(false);
   });
 
   it("routes to the Python factory when explicitly preferred", () => {
     const base = {
       requested: 100,
       available: 0,
-      mode: "generated_mock",
+      mode: "generated_mock" as const,
       canUseAi: true,
     };
 
@@ -155,6 +180,7 @@ describe("blockedPlanPayload", () => {
         available: 23,
         mode: "generated_mock",
         canUseAi: false,
+        pythonWorkerEnabled: false,
       }),
     );
 
@@ -175,6 +201,7 @@ describe("blockedPlanPayload", () => {
         available: 23,
         mode: "official_previous",
         canUseAi: true,
+        pythonWorkerEnabled: true,
       }),
     );
 
@@ -199,6 +226,7 @@ describe("planSummary", () => {
       generator: "edge_assembler",
       bankQuestions: 21,
       aiQuestions: 79,
+      deterministicQuestions: 0,
       requested: 100,
       paperClass: "ai_generated",
     });

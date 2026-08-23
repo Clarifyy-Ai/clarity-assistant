@@ -298,8 +298,12 @@ const AdminQuestionEditor = lazy(
 const AdminCommunity = lazy(() => import("@/pages/app/admin/AdminCommunity"));
 const AdminLearning = lazy(() => import("@/pages/app/admin/AdminLearning"));
 const AdminAuditLog = lazy(() => import("@/pages/app/admin/AdminAuditLog"));
-const AdminQAChecklist = lazy(
-  () => import("@/pages/app/admin/AdminQAChecklist")
+const AdminDiagnostics = lazy(
+  () => import("@/pages/app/admin/AdminDiagnostics"),
+);
+const AdminBlog = lazy(() => import("@/pages/app/admin/AdminBlog"));
+const AdminHelpArticles = lazy(
+  () => import("@/pages/app/admin/AdminHelpArticles"),
 );
 const AdminSupport = lazy(() => import("@/pages/app/admin/AdminSupport"));
 const AdminPromoCodes = lazy(() => import("@/pages/app/admin/AdminPromoCodes"));
@@ -908,7 +912,7 @@ const routes = [
       {
         path: "admin",
         element: (
-          <ProtectedRoute requireAdmin>
+          <ProtectedRoute requireStaff>
             <Suspense fallback={<PageLoader />}>
               <AdminLayout />
             </Suspense>
@@ -949,7 +953,16 @@ const routes = [
             element: <Page component={AdminQuestionEditor} />,
           },
           { path: "audit-log", element: <Page component={AdminAuditLog} /> },
-          { path: "qa-checklist", element: <Page component={AdminQAChecklist} /> },
+          {
+            path: "qa-checklist",
+            element: <Navigate to="/app/admin/diagnostics" replace />,
+          },
+          { path: "diagnostics", element: <Page component={AdminDiagnostics} /> },
+          { path: "blog", element: <Page component={AdminBlog} /> },
+          {
+            path: "help-articles",
+            element: <Page component={AdminHelpArticles} />,
+          },
           { path: "support",   element: <Page component={AdminSupport} /> },
           { path: "promo-codes", element: <Page component={AdminPromoCodes} /> },
           { path: "billing-settings", element: <Page component={AdminBillingSettings} /> },
@@ -972,7 +985,7 @@ const routes = [
           { path: "learning", element: <Page component={AdminLearning} /> },
           {
             path: "security-config",
-            element: <Page component={SettingsSecurityConfig} />,
+            element: <Navigate to="/app/admin/diagnostics" replace />,
           },
         ],
       },

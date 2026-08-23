@@ -723,90 +723,47 @@ export function useLiveCopilot({
     async (question: string) => {
       if (!profile) return;
 
+      const sessionId = sessionIdRef.current;
+      if (
+        !sessionId ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          sessionId,
+        )
+      ) {
+        toast.error("Start a practice session before chatting with your coach.");
+        return;
+      }
+
       const baseContext = coachStore.getContext() ?? getSafeContext();
       if (!baseContext) return;
       const context = await enrichContextForAi(baseContext as Record<string, unknown>);
 
-      useOverlayStore.getState().addChatMessage({
-        role: "user",
-        text: question,
-        timestamp: Date.now(),
-      });
-
-      const selectedModel = useOverlayStore.getState().active_model;
-      const creditCheck = checkCreditsForAction("fullAnswer");
-
-      if (!creditCheck.canProceed) {
-        const overlay = useOverlayStore.getState();
-        const tp = overlay.resume_talking_points;
-        useOverlayStore.getState().addChatMessage({
-          role: "assistant",
-          text: tp ? formatTalkingPointsAsHint(tp) : creditCheck.reason ?? "Out of credits",
-          timestamp: Date.now(),
-        });
-        return;
-      }
-
-      // Dedicated chat abort — do NOT cancel the auto-hint pipeline
       chatAbortRef.current?.abort();
       const controller = new AbortController();
       chatAbortRef.current = controller;
 
-      const requestId = generateId();
-      useOverlayStore.getState().setChatGenerating(true);
-
-      let chatBuffer = "";
-
       try {
-        await routeHint({
-          question,
-          context: context as unknown as CoachingContext,
-          preferredModel: selectedModel,
-          interviewType: String(context.session_type ?? "behavioral") as InterviewType,
-          isLive: true,
-          sessionId: sessionIdRef.current,
-          questionId: requestId,
-          simpleLanguage: useOverlayStore.getState().simple_language,
-          callType: useOverlayStore.getState().session_call_type,
-          language: useOverlayStore.getState().session_language,
-          answerMode: "full_answer",
-          onChunk: (chunk) => {
-            chatBuffer += chunk;
-          },
-          onDone: async () => {
-            const remaining = await refreshCredits();
-            if (remaining !== null) {
-              useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
-            }
-          },
-          onError: (error) => {
-            throw error;
-          },
+        const { submitCoachChatMessage } = await import("@/lib/ai/coachChatSession");
+        await submitCoachChatMessage({
+          message: question,
+          sessionId,
+          currentQuestion:
+            useOverlayStore.getState().current_question?.trim() ||
+            String(context.session_type ?? "behavioral"),
+          recentTranscript: String(context.last_transcript ?? ""),
+          resumeContext: String(context.resume_experience_summary ?? ""),
+          jobDescription: Array.isArray(context.jd_required_skills)
+            ? (context.jd_required_skills as string[]).join(", ")
+            : "",
+          recentAnswers: Array.isArray(context.last_3_answer_summaries)
+            ? (context.last_3_answer_summaries as Array<{ summary?: string }>)
+                .map((s) => s.summary ?? "")
+                .filter(Boolean)
+            : [],
           signal: controller.signal,
         });
-
-        if (!controller.signal.aborted) {
-          useOverlayStore.getState().addChatMessage({
-            role: "assistant",
-            text: chatBuffer || "No response received. Please try again.",
-            timestamp: Date.now(),
-          });
-        }
-      } catch (err) {
-        if (!controller.signal.aborted) {
-          openUpgradeIfInsufficientCredits(err);
-          noteProviderFailureFromError(err);
-          const msg = getAiUserFacingError(err) || "Chat generation failed";
-          useOverlayStore.getState().addChatMessage({
-            role: "assistant",
-            text: `Error: ${msg}`,
-            timestamp: Date.now(),
-          });
-          useOverlayStore.getState().setError(msg);
-        }
       } finally {
         if (chatAbortRef.current === controller) chatAbortRef.current = null;
-        useOverlayStore.getState().setChatGenerating(false);
       }
     },
     [profile, coachStore, getSafeContext, enrichContextForAi],
@@ -887,6 +844,19 @@ export function useLiveCopilot({
       }
       markOverlayProductSessionActive(generation);
       markFirstListening();
+      useOverlayStore.getState().clearChatHistory();
+      const sid = sessionIdRef.current;
+      if (
+        sid &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+          sid,
+        ) &&
+        !getPrivateMode()
+      ) {
+        void import("@/lib/ai/coachChatSession").then(({ loadCoachChatHistory }) =>
+          loadCoachChatHistory(sid),
+        );
+      }
     } catch (err) {
       console.error("[useLiveCopilot] Failed to start live session:", err);
       audio.stop();
@@ -940,6 +910,18 @@ export function useLiveCopilot({
           session_id: session.session_id,
           terminal_reason: "USER_ENDED",
         });
+
+        // Mark coach conversation closed (history rows retained for the session).
+        try {
+          const { supabase } = await import("@/lib/supabase/client");
+          await supabase
+            .from("coach_conversations")
+            .update({ status: "closed", updated_at: new Date().toISOString() })
+            .eq("session_id", session.session_id)
+            .eq("user_id", userId);
+        } catch {
+          /* non-fatal */
+        }
 
         // Metrics-only follow-up — never overwrite terminal fields or duration.
         await sessionsDB.updateForUser(session.session_id, userId, {

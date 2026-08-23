@@ -56,13 +56,46 @@ export function eligibilityUserMessage(reason: string, extras?: {
   }
 }
 
+export function configuredAiProviders(): {
+  gemini: boolean;
+  openai: boolean;
+  anthropic: boolean;
+} {
+  const gemini = Boolean(
+    (Deno.env.get("GEMINI_API_KEY") ?? Deno.env.get("GOOGLE_AI_API_KEY") ?? "").trim(),
+  );
+  const openai = Boolean((Deno.env.get("OPENAI_API_KEY") ?? "").trim());
+  const anthropic = Boolean((Deno.env.get("ANTHROPIC_API_KEY") ?? "").trim());
+  return { gemini, openai, anthropic };
+}
+
+/** True when any coaching provider in the canonical fallback chain is configured. */
 export function isAiProviderConfigured(): boolean {
   try {
-    const key = Deno.env.get("GEMINI_API_KEY")?.trim();
-    return Boolean(key);
+    const p = configuredAiProviders();
+    return p.gemini || p.openai || p.anthropic;
   } catch {
     return false;
   }
+}
+
+export function isSttProviderConfigured(): boolean {
+  try {
+    return Boolean((Deno.env.get("DEEPGRAM_API_KEY") ?? "").trim());
+  } catch {
+    return false;
+  }
+}
+
+/** Operation readiness — never includes secret presence details for public clients. */
+export function sessionServiceReadiness(): {
+  ai: boolean;
+  transcription: boolean;
+} {
+  return {
+    ai: isAiProviderConfigured(),
+    transcription: isSttProviderConfigured(),
+  };
 }
 
 export type EligibilityRpc = {

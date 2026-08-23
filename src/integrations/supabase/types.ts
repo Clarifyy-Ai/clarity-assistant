@@ -696,6 +696,54 @@ export type Database = {
         }
         Relationships: []
       }
+      backend_operation_log: {
+        Row: {
+          correlation_id: string
+          created_at: string
+          execution_ms: number | null
+          fallback_reason: string | null
+          id: string
+          model_version: string | null
+          operation_id: string
+          operation_type: string
+          provider: string | null
+          python_service_version: string | null
+          source: string
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          correlation_id: string
+          created_at?: string
+          execution_ms?: number | null
+          fallback_reason?: string | null
+          id?: string
+          model_version?: string | null
+          operation_id: string
+          operation_type: string
+          provider?: string | null
+          python_service_version?: string | null
+          source: string
+          status?: string
+          user_id?: string | null
+        }
+        Update: {
+          correlation_id?: string
+          created_at?: string
+          execution_ms?: number | null
+          fallback_reason?: string | null
+          id?: string
+          model_version?: string | null
+          operation_id?: string
+          operation_type?: string
+          provider?: string | null
+          python_service_version?: string | null
+          source?: string
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       billing_reconciliation_incidents: {
         Row: {
           created_at: string
@@ -854,6 +902,109 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      coach_conversations: {
+        Row: {
+          created_at: string
+          id: string
+          session_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          session_id: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          session_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_conversations_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: true
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_conversations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      coach_messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          operation_id: string | null
+          role: string
+          session_id: string
+          source: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          operation_id?: string | null
+          role: string
+          session_id: string
+          source?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          operation_id?: string | null
+          role?: string
+          session_id?: string
+          source?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coach_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "coach_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_messages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coach_messages_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       coaching_context: {
         Row: {
@@ -1892,6 +2043,157 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_processing_job_attempts: {
+        Row: {
+          attempt_number: number
+          error_code: string | null
+          error_message: string | null
+          finished_at: string | null
+          id: string
+          job_id: string
+          stage: string | null
+          started_at: string
+          status: string
+          worker_id: string | null
+        }
+        Insert: {
+          attempt_number: number
+          error_code?: string | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          job_id: string
+          stage?: string | null
+          started_at?: string
+          status: string
+          worker_id?: string | null
+        }
+        Update: {
+          attempt_number?: number
+          error_code?: string | null
+          error_message?: string | null
+          finished_at?: string | null
+          id?: string
+          job_id?: string
+          stage?: string | null
+          started_at?: string
+          status?: string
+          worker_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_processing_job_attempts_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "document_processing_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_processing_jobs: {
+        Row: {
+          attempt_count: number
+          available_at: string
+          cancel_requested_at: string | null
+          completed_at: string | null
+          created_at: string
+          credit_transaction_id: string | null
+          credits_refunded_at: string | null
+          credits_reserved: number
+          credits_settled_at: string | null
+          document_id: string
+          error_code: string | null
+          error_message: string | null
+          error_stage: string | null
+          heartbeat_at: string | null
+          id: string
+          idempotency_key: string
+          lease_expires_at: string | null
+          max_attempts: number
+          operation: string
+          owner_id: string
+          parser_version: string | null
+          request_hash: string | null
+          result_reference: string | null
+          retryable: boolean
+          status: string
+          storage_reference: Json
+          updated_at: string
+          warnings: Json
+          worker_id: string | null
+        }
+        Insert: {
+          attempt_count?: number
+          available_at?: string
+          cancel_requested_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          credit_transaction_id?: string | null
+          credits_refunded_at?: string | null
+          credits_reserved?: number
+          credits_settled_at?: string | null
+          document_id: string
+          error_code?: string | null
+          error_message?: string | null
+          error_stage?: string | null
+          heartbeat_at?: string | null
+          id?: string
+          idempotency_key: string
+          lease_expires_at?: string | null
+          max_attempts?: number
+          operation?: string
+          owner_id: string
+          parser_version?: string | null
+          request_hash?: string | null
+          result_reference?: string | null
+          retryable?: boolean
+          status?: string
+          storage_reference?: Json
+          updated_at?: string
+          warnings?: Json
+          worker_id?: string | null
+        }
+        Update: {
+          attempt_count?: number
+          available_at?: string
+          cancel_requested_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          credit_transaction_id?: string | null
+          credits_refunded_at?: string | null
+          credits_reserved?: number
+          credits_settled_at?: string | null
+          document_id?: string
+          error_code?: string | null
+          error_message?: string | null
+          error_stage?: string | null
+          heartbeat_at?: string | null
+          id?: string
+          idempotency_key?: string
+          lease_expires_at?: string | null
+          max_attempts?: number
+          operation?: string
+          owner_id?: string
+          parser_version?: string | null
+          request_hash?: string | null
+          result_reference?: string | null
+          retryable?: boolean
+          status?: string
+          storage_reference?: Json
+          updated_at?: string
+          warnings?: Json
+          worker_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_processing_jobs_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "personal_library_documents"
             referencedColumns: ["id"]
           },
         ]
@@ -4176,6 +4478,47 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      personal_library_document_attempts: {
+        Row: {
+          attempt_number: number
+          created_at: string
+          document_id: string
+          error_code: string | null
+          error_message: string | null
+          id: string
+          parser_version: string | null
+          status: string
+        }
+        Insert: {
+          attempt_number: number
+          created_at?: string
+          document_id: string
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          parser_version?: string | null
+          status: string
+        }
+        Update: {
+          attempt_number?: number
+          created_at?: string
+          document_id?: string
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          parser_version?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "personal_library_document_attempts_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "personal_library_documents"
             referencedColumns: ["id"]
           },
         ]
@@ -6704,6 +7047,7 @@ export type Database = {
         Row: {
           accuracy: number | null
           ai_analysis_text: string | null
+          algorithm_version: string | null
           attempt_percentage: number | null
           created_at: string | null
           id: string
@@ -6723,6 +7067,7 @@ export type Database = {
         Insert: {
           accuracy?: number | null
           ai_analysis_text?: string | null
+          algorithm_version?: string | null
           attempt_percentage?: number | null
           created_at?: string | null
           id?: string
@@ -6742,6 +7087,7 @@ export type Database = {
         Update: {
           accuracy?: number | null
           ai_analysis_text?: string | null
+          algorithm_version?: string | null
           attempt_percentage?: number | null
           created_at?: string | null
           id?: string
@@ -7371,9 +7717,11 @@ export type Database = {
       claim_and_complete_test: {
         Args: {
           p_accuracy: number
+          p_algorithm_version?: string
           p_attempt_percentage: number
           p_max_score: number
           p_predicted_percentile: number
+          p_responses?: Json
           p_strong_topics: string[]
           p_subject_breakdown: Json
           p_test_id: string
@@ -7546,11 +7894,31 @@ export type Database = {
         }
         Returns: boolean
       }
+      has_own_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: boolean
+      }
+      claim_document_processing_job: {
+        Args: { p_lease_seconds?: number; p_worker_id: string }
+        Returns: Json
+      }
+      heartbeat_document_processing_job: {
+        Args: { p_job_id: string; p_lease_seconds?: number; p_worker_id: string }
+        Returns: Json
+      }
       increment_profile_credits: {
         Args: { p_credits: number; p_customer_id: string; p_user_id: string }
         Returns: undefined
       }
       is_admin: { Args: never; Returns: boolean }
+      is_moderator: { Args: never; Returns: boolean }
+      get_public_feature_flags: {
+        Args: never
+        Returns: { key: string; is_enabled: boolean }[]
+      }
+      demote_admin: { Args: { p_user_id: string }; Returns: undefined }
       issue_course_certificate: { Args: { p_course_id: string }; Returns: Json }
       mark_notifications_read: {
         Args: { p_user_id: string }
@@ -7567,8 +7935,33 @@ export type Database = {
         Args: { p_referral_code: string; p_referred_id: string }
         Returns: Json
       }
+      refund_document_processing_job: {
+        Args: { p_job_id: string; p_reason?: string }
+        Returns: Json
+      }
+      settle_document_processing_job: {
+        Args: { p_job_id: string }
+        Returns: Json
+      }
+      transition_document_processing_job: {
+        Args: {
+          p_error_code?: string
+          p_error_message?: string
+          p_error_stage?: string
+          p_job_id: string
+          p_result_reference?: string
+          p_status: string
+          p_warnings?: Json
+        }
+        Returns: Json
+      }
       refund_credits: {
-        Args: { p_cost: number; p_reason?: string; p_user_id: string }
+        Args: {
+          p_cost: number
+          p_reason?: string
+          p_source_transaction_id?: string
+          p_user_id: string
+        }
         Returns: Json
       }
       update_topic_performance: {

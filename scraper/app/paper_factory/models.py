@@ -8,6 +8,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from app.shared.algorithm_catalog import (
+    dedup_algorithm_version,
+    quality_algorithm_version,
+    paper_blueprint_version,
+)
+
 Difficulty = Literal["EASY", "MEDIUM", "HARD"]
 DIFFICULTIES: tuple[Difficulty, ...] = ("EASY", "MEDIUM", "HARD")
 
@@ -238,6 +244,9 @@ class PaperResult:
             "generator": "python_paper_factory",
             "generation_policy_version": GENERATION_POLICY_VERSION,
             "algorithm_version": ALGORITHM_VERSION,
+            "quality_algorithm_version": quality_algorithm_version(),
+            "dedup_algorithm_version": dedup_algorithm_version(),
+            "paper_blueprint_version": paper_blueprint_version(),
             "bank_questions": self.bank_count,
             "ai_questions": self.generated_count,
             "ai_calls": self.ai_calls,

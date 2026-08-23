@@ -568,6 +568,9 @@ function extractQuestionsFromPythonJson(json: unknown): CleanQuestion[] {
     { questions: raw },
     "behavioral",
     [],
+  );
+}
+
 function fallbackToCleanQuestions(
   interviewType: string,
   count: number,
@@ -697,7 +700,7 @@ Deno.serve(async (req: Request) => {
   const { user } = auth.context;
 
   const planId = await resolveUserPlanId(user.id);
-  const capabilityGate = requireCapabilityForFunction(planId, FUNCTION_NAME, req);
+  const capabilityGate = await requireCapabilityForFunction(planId, FUNCTION_NAME, req);
   if (capabilityGate) {
     return withCorsHeaders(req, capabilityGate);
   }

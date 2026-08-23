@@ -62,7 +62,7 @@ Deno.serve(async (req: Request) => {
     /* -------------------------------------------------------
        3. PLAN / CAPABILITY GATE
     ------------------------------------------------------- */
-    const capabilityGate = requireCapabilityForFunction(auth.planId, FN, req);
+    const capabilityGate = await requireCapabilityForFunction(auth.planId, FN, req);
     if (capabilityGate) return capabilityGate;
 
     /* -------------------------------------------------------

@@ -11,11 +11,19 @@ Frontend
     → Decision engine
         OPTION 1: bank enough → Python/Edge assemble → Paper
         OPTION 2: shortfall + AI allowed → reserve once → AI fill missing → validate → Paper
-        OPTION 3: AI unavailable → bank / deterministic_python practice → Custom set
+        OPTION 3: AI unavailable + Python up → bank + deterministic_python practice → Realistic Mock
         OPTION 4: no safe content → CONTENT_INSUFFICIENT (no charge)
 ```
 
 AI is **optional**. Approved question-bank / deterministic Python paths must work when the AI provider is down.
+
+**Paper modes (honest labels):**
+- Mode A — Official / Previous-Year: only official_verified / verified_public / approved bank (never fabricate)
+- Mode B — Realistic Mock Exam: bank + deterministic practice (+ optional AI); never labeled Official PYQ
+
+**Source priority:** official_verified → verified_public_source → approved_bank → generated_practice → ai_generated_practice
+
+**Python endpoints:** `/internal/gov-exams/availability|select|validate-questions|process-job|build-paper`
 
 ## Pipeline stages
 

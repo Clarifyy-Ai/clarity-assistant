@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
     const rateLimited = await enforceAiRateLimitAsync(db, FN, userId);
     if (rateLimited) return rateLimited;
 
-    const capabilityGate = requireCapabilityForFunction(
+    const capabilityGate = await requireCapabilityForFunction(
       auth.planId,
       FN,
       req,

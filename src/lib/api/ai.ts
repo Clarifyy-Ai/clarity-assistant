@@ -126,24 +126,29 @@ export type GenerateDebriefResponse = {
   session: Record<string, unknown>;
 };
 
-export type CoachHistoryMessage = {
-  role: "user" | "coach" | "assistant";
-  text: string;
-};
-
 export type AiCoachChatRequest = {
   session_id: string;
-  question?: string;
-  transcript?: string;
-  user_message: string;
-  history?: CoachHistoryMessage[];
+  conversation_id?: string | null;
+  message: string;
+  context?: {
+    current_question?: string;
+    recent_transcript?: string;
+    resume_context?: string;
+    job_description?: string;
+    recent_answers?: string[];
+  };
+  coach_tone?: string;
+  hint_style?: string;
   model?: string;
 };
 
 export type AiCoachChatResponse = {
   success: boolean;
-  request_id: string;
+  conversation_id: string;
+  message_id: string;
   reply: string;
+  source: string;
+  correlation_id: string;
 };
 
 export type StreamGenerateAnswerOptions = IdempotencyOptions & {
@@ -220,14 +225,49 @@ export async function aiCoachChat(
   payload: AiCoachChatRequest,
   options: IdempotencyOptions = {}
 ): Promise<AiCoachChatResponse> {
-  return invokeIdempotentFunction<AiCoachChatResponse, AiCoachChatRequest>(
-    "ai-coach-chat",
-    payload,
-    {
+  // Prefer streamCoachChat for UI. This helper collects SSE into a final payload.
+  const { streamCoachChat } = await import("@/lib/ai/openaiClient");
+  return new Promise((resolve, reject) => {
+    let reply = "";
+    let conversation_id = payload.conversation_id ?? "";
+    let message_id = "";
+    let source = "ai";
+    let correlation_id = "";
+    void streamCoachChat({
+      message: payload.message,
+      sessionId: payload.session_id,
+      conversationId: payload.conversation_id,
+      currentQuestion: payload.context?.current_question,
+      recentTranscript: payload.context?.recent_transcript,
+      resumeContext: payload.context?.resume_context,
+      jobDescription: payload.context?.job_description,
+      recentAnswers: payload.context?.recent_answers,
+      coachTone: payload.coach_tone as never,
+      hintStyle: payload.hint_style as never,
+      model: payload.model,
       idempotencyKey:
         options.idempotencyKey ?? createIdempotencyKey("ai-coach-chat"),
-    }
-  );
+      onMeta: (meta) => {
+        conversation_id = meta.conversation_id;
+        message_id = meta.message_id;
+        correlation_id = meta.correlation_id;
+      },
+      onChunk: (chunk) => {
+        reply += chunk;
+      },
+      onDone: (result) => {
+        resolve({
+          success: true,
+          conversation_id: result.conversation_id || conversation_id,
+          message_id: result.message_id || message_id,
+          reply: result.fullText || reply,
+          source: result.source || source,
+          correlation_id,
+        });
+      },
+      onError: reject,
+    });
+  });
 }
 
 export async function streamGenerateAnswer(

@@ -51,8 +51,11 @@ interface QuestionRow {
 
 export default function AdminQuestionEditor() {
   const { id } = useParams<{ id?: string }>();
-   
-  const _user = useAuthStore((s) => s.user);
+  const isAdmin = useAuthStore((s) => s.isAdmin);
+
+  if (id === "new" && !isAdmin) {
+    return <ListView />;
+  }
 
   return id === "new" || id ? <EditorView id={id} /> : <ListView />;
 }
@@ -63,6 +66,7 @@ export default function AdminQuestionEditor() {
 
 function ListView() {
   const navigate = useNavigate();
+  const isAdmin = useAuthStore((s) => s.isAdmin);
   const [rows, setRows] = useState<QuestionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -110,6 +114,7 @@ function ListView() {
           title="Question Bank Editor"
           description="Author, edit, and manage every question — with images placed anywhere inside the question."
         />
+        {isAdmin && (
         <Button
           onClick={() => navigate("/app/admin/questions/new")}
           leftIcon={<Plus className="w-4 h-4" />}
@@ -117,6 +122,7 @@ function ListView() {
         >
           New question
         </Button>
+        )}
       </div>
 
       <Card>
@@ -182,12 +188,14 @@ function ListView() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-right">
+                      {isAdmin && (
                       <button
                         onClick={(e) => { e.stopPropagation(); setDeleteId(r.id); }}
                         className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
+                      )}
                     </td>
                   </tr>
                 ))}

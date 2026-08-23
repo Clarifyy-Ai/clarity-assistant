@@ -54,7 +54,7 @@ type MoreLink = {
   to: string;
   icon: LucideIcon;
   label: string;
-  adminOnly?: boolean;
+  staffOnly?: boolean;
   featureFlag?: FeatureFlagId;
 };
 
@@ -93,7 +93,7 @@ const MORE_LINKS: MoreLink[] = [
   { to: "/app/guide/practice-coach", icon: BookMarked, label: "Guide" },
   { to: "/app/settings/profile", icon: UserRound, label: "Profile" },
   { to: "/app/settings", icon: Settings, label: "Settings" },
-  { to: "/app/admin", icon: Shield, label: "Admin", adminOnly: true },
+  { to: "/app/admin", icon: Shield, label: "Admin", staffOnly: true },
 ];
 
 function isRouteActive(pathname: string, tab: MobileTab): boolean {
@@ -105,6 +105,8 @@ export function MobileNav(): JSX.Element {
   const location = useLocation();
   const signOut = useAuthStore((s) => s.signOut);
   const isAdmin = useAuthStore((s) => s.isAdmin);
+  const isModerator = useAuthStore((s) => s.isModerator);
+  const isStaff = isAdmin || isModerator;
   const { isIndia } = useIndiaRegion();
   const [moreOpen, setMoreOpen] = useState(false);
   const killSwitches = useGlobalStore((s) => s.featureKillSwitches);
@@ -122,7 +124,15 @@ export function MobileNav(): JSX.Element {
 
   const visibleTabs = TABS.filter((tab) => navFlagVisible(tab.featureFlag));
   const visibleMore = MORE_LINKS.filter(
-    (l) => (!l.adminOnly || isAdmin) && navFlagVisible(l.featureFlag),
+    (l) => (!l.staffOnly || isStaff) && navFlagVisible(l.featureFlag),
+  ).map((l) =>
+    l.staffOnly
+      ? {
+          ...l,
+          to: isAdmin ? "/app/admin" : "/app/admin/community",
+          label: isAdmin ? "Admin" : "Moderation",
+        }
+      : l,
   );
   const moreActive = visibleMore.some(
     (l) => location.pathname === l.to || location.pathname.startsWith(`${l.to}/`),

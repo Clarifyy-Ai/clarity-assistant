@@ -3,6 +3,8 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import type { AudioDevice } from "@/types/audio.types";
 import {
+  AI_STATUS_COPY,
+  AiState,
   MIC_PERMISSION_RECOVERY,
   MIC_READY_STT_UNAVAILABLE,
   MIC_STATUS_COPY,
@@ -25,6 +27,7 @@ export function DevicePrecheckCards({
   micState,
   speakerState,
   sttState,
+  aiState = AiState.AI_NOT_CHECKED,
   micDevices,
   speakerDevices,
   selectedMicId,
@@ -46,6 +49,7 @@ export function DevicePrecheckCards({
   micState: MicState;
   speakerState: SpeakerState;
   sttState: SttState;
+  aiState?: AiState;
   micDevices: AudioDevice[];
   speakerDevices: AudioDevice[];
   selectedMicId: string | null;
@@ -85,6 +89,8 @@ export function DevicePrecheckCards({
   const speakerBad = speakerState === SpeakerState.ERROR || speakerState === SpeakerState.DEVICE_UNAVAILABLE;
   const sttReady = sttState === SttState.STT_READY;
   const sttDown = sttState === SttState.STT_UNAVAILABLE || sttState === SttState.STT_ERROR;
+  const aiReady = aiState === AiState.AI_READY;
+  const aiDown = aiState === AiState.AI_UNAVAILABLE;
 
   const speakerActionLabel =
     speakerPlaying ? "Playing test…" : speakerReady ? "Play again" : "Play test";
@@ -260,7 +266,7 @@ export function DevicePrecheckCards({
       <section
         aria-labelledby="precheck-stt-heading"
         className={cn(
-          "rounded-xl border p-4 space-y-2 min-w-0 md:col-span-2",
+          "rounded-xl border p-4 space-y-2 min-w-0",
           statusTone(sttReady, sttDown, false),
         )}
       >
@@ -290,6 +296,26 @@ export function DevicePrecheckCards({
         {sttDown && (
           <p className="text-xs text-muted-foreground">
             This does not mean your microphone is broken. You can still start after the local microphone and speaker checks pass.
+          </p>
+        )}
+      </section>
+
+      <section
+        aria-labelledby="precheck-ai-heading"
+        className={cn(
+          "rounded-xl border p-4 space-y-2 min-w-0",
+          statusTone(aiReady, aiDown, false),
+        )}
+      >
+        <h3 id="precheck-ai-heading" className="text-sm font-semibold text-foreground">
+          Coaching service
+        </h3>
+        <p id="precheck-ai-status" role="status" aria-live="polite" className="text-sm text-foreground">
+          {AI_STATUS_COPY[aiState]}
+        </p>
+        {aiDown && (
+          <p className="text-xs text-muted-foreground">
+            Independent of microphone and transcription. Text coaching also requires this service.
           </p>
         )}
       </section>

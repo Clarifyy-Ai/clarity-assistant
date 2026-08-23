@@ -1,8 +1,7 @@
 """Candidate normalisation, validation, deduplication and quality scoring.
 
-Reuses the deterministic validators and the multi-signal dedup engine already used by
-the document-intelligence pipeline, and mirrors the Edge quality floor
-(`MIN_BANK_QUESTION_QUALITY = 40` in `_shared/govQualityScore.ts`).
+Uses the shared machine-readable catalog (`gov_question_quality_v2` /
+`gov_question_dedup_v2`). Provenance is not a quality score.
 """
 from __future__ import annotations
 
@@ -18,9 +17,19 @@ from app.document_intelligence.deduplication import (
 )
 from app.document_intelligence.question_validators import validate_question_integrity
 from app.paper_factory.models import Difficulty, GenerationSlot, PaperQuestion
+from app.shared.algorithm_catalog import (
+    dedup_algorithm_version,
+    dedup_spec,
+    quality_algorithm_version,
+    quality_spec,
+)
 
-MIN_QUALITY_SCORE = 40.0
+_QUALITY = quality_spec()
+_DEDUP = dedup_spec()
+MIN_QUALITY_SCORE = float(_QUALITY["min_bank_question_quality"])
 REQUIRED_OPTION_COUNT = 4
+QUALITY_ALGORITHM_VERSION = quality_algorithm_version()
+DEDUP_ALGORITHM_VERSION = dedup_algorithm_version()
 
 _LETTER_RE = re.compile(r"^\(?\s*([A-Za-z])\s*\)?$")
 _BANNED_PATTERNS = (
@@ -68,17 +77,30 @@ def resolve_correct_index(value: Any, option_count: int) -> int | None:
     return None
 
 
-def _stem_length_score(stem: str) -> float:
+def _clamp01(value: float) -> float:
+    if value != value:  # NaN
+        return 0.0
+    return max(0.0, min(1.0, float(value)))
+
+
+def _normalize_source_confidence(raw: float) -> float:
+    """Accept 0–1 or legacy 0–100 values."""
+    value = float(raw)
+    if value > 1.0:
+        value = value / 100.0
+    return _clamp01(value)
+
+
+def _stem_length_unit(stem: str) -> float:
+    stem_cfg = _QUALITY["stem"]
     length = len(stem.strip())
-    if length < 20:
-        return 20.0
-    if length < 40:
-        return 60.0
-    if length <= 600:
-        return 100.0
-    if length <= 900:
-        return 70.0
-    return 40.0
+    if length < int(stem_cfg["too_short"]):
+        return float(stem_cfg["score_too_short"])
+    if length < int(stem_cfg["short"]):
+        return float(stem_cfg["score_short"])
+    if length > int(stem_cfg["too_long"]):
+        return float(stem_cfg["score_too_long"])
+    return float(stem_cfg["score_ok"])
 
 
 def quality_score(
@@ -90,32 +112,87 @@ def quality_score(
     max_similarity: float,
     fingerprint_unique: bool,
     source_confidence: float,
+    hard_fail: bool = False,
 ) -> float:
-    """Weighted 0-100 score mirroring the Edge scoring components."""
-    distinct = len({normalize_text(o) for o in options if normalize_text(o)})
-    structure = 100.0
-    if len(options) != REQUIRED_OPTION_COUNT:
-        structure -= 40.0
-    if distinct != len(options):
-        structure -= 40.0
-    if not 0 <= correct_index < len(options):
-        structure = 0.0
-    structure = max(0.0, structure)
-
-    similarity = max(0.0, 100.0 * (1.0 - max(0.0, min(1.0, max_similarity))))
-    explanation_score = 100.0 if len(explanation.strip()) >= 40 else (
-        60.0 if explanation.strip() else 0.0
+    """Canonical 0-100 score — same weights as Edge gov_question_quality_v2."""
+    weights = _QUALITY["weights"]
+    distinct = {normalize_text(o) for o in options if normalize_text(o)}
+    structure_ok = (
+        len(options) == REQUIRED_OPTION_COUNT
+        and len(distinct) == len(options)
+        and 0 <= correct_index < len(options)
+        and all(normalize_text(o) for o in options)
     )
-
-    score = (
-        structure * 0.30
-        + similarity * 0.25
-        + _stem_length_score(stem) * 0.15
-        + explanation_score * 0.10
-        + max(0.0, min(100.0, source_confidence)) * 0.10
-        + (100.0 if fingerprint_unique else 0.0) * 0.10
+    unique_ok = structure_ok
+    sim = _clamp01(max_similarity)
+    if sim >= float(_DEDUP["stem_only_conflict"]):
+        hard_fail = True
+        sim_unit = 0.0
+    else:
+        sim_unit = _clamp01(
+            1.0
+            - max(0.0, sim - float(_QUALITY["similarity_soft_floor"]))
+            * float(_QUALITY["similarity_soft_penalty"])
+        )
+    expl_unit = 1.0 if explanation.strip() else float(_QUALITY["explanation_missing_score"])
+    src_unit = _normalize_source_confidence(
+        source_confidence if source_confidence else _QUALITY["source_confidence_default"]
     )
-    return round(score, 2)
+    fp_unit = 1.0 if fingerprint_unique else 0.0
+    stem_unit = _stem_length_unit(stem)
+    if len(stem.strip()) < int(_QUALITY["stem"]["too_short"]):
+        hard_fail = True
+
+    components = (
+        (float(weights["mcq_structure"]), 1.0 if structure_ok else 0.0),
+        (float(weights["answer_uniqueness"]), 1.0 if unique_ok else 0.0),
+        (float(weights["similarity"]), sim_unit),
+        (float(weights["stem_length"]), stem_unit),
+        (float(weights["explanation_present"]), expl_unit),
+        (float(weights["source_confidence"]), src_unit),
+        (float(weights["fingerprint"]), fp_unit),
+    )
+    weight_sum = sum(weight for weight, _ in components) or 1.0
+    weighted = sum(weight * score for weight, score in components) / weight_sum
+    if hard_fail or not structure_ok:
+        return 0.0
+    return round(weighted * 100.0, 1)
+
+
+def score_assembled_question(
+    *,
+    stem: str,
+    options: Sequence[str],
+    correct_index: int,
+    explanation: str = "",
+    peers: Sequence[str] = (),
+    source_confidence: float = 0.7,
+) -> float:
+    """Score a bank/generated item with the canonical engine (not provenance)."""
+    max_sim = 0.0
+    for peer in peers:
+        if not peer or peer == stem:
+            continue
+        from app.document_intelligence.deduplication import (
+            ngram_jaccard_similarity,
+            token_jaccard_similarity,
+        )
+
+        max_sim = max(
+            max_sim,
+            token_jaccard_similarity(stem, peer),
+            ngram_jaccard_similarity(stem, peer, n=3),
+        )
+    fingerprint = compute_normalized_hash(stem, [str(o) for o in options])
+    return quality_score(
+        stem=stem,
+        options=options,
+        correct_index=correct_index,
+        explanation=explanation,
+        max_similarity=max_sim,
+        fingerprint_unique=bool(fingerprint),
+        source_confidence=source_confidence,
+    )
 
 
 @dataclass
@@ -177,8 +254,8 @@ def build_signature(stem: str, options: Sequence[str]) -> _Signature:
 class CandidateValidator:
     """Stateful validator that rejects duplicates against the whole paper and bank."""
 
-    near_duplicate_threshold: float = 0.85
-    template_clone_threshold: float = 0.85
+    near_duplicate_threshold: float = float(_DEDUP["near_duplicate_composite"])
+    template_clone_threshold: float = float(_DEDUP["template_clone_similarity"])
     _fingerprints: set[str] = field(default_factory=set)
     _signatures: list[_Signature] = field(default_factory=list)
 
@@ -224,12 +301,20 @@ class CandidateValidator:
             ngram_sim = _jaccard(candidate.ngrams, other.ngrams)
             option_overlap = _jaccard(candidate.options, other.options)
             stem_max = max(token_sim, ngram_sim)
-            composite = token_sim * 0.4 + ngram_sim * 0.4 + option_overlap * 0.2
+            cw = _DEDUP["composite_weights"]
+            composite = (
+                token_sim * float(cw["token"])
+                + ngram_sim * float(cw["ngram"])
+                + option_overlap * float(cw["option_overlap"])
+            )
 
             if (
                 composite >= self.near_duplicate_threshold
-                or (option_overlap >= 0.8 and stem_max >= 0.6)
-                or stem_max >= 0.85
+                or (
+                    option_overlap >= float(_DEDUP["option_overlap_near"])
+                    and stem_max >= float(_DEDUP["stem_max_near_with_options"])
+                )
+                or stem_max >= float(_DEDUP["stem_max_near"])
             ):
                 return 1.0, "near_duplicate"
 

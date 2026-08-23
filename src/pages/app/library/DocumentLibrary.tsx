@@ -15,8 +15,18 @@ import {
   UNSUPPORTED_FORMAT_MESSAGE,
   validateDocumentFile,
 } from "@/lib/documents/uploadValidation";
-import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { LICENSE_TYPES, type LicenseType } from "@/lib/content/license";
+import {
+  cancelDocumentProcessingJob,
+  createDocumentProcessingJob,
+  isFailedJobStatus,
+  isInFlightJobStatus,
+  parseDocumentFallback,
+  pollDocumentJobUntilDone,
+  retryDocumentProcessingJob,
+  shouldFallbackToSyncParse,
+  userFacingJobError,
+} from "@/lib/documents/processingJobs";
 import {
   Select,
   SelectContent,
@@ -38,13 +48,36 @@ type Doc = {
   created_at: string;
 };
 
+function mimeForDoc(name: string, mime: string | null): string {
+  if (mime) return mime;
+  return ({
+    pdf: "application/pdf",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    txt: "text/plain",
+    csv: "text/csv",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  }[name.split(".").pop()?.toLowerCase() ?? ""] ?? "application/octet-stream");
+}
+
 function statusLabel(status: string | undefined): string {
   switch (status) {
     case "queued":
       return "Queued";
+    case "leased":
+    case "downloading":
+    case "extracting":
+    case "OCR":
+    case "segmenting":
     case "processing":
     case "validating":
+    case "awaiting_review":
       return "Processing…";
+    case "failed_retryable":
+      return "Failed — Retry";
+    case "failed_permanent":
+      return "Failed";
+    case "cancelled":
+      return "Cancelled";
     case "ready":
     case "completed":
       return "Completed";
@@ -81,6 +114,64 @@ export default function DocumentLibraryPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const inflight = docs.filter((d) => isInFlightJobStatus(d.processing_status));
+    if (!inflight.length) return;
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      if (!cancelled) void load();
+    }, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [docs, load]);
+
+  async function processLibraryDocument(opts: {
+    documentId: string;
+    mimeType: string;
+    contentHash: string;
+    isRetry?: boolean;
+  }) {
+    const idempotencyKey = opts.isRetry
+      ? `library-retry:${opts.documentId}:${crypto.randomUUID()}`
+      : `library-parse:${user?.id}:${opts.contentHash}`;
+    try {
+      const created = await createDocumentProcessingJob({
+        documentId: opts.documentId,
+        idempotencyKey,
+      });
+      if (created.jobId) {
+        await supabase.from("personal_library_documents").update({
+          processing_status: created.state || "queued",
+          processing_error: null,
+        }).eq("id", opts.documentId);
+      }
+      if (shouldFallbackToSyncParse(null, created) || !created.jobId) {
+        await parseDocumentFallback({
+          libraryDocumentId: opts.documentId,
+          mimeType: opts.mimeType,
+          idempotencyKey,
+        });
+        return;
+      }
+      const job = await pollDocumentJobUntilDone(created.jobId);
+      if (job && isFailedJobStatus(job.status)) {
+        throw new Error(userFacingJobError(job));
+      }
+    } catch (err) {
+      if (shouldFallbackToSyncParse(err)) {
+        await parseDocumentFallback({
+          libraryDocumentId: opts.documentId,
+          mimeType: opts.mimeType,
+          idempotencyKey: `${idempotencyKey}:sync`,
+        });
+        return;
+      }
+      throw err;
+    }
+  }
 
   async function upload(file: File) {
     if (!user?.id) return;
@@ -143,25 +234,20 @@ export default function DocumentLibraryPage() {
         toast.error(`Upload could not be saved: ${error.message}`);
       } else {
         try {
-          await fetchEdgeJson("parse-document", {
-            library_document_id: (await supabase
-              .from("personal_library_documents")
-              .select("id")
-              .eq("owner_id", user.id)
-              .eq("storage_path", path)
-              .single()).data?.id,
-            mime_type: file.type || ({
-              pdf: "application/pdf",
-              docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-              txt: "text/plain",
-              csv: "text/csv",
-              xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            }[file.name.split(".").pop()?.toLowerCase() ?? ""] ?? "application/octet-stream"),
-          }, {
-            timeoutMs: 90_000,
-            headers: { "x-idempotency-key": `library-parse:${user.id}:${contentHash}` },
-          });
-          toast.success("Document uploaded and processed.");
+          const inserted = await supabase
+            .from("personal_library_documents")
+            .select("id")
+            .eq("owner_id", user.id)
+            .eq("storage_path", path)
+            .single();
+          if (inserted.data?.id) {
+            await processLibraryDocument({
+              documentId: inserted.data.id,
+              mimeType: mimeForDoc(file.name, file.type),
+              contentHash,
+            });
+          }
+          toast.success("Document uploaded. Processing will continue if you refresh.");
         } catch (parseError) {
           toast.warning(parseError instanceof Error
             ? `Uploaded, but processing needs a retry: ${parseError.message}`
@@ -214,24 +300,52 @@ export default function DocumentLibraryPage() {
   async function retryProcessing(doc: Doc) {
     if (!doc.storage_path) return;
     try {
-      await fetchEdgeJson("parse-document", {
-        library_document_id: doc.id,
-        mime_type: doc.mime_type || ({
-          pdf: "application/pdf",
-          docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          txt: "text/plain",
-          csv: "text/csv",
-          xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        }[doc.document_name.split(".").pop()?.toLowerCase() ?? ""] ?? "application/pdf"),
-      }, {
-        timeoutMs: 90_000,
-        headers: { "x-idempotency-key": `library-retry:${doc.id}:${crypto.randomUUID()}` },
-      });
-      toast.success("Document processing completed.");
+      const { data: job } = await supabase
+        .from("document_processing_jobs")
+        .select("id, status")
+        .eq("document_id", doc.id)
+        .eq("owner_id", user?.id ?? "")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (job?.id && job.status === "failed_retryable") {
+        await retryDocumentProcessingJob(job.id);
+        toast.success("Retry queued.");
+      } else {
+        await processLibraryDocument({
+          documentId: doc.id,
+          mimeType: mimeForDoc(doc.document_name, doc.mime_type),
+          contentHash: `retry-${doc.id}`,
+          isRetry: true,
+        });
+        toast.success("Document processing completed.");
+      }
       void load();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Document processing failed.");
       void load();
+    }
+  }
+
+  async function cancelProcessing(doc: Doc) {
+    const { data: job } = await supabase
+      .from("document_processing_jobs")
+      .select("id, status")
+      .eq("document_id", doc.id)
+      .eq("owner_id", user?.id ?? "")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!job?.id || !isInFlightJobStatus(job.status)) {
+      toast.error("No in-progress job to cancel.");
+      return;
+    }
+    try {
+      await cancelDocumentProcessingJob(job.id);
+      toast.success("Processing cancelled.");
+      void load();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not cancel processing.");
     }
   }
 
@@ -289,8 +403,11 @@ export default function DocumentLibraryPage() {
               )}
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" onClick={() => void download(doc)}>Download</Button>
-                {doc.processing_status === "error" && (
+                {(doc.processing_status === "error" || isFailedJobStatus(doc.processing_status)) && (
                   <Button size="sm" variant="outline" onClick={() => void retryProcessing(doc)}>Retry processing</Button>
+                )}
+                {isInFlightJobStatus(doc.processing_status) && (
+                  <Button size="sm" variant="outline" onClick={() => void cancelProcessing(doc)}>Cancel processing</Button>
                 )}
                 <Button size="sm" variant="outline" onClick={() => void createPracticeSet(doc)}>Create practice set</Button>
                 <Button size="sm" variant="danger" onClick={() => void remove(doc)}>Delete</Button>

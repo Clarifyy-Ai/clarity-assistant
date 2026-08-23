@@ -187,15 +187,17 @@ const inventory = await invoke("create-exam-paper", {
   body: {
     examId: SSC.examId,
     stageId: SSC.stageId,
-    mode: "generated_mock",
+    mode: "official_previous",
     language: "en",
     questionCount: 100,
     idempotencyKey: `probe-inv-${Date.now()}`,
   },
 });
 check(
-  "CASE C 100-q blocked by inventory before charge",
-  inventory.status === 409 && inventory.code === "QUESTION_INVENTORY_INSUFFICIENT",
+  "CASE C official 100-q blocked by inventory before charge (never fabricate PYQ)",
+  inventory.status === 409 &&
+    (inventory.code === "QUESTION_INVENTORY_INSUFFICIENT" ||
+      inventory.code === "CONTENT_INSUFFICIENT"),
   `status=${inventory.status} code=${inventory.code} available=${inventory.json?.available} requested=${inventory.json?.requested}`,
 );
 check(

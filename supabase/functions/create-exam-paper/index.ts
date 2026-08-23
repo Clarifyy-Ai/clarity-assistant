@@ -323,6 +323,7 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
 
     const dispatchPython =
       plan.generator === "python_paper_factory" ||
+      plan.kind === "hybrid_deterministic" ||
       (plan.kind === "bank_only" && pythonConfigured);
 
     const { data: job, error: jobErr } = await db
@@ -339,12 +340,20 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
           ...(body as Record<string, unknown>),
           skipAiFill: plan.skipAiFill,
           allowAiFill: !plan.skipAiFill,
+          allowDeterministicFill: plan.allowDeterministicFill,
           generator: dispatchPython && pythonConfigured
             ? "python_paper_factory"
             : plan.generator,
           generationPlan: planSummary(plan),
           correlationId,
         },
+        source_mix: {
+          bank: plan.bankContribution,
+          ai: plan.aiContribution,
+          deterministic: plan.deterministicContribution,
+          plan_kind: plan.kind,
+        },
+        missing_count: Math.max(0, plan.requested - plan.available),
         status: "queued",
         progress_stage: "queued",
         idempotency_key: idempotencyKey,

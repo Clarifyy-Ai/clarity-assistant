@@ -37,7 +37,8 @@ import {
 } from "@/components/ui/pagination";
 
 import { EmptyState } from "@/components/common/EmptyState";
-
+import { writeAdminAudit } from "@/lib/admin/writeAdminAudit";
+import { adminActionFailedMessage } from "@/lib/admin/adminErrors";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 
 import { toast } from "sonner";
@@ -69,6 +70,8 @@ interface UserRow {
   credits: number | null;
 
   is_admin: boolean;
+
+  is_moderator: boolean;
 
   is_banned: boolean | null;
 
@@ -156,11 +159,12 @@ export default function AdminUsers() {
 
 
 
-      const rows = (data ?? []) as Omit<UserRow, "is_admin">[];
+      const rows = (data ?? []) as Omit<UserRow, "is_admin" | "is_moderator">[];
 
       const ids = rows.map((r) => r.id);
 
       let adminIds = new Set<string>();
+      let moderatorIds = new Set<string>();
 
       if (ids.length > 0) {
 
@@ -168,21 +172,28 @@ export default function AdminUsers() {
 
           .from("user_roles")
 
-          .select("user_id")
+          .select("user_id, role")
 
-          .eq("role", "admin")
+          .in("role", ["admin", "moderator"])
 
           .in("user_id", ids);
 
         if (roleErr) throw roleErr;
 
-        adminIds = new Set((roles ?? []).map((r: { user_id: string }) => r.user_id));
+        for (const r of roles ?? []) {
+          if (r.role === "admin") adminIds.add(r.user_id);
+          if (r.role === "moderator") moderatorIds.add(r.user_id);
+        }
 
       }
 
 
 
-      setUsers(rows.map((r) => ({ ...r, is_admin: adminIds.has(r.id) })));
+      setUsers(rows.map((r) => ({
+        ...r,
+        is_admin: adminIds.has(r.id),
+        is_moderator: moderatorIds.has(r.id),
+      })));
 
       setTotal(count ?? 0);
 
@@ -226,10 +237,53 @@ export default function AdminUsers() {
 
         if (roleErr) throw roleErr;
 
-
+        await writeAdminAudit({
+          action: "make_admin",
+          targetType: "user",
+          targetId: userId,
+          newValue: { role: "admin" },
+        });
 
         toast.success("User promoted to admin");
 
+      } else if (action === "remove_admin") {
+        if (!window.confirm("Remove admin role from this user?")) {
+          setActionLoading(false);
+          return;
+        }
+        const { error } = await supabase.rpc("demote_admin", { p_user_id: userId });
+        if (error) throw error;
+        toast.success("Admin role removed");
+      } else if (action === "make_moderator") {
+        const { error: roleErr } = await supabase
+          .from("user_roles")
+          .upsert({ user_id: userId, role: "moderator" }, { onConflict: "user_id,role" });
+        if (roleErr) throw roleErr;
+        await writeAdminAudit({
+          action: "make_moderator",
+          targetType: "user",
+          targetId: userId,
+          newValue: { role: "moderator" },
+        });
+        toast.success("User granted moderator");
+      } else if (action === "remove_moderator") {
+        if (!window.confirm("Remove moderator role from this user?")) {
+          setActionLoading(false);
+          return;
+        }
+        const { error } = await supabase
+          .from("user_roles")
+          .delete()
+          .eq("user_id", userId)
+          .eq("role", "moderator");
+        if (error) throw error;
+        await writeAdminAudit({
+          action: "remove_moderator",
+          targetType: "user",
+          targetId: userId,
+          oldValue: { role: "moderator" },
+        });
+        toast.success("Moderator role removed");
       } else {
 
         const patch: Record<string, unknown> = {};
@@ -286,7 +340,7 @@ export default function AdminUsers() {
 
       console.error("[AdminUsers] action failed:", err);
 
-      toast.error(err instanceof Error ? err.message : "Action failed");
+      toast.error(adminActionFailedMessage(err, "AdminUsers.action"));
 
     } finally {
 
@@ -527,6 +581,11 @@ export default function AdminUsers() {
                       </Badge>
 
                     )}
+                    {u.is_moderator && !u.is_admin && (
+                      <Badge variant="default" size="sm">
+                        moderator
+                      </Badge>
+                    )}
 
                   </TableCell>
 
@@ -661,6 +720,14 @@ export default function AdminUsers() {
               { action: "add_credits", label: "Add 100 credits", icon: Zap },
 
               { action: "make_admin", label: "Make admin", icon: Shield },
+
+              ...(selected.is_admin
+                ? [{ action: "remove_admin", label: "Remove admin", icon: Shield }]
+                : []),
+
+              ...(selected.is_moderator
+                ? [{ action: "remove_moderator", label: "Remove moderator", icon: Shield }]
+                : [{ action: "make_moderator", label: "Make moderator", icon: Shield }]),
 
               {
 

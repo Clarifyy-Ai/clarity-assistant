@@ -1,6 +1,7 @@
 /**
  * Government exam admin content-ops helpers.
- * Mutations go through Supabase client; RLS must allow is_admin().
+ * Mutations go through Supabase client; RLS must allow is_admin() or, for
+ * question review/hide, is_moderator().
  * Audit rows are written to admin_audit_log when the insert policy permits.
  */
 
@@ -10,6 +11,13 @@ import {
   normalizeQuestionLanguage,
   type TranslationReviewState,
 } from "@/lib/gov-exam/questionTranslations";
+import {
+  writeAdminAudit,
+  type AdminAuditPayload,
+} from "@/lib/admin/writeAdminAudit";
+
+export { writeAdminAudit };
+export type { AdminAuditPayload };
 
 export { TRANSLATION_REVIEW_STATES };
 export type { TranslationReviewState };
@@ -180,35 +188,6 @@ export function summarizeBlueprint(blueprint: unknown): string {
     mode,
   ].filter(Boolean);
   return parts.length ? parts.join(" · ") : "blueprint present";
-}
-
-export type AdminAuditPayload = {
-  action: string;
-  targetType: string;
-  targetId: string;
-  oldValue?: unknown;
-  newValue?: unknown;
-};
-
-export async function writeAdminAudit(payload: AdminAuditPayload): Promise<{
-  ok: boolean;
-  error?: string;
-}> {
-  const { data: auth } = await supabase.auth.getUser();
-  const adminId = auth.user?.id;
-  if (!adminId) return { ok: false, error: "Not authenticated" };
-
-  const { error } = await db().from("admin_audit_log").insert({
-    admin_id: adminId,
-    action: payload.action,
-    target_type: payload.targetType,
-    target_id: payload.targetId,
-    old_value: payload.oldValue ?? null,
-    new_value: payload.newValue ?? null,
-  });
-
-  if (error) return { ok: false, error: error.message };
-  return { ok: true };
 }
 
 async function mutateWithAudit(params: {
@@ -938,6 +917,19 @@ export async function setPaperReviewState(
 ): Promise<{ error: string | null }> {
   if (!canSetPaperReviewState(next)) {
     return { error: `Invalid paper review_state: ${next}` };
+  }
+  // Do not allow jumping straight to approved from draft/failed-like states.
+  if (next === "approved") {
+    const allowedFrom = new Set<string>([
+      "machine_validated",
+      "needs_review",
+      "expert_reviewed",
+    ]);
+    if (previous && !allowedFrom.has(previous)) {
+      return {
+        error: "Papers must be validated or expert-reviewed before approval.",
+      };
+    }
   }
   return mutateWithAudit({
     table: "gov_generated_papers",

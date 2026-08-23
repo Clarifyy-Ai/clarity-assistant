@@ -3,6 +3,32 @@
  * Keep values in sync when changing plan credits or feature costs.
  */
 
+export const CREDIT_CATALOG_VERSION = "credit_catalog_v2";
+
+export const PLAN_STATUS = {
+  free: "active",
+  starter: "deprecated",
+  pro: "active",
+  elite: "deprecated",
+  enterprise: "active",
+} as const;
+
+export const PLAN_PRICE_CENTS_MONTHLY = {
+  free: 0,
+  starter: 0,
+  pro: 2_900,
+  elite: 7_900,
+  enterprise: 7_900,
+} as const;
+
+export const PLAN_PRICE_CENTS_YEARLY = {
+  free: 0,
+  starter: 0,
+  pro: 27_840,
+  elite: 75_840,
+  enterprise: 75_840,
+} as const;
+
 export const PLAN_MONTHLY_CREDITS = {
   free: 50,
   starter: 50,

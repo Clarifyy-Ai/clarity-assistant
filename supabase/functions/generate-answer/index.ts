@@ -52,7 +52,7 @@ import { creditDenialResponse } from "../_shared/creditAuthority.ts";
 import { callAI } from "../_shared/utils.ts";
 import { logAICost } from "../_shared/aiProvider.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
-import { requireCapability } from "../_shared/requireCapability.ts";
+import { requireCapabilityAsync } from "../_shared/requireCapability.ts";
 import { resolveModel, isGeminiModel } from "../_shared/resolveModel.ts";
 import type { ModelId } from "../_shared/types.ts";
 
@@ -65,6 +65,7 @@ const DEFAULT_MODEL =
 const FUNCTION_NAME = "generate-answer";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { callPythonProcess } from "../_shared/pythonClient.ts";
+import { normalizePythonCoachData } from "../_shared/practiceCoachContract.ts";
 
 const COST = creditCost("live_answer");
 
@@ -379,6 +380,7 @@ async function tryPythonStructuredAnswer(opts: {
   question: string;
   transcript: string;
   interviewType: string;
+  resumeContext?: string;
   corsHeaders: HeadersInit;
 }): Promise<Response | null> {
   const pythonCoach = await callPythonProcess({
@@ -386,20 +388,16 @@ async function tryPythonStructuredAnswer(opts: {
     operationId: `answer:${opts.requestId}`,
     correlationId: opts.requestId,
     payload: {
-      mode: "answer",
+      operation_type: "answer",
       question: opts.question,
       transcript: opts.transcript,
       interview_type: opts.interviewType,
+      resume_context: opts.resumeContext ?? "",
     },
   });
   if (!pythonCoach.ok) return null;
-  const data =
-    pythonCoach.data && typeof pythonCoach.data === "object"
-      ? (pythonCoach.data as Record<string, unknown>)
-      : {};
-  const text = String(
-    data.answer ?? data.reply ?? data.coaching ?? data.text ?? "",
-  ).trim();
+  const normalized = normalizePythonCoachData(pythonCoach.data);
+  const text = (normalized?.reply ?? "").trim();
   if (!text) return null;
 
   const encoder = new TextEncoder();
@@ -625,14 +623,14 @@ Deno.serve(async (req: Request) => {
 
   if (isOverlayFeature) {
     const overlayGate =
-      requireCapability(planId, "desktop_overlay", req) ??
+      (await requireCapabilityAsync(planId, "desktop_overlay", req)) ??
       requirePlan(planId, "pro", req);
     if (overlayGate) {
       return withCors(overlayGate, corsHeaders);
     }
   }
 
-  const capabilityGate = requireCapability(planId, "live_rehearsal", req);
+  const capabilityGate = await requireCapabilityAsync(planId, "live_rehearsal", req);
   if (capabilityGate) {
     return withCors(capabilityGate, corsHeaders);
   }
@@ -755,6 +753,7 @@ Deno.serve(async (req: Request) => {
         question: body.question,
         transcript: body.transcript,
         interviewType: body.interview_type,
+        resumeContext: body.resume_context,
         corsHeaders,
       });
       if (pythonStream) return pythonStream;
@@ -774,6 +773,7 @@ Deno.serve(async (req: Request) => {
       question: body.question,
       transcript: body.transcript,
       interviewType: body.interview_type,
+      resumeContext: body.resume_context,
       corsHeaders,
     });
     if (pythonStream) return pythonStream;
@@ -846,6 +846,7 @@ Deno.serve(async (req: Request) => {
       question: body.question,
       transcript: body.transcript,
       interviewType: body.interview_type,
+      resumeContext: body.resume_context,
       corsHeaders,
     });
     if (pythonStream) return pythonStream;
@@ -887,6 +888,7 @@ Deno.serve(async (req: Request) => {
       question: body.question,
       transcript: body.transcript,
       interviewType: body.interview_type,
+      resumeContext: body.resume_context,
       corsHeaders,
     });
     if (pythonStream) return pythonStream;
@@ -921,6 +923,7 @@ Deno.serve(async (req: Request) => {
       question: body.question,
       transcript: body.transcript,
       interviewType: body.interview_type,
+      resumeContext: body.resume_context,
       corsHeaders,
     });
     if (pythonStream) return pythonStream;

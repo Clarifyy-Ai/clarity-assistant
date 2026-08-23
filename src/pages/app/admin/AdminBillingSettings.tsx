@@ -63,8 +63,22 @@ export default function AdminBillingSettings() {
       .from("billing_settings")
       .upsert({ id: 1, ...settings, updated_at: new Date().toISOString() });
     setSaving(false);
-    if (error) toast.error(error.message);
-    else toast.success("Billing settings saved");
+    if (error) {
+      const { adminActionFailedMessage } = await import("@/lib/admin/adminErrors");
+      toast.error(adminActionFailedMessage(error, "AdminBillingSettings"));
+    } else {
+      const { writeAdminAudit } = await import("@/lib/admin/writeAdminAudit");
+      await writeAdminAudit({
+        action: "update",
+        targetType: "billing_settings",
+        targetId: "1",
+        newValue: {
+          referral_discount_percent: settings.referral_discount_percent,
+          razorpay_enabled: settings.razorpay_enabled,
+        },
+      });
+      toast.success("Billing settings saved");
+    }
   }
 
   function field(

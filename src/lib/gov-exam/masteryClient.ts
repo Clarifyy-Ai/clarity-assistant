@@ -1,3 +1,7 @@
+/**
+ * Read-only mastery projections. Authoritative writes happen only on Edge/server
+ * via recomputeTopicMastery. Do not insert/update topic_mastery from the client.
+ */
 import { supabase } from "@/lib/supabase/client";
 import type {
   ExamReadinessSummary,

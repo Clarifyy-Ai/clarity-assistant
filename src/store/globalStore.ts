@@ -26,6 +26,7 @@ import { sanitizeText } from "@/lib/security";
 import { normalizePlanId } from "@/lib/billing/planIds";
 
 import type { FeatureFlagId, PlanId } from "@/types";
+import { FEATURE_PLAN_GATE } from "@/lib/constants/features";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -200,45 +201,12 @@ const PLAN_ORDER: PlanId[] = [
   "enterprise",
 ];
 
-const FEATURE_PLAN_GATES: Record<FeatureFlagId, PlanId> = {
-  live_assist: "free",
-  mock_sessions: "free",
-  answer_bank: "free",
-  star_builder: "free",
-  rephraser: "free",
-  ai_coach: "free",
-
-  // Pro+ only. Legacy starter maps to free and must not unlock these.
-  company_research: "pro",
-  coding_hints: "pro",
-  system_design: "pro",
-  session_debrief: "pro",
-  resume_analysis: "pro",
-  overlay: "pro",
-  audio_analysis: "pro",
-  filler_detection: "pro",
-  wpm_tracking: "pro",
-  analytics: "pro",
-
-  screenshot_capture: "pro",
-  diarization: "pro",
-  byok: "pro",
-  calendar_sync: "pro",
-  experimental_ui: "pro",
-  beta_models: "pro",
-
-  priority_support: "enterprise",
-  coach_sessions: "enterprise",
-
-  debug_panel: "enterprise",
-};
-
 function resolveFlags(planId: PlanId): Record<FeatureFlagId, boolean> {
   const normalized = normalizePlanId(planId) as PlanId;
   const userPlanIndex = PLAN_ORDER.indexOf(normalized);
 
   return Object.fromEntries(
-    Object.entries(FEATURE_PLAN_GATES).map(([flag, minimumPlan]) => {
+    Object.entries(FEATURE_PLAN_GATE).map(([flag, minimumPlan]) => {
       const requiredPlanIndex = PLAN_ORDER.indexOf(minimumPlan as PlanId);
 
       return [

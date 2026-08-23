@@ -61,16 +61,20 @@ Deno.serve(async (req) => {
     });
   }
 
-  const geminiTimer = startTimer();
+  const aiTimer = startTimer();
   try {
-    const geminiKey = Deno.env.get("GEMINI_API_KEY") ?? Deno.env.get("GOOGLE_AI_API_KEY");
-    if (!geminiKey || geminiKey.trim().length === 0) {
-      throw new Error("GEMINI_API_KEY is not set");
+    const anyAi = Boolean(
+      (Deno.env.get("GEMINI_API_KEY") ?? Deno.env.get("GOOGLE_AI_API_KEY") ?? "").trim() ||
+        (Deno.env.get("OPENAI_API_KEY") ?? "").trim() ||
+        (Deno.env.get("ANTHROPIC_API_KEY") ?? "").trim(),
+    );
+    if (!anyAi) {
+      throw new Error("No AI provider configured");
     }
-    checks.gemini_api = { status: "ok", duration_ms: geminiTimer.elapsed() };
+    checks.ai_provider = { status: "ok", duration_ms: aiTimer.elapsed() };
   } catch {
     allHealthy = false;
-    checks.gemini_api = { status: "error", duration_ms: geminiTimer.elapsed() };
+    checks.ai_provider = { status: "error", duration_ms: aiTimer.elapsed() };
   }
 
   const billingTimer = startTimer();

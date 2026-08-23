@@ -54,6 +54,8 @@ export default function AdminLiveChat() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const [realtimeDegraded, setRealtimeDegraded] = useState(false);
+
   // Load threads
   useEffect(() => { void loadThreads(); }, [statusFilter]);
 
@@ -100,17 +102,43 @@ export default function AdminLiveChat() {
     })();
   }, [activeId]);
 
-  // Realtime
+  // Realtime with degrade (no infinite spinner on channel failure)
   useEffect(() => {
+    setRealtimeDegraded(false);
+    let settled = false;
+    const timer = window.setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        setRealtimeDegraded(true);
+      }
+    }, 8000);
+
     const ch = supabase
-      .channel("admin-support")
-      .on("postgres_changes", { event: "*", schema: "public", table: "support_threads" }, () => loadThreads())
+      .channel(`admin-support-${activeId ?? "list"}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "support_threads" }, () => {
+        void loadThreads();
+      })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "support_messages" }, (payload) => {
         const m = payload.new as Message;
         if (m.thread_id === activeId) setMessages((prev) => [...prev, m]);
       })
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") {
+          settled = true;
+          window.clearTimeout(timer);
+          setRealtimeDegraded(false);
+        }
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          settled = true;
+          window.clearTimeout(timer);
+          setRealtimeDegraded(true);
+        }
+      });
+
+    return () => {
+      window.clearTimeout(timer);
+      void supabase.removeChannel(ch);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId]);
 
@@ -175,7 +203,15 @@ export default function AdminLiveChat() {
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
           <MessageSquare className="w-5 h-5 text-primary" /> Support messages
         </h1>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {realtimeDegraded && (
+            <p className="text-xs text-amber-600 max-w-[220px]">
+              Realtime unavailable — use Refresh for updates.
+            </p>
+          )}
+          <Button type="button" variant="outline" size="sm" onClick={() => void loadThreads()}>
+            Refresh
+          </Button>
           <KPI label="Open" value={openCount} icon={<AlertCircle className="w-3.5 h-3.5" />} color="text-amber-400" />
           <KPI label="Pending" value={pendingCount} icon={<Clock className="w-3.5 h-3.5" />} color="text-blue-400" />
           <KPI label="Resolved" value={resolvedCount} icon={<CheckCircle2 className="w-3.5 h-3.5" />} color="text-emerald-400" />

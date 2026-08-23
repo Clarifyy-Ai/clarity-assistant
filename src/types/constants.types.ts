@@ -159,7 +159,9 @@ export type FeatureFlagId =
   | "coach_sessions"
   | "experimental_ui"
   | "debug_panel"
-  | "beta_models";
+  | "beta_models"
+  | "mock_test_ai"
+  | "gov_exam_ai_fill";
 
 export type FeatureState = "enabled" | "disabled" | "gated" | "beta";
 

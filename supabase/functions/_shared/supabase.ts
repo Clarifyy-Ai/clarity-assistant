@@ -51,6 +51,8 @@ export type RefundCreditsInput = {
   cost: number;
   reason: string;
   sessionId?: string | null;
+  /** When set, refund the absolute amount of this usage transaction. */
+  sourceTransactionId?: string | null;
   /** When set, duplicate refunds with the same key are no-ops. */
   idempotencyKey?: string | null;
 };
@@ -521,6 +523,9 @@ export async function refundCredits(
       p_user_id: input.userId,
       p_cost: input.cost,
       p_reason: reason,
+      ...(input.sourceTransactionId
+        ? { p_source_transaction_id: input.sourceTransactionId }
+        : {}),
     });
 
     const result = rpcResult.data as { success?: boolean; error?: string } | null;

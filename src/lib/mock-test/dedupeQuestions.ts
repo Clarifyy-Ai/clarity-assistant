@@ -4,6 +4,7 @@ import {
   questionFingerprint,
 } from "@/lib/gov-exam/validators/similarity";
 import { sanitizeQuestionStem } from "@/lib/mock-test/questionMedia";
+import { DEDUP_POLICY } from "@/lib/gov-exam/algorithmCatalog";
 
 export type DedupeableQuestion = {
   id: string;
@@ -14,7 +15,7 @@ export type DedupeableQuestion = {
 /** Drop exact / near-duplicate stems so a paper never shows the same MCQ twice. */
 export function dedupeQuestionsByStem<T extends DedupeableQuestion>(
   questions: T[],
-  threshold = 0.8,
+  threshold = DEDUP_POLICY.stem_only_conflict,
 ): T[] {
   const out: T[] = [];
   const stems: string[] = [];

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { BookOpen } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -20,6 +20,8 @@ type Course = {
 
 export default function LearningHubPage() {
   const user = useAuthStore((s) => s.user);
+  const isAdmin = useAuthStore((s) => s.isAdmin);
+  const navigate = useNavigate();
   const [courses, setCourses] = useState<Course[]>([]);
   const [progress, setProgress] = useState<Record<string, number>>({});
   const [loaded, setLoaded] = useState(false);
@@ -64,8 +66,10 @@ export default function LearningHubPage() {
       {isPreview ? (
         <EmptyState
           icon={BookOpen}
-          title="Courses coming soon"
-          description="Learning Hub is in preview. Published courses will show up here."
+          title="No published courses yet"
+          description="Content is unpublished. Published courses will appear here."
+          actionLabel={isAdmin ? "Create a course" : undefined}
+          onAction={isAdmin ? () => navigate("/app/admin/learning") : undefined}
         />
       ) : (
       <div className={STACK_GRID}>

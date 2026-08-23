@@ -145,6 +145,13 @@ export default function AdminFeatureFlags() {
       for (const [key, is_enabled] of entries) {
         await featureFlagsDB.upsertEnabled(key, is_enabled);
         setDbFlags((prev) => ({ ...prev, [key]: is_enabled }));
+        const { writeAdminAudit } = await import("@/lib/admin/writeAdminAudit");
+        await writeAdminAudit({
+          action: "feature_flag_update",
+          targetType: "feature_flag",
+          targetId: key,
+          newValue: { is_enabled },
+        });
       }
       const nextMap = { ...dbFlags };
       for (const [key, is_enabled] of entries) {
@@ -155,7 +162,8 @@ export default function AdminFeatureFlags() {
       setOverrides({});
       setIsDirty(false);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save flag overrides.");
+      const { adminActionFailedMessage } = await import("@/lib/admin/adminErrors");
+      toast.error(adminActionFailedMessage(err, "AdminFeatureFlags.save"));
     } finally {
       setIsSaving(false);
     }

@@ -35,7 +35,8 @@ export type AuthContext = {
   accessToken: string;
 };
 
-export type UserRole = "user" | "admin" | "super_admin";
+/** Matches public.app_role enum: admin | moderator | user. */
+export type UserRole = "user" | "admin" | "moderator";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
@@ -309,15 +310,41 @@ export async function userHasRole(userId: string, role: UserRole): Promise<boole
 }
 
 /**
- * Checks if a user is admin or super_admin.
+ * Checks if a user has the admin role (app_role = 'admin' only).
  */
 export async function isAdmin(userId: string): Promise<boolean> {
-  const [admin, superAdmin] = await Promise.all([
-    userHasRole(userId, "admin"),
-    userHasRole(userId, "super_admin"),
-  ]);
+  return userHasRole(userId, "admin");
+}
 
-  return admin || superAdmin;
+export async function isModerator(userId: string): Promise<boolean> {
+  return userHasRole(userId, "moderator");
+}
+
+export async function isStaff(userId: string): Promise<boolean> {
+  return (await isAdmin(userId)) || (await isModerator(userId));
+}
+
+export async function requireModerator(userId: string): Promise<void> {
+  const allowed = await isModerator(userId);
+  if (!allowed) {
+    throw new Error("Moderator role required.");
+  }
+}
+
+export async function requireStaff(userId: string): Promise<void> {
+  const allowed = await isStaff(userId);
+  if (!allowed) {
+    throw new Error("Staff role required.");
+  }
+}
+
+export async function enforceStaff(userId: string, req?: Request): Promise<Response | null> {
+  try {
+    await requireStaff(userId);
+    return null;
+  } catch {
+    return forbiddenResponse("Staff access required.", req);
+  }
 }
 
 /** Resolve consumer plan_id from profiles (server-side only). */
@@ -355,12 +382,12 @@ export async function requireAdmin(userId: string): Promise<void> {
  *
  * Returns a 403 response if user is not admin.
  */
-export async function enforceAdmin(userId: string): Promise<Response | null> {
+export async function enforceAdmin(userId: string, req?: Request): Promise<Response | null> {
   try {
     await requireAdmin(userId);
     return null;
   } catch {
-    return forbiddenResponse("Admin access required.");
+    return forbiddenResponse("Admin access required.", req);
   }
 }
 

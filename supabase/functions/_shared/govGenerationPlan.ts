@@ -1,10 +1,12 @@
 /**
  * Server-authoritative decision for HOW a government exam paper gets built.
  *
- * A short question bank is no longer a dead end: when the caller's plan includes
- * `gov_exam_ai_fill`, the shortfall is generated to the blueprint and the paper is
- * labelled as an AI practice paper. Generation is only blocked when neither the bank
- * nor AI can deliver the requested count.
+ * Priority when inventory is short (mock modes only):
+ *   1. approved bank
+ *   2. Python deterministic practice fill (no AI required)
+ *   3. optional AI gap-fill when capability allows
+ *
+ * Official previous-year mode NEVER fabricates questions.
  */
 
 import {
@@ -13,14 +15,19 @@ import {
   type GeneratorPreference,
 } from "./govGeneratorRouting.ts";
 
-export type GenerationPlanKind = "bank_only" | "ai_assisted" | "blocked";
+export type GenerationPlanKind =
+  | "bank_only"
+  | "ai_assisted"
+  | "hybrid_deterministic"
+  | "blocked";
 export type PaperGenerator = "edge_assembler" | "python_paper_factory";
 
 export type { GeneratorPreference };
 export { parseGeneratorPreference, resolvePaperGenerator };
 
-/** Modes where fresh AI questions are acceptable. Official reproductions are not. */
-const AI_ELIGIBLE_MODES = new Set(["generated_mock", "custom_mock", "adaptive"]);
+/** Modes where fresh AI / deterministic practice questions are acceptable. */
+const FILL_ELIGIBLE_MODES = new Set(["generated_mock", "custom_mock", "adaptive"]);
+const AI_ELIGIBLE_MODES = FILL_ELIGIBLE_MODES;
 
 export interface GenerationPlan {
   kind: GenerationPlanKind;
@@ -28,8 +35,12 @@ export interface GenerationPlan {
   available: number;
   bankContribution: number;
   aiContribution: number;
+  /** Deterministic Python practice slots (never labeled official). */
+  deterministicContribution: number;
   /** Written into `request_json` so the assembler knows whether it may call AI. */
   skipAiFill: boolean;
+  /** Explicit permission for Python template fill. */
+  allowDeterministicFill: boolean;
   generator: PaperGenerator;
   /** Largest bank-only practice set we can honestly offer as a fallback. */
   maxCustomSetSize: number;
@@ -37,7 +48,11 @@ export interface GenerationPlan {
     | "QUESTION_INVENTORY_INSUFFICIENT"
     | "CONTENT_INSUFFICIENT"
     | "CAPABILITY_REQUIRED";
-  paperClass: "official_previous" | "ai_generated" | "custom_practice";
+  paperClass:
+    | "official_previous"
+    | "ai_generated"
+    | "custom_practice"
+    | "realistic_mock";
 }
 
 export function decideGenerationPlan(input: {
@@ -49,11 +64,12 @@ export function decideGenerationPlan(input: {
   generatorPreference?: GeneratorPreference;
   /** @deprecated use generatorPreference=python */
   preferPythonFactory?: boolean;
-  /** Supabase secret PAPER_FACTORY_WORKER=1 — Python worker is deployed. */
+  /** Supabase secret PAPER_FACTORY_WORKER=1 or GOV_EXAM_PYTHON_URL configured. */
   pythonWorkerEnabled?: boolean;
 }): GenerationPlan {
   const requested = Math.max(0, Math.floor(input.requested));
   const available = Math.max(0, Math.floor(input.available));
+  const fillEligible = FILL_ELIGIBLE_MODES.has(input.mode);
   const aiEligibleMode = AI_ELIGIBLE_MODES.has(input.mode);
   const preference: GeneratorPreference = input.generatorPreference ??
     (input.preferPythonFactory ? "python" : "auto");
@@ -63,6 +79,7 @@ export function decideGenerationPlan(input: {
     kind: GenerationPlanKind,
     aiContribution: number,
     skipAiFill: boolean,
+    deterministicContribution: number,
   ): PaperGenerator =>
     resolvePaperGenerator({
       kind,
@@ -71,13 +88,16 @@ export function decideGenerationPlan(input: {
       skipAiFill,
       preference,
       pythonWorkerEnabled,
+      deterministicContribution,
     });
 
-  const paperClass: GenerationPlan["paperClass"] = input.mode === "official_previous"
-    ? "official_previous"
-    : input.mode === "custom_mock" || input.mode === "adaptive"
-    ? "custom_practice"
-    : "ai_generated";
+  const paperClassForMode = (): GenerationPlan["paperClass"] => {
+    if (input.mode === "official_previous") return "official_previous";
+    if (input.mode === "custom_mock" || input.mode === "adaptive") {
+      return "custom_practice";
+    }
+    return "realistic_mock";
+  };
 
   // The bank alone satisfies the request.
   if (requested > 0 && available >= requested) {
@@ -87,24 +107,61 @@ export function decideGenerationPlan(input: {
       available,
       bankContribution: requested,
       aiContribution: 0,
+      deterministicContribution: 0,
       skipAiFill: true,
+      allowDeterministicFill: false,
       generator: "edge_assembler",
       maxCustomSetSize: available,
-      paperClass,
+      paperClass: input.mode === "official_previous"
+        ? "official_previous"
+        : paperClassForMode(),
     };
   }
 
-  // Shortfall, but the caller may generate the difference.
+  const shortfall = Math.max(0, requested - Math.min(available, requested));
+  const bankContribution = Math.min(available, requested);
+
+  // Hybrid: bank + deterministic Python (AI optional). No Pro required for mock modes.
+  if (requested > 0 && fillEligible && pythonWorkerEnabled && shortfall > 0) {
+    const useAi = aiEligibleMode && input.canUseAi;
+    const aiContribution = useAi ? shortfall : 0;
+    const deterministicContribution = useAi ? 0 : shortfall;
+    // Prefer AI when available; otherwise deterministic fills 100% of shortfall.
+    // When AI is available we still allow deterministic as fallback inside the worker
+    // (allowDeterministicFill=true) without a second credit charge.
+    return {
+      kind: useAi ? "ai_assisted" : "hybrid_deterministic",
+      requested,
+      available,
+      bankContribution,
+      aiContribution,
+      deterministicContribution: useAi ? 0 : deterministicContribution,
+      skipAiFill: !useAi,
+      allowDeterministicFill: true,
+      generator: pickGenerator(
+        useAi ? "ai_assisted" : "hybrid_deterministic",
+        aiContribution,
+        !useAi,
+        useAi ? 0 : deterministicContribution,
+      ),
+      maxCustomSetSize: available,
+      paperClass: useAi ? "ai_generated" : "realistic_mock",
+    };
+  }
+
+  // Shortfall, AI capability, but Python worker not configured — Edge AI path.
   if (requested > 0 && aiEligibleMode && input.canUseAi) {
-    const aiContribution = requested - Math.min(available, requested);
+    const aiContribution = shortfall;
     return {
       kind: "ai_assisted",
       requested,
       available,
-      bankContribution: Math.min(available, requested),
+      bankContribution,
       aiContribution,
+      deterministicContribution: 0,
       skipAiFill: false,
-      generator: pickGenerator("ai_assisted", aiContribution, false),
+      allowDeterministicFill: false,
+      generator: pickGenerator("ai_assisted", aiContribution, false, 0),
       maxCustomSetSize: available,
       paperClass: "ai_generated",
     };
@@ -114,15 +171,17 @@ export function decideGenerationPlan(input: {
     kind: "blocked",
     requested,
     available,
-    bankContribution: Math.min(available, requested),
+    bankContribution,
     aiContribution: 0,
+    deterministicContribution: 0,
     skipAiFill: true,
+    allowDeterministicFill: false,
     generator: "edge_assembler",
     maxCustomSetSize: available,
-    reasonCode: aiEligibleMode && !input.canUseAi
+    reasonCode: fillEligible && !input.canUseAi && !pythonWorkerEnabled
       ? "CAPABILITY_REQUIRED"
       : "CONTENT_INSUFFICIENT",
-    paperClass,
+    paperClass: paperClassForMode(),
   };
 }
 
@@ -137,14 +196,15 @@ export function blockedPlanPayload(plan: GenerationPlan): {
   aiFillAvailable: boolean;
 } {
   const raw = plan.reasonCode ?? "CONTENT_INSUFFICIENT";
-  // Inventory shortfalls surface as CONTENT_INSUFFICIENT; keep legacy alias for clients.
   const code = raw === "QUESTION_INVENTORY_INSUFFICIENT" ? "CONTENT_INSUFFICIENT" : raw;
   const error = code === "CAPABILITY_REQUIRED"
     ? `Only ${plan.available} approved questions are available for this configuration. ` +
-      `Generating the remaining ${plan.requested - plan.available} requires a supported plan.`
+      `Generating the remaining ${plan.requested - plan.available} requires a supported plan ` +
+      `or the practice generation service.`
     : `Not enough approved questions for this configuration ` +
       `(available ${plan.available}, requested ${plan.requested}). ` +
-      `Try a smaller custom practice set (up to ${plan.maxCustomSetSize}).`;
+      `Try a smaller custom practice set (up to ${plan.maxCustomSetSize}), ` +
+      `or switch to Realistic Mock mode when practice fill is available.`;
 
   return {
     error,
@@ -163,6 +223,7 @@ export function planSummary(plan: GenerationPlan): {
   generator: PaperGenerator;
   bankQuestions: number;
   aiQuestions: number;
+  deterministicQuestions: number;
   requested: number;
   paperClass: string;
 } {
@@ -171,6 +232,7 @@ export function planSummary(plan: GenerationPlan): {
     generator: plan.generator,
     bankQuestions: plan.bankContribution,
     aiQuestions: plan.aiContribution,
+    deterministicQuestions: plan.deterministicContribution,
     requested: plan.requested,
     paperClass: plan.paperClass,
   };

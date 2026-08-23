@@ -31,7 +31,11 @@ from app.paper_factory.models import (
     PaperResult,
 )
 from app.paper_factory.repository import BankQuestion, PaperRepository
-from app.paper_factory.validate import CandidateValidator
+from app.paper_factory.validate import (
+    CandidateValidator,
+    MIN_QUALITY_SCORE,
+    score_assembled_question,
+)
 
 log = get_logger("paper_factory.factory")
 
@@ -192,8 +196,17 @@ class PaperFactory:
             validator.seed_existing((q.question_text, q.options) for q in bank)
             buckets = match_bank_to_sections(bank, blueprint)
             for section in blueprint.sections:
-                available = buckets.get(section.code, [])[: section.question_count]
+                available = buckets.get(section.code, [])
                 for item in available:
+                    if len(bank_selected[section.code]) >= section.question_count:
+                        break
+                    quality = score_assembled_question(
+                        stem=item.question_text,
+                        options=list(item.options),
+                        correct_index=item.correct_index,
+                    )
+                    if quality < MIN_QUALITY_SCORE:
+                        continue
                     bank_selected[section.code].append(
                         PaperQuestion(
                             question_text=item.question_text,
@@ -207,10 +220,10 @@ class PaperFactory:
                             marks_negative=blueprint.negative_mark,
                             source_class="bank",
                             question_id=item.id,
-                            quality_score=100.0 if item.is_verified else 70.0,
+                            quality_score=quality,
                         )
                     )
-                bank_count += len(available)
+                bank_count += len(bank_selected[section.code])
 
         # ── Reduce the plan by what the bank already covers ────────────────────
         outstanding = self._subtract_bank_coverage(blueprint, bank_selected)

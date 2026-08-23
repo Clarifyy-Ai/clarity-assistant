@@ -119,7 +119,7 @@ Deno.serve(async (req: Request) => {
     const planGate = requirePlan(auth.planId, "free", req);
     if (planGate) return planGate;
 
-    const capabilityGate = requireCapabilityForFunction(auth.planId, FN, req);
+    const capabilityGate = await requireCapabilityForFunction(auth.planId, FN, req);
     if (capabilityGate) return capabilityGate;
 
     const body = await parseBody<{

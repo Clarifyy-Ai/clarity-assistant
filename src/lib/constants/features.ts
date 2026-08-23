@@ -97,7 +97,10 @@ export function isKillOnlyFlag(id: string): boolean {
   return (KILL_ONLY_FLAGS as readonly string[]).includes(id);
 }
 
-// ─── AI Model Catalogue ───────────────────────────────────────────────────────
+// ─── AI Model Catalogue (non-runtime reference only) ────────────────────────
+// Settings, overlay, and onboarding use MODEL_OPTIONS in src/lib/ai/modelOptions.ts.
+// Server routing is supabase/functions/_shared/resolveModel.ts. Do not treat
+// AI_MODELS as a selectable catalog — several slugs collapse to Gemini 2.5 Flash.
 
 export type AIProvider = "openai" | "anthropic" | "gemini";
 

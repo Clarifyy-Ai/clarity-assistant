@@ -271,6 +271,23 @@ export const userRolesDB = {
       }
       return Boolean(data);
     }
+    if (role === "moderator") {
+      const { data, error } = await supabase.rpc("is_moderator");
+      if (!error) return Boolean(data);
+      const { data: row, error: rowErr } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .eq("role", "moderator")
+        .maybeSingle();
+      if (rowErr) {
+        throw new DatabaseError(rowErr.message, ErrorCode.DB_QUERY_FAILED, {
+          table: "user_roles",
+          operation: "hasRole",
+        });
+      }
+      return Boolean(row);
+    }
 
     const { data, error } = await supabase
       .from("user_roles")
@@ -2605,16 +2622,26 @@ export const questionsDB = {
 // ─── Feature flags ────────────────────────────────────────────────────────────
 
 export const featureFlagsDB = {
+  /** Public contract: includes disabled keys so kill-switches reach all clients. */
   async listKeyEnabled(): Promise<Record<string, boolean>> {
-    const { data, error } = await supabase
-      .from("feature_flags")
-      .select("key, is_enabled");
+    const { data, error } = await supabase.rpc("get_public_feature_flags");
 
     if (error) {
-      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
-        table: "feature_flags",
-        operation: "listKeyEnabled",
-      });
+      // Fallback to public view if RPC not yet migrated
+      const view = await supabase
+        .from("feature_flags_public")
+        .select("key, is_enabled");
+      if (view.error) {
+        throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+          table: "feature_flags",
+          operation: "listKeyEnabled",
+        });
+      }
+      const map: Record<string, boolean> = {};
+      for (const row of view.data ?? []) {
+        map[row.key] = row.is_enabled ?? true;
+      }
+      return map;
     }
 
     const map: Record<string, boolean> = {};

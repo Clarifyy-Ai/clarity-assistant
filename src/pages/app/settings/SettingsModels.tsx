@@ -12,6 +12,7 @@ import type { PreferredAIModel } from "@/types/user.types";
 import {
   MODEL_OPTIONS,
   normalizePreferredModel,
+  servedModelForPreference,
   toDbPreferredModel,
 } from "@/lib/ai/modelOptions";
 import {
@@ -19,6 +20,7 @@ import {
   providerForModel,
   providerUnavailableReason,
   refreshProviderAvailability,
+  hasLoadedProviderFlags,
   useProviderFlags,
 } from "@/lib/ai/providerAvailability";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
@@ -33,10 +35,13 @@ export default function SettingsModels() {
   );
   const [saving, setSaving] = useState(false);
 
-  useProviderFlags();
+  const providerFlags = useProviderFlags();
+  const providersLoaded = hasLoadedProviderFlags();
   useEffect(() => {
     void refreshProviderAvailability();
   }, []);
+  const fallbackToGemini =
+    providersLoaded && (providerFlags.openai === false || providerFlags.anthropic === false);
 
   useEffect(() => {
     if (profile?.preferred_model) {
@@ -87,9 +92,15 @@ export default function SettingsModels() {
           <div>
             <h3 className="text-sm font-semibold text-foreground">Default model</h3>
             <p className="text-xs text-muted-foreground mt-1">
-              Gemini Flash is the default for sub-second live hints. Pro plans unlock GPT-4o and
-              Claude for deeper reasoning — routed automatically per task.
+              Preference is saved to your profile. The server validates the
+              selection against your plan and routes to the served model below.
+              If a provider is unavailable, requests fall back to Gemini.
             </p>
+            {fallbackToGemini && (
+              <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                Provider unavailable, using Gemini.
+              </p>
+            )}
           </div>
         </div>
 
@@ -136,6 +147,9 @@ export default function SettingsModels() {
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">{m.desc}</p>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Served as {servedModelForPreference(m.value)}
+                </p>
               </button>
             );
           })}

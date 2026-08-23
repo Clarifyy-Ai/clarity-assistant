@@ -2,7 +2,7 @@ import { handleCors, getCorsHeaders, withCorsHeaders } from "../_shared/cors.ts"
 import { authenticateRequest, createUserScopedClient, resolveUserPlanId } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { enforceSessionRateLimitAsync } from "../_shared/rateLimit.ts";
-import { requireCapability } from "../_shared/requireCapability.ts";
+import { requireCapabilityAsync } from "../_shared/requireCapability.ts";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -138,7 +138,7 @@ Deno.serve(async (req) => {
     if (rateLimited) return withCorsHeaders(req, rateLimited);
 
     const planId = await resolveUserPlanId(auth.context.user.id);
-    const capabilityGate = requireCapability(planId, "mock_test", req);
+    const capabilityGate = await requireCapabilityAsync(planId, "mock_test", req);
     if (capabilityGate) return withCorsHeaders(req, capabilityGate);
 
     const body = await req.json().catch(() => null);

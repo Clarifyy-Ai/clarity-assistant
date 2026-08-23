@@ -1,0 +1,56 @@
+{
+  "credit_catalog_version": "credit_catalog_v2",
+  "quality_algorithm_version": "gov_question_quality_v2",
+  "dedup_algorithm_version": "gov_question_dedup_v2",
+  "mastery_algorithm_version": "mastery_v1",
+  "scoring_algorithm_version": "scorecard_v2",
+  "paper_blueprint_version": "gov_paper_v1",
+  "quality": {
+    "min_bank_question_quality": 40,
+    "hard_fail_zeroes_score": true,
+    "weights": {
+      "mcq_structure": 0.25,
+      "answer_uniqueness": 0.2,
+      "similarity": 0.2,
+      "stem_length": 0.1,
+      "explanation_present": 0.05,
+      "source_confidence": 0.1,
+      "fingerprint": 0.05,
+      "quant_template": 0.1,
+      "reasoning_syllogism": 0.1,
+      "reasoning_seating": 0.1
+    },
+    "stem": {
+      "too_short": 8,
+      "short": 20,
+      "too_long": 1200,
+      "score_too_short": 0,
+      "score_short": 0.5,
+      "score_ok": 1,
+      "score_too_long": 0.6
+    },
+    "explanation_missing_score": 0.4,
+    "source_confidence_default": 0.7,
+    "source_confidence_pass": 0.4,
+    "similarity_soft_floor": 0.5,
+    "similarity_soft_penalty": 0.5
+  },
+  "dedup": {
+    "embeddings_enabled": false,
+    "embeddings_note": "Lexical multi-signal policy is canonical. Embeddings stay optional second-level and are not computed O(n^2) over the bank.",
+    "composite_weights": {
+      "token": 0.4,
+      "ngram": 0.4,
+      "option_overlap": 0.2
+    },
+    "near_duplicate_composite": 0.65,
+    "review_composite": 0.45,
+    "template_clone_similarity": 0.9,
+    "option_overlap_near": 0.8,
+    "stem_max_near": 0.8,
+    "stem_max_near_with_options": 0.5,
+    "review_option_overlap": 0.4,
+    "review_stem_max": 0.35,
+    "stem_only_conflict": 0.8
+  }
+}

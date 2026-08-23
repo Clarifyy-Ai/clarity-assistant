@@ -30,6 +30,7 @@ interface ProtectedRouteProps {
   requireOnboarding?: boolean;
   requireOnboarded?: boolean;
   requireAdmin?: boolean;
+  requireStaff?: boolean;
   requireEmailVerification?: boolean;
   loginPath?: string;
   children?: React.ReactNode;
@@ -107,6 +108,7 @@ export const ProtectedRoute = memo(function ProtectedRoute({
   requireOnboarding = false,
   requireOnboarded = false,
   requireAdmin = false,
+  requireStaff = false,
   requireEmailVerification = false,
   loginPath = "/login",
   children,
@@ -118,7 +120,9 @@ export const ProtectedRoute = memo(function ProtectedRoute({
   const profile = useAuthStore((s) => s.profile);
   const error = useAuthStore((s) => s.error);
   const isAdmin = useAuthStore((s) => s.isAdmin);
+  const isModerator = useAuthStore((s) => s.isModerator);
   const isAdminResolved = useAuthStore((s) => s.isAdminResolved);
+  const needsStaffGate = requireAdmin || requireStaff;
   const isProfileLoaded = useAuthStore((s) => s.isProfileLoaded);
   const isOnboarded = useAuthStore((s) => s.isOnboarded);
 
@@ -179,7 +183,7 @@ export const ProtectedRoute = memo(function ProtectedRoute({
   }, [userId, status, isLoginPath, mfaVerifiedUserId]);
 
   useEffect(() => {
-    if (!(requireAdmin && isProfileLoaded && !isAdminResolved)) {
+    if (!(needsStaffGate && isProfileLoaded && !isAdminResolved)) {
       setAdminWaitExpired(false);
       return;
     }
@@ -188,7 +192,7 @@ export const ProtectedRoute = memo(function ProtectedRoute({
       ADMIN_ROLE_WAIT_MS,
     );
     return () => window.clearTimeout(t);
-  }, [requireAdmin, isProfileLoaded, isAdminResolved]);
+  }, [needsStaffGate, isProfileLoaded, isAdminResolved]);
 
   // Wait for authoritative account context. Never render protected pages
   // while session/profile are still resolving.
@@ -363,7 +367,7 @@ export const ProtectedRoute = memo(function ProtectedRoute({
 
   // 4) Admin check — wait for profile + definitive role result before denying.
   // After ADMIN_ROLE_WAIT_MS, show recoverable error instead of infinite loading.
-  if (requireAdmin && (!isProfileLoaded || !isAdminResolved)) {
+  if (needsStaffGate && (!isProfileLoaded || !isAdminResolved)) {
     if (isProfileLoaded && adminWaitExpired) {
       return (
         <AccountLoadErrorCard
@@ -375,7 +379,7 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     }
     return <AppLoadingFallback />;
   }
-  if (requireAdmin && isAdminResolved && !isAdmin) {
+  if (needsStaffGate && isAdminResolved && !(isAdmin || (requireStaff && isModerator))) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <Card className="w-full max-w-md p-6">

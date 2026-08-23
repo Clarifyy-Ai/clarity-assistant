@@ -19,12 +19,13 @@ import { fillUntilCount, type GapFillRow } from "../_shared/govAiGapFill.ts";
 import { type WeakTopicStat } from "../_shared/examAIPrompts.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
-import { requireCapability } from "../_shared/requireCapability.ts";
+import { requireCapabilityAsync } from "../_shared/requireCapability.ts";
 import {
   attemptLimitPayload,
   checkGovExamAttemptLimit,
 } from "../_shared/govAttemptLimits.ts";
 import { conflictsWithSelected } from "../_shared/govMcqValidator.ts";
+import { DEDUP_POLICY } from "../_shared/algorithmCatalog.ts";
 /* ─── SANITIZATION ───────────────────────────────────────────────────────── */
 //
 // REGEX ESCAPING RULE for RegExp constructor strings:
@@ -289,7 +290,7 @@ Deno.serve(async (req: Request) => {
     const wantsAI = source_types.includes("AI_GENERATED");
 
     if (wantsAI) {
-      const capabilityGate = requireCapability(planId, "gov_exam_ai_fill", req);
+      const capabilityGate = await requireCapabilityAsync(planId, "gov_exam_ai_fill", req);
       if (capabilityGate) return capabilityGate;
     }
 
@@ -416,7 +417,7 @@ Deno.serve(async (req: Request) => {
         if (usedIds.has(id)) continue;
         const row = questions.find((q) => q.id === id);
         const stem = String(row?.question_text ?? "").trim();
-        if (stem && conflictsWithSelected(stem, selectedStems, 0.8)) continue;
+        if (stem && conflictsWithSelected(stem, selectedStems, DEDUP_POLICY.stem_only_conflict)) continue;
         usedIds.add(id);
         if (stem) selectedStems.push(stem);
         picked.push(id);
@@ -442,7 +443,7 @@ Deno.serve(async (req: Request) => {
         if (finalIds.length >= question_count) break;
         const row = questions.find((q) => q.id === id);
         const stem = String(row?.question_text ?? "").trim();
-        if (stem && conflictsWithSelected(stem, selectedStems, 0.8)) continue;
+        if (stem && conflictsWithSelected(stem, selectedStems, DEDUP_POLICY.stem_only_conflict)) continue;
         usedIds.add(id);
         if (stem) selectedStems.push(stem);
         finalIds.push(id);

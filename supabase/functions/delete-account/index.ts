@@ -26,7 +26,29 @@ function isMissingRelation(error: { message?: string; code?: string } | null): b
 
 type WipeSpec = { table: string; column: string };
 
+/**
+ * DELETION_POLICY
+ *
+ * DELETE — private user-owned rows (practice, sessions, coach chat, documents).
+ * ANONYMIZE — financial/audit rows that must remain for reconciliation.
+ * RETAIN_REQUIRED — ops/audit telemetry; user_id SET NULL, row kept.
+ * GLOBAL_SHARED — catalog content (questions, courses, templates); never delete
+ *   rows. Attribution columns SET NULL via FK or explicit anonymize.
+ *
+ * Order matters: child/FK blockers (generated papers, coach messages, jobs)
+ * are wiped before parents (paper jobs, conversations, library documents).
+ */
 const WIPE_TABLES: WipeSpec[] = [
+  { table: "coach_messages", column: "user_id" },
+  { table: "coach_conversations", column: "user_id" },
+  { table: "practice_contexts", column: "user_id" },
+  { table: "gov_generated_papers", column: "created_by" },
+  { table: "gov_exam_requests", column: "user_id" },
+  { table: "document_processing_jobs", column: "owner_id" },
+  { table: "community_reports", column: "reporter_id" },
+  { table: "companies", column: "user_id" },
+  { table: "practice_rooms", column: "host_id" },
+  { table: "rooms", column: "host_id" },
   { table: "session_ai_interactions", column: "user_id" },
   { table: "session_answers", column: "user_id" },
   { table: "session_debriefs", column: "user_id" },
@@ -218,6 +240,22 @@ Deno.serve(async (req) => {
       user_id: null,
       details: { anonymized: true },
     }).eq("user_id", targetUserId);
+
+    // RETAIN_REQUIRED: ops provenance stays; drop the user pointer.
+    await db.from("backend_operation_log").update({
+      user_id: null,
+    }).eq("user_id", targetUserId);
+
+    await db.from("content_quality_incidents").update({
+      reported_by: null,
+      reporter_id: null,
+    }).eq("reported_by", targetUserId);
+    await db.from("content_quality_incidents").update({
+      reporter_id: null,
+    }).eq("reporter_id", targetUserId);
+
+    await db.from("room_questions").update({ created_by: null }).eq("created_by", targetUserId);
+    await db.from("promo_codes").update({ created_by: null }).eq("created_by", targetUserId);
 
     for (const bucket of STORAGE_BUCKETS) {
       const { data, error: listErr } = await db.storage.from(bucket).list(targetUserId);

@@ -24,7 +24,7 @@ export const MODEL_OPTIONS: ModelOption[] = [
   {
     value: "gemini-pro",
     label: "Gemini Pro",
-    desc: "Deeper reasoning for system design and complex behavioural answers.",
+    desc: "Deeper reasoning preference. Currently served as Gemini 2.5 Flash (same production route as Flash).",
     badge: "Balanced",
     free: true,
   },
@@ -121,4 +121,24 @@ export function toDbPreferredModel(
     "gemini-2.0-flash": "gemini-2.0-flash",
   };
   return map[slug] ?? "gemini-1-5-flash";
+}
+
+/**
+ * Client-safe copy of Edge resolveModel APP_TO_API. Used to tell users what
+ * the server actually calls — not a security control.
+ */
+export const APP_TO_SERVED_MODEL: Record<string, string> = {
+  "gemini-flash": "gemini-2.5-flash",
+  "gemini-pro": "gemini-2.5-flash",
+  "gemini-2.0-flash": "gemini-2.5-flash",
+  "gpt-4o": "gpt-4o",
+  "gpt-4o-mini": "gpt-4o-mini",
+  "claude-3-5-sonnet": "claude-3-5-sonnet",
+};
+
+export function servedModelForPreference(
+  raw: string | null | undefined,
+): string {
+  const slug = normalizePreferredModel(raw);
+  return APP_TO_SERVED_MODEL[slug] ?? "gemini-2.5-flash";
 }

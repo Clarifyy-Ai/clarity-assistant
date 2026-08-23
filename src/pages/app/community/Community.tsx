@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
@@ -32,6 +32,8 @@ type Post = {
 
 export default function CommunityPage() {
   const user = useAuthStore((s) => s.user);
+  const isAdmin = useAuthStore((s) => s.isAdmin);
+  const navigate = useNavigate();
   const [posts, setPosts] = useState<Post[]>([]);
   const [category, setCategory] = useState("all");
   const [title, setTitle] = useState("");
@@ -86,14 +88,16 @@ export default function CommunityPage() {
             : "Ask interview and career questions. This is Clarify’s own community, not a third-party forum."
         }
       />
-      {isPreview ? (
+      {isPreview && (
         <EmptyState
           icon={MessageSquare}
-          title="Q&A is in preview"
-          description="No community posts yet. This space will fill as questions are published."
+          title="No published questions yet"
+          description="Content is unpublished. You can still ask the first question below."
+          actionLabel={isAdmin ? "Open Admin Community" : undefined}
+          onAction={isAdmin ? () => navigate("/app/admin/community") : undefined}
+          compact
         />
-      ) : (
-      <>
+      )}
       <Card className="mb-4 space-y-3">
         <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ask a question" />
         <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Add a description" />
@@ -128,8 +132,6 @@ export default function CommunityPage() {
           </li>
         ))}
       </ul>
-      </>
-      )}
     </div>
   );
 }

@@ -1,12 +1,13 @@
 // bulk-import-questions
 //
-// Ingest endpoint for the external FastAPI scraper. Accepts a paper + its MCQs,
-// upserts the exam_papers row, and inserts the questions in one call.
+// WORKER / INGEST ONLY — not a product UI endpoint.
+// The browser app never calls this. The FastAPI scraper (or an operator with
+// INGEST_API_KEY) posts papers + MCQs. The current scraper also writes via
+// service role; this function remains the keyed HTTP ingest alternative.
 //
 // Auth: header `x-ingest-key` MUST match the `INGEST_API_KEY` secret.
-// This function is intentionally JWT-disabled (config.toml verify_jwt=false)
-// because the caller is a server-side scraper, not a browser user.
-// Fail-closed: missing INGEST_API_KEY → 503 (never open).
+// JWT is disabled (config.toml verify_jwt=false) because the caller is a
+// server, not a browser user. Fail-closed: missing INGEST_API_KEY → 503.
 
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { handleCors, getCorsHeaders, withCorsHeaders } from "../_shared/cors.ts";

@@ -26,6 +26,7 @@ import {
   type LinearSeatingPuzzle,
   type SyllogismProblem,
 } from "@/lib/gov-exam/validators/reasoningValidator";
+import { DEDUP_POLICY } from "@/lib/gov-exam/algorithmCatalog";
 import {
   scoreQuestionQuality,
   type QualityScoreResult,
@@ -418,7 +419,7 @@ export function runMultiAgentValidation(input: MultiAgentInput): MultiAgentResul
 /** Paper-level similarity pass after selection. */
 export function validatePaperSimilarity(
   stems: string[],
-  threshold = 0.88,
+  threshold = DEDUP_POLICY.stem_only_conflict,
 ): { ok: boolean; pairs: ReturnType<typeof findNearDuplicatesInSet> } {
   const pairs = findNearDuplicatesInSet(stems, threshold);
   return { ok: pairs.length === 0, pairs };

@@ -48,6 +48,8 @@ class BankQuestion:
     topic: str
     difficulty: str
     is_verified: bool
+    source: str = ""
+    source_type: str = ""
 
 
 def _uuid_or_none(value: str | None) -> str | None:
@@ -478,6 +480,8 @@ class PaperRepository:
         quality_score: float,
         provenance: dict[str, Any],
         title: str | None = None,
+        paper_source: str | None = None,
+        source_mix: dict[str, Any] | None = None,
     ) -> tuple[str, str]:
         """Create the mock_test + gov_generated_papers rows. Returns (paper_id, mock_test_id)."""
         question_ids = [q.question_id for q in questions if q.question_id]
@@ -490,7 +494,7 @@ class PaperRepository:
         paper_title = title or (
             f"{blueprint.exam.name}"
             + (f" — {blueprint.exam.stage_name}" if blueprint.exam.stage_name else "")
-            + " — AI Mock Paper"
+            + " — Practice Mock Paper"
         )
 
         mock = (
@@ -560,6 +564,8 @@ class PaperRepository:
                     "review_state": "machine_validated",
                     "disclaimer": blueprint.label,
                     "mock_test_id": mock_test_id,
+                    "paper_source": paper_source,
+                    "source_mix": source_mix or provenance.get("source_mix") or {},
                 }
             )
             .execute()
@@ -587,6 +593,14 @@ class PaperRepository:
                 "section_code": question.section_code,
                 "sort_order": index,
                 "source_class": question.source_class,
+                "question_source_type": getattr(question, "question_source_type", None)
+                or (
+                    "official_verified"
+                    if question.source_class == "previous_year"
+                    else "generated_practice"
+                    if question.source_class == "generated"
+                    else "approved_bank"
+                ),
             }
             for index, question in enumerate(questions)
         ]
@@ -710,6 +724,21 @@ class PaperRepository:
                 "lease_expires_at": None,
                 "error_code": None,
                 "error_message": None,
+            }
+        ).eq("id", job_id).execute()
+
+    def patch_job_source_mix(
+        self,
+        job_id: str,
+        *,
+        mix: dict[str, Any],
+        missing_count: int = 0,
+    ) -> None:
+        self.db.table("gov_paper_generation_jobs").update(
+            {
+                "source_mix": mix,
+                "missing_count": missing_count,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
             }
         ).eq("id", job_id).execute()
 

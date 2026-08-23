@@ -27,6 +27,20 @@ export const SpeakerState = {
 
 export type SpeakerState = (typeof SpeakerState)[keyof typeof SpeakerState];
 
+export const AiState = {
+  AI_NOT_CHECKED: "AI_NOT_CHECKED",
+  AI_READY: "AI_READY",
+  AI_UNAVAILABLE: "AI_UNAVAILABLE",
+} as const;
+
+export type AiState = (typeof AiState)[keyof typeof AiState];
+
+export const AI_STATUS_COPY: Record<AiState, string> = {
+  AI_NOT_CHECKED: "Coaching availability not checked",
+  AI_READY: "Coaching ready",
+  AI_UNAVAILABLE: "Coaching temporarily unavailable",
+};
+
 export const SttState = {
   STT_NOT_CHECKED: "STT_NOT_CHECKED",
   STT_CHECKING: "STT_CHECKING",

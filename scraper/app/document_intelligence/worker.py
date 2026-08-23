@@ -179,7 +179,10 @@ class DocumentJobWorker:
 
             ocr_res = None
             if ocr_processor:
-                ocr_res = ocr_processor(raw_bytes, job)
+                try:
+                    ocr_res = ocr_processor(raw_bytes, job, extracted)
+                except TypeError:
+                    ocr_res = ocr_processor(raw_bytes, job)
 
             self.heartbeat(job_id)
 
@@ -276,6 +279,51 @@ def _download_document(db: Client, job: dict[str, Any]) -> bytes:
     raise ValueError("Storage download returned unexpected payload")
 
 
+def _needs_ocr(extracted: Any) -> bool:
+    doc = extracted[0] if isinstance(extracted, tuple) and extracted else extracted
+    text = str(getattr(doc, "text", "") or "").strip()
+    confidence = getattr(doc, "confidence", None)
+    if not text:
+        return True
+    if confidence is not None and float(confidence) < 0.6:
+        return True
+    return False
+
+
+def _ocr_document(raw_bytes: bytes, job: dict[str, Any], extracted: Any = None) -> Any:
+    """Run OCR only when extraction is empty or low-confidence.
+
+    parse_pdf / parse_image already OCR scanned pages. This stage re-runs that
+    path when the extract result is unusable, and fails retryably if OCR deps
+    are missing instead of completing with empty text.
+    """
+    if extracted is not None and not _needs_ocr(extracted):
+        return extracted
+    from app.document_intelligence.parsers.errors import ParseError
+    from app.document_intelligence.parsers.document import parse_bytes
+
+    storage_ref = job.get("storage_reference") or {}
+    filename = "document.pdf"
+    if isinstance(storage_ref, dict):
+        path = str(storage_ref.get("path") or "")
+        if path:
+            filename = path.rsplit("/", 1)[-1] or filename
+    try:
+        parsed = parse_bytes(raw_bytes, filename)
+    except ParseError as exc:
+        if getattr(exc, "code", "") == "OCR_UNAVAILABLE":
+            raise
+        raise
+    if not str(getattr(parsed, "text", "") or "").strip():
+        raise ParseError(
+            "OCR_EMPTY",
+            "OCR produced no text; document cannot be marked complete.",
+            retryable=True,
+            stage="ocr",
+        )
+    return parsed
+
+
 def _extract_document(raw_bytes: bytes, job: dict[str, Any]) -> tuple[Any, Any]:
     document_id = str(job.get("document_id") or "document.pdf")
     filename = document_id if "." in document_id else f"{document_id}.pdf"
@@ -354,12 +402,16 @@ async def worker_loop(
         def extractor(raw: bytes, job: dict[str, Any]) -> tuple[Any, Any]:
             return _extract_document(raw, job)
 
+        def ocr_processor(raw: bytes, job: dict[str, Any], extracted: Any = None) -> Any:
+            return _ocr_document(raw, job, extracted)
+
         try:
             await asyncio.to_thread(
                 worker.execute_pipeline,
                 claimed,
                 downloader=downloader,
                 extractor=extractor,
+                ocr_processor=ocr_processor,
                 validator=_validate_extraction,
                 needs_review=_needs_review,
             )

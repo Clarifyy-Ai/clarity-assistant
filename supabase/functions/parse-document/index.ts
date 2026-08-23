@@ -191,7 +191,7 @@ Deno.serve(async (req) => {
       .eq("id", userId)
       .maybeSingle();
 
-    const capabilityGate = requireCapabilityForFunction(
+    const capabilityGate = await requireCapabilityForFunction(
       profileRow?.plan_id,
       "parse-document",
       req,

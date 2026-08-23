@@ -23,6 +23,7 @@ import type { UserProfile } from "@/types/user.types";
 import { getEnabledOAuthProviders } from "@/lib/auth/oauthProviders";
 import { omitPinnedProfileColumns } from "@/lib/profile/clientUpdateGuard";
 import { normalizePlanId } from "@/lib/billing/planIds";
+import { FEATURE_PLAN_GATE, type FeatureFlag } from "@/lib/constants/features";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -57,14 +58,34 @@ type FeatureKey =
 
 const SUPPORTED_OAUTH_PROVIDERS = new Set<string>(getEnabledOAuthProviders());
 
-/** Launch IDs only. Legacy starter→free and elite→pro via normalizePlanId. */
+const LEGACY_FEATURE_TO_FLAG: Record<FeatureKey, FeatureFlag | null> = {
+  live_copilot: "overlay",
+  advanced_analytics: "analytics",
+  export_pdf: "analytics",
+  team_rooms: null,
+  byok: null,
+};
+
+const LAUNCH_PLAN_RANK: Record<"free" | "pro" | "enterprise", number> = {
+  free: 0,
+  pro: 2,
+  enterprise: 4,
+};
+
+function plansMeetingGate(flag: FeatureFlag): string[] {
+  const min = FEATURE_PLAN_GATE[flag];
+  const need = LAUNCH_PLAN_RANK[min === "starter" ? "free" : min === "elite" ? "pro" : min] ?? 0;
+  return (Object.keys(LAUNCH_PLAN_RANK) as Array<"free" | "pro" | "enterprise">).filter(
+    (id) => LAUNCH_PLAN_RANK[id] >= need,
+  );
+}
+
+/** Launch IDs only. Derived from FEATURE_PLAN_GATE so tests keep stable keys. */
 export const FEATURE_PLAN_MAP: Record<FeatureKey, string[]> = {
-  live_copilot: ["pro", "enterprise"],
-  // Rooms are deprecated — never grant access.
+  live_copilot: plansMeetingGate("overlay"),
   team_rooms: [],
-  advanced_analytics: ["pro", "enterprise"],
-  export_pdf: ["pro", "enterprise"],
-  // BYOK removed — server-managed providers only.
+  advanced_analytics: plansMeetingGate("analytics"),
+  export_pdf: plansMeetingGate("analytics"),
   byok: [],
 };
 
@@ -463,8 +484,11 @@ export function useAuth() {
     }
 
     const plan = normalizePlanId(currentProfile.plan_id ?? "free");
-
-    return FEATURE_PLAN_MAP[feature]?.includes(plan) ?? false;
+    const flag = LEGACY_FEATURE_TO_FLAG[feature];
+    if (!flag) return false;
+    const min = FEATURE_PLAN_GATE[flag];
+    const need = LAUNCH_PLAN_RANK[min === "starter" ? "free" : min === "elite" ? "pro" : min] ?? 0;
+    return LAUNCH_PLAN_RANK[plan] >= need;
   }, []);
 
   return {
@@ -475,7 +499,6 @@ export function useAuth() {
     isAuthenticated,
     isLoading,
     isAdmin,
-    isSuperAdmin: isAdmin,
 
     // Actions
     login: signInWithEmail,

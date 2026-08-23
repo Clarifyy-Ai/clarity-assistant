@@ -1,7 +1,10 @@
-// src/lib/ai/openaiClient.ts — PRODUCTION READY// src/lib/ai/openaiClient } from "@/types/ai.types";
+// src/lib/ai/openaiClient.ts — PRODUCTION READY
 import { fetchEdgeJson, fetchEdge, getAuthHeaders } from "@/lib/network/fetchEdge";
 import { createIdempotencyKey } from "@/lib/api/functions";
+import { retry } from "@/lib/utils";
+import { ApiClientError } from "@/lib/api/apiClient";
 import type { CoachingContext } from "@/types/ai.types";
+import type { CoachTone, HintStyle } from "@/types/user.types";
 
 export interface OpenAIStreamOptions {
   question: string;
@@ -55,7 +58,7 @@ export async function streamOpenAIHint(opts: OpenAIStreamOptions): Promise<void>
           headers: { "Idempotency-Key": idempotencyKey },
         }),
       2,
-      400
+      400,
     );
 
     const hintText = data.hints ?? data.hint ?? "";
@@ -99,69 +102,223 @@ export async function callOpenAI(payload: {
   return data.result ?? "";
 }
 
-/**
- * Coach chat → ai-coach-chat EF
- * (non-streaming response in current version, but preserves streaming-like callbacks)
- */
-export async function streamCoachChat(opts: {
-  messages: Array<{ role: "user" | "assistant"; content: string }>;
-  context: CoachingContext;
+export type CoachChatStreamOptions = {
+  message: string;
   sessionId: string;
+  conversationId?: string | null;
+  currentQuestion?: string;
+  recentTranscript?: string;
+  resumeContext?: string;
+  jobDescription?: string;
+  recentAnswers?: string[];
+  coachTone?: CoachTone;
+  hintStyle?: HintStyle;
+  model?: string;
+  idempotencyKey?: string;
+  onMeta?: (meta: {
+    conversation_id: string;
+    message_id: string;
+    correlation_id: string;
+  }) => void;
   onChunk: (chunk: string) => void;
-  onDone: (fullText: string) => void;
+  onDone: (result: {
+    fullText: string;
+    conversation_id: string;
+    message_id: string;
+    source: string;
+  }) => void;
   onError: (error: Error) => void;
   signal?: AbortSignal;
-}): Promise<void> {
-  const { messages, context, sessionId, onChunk, onDone, onError, signal } = opts;
+};
 
-  const lastUserMessage =
-    [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
-
-  const questionContext = [
-    context.session_type && `Interview type: ${context.session_type}`,
-    context.role && `Role: ${context.role}`,
-    context.target_company && `Target company: ${context.target_company}`,
-  ]
-    .filter(Boolean)
-    .join(" | ");
+/**
+ * Coach chat → ai-coach-chat EF (SSE streaming).
+ */
+export async function streamCoachChat(opts: CoachChatStreamOptions): Promise<void> {
+  const {
+    message,
+    sessionId,
+    conversationId,
+    onChunk,
+    onDone,
+    onError,
+    onMeta,
+    signal,
+  } = opts;
 
   const body = {
     session_id: sessionId,
-    question: questionContext || "General interview session",
-    user_message: lastUserMessage,
-    history: messages.slice(-6).map((m) => ({
-      role: m.role === "assistant" ? "coach" : "user",
-      text: m.content,
-    })),
+    conversation_id: conversationId ?? null,
+    message,
+    context: {
+      current_question: opts.currentQuestion ?? "",
+      recent_transcript: opts.recentTranscript ?? "",
+      resume_context: opts.resumeContext ?? "",
+      job_description: opts.jobDescription ?? "",
+      recent_answers: opts.recentAnswers ?? [],
+    },
+    coach_tone: opts.coachTone ?? "",
+    hint_style: opts.hintStyle ?? "",
+    model: opts.model ?? "",
   };
 
   try {
-    // This function expects auth. Use real auth headers.
-    const headers = await getAuthHeaders({ "Content-Type": "application/json" });
+    const idempotencyKey =
+      opts.idempotencyKey ?? createIdempotencyKey("ai-coach-chat");
+    const headers = await getAuthHeaders({
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+      "Idempotency-Key": idempotencyKey,
+      "x-idempotency-key": idempotencyKey,
+    });
 
     const res = await fetchEdge("ai-coach-chat", body, {
       method: "POST",
-      headers: {
-        ...headers,
-        "Idempotency-Key": createIdempotencyKey("ai-coach-chat"),
-      },
+      headers,
       signal,
-      timeoutMs: 30_000,
+      timeoutMs: 60_000,
     });
 
     if (!res.ok) {
-      const txt = await res.text().catch(() => "");
-      throw new Error(txt || `Coach chat failed: ${res.status}`);
+      const errText = await res.text().catch(() => "");
+      let parsed: { error?: string; code?: string; message?: string } | null = null;
+      try {
+        parsed = JSON.parse(errText) as {
+          error?: string;
+          code?: string;
+          message?: string;
+        };
+      } catch {
+        parsed = null;
+      }
+      const code = String(parsed?.code ?? "").toUpperCase() || "API_ERROR";
+      const providerUnavailable =
+        res.status === 502 ||
+        res.status === 503 ||
+        code === "AI_UNAVAILABLE" ||
+        code === "PROVIDER_UNAVAILABLE";
+      const insufficientCredits =
+        !providerUnavailable &&
+        (code === "PAYMENT_REQUIRED" ||
+          code === "INSUFFICIENT_CREDITS" ||
+          res.status === 402);
+      throw new ApiClientError({
+        message:
+          parsed?.error ||
+          parsed?.message ||
+          (insufficientCredits
+            ? "Insufficient credits. Please top up to continue chatting with your coach."
+            : providerUnavailable
+              ? "Your coach is temporarily unavailable. Please retry."
+              : `Coach chat failed (${res.status}).`),
+        status: res.status,
+        code: insufficientCredits
+          ? "INSUFFICIENT_CREDITS"
+          : providerUnavailable
+            ? "AI_PROVIDER_UNAVAILABLE"
+            : code,
+      });
     }
 
-    const data = (await res.json()) as { reply?: string };
-    const reply = data.reply ?? "";
+    if (!res.body) {
+      throw new ApiClientError({
+        message: "Your coach is temporarily unavailable. Please retry.",
+        status: 502,
+        code: "AI_PROVIDER_UNAVAILABLE",
+      });
+    }
 
-    if (reply) onChunk(reply);
-    onDone(reply);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let fullText = "";
+    let metaConversationId = conversationId ?? "";
+    let metaMessageId = "";
+    let source = "ai";
+
+    while (true) {
+      if (signal?.aborted) {
+        try {
+          await reader.cancel();
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true }).replace(/\r/g, "");
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (!line || !line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
+        if (!data || data === "[DONE]") continue;
+
+        let parsed: Record<string, unknown>;
+        try {
+          parsed = JSON.parse(data) as Record<string, unknown>;
+        } catch {
+          continue;
+        }
+
+        const eventType = String(parsed.type ?? "");
+
+        if (eventType === "meta" || (parsed.conversation_id && !parsed.text && !eventType)) {
+          metaConversationId = String(parsed.conversation_id ?? metaConversationId);
+          metaMessageId = String(parsed.message_id ?? metaMessageId);
+          onMeta?.({
+            conversation_id: metaConversationId,
+            message_id: metaMessageId,
+            correlation_id: String(parsed.correlation_id ?? ""),
+          });
+          continue;
+        }
+
+        if (eventType === "error") {
+          throw new ApiClientError({
+            message:
+              String(parsed.error ?? "") ||
+              "Your coach is temporarily unavailable. Please retry.",
+            status: 502,
+            code: String(parsed.code ?? "AI_UNAVAILABLE"),
+          });
+        }
+
+        if (eventType === "done") {
+          const reply = String(parsed.reply ?? fullText);
+          fullText = reply || fullText;
+          metaConversationId = String(parsed.conversation_id ?? metaConversationId);
+          metaMessageId = String(parsed.message_id ?? metaMessageId);
+          source = String(parsed.source ?? source);
+          onDone({
+            fullText,
+            conversation_id: metaConversationId,
+            message_id: metaMessageId,
+            source,
+          });
+          return;
+        }
+
+        const chunk = typeof parsed.text === "string" ? parsed.text : "";
+        if (chunk) {
+          fullText += chunk;
+          onChunk(chunk);
+        }
+      }
+    }
+
+    onDone({
+      fullText,
+      conversation_id: metaConversationId,
+      message_id: metaMessageId,
+      source,
+    });
   } catch (err) {
     if ((err as Error).name === "AbortError") return;
     onError(err instanceof Error ? err : new Error(String(err)));
   }
 }
-import { retry } from "@/lib/utils";

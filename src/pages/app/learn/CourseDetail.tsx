@@ -14,6 +14,7 @@ import {
 } from "@/lib/learning/progress";
 import { certificateKindLabel, verificationPath } from "@/lib/learning/certificates";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 
 type Course = {
   id: string;
@@ -122,15 +123,17 @@ export default function CourseDetailPage() {
 
   async function issueCert() {
     if (!courseId) return;
-    const { data, error } = await supabase.rpc("issue_course_certificate", { p_course_id: courseId });
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-    const code = (data as { certificate_code?: string } | null)?.certificate_code;
-    if (code) {
-      setCertCode(code);
-      toast.success(`${certificateKindLabel()} issued.`);
+    try {
+      const data = await fetchEdgeJson<{ certificate_code?: string }>("issue-course-certificate", {
+        course_id: courseId,
+      });
+      const code = data?.certificate_code;
+      if (code) {
+        setCertCode(code);
+        toast.success(`${certificateKindLabel()} issued.`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Certificate could not be issued.");
     }
   }
 

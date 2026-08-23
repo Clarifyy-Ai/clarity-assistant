@@ -111,7 +111,8 @@ export function createRateLimitKey(
 }
 
 /**
- * Main rate-limit check.
+ * LEGACY in-process rate limit. Isolates do not share this Map.
+ * Production handlers must use checkRateLimitAsync (Postgres RPC).
  *
  * Returns:
  * - allowed = true if request can continue

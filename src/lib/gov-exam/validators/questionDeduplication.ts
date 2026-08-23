@@ -3,6 +3,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { DEDUP_ALGORITHM_VERSION, DEDUP_POLICY } from "@/lib/gov-exam/algorithmCatalog";
 import {
   charNgrams,
   ngramJaccard,
@@ -106,20 +107,33 @@ export function evaluateQuestionSimilarity(
   const optOverlap = union > 0 ? inter / union : 0;
 
   const stemMaxSim = Math.max(tokSim, ngSim);
-  const compositeScore = tokSim * 0.4 + ngSim * 0.4 + optOverlap * 0.2;
+  const compositeScore =
+    tokSim * DEDUP_POLICY.composite_weights.token +
+    ngSim * DEDUP_POLICY.composite_weights.ngram +
+    optOverlap * DEDUP_POLICY.composite_weights.option_overlap;
 
   // Template Clone Check (same underlying template structure with changed numbers/variables)
   const tpl1 = computeTemplateFingerprint(cleanQ1);
   const tpl2 = computeTemplateFingerprint(cleanQ2);
   const tplSim = tokenJaccard(tpl1, tpl2);
-  const isTemplateClone = (tpl1 === tpl2 || tplSim >= 0.9) && n1 !== n2;
+  const isTemplateClone =
+    (tpl1 === tpl2 || tplSim >= DEDUP_POLICY.template_clone_similarity) && n1 !== n2;
 
   let decision: DuplicateDecision = "unique";
   if (isTemplateClone) {
     decision = "template_clone";
-  } else if (compositeScore >= 0.65 || (optOverlap >= 0.8 && stemMaxSim >= 0.5) || stemMaxSim >= 0.8) {
+  } else if (
+    compositeScore >= DEDUP_POLICY.near_duplicate_composite ||
+    (optOverlap >= DEDUP_POLICY.option_overlap_near &&
+      stemMaxSim >= DEDUP_POLICY.stem_max_near_with_options) ||
+    stemMaxSim >= DEDUP_POLICY.stem_max_near
+  ) {
     decision = "near_duplicate";
-  } else if (compositeScore >= 0.45 || (optOverlap > 0.4 && stemMaxSim >= 0.35)) {
+  } else if (
+    compositeScore >= DEDUP_POLICY.review_composite ||
+    (optOverlap > DEDUP_POLICY.review_option_overlap &&
+      stemMaxSim >= DEDUP_POLICY.review_stem_max)
+  ) {
     decision = "flagged_for_review";
   }
 

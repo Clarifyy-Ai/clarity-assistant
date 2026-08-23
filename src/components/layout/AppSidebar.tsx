@@ -103,8 +103,8 @@ const ROUTE_PREFETCH: Record<string, () => Promise<unknown>> = {
   "/app/practice-workspace": () => import("@/pages/app/practice/PracticeWorkspace"),
   "/app/plan": () => import("@/pages/app/plan/InterviewPracticePlan"),
   "/app/analytics": () => import("@/pages/app/Analytics"),
-  "/app/company-research": () => import("@/pages/app/company-research/CompanyResearch"),
-  "/app/answer-bank": () => import("@/pages/app/answer-bank/AnswerBank"),
+  "/app/companies": () => import("@/pages/app/company-research/CompanyResearch"),
+  "/app/answers": () => import("@/pages/app/answer-bank/AnswerBank"),
   "/app/settings": () => import("@/pages/app/settings/Settings"),
   "/app/admin": () => import("@/pages/app/admin/AdminDashboard"),
 };
@@ -310,6 +310,8 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
 
   const profile = useAuthStore((state) => state.profile);
   const isAdmin = useAuthStore((state) => state.isAdmin);
+  const isModerator = useAuthStore((state) => state.isModerator);
+  const isStaff = isAdmin || isModerator;
   const { isIndia } = useIndiaRegion();
   const killSwitches = useGlobalStore((state) => state.featureKillSwitches);
   const featureFlags = useGlobalStore((state) => state.featureFlags);
@@ -529,11 +531,11 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
           onClick={onNavClick}
         />
 
-        {isAdmin && (
+        {isStaff && (
           <SidebarLink
-            to="/app/admin"
+            to={isAdmin ? "/app/admin" : "/app/admin/community"}
             icon={ShieldAlert}
-            label="Admin Panel"
+            label={isAdmin ? "Admin Panel" : "Moderation"}
             collapsed={visuallyCollapsed}
             stealth={stealthMode}
             onClick={onNavClick}

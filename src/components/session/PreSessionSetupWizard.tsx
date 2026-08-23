@@ -1653,6 +1653,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 micState={devicePrecheck.micState}
                 speakerState={devicePrecheck.speakerState}
                 sttState={devicePrecheck.sttState}
+                aiState={devicePrecheck.aiState}
                 micDevices={devicePrecheck.micDevices}
                 speakerDevices={devicePrecheck.speakerDevices}
                 selectedMicId={devicePrecheck.selectedMicId}

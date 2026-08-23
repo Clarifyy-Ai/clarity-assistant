@@ -81,6 +81,8 @@ export interface ChatMessage {
   role: "user" | "assistant";
   text: string;
   timestamp: number;
+  id?: string;
+  pending?: boolean;
 }
 
 export interface CaptureAnswerRecord {
@@ -162,6 +164,7 @@ interface OverlayStore {
 
   chat_history: ChatMessage[];
   is_chat_generating: boolean;
+  coach_conversation_id: string | null;
 
   resume_context: ResumeContext | null;
   resume_talking_points: ResumeTalkingPoints | null;
@@ -221,8 +224,10 @@ interface OverlayStore {
   setActiveTab: (tab: "answer" | "chat" | "transcript" | "audit" | "resume") => void;
 
   addChatMessage: (msg: ChatMessage) => void;
+  updateChatMessage: (id: string, patch: Partial<ChatMessage>) => void;
   clearChatHistory: () => void;
   setChatGenerating: (generating: boolean) => void;
+  setCoachConversationId: (id: string | null) => void;
 
   setResumeContext: (ctx: ResumeContext | null) => void;
   setResumeTalkingPoints: (points: ResumeTalkingPoints | null) => void;
@@ -354,6 +359,7 @@ export const useOverlayStore = create<OverlayStore>()(
 
       chat_history: [],
       is_chat_generating: false,
+      coach_conversation_id: null,
 
       resume_context: null,
       resume_talking_points: null,
@@ -779,16 +785,32 @@ export const useOverlayStore = create<OverlayStore>()(
         if (!guardSessionMutation()) return;
         set((s) => ({
           chat_history: [...s.chat_history, msg],
-          is_chat_generating: false,
+          is_chat_generating: msg.pending ? s.is_chat_generating : false,
+        }));
+      },
+      updateChatMessage: (id, patch) => {
+        if (!guardSessionMutation()) return;
+        set((s) => ({
+          chat_history: s.chat_history.map((m) =>
+            m.id === id ? { ...m, ...patch } : m,
+          ),
         }));
       },
       clearChatHistory: () => {
         if (!guardSessionMutation()) return;
-        set({ chat_history: [], is_chat_generating: false });
+        set({
+          chat_history: [],
+          is_chat_generating: false,
+          coach_conversation_id: null,
+        });
       },
       setChatGenerating: (is_chat_generating) => {
         if (!guardSessionMutation()) return;
         set({ is_chat_generating });
+      },
+      setCoachConversationId: (coach_conversation_id) => {
+        if (!guardSessionMutation()) return;
+        set({ coach_conversation_id });
       },
 
       setResumeContext: (resume_context) => {
@@ -873,6 +895,7 @@ export const useOverlayStore = create<OverlayStore>()(
 
           chat_history: [],
           is_chat_generating: false,
+          coach_conversation_id: null,
 
           resume_context: null,
           resume_talking_points: null,

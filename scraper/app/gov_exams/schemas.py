@@ -108,6 +108,40 @@ class ProcessJobResponse(BaseModel):
     bank_count: int | None = None
     ai_count: int | None = None
     deterministic_count: int | None = None
+    source_mix: dict[str, int] | None = None
+    paper_source: str | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    retryable: bool | None = None
+
+
+class BuildPaperRequest(BaseModel):
+    """Explicit paper-assembly request (alias surface for Edge → Python)."""
+
+    job_id: str = Field(..., min_length=1, max_length=80)
+    exam_id: str = Field(..., min_length=1, max_length=80)
+    stage_id: str | None = Field(default=None, max_length=80)
+    paper_id: str | None = Field(default=None, max_length=80)
+    language: str = Field(default="en", max_length=8)
+    mode: str = Field(default="generated_mock", max_length=40)
+    blueprint: dict[str, Any] | None = None
+    question_sources: list[str] = Field(default_factory=list, max_length=20)
+    correlation_id: str | None = Field(default=None, max_length=128)
+
+
+class BuildPaperResponse(BaseModel):
+    success: bool
+    job_id: str
+    status: str
+    selected_question_ids: list[str] = Field(default_factory=list)
+    generated_question_ids: list[str] = Field(default_factory=list)
+    source_distribution: dict[str, int] = Field(default_factory=dict)
+    validation_status: str = "pending"
+    missing_slots: int = 0
+    paper_id: str | None = None
+    mock_test_id: str | None = None
+    question_count: int | None = None
+    paper_structure: dict[str, Any] | None = None
     error_code: str | None = None
     error_message: str | None = None
     retryable: bool | None = None

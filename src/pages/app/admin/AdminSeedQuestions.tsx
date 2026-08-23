@@ -319,13 +319,14 @@ export default function AdminSeedQuestions() {
               </div>
               {!scraperConfigured && (
                 <span className="text-xs px-2 py-1 rounded bg-amber-500/10 text-amber-600 font-medium">
-                  VITE_SCRAPER_URL not set
+                  Scraper integration not configured
                 </span>
               )}
             </div>
             <p className="text-sm text-muted-foreground">
-              Long-running scraper for official PYQ papers with answer-key extraction and image capture.
-              Uses the Target Exam above. Set a Year From / Year To to bound the run.
+              {scraperConfigured
+                ? "Long-running scraper for official PYQ papers with answer-key extraction and image capture. Uses the Target Exam above."
+                : "This integration is not configured. Set the scraper service URL in the deployment environment to enable Start scrape."}
             </p>
 
             <div className="grid grid-cols-2 gap-4">

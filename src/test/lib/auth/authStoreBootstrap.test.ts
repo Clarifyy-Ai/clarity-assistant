@@ -80,6 +80,7 @@ describe("authStore account bootstrap", () => {
       isProfileLoaded: false,
       error: null,
       isAdmin: false,
+      isModerator: false,
       isAdminResolved: false,
       isOnboarded: false,
       planId: "free",

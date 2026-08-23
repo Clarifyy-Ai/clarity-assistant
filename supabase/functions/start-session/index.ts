@@ -37,11 +37,12 @@ import {
 
 import { createServiceClient } from "../_shared/supabase.ts";
 import { capDurationMinutes } from "../_shared/freeTier.ts";
-import { requireCapability, type Capability } from "../_shared/requireCapability.ts";
+import { requireCapabilityAsync, type Capability } from "../_shared/requireCapability.ts";
 import {
   eligibilityUserMessage,
   httpStatusForEligibilityReason,
   isAiProviderConfigured,
+  sessionServiceReadiness,
   type EligibilityRpc,
 } from "../_shared/sessionStartEligibility.ts";
 import { rpcJson } from "../_shared/sessionLifecycleRpc.ts";
@@ -622,6 +623,7 @@ function eligibilityPayload(data: EligibilityRpc, reason: string) {
     found: data.found,
     duration_seconds: data.duration_seconds ?? null,
     ended_at: data.ended_at ?? null,
+    readiness: sessionServiceReadiness(),
   };
 }
 
@@ -713,7 +715,7 @@ Deno.serve(async (req: Request) => {
     .maybeSingle();
 
   const sessionType = toDbSessionType(toSessionType(body));
-  const capabilityGate = requireCapability(
+  const capabilityGate = await requireCapabilityAsync(
     profile?.plan_id ?? "free",
     capabilityForSessionType(sessionType),
     req,

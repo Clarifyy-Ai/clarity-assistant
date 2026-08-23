@@ -252,7 +252,7 @@ Deno.serve(async (req) => {
     // P0-3: Calendar sync is a Pro feature (matches PLANS.features.calendar_sync)
     const planGate = requirePlan(auth.planId, "pro", req);
     if (planGate) return planGate;
-    const capabilityGate = requireCapabilityForFunction(auth.planId, FN, req);
+    const capabilityGate = await requireCapabilityForFunction(auth.planId, FN, req);
     if (capabilityGate) return capabilityGate;
 
     // ── Body ─────────────────────────────────────────────────────

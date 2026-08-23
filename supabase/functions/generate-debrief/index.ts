@@ -659,7 +659,7 @@ Deno.serve(async (req: Request) => {
 
   const dbEarly = createServiceClient();
   const planId = await resolveUserPlanId(user.id);
-  const capabilityGate = requireCapabilityForFunction(planId, FUNCTION_NAME, req);
+  const capabilityGate = await requireCapabilityForFunction(planId, FUNCTION_NAME, req);
   if (capabilityGate) {
     return withCorsHeaders(req, capabilityGate);
   }

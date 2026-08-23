@@ -64,7 +64,7 @@ function readIntEnv(name: string, fallback: number): number {
 
 /**
  * Pick the runtime after inventory/plan decisions.
- * Bank-only work always stays on Edge (fast, no long-running AI).
+ * Bank-only work stays on Edge (fast). Hybrid deterministic always prefers Python.
  */
 export function resolvePaperGenerator(input: {
   kind: GenerationPlanKind;
@@ -72,10 +72,18 @@ export function resolvePaperGenerator(input: {
   aiContribution: number;
   skipAiFill: boolean;
   preference: GeneratorPreference;
-  /** True when Supabase secret PAPER_FACTORY_WORKER=1 (Python worker deployed). */
+  /** True when Python worker / GOV_EXAM_PYTHON_URL is available. */
   pythonWorkerEnabled: boolean;
+  deterministicContribution?: number;
 }): PaperGenerator {
-  if (input.kind === "bank_only" || input.skipAiFill || input.aiContribution <= 0) {
+  const det = Math.max(0, Math.floor(input.deterministicContribution ?? 0));
+
+  // Deterministic practice fill requires the Python factory.
+  if (input.kind === "hybrid_deterministic" || det > 0) {
+    return input.pythonWorkerEnabled ? "python_paper_factory" : "edge_assembler";
+  }
+
+  if (input.kind === "bank_only" || (input.skipAiFill && input.aiContribution <= 0)) {
     return "edge_assembler";
   }
 

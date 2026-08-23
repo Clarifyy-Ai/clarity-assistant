@@ -9,6 +9,12 @@
 
 import { launchPlanRank, normalizePlanId, type CanonicalPlanId } from "./billingCatalog.ts";
 import { errorResponse } from "./utils.ts";
+import {
+  CAPABILITY_KILL_FLAG,
+  FUNCTION_KILL_FLAG,
+  isFeatureKilled,
+  killSwitchResponse,
+} from "./featureKillSwitch.ts";
 
 export type Capability =
   | "live_rehearsal"
@@ -71,6 +77,19 @@ export function requireCapability(
   );
 }
 
+/** Async: plan gate + DB kill-switch for a capability. */
+export async function requireCapabilityWithKillSwitch(
+  planId: string | null | undefined,
+  capability: Capability,
+  req?: Request,
+): Promise<Response | null> {
+  const flag = CAPABILITY_KILL_FLAG[capability];
+  if (flag && (await isFeatureKilled(flag))) {
+    return killSwitchResponse(req);
+  }
+  return requireCapability(planId, capability, req);
+}
+
 export function requirePlanRank(
   planId: string | null | undefined,
   minimum: CanonicalPlanId,
@@ -116,12 +135,31 @@ export function capabilityForFunction(functionName: string): Capability | null {
   return AI_FUNCTION_CAPABILITY[functionName] ?? null;
 }
 
-export function requireCapabilityForFunction(
+/** Plan gate + DB kill-switch for an Edge function. */
+export async function requireCapabilityForFunction(
   planId: string | null | undefined,
   functionName: string,
   req?: Request,
-): Response | null {
+): Promise<Response | null> {
+  const flag =
+    FUNCTION_KILL_FLAG[functionName] ??
+    (() => {
+      const cap = capabilityForFunction(functionName);
+      return cap ? CAPABILITY_KILL_FLAG[cap] : undefined;
+    })();
+  if (flag && (await isFeatureKilled(flag))) {
+    return killSwitchResponse(req);
+  }
   const capability = capabilityForFunction(functionName);
   if (!capability) return null;
   return requireCapability(planId, capability, req);
+}
+
+/** Plan gate + kill-switch for a capability (non-function entry points). */
+export async function requireCapabilityAsync(
+  planId: string | null | undefined,
+  capability: Capability,
+  req?: Request,
+): Promise<Response | null> {
+  return requireCapabilityWithKillSwitch(planId, capability, req);
 }

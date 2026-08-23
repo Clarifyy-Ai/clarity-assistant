@@ -3,6 +3,7 @@
  * LLM generator OFF by default — bank-first only.
  */
 
+import { DEDUP_POLICY } from "./algorithmCatalog.ts";
 import {
   findNearDuplicatesInSet,
   isNearDuplicate,
@@ -176,7 +177,7 @@ export function runBankMultiAgentValidation(
   };
 }
 
-export function validatePaperSimilarity(stems: string[], threshold = 0.88) {
+export function validatePaperSimilarity(stems: string[], threshold = DEDUP_POLICY.stem_only_conflict) {
   const pairs = findNearDuplicatesInSet(stems, threshold);
   return { ok: pairs.length === 0, pairs };
 }

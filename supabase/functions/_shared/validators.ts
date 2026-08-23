@@ -299,9 +299,21 @@ export const parseQuestionPdfSchema = z.object({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const aiCoachChatSchema = z.object({
-  sessionId: uuidSchema.optional(),
+  session_id: uuidSchema,
+  conversation_id: uuidSchema.nullable().optional(),
   message: aiInputText(MAX_LONG_TEXT_LENGTH, "Message"),
-  context: optionalAiInputText(MAX_DOCUMENT_TEXT_LENGTH, "Context"),
+  context: z
+    .object({
+      current_question: optionalAiInputText(MAX_MEDIUM_TEXT_LENGTH, "Current question"),
+      recent_transcript: optionalAiInputText(MAX_DOCUMENT_TEXT_LENGTH, "Transcript"),
+      resume_context: optionalAiInputText(MAX_DOCUMENT_TEXT_LENGTH, "Resume context"),
+      job_description: optionalAiInputText(MAX_DOCUMENT_TEXT_LENGTH, "Job description"),
+      recent_answers: z.array(z.string().max(2000)).max(5).optional(),
+    })
+    .optional(),
+  coach_tone: z.enum(["encouraging", "direct", "formal", "casual"]).optional(),
+  hint_style: z.enum(["short_hints", "keywords_only", "full_answer"]).optional(),
+  model: optionalSafeText(100, "Model"),
 });
 
 export const polishStarSectionSchema = z.object({
