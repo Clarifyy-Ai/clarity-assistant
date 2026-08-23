@@ -64,6 +64,7 @@ const DEFAULT_MODEL =
 
 const FUNCTION_NAME = "generate-answer";
 import { creditCost } from "../_shared/creditEconomics.ts";
+import { callPythonProcess } from "../_shared/pythonClient.ts";
 
 const COST = creditCost("live_answer");
 
@@ -371,6 +372,62 @@ async function refundCreditsSafely(options: {
   } catch (error) {
     console.error("[generate-answer] Refund failed:", error);
   }
+}
+
+async function tryPythonStructuredAnswer(opts: {
+  requestId: string;
+  question: string;
+  transcript: string;
+  interviewType: string;
+  corsHeaders: HeadersInit;
+}): Promise<Response | null> {
+  const pythonCoach = await callPythonProcess({
+    operation: "practice_coach",
+    operationId: `answer:${opts.requestId}`,
+    correlationId: opts.requestId,
+    payload: {
+      mode: "answer",
+      question: opts.question,
+      transcript: opts.transcript,
+      interview_type: opts.interviewType,
+    },
+  });
+  if (!pythonCoach.ok) return null;
+  const data =
+    pythonCoach.data && typeof pythonCoach.data === "object"
+      ? (pythonCoach.data as Record<string, unknown>)
+      : {};
+  const text = String(
+    data.answer ?? data.reply ?? data.coaching ?? data.text ?? "",
+  ).trim();
+  if (!text) return null;
+
+  const encoder = new TextEncoder();
+  const chunkSize = 24;
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      controller.enqueue(
+        encoder.encode(
+          `data: ${JSON.stringify({ source: "python_structured" })}\n\n`,
+        ),
+      );
+      for (let i = 0; i < text.length; i += chunkSize) {
+        const slice = text.slice(i, i + chunkSize);
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ text: slice })}\n\n`),
+        );
+        await new Promise((r) => setTimeout(r, 0));
+      }
+      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+  });
+  const responseHeaders = new Headers(opts.corsHeaders);
+  responseHeaders.set("Content-Type", "text/event-stream");
+  responseHeaders.set("Cache-Control", "no-cache");
+  responseHeaders.set("Connection", "keep-alive");
+  responseHeaders.set("X-Clarify-Source", "python_structured");
+  return new Response(stream, { headers: responseHeaders });
 }
 
 async function parseAndValidateRequest(
@@ -693,6 +750,14 @@ Deno.serve(async (req: Request) => {
       return new Response(stream, { headers: responseHeaders });
     } catch (error) {
       console.error("[generate-answer] Multi-model call failed:", error);
+      const pythonStream = await tryPythonStructuredAnswer({
+        requestId: crypto.randomUUID(),
+        question: body.question,
+        transcript: body.transcript,
+        interviewType: body.interview_type,
+        corsHeaders,
+      });
+      if (pythonStream) return pythonStream;
       await refundCreditsSafely({ db, userId: user.id, reason: "AI call failure" });
       return json(corsHeaders, 502, {
         error: "AI Help is temporarily unavailable. Please try again.",
@@ -704,6 +769,14 @@ Deno.serve(async (req: Request) => {
   const geminiApiKey = SERVER_GEMINI_API_KEY;
 
   if (!geminiApiKey) {
+    const pythonStream = await tryPythonStructuredAnswer({
+      requestId: crypto.randomUUID(),
+      question: body.question,
+      transcript: body.transcript,
+      interviewType: body.interview_type,
+      corsHeaders,
+    });
+    if (pythonStream) return pythonStream;
     await refundCreditsSafely({
       db,
       userId: user.id,
@@ -768,6 +841,15 @@ Deno.serve(async (req: Request) => {
   } catch (error) {
     console.error("[generate-answer] Gemini network error:", error);
 
+    const pythonStream = await tryPythonStructuredAnswer({
+      requestId: crypto.randomUUID(),
+      question: body.question,
+      transcript: body.transcript,
+      interviewType: body.interview_type,
+      corsHeaders,
+    });
+    if (pythonStream) return pythonStream;
+
     await refundCreditsSafely({
       db,
       userId: user.id,
@@ -800,6 +882,15 @@ Deno.serve(async (req: Request) => {
       errorText.slice(0, 1_000)
     );
 
+    const pythonStream = await tryPythonStructuredAnswer({
+      requestId: crypto.randomUUID(),
+      question: body.question,
+      transcript: body.transcript,
+      interviewType: body.interview_type,
+      corsHeaders,
+    });
+    if (pythonStream) return pythonStream;
+
     await refundCreditsSafely({
       db,
       userId: user.id,
@@ -825,6 +916,15 @@ Deno.serve(async (req: Request) => {
   }
 
   if (!geminiResponse.body) {
+    const pythonStream = await tryPythonStructuredAnswer({
+      requestId: crypto.randomUUID(),
+      question: body.question,
+      transcript: body.transcript,
+      interviewType: body.interview_type,
+      corsHeaders,
+    });
+    if (pythonStream) return pythonStream;
+
     await refundCreditsSafely({
       db,
       userId: user.id,

@@ -40,6 +40,7 @@ export type StarBuilderFormProps = {
   layout?: "grid" | "stack";
   renderSectionActions?: (key: StarFieldKey, wordCount: number) => ReactNode;
   questionPlaceholder?: string;
+  draftBadge?: string | null;
 };
 
 function wordCount(text: string): number {
@@ -56,11 +57,20 @@ export function StarBuilderForm({
   layout = "grid",
   renderSectionActions,
   questionPlaceholder = "e.g. Tell me about a time you resolved a conflict at work.",
+  draftBadge = null,
 }: StarBuilderFormProps): JSX.Element {
   const showCompetency = onCompetencyTagChange !== undefined;
 
   return (
     <div className="space-y-4">
+      {draftBadge && (
+        <p
+          role="status"
+          className="text-xs font-medium text-amber-700 dark:text-amber-300 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2"
+        >
+          {draftBadge}
+        </p>
+      )}
       <Card>
         <p className="text-xs font-medium text-foreground mb-2">
           Interview question you&apos;re preparing for

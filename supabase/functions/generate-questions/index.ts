@@ -40,19 +40,19 @@ import {
 } from "../_shared/audit.ts";
 
 import {
-  deductCreditsAtomic,
-  refundCredits,
   createServiceClient,
   getIdempotentResponse,
   storeIdempotentResponse,
 } from "../_shared/supabase.ts";
-import { creditDenialResponse } from "../_shared/creditAuthority.ts";
 
 import { parseStructuredJson } from "../_shared/structuredParse.ts";
 import { generateWithFallback } from "../_shared/aiProvider.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { selectApprovedFallbackQuestions } from "../_shared/mockQuestionBank.ts";
+import { executeHybridOperation } from "../_shared/hybridExecute.ts";
+import { isAiForceUnavailable } from "../_shared/operationRouter.ts";
+import { callPythonProcess } from "../_shared/pythonClient.ts";
 
 const FUNCTION_NAME = "generate-questions";
 const CREDIT_COST = creditCost("generate_questions");
@@ -297,7 +297,7 @@ async function sha256Hex(value: string): Promise<string> {
 function successPayload(
   questions: CleanQuestion[],
   requestId: string,
-  extras?: { source?: "ai" | "fallback"; cached?: boolean },
+  extras?: { source?: "ai" | "fallback" | "python"; cached?: boolean },
 ) {
   return {
     success: true,
@@ -522,6 +522,52 @@ function cleanGeneratedQuestions(
   return cleaned;
 }
 
+type QuestionsHybridData = {
+  request_id: string;
+  source: "ai" | "fallback" | "database" | "python";
+  cached: boolean;
+  questions: CleanQuestion[];
+  count: number;
+  data: {
+    questions: CleanQuestion[];
+    count: number;
+    source: string;
+  };
+};
+
+function buildQuestionsHybridData(
+  questions: CleanQuestion[],
+  requestId: string,
+  source: QuestionsHybridData["source"],
+  cached = false,
+): QuestionsHybridData {
+  return {
+    request_id: requestId,
+    source,
+    cached,
+    questions,
+    count: questions.length,
+    data: {
+      questions,
+      count: questions.length,
+      source,
+    },
+  };
+}
+
+function extractQuestionsFromPythonJson(json: unknown): CleanQuestion[] {
+  if (!json || typeof json !== "object") return [];
+  const obj = json as Record<string, unknown>;
+  const raw =
+    obj.questions ??
+    (obj.data && typeof obj.data === "object"
+      ? (obj.data as Record<string, unknown>).questions
+      : null);
+  if (!Array.isArray(raw)) return [];
+  return cleanGeneratedQuestions(
+    { questions: raw },
+    "behavioral",
+    [],
 function fallbackToCleanQuestions(
   interviewType: string,
   count: number,
@@ -763,109 +809,126 @@ Deno.serve(async (req: Request) => {
         corsHeaders,
         200,
         successPayload(priorPayload.questions as CleanQuestion[], requestId, {
-          source: (priorPayload.source as "ai" | "fallback") ?? "ai",
+          source: (priorPayload.source as "ai" | "fallback" | "python") ?? "ai",
           cached: true,
         }),
       );
     }
   }
 
-  let creditResult: {
-    success: boolean;
-    error?: string;
-    code?: string;
-    balanceAfter?: number | null;
-    transactionId?: string | null;
-  } = { success: true, balanceAfter: null, transactionId: null };
+  const prompt = buildPrompt(body);
+  const creditCharge = body.free_session ? 0 : CREDIT_COST;
 
-  if (!body.free_session) {
-    creditResult = await deductCreditsAtomic({
-      userId: user.id,
-      action: "generate_questions",
-      cost: CREDIT_COST,
-      sessionId: body.session_id ?? null,
-      idempotencyKey,
-      requestHash,
-    });
+  const hybridResult = await executeHybridOperation<QuestionsHybridData>({
+    req,
+    auth: { userId: user.id, planId },
+    operation: "mock_question_generation",
+    idempotencyKey,
+    creditCost: creditCharge,
+    creditAction: "generate_questions",
+    body: {
+      interviewType: body.interviewType,
+      questionCount: body.questionCount,
+      difficulty: body.difficulty,
+      company: body.company,
+      role: body.role,
+      exclude_questions: body.exclude_questions,
+      allow_fallback: body.allow_fallback,
+    },
+    runDatabase: async () => {
+      if (!body.allow_fallback) return null;
+      const bank = fallbackToCleanQuestions(
+        body.interviewType,
+        body.questionCount,
+        body.exclude_questions,
+        body.difficulty,
+      );
+      if (bank.length < body.questionCount && !isAiForceUnavailable()) {
+        return null;
+      }
+      if (bank.length === 0) return null;
+      return buildQuestionsHybridData(bank, requestId, "fallback");
+    },
+    runAi: async () => {
+      const ai = await withTimeout(
+        retry(() =>
+          generateWithFallback({
+            prompt,
+            systemPrompt: SYSTEM_PROMPT,
+            maxTokens: 2048,
+            temperature: 0.7,
+            jsonMode: true,
+            userId: user.id,
+            action: "generate_questions",
+          }),
+        ),
+        AI_TIMEOUT_MS,
+      );
+      const parsedResult = parseStructuredJson(
+        ai.text,
+        (value): value is ParsedQuestionsResponse =>
+          Boolean(value) &&
+          typeof value === "object" &&
+          Array.isArray((value as ParsedQuestionsResponse).questions),
+      );
+      const parsed = (parsedResult.value ?? { questions: [] }) as ParsedQuestionsResponse;
+      const cleaned = cleanGeneratedQuestions(
+        parsed,
+        body.interviewType,
+        body.exclude_questions,
+      );
+      if (cleaned.length === 0) {
+        throw new Error("AI returned no valid questions.");
+      }
+      return buildQuestionsHybridData(cleaned, requestId, "ai");
+    },
+    runPython: async (ctx) => {
+      const bank = body.allow_fallback
+        ? fallbackToCleanQuestions(
+          body.interviewType,
+          body.questionCount,
+          body.exclude_questions,
+          body.difficulty,
+        )
+        : [];
 
-    if (!creditResult.success) {
-      await logAiAudit({
-        req,
-        userId: user.id,
-        action: "GENERATE_QUESTIONS",
-        sessionId: body.session_id ?? null,
-        status: "failure",
-        metadata: {
-          reason: creditResult.error ?? "Credit deduction failed.",
-          cost: CREDIT_COST,
-          code: creditResult.code,
+      const py = await callPythonProcess({
+        operation: "mock_question_validate",
+        operationId: ctx.operationId,
+        correlationId: ctx.correlationId,
+        payload: {
+          interview_type: body.interviewType,
+          difficulty: body.difficulty,
+          count: body.questionCount,
+          company: body.company,
+          role: body.role,
+          exclude_questions: body.exclude_questions,
+          questions: bank.map((q) => ({
+            question: q.question_text,
+            difficulty: q.difficulty,
+            type: q.type,
+            tags: q.tags,
+          })),
         },
       });
 
-      return creditDenialResponse(req, creditResult, CREDIT_COST);
-    }
-  }
+      if (py.ok) {
+        const data = py.data;
+        const fromPy = extractQuestionsFromPythonJson(
+          data && typeof data === "object" && !Array.isArray(data) && "questions" in (data as object)
+            ? data
+            : { questions: data },
+        );
+        if (fromPy.length > 0) {
+          return buildQuestionsHybridData(fromPy, requestId, "python");
+        }
+      }
+      if (bank.length === 0) return null;
+      return buildQuestionsHybridData(bank, requestId, "fallback");
+    },
+  });
 
-  const prompt = buildPrompt(body);
-  let rawAiResponse = "";
-  let source: "ai" | "fallback" = "ai";
-  let questions: CleanQuestion[] = [];
-
-  try {
-    const ai = await withTimeout(
-      retry(() =>
-        generateWithFallback({
-          prompt,
-          systemPrompt: SYSTEM_PROMPT,
-          maxTokens: 2048,
-          temperature: 0.7,
-          jsonMode: true,
-          userId: user.id,
-          action: "generate_questions",
-        }),
-      ),
-      AI_TIMEOUT_MS,
-    );
-    rawAiResponse = ai.text;
-
-    const parsedResult = parseStructuredJson(rawAiResponse, (value): value is ParsedQuestionsResponse =>
-      Boolean(value) && typeof value === "object" && Array.isArray((value as ParsedQuestionsResponse).questions),
-    );
-    const parsed = (parsedResult.value ?? { questions: [] }) as ParsedQuestionsResponse;
-    questions = cleanGeneratedQuestions(
-      parsed,
-      body.interviewType,
-      body.exclude_questions,
-    );
-  } catch (error) {
-    console.error(
-      "[generate-questions] AI generation failed:",
-      error instanceof Error ? error.message : String(error),
-    );
-  }
-
-  if (questions.length === 0 && body.allow_fallback) {
-    questions = fallbackToCleanQuestions(
-      body.interviewType,
-      body.questionCount,
-      body.exclude_questions,
-      body.difficulty,
-    );
-    if (questions.length > 0) {
-      source = "fallback";
-    }
-  }
-
-  if (questions.length === 0) {
-    if (!body.free_session) {
-      await refundCredits({
-        userId: user.id,
-        cost: CREDIT_COST,
-        reason: "generate_questions AI failure",
-        sessionId: body.session_id ?? null,
-      });
-    }
-
+  if (!hybridResult.ok) {
     await logAiAudit({
       req,
       userId: user.id,
@@ -873,18 +936,15 @@ Deno.serve(async (req: Request) => {
       sessionId: body.session_id ?? null,
       status: "failure",
       metadata: {
-        reason: "QUESTION_GENERATION_UNAVAILABLE",
+        reason: hybridResult.code,
         requestId,
       },
     });
-
-    return json(corsHeaders, 503, {
-      success: false,
-      error: "We couldn't generate the next question right now. Please try again.",
-      code: "QUESTION_GENERATION_UNAVAILABLE",
-      request_id: requestId,
-    });
+    return hybridResult.response;
   }
+
+  const payload = hybridResult.data;
+  const source = payload.source;
 
   if (idempotencyKey) {
     await storeIdempotentResponse(
@@ -892,10 +952,8 @@ Deno.serve(async (req: Request) => {
       idempotencyKey,
       {
         success: true,
-        balanceAfter: creditResult.balanceAfter ?? undefined,
-        transactionId: creditResult.transactionId ?? undefined,
         payload: {
-          questions,
+          questions: payload.questions,
           source,
           parse_status: "completed",
         },
@@ -916,20 +974,16 @@ Deno.serve(async (req: Request) => {
     status: "success",
     metadata: {
       requestId,
-      count: questions.length,
+      count: payload.count,
       requestedCount: body.questionCount,
       source,
-      cost: body.free_session ? 0 : CREDIT_COST,
-      balanceAfter:  creditResult.balanceAfter  ?? null,
-      transactionId: creditResult.transactionId ?? null,
+      cost: creditCharge,
+      hybrid_source: hybridResult.source,
+      operation_id: hybridResult.operationId,
     },
   });
 
-  return json(
-    corsHeaders,
-    200,
-    successPayload(questions, requestId, { source, cached: false }),
-  );
+  return hybridResult.response;
 });
 
 // Production hardening included:

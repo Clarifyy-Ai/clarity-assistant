@@ -28,6 +28,7 @@ import {
   assessStarFactualIntegrity,
   starSectionsToText,
 } from "@/lib/prep/starFactualIntegrity";
+import { parsePrepToolMeta, prepDraftBadgeLabel } from "@/lib/prep/prepToolMeta";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
@@ -67,6 +68,7 @@ export default function StarBuilder() {
   const [competencyTag, setCompetencyTag] = useState("");
   const [aiPhase, setAiPhase] = useState<AiPhase>("IDLE");
   const [polishError, setPolishError] = useState<string | null>(null);
+  const [draftBadge, setDraftBadge] = useState<string | null>(null);
   const [savePhase, setSavePhase] = useState<SavePhase>("IDLE");
   const polishKeyRef = useRef<string | null>(null);
   const polishInFlightRef = useRef(false);
@@ -129,6 +131,7 @@ export default function StarBuilder() {
     setAiPhase("IDLE");
     setSavePhase("IDLE");
     setPolishError(null);
+    setDraftBadge(null);
     originalStarRef.current = null;
     setHasOriginalDraft(false);
     dirtyRef.current = false;
@@ -171,6 +174,7 @@ export default function StarBuilder() {
     setHasOriginalDraft(true);
     setAiPhase("GENERATING");
     setPolishError(null);
+    setDraftBadge(null);
 
     const input = `Question: ${question || "(general behavioral)"}\n\nSituation: ${star.situation}\nTask: ${star.task}\nAction: ${star.action}\nResult: ${star.result}`;
     const contentHash = await sha256(input);
@@ -181,7 +185,7 @@ export default function StarBuilder() {
 
     try {
 
-      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
+      const data = await fetchEdgeJson<Record<string, unknown>>("prep-tool", {
         tool_id: "star_method",
         input,
       }, {
@@ -190,6 +194,7 @@ export default function StarBuilder() {
         },
       });
 
+      const meta = parsePrepToolMeta(data);
       const text = typeof data?.result === "string" ? data.result.trim() : "";
       if (!text) {
         setStar(originalStarRef.current);
@@ -234,8 +239,9 @@ export default function StarBuilder() {
       setStar(next);
       dirtyRef.current = true;
       setAiPhase("GENERATED");
+      setDraftBadge(prepDraftBadgeLabel(meta));
       polishKeyRef.current = null;
-      toast.success("Answer polished with AI. Save to keep it.");
+      toast.success("Answer polished. Save to keep it.");
       await refreshCredits().catch(() => undefined);
     } catch (err) {
       if (originalStarRef.current) setStar(originalStarRef.current);
@@ -259,6 +265,7 @@ export default function StarBuilder() {
       setHasOriginalDraft(false);
       setAiPhase("IDLE");
       setPolishError(null);
+      setDraftBadge(null);
       toast.message("Restored your original STAR content.");
     }
   }
@@ -372,6 +379,7 @@ export default function StarBuilder() {
             }}
             layout="stack"
             questionPlaceholder="e.g. Tell me about a time you led a team..."
+            draftBadge={draftBadge}
           />
 
           <div className="flex gap-2 flex-wrap items-center">

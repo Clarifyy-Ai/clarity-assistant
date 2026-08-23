@@ -27,6 +27,84 @@ export function isPaperJobTerminal(status: string | null | undefined): boolean {
   );
 }
 
+/** User-facing progress stages shown during paper generation. */
+export const PAPER_JOB_USER_STAGES = [
+  "generating_paper",
+  "selecting_questions",
+  "validating_paper",
+  "completed",
+] as const;
+
+export type PaperJobUserStage = (typeof PAPER_JOB_USER_STAGES)[number];
+
+export const PAPER_JOB_STAGE_LABEL: Record<string, string> = {
+  queued: "Generating paper…",
+  validating: "Generating paper…",
+  retrieving_sources: "Generating paper…",
+  analyzing_pattern: "Generating paper…",
+  planning_blueprint: "Generating paper…",
+  building_blueprint: "Generating paper…",
+  generating_paper: "Generating paper…",
+  selecting_questions: "Selecting questions…",
+  generating_questions: "Generating paper…",
+  generating_missing_slots: "Generating paper…",
+  validating_questions: "Validating paper…",
+  checking_similarity: "Validating paper…",
+  assembling: "Validating paper…",
+  validating_paper: "Validating paper…",
+  completed: "Completed",
+  failed: "We couldn't generate this paper. Try again.",
+  failed_retryable: "We couldn't generate this paper. Try again.",
+  failed_permanent: "We couldn't generate this paper. Try again.",
+  cancelled: "Cancelled",
+  expired: "We couldn't generate this paper. Try again.",
+};
+
+/** Collapse internal job progress into the four user-facing stages. */
+export function mapProgressToUserStage(
+  progressStage: string | null | undefined,
+  status: string | null | undefined,
+): PaperJobUserStage | "failed" | "cancelled" {
+  const publicStatus = mapPaperJobPublicStatus(status);
+  if (publicStatus === "completed") return "completed";
+  if (publicStatus === "cancelled") return "cancelled";
+  if (
+    publicStatus === "failed" ||
+    publicStatus === "failed_retryable" ||
+    publicStatus === "failed_permanent" ||
+    publicStatus === "expired"
+  ) {
+    return "failed";
+  }
+  const stage = String(progressStage ?? status ?? "").trim();
+  if (stage === "selecting_questions") return "selecting_questions";
+  if (
+    stage === "validating_questions" ||
+    stage === "checking_similarity" ||
+    stage === "assembling" ||
+    stage === "validating_paper"
+  ) {
+    return "validating_paper";
+  }
+  if (stage === "completed") return "completed";
+  return "generating_paper";
+}
+
+export function paperJobStageLabel(
+  progressStage: string | null | undefined,
+  status?: string | null,
+): string {
+  if (status) {
+    const user = mapProgressToUserStage(progressStage, status);
+    if (user === "failed" || user === "cancelled") {
+      return PAPER_JOB_STAGE_LABEL[user] ?? PAPER_JOB_STAGE_LABEL.failed;
+    }
+    return PAPER_JOB_STAGE_LABEL[user] ?? PAPER_JOB_STAGE_LABEL.generating_paper;
+  }
+  const key = String(progressStage ?? "").trim();
+  return PAPER_JOB_STAGE_LABEL[key] ?? PAPER_JOB_STAGE_LABEL.generating_paper;
+}
+
 export const PAPER_JOB_STORAGE_KEY = "clarify_gov_paper_job";
 
 export function saveActivePaperJob(payload: {

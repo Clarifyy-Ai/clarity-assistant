@@ -2,60 +2,119 @@
 
 Clarify AI provides an **independent** government-exam preparation engine. It is not affiliated with UPSC, SSC, RRB, IBPS, or any recruiting body.
 
-## Pipeline
+## Hybrid pipeline (target = shipped)
 
-1. **Exam registry** — configurable recruiting bodies, exams, aliases, stages  
-2. **Versioned patterns & syllabus** — never overwrite; supersede with new versions  
-3. **Official source registry** — link-first provenance (no unauthorized scraping)  
-4. **Blueprint engine** — hard constraints from approved pattern; soft historical quotas  
-5. **Paper assembly** — select from approved question bank; fail clearly if insufficient  
-6. **Durable jobs** — `gov_paper_generation_jobs` with stage transitions  
-7. **Mock delivery** — existing `mock_tests` / TestSession runner  
-8. **Analytics** — existing mock analytics + topic mastery (iterative)
+```
+Frontend
+  → Supabase Edge Function (JWT, capability, credits, idempotency)
+    → Availability (Python preferred, Edge bank fallback)  [BEFORE credit]
+    → Decision engine
+        OPTION 1: bank enough → Python/Edge assemble → Paper
+        OPTION 2: shortfall + AI allowed → reserve once → AI fill missing → validate → Paper
+        OPTION 3: AI unavailable → bank / deterministic_python practice → Custom set
+        OPTION 4: no safe content → CONTENT_INSUFFICIENT (no charge)
+```
+
+AI is **optional**. Approved question-bank / deterministic Python paths must work when the AI provider is down.
+
+## Pipeline stages
+
+1. **Exam registry** — dynamic recruiting bodies, exams, aliases, stages, short_name, jurisdiction, state
+2. **Versioned patterns & syllabus** — never overwrite; supersede with new versions
+3. **Official source registry** — link-first provenance (no unauthorized scraping)
+4. **Blueprint engine** — hard constraints from approved pattern
+5. **Availability** — deterministic count before credit reservation
+6. **Paper assembly** — bank first; optional AI gap-fill; Python fallback on AI failure
+7. **Durable jobs** — `gov_paper_generation_jobs` with lease / heartbeat / FSM
+8. **Mock delivery** — `mock_tests` / TestSession (answers stripped until COMPLETED)
+9. **Analytics** — mock analytics + topic mastery
+
+## Decision engine
+
+| Situation | Behavior |
+|-----------|----------|
+| Bank ≥ requested | `bank_only` — no AI call |
+| Bank short + AI capability | `ai_assisted` — AI fills missing slots only |
+| AI fails / unavailable | Python bank reassemble + optional `deterministic_python` practice variants |
+| Still insufficient | `CONTENT_INSUFFICIENT` — no fabricate, refund per policy |
+| Blocked before charge | Return inventory message + Custom Practice max |
 
 ## Key tables
 
-- `recruiting_bodies`, `gov_exams`, `gov_exam_aliases`, `gov_exam_stages`
-- `gov_exam_pattern_versions`, `gov_exam_sections`, `gov_exam_syllabus_versions`
-- `gov_official_sources` (+ optional `storage_path` for admin-authorized uploads)
-- `previous_year_papers`, `previous_year_paper_questions`
-- `source_ingestion_jobs`
+- `recruiting_bodies`, `gov_exams` (+ `short_name`, `state_code`, `jurisdiction`, `region`, `verified_at`), `gov_exam_aliases`, `gov_exam_stages`
+- `gov_exam_pattern_versions`, `gov_exam_sections`, `gov_exam_syllabus_versions`, `gov_exam_cycles`
+- `gov_official_sources`, `previous_year_papers`, `previous_year_paper_questions`
 - `gov_paper_generation_jobs`, `gov_generated_papers`, `gov_generated_paper_questions`
-- `user_gov_exam_preferences`
-- `question_translations` (human-reviewed regional text; public only when approved)
-- `topic_mastery`, `exam_readiness`, `preparation_plans` (adaptive prep)
+- `questions` (bank), `mock_tests`, `test_responses`, `test_analyses`
 
-**Previous-year bank:** Prefer an empty approved `previous_year_papers` set over synthetic seeds. Populate only via admin `ingest-source-document` / `extract-question-paper` (allowlisted URL metadata + authorized upload / structured JSON / PDF). Draft / OCR / synthetic rows stay unpublished until review.
+**Source classes:** `bank` / `previous_year` (sourced) vs `generated` (AI or `deterministic_python` practice — never labeled official PYQ).
 
-## Edge functions (implemented)
+## Edge functions
 
-| Function | Purpose | Pilot status |
-|----------|---------|--------------|
-| `search-exams` | Alias-aware discovery + bank readiness | Deployed |
-| `create-exam-paper` | Validate → reserve credits → quality/similarity gate → assemble → job + mock_test | Deployed |
-| `get-paper-generation-job` | Poll durable job state | Deployed |
-| `reconcile-paper-quality` | Admin-only re-score of `gov_generated_papers` | Deployed |
-| `ingest-source-document` | Admin-only source register + durable JSON/metadata ingest (no remote scrape) | Deployed |
-| `list-previous-papers` | Authenticated list of approved previous-year papers | Deployed |
-| `extract-question-paper` | Admin PDF/OCR extract into unpublished bank + ingest job stages | Deployed |
-| `recompute-topic-mastery` | Recompute topic mastery / readiness from attempts | Deployed |
-| `submit-test` | Existing mock submit path; hooks mastery recompute | Redeployed (mastery) |
+| Function | Purpose |
+|----------|---------|
+| `search-exams` | Alias-aware discovery + bank readiness; empty = 200; infra = 503 |
+| `check-exam-paper-availability` | Inventory preflight — **no charge**; prefers Python |
+| `create-exam-paper` | Validate → availability → credit → job → Python `process-job` dispatch and/or Edge assemble |
+| `get-paper-generation-job` / `cancel-paper-generation-job` | Poll / cancel + refund |
+| `process-paper-generation-job` | Internal claim + Edge assemble |
+| `get-exam-details` / `get-exam-pattern` / `get-exam-syllabus` | Dynamic config |
+| `submit-test` | Idempotent submit + mastery (CORS preserved) |
 
-Related (shared / legacy mock tooling, not gov-registry-specific): `parse-question-pdf`, `select-test-questions`, `create-test`, `analyze-test-performance`, `generate-questions`, `bulk-import-questions`.
+## Python FastAPI (Render)
 
-### Master-prompt API names not shipped as separate EFs
+HMAC-protected (`DOCUMENT_INTELLIGENCE_AUTH_SECRET`):
 
-Deferred or covered elsewhere: `get-exam-details` / `get-exam-pattern` / `get-exam-syllabus` (client + `search-exams`), `cancel-paper-generation-job`, `analyze-paper-trends`, `report-question`, `generate-topic-practice`, `update-preparation-plan`, `admin-review-question`, `admin-publish-paper` (admin UI + RLS), separate attempt APIs (existing TestSession runner).
+| Path | Role |
+|------|------|
+| `POST /internal/gov-exams/availability` | Deterministic availability |
+| `POST /internal/gov-exams/select` | Seeded selection (IDs only) |
+| `POST /internal/gov-exams/validate-questions` | Reject invalid; no silent insert |
+| `POST /internal/gov-exams/process-job` | Full hybrid job pipeline |
+| `GET /internal/gov-exams/health` | Authenticated probe |
 
-## Ops / monitoring
+Edge env for dispatch: `GOV_EXAM_PYTHON_URL` (or `PAPER_FACTORY_URL` / `SCRAPER_SERVICE_URL`) + same HMAC secret.
+
+Embedded paper-factory worker starts **without** AI keys (bank-only / deterministic).
+
+## Observability
+
+Render + Edge logs share correlation / job IDs:
+
+```
+[GOV_EXAM] job_received
+[GOV_EXAM] availability_started / availability_completed
+[GOV_EXAM] selection_started
+[GOV_EXAM] validation_started
+[GOV_EXAM] assembly_started
+[GOV_EXAM] ai_generation_started / ai_generation_failed
+[GOV_EXAM] python_fallback_started
+[GOV_EXAM] completed
+[GOV_EXAM] edge_dispatch
+```
+
+## Job FSM
+
+`queued` → `validating` → `building_blueprint` → `selecting_questions` → `generating_missing_slots` → `validating_questions` → `assembling` → `completed`  
+Terminal: `failed_retryable` | `failed_permanent` | `cancelled`
+
+Lease: heartbeat, timeout, retry limit, refund on permanent fail. Frontend resumes via `?jobId=` + localStorage.
+
+## Credit lifecycle
+
+availability → eligibility → cost → reservation → generation → validation → publication → finalization  
+
+One logical charge; AI failure + Python fallback = same operation; compensate on failure before valid publication.
+
+## Labels / honesty
+
+- Affiliation disclaimer on discovery and exam surfaces
+- AI / custom / deterministic practice papers never labeled as official or “predicted”
+
+## Ops
 
 See `docs/GOV_EXAM_MONITORING.md` and `scripts/gov-exam-ops-snapshot.mjs`.
 
-## Labels
-
-- Affiliation disclaimer on discovery and exam surfaces  
-- AI / custom practice papers never labeled as official or “predicted”
-
 ## Release posture
 
-**CONDITIONAL_GO_PILOT** — engine + admin + ingest + mastery + validators live; **0** full-simulation-ready packs; frontend host deploy external. Do not claim GO for all exams.
+Hybrid engine shipped (Edge + Python + registry + durable jobs). Full-simulation readiness still depends on **approved bank density** per exam. Do not claim GO for all exams until bank readiness is `ready`.

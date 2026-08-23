@@ -190,47 +190,87 @@ export function validateSearchQuery(raw: unknown): QueryValidation {
 export function buildExamOrFilter(query: string): string {
   const pattern = `%${escapeIlikePattern(query)}%`;
   return [
+    `short_name.ilike.${pattern}`,
     `name.ilike.${pattern}`,
     `code.ilike.${pattern}`,
     `description.ilike.${pattern}`,
     `legacy_exam_type.ilike.${pattern}`,
+    `state_code.ilike.${pattern}`,
+    `jurisdiction.ilike.${pattern}`,
+    `region.ilike.${pattern}`,
+    `family.ilike.${pattern}`,
   ].join(",");
 }
 
 export type RankableExam = {
   code?: string | null;
+  shortName?: string | null;
   name?: string | null;
   aliases?: string[] | null;
   recruitingBody?: { name?: string | null; code?: string | null } | null;
   family?: string | null;
+  jurisdiction?: string | null;
+  stateCode?: string | null;
 };
 
 function norm(s: string | null | undefined): string {
   return (s ?? "").normalize("NFC").trim().toLowerCase();
 }
 
-/** Lower score = better match. Used to re-order a page of results. */
+/**
+ * Lower score = better match.
+ * Order: exact short name/code → exact name → alias → prefix → recruiting body → full text → fuzzy.
+ * `code` maps to short-name rank (exact code is treated like exact short name).
+ */
 export function examSearchRankScore(exam: RankableExam, query: string): number {
   const q = norm(query);
   if (!q) return 1000;
   const code = norm(exam.code);
+  const shortName = norm(exam.shortName) || norm(exam.code?.replace(/_/g, " "));
   const name = norm(exam.name);
   const aliases = (exam.aliases ?? []).map(norm).filter(Boolean);
   const bodyName = norm(exam.recruitingBody?.name);
   const bodyCode = norm(exam.recruitingBody?.code);
+  const family = norm(exam.family);
+  const jurisdiction = norm(exam.jurisdiction);
+  const stateCode = norm(exam.stateCode);
 
-  if (code === q) return 0;
+  // 0 — exact short name (code counts as short name)
+  if (shortName === q || code === q || code.replace(/_/g, " ") === q) return 0;
+  // 1 — exact name
   if (name === q) return 1;
+  // 2 — exact alias
   if (aliases.some((a) => a === q)) return 2;
-  if (code.startsWith(q) || name.startsWith(q)) return 3;
-  if (aliases.some((a) => a.startsWith(q))) return 4;
-  if (bodyName === q || bodyCode === q) return 5;
-  if (bodyName.startsWith(q) || bodyName.includes(q)) return 6;
-  if (name.includes(q) || code.includes(q) || aliases.some((a) => a.includes(q))) {
-    return 7;
+  // 3 — prefix
+  if (
+    shortName.startsWith(q) ||
+    code.startsWith(q) ||
+    name.startsWith(q) ||
+    aliases.some((a) => a.startsWith(q))
+  ) {
+    return 3;
   }
-  // Cheap trigram-ish: shared character overlap ratio
-  const hay = `${name} ${code} ${aliases.join(" ")} ${bodyName}`;
+  // 4 — recruiting body
+  if (bodyName === q || bodyCode === q || bodyName.startsWith(q) || bodyName.includes(q)) {
+    return 4;
+  }
+  // 5 — category / jurisdiction / full-text contains
+  if (
+    family === q ||
+    jurisdiction === q ||
+    stateCode === q ||
+    name.includes(q) ||
+    shortName.includes(q) ||
+    code.includes(q) ||
+    aliases.some((a) => a.includes(q)) ||
+    family.includes(q) ||
+    jurisdiction.includes(q) ||
+    stateCode.includes(q)
+  ) {
+    return 5;
+  }
+  // 6+ — cheap trigram-ish fuzzy
+  const hay = `${name} ${shortName} ${code} ${aliases.join(" ")} ${bodyName} ${family}`;
   let shared = 0;
   const seen = new Set<string>();
   for (const ch of q) {
@@ -239,7 +279,7 @@ export function examSearchRankScore(exam: RankableExam, query: string): number {
     if (hay.includes(ch)) shared += 1;
   }
   const overlap = q.length === 0 ? 0 : shared / q.length;
-  return 8 + (1 - overlap);
+  return 6 + (1 - overlap);
 }
 
 export function rankExamResults<T extends RankableExam>(

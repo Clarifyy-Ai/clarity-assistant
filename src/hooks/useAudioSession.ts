@@ -400,19 +400,11 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
         store.setDeepgramStatus("disconnected");
         store.setPipelineStatus("microphone_only");
         markInterviewerChannel(false);
-        const dgMsg =
-          dgErr instanceof Error ? dgErr.message : "Live transcription unavailable";
         if (!opts.micOptional) {
-          store.setStreamError({
-            code: "UNKNOWN",
-            message: dgMsg,
-            recoverable: true,
-            suggestion: "Type questions in Chat, or retry listening from the toolbar.",
-          });
           useOverlayStore.getState().setSessionPipelineState("audio_unavailable");
-          toast.error(
-            "Live transcription is off. Type a question in the Chat tab to get hints.",
-            { duration: Infinity },
+          toast.message(
+            "Transcription unavailable — your microphone still works. Type questions in Chat.",
+            { duration: 8000 },
           );
         } else {
           useOverlayStore.getState().setSessionPipelineState("listening");

@@ -37,8 +37,14 @@ def signed_headers(method: str, path: str, body: bytes, request_id: str) -> dict
 
 def test_health_and_readiness() -> None:
     with TestClient(app) as client:
-        assert client.get("/health").json() == {"status": "ok"}
-        assert client.get("/ready").json() == {"status": "ready"}
+        health = client.get("/health").json()
+        assert health["status"] == "ok"
+        assert health.get("service_version") == "1.1.0"
+        ready = client.get("/ready").json()
+        assert ready["status"] == "ready"
+        assert ready.get("service_version") == "1.1.0"
+        assert ready.get("checks", {}).get("config") is True
+        assert ready.get("checks", {}).get("hybrid") is True
 
 
 def test_internal_endpoint_requires_hmac() -> None:

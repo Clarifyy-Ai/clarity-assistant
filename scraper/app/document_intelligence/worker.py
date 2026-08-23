@@ -6,15 +6,25 @@ The Python worker must NOT independently modify credits.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
+import asyncio
 import logging
+import os
+import socket
+import uuid
+from dataclasses import dataclass
 from typing import Any, Callable
 
+from supabase import Client, create_client
+
+from app.document_intelligence.parsers.errors import ParseError
+from app.document_intelligence.parsers.service import parse_document_bytes
 from app.document_intelligence.schemas import JobState
-from supabase import Client
 
 logger = logging.getLogger(__name__)
+
+
+def document_worker_id() -> str:
+    return f"py-doc-{socket.gethostname()}-{os.getpid()}-{uuid.uuid4().hex[:6]}"
 
 
 def retry_backoff_seconds(attempt_count: int) -> int:
@@ -250,3 +260,116 @@ class DocumentJobWorker:
                     attempt_count=attempt_count,
                 )
             return False
+
+
+def _download_document(db: Client, job: dict[str, Any]) -> bytes:
+    storage_ref = job.get("storage_reference") or {}
+    bucket = storage_ref.get("bucket") or "documents"
+    path = storage_ref.get("path")
+    if not path:
+        raise ValueError("Job storage_reference.path is missing")
+    response = db.storage.from_(bucket).download(path)
+    if isinstance(response, bytes):
+        return response
+    if hasattr(response, "read"):
+        return response.read()
+    raise ValueError("Storage download returned unexpected payload")
+
+
+def _extract_document(raw_bytes: bytes, job: dict[str, Any]) -> tuple[Any, Any]:
+    document_id = str(job.get("document_id") or "document.pdf")
+    filename = document_id if "." in document_id else f"{document_id}.pdf"
+    storage_ref = job.get("storage_reference") or {}
+    if isinstance(storage_ref, dict):
+        path = str(storage_ref.get("path") or "")
+        if path:
+            filename = path.rsplit("/", 1)[-1] or filename
+    try:
+        return parse_document_bytes(raw_bytes, filename, "resume_pdf")
+    except ParseError:
+        return parse_document_bytes(raw_bytes, filename, "job_description")
+
+
+def _validate_extraction(extracted: Any, _job: dict[str, Any]) -> bool:
+    if isinstance(extracted, tuple) and extracted:
+        doc = extracted[0]
+        return bool(getattr(doc, "text", "").strip())
+    if hasattr(extracted, "text"):
+        return bool(getattr(extracted, "text", "").strip())
+    return extracted is not None
+
+
+def _needs_review(extracted: Any, _job: dict[str, Any]) -> bool:
+    if isinstance(extracted, tuple) and extracted:
+        doc = extracted[0]
+        return bool(getattr(doc, "review_required", False))
+    return bool(getattr(extracted, "review_required", False))
+
+
+async def worker_loop(
+    *,
+    supabase_url: str,
+    supabase_service_role_key: str,
+    stop: asyncio.Event | None = None,
+    once: bool = False,
+    poll_seconds: float = 5.0,
+    lease_seconds: int = 180,
+) -> int:
+    """Poll for claimable document jobs until stopped.
+
+    Runs the durable state machine via ``DocumentJobWorker.execute_pipeline``.
+    Stage callbacks (download/extract/OCR) are optional; when absent the worker
+    still advances leases so Edge-enqueued jobs are claimed. Returns jobs claimed.
+    """
+    stop_event = stop or asyncio.Event()
+    identity = document_worker_id()
+    db = create_client(supabase_url, supabase_service_role_key)
+    worker = DocumentJobWorker(db, identity, lease_seconds=lease_seconds)
+    processed = 0
+
+    logger.info("document_worker_started worker_id=%s once=%s", identity, once)
+    while not stop_event.is_set():
+        claimed: ClaimedJob | None = None
+        try:
+            claimed = await asyncio.to_thread(worker.claim)
+        except Exception as exc:  # noqa: BLE001 — transient DB/network
+            logger.error("document_worker_claim_failed: %s", exc)
+            claimed = None
+
+        if claimed is None:
+            if once:
+                break
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=max(1.0, poll_seconds))
+            except asyncio.TimeoutError:
+                pass
+            continue
+
+        job_id = str(claimed.job.get("id"))
+        logger.info("document_worker_job_claimed job_id=%s worker_id=%s", job_id, identity)
+
+        def downloader(job: dict[str, Any]) -> bytes:
+            return _download_document(db, job)
+
+        def extractor(raw: bytes, job: dict[str, Any]) -> tuple[Any, Any]:
+            return _extract_document(raw, job)
+
+        try:
+            await asyncio.to_thread(
+                worker.execute_pipeline,
+                claimed,
+                downloader=downloader,
+                extractor=extractor,
+                validator=_validate_extraction,
+                needs_review=_needs_review,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("document_worker_pipeline_error job_id=%s: %s", job_id, exc)
+        processed += 1
+        if once:
+            break
+
+    logger.info(
+        "document_worker_stopped worker_id=%s processed=%s", identity, processed
+    )
+    return processed

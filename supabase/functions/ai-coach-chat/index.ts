@@ -47,6 +47,7 @@ import {
   type GeminiMessage,
 } from "../_shared/gemini.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
+import { callPythonProcess } from "../_shared/pythonClient.ts";
 
 const FUNCTION_NAME = "ai-coach-chat";
 const CREDIT_COST = creditCost("ai_coach_message");
@@ -634,10 +635,64 @@ Deno.serve(async (req: Request) => {
 
     console.error("[ai-coach-chat] AI provider failed:", message);
 
+    const lastUser =
+      [...messages].reverse().find((m) => m.role === "user")?.parts
+        ?.map((p) => p.text)
+        .join("\n") ?? "";
+
+    const pythonCoach = await callPythonProcess({
+      operation: "practice_coach",
+      operationId: `coach:${requestId}`,
+      correlationId: requestId,
+      payload: {
+        mode: "chat",
+        message: lastUser,
+        session_id: body.session_id,
+      },
+    });
+
+    if (pythonCoach.ok) {
+      const data =
+        pythonCoach.data && typeof pythonCoach.data === "object"
+          ? (pythonCoach.data as Record<string, unknown>)
+          : {};
+      const reply = normalizeReply(
+        String(
+          data.reply ??
+            data.coaching ??
+            data.message ??
+            data.answer ??
+            "",
+        ),
+      );
+      if (reply.trim()) {
+        await logAiAudit({
+          req,
+          userId: user.id,
+          action: "AI_COACH_CHAT",
+          sessionId: body.session_id,
+          status: "success",
+          metadata: {
+            requestId,
+            source: "python_structured",
+            cost: CREDIT_COST,
+            balanceAfter: creditResult.balanceAfter ?? null,
+            transactionId: creditResult.transactionId ?? null,
+          },
+        });
+        return json(corsHeaders, 200, {
+          success: true,
+          request_id: requestId,
+          reply,
+          source: "python_structured",
+        });
+      }
+    }
+
     await refundCredits({
       userId: user.id,
       cost: CREDIT_COST,
-      reason: "ai_coach_chat AI failure",
+      reason: "ai_coach_chat AI and python failure",
       sessionId: body.session_id,
     });
 

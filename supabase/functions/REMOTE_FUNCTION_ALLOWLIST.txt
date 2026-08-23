@@ -76,4 +76,6 @@ validate-api-key
 cancel-document-processing-job
 create-document-processing-job
 get-document-processing-job
+hybrid-health
+hybrid-ping
 retry-document-processing-job

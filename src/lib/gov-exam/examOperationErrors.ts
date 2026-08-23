@@ -48,6 +48,26 @@ function formatResetTime(resetAt: string | null | undefined): string {
   }
 }
 
+function inventoryShortageMessage(available: number | undefined): string {
+  if (typeof available === "number") {
+    return `Only ${available} approved questions are available. Try Custom Practice Set.`;
+  }
+  return "Not enough approved questions are available. Try Custom Practice Set.";
+}
+
+/** Soften blunt / internal failure copy before it reaches the UI. */
+function sanitizeGovFacingMessage(message: string): string {
+  const trimmed = message.trim();
+  if (!trimmed) return "We couldn't generate this paper. Try again.";
+  if (/\bai failed\b/i.test(trimmed) || /^generation failed\.?$/i.test(trimmed) || /^failed\.?$/i.test(trimmed)) {
+    return "We couldn't generate this paper. Try again.";
+  }
+  if (/\b(402|502|503|400|429)\b/.test(trimmed) || /HTTP\s+\d{3}/i.test(trimmed)) {
+    return "Something went wrong. Please try again.";
+  }
+  return trimmed;
+}
+
 export function formatGovExamOperationError(err: unknown): string {
   const details = extractCreditDenialDetails(err);
   const code = (details?.code ?? (err instanceof ApiClientError ? err.code : "")).toUpperCase();
@@ -81,25 +101,18 @@ export function formatGovExamOperationError(err: unknown): string {
     return "Credits couldn't be verified right now. Please try again.";
   }
 
-  if (code === "QUESTION_INVENTORY_INSUFFICIENT" || code === "INSUFFICIENT_APPROVED_QUESTIONS") {
-    const available = details?.available;
-    const requested = details?.requested;
-    if (typeof available === "number" && typeof requested === "number") {
-      return `Only ${available} approved questions are available for this configuration.`;
-    }
-    if (typeof available === "number") {
-      return `Only ${available} approved questions are available for this configuration.`;
-    }
-    return "Not enough approved questions are available for this configuration.";
+  if (
+    code === "QUESTION_INVENTORY_INSUFFICIENT" ||
+    code === "INSUFFICIENT_APPROVED_QUESTIONS" ||
+    code === "CONTENT_INSUFFICIENT"
+  ) {
+    return inventoryShortageMessage(details?.available);
   }
 
   if (code === "ACCOUNT_RESTRICTED") {
     return "This account cannot perform that action. Contact support if you need help.";
   }
 
-  const mapped = getAiUserFacingError(err);
-  if (/\b(402|502|503|400|429)\b/.test(mapped) || /HTTP\s+\d{3}/i.test(mapped)) {
-    return "Something went wrong. Please try again.";
-  }
+  const mapped = sanitizeGovFacingMessage(getAiUserFacingError(err));
   return mapped;
 }

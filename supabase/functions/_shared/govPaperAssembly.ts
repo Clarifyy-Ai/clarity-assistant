@@ -40,6 +40,10 @@ import {
   setJobIfActive,
   type ServiceDb,
 } from "./govPaperJobLease.ts";
+import {
+  isPythonGovExamConfigured,
+  pythonGovSelect,
+} from "./pythonGovExamClient.ts";
 
 /**
  * Flattens `gov_exam_syllabus_versions.topics_json` (`[{ section, topics[] }]`) into a
@@ -284,7 +288,7 @@ export async function assembleClaimedPaperJob(
   ) as "official_previous" | "generated_mock" | "custom_mock" | "adaptive";
 
   try {
-    let st = await stage(db, job.id, workerId, "analyzing_pattern");
+    let st = await stage(db, job.id, workerId, "validating");
     if (st === "cancelled") {
       return { ok: false, status: "cancelled", errorCode: "CANCELLED", error: "Cancelled" };
     }
@@ -303,7 +307,7 @@ export async function assembleClaimedPaperJob(
       return { ok: false, status: "failed", errorCode: "EXAM_NOT_FOUND", error: "Exam not found", httpStatus: 404 };
     }
 
-    st = await stage(db, job.id, workerId, "planning_blueprint");
+    st = await stage(db, job.id, workerId, "building_blueprint");
     if (st === "cancelled") {
       return { ok: false, status: "cancelled", errorCode: "CANCELLED", error: "Cancelled" };
     }
@@ -656,9 +660,12 @@ export async function assembleClaimedPaperJob(
     const allowAiFill = mode !== "official_previous" && userCanAiFill && !skipAiFill;
     let aiFilledCount = 0;
     let aiFillError: string | undefined;
+    const correlationId = String(
+      requestJson.correlationId ?? requestJson.correlation_id ?? job.id,
+    );
 
     if (allowAiFill && selected.length < blueprint.total_questions) {
-      st = await stage(db, job.id, workerId, "generating_questions");
+      st = await stage(db, job.id, workerId, "generating_missing_slots");
       if (st === "cancelled") {
         return { ok: false, status: "cancelled", errorCode: "CANCELLED", error: "Cancelled" };
       }
@@ -708,6 +715,89 @@ export async function assembleClaimedPaperJob(
         selected.push(row);
       }
       aiFilledCount = fill.added.length;
+
+      // AI shortfall → never leave the job spinning; fall back to Python select or bank.
+      if (selected.length < blueprint.total_questions) {
+        console.error(JSON.stringify({
+          tag: "[GOV_EXAM] ai_generation_failed",
+          correlation_id: correlationId,
+          job_id: job.id,
+          selected: selected.length,
+          required: blueprint.total_questions,
+          error: (aiFillError ?? "short_fill").slice(0, 240),
+        }));
+
+        const need = blueprint.total_questions - selected.length;
+        const selectedIds = new Set(selected.map((r) => String(r.id)));
+
+        if (isPythonGovExamConfigured() && job.stage_id) {
+          console.log(JSON.stringify({
+            tag: "[GOV_EXAM] python_fallback_started",
+            correlation_id: correlationId,
+            job_id: job.id,
+            need,
+          }));
+          const pySel = await pythonGovSelect({
+            exam_id: job.exam_id,
+            stage_id: job.stage_id,
+            language: job.language,
+            question_count: need,
+            seed: randomSeed,
+            correlation_id: correlationId,
+            job_id: job.id,
+            exclude_ids: [...selectedIds],
+          });
+          if (pySel.ok && pySel.data.question_ids.length > 0) {
+            const { data: pyRows } = await db
+              .from("questions")
+              .select(
+                "id, question_text, options, correct_answer, subject, topic, difficulty, source, source_year, is_public, is_verified",
+              )
+              .in("id", pySel.data.question_ids)
+              .eq("is_public", true);
+            for (const row of (pyRows ?? []) as GapFillRow[]) {
+              if (selected.length >= blueprint.total_questions) break;
+              const id = String(row.id);
+              if (selectedIds.has(id)) continue;
+              selectedIds.add(id);
+              selected.push(row);
+            }
+          } else if (!pySel.ok) {
+            console.warn(JSON.stringify({
+              tag: "[GOV_EXAM] python_fallback_select_failed",
+              correlation_id: correlationId,
+              job_id: job.id,
+              code: pySel.error.code,
+            }));
+          }
+        }
+
+        // Local bank re-selection from already-fetched candidates.
+        if (selected.length < blueprint.total_questions) {
+          for (const row of candidates) {
+            if (selected.length >= blueprint.total_questions) break;
+            const id = String(row.id);
+            if (selectedIds.has(id)) continue;
+            const text = String(row.question_text ?? "");
+            const options = normalizeMcqOptions(row.options);
+            const correctIndex = resolveCorrectIndex(row.correct_answer, options.length);
+            if (correctIndex == null) continue;
+            const fp = questionFingerprint(text, options);
+            if (seenFp.has(fp)) continue;
+            seenFp.add(fp);
+            selectedIds.add(id);
+            selected.push(row);
+          }
+        }
+      }
+    }
+
+    st = await stage(db, job.id, workerId, "validating_questions");
+    if (st === "cancelled") {
+      return { ok: false, status: "cancelled", errorCode: "CANCELLED", error: "Cancelled" };
+    }
+    if (st === "lost_lease") {
+      return { ok: false, status: "failed", errorCode: "LEASE_LOST", error: "Lost job lease", httpStatus: 409 };
     }
 
     const requireExact = mode === "official_previous" || mode === "generated_mock";
@@ -715,10 +805,12 @@ export async function assembleClaimedPaperJob(
     if (selected.length < blueprint.total_questions) {
       if (requireExact) {
         const isCapBlocked = mode === "generated_mock" && !userCanAiFill && !skipAiFill;
-        const errorCode = "QUESTION_INVENTORY_INSUFFICIENT";
+        const errorCode = isCapBlocked
+          ? "CAPABILITY_REQUIRED"
+          : "CONTENT_INSUFFICIENT";
         const errorMsg = isCapBlocked
-          ? `AI question generation requires a Pro plan. Found ${selected.length}/${blueprint.total_questions} approved bank items.`
-          : `Only ${selected.length} approved questions are available for this configuration.`;
+          ? `Only ${selected.length}/${blueprint.total_questions} approved bank items are available. A supported plan is required to fill the remaining slots.`
+          : `Only ${selected.length} approved questions are available for this configuration (need ${blueprint.total_questions}).`;
 
         await failJob(
           db,
@@ -735,33 +827,28 @@ export async function assembleClaimedPaperJob(
           error: errorMsg,
           available: selected.length,
           required: blueprint.total_questions,
-          httpStatus: 422,
+          httpStatus: isCapBlocked ? 403 : 422,
         };
       }
       if (selected.length < 5) {
         const quotaBlocked = /429|RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(aiFillError ?? "");
-        const fillDetail = quotaBlocked
-          ? "AI question generation is rate-limited. Wait a minute and try again."
-          : aiFillError
-            ? aiFillError.replace(/\s+/g, " ").slice(0, 180)
-            : "";
+        const errorCode = "CONTENT_INSUFFICIENT";
+        const errorMsg = quotaBlocked
+          ? `Question generation is temporarily rate-limited. Only ${selected.length} questions are ready — try again shortly or use a smaller set.`
+          : `Only ${selected.length} approved questions are available. Choose a smaller custom practice set.`;
         await failJob(
           db,
           job,
           workerId,
-          "INSUFFICIENT_APPROVED_QUESTIONS",
-          fillDetail
-            ? `Only ${selected.length} questions after bank + AI fill (${fillDetail})`
-            : `Only ${selected.length} questions after bank + AI fill.`,
+          errorCode,
+          errorMsg,
           quotaBlocked,
         );
         return {
           ok: false,
           status: "failed",
-          errorCode: "INSUFFICIENT_APPROVED_QUESTIONS",
-          error: fillDetail
-            ? `Not enough questions (${selected.length}). ${fillDetail}`
-            : "Not enough questions for a practice set.",
+          errorCode,
+          error: errorMsg,
           available: selected.length,
           required: blueprint.total_questions,
           httpStatus: 422,

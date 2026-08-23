@@ -70,11 +70,11 @@ describe("decideGenerationPlan", () => {
     });
 
     expect(plan.kind).toBe("blocked");
-    expect(plan.reasonCode).toBe("QUESTION_INVENTORY_INSUFFICIENT");
+    expect(plan.reasonCode).toBe("CONTENT_INSUFFICIENT");
     expect(plan.skipAiFill).toBe(true);
   });
 
-  it("routes to the Python factory only when explicitly preferred", () => {
+  it("routes to the Python factory when explicitly preferred", () => {
     const base = {
       requested: 100,
       available: 0,
@@ -84,8 +84,53 @@ describe("decideGenerationPlan", () => {
 
     expect(decideGenerationPlan(base).generator).toBe("edge_assembler");
     expect(
-      decideGenerationPlan({ ...base, preferPythonFactory: true }).generator,
+      decideGenerationPlan({
+        ...base,
+        generatorPreference: "python",
+        pythonWorkerEnabled: true,
+      }).generator,
     ).toBe("python_paper_factory");
+  });
+
+  it("auto-routes heavy AI fill to Python when worker is enabled", () => {
+    const plan = decideGenerationPlan({
+      requested: 100,
+      available: 21,
+      mode: "generated_mock",
+      canUseAi: true,
+      generatorPreference: "auto",
+      pythonWorkerEnabled: true,
+    });
+
+    expect(plan.generator).toBe("python_paper_factory");
+    expect(plan.aiContribution).toBe(79);
+  });
+
+  it("auto-routes small AI fill to Edge when worker is enabled", () => {
+    const plan = decideGenerationPlan({
+      requested: 25,
+      available: 15,
+      mode: "custom_mock",
+      canUseAi: true,
+      generatorPreference: "auto",
+      pythonWorkerEnabled: true,
+    });
+
+    expect(plan.generator).toBe("edge_assembler");
+    expect(plan.aiContribution).toBe(10);
+  });
+
+  it("forces Edge when caller prefers edge even with Python enabled", () => {
+    const plan = decideGenerationPlan({
+      requested: 100,
+      available: 0,
+      mode: "generated_mock",
+      canUseAi: true,
+      generatorPreference: "edge",
+      pythonWorkerEnabled: true,
+    });
+
+    expect(plan.generator).toBe("edge_assembler");
   });
 
   it("keeps bank-only work on the Edge assembler even when Python is preferred", () => {
@@ -94,7 +139,8 @@ describe("decideGenerationPlan", () => {
       available: 50,
       mode: "generated_mock",
       canUseAi: true,
-      preferPythonFactory: true,
+      generatorPreference: "python",
+      pythonWorkerEnabled: true,
     });
 
     expect(plan.generator).toBe("edge_assembler");
@@ -132,7 +178,7 @@ describe("blockedPlanPayload", () => {
       }),
     );
 
-    expect(payload.code).toBe("QUESTION_INVENTORY_INSUFFICIENT");
+    expect(payload.code).toBe("CONTENT_INSUFFICIENT");
     expect(payload.aiFillAvailable).toBe(false);
   });
 });

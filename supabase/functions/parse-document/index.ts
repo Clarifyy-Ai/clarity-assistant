@@ -10,6 +10,8 @@ import {
 } from "../_shared/rateLimit.ts";
 import { validateUploadMime } from "../_shared/uploadValidation.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
+import { creditDenialResponse } from "../_shared/creditAuthority.ts";
+import { callPythonProcess } from "../_shared/pythonClient.ts";
 import JSZip from "https://esm.sh/jszip@3.10.1";
 
 const PARSE_DOCUMENT_COST = creditCost("parse_document");
@@ -121,6 +123,59 @@ async function extractWithGemini(
   };
 }
 
+function extractPythonDocument(data: unknown): { full_text: string; summary: string } | null {
+  if (!data || typeof data !== "object") return null;
+  const obj = data as Record<string, unknown>;
+  const structured =
+    obj.structured && typeof obj.structured === "object"
+      ? (obj.structured as Record<string, unknown>)
+      : null;
+  const full =
+    (typeof obj.extracted_text === "string" && obj.extracted_text) ||
+    (typeof obj.full_text === "string" && obj.full_text) ||
+    (typeof obj.text === "string" && obj.text) ||
+    (typeof obj.content === "string" && obj.content) ||
+    "";
+  if (full.trim().length < 20) return null;
+  const summary =
+    (structured && typeof structured.summary === "string" && structured.summary) ||
+    (typeof obj.summary === "string" && obj.summary) ||
+    full.slice(0, 400);
+  return {
+    full_text: full.slice(0, 50000),
+    summary: String(summary).slice(0, 2000),
+  };
+}
+
+async function tryPythonDocumentExtract(opts: {
+  base64: string;
+  filename: string;
+  mimeType: string;
+  documentKind: string;
+  operationId: string;
+}): Promise<{ full_text: string; summary: string } | null> {
+  const result = await callPythonProcess({
+    operation: "document_extract",
+    operationId: opts.operationId,
+    correlationId: crypto.randomUUID(),
+    payload: {
+      base64: opts.base64,
+      filename: opts.filename,
+      mime_type: opts.mimeType,
+      document_kind: opts.documentKind,
+      category_hint: opts.documentKind,
+    },
+  });
+  if (!result.ok) {
+    console.warn("[parse-document] python document_extract failed", {
+      code: result.code,
+      message: result.message,
+    });
+    return null;
+  }
+  return extractPythonDocument(result.data);
+}
+
 Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
@@ -201,19 +256,29 @@ Deno.serve(async (req) => {
       }
       const bytes = new Uint8Array(buf);
       let extracted: { full_text: string; summary: string } | null = null;
-      if (mimeCheck.mimeType === "text/plain" || mimeCheck.mimeType === "text/csv" || mimeCheck.mimeType === "application/csv" || mimeCheck.mimeType === "application/vnd.ms-excel") {
-        if (looksBinary(bytes)) return response(req, { error: "This file is not valid text.", code: "UNSUPPORTED_ENCODING" }, 400);
-        const text = bytesToUtf8(bytes).replace(/^\uFEFF/, "").trim();
-        if (text.length < 1) return response(req, { error: "The document contains no readable text.", code: "BAD_REQUEST" }, 400);
-        extracted = { full_text: text.slice(0, 50000), summary: text.slice(0, 400) };
-      } else if (mimeCheck.mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-        const text = await extractZipText(bytes, false);
-        if (text) extracted = { full_text: text, summary: text.slice(0, 400) };
-      } else if (mimeCheck.mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
-        const text = await extractZipText(bytes, true);
-        if (text) extracted = { full_text: text, summary: text.slice(0, 400) };
-      } else {
-        extracted = await extractWithGemini(safeBase64(bytes), mimeCheck.mimeType, "library");
+      // Prefer Python document_extract; fall back to local/AI extract.
+      extracted = await tryPythonDocumentExtract({
+        base64: safeBase64(bytes),
+        filename: libraryDoc.storage_path.split("/").pop() || "document",
+        mimeType: mimeCheck.mimeType,
+        documentKind: "library",
+        operationId: `library:${libraryDocumentId}`,
+      });
+      if (!extracted) {
+        if (mimeCheck.mimeType === "text/plain" || mimeCheck.mimeType === "text/csv" || mimeCheck.mimeType === "application/csv" || mimeCheck.mimeType === "application/vnd.ms-excel") {
+          if (looksBinary(bytes)) return response(req, { error: "This file is not valid text.", code: "UNSUPPORTED_ENCODING" }, 400);
+          const text = bytesToUtf8(bytes).replace(/^\uFEFF/, "").trim();
+          if (text.length < 1) return response(req, { error: "The document contains no readable text.", code: "BAD_REQUEST" }, 400);
+          extracted = { full_text: text.slice(0, 50000), summary: text.slice(0, 400) };
+        } else if (mimeCheck.mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+          const text = await extractZipText(bytes, false);
+          if (text) extracted = { full_text: text, summary: text.slice(0, 400) };
+        } else if (mimeCheck.mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
+          const text = await extractZipText(bytes, true);
+          if (text) extracted = { full_text: text, summary: text.slice(0, 400) };
+        } else {
+          extracted = await extractWithGemini(safeBase64(bytes), mimeCheck.mimeType, "library");
+        }
       }
       if (!extracted) {
         await db.from("personal_library_documents").update({
@@ -294,47 +359,46 @@ Deno.serve(async (req) => {
         idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
       });
       if (!creditResult.success) {
-        return new Response(
-          JSON.stringify({
-            error: "Insufficient credits.",
-            code: "INSUFFICIENT_CREDITS",
-            message: `Document parsing costs ${PARSE_DOCUMENT_COST} credits.`,
-          }),
-          {
-            status: 402,
-            headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
-          },
-        );
+        return creditDenialResponse(req, creditResult, PARSE_DOCUMENT_COST);
       }
 
       const fileBytes = new Uint8Array(buf);
-      let extracted: { full_text: string; summary: string } | null = null;
-      if (mimeCheck.mimeType === "text/plain") {
-        if (looksBinary(fileBytes)) {
-          await refundCredits({
-            userId,
-            cost: PARSE_DOCUMENT_COST,
-            reason: "refund_parse_document_failed",
-          });
-          return new Response(
-            JSON.stringify({
-              error: "This file is not valid UTF-8 text.",
-              code: "UNSUPPORTED_ENCODING",
-            }),
-            { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+      let extracted: { full_text: string; summary: string } | null =
+        await tryPythonDocumentExtract({
+          base64: safeBase64(fileBytes),
+          filename: match.name,
+          mimeType: mimeCheck.mimeType,
+          documentKind: "job_description",
+          operationId: `jd:${jdId}`,
+        });
+      if (!extracted) {
+        if (mimeCheck.mimeType === "text/plain") {
+          if (looksBinary(fileBytes)) {
+            await refundCredits({
+              userId,
+              cost: PARSE_DOCUMENT_COST,
+              reason: "refund_parse_document_failed",
+            });
+            return new Response(
+              JSON.stringify({
+                error: "This file is not valid UTF-8 text.",
+                code: "UNSUPPORTED_ENCODING",
+              }),
+              { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+            );
+          }
+          const text = bytesToUtf8(fileBytes).replace(/^\uFEFF/, "").trim();
+          extracted = {
+            full_text: text.slice(0, 50000),
+            summary: text.slice(0, 400),
+          };
+        } else {
+          extracted = await extractWithGemini(
+            safeBase64(fileBytes),
+            mimeCheck.mimeType,
+            "job_description",
           );
         }
-        const text = bytesToUtf8(fileBytes).replace(/^\uFEFF/, "").trim();
-        extracted = {
-          full_text: text.slice(0, 50000),
-          summary: text.slice(0, 400),
-        };
-      } else {
-        extracted = await extractWithGemini(
-          safeBase64(fileBytes),
-          mimeCheck.mimeType,
-          "job_description",
-        );
       }
 
       if (!extracted) {
@@ -450,62 +514,61 @@ Deno.serve(async (req) => {
       idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
     });
     if (!creditResult.success) {
-      return new Response(
-        JSON.stringify({
-          error: "Insufficient credits.",
-          code: "INSUFFICIENT_CREDITS",
-          message: `Document parsing costs ${PARSE_DOCUMENT_COST} credits.`,
-        }),
-        {
-          status: 402,
-          headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
-        },
-      );
+      return creditDenialResponse(req, creditResult, PARSE_DOCUMENT_COST);
     }
 
     const fileBytes = new Uint8Array(buf);
-    let extracted: { full_text: string; summary: string } | null = null;
+    let extracted: { full_text: string; summary: string } | null =
+      await tryPythonDocumentExtract({
+        base64: safeBase64(fileBytes),
+        filename: match.name,
+        mimeType: mimeCheck.mimeType,
+        documentKind: doc.type ?? "other",
+        operationId: `document:${documentId}`,
+      });
 
-    if (mimeCheck.mimeType === "text/plain") {
-      if (looksBinary(fileBytes)) {
-        await refundCredits({
-          userId,
-          cost: PARSE_DOCUMENT_COST,
-          reason: "refund_parse_document_failed",
-        });
-        return new Response(
-          JSON.stringify({
-            error: "This file is not valid UTF-8 text.",
-            code: "UNSUPPORTED_ENCODING",
-          }),
-          { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+    if (!extracted) {
+      if (mimeCheck.mimeType === "text/plain") {
+        if (looksBinary(fileBytes)) {
+          await refundCredits({
+            userId,
+            cost: PARSE_DOCUMENT_COST,
+            reason: "refund_parse_document_failed",
+          });
+          return new Response(
+            JSON.stringify({
+              error: "This file is not valid UTF-8 text.",
+              code: "UNSUPPORTED_ENCODING",
+            }),
+            { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+          );
+        }
+        const text = bytesToUtf8(fileBytes).replace(/^\uFEFF/, "").trim();
+        if (text.length < 20) {
+          await refundCredits({
+            userId,
+            cost: PARSE_DOCUMENT_COST,
+            reason: "refund_parse_document_failed",
+          });
+          return new Response(
+            JSON.stringify({
+              error: "Text file is empty or too short to parse.",
+              code: "BAD_REQUEST",
+            }),
+            { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+          );
+        }
+        extracted = {
+          full_text: text.slice(0, 50000),
+          summary: text.slice(0, 400),
+        };
+      } else {
+        extracted = await extractWithGemini(
+          safeBase64(fileBytes),
+          mimeCheck.mimeType,
+          doc.type ?? "other",
         );
       }
-      const text = bytesToUtf8(fileBytes).replace(/^\uFEFF/, "").trim();
-      if (text.length < 20) {
-        await refundCredits({
-          userId,
-          cost: PARSE_DOCUMENT_COST,
-          reason: "refund_parse_document_failed",
-        });
-        return new Response(
-          JSON.stringify({
-            error: "Text file is empty or too short to parse.",
-            code: "BAD_REQUEST",
-          }),
-          { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
-        );
-      }
-      extracted = {
-        full_text: text.slice(0, 50000),
-        summary: text.slice(0, 400),
-      };
-    } else {
-      extracted = await extractWithGemini(
-        safeBase64(fileBytes),
-        mimeCheck.mimeType,
-        doc.type ?? "other",
-      );
     }
 
     if (!extracted) {

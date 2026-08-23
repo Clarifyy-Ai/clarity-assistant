@@ -10,6 +10,7 @@ import {
   checkExamPaperAvailability,
   createExamPaper,
   generateTopicPractice,
+  getExamPattern,
   getExamSyllabus,
   getPaperGenerationJob,
   requestGovExam,
@@ -27,7 +28,12 @@ import {
   formatInventoryCoverage,
   generateButtonLabel,
   generationSourceSummary,
+  inventoryAvailabilityMessage,
 } from "@/lib/gov-exam/questionInventoryPolicy";
+import {
+  generatorLabel,
+  pickPaperGeneratorPreference,
+} from "@/lib/gov-exam/generatorRouting";
 import { planRank } from "@/lib/billing/planCatalog";
 import { formatGovExamOperationError } from "@/lib/gov-exam/examOperationErrors";
 import { ApiClientError } from "@/lib/api/apiClient";
@@ -39,19 +45,42 @@ import {
 } from "@/lib/gov-exam/disclaimers";
 import { flattenSyllabusTopicLabels } from "@/lib/gov-exam/topicFilter";
 import {
+  PAPER_JOB_STAGE_LABEL,
+  PAPER_JOB_USER_STAGES,
   clearActivePaperJob,
   isPaperJobTerminal,
   loadActivePaperJob,
   mapPaperJobPublicStatus,
+  mapProgressToUserStage,
   saveActivePaperJob,
 } from "@/lib/gov-exam/paperJobStatus";
 import { toast } from "sonner";
 
 const STEPS = ["Exam", "Paper basis", "Customize", "Review"] as const;
 
+const LANGUAGE_LABELS: Record<string, string> = {
+  en: "English",
+  hi: "Hindi",
+  ta: "Tamil",
+  te: "Telugu",
+  kn: "Kannada",
+  ml: "Malayalam",
+  mr: "Marathi",
+  bn: "Bengali",
+  gu: "Gujarati",
+  pa: "Punjabi",
+  or: "Odia",
+  ur: "Urdu",
+};
+
+function languageOptionLabel(code: string): string {
+  const key = code.trim().toLowerCase();
+  return LANGUAGE_LABELS[key] ?? code.toUpperCase();
+}
+
 function paperJobErrorMessage(job: PaperJobResult): string {
   return formatGovExamOperationError({
-    error: job.errorMessage ?? job.error ?? "Generation failed",
+    error: job.errorMessage ?? job.error ?? "We couldn't generate this paper. Try again.",
     code: job.errorCode ?? "",
     available: job.available,
     requested: job.requested ?? job.required,
@@ -61,41 +90,15 @@ function paperJobErrorMessage(job: PaperJobResult): string {
   });
 }
 
-const JOB_STAGES = [
-  "queued",
-  "validating",
-  "retrieving_sources",
-  "analyzing_pattern",
-  "planning_blueprint",
-  "building_blueprint",
-  "selecting_questions",
-  "generating_questions",
-  "generating_missing_slots",
-  "validating_questions",
-  "checking_similarity",
-  "assembling",
-  "completed",
-] as const;
+function examCategoryLabel(exam: GovExamSearchResult): string | null {
+  return exam.stateCode?.trim() || exam.jurisdiction?.trim() || exam.family?.trim() || null;
+}
 
-const STAGE_LABEL: Record<string, string> = {
-  queued: "Queued",
-  validating: "Validating request",
-  retrieving_sources: "Retrieving sources",
-  analyzing_pattern: "Analyzing syllabus & pattern",
-  planning_blueprint: "Building blueprint",
-  building_blueprint: "Building blueprint",
-  selecting_questions: "Selecting reviewed questions",
-  generating_questions: "Generating remaining unique questions with AI",
-  generating_missing_slots: "Filling missing question slots",
-  validating_questions: "Validating answers",
-  checking_similarity: "Checking duplicates",
-  assembling: "Assembling paper",
-  completed: "Final quality check complete",
-  failed: "Failed",
-  failed_retryable: "Failed — retry available",
-  failed_permanent: "Failed",
-  cancelled: "Cancelled",
-};
+function examVerificationLabel(exam: GovExamSearchResult): string | null {
+  const raw = exam.verifiedAt ?? exam.lastVerified;
+  if (!raw) return null;
+  return String(raw).slice(0, 10) || null;
+}
 
 export default function GenerateGovPaper(): React.ReactElement {
   const [params] = useSearchParams();
@@ -165,6 +168,38 @@ export default function GenerateGovPaper(): React.ReactElement {
     requested: requestedForConfig,
     aiFillAvailable: serverAvailability?.aiFillAllowed ?? aiFillAvailable,
   });
+  const customPracticeMax =
+    serverAvailability?.customPracticeMax ?? inventory.customPracticeMax;
+  const fullMockAllowedByServer =
+    serverAvailability == null
+      ? true
+      : serverAvailability.fullMockAllowed && !serverAvailability.blocked;
+  const canGenerateRequested =
+    inventory.canGenerateRequested &&
+    (basis !== "full_sim" || fullMockAllowedByServer);
+  const showInventoryShortage =
+    inventory.reason === "short" ||
+    inventory.reason === "empty" ||
+    (serverAvailability != null &&
+      serverAvailability.available < serverAvailability.requested &&
+      !serverAvailability.fullMockAllowed);
+  const languageOptions =
+    (serverAvailability?.pattern?.languages?.length
+      ? serverAvailability.pattern.languages
+      : null) ??
+    (selected?.languages?.length ? selected.languages : null) ??
+    ["en"];
+
+  function syncJobIdInUrl(jobId: string | null) {
+    const next = new URLSearchParams(params);
+    if (jobId) next.set("jobId", jobId);
+    else next.delete("jobId");
+    const search = next.toString();
+    navigate(
+      { pathname: "/app/mock-test/generate", search: search ? `?${search}` : "" },
+      { replace: true },
+    );
+  }
 
   function applyExamSelection(exam: GovExamSearchResult) {
     setSelectedExam(exam);
@@ -218,7 +253,10 @@ export default function GenerateGovPaper(): React.ReactElement {
             examId: details.exam.examId,
             code: details.exam.code,
             name: details.exam.name,
+            shortName: details.exam.shortName ?? null,
             family: details.exam.family,
+            stateCode: details.exam.stateCode ?? null,
+            jurisdiction: details.exam.jurisdiction ?? null,
             description: details.exam.description,
             legacyExamType: details.exam.legacyExamType,
             recruitingBody: details.body
@@ -256,6 +294,7 @@ export default function GenerateGovPaper(): React.ReactElement {
               : null,
             languages: details.languages?.length ? details.languages : ["en"],
             lastVerified: details.activePatternSummary?.effectiveDate ?? null,
+            verifiedAt: details.exam.verifiedAt ?? details.activePatternSummary?.effectiveDate ?? null,
             bankReadiness: details.bankReadiness ?? null,
             primaryActions: ["view_exam", "generate_mock", "start_preparation"],
           };
@@ -280,6 +319,9 @@ export default function GenerateGovPaper(): React.ReactElement {
     const stored = loadActivePaperJob(userId);
     const jobId = fromUrl || stored?.jobId;
     if (!jobId) return;
+    if (!fromUrl) {
+      syncJobIdInUrl(jobId);
+    }
     let cancelled = false;
     pollAbortRef.current = false;
     setBusy(true);
@@ -293,6 +335,7 @@ export default function GenerateGovPaper(): React.ReactElement {
         const status = mapPaperJobPublicStatus(current.status);
         if (isPaperJobTerminal(status)) {
           clearActivePaperJob();
+          syncJobIdInUrl(null);
           setBusy(false);
           if (status === "completed" && current.mockTestId) {
             navigate(`/app/mock-test/session/${current.mockTestId}`);
@@ -307,9 +350,11 @@ export default function GenerateGovPaper(): React.ReactElement {
         }
         if (current.status === "completed" && current.mockTestId) {
           clearActivePaperJob();
+          syncJobIdInUrl(null);
           navigate(`/app/mock-test/session/${current.mockTestId}`);
         } else if (isPaperJobTerminal(current.status)) {
           clearActivePaperJob();
+          syncJobIdInUrl(null);
         }
       } catch {
         /* leave UI; user can retry */
@@ -337,6 +382,53 @@ export default function GenerateGovPaper(): React.ReactElement {
     }
   }, [selected, basis]);
 
+  // Refresh pattern/languages from the server when exam + stage are known.
+  useEffect(() => {
+    if (!examId || !stageId) return;
+    let cancelled = false;
+    void getExamPattern({ examId, stageId })
+      .then((res) => {
+        if (cancelled) return;
+        setSelectedExam((prev) => {
+          if (!prev || prev.examId !== examId) return prev;
+          const langs =
+            res.pattern.languages?.length > 0
+              ? res.pattern.languages
+              : prev.languages?.length
+                ? prev.languages
+                : ["en"];
+          return {
+            ...prev,
+            languages: langs,
+            pattern: {
+              version: res.pattern.version,
+              totalQuestions: res.pattern.totalQuestions,
+              totalMarks: res.pattern.totalMarks,
+              durationMinutes: res.pattern.durationMinutes,
+              negativeMark: res.pattern.negativeMark,
+              sourceUrl: res.pattern.sourceUrl,
+            },
+          };
+        });
+        if (basis === "full_sim") {
+          setQuestionCount(res.pattern.totalQuestions);
+          setDurationMinutes(res.pattern.durationMinutes);
+        }
+        if (res.pattern.languages?.length) {
+          setLanguage((prev) =>
+            res.pattern.languages.includes(prev) ? prev : res.pattern.languages[0],
+          );
+        }
+      })
+      .catch(() => {
+        /* keep selection from search/details */
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [examId, stageId]);
+
   // Server-authoritative availability before charge.
   useEffect(() => {
     if (!examId || !stageId || step < 2) return;
@@ -351,6 +443,17 @@ export default function GenerateGovPaper(): React.ReactElement {
       questionCount: requestedForConfig,
       topics: basis === "topic" ? resolvedTopicsSafe() : [],
       difficulty: difficulty || null,
+      generator: pickPaperGeneratorPreference({
+        mode,
+        questionCount: requestedForConfig,
+        available: inventoryAvailable,
+        basis:
+          basis === "full_sim"
+            ? "full_sim"
+            : basis === "topic"
+              ? "topic"
+              : "custom",
+      }),
     })
       .then((avail) => {
         if (!cancelled) setServerAvailability(avail);
@@ -429,6 +532,7 @@ export default function GenerateGovPaper(): React.ReactElement {
       const res = await cancelPaperGenerationJob(job.jobId);
       setJob({ ...job, status: res.status || "cancelled" });
       clearActivePaperJob();
+      syncJobIdInUrl(null);
       toast.message("Generation cancelled.");
     } catch (e) {
       toast.error(formatGovExamOperationError(e));
@@ -462,8 +566,24 @@ export default function GenerateGovPaper(): React.ReactElement {
         difficulty: difficulty || null,
       });
       setServerAvailability(avail);
-      if (avail.blocked && mode === "generated_mock") {
-        toast.error(avail.message);
+      if (avail.blocked && (overrideCount != null ? false : mode === "generated_mock")) {
+        toast.error(
+          inventoryAvailabilityMessage(avail.available) +
+            (avail.customPracticeMax > 0
+              ? " Try Custom Practice Set."
+              : ""),
+        );
+        return;
+      }
+      if (
+        overrideCount == null &&
+        mode === "generated_mock" &&
+        !avail.fullMockAllowed
+      ) {
+        toast.error(
+          inventoryAvailabilityMessage(avail.available) +
+            " Try Custom Practice Set.",
+        );
         return;
       }
       const liveInventory = decideQuestionInventory({
@@ -472,9 +592,7 @@ export default function GenerateGovPaper(): React.ReactElement {
         aiFillAvailable: avail.aiFillAllowed,
       });
       if (!liveInventory.canGenerateRequested) {
-        toast.error(
-          `Only ${liveInventory.available} approved questions are currently available for this configuration.`,
-        );
+        toast.error(inventoryAvailabilityMessage(liveInventory.available));
         return;
       }
     } catch (e) {
@@ -526,16 +644,29 @@ export default function GenerateGovPaper(): React.ReactElement {
         durationMinutes:
           overrideCount != null || mode === "custom_mock" ? durationMinutes : undefined,
         idempotencyKey,
+        generator: pickPaperGeneratorPreference({
+          mode: overrideCount != null ? "custom_mock" : mode,
+          questionCount: requested,
+          available: serverAvailability?.available,
+          basis:
+            basis === "full_sim"
+              ? "full_sim"
+              : basis === "topic"
+                ? "topic"
+                : "custom",
+        }),
       });
       setJob(result);
       if (profile?.id && result.jobId) {
         saveActivePaperJob({ jobId: result.jobId, examId, userId: profile.id });
+        syncJobIdInUrl(result.jobId);
       }
 
       const publicStatus = mapPaperJobPublicStatus(result.status);
       if (publicStatus === "failed_permanent" || publicStatus === "failed_retryable") {
         idempotencyKeyRef.current = null;
         clearActivePaperJob();
+        syncJobIdInUrl(null);
         toast.error(paperJobErrorMessage(result));
         return;
       }
@@ -545,6 +676,7 @@ export default function GenerateGovPaper(): React.ReactElement {
 
       if (terminal === "completed" && current.mockTestId) {
         clearActivePaperJob();
+        syncJobIdInUrl(null);
         const expected =
           basis === "full_sim" ? selected?.pattern?.totalQuestions : questionCount;
         const actual = current.questionCount;
@@ -555,7 +687,7 @@ export default function GenerateGovPaper(): React.ReactElement {
         const custom = current.paperClass === "custom_practice" || (basis !== "full_sim" && short);
         if (basis === "full_sim" && short) {
           toast.error(
-            `Full mock needs ${expected} questions but only ${actual ?? 0} were assembled. Try a Custom Practice Set.`,
+            `Only ${actual ?? 0} approved questions are available. Try Custom Practice Set.`,
           );
           return;
         }
@@ -570,9 +702,11 @@ export default function GenerateGovPaper(): React.ReactElement {
       } else if (terminal === "failed_retryable" || terminal === "failed_permanent" || terminal === "failed") {
         idempotencyKeyRef.current = null;
         clearActivePaperJob();
+        syncJobIdInUrl(null);
         toast.error(paperJobErrorMessage(current));
       } else if (terminal === "cancelled") {
         clearActivePaperJob();
+        syncJobIdInUrl(null);
         toast.message("Generation cancelled.");
       } else {
         toast.message(
@@ -590,8 +724,13 @@ export default function GenerateGovPaper(): React.ReactElement {
     }
   }
 
-  const currentStageIdx = job?.progressStage
-    ? JOB_STAGES.indexOf(job.progressStage as (typeof JOB_STAGES)[number])
+  const currentUserStage = job
+    ? mapProgressToUserStage(job.progressStage, job.status)
+    : null;
+  const currentStageIdx = currentUserStage
+    ? PAPER_JOB_USER_STAGES.indexOf(
+        currentUserStage as (typeof PAPER_JOB_USER_STAGES)[number],
+      )
     : -1;
 
   return (
@@ -651,8 +790,15 @@ export default function GenerateGovPaper(): React.ReactElement {
               {selected && (
                 <div className="space-y-1 text-xs text-muted-foreground">
                   <p>
-                    {selected.family}
-                    {selected.recruitingBody?.name ? ` · ${selected.recruitingBody.name}` : ""}
+                    {selected.shortName && selected.shortName !== selected.name
+                      ? `${selected.shortName} · ${selected.name}`
+                      : selected.name}
+                    {selected.recruitingBody?.name
+                      ? ` · ${selected.recruitingBody.name}`
+                      : ""}
+                    {examCategoryLabel(selected)
+                      ? ` · ${examCategoryLabel(selected)}`
+                      : ""}
                     {selected.stages?.length
                       ? ` · ${selected.stages.length} stage(s)`
                       : ""}
@@ -679,8 +825,8 @@ export default function GenerateGovPaper(): React.ReactElement {
                       </select>
                     </label>
                   )}
-                  {selected.lastVerified && (
-                    <p>Last verified pattern: {selected.lastVerified}</p>
+                  {examVerificationLabel(selected) && (
+                    <p>Verified: {examVerificationLabel(selected)}</p>
                   )}
                   {bank && (
                     <p
@@ -788,8 +934,11 @@ export default function GenerateGovPaper(): React.ReactElement {
                   value={language}
                   onChange={(e) => setLanguage(e.target.value)}
                 >
-                  <option value="en">English</option>
-                  <option value="hi">Hindi</option>
+                  {languageOptions.map((code) => (
+                    <option key={code} value={code}>
+                      {languageOptionLabel(code)}
+                    </option>
+                  ))}
                 </select>
               </label>
               <label className="text-sm space-y-1">
@@ -893,7 +1042,12 @@ export default function GenerateGovPaper(): React.ReactElement {
                 <dt className="text-muted-foreground">Exam</dt>
                 <dd>{selected?.name ?? "—"}</dd>
                 <dt className="text-muted-foreground">Stage</dt>
-                <dd>{selected?.stage?.name ?? selected?.stages[0]?.name ?? "—"}</dd>
+                <dd>
+                  {selected?.stages?.find((s) => s.id === stageId)?.name ??
+                    selected?.stage?.name ??
+                    selected?.stages[0]?.name ??
+                    "—"}
+                </dd>
                 <dt className="text-muted-foreground">Pattern</dt>
                 <dd>{selected?.pattern?.version ?? "—"}</dd>
                 <dt className="text-muted-foreground">Mode</dt>
@@ -908,6 +1062,19 @@ export default function GenerateGovPaper(): React.ReactElement {
                 <dd>{requestedForConfig}</dd>
                 <dt className="text-muted-foreground">Approved inventory</dt>
                 <dd>{formatInventoryCoverage(inventory.available, requestedForConfig)}</dd>
+                {serverAvailability?.generationPlan?.generator && (
+                  <>
+                    <dt className="text-muted-foreground">Backend</dt>
+                    <dd>
+                      {generatorLabel(serverAvailability.generationPlan.generator)}
+                      {serverAvailability.generationPlan.generator === "python_paper_factory"
+                        ? " (long-running AI)"
+                        : serverAvailability.generationPlan.generator === "edge_assembler"
+                          ? " (fast path)"
+                          : ""}
+                    </dd>
+                  </>
+                )}
                 <dt className="text-muted-foreground">Question sources</dt>
                 <dd>{generationSourceSummary(inventory)}</dd>
                 {basis === "topic" && (
@@ -918,8 +1085,17 @@ export default function GenerateGovPaper(): React.ReactElement {
                 )}
                 <dt className="text-muted-foreground">Your credits</dt>
                 <dd>{displayCredits ?? "…"}</dd>
-                <dt className="text-muted-foreground">Operation cost</dt>
-                <dd>{CREATE_EXAM_PAPER_CREDIT_COST}</dd>
+                {canGenerateRequested || customPracticeMax >= 5 ? (
+                  <>
+                    <dt className="text-muted-foreground">Operation cost</dt>
+                    <dd>{CREATE_EXAM_PAPER_CREDIT_COST}</dd>
+                  </>
+                ) : (
+                  <>
+                    <dt className="text-muted-foreground">Operation cost</dt>
+                    <dd>No charge — generation isn’t available for this setup</dd>
+                  </>
+                )}
                 <dt className="text-muted-foreground">Quality checks</dt>
                 <dd>
                   {basis === "topic"
@@ -927,7 +1103,7 @@ export default function GenerateGovPaper(): React.ReactElement {
                     : "Blueprint · uniqueness · approved bank inventory"}
                 </dd>
               </dl>
-              {inventory.reason === "ai_fill" && (
+              {inventory.reason === "ai_fill" && canGenerateRequested && (
                 <p className="text-sm text-muted-foreground">
                   {inventory.available} approved questions are available, so{" "}
                   {inventory.aiQuestions} will be generated by AI against the approved syllabus,
@@ -935,18 +1111,19 @@ export default function GenerateGovPaper(): React.ReactElement {
                   single correct answer and checked against the rest of the paper for duplicates.
                 </p>
               )}
-              {(inventory.reason === "short" || inventory.reason === "empty") && (
+              {showInventoryShortage && (
                 <p className="text-sm text-amber-700 dark:text-amber-400">
-                  Only {inventory.available} approved questions are currently available for this
-                  configuration.
+                  {inventoryAvailabilityMessage(
+                    serverAvailability?.available ?? inventory.available,
+                  )}
                 </p>
               )}
               {serverAvailability && (
                 <p className="text-sm text-muted-foreground" aria-live="polite">
                   Server check — Available: {serverAvailability.available}, Requested:{" "}
                   {serverAvailability.requested}, Missing: {serverAvailability.missing}.
-                  {serverAvailability.blocked
-                    ? " Full mock disabled. Custom Practice Set available up to available count."
+                  {!serverAvailability.fullMockAllowed || serverAvailability.blocked
+                    ? ` Full mock disabled. Custom Practice Set available up to ${serverAvailability.customPracticeMax}.`
                     : ""}
                 </p>
               )}
@@ -954,23 +1131,33 @@ export default function GenerateGovPaper(): React.ReactElement {
               {busy && job && (
                 <div className="space-y-2 mt-4">
                   <ul className="space-y-1.5" aria-live="polite">
-                    {JOB_STAGES.map((s, i) => {
-                      const done = currentStageIdx > i || job.status === "completed";
-                      const active = job.progressStage === s || job.status === s;
+                    {PAPER_JOB_USER_STAGES.map((s, i) => {
+                      const done =
+                        currentStageIdx > i ||
+                        job.status === "completed" ||
+                        currentUserStage === "completed";
+                      const active =
+                        currentUserStage === s ||
+                        (currentUserStage === "failed" && s === "generating_paper" && i === 0);
                       return (
                         <li key={s} className="flex items-center gap-2 text-xs">
                           {done ? (
                             <Check className="h-3.5 w-3.5 text-green-600" />
-                          ) : active ? (
+                          ) : active && !isPaperJobTerminal(job.status) ? (
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
                           ) : (
                             <span className="h-3.5 w-3.5 rounded-full border border-border" />
                           )}
-                          {STAGE_LABEL[s] ?? s}
+                          {PAPER_JOB_STAGE_LABEL[s] ?? s}
                         </li>
                       );
                     })}
                   </ul>
+                  {currentUserStage === "failed" && (
+                    <p className="text-sm text-amber-700 dark:text-amber-400">
+                      {paperJobErrorMessage(job)}
+                    </p>
+                  )}
                   {!isPaperJobTerminal(job.status) && (
                     <Button
                       type="button"
@@ -998,7 +1185,7 @@ export default function GenerateGovPaper(): React.ReactElement {
               <Button onClick={() => setStep((s) => Math.min(3, s + 1))} disabled={!examId}>
                 Continue
               </Button>
-            ) : inventory.canGenerateRequested ? (
+            ) : canGenerateRequested ? (
               <Button
                 onClick={() => void handleGenerate()}
                 disabled={busy || !stageId}
@@ -1016,8 +1203,8 @@ export default function GenerateGovPaper(): React.ReactElement {
               </Button>
             ) : (
               <Button
-                onClick={() => void handleGenerate(inventory.customPracticeMax)}
-                disabled={busy || !stageId || inventory.customPracticeMax < 5}
+                onClick={() => void handleGenerate(customPracticeMax)}
+                disabled={busy || !stageId || customPracticeMax < 5}
               >
                 {busy ? (
                   <>
@@ -1025,7 +1212,7 @@ export default function GenerateGovPaper(): React.ReactElement {
                     Generating…
                   </>
                 ) : (
-                  customPracticeSetLabel(inventory.customPracticeMax)
+                  customPracticeSetLabel(customPracticeMax)
                 )}
               </Button>
             )}
@@ -1039,10 +1226,14 @@ export default function GenerateGovPaper(): React.ReactElement {
           <p>
             Negative mark: {selected?.pattern?.negativeMark ?? "—"}
           </p>
-          <p>Est. credits: {CREATE_EXAM_PAPER_CREDIT_COST}</p>
+          {canGenerateRequested || customPracticeMax >= 5 ? (
+            <p>Est. credits: {CREATE_EXAM_PAPER_CREDIT_COST}</p>
+          ) : (
+            <p>Est. credits: none — generation unavailable</p>
+          )}
           <p>Your credits: {displayCredits ?? "…"}</p>
           <p>Bank: {formatInventoryCoverage(inventory.available, requestedForConfig)}</p>
-          {inventory.mode === "ai_assisted" && (
+          {inventory.mode === "ai_assisted" && canGenerateRequested && (
             <p>AI-generated: {inventory.aiQuestions} questions</p>
           )}
           <p className="pt-2 border-t border-border">

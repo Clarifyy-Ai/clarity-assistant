@@ -45,7 +45,12 @@ class Settings(BaseSettings):
     internal_auth_previous_secret: str = Field("", alias="DOCUMENT_INTELLIGENCE_AUTH_PREVIOUS_SECRET")
     internal_auth_max_skew_seconds: int = Field(300, alias="DOCUMENT_INTELLIGENCE_AUTH_MAX_SKEW_SECONDS")
     internal_auth_replay_ttl_seconds: int = Field(600, alias="DOCUMENT_INTELLIGENCE_AUTH_REPLAY_TTL_SECONDS")
-    internal_max_request_bytes: int = Field(1_048_576, alias="DOCUMENT_INTELLIGENCE_MAX_REQUEST_BYTES")
+    internal_max_request_bytes: int = Field(5_242_880, alias="DOCUMENT_INTELLIGENCE_MAX_REQUEST_BYTES")
+
+    # When true (default), drain document_processing_jobs inside the web process.
+    document_intelligence_embedded_worker: bool = Field(
+        True, alias="DOCUMENT_INTELLIGENCE_EMBEDDED_WORKER"
+    )
 
     # Daily scrape (runs while this process is up; pg_cron covers hosted Edge)
     scrape_daily_enabled: bool = Field(True, alias="SCRAPE_DAILY_ENABLED")
@@ -56,6 +61,18 @@ class Settings(BaseSettings):
     # Set PAPER_FACTORY_EMBEDDED_WORKER=false to run a dedicated Background Worker.
     paper_factory_embedded_worker: bool = Field(
         True, alias="PAPER_FACTORY_EMBEDDED_WORKER"
+    )
+
+    # When true (default), start the document-intelligence worker loop inside
+    # the web process if worker_loop is available. Set false for a dedicated worker.
+    document_worker_embedded: bool = Field(
+        True, alias="DOCUMENT_WORKER_EMBEDDED"
+    )
+    document_worker_poll_seconds: float = Field(
+        5.0, alias="DOCUMENT_WORKER_POLL_SECONDS"
+    )
+    document_worker_lease_seconds: int = Field(
+        180, alias="DOCUMENT_WORKER_LEASE_SECONDS"
     )
 
     @field_validator("cors_origins", mode="before")

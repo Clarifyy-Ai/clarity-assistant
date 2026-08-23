@@ -120,12 +120,15 @@ describe("query filter escaping", () => {
     expect(escapeIlikePattern("(x)")).toBe("\\(x\\)");
   });
 
-  it("searches name, code, description, and legacy exam type", () => {
+  it("searches short_name, name, code, jurisdiction, and related columns", () => {
     const filter = buildExamOrFilter("ssc cgl");
+    expect(filter).toContain("short_name.ilike.%ssc cgl%");
     expect(filter).toContain("name.ilike.%ssc cgl%");
     expect(filter).toContain("code.ilike.%ssc cgl%");
     expect(filter).toContain("description.ilike.%ssc cgl%");
     expect(filter).toContain("legacy_exam_type.ilike.%ssc cgl%");
+    expect(filter).toContain("jurisdiction.ilike.%ssc cgl%");
+    expect(filter).toContain("state_code.ilike.%ssc cgl%");
   });
 });
 
@@ -153,6 +156,18 @@ describe("exam search ranking", () => {
         { code: "X", name: "Banking", aliases: ["ssc"] },
       ],
       "SSC_CGL",
+    );
+    expect(ranked[0]?.code).toBe("SSC_CGL");
+  });
+
+  it("ranks exact short_name like exact code", () => {
+    const ranked = rankExamResults(
+      [
+        { code: "OTHER", shortName: "Other", name: "CGL somewhere", aliases: [] },
+        { code: "SSC_CGL", shortName: "SSC CGL", name: "SSC Combined Graduate Level", aliases: [] },
+        { code: "X", shortName: "Bank", name: "Banking", aliases: ["SSC CGL"] },
+      ],
+      "SSC CGL",
     );
     expect(ranked[0]?.code).toBe("SSC_CGL");
   });

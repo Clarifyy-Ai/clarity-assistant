@@ -48,22 +48,30 @@ type ExamRow = {
   id: string;
   code: string;
   name: string;
+  short_name: string | null;
   family: string;
   description: string | null;
   legacy_exam_type: string | null;
+  jurisdiction: string | null;
+  state_code: string | null;
+  region: string | null;
+  verified_at: string | null;
   recruiting_bodies:
-    | { id: string; code: string; name: string; official_url: string | null }
-    | { id: string; code: string; name: string; official_url: string | null }[]
+    | { id: string; code: string; name: string; official_url: string | null; jurisdiction?: string | null }
+    | { id: string; code: string; name: string; official_url: string | null; jurisdiction?: string | null }[]
     | null;
   gov_exam_aliases: { alias: string }[] | null;
   gov_exam_stages: { id: string; code: string; name: string; sort_order: number }[] | null;
+  gov_exam_languages?: { language_code: string }[] | null;
 };
 
 const EXAM_SELECT = `
-  id, code, name, family, description, legacy_exam_type,
-  recruiting_bodies ( id, code, name, official_url ),
+  id, code, name, short_name, family, description, legacy_exam_type,
+  jurisdiction, state_code, region, verified_at,
+  recruiting_bodies ( id, code, name, official_url, jurisdiction ),
   gov_exam_aliases ( alias ),
-  gov_exam_stages ( id, code, name, sort_order )
+  gov_exam_stages ( id, code, name, sort_order ),
+  gov_exam_languages ( language_code )
 `;
 
 function json(req: Request, payload: unknown, status = 200) {
@@ -104,25 +112,44 @@ function mapExam(row: ExamRow) {
   const stages = [...(row.gov_exam_stages ?? [])].sort(
     (a, b) => a.sort_order - b.sort_order,
   );
+  const languages = [
+    ...new Set(
+      (row.gov_exam_languages ?? [])
+        .map((l) => String(l.language_code ?? "").trim())
+        .filter(Boolean),
+    ),
+  ];
+  const shortName = row.short_name?.trim() ||
+    (row.code ? row.code.replace(/_/g, " ") : null);
+  const jurisdiction = row.jurisdiction ??
+    recruitingBody?.jurisdiction ??
+    null;
 
   return {
     resultType: "official_exam" as const,
     examId: row.id,
     code: row.code,
+    shortName,
     name: row.name,
     family: row.family,
     description: row.description,
     legacyExamType: row.legacy_exam_type,
+    jurisdiction,
+    stateCode: row.state_code,
+    region: row.region,
+    verifiedAt: row.verified_at,
     recruitingBody: recruitingBody
       ? {
         id: recruitingBody.id,
         code: recruitingBody.code,
         name: recruitingBody.name,
         officialUrl: recruitingBody.official_url,
+        jurisdiction: recruitingBody.jurisdiction ?? null,
       }
       : null,
     aliases,
     stages,
+    languages,
     primaryActions: ["view_exam", "generate_mock", "start_preparation"] as const,
   };
 }
@@ -202,10 +229,12 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
       .maybeSingle();
     const isIndiaUser = resolveIsIndiaProfile(profileRow);
 
-    // Alias hits cannot be expressed as a PostgREST filter on gov_exams, so
-    // resolve matching exam ids first and union them into the main filter.
+    // Alias / stage / body / cycle year hits cannot all be expressed as a single
+    // PostgREST filter on gov_exams — resolve matching exam ids then union.
     let aliasExamIds: string[] = [];
     let bodyExamIds: string[] = [];
+    let stageExamIds: string[] = [];
+    let cycleExamIds: string[] = [];
     if (q) {
       const like = `%${escapeIlikePattern(q)}%`;
       const { data: aliasRows, error: aliasError } = await db
@@ -224,7 +253,6 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
         ),
       ];
 
-      // Recruiting body name/code matches — union exam ids (body is a relation).
       const { data: bodyRows, error: bodyError } = await db
         .from("recruiting_bodies")
         .select("id")
@@ -253,10 +281,48 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
           }
         }
       }
+
+      // Stage name / code matches (e.g. "Tier I", "Prelims").
+      const { data: stageRows, error: stageErr } = await db
+        .from("gov_exam_stages")
+        .select("exam_id")
+        .or(`name.ilike.${like},code.ilike.${like}`)
+        .limit(200);
+      if (stageErr) {
+        console.warn("[search-exams] stages lookup:", stageErr.message);
+      } else {
+        stageExamIds = [
+          ...new Set(
+            (stageRows ?? [])
+              .map((row) => String((row as { exam_id?: string }).exam_id ?? ""))
+              .filter(Boolean),
+          ),
+        ];
+      }
+
+      // Optional year match via exam cycles (e.g. "2024").
+      const yearMatch = /^20\d{2}$/.test(q.trim()) ? Number(q.trim()) : null;
+      if (yearMatch) {
+        const { data: cycleRows, error: cycleErr } = await db
+          .from("gov_exam_cycles")
+          .select("exam_id")
+          .eq("year", yearMatch)
+          .eq("review_state", "approved")
+          .limit(200);
+        if (cycleErr) {
+          console.warn("[search-exams] cycles lookup:", cycleErr.message);
+        } else {
+          cycleExamIds = [
+            ...new Set(
+              (cycleRows ?? [])
+                .map((row) => String((row as { exam_id?: string }).exam_id ?? ""))
+                .filter(Boolean),
+            ),
+          ];
+        }
+      }
     }
 
-    // Filtering and paging happen in PostgREST so a large registry never gets
-    // pulled into the function.
     let query = db
       .from("gov_exams")
       .select(EXAM_SELECT, { count: "exact" })
@@ -275,7 +341,14 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
       }
     }
     if (q) {
-      const idUnion = [...new Set([...aliasExamIds, ...bodyExamIds])];
+      const idUnion = [
+        ...new Set([
+          ...aliasExamIds,
+          ...bodyExamIds,
+          ...stageExamIds,
+          ...cycleExamIds,
+        ]),
+      ];
       query = query.or(
         idUnion.length > 0
           ? `${buildExamOrFilter(q)},id.in.(${idUnion.join(",")})`
@@ -283,7 +356,6 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
       );
     }
 
-    // Fetch a wider window then rank in-memory so relevance beats alpha order.
     const fetchSize = Math.min(MAX_PAGE_SIZE * 3, 120);
     const { data: exams, error, count } = await query
       .order("name")
@@ -298,7 +370,7 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
     const ranked = rankExamResults(mapped, q);
     const results = ranked.slice(pageRequest.from, pageRequest.to + 1);
 
-    // No matches is a successful empty result, never an error.
+    // No matches is a successful empty result, never an error / never invent exams.
     if (results.length === 0) {
       return json(req, {
         success: true,
@@ -326,10 +398,10 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
       }
     }
 
-    // Enrichment is bounded by pageSize (<= MAX_PAGE_SIZE), not by the registry.
     const enriched = await Promise.all(
       results.map(async (r) => {
         const stage = r.stages[0];
+        const registryLanguages = r.languages ?? [];
         if (!stage) {
           const emptyBank = readinessByExam.get(r.examId) ?? {
             approvedPublicCount: 0,
@@ -341,9 +413,11 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
           return {
             ...r,
             pattern: null,
-            languages: [] as string[],
-            lastVerified: null as string | null,
+            languages: registryLanguages,
+            lastVerified: r.verifiedAt,
+            verifiedAt: r.verifiedAt,
             bankReadiness: emptyBank,
+            approvedQuestionCount: emptyBank.approvedPublicCount,
           };
         }
         const { data: pat } = await db
@@ -399,6 +473,11 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
           };
         }
 
+        const patternLanguages = (pat?.languages as string[] | null) ?? [];
+        const languages = [
+          ...new Set([...registryLanguages, ...patternLanguages].filter(Boolean)),
+        ];
+
         return {
           ...r,
           pattern: pat
@@ -411,10 +490,12 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
               sourceUrl: pat.source_url,
             }
             : null,
-          languages: (pat?.languages as string[] | null) ?? [],
-          lastVerified: pat?.effective_date ?? null,
+          languages,
+          lastVerified: r.verifiedAt ?? pat?.effective_date ?? null,
+          verifiedAt: r.verifiedAt ?? pat?.effective_date ?? null,
           stage,
           bankReadiness,
+          approvedQuestionCount: bankReadiness.approvedPublicCount,
         };
       }),
     );

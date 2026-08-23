@@ -18,7 +18,12 @@ export type GovExamSearchResult = {
   examId: string;
   code: string;
   name: string;
+  /** Optional short display name from the registry. */
+  shortName?: string | null;
   family: string;
+  /** State / category code when the exam is jurisdiction-scoped. */
+  stateCode?: string | null;
+  jurisdiction?: string | null;
   description: string | null;
   legacyExamType: string | null;
   recruitingBody: {
@@ -39,7 +44,10 @@ export type GovExamSearchResult = {
     sourceUrl: string | null;
   } | null;
   languages: string[];
+  /** ISO date/time when the exam pattern was last verified (legacy alias). */
   lastVerified: string | null;
+  /** Preferred verification timestamp when the API provides it. */
+  verifiedAt?: string | null;
   bankReadiness?: GovExamBankReadiness | null;
   primaryActions: readonly string[];
 };
@@ -177,7 +185,13 @@ export function mapGovSearchError(err: unknown): {
   code: "RATE_LIMITED" | "INVALID_QUERY" | "SEARCH_UNAVAILABLE" | "SEARCH_FAILED";
   message: string;
 } {
-  const code = String((err as { code?: string } | null)?.code ?? "").toUpperCase();
+  const code = String(
+    (err as { code?: string } | null)?.code ??
+      (err instanceof Error && "code" in err
+        ? (err as Error & { code?: string }).code
+        : "") ??
+      "",
+  ).toUpperCase();
   const status = (err as { status?: number } | null)?.status;
   if (code === "RATE_LIMITED" || code === "RATE_LIMIT_BACKEND_UNAVAILABLE") {
     return {
@@ -191,10 +205,16 @@ export function mapGovSearchError(err: unknown): {
       message: "That search query isn't valid. Try a shorter keyword.",
     };
   }
-  if (isSearchUnavailableError(err) || status === 502 || status === 503) {
+  if (
+    isSearchUnavailableError(err) ||
+    status === 502 ||
+    status === 503 ||
+    code === "SERVICE_UNAVAILABLE" ||
+    code === "SEARCH_SERVICE_UNAVAILABLE"
+  ) {
     return {
       code: "SEARCH_UNAVAILABLE",
-      message: "Exam search is temporarily unavailable.",
+      message: "Exam search is temporarily unavailable. Please try again.",
     };
   }
   return {
@@ -216,6 +236,8 @@ export type CreateExamPaperRequest = {
   currentAffairsCutoff?: string;
   randomSeed?: string;
   idempotencyKey: string;
+  /** auto (default) | edge | python — server picks runtime when auto. */
+  generator?: "auto" | "edge" | "python";
 };
 
 export type PaperJobResult = {
@@ -338,10 +360,14 @@ export type GovExamDetails = {
     examId: string;
     code: string;
     name: string;
+    shortName?: string | null;
     family: string;
+    stateCode?: string | null;
+    jurisdiction?: string | null;
     description: string | null;
     legacyExamType: string | null;
     aliases: string[];
+    verifiedAt?: string | null;
   };
   body: {
     id: string;
@@ -518,6 +544,14 @@ export type ExamPaperAvailability = {
   blocked: boolean;
   blockCode: string | null;
   message: string;
+  generationPlan?: {
+    kind: string;
+    generator: string;
+    bankQuestions: number;
+    aiQuestions: number;
+    requested: number;
+    paperClass: string;
+  };
   pattern?: {
     totalQuestions: number;
     totalMarks: number;
@@ -535,6 +569,7 @@ export async function checkExamPaperAvailability(params: {
   questionCount?: number;
   topics?: string[];
   difficulty?: "EASY" | "MEDIUM" | "HARD" | null;
+  generator?: "auto" | "edge" | "python";
 }): Promise<ExamPaperAvailability> {
   return fetchEdgeJson("check-exam-paper-availability", {
     examId: params.examId,
@@ -544,6 +579,7 @@ export async function checkExamPaperAvailability(params: {
     questionCount: params.questionCount,
     topics: params.topics ?? [],
     difficulty: params.difficulty ?? null,
+    generator: params.generator,
   });
 }
 

@@ -12,6 +12,7 @@ type Tool = "pen" | "eraser";
 
 export interface WhiteboardHandle {
   loadPreset: (presetId: string) => void;
+  loadShapes: (shapes: PresetShape[]) => void;
   clear: () => void;
 }
 
@@ -81,6 +82,7 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const drawingRef = useRef(false);
     const lastRef = useRef<{ x: number; y: number } | null>(null);
+    const hasContentRef = useRef(false);
     const [tool, setTool] = useState<Tool>("pen");
     const [color, setColor] = useState("#a78bfa");
 
@@ -93,25 +95,33 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.restore();
+      hasContentRef.current = false;
     };
 
-    const drawPreset = (presetId: string) => {
-      const preset = getSystemDesignPreset(presetId);
+    const drawShapes = (shapes: PresetShape[]) => {
       const canvas = canvasRef.current;
-      if (!preset || !canvas) return;
+      if (!canvas) return;
 
       clearCanvas();
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
 
       const dpr = window.devicePixelRatio || 1;
-      for (const shape of preset.shapes) {
+      for (const shape of shapes) {
         drawPresetShape(ctx, shape, dpr);
       }
+      hasContentRef.current = shapes.length > 0;
+    };
+
+    const drawPreset = (presetId: string) => {
+      const preset = getSystemDesignPreset(presetId);
+      if (!preset) return;
+      drawShapes(preset.shapes);
     };
 
     useImperativeHandle(ref, () => ({
       loadPreset: drawPreset,
+      loadShapes: drawShapes,
       clear: clearCanvas,
     }));
 
@@ -121,7 +131,7 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(
       const resize = () => {
         const rect = canvas.parentElement!.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
-        const snap = canvas.toDataURL();
+        const snap = hasContentRef.current ? canvas.toDataURL() : "";
         canvas.width = rect.width * dpr;
         canvas.height = height * dpr;
         canvas.style.width = `${rect.width}px`;
@@ -130,9 +140,11 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(
         ctx.scale(dpr, dpr);
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
-        const img = new Image();
-        img.onload = () => ctx.drawImage(img, 0, 0, rect.width, height);
-        img.src = snap;
+        if (snap) {
+          const img = new Image();
+          img.onload = () => ctx.drawImage(img, 0, 0, rect.width, height);
+          img.src = snap;
+        }
       };
       resize();
       const ro = new ResizeObserver(resize);
@@ -164,6 +176,7 @@ export const Whiteboard = forwardRef<WhiteboardHandle, WhiteboardProps>(
       ctx.lineTo(pos.x, pos.y);
       ctx.stroke();
       lastRef.current = pos;
+      hasContentRef.current = true;
     };
 
     const onUp = () => {

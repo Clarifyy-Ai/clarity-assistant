@@ -28,7 +28,14 @@ from app.paper_factory.models import (
 
 log = get_logger("paper_factory.repository")
 
-TERMINAL_JOB_STATUSES = ("completed", "failed", "cancelled", "expired")
+TERMINAL_JOB_STATUSES = (
+    "completed",
+    "failed",
+    "failed_permanent",
+    "cancelled",
+    "expired",
+)
+# Note: failed_retryable stays claimable until attempt_count hits the max.
 
 
 @dataclass(frozen=True)
@@ -497,11 +504,11 @@ class PaperRepository:
                     "attempt_phase": "NOT_STARTED",
                     "time_limit_minutes": blueprint.duration_minutes,
                     "config": {
-                        "exam_id": blueprint.exam.exam_id,
-                        "exam_code": blueprint.exam.code,
                         "exam_type": blueprint.exam.legacy_exam_type
                         or blueprint.exam.code,
-                        "stage_id": blueprint.exam.stage_id,
+                        "gov_exam_id": blueprint.exam.exam_id,
+                        "gov_stage_id": blueprint.exam.stage_id,
+                        "exam_code": blueprint.exam.code,
                         "stage_name": blueprint.exam.stage_name,
                         "language": blueprint.language,
                         "mode": blueprint.mode,
@@ -509,11 +516,14 @@ class PaperRepository:
                         "question_count": len(question_ids),
                         "requested_question_count": blueprint.total_questions,
                         "total_marks": blueprint.total_marks,
+                        "marks_positive": blueprint.marks_per_question,
+                        "marks_negative": blueprint.negative_mark,
                         "marks_per_question": blueprint.marks_per_question,
                         "negative_mark": blueprint.negative_mark,
                         "duration_minutes": blueprint.duration_minutes,
                         "sections": [s.to_json() for s in blueprint.sections],
                         "generator": "python_paper_factory",
+                        "generation_job_id": job_id,
                         "disclaimer": blueprint.label,
                     },
                 }
@@ -562,6 +572,13 @@ class PaperRepository:
                 retryable=True,
             )
         paper_id = str(paper_rows[0]["id"])
+
+        # Link paper id back onto the attempt config (Edge/TestResults expect gov_paper_id).
+        mock_config = dict(mock_rows[0].get("config") or {})
+        mock_config["gov_paper_id"] = paper_id
+        self.db.table("mock_tests").update({"config": mock_config}).eq(
+            "id", mock_test_id
+        ).execute()
 
         links = [
             {
@@ -700,10 +717,11 @@ class PaperRepository:
         self, job_id: str, *, code: str, message: str, retryable: bool
     ) -> None:
         now = datetime.now(timezone.utc).isoformat()
+        status = "failed_retryable" if retryable else "failed_permanent"
         self.db.table("gov_paper_generation_jobs").update(
             {
-                "status": "failed",
-                "progress_stage": "failed",
+                "status": status,
+                "progress_stage": status,
                 "error_code": code,
                 "error_message": message[:500],
                 "retryable": retryable,

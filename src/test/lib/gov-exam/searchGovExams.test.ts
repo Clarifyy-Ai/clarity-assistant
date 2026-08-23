@@ -83,7 +83,7 @@ describe("searchGovExams", () => {
     expect(isSearchUnavailableError(err)).toBe(true);
     expect(mapGovSearchError(err)).toEqual({
       code: "SEARCH_UNAVAILABLE",
-      message: "Exam search is temporarily unavailable.",
+      message: "Exam search is temporarily unavailable. Please try again.",
     });
   });
 

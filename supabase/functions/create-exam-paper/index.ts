@@ -22,6 +22,7 @@ import { countEligibleGovQuestions } from "../_shared/govQuestionInventory.ts";
 import {
   blockedPlanPayload,
   decideGenerationPlan,
+  parseGeneratorPreference,
   planSummary,
 } from "../_shared/govGenerationPlan.ts";
 import {
@@ -29,6 +30,11 @@ import {
   checkGovExamAttemptLimit,
 } from "../_shared/govAttemptLimits.ts";
 import { isUniqueViolation } from "../_shared/postgresErrors.ts";
+import {
+  isPythonGovExamConfigured,
+  pythonGovAvailability,
+  pythonGovProcessJob,
+} from "../_shared/pythonGovExamClient.ts";
 
 const COST = creditCost("create_mock_test");
 
@@ -52,6 +58,7 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
   if (cors) return cors;
 
   const db = createServiceClient();
+  const correlationId = req.headers.get("x-request-id")?.trim() || crypto.randomUUID();
 
   try {
     const auth = await authenticateRequest(req);
@@ -124,6 +131,7 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
         errorCode: existing.error_code,
         progressStage: existing.progress_stage,
         idempotentReplay: true,
+        correlationId,
       }, existing.status === "completed" ? 200 : 202);
     }
 
@@ -222,27 +230,84 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
         ? Math.min(200, Math.max(5, Math.floor(requestedCountRaw)))
         : Number(pattern.total_questions) || 0;
 
-    const inventory = await countEligibleGovQuestions(db, {
-      exam: {
-        code: exam.code as string | null,
-        name: exam.name as string | null,
-        legacy_exam_type: exam.legacy_exam_type as string | null,
-      },
-    });
+    const topics = Array.isArray((body as Record<string, unknown>).topics)
+      ? ((body as Record<string, unknown>).topics as unknown[])
+        .map((t) => String(t).trim())
+        .filter(Boolean)
+        .slice(0, 20)
+      : [];
 
-    // Decide bank-only vs AI-assisted before charging anything. A short bank is only
-    // fatal when the caller cannot generate the shortfall.
+    const difficultyRaw = String((body as Record<string, unknown>).difficulty ?? "").toUpperCase();
+    const difficulty =
+      difficultyRaw === "EASY" || difficultyRaw === "MEDIUM" || difficultyRaw === "HARD"
+        ? difficultyRaw
+        : null;
+
+    let available = 0;
+    let usedPythonInventory = false;
+    if (isPythonGovExamConfigured()) {
+      const py = await pythonGovAvailability({
+        exam_id: examId,
+        stage_id: stageId,
+        language,
+        question_count: requestedCount,
+        topics,
+        difficulty,
+        correlation_id: correlationId,
+      });
+      if (py.ok) {
+        available = py.data.available;
+        usedPythonInventory = true;
+        console.log(JSON.stringify({
+          tag: "[GOV_EXAM] create_availability_python",
+          correlation_id: correlationId,
+          available,
+          requested: requestedCount,
+        }));
+      } else {
+        console.warn(JSON.stringify({
+          tag: "[GOV_EXAM] create_availability_python_fallback",
+          correlation_id: correlationId,
+          code: py.error.code,
+        }));
+      }
+    }
+    if (!usedPythonInventory) {
+      const inventory = await countEligibleGovQuestions(db, {
+        exam: {
+          code: exam.code as string | null,
+          name: exam.name as string | null,
+          legacy_exam_type: exam.legacy_exam_type as string | null,
+        },
+        language,
+        topics: topics.length ? topics : null,
+        difficulty,
+      });
+      available = inventory.available;
+    }
+
+    const pythonConfigured = isPythonGovExamConfigured();
+    // Decide bank-only vs AI-assisted before charging anything.
     const plan = decideGenerationPlan({
       requested: requestedCount,
-      available: inventory.available,
+      available,
       mode,
       canUseAi: hasCapability(profile?.plan_id, "gov_exam_ai_fill"),
-      preferPythonFactory: Deno.env.get("PAPER_FACTORY_WORKER") === "1",
+      generatorPreference: parseGeneratorPreference(body),
+      pythonWorkerEnabled:
+        pythonConfigured || Deno.env.get("PAPER_FACTORY_WORKER") === "1",
     });
 
     if (plan.kind === "blocked") {
       const payload = blockedPlanPayload(plan);
-      return json(req, payload, payload.code === "CAPABILITY_REQUIRED" ? 403 : 409);
+      console.log(JSON.stringify({
+        tag: "[GOV_EXAM] create_blocked",
+        correlation_id: correlationId,
+        code: payload.code,
+        available,
+        requested: requestedCount,
+      }));
+      return json(req, { ...payload, correlationId }, payload.code === "CAPABILITY_REQUIRED" ? 403 : 409);
     }
 
     const creditResult = await deductCreditsAtomic({
@@ -255,6 +320,10 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
     if (!creditResult?.success) {
       return creditDenialResponse(req, creditResult, COST);
     }
+
+    const dispatchPython =
+      plan.generator === "python_paper_factory" ||
+      (plan.kind === "bank_only" && pythonConfigured);
 
     const { data: job, error: jobErr } = await db
       .from("gov_paper_generation_jobs")
@@ -270,8 +339,11 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
           ...(body as Record<string, unknown>),
           skipAiFill: plan.skipAiFill,
           allowAiFill: !plan.skipAiFill,
-          generator: plan.generator,
+          generator: dispatchPython && pythonConfigured
+            ? "python_paper_factory"
+            : plan.generator,
           generationPlan: planSummary(plan),
+          correlationId,
         },
         status: "queued",
         progress_stage: "queued",
@@ -305,6 +377,7 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
             errorCode: replay.error_code,
             progressStage: replay.progress_stage,
             idempotentReplay: true,
+            correlationId,
           }, replay.status === "completed" ? 200 : 202);
         }
       }
@@ -314,14 +387,67 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
         cost: COST,
         reason: "refund_create_exam_paper_job",
       }).catch(() => {});
-      return json(req, { error: "Failed to create job", code: "PAPER_GENERATION_FAILED" }, 500);
+      return json(req, {
+        error: "Failed to create job",
+        code: "PAPER_GENERATION_FAILED",
+        correlationId,
+      }, 500);
     }
 
     const jobId = job.id as string;
     const workerId = newWorkerId("create");
 
-    // Heavy AI generation can be delegated to the Python paper factory worker, which
-    // is not bound by Edge execution limits. The job stays queued for it to claim.
+    console.log(JSON.stringify({
+      tag: "[GOV_EXAM] job_enqueued",
+      correlation_id: correlationId,
+      job_id: jobId,
+      generator: dispatchPython && pythonConfigured
+        ? "python_paper_factory"
+        : plan.generator,
+      plan_kind: plan.kind,
+    }));
+
+    // Invoke Render FastAPI so jobs are not left only for DB polling.
+    if (dispatchPython && pythonConfigured) {
+      const dispatch = pythonGovProcessJob({
+        job_id: jobId,
+        correlation_id: correlationId,
+      }).then((res) => {
+        console.log(JSON.stringify({
+          tag: "[GOV_EXAM] process_job_dispatched",
+          correlation_id: correlationId,
+          job_id: jobId,
+          ok: res.ok,
+          code: res.ok ? "accepted" : res.error.code,
+        }));
+      }).catch((err) => {
+        console.error(JSON.stringify({
+          tag: "[GOV_EXAM] process_job_dispatch_error",
+          correlation_id: correlationId,
+          job_id: jobId,
+          error: err instanceof Error ? err.message : String(err),
+        }));
+      });
+
+      scheduleWithWaitUntil(dispatch);
+
+      return json(req, {
+        jobId,
+        status: "queued",
+        progressStage: "queued",
+        creditsCharged: COST,
+        balanceAfter: creditResult.balanceAfter,
+        generationPlan: planSummary({
+          ...plan,
+          generator: "python_paper_factory",
+        }),
+        async: true,
+        correlationId,
+        code: "JOB_QUEUED",
+      }, 202);
+    }
+
+    // Python preferred by plan but HTTP not configured — leave queued for DB worker.
     if (plan.generator === "python_paper_factory") {
       return json(req, {
         jobId,
@@ -331,13 +457,14 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
         balanceAfter: creditResult.balanceAfter,
         generationPlan: planSummary(plan),
         async: true,
+        correlationId,
+        code: "JOB_QUEUED",
       }, 202);
     }
 
     const runJob = () =>
       processPaperGenerationJobById(jobId, { workerId, userId: user.id });
 
-    // Prefer background processing via EdgeRuntime.waitUntil; fall back to inline.
     const scheduled = scheduleWithWaitUntil(runJob());
     if (scheduled) {
       return json(req, {
@@ -348,10 +475,11 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
         balanceAfter: creditResult.balanceAfter,
         generationPlan: planSummary(plan),
         async: true,
+        correlationId,
+        code: "JOB_QUEUED",
       }, 202);
     }
 
-    // Backward compatible: process inline when waitUntil is unavailable.
     const result = await runJob();
     if (result.ok) {
       return json(req, {
@@ -367,6 +495,8 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
         creditsCharged: COST,
         generationPlan: planSummary(plan),
         async: false,
+        correlationId,
+        code: "COMPLETED",
       }, 202);
     }
 
@@ -377,6 +507,8 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
         errorCode: result.errorCode,
         error: result.error,
         async: false,
+        correlationId,
+        code: result.errorCode,
       }, 202);
     }
 
@@ -388,9 +520,15 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
       available: result.available,
       required: result.required,
       async: false,
+      correlationId,
+      code: result.errorCode,
     }, result.httpStatus ?? 500);
   } catch (err) {
     console.error("[create-exam-paper] Error:", err);
-    return json(req, { error: "Internal server error", code: "INTERNAL_ERROR" }, 500);
+    return json(req, {
+      error: "Internal server error",
+      code: "INTERNAL_ERROR",
+      correlationId,
+    }, 500);
   }
 }));

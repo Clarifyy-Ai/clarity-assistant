@@ -3,7 +3,7 @@
  */
 
 import { ApiClientError } from "@/lib/api/apiClient";
-import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { fetchDeepgramTokenBounded, isDeepgramTokenBlocked } from "@/lib/audio/deepgramToken";
 import { SttState } from "@/lib/audio/precheckStates";
 
 export const STT_HEALTH_TIMEOUT_MS = 4_000;
@@ -34,14 +34,14 @@ export function classifySttFailure(err: unknown): SttHealthResult {
     return {
       state: SttState.STT_UNAVAILABLE,
       status,
-      message: "Transcription service is temporarily unavailable.",
+      message: "Transcription unavailable.",
     };
   }
 
   return {
     state: SttState.STT_ERROR,
     status,
-    message: "Transcription service check failed.",
+    message: "Transcription unavailable.",
   };
 }
 
@@ -52,22 +52,29 @@ export async function checkSttHealth(options?: {
 }): Promise<SttHealthResult> {
   const timeoutMs = options?.timeoutMs ?? STT_HEALTH_TIMEOUT_MS;
   try {
+    if (isDeepgramTokenBlocked()) {
+      return {
+        state: SttState.STT_UNAVAILABLE,
+        message: "Transcription unavailable.",
+      };
+    }
+
     const data = options?.fetchToken
       ? await options.fetchToken()
-      : await fetchEdgeJson<TokenResponse>("deepgram-token", {}, { timeoutMs, signal: options?.signal });
+      : await fetchDeepgramTokenBounded({ signal: options?.signal });
 
     if (data?.token) {
       return {
         state: SttState.STT_READY,
         status: 200,
-        message: "Transcription service ready",
+        message: "Transcription ready",
       };
     }
 
     return {
       state: SttState.STT_UNAVAILABLE,
       status: 200,
-      message: "Transcription service is temporarily unavailable.",
+      message: "Transcription unavailable.",
     };
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {

@@ -11,6 +11,14 @@ verify_jwt = false
 [functions.health]
 verify_jwt = false
 
+# Authenticated hybrid Edge + Python diagnostics (no secrets / URLs exposed).
+[functions.hybrid-health]
+verify_jwt = true
+
+# Authenticated Edge → Python ping for production verification.
+[functions.hybrid-ping]
+verify_jwt = true
+
 [functions.stripe-webhook]
 verify_jwt = false
 

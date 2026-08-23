@@ -13,6 +13,9 @@ import {
   resolveUploadMime,
 } from "../_shared/uploadValidation.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
+import { creditDenialResponse } from "../_shared/creditAuthority.ts";
+import { callPythonProcess } from "../_shared/pythonClient.ts";
+import { executeHybridOperation } from "../_shared/hybridExecute.ts";
 import JSZip from "https://esm.sh/jszip@3.10.1";
 
 const RESUME_PARSE_COST = creditCost("resume_analysis");
@@ -94,6 +97,93 @@ function normalizeResumeParsed(obj: any): Record<string, unknown> | null {
 
 function isValidResumeSchema(obj: any): boolean {
   return normalizeResumeParsed(obj) !== null;
+}
+
+function isThinResumeStructured(parsed: Record<string, unknown> | null): boolean {
+  if (!parsed) return true;
+  const skills = Array.isArray(parsed.skills) ? parsed.skills : [];
+  const experience = Array.isArray(parsed.experience) ? parsed.experience : [];
+  const summary = typeof parsed.summary === "string" ? parsed.summary.trim() : "";
+  const name = typeof parsed.name === "string" ? parsed.name.trim() : "";
+  return !name || skills.length < 2 || experience.length < 1 || summary.length < 40;
+}
+
+function mapPythonStructuredResume(structured: Record<string, unknown>): Record<string, unknown> | null {
+  const expEntries = Array.isArray(structured.experience) ? structured.experience : [];
+  const experience = expEntries.map((item) => {
+    if (typeof item === "string") return { title: item, company: "", description: item };
+    if (item && typeof item === "object") {
+      const row = item as Record<string, unknown>;
+      const text = typeof row.text === "string" ? row.text : "";
+      return { title: text, company: "", description: text, ...row };
+    }
+    return null;
+  }).filter(Boolean);
+
+  const eduEntries = Array.isArray(structured.education) ? structured.education : [];
+  const education = eduEntries.map((item) => {
+    if (typeof item === "string") return { degree: item, institution: item };
+    if (item && typeof item === "object") {
+      const row = item as Record<string, unknown>;
+      const text = typeof row.text === "string" ? row.text : "";
+      return { degree: text, institution: text, ...row };
+    }
+    return null;
+  }).filter(Boolean);
+
+  const contact =
+    structured.contact_details && typeof structured.contact_details === "object"
+      ? (structured.contact_details as Record<string, unknown>)
+      : {};
+
+  return normalizeResumeParsed({
+    name: structured.name,
+    summary: structured.summary,
+    skills: structured.skills,
+    experience,
+    education,
+    projects: structured.projects,
+    email: contact.email,
+    phone: contact.phone,
+    location: contact.url ?? contact.location,
+  });
+}
+
+function extractPythonResume(data: unknown): Record<string, unknown> | null {
+  if (!data || typeof data !== "object") return null;
+  const obj = data as Record<string, unknown>;
+  const structured =
+    (obj.structured && typeof obj.structured === "object"
+      ? obj.structured
+      : null) ??
+    (obj.resume && typeof obj.resume === "object" ? obj.resume : null) ??
+    (obj.parsed && typeof obj.parsed === "object" ? obj.parsed : null);
+
+  if (structured && typeof structured === "object") {
+    const mapped = mapPythonStructuredResume(structured as Record<string, unknown>);
+    if (mapped) return mapped;
+  }
+
+  const normalized = normalizeResumeParsed(structured ?? obj);
+  if (normalized) return normalized;
+
+  const text =
+    (typeof obj.extracted_text === "string" && obj.extracted_text) ||
+    (typeof obj.full_text === "string" && obj.full_text) ||
+    (typeof obj.text === "string" && obj.text) ||
+    (typeof obj.content === "string" && obj.content) ||
+    "";
+  if (text.trim().length >= 40) {
+    return normalizeResumeParsed({
+      name: "",
+      summary: text.slice(0, 2000),
+      skills: [],
+      experience: [],
+      education: [],
+      projects: [],
+    });
+  }
+  return null;
 }
 
 function buildParseSuccess(source: string, parsed: unknown) {
@@ -224,6 +314,44 @@ async function parseFromPlainText(
   }
   return null;
 }
+
+/** Hybrid resume_structure → AI enrichment when plain text is available. */
+async function parseResumeTextHybrid(
+  req: Request,
+  userId: string,
+  text: string,
+  prompt: string,
+): Promise<Record<string, unknown> | null> {
+  const clipped = text.slice(0, 80_000);
+  const hybrid = await executeHybridOperation<Record<string, unknown>>({
+    req,
+    auth: { userId },
+    operation: "resume_parse",
+    creditCost: 0,
+    body: { text: clipped },
+    runDeterministic: async () => {
+      const firstLine = clipped.split(/\n+/).map((l) => l.trim()).find(Boolean) ?? "";
+      const normalized = normalizeResumeParsed({
+        name: firstLine.slice(0, 200),
+        summary: clipped.slice(0, 2000),
+        skills: [],
+        experience: [],
+        education: [],
+        projects: [],
+      });
+      if (!normalized || isThinResumeStructured(normalized)) return null;
+      return normalized;
+    },
+    runAi: async () => {
+      const parsed = await parseFromPlainText(clipped, prompt);
+      if (!parsed) throw new Error("AI resume parse failed");
+      const normalized = normalizeResumeParsed(parsed);
+      if (!normalized) throw new Error("AI resume schema invalid");
+      return normalized;
+    },
+  });
+  return hybrid.ok ? hybrid.data : null;
+}
 /**
  * Fan parsed resume out to documents (primary resume row) and backfill
  * profiles.target_role / headline when empty. All writes are best-effort —
@@ -333,7 +461,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    const { resume_id, version_id, mime_type } = await req.json();
+    const { resume_id, version_id, mime_type, text: inlineText } = await req.json();
 
     if (!resume_id) {
       return new Response(JSON.stringify({ error: "Missing resume_id", code: "BAD_REQUEST" }), { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } });
@@ -343,6 +471,42 @@ Deno.serve(async (req) => {
     const { data: resumeRow } = await db.from("resumes").select("id, user_id, file_path").eq("id", resume_id).single();
     if (!resumeRow || resumeRow.user_id !== userId) {
       return new Response(JSON.stringify({ error: "Resume not found or not yours.", code: "FORBIDDEN" }), { status: 403, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } });
+    }
+
+    // Optional inline text payload — hybrid python/deterministic before AI.
+    if (typeof inlineText === "string" && inlineText.trim().length >= 20) {
+      let creditsDeducted = false;
+      if (!waiveCredits) {
+        const creditResult = await deductCreditsAtomic({
+          userId,
+          action: "resume_analysis",
+          cost: RESUME_PARSE_COST,
+          idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+        });
+        if (!creditResult.success) {
+          return creditDenialResponse(req, creditResult, RESUME_PARSE_COST);
+        }
+        creditsDeducted = true;
+      }
+
+      const SCHEMA = `{"name":"","summary":"","skills":[],"experience":[],"projects":[],"education":[],"total_years_experience":null}`;
+      const PROMPT = `Extract structured resume information following this schema EXACTLY:\n${SCHEMA}\nReturn ONLY valid JSON. No markdown, no extra text.`;
+      const parsed = await parseResumeTextHybrid(req, userId, inlineText.trim(), PROMPT);
+      if (parsed) {
+        await db.from("resumes").update({ content: JSON.stringify(parsed) }).eq("id", resume_id);
+        await fanOutResume(db, userId, parsed);
+        return new Response(
+          JSON.stringify(buildParseSuccess("hybrid-text", parsed)),
+          { headers: getCorsHeaders(req) },
+        );
+      }
+      if (creditsDeducted) {
+        await refundCredits({ userId, cost: RESUME_PARSE_COST, reason: "refund_parse_resume_failed" });
+      }
+      return new Response(
+        JSON.stringify({ error: "Resume parsing failed for inline text.", code: "PARSER_FAILED" }),
+        { status: 422, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+      );
     }
 
     const file_path = resumeRow.file_path;
@@ -479,17 +643,7 @@ Deno.serve(async (req) => {
         idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
       });
       if (!creditResult.success) {
-        return new Response(
-          JSON.stringify({
-            error: "Insufficient credits.",
-            code: "INSUFFICIENT_CREDITS",
-            message: `Resume analysis costs ${RESUME_PARSE_COST} credits.`,
-          }),
-          {
-            status: 402,
-            headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
-          },
-        );
+        return creditDenialResponse(req, creditResult, RESUME_PARSE_COST);
       }
       creditsDeducted = true;
     }
@@ -507,6 +661,55 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify(buildParseSuccess(source, normalized)), { headers: getCorsHeaders(req) });
     };
 
+    // ── Python document_extract first (one credit lifecycle) ──────
+    const filename = String(file_path).split("/").pop() || "resume.pdf";
+    const correlationId = crypto.randomUUID();
+    const pythonResult = await callPythonProcess({
+      operation: "document_extract",
+      operationId: `resume:${resume_id}`,
+      correlationId,
+      payload: {
+        base64,
+        filename,
+        mime_type: resolvedMime,
+        document_kind: "resume",
+        category_hint: "resume",
+      },
+    });
+
+    if (pythonResult.ok) {
+      let pythonParsed = extractPythonResume(pythonResult.data);
+      if (pythonParsed) {
+        // Optional AI enrichment only when structured is thin AND AI available.
+        if (isThinResumeStructured(pythonParsed) && (GEMINI_API_KEY || ANTHROPIC_API_KEY)) {
+          try {
+            const textHint =
+              typeof (pythonResult.data as Record<string, unknown>)?.full_text === "string"
+                ? String((pythonResult.data as Record<string, unknown>).full_text)
+                : typeof (pythonResult.data as Record<string, unknown>)?.text === "string"
+                ? String((pythonResult.data as Record<string, unknown>).text)
+                : JSON.stringify(pythonParsed);
+            const enriched = await parseFromPlainText(textHint, PROMPT);
+            if (enriched) {
+              const enrichedNorm = normalizeResumeParsed(enriched);
+              if (enrichedNorm && !isThinResumeStructured(enrichedNorm)) {
+                return await persistSuccess("python+ai", enrichedNorm);
+              }
+            }
+          } catch (enrichErr) {
+            console.warn("[parse-resume] AI enrichment failed; keeping python result", enrichErr);
+          }
+        }
+        return await persistSuccess("python", pythonParsed);
+      }
+    } else {
+      console.warn("[parse-resume] python document_extract failed", {
+        code: pythonResult.code,
+        message: pythonResult.message,
+      });
+    }
+
+    // ── Edge extract / AI fallback (same credit reservation) ──────
     // ── TXT / plain text ──────────────────────────────────────────
     if (resolvedMime === "text/plain") {
       const text = bytesToUtf8(fileBytes).trim();
@@ -519,8 +722,8 @@ Deno.serve(async (req) => {
         }
         return new Response(JSON.stringify({ error: "Text file is empty or too short to parse.", code: "BAD_REQUEST" }), { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } });
       }
-      const parsed = await parseFromPlainText(text, PROMPT);
-      if (parsed) return await persistSuccess("gemini-text", parsed);
+      const parsed = await parseResumeTextHybrid(req, userId, text, PROMPT);
+      if (parsed) return await persistSuccess("hybrid-text", parsed);
     }
 
     // ── DOCX ──────────────────────────────────────────────────────
@@ -530,8 +733,8 @@ Deno.serve(async (req) => {
     ) {
       const docxText = await extractDocxText(fileBytes);
       if (docxText) {
-        const parsed = await parseFromPlainText(docxText, PROMPT);
-        if (parsed) return await persistSuccess("gemini-docx", parsed);
+        const parsed = await parseResumeTextHybrid(req, userId, docxText, PROMPT);
+        if (parsed) return await persistSuccess("hybrid-docx", parsed);
       }
       // Fall through to multimodal/OCR attempts with PDF path only if zip failed
     }

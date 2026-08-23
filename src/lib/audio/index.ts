@@ -20,7 +20,13 @@ export { runLocalMicCheck } from "./localMicPrecheck";
 export { checkSttHealth } from "./sttHealthCheck";
 export { runSpeakerTest, cancelSpeakerTest } from "./speakerTest";
 export { MicState, SpeakerState, SttState } from "./precheckStates";
-export { DeepgramStreamClient } from "./deepgramStream";
+export { DeepgramStreamClient, resetDeepgramTokenClient } from "./deepgramStream";
+export {
+  fetchDeepgramTokenBounded,
+  resetDeepgramTokenClient as resetDeepgramTokenCache,
+  isDeepgramTokenBlocked,
+} from "./deepgramToken";
+export { TranscriptionState, TRANSCRIPTION_STATUS_COPY } from "./transcriptionStates";
 export type { DeepgramStreamOptions } from "./deepgramStream";
 
 // ─── Speech Analysis ──────────────────────────────────────────────────────────

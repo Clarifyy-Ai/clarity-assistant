@@ -18,6 +18,7 @@ import {
   RATE_LIMIT_PRESETS,
 } from "../_shared/rateLimit.ts";
 import { recomputeTopicMasteryFromAttempt } from "../_shared/recomputeTopicMastery.ts";
+import type { AttemptSignal } from "../_shared/masteryEngine.ts";
 import { isExamExpired } from "../_shared/examTimer.ts";
 
 /* -------------------------------------------------------------------------- */
@@ -825,7 +826,8 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
 
     /* --------------- GOV EXAM TOPIC MASTERY (best-effort) --------------- */
     try {
-      const govExamId = safeString(testConfig.gov_exam_id);
+      const govExamId =
+        safeString(testConfig.gov_exam_id) || safeString(testConfig.exam_id);
       if (govExamId) {
         const avgTimeForQuality =
           timeEntries.length > 0
@@ -877,7 +879,10 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
         await recomputeTopicMasteryFromAttempt(db, {
           userId,
           examId: govExamId,
-          stageId: safeString(testConfig.gov_stage_id) || null,
+          stageId:
+            safeString(testConfig.gov_stage_id) ||
+            safeString(testConfig.stage_id) ||
+            null,
           topicAttempts,
         });
       }

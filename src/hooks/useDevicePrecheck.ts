@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { AudioDevice } from "@/types/audio.types";
 import { runLocalMicCheck } from "@/lib/audio/localMicPrecheck";
 import { checkSttHealth } from "@/lib/audio/sttHealthCheck";
+import { resetDeepgramTokenClient } from "@/lib/audio/deepgramToken";
 import {
   cancelSpeakerTest,
   disposeSpeakerTestResources,
@@ -87,6 +88,7 @@ export function useDevicePrecheck({
     sttAbortRef.current?.abort();
     const ac = new AbortController();
     sttAbortRef.current = ac;
+    resetDeepgramTokenClient();
     setSttState(SttState.STT_CHECKING);
     setSttMessage(null);
     try {

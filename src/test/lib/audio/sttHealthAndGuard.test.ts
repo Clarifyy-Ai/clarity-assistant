@@ -4,7 +4,6 @@ import { checkSttHealth, classifySttFailure } from "@/lib/audio/sttHealthCheck";
 import {
   createOperationGuard,
   isLocalAudioReadyForVoice,
-  MIC_READY_STT_UNAVAILABLE,
   MIC_STATUS_COPY,
   micAndSttSummary,
   MicState,
@@ -26,7 +25,7 @@ describe("STT health is independent of microphone hardware", () => {
 
   it("does not change microphone READY when STT is down", () => {
     expect(MIC_STATUS_COPY[MicState.READY]).toBe("Microphone ready");
-    expect(micAndSttSummary(MicState.READY, SttState.STT_UNAVAILABLE)).toBe(MIC_READY_STT_UNAVAILABLE);
+    expect(micAndSttSummary(MicState.READY, SttState.STT_UNAVAILABLE)).toBe("Microphone ready");
     expect(isLocalAudioReadyForVoice(MicState.READY, SpeakerState.READY)).toBe(true);
   });
 

@@ -31,6 +31,9 @@ export const SttState = {
   STT_NOT_CHECKED: "STT_NOT_CHECKED",
   STT_CHECKING: "STT_CHECKING",
   STT_READY: "STT_READY",
+  STT_RECEIVING_AUDIO: "STT_RECEIVING_AUDIO",
+  STT_TRANSCRIBING: "STT_TRANSCRIBING",
+  STT_RECONNECTING: "STT_RECONNECTING",
   STT_UNAVAILABLE: "STT_UNAVAILABLE",
   STT_ERROR: "STT_ERROR",
 } as const;
@@ -58,18 +61,22 @@ export const SPEAKER_STATUS_COPY: Record<SpeakerState, string> = {
 };
 
 export const STT_STATUS_COPY: Record<SttState, string> = {
-  STT_NOT_CHECKED: "Transcription service not checked",
-  STT_CHECKING: "Checking transcription service…",
-  STT_READY: "Transcription service ready",
-  STT_UNAVAILABLE: "Transcription service is temporarily unavailable",
-  STT_ERROR: "Transcription service check failed",
+  STT_NOT_CHECKED: "Transcription not checked",
+  STT_CHECKING: "Connecting to transcription…",
+  STT_READY: "Transcription ready",
+  STT_RECEIVING_AUDIO: "Receiving audio",
+  STT_TRANSCRIBING: "Transcribing",
+  STT_RECONNECTING: "Reconnecting transcription…",
+  STT_UNAVAILABLE: "Transcription unavailable",
+  STT_ERROR: "Transcription unavailable",
 };
 
 export const MIC_PERMISSION_RECOVERY =
   "Allow microphone access in your browser settings, then select Recheck.";
 
+/** Contextual note — never use as the primary mic status line. */
 export const MIC_READY_STT_UNAVAILABLE =
-  "Microphone ready. Transcription service is temporarily unavailable.";
+  "Your microphone works. Transcription is unavailable — you can use text mode.";
 
 export function isMicHardwareReady(state: MicState): boolean {
   return state === MicState.READY;
@@ -87,13 +94,8 @@ export function isLocalAudioReadyForVoice(
   return mic === MicState.READY && speaker === SpeakerState.READY;
 }
 
+/** @deprecated Prefer separate MIC_STATUS_COPY and STT_STATUS_COPY in UI. */
 export function micAndSttSummary(mic: MicState, stt: SttState): string {
-  if (mic === MicState.READY && (stt === SttState.STT_UNAVAILABLE || stt === SttState.STT_ERROR)) {
-    return MIC_READY_STT_UNAVAILABLE;
-  }
-  if (mic === MicState.READY && stt === SttState.STT_READY) {
-    return "Microphone ready. Transcription service ready.";
-  }
   return MIC_STATUS_COPY[mic];
 }
 

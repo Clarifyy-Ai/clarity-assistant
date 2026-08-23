@@ -11,13 +11,17 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
 from app.core.logger import configure_logging, get_logger
+from app.hybrid import SERVICE_VERSION
 from app.paper_factory.config import get_factory_settings
 from app.paper_factory.worker import worker_loop
 from app.routes import (
     document_intelligence,
+    gov_exams,
     health,
     metrics,
+    operations,
     paper_factory,
+    process,
     scrape,
 )
 from app.workers.daily_scheduler import daily_scrape_loop
@@ -50,9 +54,8 @@ async def lifespan(app: FastAPI):
         )
 
     factory_settings = get_factory_settings()
-    start_factory_worker = (
-        settings.paper_factory_embedded_worker and factory_settings.has_ai_provider
-    )
+    # Bank-only / deterministic jobs must still run when AI keys are absent.
+    start_factory_worker = settings.paper_factory_embedded_worker
     if start_factory_worker:
         background_tasks.append(
             asyncio.create_task(
@@ -60,10 +63,44 @@ async def lifespan(app: FastAPI):
                 name="paper-factory-worker",
             )
         )
-    elif settings.paper_factory_embedded_worker:
-        log.warning(
-            "paper_factory_worker_skipped",
-            reason="Set GEMINI_API_KEY or OPENAI_API_KEY to enable AI paper generation.",
+        if not factory_settings.has_ai_provider:
+            log.info(
+                "paper_factory_worker_bank_only",
+                reason="No AI keys configured; worker will process bank-only / deterministic jobs.",
+            )
+
+    # Document intelligence embedded worker — only when enabled and secret present.
+    start_document_worker = (
+        settings.document_worker_embedded and bool(settings.internal_auth_secret)
+    )
+    if start_document_worker:
+        try:
+            from app.document_intelligence.worker import worker_loop as document_worker_loop
+        except ImportError:
+            document_worker_loop = None
+            log.warning(
+                "document_worker_skipped",
+                reason="worker_loop not available in document_intelligence.worker",
+            )
+        if document_worker_loop is not None:
+            background_tasks.append(
+                asyncio.create_task(
+                    document_worker_loop(
+                        supabase_url=settings.supabase_url,
+                        supabase_service_role_key=settings.supabase_service_role_key,
+                        stop=stop,
+                        poll_seconds=settings.document_worker_poll_seconds,
+                        lease_seconds=settings.document_worker_lease_seconds,
+                    ),
+                    name="document-intelligence-worker",
+                )
+            )
+            log.info("document_worker_embedded", enabled=True)
+    else:
+        log.info(
+            "document_worker_embedded",
+            enabled=False,
+            reason="DOCUMENT_WORKER_EMBEDDED disabled",
         )
 
     log.info(
@@ -73,7 +110,9 @@ async def lifespan(app: FastAPI):
         daily_scrape=settings.scrape_daily_enabled,
         daily_hour_utc=settings.scrape_daily_hour_utc,
         paper_factory_worker=start_factory_worker,
+        document_worker=start_document_worker,
         has_ai_provider=factory_settings.has_ai_provider,
+        service_version=SERVICE_VERSION,
     )
     yield
     stop.set()
@@ -91,7 +130,7 @@ _settings = get_settings()
 is_production = _settings.app_env.lower() == "production"
 app = FastAPI(
     title="Clarity.AI Gov-Exam Scraper",
-    version="1.0.0",
+    version=SERVICE_VERSION,
     docs_url=None if is_production else "/docs",
     redoc_url=None,
     lifespan=lifespan,
@@ -120,6 +159,9 @@ app.include_router(metrics.router)
 app.include_router(scrape.router)
 app.include_router(document_intelligence.router)
 app.include_router(paper_factory.router)
+app.include_router(gov_exams.router)
+app.include_router(operations.router)
+app.include_router(process.router)
 
 
 @app.exception_handler(RequestValidationError)

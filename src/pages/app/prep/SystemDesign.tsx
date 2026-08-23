@@ -27,6 +27,11 @@ import { Whiteboard, type WhiteboardHandle } from "@/components/prep/Whiteboard"
 import { SYSTEM_DESIGN_PRESETS } from "@/lib/prep/systemDesignPresets";
 import { splitMarkdownSections } from "@/lib/prep/structuredOutput";
 import { validateSystemDesignOutput } from "@/lib/prep/systemDesignOutput";
+import {
+  diagramSpecToPresetShapes,
+  parseSystemDesignResponse,
+  type DiagramSpec,
+} from "@/lib/prep/systemDesignDiagram";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 
 type Difficulty = "easy" | "medium" | "hard";
@@ -87,6 +92,7 @@ export default function SystemDesign() {
   const genInFlightRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
   const generationSeqRef = useRef(0);
+  const diagramLoadedRef = useRef<string | null>(null);
   const prefersReducedMotion = usePrefersReducedMotion();
   const [activePreset, setActivePreset] = useState<string | null>(null);
   /** 'auto' follows reduced-motion preference; user can override. */
@@ -103,6 +109,7 @@ export default function SystemDesign() {
   const [savePhase, setSavePhase] = useState<SavePhase>("IDLE");
   const [savedAnswerId, setSavedAnswerId] = useState<string | null>(null);
   const [error, setError]         = useState<string | null>(null);
+  const [diagramSpec, setDiagramSpec] = useState<DiagramSpec | null>(null);
 
   const generating =
     genPhase === "VALIDATING" ||
@@ -151,6 +158,14 @@ export default function SystemDesign() {
     [breakdown],
   );
 
+  useEffect(() => {
+    if (genPhase !== "COMPLETED" || !diagramSpec || useNotesOnly) return;
+    const key = JSON.stringify(diagramSpec);
+    if (diagramLoadedRef.current === key) return;
+    whiteboardRef.current?.loadShapes(diagramSpecToPresetShapes(diagramSpec));
+    diagramLoadedRef.current = key;
+  }, [diagramSpec, genPhase, useNotesOnly]);
+
   function buildInput(topic: DesignTopic, candidateNotes: string): string {
     return `Topic: ${topic.title}\n\nPrompt: ${topic.prompt}\n\nKey areas: ${topic.keyAreas.join(", ")}${candidateNotes ? `\n\nCandidate notes:\n${candidateNotes}` : ""}`;
   }
@@ -179,7 +194,7 @@ export default function SystemDesign() {
       inflightKeyRef.current = idempotencyKey;
 
       setGenPhase("GENERATING");
-      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
+      const data = await fetchEdgeJson<Record<string, unknown>>("prep-tool", {
         tool_id: "system_design",
         input,
       }, {
@@ -192,7 +207,8 @@ export default function SystemDesign() {
       if (controller.signal.aborted || seq !== generationSeqRef.current) return;
 
       setGenPhase("VALIDATING_OUTPUT");
-      const result = typeof data.result === "string" ? data.result.trim() : "";
+      const parsed = parseSystemDesignResponse(data);
+      const result = parsed.markdown;
       const validation = validateSystemDesignOutput(result);
       if (validation.ok === false) {
         setGenPhase("FAILED");
@@ -203,6 +219,8 @@ export default function SystemDesign() {
       }
 
       setBreakdown(result);
+      setDiagramSpec(parsed.diagramSpec ?? null);
+      diagramLoadedRef.current = null;
       setGenPhase("COMPLETED");
       inflightKeyRef.current = null;
       await refreshCredits().catch(() => undefined);
@@ -257,6 +275,8 @@ export default function SystemDesign() {
     setSelected(id);
     setBreakdown("");
     setNotes("");
+    setDiagramSpec(null);
+    diagramLoadedRef.current = null;
     setError(null);
     setGenPhase("IDLE");
     setSavePhase("IDLE");

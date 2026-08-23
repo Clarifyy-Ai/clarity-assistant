@@ -21,7 +21,7 @@ describe("DevicePrecheckCards", () => {
         peakRms={0.2}
         usedFallback={false}
         micError={null}
-        sttMessage="Transcription service is temporarily unavailable."
+        sttMessage="Transcription unavailable."
         outputSelectable={false}
         speakerPlaying={false}
         onRecheckMic={noop}
@@ -35,7 +35,7 @@ describe("DevicePrecheckCards", () => {
     expect(screen.getByText("Microphone ready")).toBeInTheDocument();
     expect(screen.getByText("Speaker ready")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Play again" })).toBeInTheDocument();
-    expect(screen.getByText("Microphone ready. Transcription service is temporarily unavailable.")).toBeInTheDocument();
+    expect(screen.getByText("Your microphone works. Transcription is unavailable — you can use text mode.")).toBeInTheDocument();
     expect(screen.queryByText(/needs fix/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Speaker OK — play again/i)).not.toBeInTheDocument();
   });

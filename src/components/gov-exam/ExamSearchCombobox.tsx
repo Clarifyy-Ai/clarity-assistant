@@ -37,6 +37,33 @@ function examOptionId(listId: string, examId: string): string {
   return `${listId}-opt-${examId}`;
 }
 
+function examDisplayName(exam: GovExamSearchResult): string {
+  return exam.shortName?.trim() || exam.name;
+}
+
+function examCategoryLabel(exam: GovExamSearchResult): string | null {
+  const state = exam.stateCode?.trim();
+  if (state) return state;
+  const jurisdiction = exam.jurisdiction?.trim();
+  if (jurisdiction) return jurisdiction;
+  const family = exam.family?.trim();
+  return family || null;
+}
+
+function examVerificationLabel(exam: GovExamSearchResult): string | null {
+  const raw = exam.verifiedAt ?? exam.lastVerified;
+  if (!raw) return null;
+  const iso = String(raw).slice(0, 10);
+  return iso || null;
+}
+
+function examStageLabel(exam: GovExamSearchResult): string | null {
+  if (exam.stage?.name) return exam.stage.name;
+  if (exam.stages?.length === 1) return exam.stages[0].name;
+  if (exam.stages?.length) return `${exam.stages.length} stage(s)`;
+  return null;
+}
+
 export function ExamSearchCombobox({
   value,
   onSelect,
@@ -59,10 +86,14 @@ export function ExamSearchCombobox({
   const [state, setState] = useState<"idle" | "loading" | "empty" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [picked, setPicked] = useState<GovExamSearchResult | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const reqIdRef = useRef(0);
 
-  const selected = results.find((r) => r.examId === value) ?? null;
+  const selected =
+    (value && picked?.examId === value ? picked : null) ??
+    results.find((r) => r.examId === value) ??
+    null;
 
   useEffect(() => {
     if (typeof syncQuery === "string" && syncQuery !== query) {
@@ -111,6 +142,7 @@ export function ExamSearchCombobox({
       } catch (err) {
         if (ac.signal.aborted) return;
         if (reqId !== reqIdRef.current) return;
+        // Never keep a stale / fake list after a search failure (e.g. 503).
         setResults([]);
         const mapped = mapGovSearchError(err);
         setState("error");
@@ -139,8 +171,9 @@ export function ExamSearchCombobox({
   function selectAt(index: number) {
     const exam = results[index];
     if (!exam) return;
+    setPicked(exam);
     onSelect(exam);
-    setQuery(exam.name);
+    setQuery(examDisplayName(exam));
     setOpen(false);
     setActiveIndex(-1);
     inputRef.current?.focus();
@@ -198,7 +231,7 @@ export function ExamSearchCombobox({
           aria-autocomplete="list"
           aria-activedescendant={activeId}
           aria-haspopup="listbox"
-          aria-label="Select government exam"
+          aria-label="Search government exams"
           disabled={disabled}
           value={query}
           placeholder={placeholder}
@@ -206,7 +239,10 @@ export function ExamSearchCombobox({
           onChange={(e) => {
             setQuery(e.target.value);
             setOpen(true);
-            if (value && onClear) onClear();
+            if (value && onClear) {
+              setPicked(null);
+              onClear();
+            }
           }}
           onFocus={() => {
             setOpen(true);
@@ -225,7 +261,7 @@ export function ExamSearchCombobox({
 
       {selected && !open && (
         <p className="text-xs text-muted-foreground" aria-live="polite">
-          Selected: {selected.name} ({selected.code})
+          Selected: {examDisplayName(selected)} ({selected.code})
           {selected.recruitingBody?.name ? ` · ${selected.recruitingBody.name}` : ""}
         </p>
       )}
@@ -264,48 +300,62 @@ export function ExamSearchCombobox({
               )}
             </div>
           )}
-          {results.map((exam, index) => {
-            const bank = exam.bankReadiness;
-            const active = index === activeIndex;
-            return (
-              <button
-                key={exam.examId}
-                type="button"
-                id={examOptionId(listId, exam.examId)}
-                role="option"
-                aria-selected={exam.examId === value || active}
-                className={`w-full text-left px-3 py-2.5 border-b border-border/40 last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
-                  active ? "bg-secondary/70" : "hover:bg-secondary/40"
-                }`}
-                onMouseDown={(e) => e.preventDefault()}
-                onMouseEnter={() => setActiveIndex(index)}
-                onClick={() => selectAt(index)}
-              >
-                <p className="text-sm font-medium text-foreground truncate">{exam.name}</p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {exam.code}
-                  {exam.recruitingBody?.name ? ` · ${exam.recruitingBody.name}` : ""}
-                  {exam.family ? ` · ${exam.family}` : ""}
-                  {exam.stages?.length ? ` · ${exam.stages.length} stage(s)` : ""}
-                  {exam.languages?.length ? ` · ${exam.languages.join("/")}` : ""}
-                </p>
-                {bank && (
-                  <p className="text-xs mt-0.5 text-muted-foreground">
-                    Bank {formatBankCoverage(bank.approvedPublicCount, bank.requiredQuestions)}
-                    {exam.lastVerified
-                      ? ` · verified ${String(exam.lastVerified).slice(0, 10)}`
-                      : ""}
+          {state !== "error" &&
+            results.map((exam, index) => {
+              const bank = exam.bankReadiness;
+              const active = index === activeIndex;
+              const category = examCategoryLabel(exam);
+              const stage = examStageLabel(exam);
+              const verified = examVerificationLabel(exam);
+              const approved = bank?.approvedPublicCount;
+              return (
+                <button
+                  key={exam.examId}
+                  type="button"
+                  id={examOptionId(listId, exam.examId)}
+                  role="option"
+                  aria-selected={exam.examId === value || active}
+                  className={`w-full text-left px-3 py-2.5 border-b border-border/40 last:border-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
+                    active ? "bg-secondary/70" : "hover:bg-secondary/40"
+                  }`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onClick={() => selectAt(index)}
+                >
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {examDisplayName(exam)}
+                    {exam.shortName && exam.shortName !== exam.name ? (
+                      <span className="font-normal text-muted-foreground"> · {exam.name}</span>
+                    ) : null}
                   </p>
-                )}
-              </button>
-            );
-          })}
+                  <p className="text-xs text-muted-foreground truncate">
+                    {exam.code}
+                    {exam.recruitingBody?.name ? ` · ${exam.recruitingBody.name}` : ""}
+                    {category ? ` · ${category}` : ""}
+                    {stage ? ` · ${stage}` : ""}
+                    {exam.languages?.length ? ` · ${exam.languages.join("/")}` : ""}
+                  </p>
+                  <p className="text-xs mt-0.5 text-muted-foreground">
+                    {typeof approved === "number"
+                      ? bank
+                        ? `Bank ${formatBankCoverage(approved, bank.requiredQuestions)}`
+                        : `${approved} approved`
+                      : null}
+                    {typeof approved === "number" && verified ? " · " : null}
+                    {verified ? `verified ${verified}` : null}
+                    {typeof approved !== "number" && !verified && bank
+                      ? `Bank ${formatBankCoverage(bank.approvedPublicCount, bank.requiredQuestions)}`
+                      : null}
+                  </p>
+                </button>
+              );
+            })}
         </div>
       )}
 
       <span className="sr-only" aria-live="polite">
         {open && activeIndex >= 0 && results[activeIndex]
-          ? `${results[activeIndex].name}, ${results[activeIndex].code}`
+          ? `${examDisplayName(results[activeIndex])}, ${results[activeIndex].code}`
           : state === "empty"
             ? "No exams found"
             : state === "error"

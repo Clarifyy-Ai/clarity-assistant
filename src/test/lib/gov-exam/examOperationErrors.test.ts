@@ -32,7 +32,7 @@ describe("gov exam operation error mapping", () => {
       details: { available: 23, requested: 100 },
     });
     expect(formatGovExamOperationError(err)).toBe(
-      "Only 23 approved questions are available for this configuration.",
+      "Only 23 approved questions are available. Try Custom Practice Set.",
     );
   });
 

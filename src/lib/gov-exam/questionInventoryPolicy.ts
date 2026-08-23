@@ -87,6 +87,12 @@ export function formatInventoryCoverage(available: number, requested: number): s
   return `${avail} / ${req} questions available`;
 }
 
+/** Pre-charge shortage copy when a full mock cannot be served from inventory. */
+export function inventoryAvailabilityMessage(available: number): string {
+  const n = Math.max(0, Math.floor(Number(available) || 0));
+  return `Only ${n} approved questions are currently available.`;
+}
+
 export function customPracticeSetLabel(maxQuestions: number): string {
   const n = Math.max(0, Math.floor(Number(maxQuestions) || 0));
   return `Generate Custom Practice Set — up to ${n} questions`;

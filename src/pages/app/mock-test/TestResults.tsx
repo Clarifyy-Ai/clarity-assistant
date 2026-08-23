@@ -301,8 +301,12 @@ export default function TestResults() {
         }),
       );
 
-      const govExamId = String(loadedTest.config?.gov_exam_id ?? "").trim();
-      const govStageId = String(loadedTest.config?.gov_stage_id ?? "").trim();
+      const govExamId = String(
+        loadedTest.config?.gov_exam_id ?? loadedTest.config?.exam_id ?? "",
+      ).trim();
+      const govStageId = String(
+        loadedTest.config?.gov_stage_id ?? loadedTest.config?.stage_id ?? "",
+      ).trim();
       if (govExamId && user?.id) {
         const [ready, mastery] = await Promise.all([
           fetchExamReadiness(user.id, govExamId, govStageId || null).catch(() => null),

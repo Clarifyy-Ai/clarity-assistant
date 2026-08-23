@@ -46,8 +46,6 @@ import {
 } from "../_shared/audit.ts";
 
 import {
-  deductCreditsAtomic,
-  refundCredits,
   createServiceClient,
 } from "../_shared/supabase.ts";
 
@@ -59,10 +57,11 @@ import {
 import { resolveModel } from "../_shared/resolveModel.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { extractBYOK } from "../_shared/utils.ts";
-
-const FUNCTION_NAME = "generate-hint";
+import { executeHybridOperation } from "../_shared/hybridExecute.ts";
+import { callPythonProcess } from "../_shared/pythonClient.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 
+const FUNCTION_NAME = "generate-hint";
 const CREDIT_COST = creditCost("live_hint");
 
 const SYSTEM_PROMPT = `You are a discreet interview assistant giving rapid coaching hints.
@@ -312,6 +311,25 @@ function normalizeHints(raw: string): string {
   return cleanedLines.join("\n");
 }
 
+type HintHybridData = {
+  request_id: string;
+  hints: string;
+  source: string;
+  model: string;
+};
+
+function extractPythonHints(data: unknown): string {
+  if (!data || typeof data !== "object") return "";
+  const obj = data as Record<string, unknown>;
+  return (
+    (typeof obj.hints === "string" && obj.hints) ||
+    (Array.isArray(obj.hints) && obj.hints.map(String).join("\n")) ||
+    (typeof obj.reply === "string" && obj.reply) ||
+    (typeof obj.coaching === "string" && obj.coaching) ||
+    ""
+  );
+}
+
 async function parseAndValidateRequest(
   req: Request,
   corsHeaders: HeadersInit
@@ -494,44 +512,6 @@ Deno.serve(async (req: Request) => {
   }
 
   const idempotencyKey = getIdempotencyKey(req);
-
-  const creditResult = await deductCreditsAtomic({
-    userId: user.id,
-    action: "generate_hint",
-    cost: CREDIT_COST,
-    sessionId: body.session_id ?? null,
-    idempotencyKey,
-  });
-
-  if (!creditResult.success) {
-    const isInsufficient = (creditResult.error ?? "")
-      .toLowerCase()
-      .includes("insufficient");
-
-    await logAiAudit({
-      req,
-      userId: user.id,
-      action: "GENERATE_HINT",
-      sessionId: body.session_id ?? null,
-      status: "failure",
-      metadata: {
-        reason: creditResult.error ?? "Credit deduction failed.",
-        cost: CREDIT_COST,
-      },
-    });
-
-    return json(corsHeaders, isInsufficient ? 402 : 500, {
-      success: false,
-      error: isInsufficient
-        ? "Insufficient credits."
-        : "Credit deduction failed.",
-      code: isInsufficient
-        ? "PAYMENT_REQUIRED"
-        : "CREDIT_DEDUCTION_FAILED",
-      request_id: requestId,
-    });
-  }
-
   const prompt = buildPrompt(body);
   const byok = extractBYOK(req);
   const admin = createServiceClient();
@@ -541,73 +521,93 @@ Deno.serve(async (req: Request) => {
     sanitizeModelInput(body.model),
   );
 
-  try {
-    const aiResult = await generateWithFallback({
-      prompt,
-      systemPrompt: SYSTEM_PROMPT,
-      maxTokens: 300,
-      temperature: 0.5,
-      userId: user.id,
-      action: "generate_hint",
-      model: resolvedModel,
-      byok,
-    });
+  const hybridResult = await executeHybridOperation<HintHybridData>({
+    req,
+    auth: { userId: user.id, planId },
+    operation: "practice_coach_help",
+    idempotencyKey,
+    creditCost: CREDIT_COST,
+    creditAction: "generate_hint",
+    body: {
+      question: body.question,
+      transcript: body.transcript,
+      resume_context: body.resume_context,
+      interview_type: body.interview_type,
+      target_company: body.target_company,
+      session_id: body.session_id,
+      mode: body.mode,
+    },
+    runAi: async () => {
+      const aiResult = await generateWithFallback({
+        prompt,
+        systemPrompt: SYSTEM_PROMPT,
+        maxTokens: 300,
+        temperature: 0.5,
+        userId: user.id,
+        action: "generate_hint",
+        model: resolvedModel,
+        byok,
+      });
 
-    const moderated = moderateOutput(aiResult.text);
-    const rawHints = moderated.filtered;
+      const moderated = moderateOutput(aiResult.text);
+      const rawHints = moderated.filtered;
 
-    void logAICost(admin, {
-      userId: user.id,
-      action: "generate_hint",
-      model: aiResult.model,
-      inputTokens: aiResult.inputTokens,
-      outputTokens: aiResult.outputTokens,
-      latencyMs: aiResult.latencyMs,
-      wasFallback: aiResult.wasFallback,
-    });
+      void logAICost(admin, {
+        userId: user.id,
+        action: "generate_hint",
+        model: aiResult.model,
+        inputTokens: aiResult.inputTokens,
+        outputTokens: aiResult.outputTokens,
+        latencyMs: aiResult.latencyMs,
+        wasFallback: aiResult.wasFallback,
+      });
 
-    const hints =
-      rawHints && rawHints.trim().length > 0
-        ? normalizeHints(rawHints)
-        : FALLBACK_HINTS;
+      const hints =
+        rawHints && rawHints.trim().length > 0
+          ? normalizeHints(rawHints)
+          : FALLBACK_HINTS;
 
-    await logAiAudit({
-      req,
-      userId: user.id,
-      action: "GENERATE_HINT",
-      sessionId: body.session_id ?? null,
-      status: "success",
-      metadata: {
-        requestId,
+      return {
+        request_id: requestId,
+        hints,
         source: rawHints ? "ai" : "fallback",
         model: aiResult.model,
-        cost: CREDIT_COST,
-        balanceAfter: creditResult.balanceAfter ?? null,
-        transactionId: creditResult.transactionId ?? null,
-        questionId: body.question_id ?? null,
-      },
-    });
-
-    return json(corsHeaders, 200, {
-      success: true,
+      };
+    },
+    runDeterministic: async () => ({
       request_id: requestId,
-      hints,
-      source: rawHints ? "ai" : "fallback",
-      model: aiResult.model,
-    });
-  } catch (error) {
-    console.error(
-      "[generate-hint] Gemini call failed:",
-      error instanceof Error ? error.message : String(error)
-    );
+      hints: FALLBACK_HINTS,
+      source: "fallback",
+      model: "deterministic",
+    }),
+    runPython: async (ctx) => {
+      const py = await callPythonProcess({
+        operation: "practice_coach",
+        operationId: ctx.operationId,
+        correlationId: ctx.correlationId,
+        payload: {
+          mode: "hint",
+          question: body.question,
+          transcript: body.transcript,
+          interview_type: body.interview_type,
+          resume_context: body.resume_context,
+          target_company: body.target_company,
+        },
+      });
+      if (!py.ok) return null;
+      const hintsRaw = extractPythonHints(py.data);
+      if (!hintsRaw.trim()) return null;
+      return {
+        request_id: requestId,
+        hints: normalizeHints(hintsRaw),
+        source: "python_structured",
+        model: "python",
+      };
+    },
+    aiMeta: { provider: "gemini", modelVersion: resolvedModel },
+  });
 
-    await refundCredits({
-      userId: user.id,
-      cost: CREDIT_COST,
-      reason: "generate_hint AI failure",
-      sessionId: body.session_id ?? null,
-    });
-
+  if (!hybridResult.ok) {
     await logAiAudit({
       req,
       userId: user.id,
@@ -615,21 +615,31 @@ Deno.serve(async (req: Request) => {
       sessionId: body.session_id ?? null,
       status: "failure",
       metadata: {
-        reason: "AI unavailable. Credits refunded.",
+        reason: String(hybridResult.code),
         requestId,
       },
     });
-
-    return json(corsHeaders, 502, {
-      success: false,
-      request_id: requestId,
-      hints: FALLBACK_HINTS,
-      source: "fallback",
-      refunded: true,
-      error: "AI hint service temporarily unavailable. Credits refunded.",
-      code: "AI_ERROR",
-    });
+    return hybridResult.response;
   }
+
+  await logAiAudit({
+    req,
+    userId: user.id,
+    action: "GENERATE_HINT",
+    sessionId: body.session_id ?? null,
+    status: "success",
+    metadata: {
+      requestId,
+      source: hybridResult.data.source,
+      model: hybridResult.data.model,
+      cost: CREDIT_COST,
+      hybrid_source: hybridResult.source,
+      operation_id: hybridResult.operationId,
+      questionId: body.question_id ?? null,
+    },
+  });
+
+  return hybridResult.response;
 });
 //
 // Generates short interview coaching hints using Gemini.

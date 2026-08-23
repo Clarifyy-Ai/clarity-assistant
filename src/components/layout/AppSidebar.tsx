@@ -91,11 +91,22 @@ type SidebarLinkProps = {
   onMouseEnter?: () => void;
 };
 
-/** Prefetch heavy route chunks on sidebar hover. */
+/** Prefetch heavy route chunks on sidebar hover / focus. */
 const ROUTE_PREFETCH: Record<string, () => Promise<unknown>> = {
   "/app/dashboard": () => import("@/pages/app/Dashboard"),
   "/app/live": () => import("@/pages/app/live/LiveRehearsal"),
+  "/app/mock": () => import("@/pages/app/mock/MockInterview"),
+  "/app/prep": () => import("@/pages/app/prep/PrepLab"),
   "/app/mock-test": () => import("@/pages/app/mock-test/MockTestHub"),
+  "/app/assessments": () => import("@/pages/app/assessments/AssessmentTemplates"),
+  "/app/learn": () => import("@/pages/app/learn/LearningHub"),
+  "/app/practice-workspace": () => import("@/pages/app/practice/PracticeWorkspace"),
+  "/app/plan": () => import("@/pages/app/plan/InterviewPracticePlan"),
+  "/app/analytics": () => import("@/pages/app/Analytics"),
+  "/app/company-research": () => import("@/pages/app/company-research/CompanyResearch"),
+  "/app/answer-bank": () => import("@/pages/app/answer-bank/AnswerBank"),
+  "/app/settings": () => import("@/pages/app/settings/Settings"),
+  "/app/admin": () => import("@/pages/app/admin/AdminDashboard"),
 };
 
 interface AppSidebarProps {

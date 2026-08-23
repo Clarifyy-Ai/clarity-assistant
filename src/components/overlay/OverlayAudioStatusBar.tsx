@@ -3,6 +3,11 @@
 import { memo } from "react";
 import { Mic, MicOff, Volume2, Wifi, WifiOff } from "lucide-react";
 import { useAudioStore } from "@/store/audioStore";
+import {
+  TRANSCRIPTION_STATUS_COPY,
+  TranscriptionState,
+  deepgramStatusToTranscription,
+} from "@/lib/audio/transcriptionStates";
 import { cn } from "@/lib/utils";
 
 export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
@@ -17,8 +22,9 @@ export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
   if (!isCapturing && deepgramStatus === "disconnected") return null;
 
   const dgOk = deepgramStatus === "connected";
-  const dgPending =
-    deepgramStatus === "connecting" || deepgramStatus === "reconnecting";
+
+  const transcriptionState = deepgramStatusToTranscription(deepgramStatus, pipelineStatus);
+  const transcriptionLabel = TRANSCRIPTION_STATUS_COPY[transcriptionState];
 
   return (
     <div
@@ -80,28 +86,19 @@ export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
       <span
         className={cn(
           "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[10px] font-bold border ml-auto",
-          dgOk
+          transcriptionState === TranscriptionState.READY ||
+            transcriptionState === TranscriptionState.TRANSCRIBING ||
+            transcriptionState === TranscriptionState.RECEIVING_AUDIO
             ? "text-emerald-300/90 bg-emerald-500/10 border-emerald-500/25"
-            : dgPending
+            : transcriptionState === TranscriptionState.CONNECTING ||
+                transcriptionState === TranscriptionState.RECONNECTING
               ? "text-amber-300/80 bg-amber-500/10 border-amber-500/20"
               : "text-sky-300/80 bg-sky-500/10 border-sky-500/20",
         )}
-        title={`Transcription: ${pipelineStatus}`}
+        title={`Transcription: ${transcriptionLabel}`}
       >
         {dgOk ? <Wifi className="w-2.5 h-2.5" /> : <WifiOff className="w-2.5 h-2.5" />}
-        {pipelineStatus === "reconnecting"
-          ? "Reconnecting…"
-          : pipelineStatus === "transcribing"
-            ? "Transcribing"
-            : pipelineStatus === "receiving_audio"
-              ? "Audio received"
-              : dgPending
-                ? "Connecting…"
-                : dgOk
-                  ? "Live"
-                  : pipelineStatus === "unavailable"
-                    ? "Unavailable"
-                    : "Text mode"}
+        {transcriptionLabel}
       </span>
 
       {streamError?.message && (

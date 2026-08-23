@@ -218,33 +218,53 @@ class PaperFactory:
 
         report = None
         if needed > 0:
-            if not self.settings.has_ai_provider:
-                raise PaperFactoryError(
-                    "AI_PROVIDER_UNCONFIGURED",
-                    f"{needed} questions must be generated but no AI provider is configured.",
-                )
-            await self._stage(on_stage, "generating_questions")
-            async with MCQGenerator(self.settings) as ai:
-                report = await generate_for_slots(
-                    exam=exam,
-                    blueprint=blueprint,
-                    slots=outstanding,
-                    generator=ai,
-                    validator=validator,
-                    batch_size=self.settings.batch_size,
-                    max_repair_rounds=self.settings.max_repair_rounds,
-                    on_progress=on_progress,
-                )
+            if self.settings.has_ai_provider:
+                await self._stage(on_stage, "generating_questions")
+                async with MCQGenerator(self.settings) as ai:
+                    report = await generate_for_slots(
+                        exam=exam,
+                        blueprint=blueprint,
+                        slots=outstanding,
+                        generator=ai,
+                        validator=validator,
+                        batch_size=self.settings.batch_size,
+                        max_repair_rounds=self.settings.max_repair_rounds,
+                        on_progress=on_progress,
+                    )
 
-            if report.shortfalls:
-                missing = sum(report.shortfalls.values())
-                raise PaperFactoryError(
-                    "GENERATION_INCOMPLETE",
-                    f"Could not generate {missing} of {needed} questions after "
-                    f"{self.settings.max_repair_rounds + 1} rounds. "
-                    f"Top rejection reasons: {dict(report.reasons.most_common(4))}",
-                    retryable=True,
-                )
+                if report.shortfalls:
+                    missing = sum(report.shortfalls.values())
+                    raise PaperFactoryError(
+                        "GENERATION_INCOMPLETE",
+                        f"Could not generate {missing} of {needed} questions after "
+                        f"{self.settings.max_repair_rounds + 1} rounds. "
+                        f"Top rejection reasons: {dict(report.reasons.most_common(4))}",
+                        retryable=True,
+                    )
+            else:
+                # Bank-only path: shrink custom/adaptive papers; fail exact modes.
+                assembled_so_far = sum(len(v) for v in bank_selected.values())
+                allow_partial = request.mode in ("custom_mock", "adaptive")
+                if allow_partial and assembled_so_far >= 5:
+                    log.info(
+                        "paper_factory_bank_only_partial",
+                        exam=exam.code,
+                        bank=assembled_so_far,
+                        requested=blueprint.total_questions,
+                        missing=needed,
+                    )
+                    blueprint.total_questions = assembled_so_far
+                    blueprint.total_marks = (
+                        assembled_so_far * blueprint.marks_per_question
+                    )
+                    blueprint.paper_class = "custom_practice"
+                else:
+                    raise PaperFactoryError(
+                        "CONTENT_INSUFFICIENT",
+                        f"{needed} questions are missing and no AI provider is configured "
+                        f"for bank-only completion (have {assembled_so_far}).",
+                        retryable=False,
+                    )
 
         # ── Assemble in section order ─────────────────────────────────────────
         await self._stage(on_stage, "validating_questions")

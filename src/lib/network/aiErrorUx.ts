@@ -47,6 +47,7 @@ export function isInsufficientCreditsError(err: unknown): boolean {
     code === "PLAN_UPGRADE_REQUIRED" ||
     code === "QUESTION_INVENTORY_INSUFFICIENT" ||
     code === "INSUFFICIENT_APPROVED_QUESTIONS" ||
+    code === "CONTENT_INSUFFICIENT" ||
     code === "CREDIT_SERVICE_UNAVAILABLE" ||
     code === "PROVIDER_UNAVAILABLE" ||
     code === "ACCOUNT_RESTRICTED" ||
@@ -170,12 +171,12 @@ export function getAiUserFacingError(err: unknown): string {
     return `You have reached today's attempt limit. Try again after ${resetLabel}.`;
   }
 
-  if (code === "QUESTION_INVENTORY_INSUFFICIENT" || code === "INSUFFICIENT_APPROVED_QUESTIONS") {
+  if (code === "QUESTION_INVENTORY_INSUFFICIENT" || code === "INSUFFICIENT_APPROVED_QUESTIONS" || code === "CONTENT_INSUFFICIENT") {
     const available = Number(details?.available);
     if (Number.isFinite(available)) {
-      return `Only ${available} approved questions are available for this configuration.`;
+      return `Only ${available} approved questions are available. Try Custom Practice Set.`;
     }
-    return "Not enough approved questions are available for this configuration.";
+    return "Not enough approved questions are available. Try Custom Practice Set.";
   }
 
   if (code === "CREDIT_SERVICE_UNAVAILABLE") {

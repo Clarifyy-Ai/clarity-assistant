@@ -35,6 +35,8 @@ import {
   FACTUAL_INTEGRITY_SYSTEM_RULE,
   isValidSystemDesignOutput,
 } from "../_shared/factualIntegrity.ts";
+import { callPythonProcess } from "../_shared/pythonClient.ts";
+import { executeHybridOperation } from "../_shared/hybridExecute.ts";
 
 function structuredError(
   req: Request,
@@ -61,6 +63,137 @@ function isProviderFailure(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err ?? "");
   return /missing required|missing.*env|api.?key|GEMINI|OPENAI|ANTHROPIC|provider|unavailable|timeout|ECONNREFUSED|fetch failed|network/i
     .test(msg);
+}
+
+function parseStarSections(input: string): {
+  situation: string;
+  task: string;
+  action: string;
+  result: string;
+} {
+  const text = String(input ?? "");
+  const grab = (label: string): string => {
+    const re = new RegExp(
+      `${label}\\s*:\\s*([\\s\\S]*?)(?=(?:Situation|Task|Action|Result)\\s*:|$)`,
+      "i",
+    );
+    const m = text.match(re);
+    return (m?.[1] ?? "").trim();
+  };
+  const situation = grab("Situation");
+  const task = grab("Task");
+  const action = grab("Action");
+  const result = grab("Result");
+  if (situation || task || action || result) {
+    return { situation, task, action, result };
+  }
+  // Unlabeled draft — treat whole input as action narrative.
+  return { situation: "", task: "", action: text.slice(0, 2500), result: "" };
+}
+
+function formatStarDraft(parts: {
+  situation?: string;
+  task?: string;
+  action?: string;
+  result?: string;
+  full_answer?: string;
+  draft?: string;
+}): string {
+  if (typeof parts.draft === "string" && parts.draft.trim()) return parts.draft.trim();
+  if (typeof parts.full_answer === "string" && parts.full_answer.trim()) {
+    return parts.full_answer.trim();
+  }
+  return [
+    `Situation: ${parts.situation ?? ""}`,
+    `Task: ${parts.task ?? ""}`,
+    `Action: ${parts.action ?? ""}`,
+    `Result: ${parts.result ?? ""}`,
+  ].join("\n\n").trim();
+}
+
+function formatStarDraftFromPython(data: unknown): string {
+  if (!data || typeof data !== "object") return "";
+  const obj = data as Record<string, unknown>;
+  const starDraft =
+    obj.star_draft && typeof obj.star_draft === "object"
+      ? (obj.star_draft as Record<string, unknown>)
+      : null;
+  if (starDraft) {
+    return formatStarDraft({
+      situation: typeof starDraft.situation === "string" ? starDraft.situation : "",
+      task: typeof starDraft.task === "string" ? starDraft.task : "",
+      action: typeof starDraft.action === "string" ? starDraft.action : "",
+      result: typeof starDraft.result === "string" ? starDraft.result : "",
+    });
+  }
+  return formatStarDraft(obj as Record<string, string>);
+}
+
+function buildSystemDesignTemplate(input: string): {
+  result: string;
+  diagram_spec: null;
+} {
+  const words = input
+    .split(/\s+/)
+    .map((w) => w.replace(/[^a-zA-Z0-9_-]/g, ""))
+    .filter((w) => w.length > 3)
+    .slice(0, 10);
+  const topic = words.length > 0 ? words.join(", ") : "the requested system";
+
+  const result = [
+    "## 1. Requirements",
+    `- Functional: core flows for ${topic}`,
+    "- Non-functional: availability, latency, consistency (state assumptions)",
+    "",
+    "## 2. High-level architecture",
+    "- Client → API gateway → services → data stores",
+    `- Partition by domain keywords: ${topic}`,
+    "",
+    "## 3. Data model",
+    "- Entities, IDs, indexes, and hot read/write paths",
+    "",
+    "## 4. Scaling",
+    "- Horizontal scale, caching, async workers, backpressure",
+    "",
+    "## 5. Tradeoffs",
+    "- CAP/consistency choices; cost vs complexity",
+    "",
+    "## 6. What to mention in interview",
+    "- Requirements clarification, bottlenecks, observability, failure modes",
+  ].join("\n");
+
+  return { result, diagram_spec: null };
+}
+
+function formatSystemDesignFromPython(data: unknown): {
+  result: string;
+  diagram_spec: unknown | null;
+} | null {
+  if (!data || typeof data !== "object") return null;
+  const obj = data as Record<string, unknown>;
+  const diagram_spec = obj.diagram_spec ?? obj.diagramSpec ?? null;
+  const narrative =
+    (typeof obj.outline === "string" && obj.outline) ||
+    (typeof obj.narrative === "string" && obj.narrative) ||
+    (typeof obj.design === "string" && obj.design) ||
+    (typeof obj.result === "string" && obj.result) ||
+    (typeof obj.text === "string" && obj.text) ||
+    "";
+  if (narrative.trim().length >= 80) {
+    return { result: narrative.trim(), diagram_spec };
+  }
+  const sections = obj.sections;
+  if (sections && typeof sections === "object") {
+    const lines: string[] = [];
+    for (const [key, value] of Object.entries(sections as Record<string, unknown>)) {
+      lines.push(`## ${key}`);
+      lines.push(typeof value === "string" ? value : JSON.stringify(value));
+      lines.push("");
+    }
+    const joined = lines.join("\n").trim();
+    if (joined.length >= 80) return { result: joined, diagram_spec };
+  }
+  return null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -330,12 +463,120 @@ Deno.serve(async (req: Request) => {
         {
           result: priorPayload.result,
           alternatives: priorPayload.alternatives,
+          source: priorPayload.source ?? "ai",
+          draft_kind: priorPayload.draft_kind,
           cached: true,
         },
         { creditsCharged: 0 },
         200,
         req,
       );
+    }
+
+    /* ----------------------- PROMPT ----------------------- */
+    const prompt = promptFn(sanitizedInput);
+
+    /* ---- Hybrid path: system_design (credits via executeHybridOperation) ---- */
+    if (tool_id === "system_design") {
+      type SystemDesignPayload = {
+        result: string;
+        alternatives: null;
+        source: string;
+        diagram_spec: unknown | null;
+      };
+
+      const hybrid = await executeHybridOperation<SystemDesignPayload>({
+        req,
+        auth,
+        operation: "system_design",
+        idempotencyKey,
+        creditCost: toolCost,
+        creditAction: `prep_tool_${tool_id}`,
+        body: { input: sanitizedInput, tool_id },
+        runDeterministic: async () => {
+          if ((Deno.env.get("HYBRID_PREFER_DETERMINISTIC") ?? "").trim() !== "1") {
+            return null;
+          }
+          const tpl = buildSystemDesignTemplate(sanitizedInput);
+          if (tpl.result.length < 80) return null;
+          return {
+            result: tpl.result,
+            alternatives: null,
+            source: "deterministic",
+            diagram_spec: tpl.diagram_spec,
+          };
+        },
+        runAi: async () => {
+          const ai = await generateWithFallback({
+            prompt,
+            maxTokens: 1200,
+            temperature: 0.6,
+            userId,
+            action: `prep_tool_${tool_id}`,
+          });
+          const aiText = sanitizeAIOutput(ai.text ?? "");
+          if (!aiText || !isValidSystemDesignOutput(aiText)) {
+            throw new Error("AI system design output invalid.");
+          }
+          return {
+            result: aiText,
+            alternatives: null,
+            source: "ai",
+            diagram_spec: null,
+          };
+        },
+        runPython: async (ctx) => {
+          const py = await callPythonProcess({
+            operation: "system_design",
+            operationId: ctx.operationId,
+            correlationId: ctx.correlationId,
+            payload: { input: sanitizedInput, prompt: sanitizedInput },
+          });
+          const formatted = py.ok ? formatSystemDesignFromPython(py.data) : null;
+          if (!formatted?.result) return null;
+          return {
+            result: formatted.result,
+            alternatives: null,
+            source: "python",
+            diagram_spec: formatted.diagram_spec,
+          };
+        },
+        validate: async (data) => {
+          if (!data.result || !isValidSystemDesignOutput(data.result)) {
+            throw new Error(AI_RESPONSE_INVALID_MESSAGE);
+          }
+          return data;
+        },
+      });
+
+      if (!hybrid.ok) {
+        return structuredError(
+          req,
+          "System design is temporarily unavailable.",
+          hybrid.code === AI_RESPONSE_INVALID ? "AI_RESPONSE_INVALID" : "PROVIDER_UNAVAILABLE",
+          hybrid.code === AI_RESPONSE_INVALID ? 422 : 502,
+          correlationId,
+        );
+      }
+
+      const payload = hybrid.data;
+      await storeIdempotentResponse(db, idempotencyKey, {
+        success: true,
+        payload: {
+          result: payload.result,
+          alternatives: null,
+          tool_id,
+          parse_status: "completed",
+          source: payload.source,
+          diagram_spec: payload.diagram_spec,
+        },
+      }, {
+        userId,
+        action: `prep_tool_${tool_id}`,
+        requestHash,
+      });
+
+      return hybrid.response;
     }
 
     const creditResult = await deductCreditsAtomic({
@@ -349,8 +590,99 @@ Deno.serve(async (req: Request) => {
       return creditDenialResponse(req, creditResult, toolCost);
     }
 
-    /* ----------------------- PROMPT ----------------------- */
-    const prompt = promptFn(sanitizedInput);
+    /* ---- Python-first path for star_method ---- */
+    if (tool_id === "star_method") {
+      const starParts = parseStarSections(sanitizedInput);
+      const pythonStar = await callPythonProcess({
+        operation: "star_evidence",
+        operationId: `prep_star:${correlationId}`,
+        correlationId,
+        payload: { ...starParts, input: sanitizedInput },
+      });
+
+      let pythonDraft = "";
+      if (pythonStar.ok && pythonStar.data) {
+        pythonDraft = formatStarDraftFromPython(pythonStar.data);
+      }
+      if (!pythonDraft) {
+        pythonDraft = formatStarDraft(starParts);
+      }
+
+      let cleaned = "";
+      let usedSource: "ai" | "python" = "python";
+      try {
+        const ai = await generateWithFallback({
+          prompt,
+          maxTokens: 1200,
+          temperature: 0.6,
+          userId,
+          action: `prep_tool_${tool_id}`,
+        });
+        const aiText = sanitizeAIOutput(ai.text ?? "");
+        if (aiText.trim().length > 0) {
+          const factual = assessStarFactualIntegrity(sanitizedInput, aiText);
+          if (factual.ok) {
+            cleaned = aiText;
+            usedSource = "ai";
+          }
+        }
+      } catch (aiErr) {
+        log(FN, "warn", "STAR AI polish failed; using python draft", {
+          userId,
+          err: aiErr instanceof Error ? aiErr.message : String(aiErr),
+          correlationId,
+        });
+      }
+
+      if (!cleaned) {
+        if (!pythonDraft.trim()) {
+          await refundCredits({
+            userId,
+            cost: toolCost,
+            reason: `prep-tool both AI and python failed (${tool_id})`,
+          });
+          return structuredError(
+            req,
+            "STAR drafting is temporarily unavailable. Credits refunded.",
+            "PROVIDER_UNAVAILABLE",
+            502,
+            correlationId,
+          );
+        }
+        cleaned = pythonDraft;
+        usedSource = "python";
+      }
+
+      await storeIdempotentResponse(db, idempotencyKey, {
+        success: true,
+        balanceAfter: creditResult.balanceAfter,
+        transactionId: creditResult.transactionId,
+        payload: {
+          result: cleaned,
+          alternatives: null,
+          tool_id,
+          parse_status: "completed",
+          source: usedSource,
+          draft_kind: usedSource === "python" ? "input_based" : "polished",
+        },
+      }, {
+        userId,
+        action: `prep_tool_${tool_id}`,
+        requestHash,
+      });
+
+      return successResponse(
+        {
+          result: cleaned,
+          alternatives: null,
+          source: usedSource,
+          draft_kind: usedSource === "python" ? "input_based" : "polished",
+        },
+        { creditsCharged: toolCost },
+        200,
+        req,
+      );
+    }
 
     /* ----------------------- AI CALL ----------------------- */
     let raw: string;
@@ -498,7 +830,14 @@ Deno.serve(async (req: Request) => {
       success: true,
       balanceAfter: creditResult.balanceAfter,
       transactionId: creditResult.transactionId,
-      payload: { result: cleaned, alternatives, tool_id, parse_status: "completed" },
+      payload: {
+        result: cleaned,
+        alternatives,
+        tool_id,
+        parse_status: "completed",
+        source: "ai",
+        draft_kind: tool_id === "star_method" ? "input_based" : undefined,
+      },
     }, {
       userId,
       action: `prep_tool_${tool_id}`,
@@ -513,7 +852,12 @@ Deno.serve(async (req: Request) => {
     });
 
     return successResponse(
-      { result: cleaned, alternatives },
+      {
+        result: cleaned,
+        alternatives,
+        source: "ai",
+        draft_kind: tool_id === "star_method" ? "input_based" : undefined,
+      },
       { creditsCharged: toolCost },
       200,
       req

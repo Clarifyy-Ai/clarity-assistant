@@ -6,24 +6,19 @@ import {
   log,
   getAdminClient,
 } from "../_shared/utils.ts";
-import {
-  deductCreditsAtomic,
-  refundCredits,
-  getIdempotentResponse,
-  storeIdempotentResponse,
-  createServiceClient,
-} from "../_shared/supabase.ts";
 import { parseStructuredJson } from "../_shared/structuredParse.ts";
 import { generateWithFallback } from "../_shared/aiProvider.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
-import { creditDenialResponse } from "../_shared/creditAuthority.ts";
 import {
   normalizeCompanyName,
   companyResearchIdempotencyKey,
 } from "../_shared/companyIdentity.ts";
+import { callPythonProcess } from "../_shared/pythonClient.ts";
+import { executeHybridOperation } from "../_shared/hybridExecute.ts";
+import { DomainError } from "../_shared/domainErrors.ts";
 
 const FN = "company-research";
 const CREDIT_COST = creditCost("company_research");
@@ -65,6 +60,15 @@ type ResearchBrief = {
   watch_outs: string[];
 };
 
+type CompanyResearchClientData = {
+  persisted: boolean;
+  cached: boolean;
+  id?: string;
+  data: ResearchBrief;
+  brief: ResearchBrief;
+  source?: string;
+};
+
 function validateResponse(data: Record<string, unknown>): ResearchBrief {
   return {
     overview: typeof data.overview === "string" ? data.overview.trim() : "",
@@ -103,7 +107,84 @@ function isMeaningfulBrief(data: ResearchBrief): boolean {
   return substance > 0;
 }
 
-function jsonResponse(req: Request, body: unknown, status = 200): Response {
+function briefFromUnknown(data: unknown): ResearchBrief | null {
+  if (!data || typeof data !== "object") return null;
+  const brief = validateResponse(data as Record<string, unknown>);
+  return isMeaningfulBrief(brief) ? brief : null;
+}
+
+/** Upsert on (user_id, company_name_normalized); on conflict, update-by-id. */
+async function persistCompanyResearch(
+  admin: ReturnType<typeof getAdminClient>,
+  userId: string,
+  company: string,
+  normalized: string,
+  role: string,
+  data: ResearchBrief,
+): Promise<{ id: string } | null> {
+  const culture =
+    data.values.length > 0 ? data.values.join("; ") : data.industry || null;
+  const prepTips =
+    data.tips.length > 0
+      ? data.tips.join("; ")
+      : data.watch_outs.length > 0
+      ? data.watch_outs.join("; ")
+      : null;
+
+  const upsertRow = {
+    user_id: userId,
+    company_name: company,
+    company_name_normalized: normalized,
+    role_title: role || null,
+    overview: data.overview,
+    culture,
+    prep_tips: prepTips,
+    raw_data: data,
+  };
+
+  const { data: saved, error: persistErr } = await admin
+    .from("company_research")
+    .upsert(upsertRow, { onConflict: "user_id,company_name_normalized" })
+    .select("id")
+    .maybeSingle();
+
+  if (saved?.id) return { id: saved.id };
+
+  const { data: existing } = await admin
+    .from("company_research")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("company_name_normalized", normalized)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing?.id) {
+    const { data: updated, error: updateErr } = await admin
+      .from("company_research")
+      .update({
+        company_name: company,
+        role_title: role || null,
+        overview: data.overview,
+        culture,
+        prep_tips: prepTips,
+        raw_data: data,
+      })
+      .eq("id", existing.id)
+      .select("id")
+      .maybeSingle();
+    if (updated?.id) return { id: updated.id };
+    if (!updateErr) return { id: existing.id };
+    console.error("[company-research] update-by-id failed", updateErr.message);
+  }
+
+  if (persistErr) {
+    console.error("[company-research] persist failed", persistErr.message);
+  }
+  return null;
+}
+
+function legacyJsonResponse(req: Request, body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
@@ -113,12 +194,63 @@ function jsonResponse(req: Request, body: unknown, status = 200): Response {
   });
 }
 
+async function generateBriefWithAi(
+  company: string,
+  role: string,
+  userId: string,
+): Promise<ResearchBrief> {
+  const prompt = `Generate a company research brief for interview preparation.
+
+Company: ${company}
+Role: ${role || "General interview"}
+
+Return ONLY valid JSON:
+
+{
+  "overview": "",
+  "industry": "",
+  "tags": [],
+  "interview_process": [],
+  "questions": [],
+  "values": [],
+  "tips": [],
+  "watch_outs": []
+}`;
+
+  const aiResult = await withTimeout(
+    retry(() =>
+      generateWithFallback({
+        prompt,
+        systemPrompt: SYSTEM_PROMPT,
+        maxTokens: 2000,
+        temperature: 0.5,
+        jsonMode: true,
+        userId,
+        action: "company_research",
+      }),
+    ),
+    20000,
+  );
+  const aiText = String(aiResult?.text ?? "").trim();
+  if (!aiText) throw new Error("Empty AI response");
+
+  const parsedResult = parseStructuredJson(
+    aiText,
+    (value): value is Record<string, unknown> =>
+      Boolean(value) && typeof value === "object" && !Array.isArray(value),
+  );
+  const data = validateResponse(parsedResult.value ?? {});
+  if (!isMeaningfulBrief(data)) {
+    throw new Error("Invalid provider payload");
+  }
+  return data;
+}
+
 Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
   const requestId = crypto.randomUUID();
-  let charged = false;
   let userId = "";
 
   try {
@@ -174,14 +306,18 @@ Deno.serve(async (req) => {
           error: existingErr.message,
         });
       } else if (existing?.raw_data && typeof existing.raw_data === "object") {
-        return jsonResponse(req, {
-          success: true,
-          persisted: true,
-          cached: true,
-          id: existing.id,
-          data: existing.raw_data,
-          brief: existing.raw_data,
-        });
+        const brief = briefFromUnknown(existing.raw_data);
+        if (brief) {
+          return legacyJsonResponse(req, {
+            success: true,
+            persisted: true,
+            cached: true,
+            id: existing.id,
+            data: brief,
+            brief,
+            source: "database",
+          });
+        }
       }
     }
 
@@ -196,210 +332,133 @@ Deno.serve(async (req) => {
         ? headerKey.slice(0, 150)
         : derivedKey.slice(0, 150);
 
-    const serviceDb = createServiceClient();
-    const prior = await getIdempotentResponse(serviceDb, idempotencyKey, {
-      userId,
-      action: "company_research",
-    });
-    if (prior?.success && prior.payload?.data && prior.payload?.persisted) {
-      return jsonResponse(req, {
-        success: true,
-        persisted: true,
-        cached: true,
-        id: prior.payload.id,
-        data: prior.payload.data,
-        brief: prior.payload.data,
-        balance: prior.balanceAfter ?? prior.balance,
-      });
-    }
-
-    const creditResult = await deductCreditsAtomic({
-      userId,
-      action: "company_research",
-      cost: CREDIT_COST,
+    const hybridResult = await executeHybridOperation<CompanyResearchClientData>({
+      req,
+      auth,
+      operation: "company_research",
       idempotencyKey,
-    });
-
-    if (!creditResult.success) {
-      return creditDenialResponse(req, creditResult, CREDIT_COST);
-    }
-    charged = true;
-
-    if (creditResult.payload?.data && creditResult.payload?.persisted) {
-      return jsonResponse(req, {
-        success: true,
-        persisted: true,
-        cached: true,
-        id: creditResult.payload.id,
-        data: creditResult.payload.data,
-        brief: creditResult.payload.data,
-        balance: creditResult.balanceAfter ?? creditResult.balance,
-      });
-    }
-
-    const prompt = `Generate a company research brief for interview preparation.
-
-Company: ${company}
-Role: ${role || "General interview"}
-
-Return ONLY valid JSON:
-
-{
-  "overview": "",
-  "industry": "",
-  "tags": [],
-  "interview_process": [],
-  "questions": [],
-  "values": [],
-  "tips": [],
-  "watch_outs": []
-}`;
-
-    let aiText = "";
-    try {
-      const aiResult = await withTimeout(
-        retry(() =>
-          generateWithFallback({
-            prompt,
-            systemPrompt: SYSTEM_PROMPT,
-            maxTokens: 2000,
-            temperature: 0.5,
-            jsonMode: true,
-            userId,
-            action: "company_research",
-          }),
-        ),
-        20000,
-      );
-      aiText = String(aiResult?.text ?? "").trim();
-      if (!aiText) throw new Error("Empty AI response");
-    } catch (err) {
-      await refundCredits({
-        userId,
-        cost: CREDIT_COST,
-        reason: "company-research provider failure",
-      });
-      charged = false;
-      log(FN, "error", "Provider failed", { requestId, error: String(err) });
-      return errorResponse(
-        "Company research is temporarily unavailable. Please try again.",
-        "PROVIDER_UNAVAILABLE",
-        503,
-        req,
-      );
-    }
-
-    const parsedResult = parseStructuredJson(
-      aiText,
-      (value): value is Record<string, unknown> =>
-        Boolean(value) && typeof value === "object" && !Array.isArray(value),
-    );
-    const data = validateResponse(parsedResult.value ?? {});
-
-    if (!isMeaningfulBrief(data)) {
-      await refundCredits({
-        userId,
-        cost: CREDIT_COST,
-        reason: "company-research invalid provider payload",
-      });
-      charged = false;
-      return errorResponse(
-        "Company research is temporarily unavailable. Please try again.",
-        "PROVIDER_UNAVAILABLE",
-        503,
-        req,
-      );
-    }
-
-    const culture =
-      data.values.length > 0 ? data.values.join("; ") : data.industry || null;
-    const prepTips =
-      data.tips.length > 0
-        ? data.tips.join("; ")
-        : data.watch_outs.length > 0
-        ? data.watch_outs.join("; ")
-        : null;
-
-    const upsertRow = {
-      user_id: userId,
-      company_name: company,
-      company_name_normalized: normalized,
-      role_title: role || null,
-      overview: data.overview,
-      culture,
-      prep_tips: prepTips,
-      raw_data: data,
-    };
-
-    const { data: saved, error: persistErr } = await admin
-      .from("company_research")
-      .upsert(upsertRow, { onConflict: "user_id,company_name_normalized" })
-      .select("id")
-      .maybeSingle();
-
-    if (persistErr || !saved?.id) {
-      await refundCredits({
-        userId,
-        cost: CREDIT_COST,
-        reason: "company-research persistence failure",
-      });
-      charged = false;
-      log(FN, "error", "Persist failed", {
-        requestId,
-        error: persistErr?.message ?? "missing id",
-      });
-      return errorResponse(
-        "Research was generated, but we could not save it. Please retry.",
-        "DATABASE_UNAVAILABLE",
-        503,
-        req,
-      );
-    }
-
-    await storeIdempotentResponse(
-      serviceDb,
-      idempotencyKey,
-      {
-        success: true,
-        balance: creditResult.balanceAfter ?? creditResult.balance,
-        balanceAfter: creditResult.balanceAfter ?? creditResult.balance,
-        payload: {
+      creditCost: CREDIT_COST,
+      creditAction: "company_research",
+      body: { company, role, normalized, force },
+      runDatabase: async () => {
+        if (force) return null;
+        const { data: existing } = await admin
+          .from("company_research")
+          .select("id, raw_data")
+          .eq("user_id", userId)
+          .eq("company_name_normalized", normalized)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const brief = briefFromUnknown(existing?.raw_data);
+        if (!brief || !existing?.id) return null;
+        return {
           persisted: true,
-          id: saved.id,
-          data,
-        },
+          cached: true,
+          id: existing.id,
+          data: brief,
+          brief,
+          source: "database",
+        };
       },
-      { userId, action: "company_research" },
-    );
+      runPython: async (ctx) => {
+        // Deterministic normalize first; optional AI enrichment in-path.
+        const py = await callPythonProcess({
+          operation: "company_normalize",
+          operationId: ctx.operationId,
+          correlationId: ctx.correlationId,
+          payload: {
+            company,
+            company_name: company,
+            role,
+            role_title: role,
+            normalized,
+          },
+        });
+
+        let brief = py.ok ? briefFromUnknown(py.data) : null;
+        let source = "python";
+
+        try {
+          const aiBrief = await generateBriefWithAi(company, role, userId);
+          brief = aiBrief;
+          source = py.ok ? "python+ai" : "ai";
+        } catch (err) {
+          log(FN, "warn", "AI enrichment failed; keeping python brief if present", {
+            requestId,
+            error: String(err),
+            hasPython: Boolean(brief),
+          });
+        }
+
+        if (!brief) return null;
+
+        const saved = await persistCompanyResearch(
+          admin,
+          userId,
+          company,
+          normalized,
+          role,
+          brief,
+        );
+        if (!saved?.id) {
+          throw new DomainError(
+            "DATABASE_FAILURE",
+            "Research was generated, but we could not save it after conflict recovery.",
+          );
+        }
+
+        return {
+          persisted: true,
+          cached: false,
+          id: saved.id,
+          data: brief,
+          brief,
+          source,
+        };
+      },
+      runAi: async () => {
+        // Fallback when Python path unavailable.
+        const brief = await generateBriefWithAi(company, role, userId);
+        const saved = await persistCompanyResearch(
+          admin,
+          userId,
+          company,
+          normalized,
+          role,
+          brief,
+        );
+        if (!saved?.id) {
+          throw new DomainError(
+            "DATABASE_FAILURE",
+            "Research was generated, but we could not save it after conflict recovery.",
+          );
+        }
+        return {
+          persisted: true,
+          cached: false,
+          id: saved.id,
+          data: brief,
+          brief,
+          source: "ai",
+        };
+      },
+    });
+
+    if (!hybridResult.ok) {
+      return hybridResult.response;
+    }
 
     log(FN, "info", "Success", {
       requestId,
       company: normalized,
       userId,
-      id: saved.id,
+      id: hybridResult.data.id,
+      source: hybridResult.source,
     });
 
-    return jsonResponse(req, {
-      success: true,
-      persisted: true,
-      cached: false,
-      id: saved.id,
-      data,
-      brief: data,
-      balance: creditResult.balanceAfter ?? creditResult.balance,
-    });
+    return hybridResult.response;
   } catch (err) {
-    if (charged && userId) {
-      try {
-        await refundCredits({
-          userId,
-          cost: CREDIT_COST,
-          reason: "company-research unhandled failure",
-        });
-      } catch {
-        // best-effort compensation
-      }
-    }
     log(FN, "error", "Unhandled error", { requestId, error: String(err) });
     return errorResponse(
       "Company research failed. Please try again.",

@@ -22,6 +22,7 @@ import {
   AI_RESPONSE_INVALID,
   AI_RESPONSE_INVALID_MESSAGE,
 } from "../_shared/structuredParse.ts";
+import { callPythonProcess } from "../_shared/pythonClient.ts";
 
 type STARKey = "situation" | "task" | "action" | "result";
 
@@ -169,7 +170,7 @@ ${styleInstruction}
 Return ONLY the rewritten ${sectionLabel} text:
 `.trim();
 
-    // AI CALL — refund on failure
+    // AI CALL — on failure return Python input-based draft (no refund)
     let aiResult;
     try {
       aiResult = await generateWithFallback({
@@ -182,11 +183,68 @@ Return ONLY the rewritten ${sectionLabel} text:
         action: "polish_star_section",
       });
     } catch (aiErr) {
+      const correlationId = crypto.randomUUID();
+      const starPayload: Record<string, string> = {
+        situation: "",
+        task: "",
+        action: "",
+        result: "",
+      };
+      starPayload[section] = currentText;
+      const pythonStar = await callPythonProcess({
+        operation: "star_evidence",
+        operationId: `polish_star:${correlationId}`,
+        correlationId,
+        payload: {
+          ...starPayload,
+          question: questionText ?? "",
+          section,
+          current_text: currentText,
+        },
+      });
+      let pythonText = currentText;
+      if (pythonStar.ok && pythonStar.data && typeof pythonStar.data === "object") {
+        const data = pythonStar.data as Record<string, unknown>;
+        const starDraft =
+          data.star_draft && typeof data.star_draft === "object"
+            ? (data.star_draft as Record<string, unknown>)
+            : data;
+        const candidate =
+          (typeof starDraft[section] === "string" && starDraft[section]) ||
+          (typeof data[section] === "string" && data[section]) ||
+          (typeof data.polished === "string" && data.polished) ||
+          (typeof data.draft === "string" && data.draft) ||
+          "";
+        if (candidate.trim()) pythonText = String(candidate).trim();
+      }
+      if (pythonText.trim()) {
+        log(FN, "info", "STAR polish from python draft (AI unavailable)", {
+          userId: auth.userId,
+          section,
+        });
+        return successResponse(
+          {
+            section,
+            polished: pythonText,
+            original: currentText,
+            source: "python",
+            draft_kind: "input_based",
+          },
+          {
+            model: "python",
+            tokensUsed: 0,
+            creditsCharged: polishCost,
+            latencyMs: 0,
+          },
+          200,
+          req,
+        );
+      }
       try {
         await refundCredits({
           userId: auth.userId,
           cost: polishCost,
-          reason: "polish-star-section AI call failure",
+          reason: "polish-star-section AI and python failure",
         });
       } catch (refundErr) {
         log(FN, "error", "Refund failed", refundErr);

@@ -16,6 +16,7 @@ import {
   rateLimitResponse,
   RATE_LIMIT_PRESETS,
 } from "../_shared/rateLimit.ts";
+import { isPythonConfigured, pythonFetch } from "../_shared/pythonClient.ts";
 
 const COST = creditCost("parse_document");
 
@@ -82,6 +83,9 @@ Deno.serve(async (req) => {
       return json(req, { success: false, error: safeError("INSUFFICIENT_CREDITS", "Insufficient credits.", "credit_reservation", correlationId) }, 402);
     }
 
+    // Primary sync path is parse-resume / parse-document (Python document_extract first).
+    // This job queue is for durable/async retries; workers should prefer the same
+    // Python /v1/process document_extract path when PYTHON_SERVICE_URL is configured.
     const { data: job, error } = await db.from("document_processing_jobs").insert({
       document_id: documentId,
       owner_id: user.id,
@@ -107,6 +111,44 @@ Deno.serve(async (req) => {
       if (winner) return json(req, { success: true, idempotent: true, jobId: winner.id, ...winner }, 200);
       await refundCredits({ userId: user.id, cost: COST, reason: `refund_document_job_create:${documentId}` });
       return json(req, { success: false, error: safeError("JOB_CREATE_FAILED", "Processing job could not be created.", "queueing", correlationId, true) }, 503);
+    }
+
+    // Best-effort notify Python worker. Durable job status remains authoritative in DB.
+    if (isPythonConfigured()) {
+      void pythonFetch("/internal/jobs/document", {
+        method: "POST",
+        body: {
+          job_id: job.id,
+          document_id: documentId,
+          owner_id: user.id,
+          operation: "parse",
+          correlation_id: correlationId,
+          storage_reference: {
+            bucket: "documents",
+            path: document.storage_path,
+            content_hash: document.content_hash,
+          },
+        },
+        requestId: correlationId,
+        safeRetry: false,
+      }).then((res) => {
+        console.log(JSON.stringify({
+          phase: "PYTHON_DISPATCH",
+          correlationId,
+          jobId: job.id,
+          documentId,
+          ok: res.ok,
+          status: res.status,
+        }));
+      }).catch((notifyErr) => {
+        console.warn(JSON.stringify({
+          phase: "PYTHON_DISPATCH",
+          correlationId,
+          jobId: job.id,
+          documentId,
+          error: notifyErr instanceof Error ? notifyErr.message : String(notifyErr),
+        }));
+      });
     }
 
     return json(req, { success: true, jobId: job.id, state: job.status, attemptCount: job.attempt_count, correlationId }, 202);

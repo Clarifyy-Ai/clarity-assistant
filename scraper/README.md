@@ -41,10 +41,18 @@ The service listens on `http://localhost:8000`.
 
 ## Gov exam paper generation (Python factory)
 
-User-facing generation still goes through the Supabase Edge function
-`create-exam-paper`. When the Edge secret `PAPER_FACTORY_WORKER=1` is set and
-the bank cannot cover the paper, jobs are queued with
-`request_json.generator = "python_paper_factory"`.
+User-facing generation goes through the Supabase Edge function
+`create-exam-paper`. Each request may include `generator`:
+
+| Value | Behavior |
+|-------|----------|
+| `auto` (default) | Bank-only → **Edge**. Small AI fill → **Edge**. Heavy AI fill (≥15 questions or full mock) → **Python** when worker is enabled. |
+| `edge` | Always Supabase Edge assembler |
+| `python` | Python paper factory (requires `PAPER_FACTORY_WORKER=1` on Edge) |
+
+When the Edge secret `PAPER_FACTORY_WORKER=1` is set and routing picks Python,
+jobs are queued with `request_json.generator = "python_paper_factory"`.
+Edge `process-paper-generation-job` will **not** claim those rows.
 
 This service drains those jobs automatically when:
 

@@ -7,7 +7,12 @@
 // - WebSocket subprotocol auth confirmed correct: new WebSocket(url, ["token", token])
 // - RESTART_CLOSE_CODE check in handleClose prevents reconnect on controlled restart
 
-import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import {
+  deepgramTokenRefreshBufferSeconds,
+  fetchDeepgramTokenBounded,
+  isDeepgramTokenBlocked,
+  resetDeepgramTokenClient,
+} from "@/lib/audio/deepgramToken";
 import { useAuthStore } from "@/store/authStore";
 import { useAudioStore } from "@/store/audioStore";
 import { FEATURE_FLAGS, FEATURE_PLAN_GATE } from "@/lib/constants/features";
@@ -34,9 +39,8 @@ function isDiarizationAllowed(): boolean {
 }
 
 const DEEPGRAM_WSS_URL = "wss://api.deepgram.com/v1/listen";
-const MAX_RECONNECT_ATTEMPTS = 5;
+const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_BASE_DELAY_MS = 1000;
-const TOKEN_REFRESH_BUFFER_S = 50;
 
 // Used for controlled restart without triggering reconnect loop
 const RESTART_CLOSE_CODE = 4000;
@@ -56,13 +60,6 @@ export interface DeepgramStreamOptions {
   onInterim: (text: string) => void;
   onError: (error: Error) => void;
   onStatusChange: (status: DeepgramConnectionStatus) => void;
-}
-
-interface TokenResponse {
-  token: string;
-  expires_in: number;
-  key_id: string | null;
-  type: "scoped" | "raw";
 }
 
 interface DeepgramWord {
@@ -95,6 +92,7 @@ export class DeepgramStreamClient {
 
   private currentToken: string | null = null;
   private tokenExpiresAt = 0;
+  private tokenExpiresInSec = 0;
 
   private stream: MediaStream;
   private config: DeepgramConfig;
@@ -134,6 +132,7 @@ export class DeepgramStreamClient {
       const msg = err instanceof Error ? err.message : String(err);
       this.callbacks.onError(new Error(`Deepgram token error: ${msg}`));
       this.callbacks.onStatusChange("error");
+      this.destroyed = true;
       throw new Error(`Deepgram token error: ${msg}`);
     }
 
@@ -251,15 +250,16 @@ export class DeepgramStreamClient {
   }
 
   private async ensureFreshToken(): Promise<void> {
-    const nowMs = Date.now();
-    const bufferMs = TOKEN_REFRESH_BUFFER_S * 1000;
-    const isExpiredOrClose = !this.currentToken || nowMs + bufferMs >= this.tokenExpiresAt;
-
-    if (isExpiredOrClose) {
-      const tokenData = await fetchDeepgramToken();
-      this.currentToken = tokenData.token;
-      this.tokenExpiresAt = Date.now() + tokenData.expires_in * 1000;
+    if (isDeepgramTokenBlocked()) {
+      throw new Error(
+        "Live transcription is unavailable. You can still type questions in Chat.",
+      );
     }
+
+    const tokenData = await fetchDeepgramTokenBounded();
+    this.currentToken = tokenData.token;
+    this.tokenExpiresAt = tokenData.expires_at_ms;
+    this.tokenExpiresInSec = tokenData.expires_in;
   }
 
   private handleOpen(): void {
@@ -297,6 +297,8 @@ export class DeepgramStreamClient {
       const reason = event.reason || `Deepgram auth failure (code ${event.code})`;
       this.callbacks.onError(new Error(`Deepgram WS closed permanently: ${reason}`));
       this.callbacks.onStatusChange("error");
+      this.destroyed = true;
+      resetDeepgramTokenClient();
       return;
     }
 
@@ -310,6 +312,11 @@ export class DeepgramStreamClient {
     }
 
     if (event.code !== 1000 && this.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      if (isDeepgramTokenBlocked()) {
+        this.callbacks.onStatusChange("error");
+        this.destroyed = true;
+        return;
+      }
       this.reconnectAttempts++;
       const delay = RECONNECT_BASE_DELAY_MS * Math.pow(2, this.reconnectAttempts - 1);
       this.callbacks.onStatusChange("reconnecting");
@@ -474,12 +481,13 @@ export class DeepgramStreamClient {
   }
 
   private scheduleTokenRefresh(): void {
-      this.stopTokenRefresh();
-      const refreshIn = Math.max(5_000, this.tokenExpiresAt - Date.now() - TOKEN_REFRESH_BUFFER_S * 1000);
-      this.tokenRefreshTimer = setTimeout(() => {
-        if (!this.destroyed) void this.restart();
-      }, refreshIn);
-    }
+    this.stopTokenRefresh();
+    const bufferMs = deepgramTokenRefreshBufferSeconds(this.tokenExpiresInSec || 600) * 1000;
+    const refreshIn = Math.max(5_000, this.tokenExpiresAt - Date.now() - bufferMs);
+    this.tokenRefreshTimer = setTimeout(() => {
+      if (!this.destroyed) void this.restart();
+    }, refreshIn);
+  }
 
   private stopTokenRefresh(): void {
       if (this.tokenRefreshTimer) {
@@ -515,27 +523,7 @@ export class DeepgramStreamClient {
   }
 }
 
-/* ─── HELPERS ────────────────────────────────────────────────────────────── */
-
-async function fetchDeepgramToken(): Promise<TokenResponse> {
-  try {
-    const data = await fetchEdgeJson<TokenResponse>("deepgram-token", {});
-    if (!data?.token) {
-      throw new Error("Deepgram token response missing token field");
-    }
-    return data;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err ?? "");
-    if (/503|502|unavailable|misconfigured|SERVICE_UNAVAILABLE|MISSING_PROJECT_ID/i.test(msg)) {
-      throw new Error(
-        "Live transcription is unavailable. You can still type questions in Chat.",
-      );
-    }
-    throw new Error(
-      msg.trim() || "Could not start speech recognition. Please try again.",
-    );
-  }
-}
+export { resetDeepgramTokenClient } from "@/lib/audio/deepgramToken";
 
 /** Returns null when no word-level speaker labels exist (do not invent 0). */
 function getMajoritySpeaker(words: TranscriptWord[]): number | null {

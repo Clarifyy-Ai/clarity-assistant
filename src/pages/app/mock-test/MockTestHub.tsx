@@ -378,15 +378,20 @@ export default function MockTestHub(): React.ReactElement {
               );
           }}
           onResultsChange={(results, meta) => {
-            setGovResults(results);
+            setGovResults(meta.state === "error" ? [] : results);
             setSearchQ(meta.query);
             setSearching(meta.state === "loading");
             if (meta.state === "loading") setSearchState("searching");
-            else if (meta.state === "empty") setSearchState("empty");
-            else if (meta.state === "error") {
+            else if (meta.state === "empty") {
+              setSearchState("empty");
+              setSearchError(null);
+            } else if (meta.state === "error") {
               setSearchState("error");
               setSearchError(meta.error);
-            } else setSearchState(results.length ? "success" : "idle");
+            } else {
+              setSearchState(results.length ? "success" : "idle");
+              setSearchError(null);
+            }
           }}
         />
         <div className="flex flex-wrap gap-2 items-center">
@@ -458,20 +463,44 @@ export default function MockTestHub(): React.ReactElement {
           {govResults.map((exam) => {
             const bank = exam.bankReadiness;
             const fullSimOk = bank?.fullSimulationAvailable === true;
+            const category =
+              exam.stateCode?.trim() ||
+              exam.jurisdiction?.trim() ||
+              exam.family?.trim() ||
+              null;
+            const stageLabel =
+              exam.stage?.name ??
+              (exam.stages?.length === 1
+                ? exam.stages[0].name
+                : exam.stages?.length
+                  ? `${exam.stages.length} stage(s)`
+                  : null);
+            const verified = String(exam.verifiedAt ?? exam.lastVerified ?? "").slice(0, 10) || null;
+            const displayName = exam.shortName?.trim() || exam.name;
             return (
             <div
               key={exam.examId}
               className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-border bg-card/60 px-3 py-2.5"
             >
               <div className="min-w-0">
-                <p className="font-medium text-foreground">{exam.name}</p>
+                <p className="font-medium text-foreground">
+                  {displayName}
+                  {exam.shortName && exam.shortName !== exam.name ? (
+                    <span className="font-normal text-muted-foreground text-sm">
+                      {" "}
+                      · {exam.name}
+                    </span>
+                  ) : null}
+                </p>
                 <p className="text-xs text-muted-foreground">
                   {exam.recruitingBody?.name}
-                  {exam.stage ? ` · ${exam.stage.name}` : ""}
+                  {category ? ` · ${category}` : ""}
+                  {stageLabel ? ` · ${stageLabel}` : ""}
+                  {exam.languages?.length ? ` · ${exam.languages.join("/")}` : ""}
                   {exam.pattern
                     ? ` · ${exam.pattern.totalQuestions}Q · ${exam.pattern.durationMinutes}m · −${exam.pattern.negativeMark}`
                     : ""}
-                  {exam.lastVerified ? ` · pattern ${exam.pattern?.version}` : ""}
+                  {verified ? ` · verified ${verified}` : ""}
                 </p>
                 {bank && (
                   <p
@@ -483,9 +512,13 @@ export default function MockTestHub(): React.ReactElement {
                   >
                     Bank {formatBankCoverage(bank.approvedPublicCount, bank.requiredQuestions)}
                     {" · "}
+                    {typeof bank.approvedPublicCount === "number"
+                      ? `${bank.approvedPublicCount} approved`
+                      : null}
+                    {" · "}
                     {fullSimOk
                       ? "Full simulation available"
-                      : "Bank short — AI will fill unique remaining questions"}
+                      : "Bank short — Custom Practice Set or AI fill when allowed"}
                   </p>
                 )}
               </div>

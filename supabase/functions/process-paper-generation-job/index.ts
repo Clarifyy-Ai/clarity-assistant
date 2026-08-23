@@ -20,6 +20,7 @@ import { createServiceClient } from "../_shared/supabase.ts";
 import {
   assembleClaimedPaperJob,
 } from "../_shared/govPaperAssembly.ts";
+import { isPythonPaperFactoryGenerator } from "../_shared/govGeneratorRouting.ts";
 import {
   claimPaperGenerationJob,
   newWorkerId,
@@ -159,12 +160,8 @@ Deno.serve(async (req) => {
         }
         const routedGenerator = String(
           (existing.request_json as Record<string, unknown> | null)?.generator ?? "",
-        ).toLowerCase();
-        if (
-          routedGenerator === "python_paper_factory" ||
-          routedGenerator === "python" ||
-          routedGenerator === "factory"
-        ) {
+        );
+        if (isPythonPaperFactoryGenerator(routedGenerator)) {
           return json(req, {
             jobId: existing.id,
             status: existing.status,
@@ -184,12 +181,8 @@ Deno.serve(async (req) => {
     // Do not Edge-assemble jobs explicitly routed to the Python factory.
     const claimedGenerator = String(
       (claimed.job.request_json as Record<string, unknown> | null | undefined)?.generator ?? "",
-    ).toLowerCase();
-    if (
-      claimedGenerator === "python_paper_factory" ||
-      claimedGenerator === "python" ||
-      claimedGenerator === "factory"
-    ) {
+    );
+    if (isPythonPaperFactoryGenerator(claimedGenerator)) {
       // Release the lease so the Python worker can reclaim.
       await db
         .from("gov_paper_generation_jobs")

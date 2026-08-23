@@ -8,6 +8,7 @@ import uuid
 from typing import Any
 
 from app.core.logger import get_logger
+from app.gov_exams.observability import gov_exam_log
 from app.paper_factory.config import FactorySettings, get_factory_settings
 from app.paper_factory.factory import GenerationRequest, PaperFactory
 from app.paper_factory.models import PaperFactoryError, PaperResult
@@ -56,15 +57,61 @@ async def process_job(
 ) -> PaperResult | None:
     """Generate and publish one job, updating its state machine throughout."""
     job_id = str(job["id"])
+    correlation_id = str(
+        ((job.get("request_json") or {}) or {}).get("correlationId") or job_id
+    )
+    operation_id = f"gov-exam-worker-{job_id}"
+
+    gov_exam_log(
+        "job_received",
+        operation_id=operation_id,
+        job_id=job_id,
+        correlation_id=correlation_id,
+        worker="paper_factory",
+        mode=job.get("mode"),
+    )
+
     factory = PaperFactory(settings, repo)
     request = request_from_job(job)
 
     async def on_stage(stage: str) -> None:
         await asyncio.to_thread(repo.set_stage, job_id, stage)
+        event_map = {
+            "selecting_questions": "selection_started",
+            "validating_questions": "validation_started",
+            "generating_questions": "ai_generation_started",
+            "generating_missing_slots": "ai_generation_started",
+            "assembling": "assembly_started",
+        }
+        event = event_map.get(stage)
+        if event:
+            gov_exam_log(
+                event,
+                operation_id=operation_id,
+                job_id=job_id,
+                correlation_id=correlation_id,
+                stage=stage,
+            )
 
     try:
         result = await factory.generate(request, on_stage=on_stage)
     except PaperFactoryError as exc:
+        if exc.code in {"AI_PROVIDER_UNCONFIGURED", "GENERATION_INCOMPLETE", "CONTENT_INSUFFICIENT"}:
+            gov_exam_log(
+                "ai_generation_failed",
+                operation_id=operation_id,
+                job_id=job_id,
+                correlation_id=correlation_id,
+                error_code=exc.code,
+                error=exc.message[:300],
+            )
+            gov_exam_log(
+                "python_fallback_started",
+                operation_id=operation_id,
+                job_id=job_id,
+                correlation_id=correlation_id,
+                reason=exc.code,
+            )
         log.error(
             "paper_factory_job_failed",
             job_id=job_id,
@@ -80,6 +127,14 @@ async def process_job(
             retryable=exc.retryable,
         )
         await _compensate(job, repo)
+        gov_exam_log(
+            "completed",
+            operation_id=operation_id,
+            job_id=job_id,
+            correlation_id=correlation_id,
+            success=False,
+            error_code=exc.code,
+        )
         return None
     except Exception as exc:  # noqa: BLE001 - never leave a job stuck in-flight
         log.exception("paper_factory_job_crashed", job_id=job_id)
@@ -91,6 +146,14 @@ async def process_job(
             retryable=True,
         )
         await _compensate(job, repo)
+        gov_exam_log(
+            "completed",
+            operation_id=operation_id,
+            job_id=job_id,
+            correlation_id=correlation_id,
+            success=False,
+            error_code="PAPER_GENERATION_FAILED",
+        )
         return None
 
     await asyncio.to_thread(
@@ -98,6 +161,17 @@ async def process_job(
         job_id,
         paper_id=str(result.paper_id),
         mock_test_id=str(result.mock_test_id),
+    )
+    gov_exam_log(
+        "completed",
+        operation_id=operation_id,
+        job_id=job_id,
+        correlation_id=correlation_id,
+        success=True,
+        paper_id=result.paper_id,
+        mock_test_id=result.mock_test_id,
+        bank_count=result.bank_count,
+        generated_count=result.generated_count,
     )
     return result
 
@@ -129,7 +203,12 @@ async def worker_loop(
     stop_event = stop or asyncio.Event()
     processed = 0
 
-    log.info("paper_factory_worker_started", worker_id=identity, once=once)
+    log.info(
+        "paper_factory_worker_started",
+        worker_id=identity,
+        once=once,
+        has_ai_provider=active_settings.has_ai_provider,
+    )
     while not stop_event.is_set():
         try:
             job = await asyncio.to_thread(repo.claim_next_job, identity)

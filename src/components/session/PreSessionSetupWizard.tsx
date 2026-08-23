@@ -1806,7 +1806,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
         {isLastStep && voiceRequired && devicePrecheck.micState === MicState.READY &&
           (devicePrecheck.sttState === SttState.STT_UNAVAILABLE || devicePrecheck.sttState === SttState.STT_ERROR) && (
           <p role="status" className="text-xs text-amber-700 dark:text-amber-300">
-            Microphone ready. Transcription service is temporarily unavailable.
+            Microphone ready. Transcription unavailable — text mode still works.
           </p>
         )}
         {voiceMandatoryBlocker && (
