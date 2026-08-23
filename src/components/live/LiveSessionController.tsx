@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useNetworkColor } from "@/hooks/useNetworkMonitor";
+import { getOverlaySessionAuthority } from "@/store/overlaySessionAuthorityStore";
 import { toast } from "sonner";
 import type { LiveSessionConfig } from "@/types/session.types";
 
@@ -13,8 +14,12 @@ interface LiveSessionControllerProps {
   onAutoEnd?: () => void;
 }
 
+/**
+ * Live Copilot session timer / network sync.
+ * Mock uses MockSessionController — keep orchestration product-specific.
+ */
 export function LiveSessionController({ isActive, onAutoEnd }: LiveSessionControllerProps) {
-  const status         = useSessionStore((s) => s.status);
+  const status = useSessionStore((s) => s.status);
   const setNetworkColor = useOverlayStore((s) => s.setNetworkColor);
 
   const networkColor = useNetworkColor();
@@ -33,19 +38,34 @@ export function LiveSessionController({ isActive, onAutoEnd }: LiveSessionContro
   }
 
   useEffect(() => {
-    // Tick only while truly active. Paused / completed / idle freezes the timer
-    // so resume continues from the last elapsed value.
-    const shouldRun = isActive && status === "active";
+    const auth = getOverlaySessionAuthority();
+    const shouldRun =
+      isActive &&
+      status === "active" &&
+      auth.mode === "live" &&
+      auth.canAcceptSessionMutations();
 
     clearTimer();
     if (!shouldRun) return;
 
     let docHidden = false;
-    const onVisibility = () => { docHidden = document.hidden; };
+    const onVisibility = () => {
+      docHidden = document.hidden;
+    };
     document.addEventListener("visibilitychange", onVisibility);
 
     timerRef.current = setInterval(() => {
       if (docHidden) return;
+      const liveAuth = getOverlaySessionAuthority();
+      if (
+        liveAuth.mode !== "live" ||
+        !liveAuth.canAcceptSessionMutations() ||
+        liveAuth.lifecycle === "terminal"
+      ) {
+        clearTimer();
+        return;
+      }
+
       useSessionStore.getState().tickElapsed?.();
 
       const elapsed = useSessionStore.getState().elapsed_seconds;
@@ -61,7 +81,9 @@ export function LiveSessionController({ isActive, onAutoEnd }: LiveSessionContro
             warnedRef.current.add("end");
             toast.warning("Session time is up — ending session.", { duration: 5000 });
             clearTimer();
-            try { onAutoEndRef.current?.(); } catch (err) {
+            try {
+              onAutoEndRef.current?.();
+            } catch (err) {
               console.error("[LiveSessionController] auto-end failed:", err);
             }
           }
@@ -82,10 +104,8 @@ export function LiveSessionController({ isActive, onAutoEnd }: LiveSessionContro
       document.removeEventListener("visibilitychange", onVisibility);
       clearTimer();
     };
-     
   }, [isActive, status]);
 
-  // Reset auto-end + warnings when a brand-new session begins (idle/warming_up).
   useEffect(() => {
     if (status === "idle" || status === "warming_up") {
       autoEndedRef.current = false;
@@ -93,14 +113,14 @@ export function LiveSessionController({ isActive, onAutoEnd }: LiveSessionContro
     }
   }, [status]);
 
-  // Sync network color
   useEffect(() => {
     setNetworkColor?.(networkColor);
   }, [networkColor, setNetworkColor]);
 
   useEffect(() => {
-    return () => { clearTimer(); };
-     
+    return () => {
+      clearTimer();
+    };
   }, []);
 
   return null;

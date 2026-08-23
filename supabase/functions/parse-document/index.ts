@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
 
     const mimeCheck = validateUploadMime(mimeType);
     if (!mimeCheck.ok) {
-      return response(req, { error: mimeCheck.reason, code: "BAD_REQUEST" }, 400);
+      return response(req, { error: mimeCheck.reason, code: "UNSUPPORTED_FILE_TYPE" }, 400);
     }
 
     if (libraryDocumentId) {
@@ -188,7 +188,7 @@ Deno.serve(async (req) => {
         await db.from("personal_library_documents").update({
           processing_status: "error", processing_error: "Document file could not be downloaded.",
         }).eq("id", libraryDocumentId);
-        return response(req, { error: "Document file could not be downloaded.", code: "SERVICE_UNAVAILABLE" }, 502);
+        return response(req, { error: "Document file could not be downloaded.", code: "PARSER_UNAVAILABLE" }, 503);
       }
       const buf = await fileData.arrayBuffer();
       if (!buf.byteLength || buf.byteLength > MAX_FILE_BYTES) {
@@ -220,7 +220,7 @@ Deno.serve(async (req) => {
           processing_status: "error", processing_error: "Could not extract readable text from this document.",
           content_hash: hash,
         }).eq("id", libraryDocumentId);
-        return response(req, { error: "Could not extract readable text from this document.", code: "PARSE_FAILED" }, 422);
+        return response(req, { error: "Could not extract readable text from this document.", code: "PARSER_FAILED" }, 422);
       }
       await db.from("personal_library_documents").update({
         content_hash: hash, parsed_content: extracted.full_text, parsed_metadata: { summary: extracted.summary },

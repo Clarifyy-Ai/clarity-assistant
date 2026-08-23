@@ -11,6 +11,10 @@ export function isOverlayGhostClickSuppressed(): boolean {
 
 function guardHandler(e: Event): void {
   if (!isOverlayGhostClickSuppressed()) return;
+  const target = e.target;
+  if (target instanceof Element && target.closest("[data-mock-chrome], [data-allow-during-ghost-suppress]")) {
+    return;
+  }
   e.preventDefault();
   e.stopPropagation();
   e.stopImmediatePropagation();

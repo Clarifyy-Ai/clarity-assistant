@@ -103,6 +103,7 @@ interface MockTest {
   attempt_phase?: ExamAttemptPhase | string | null;
   time_limit_minutes: number | null;
   started_at?: string | null;
+  expires_at?: string | null;
 }
 
 interface TestResponseRow {
@@ -155,7 +156,12 @@ function formatTime(seconds: number): string {
 }
 
 function computeRemainingSeconds(test: MockTest): number {
-  return remainingFromStart(test.started_at, test.time_limit_minutes);
+  return remainingFromStart(
+    test.started_at,
+    test.time_limit_minutes,
+    Date.now(),
+    test.expires_at,
+  );
 }
 
 function MathText({ text }: { text: string }) {
@@ -404,7 +410,13 @@ export default function TestSession() {
     const tick = () => {
       setTimeLeft(computeRemainingSeconds(test));
       if (
-        shouldAutoSubmitAttempt(test.status, test.started_at, test.time_limit_minutes)
+        shouldAutoSubmitAttempt(
+          test.status,
+          test.started_at,
+          test.time_limit_minutes,
+          Date.now(),
+          test.expires_at,
+        )
       ) {
         queueMicrotask(() => {
           void handleSubmit(true);
@@ -644,11 +656,17 @@ export default function TestSession() {
     setStartingTest(true);
     try {
       const startedAt = new Date().toISOString();
+      const limitMins = Number(test.time_limit_minutes ?? 0);
+      const expiresAt =
+        Number.isFinite(limitMins) && limitMins > 0
+          ? new Date(Date.now() + limitMins * 60_000).toISOString()
+          : null;
       const { error } = await supabase
         .from("mock_tests")
         .update({
           status: "IN_PROGRESS",
           started_at: startedAt,
+          expires_at: expiresAt,
           attempt_phase: "ACTIVE",
         })
         .eq("id", test.id)
@@ -658,6 +676,7 @@ export default function TestSession() {
         ...test,
         status: "IN_PROGRESS",
         started_at: startedAt,
+        expires_at: expiresAt,
         attempt_phase: "ACTIVE",
       };
       setTest(updated);

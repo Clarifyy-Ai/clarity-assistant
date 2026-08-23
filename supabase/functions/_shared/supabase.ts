@@ -51,6 +51,8 @@ export type RefundCreditsInput = {
   cost: number;
   reason: string;
   sessionId?: string | null;
+  /** When set, duplicate refunds with the same key are no-ops. */
+  idempotencyKey?: string | null;
 };
 
 type IdempotencyRecord = {
@@ -485,7 +487,7 @@ export async function deductCreditsAtomic(
  */
 export async function refundCredits(
   input: RefundCreditsInput
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; idempotentReplay?: boolean }> {
   if (!input.userId || !isValidUuid(input.userId)) {
     return {
       success: false,
@@ -502,6 +504,17 @@ export async function refundCredits(
 
   const db = createServiceClient();
   const reason = normalizeReason(input.reason);
+  const idemKey = input.idempotencyKey?.trim() || null;
+
+  if (idemKey) {
+    const prior = await getIdempotentResponse(db, idemKey, {
+      userId: input.userId,
+      action: `refund:${reason}`,
+    });
+    if (prior?.success === true) {
+      return { success: true, idempotentReplay: true };
+    }
+  }
 
   try {
     const rpcResult = await db.rpc("refund_credits", {
@@ -512,6 +525,14 @@ export async function refundCredits(
 
     const result = rpcResult.data as { success?: boolean; error?: string } | null;
     if (!rpcResult.error && result?.success === true) {
+      if (idemKey) {
+        await storeIdempotentResponse(
+          db,
+          idemKey,
+          { success: true, credits: input.cost, balance: 0 },
+          { userId: input.userId, action: `refund:${reason}` },
+        );
+      }
       return {
         success: true,
       };

@@ -23,6 +23,7 @@ import {
 import {
   claimPaperGenerationJob,
   newWorkerId,
+  reclaimExpiredPaperJobs,
 } from "../_shared/govPaperJobLease.ts";
 
 function json(req: Request, payload: unknown, status = 200) {
@@ -103,6 +104,11 @@ Deno.serve(async (req) => {
     }
 
     if (!actor) return unauthorizedResponse();
+
+    // Opportunistic reclaim of lease-expired jobs so nothing stays Generating forever.
+    await reclaimExpiredPaperJobs(db, { limit: 10 }).catch((err) => {
+      console.warn("[process-paper-generation-job] reclaim:", err);
+    });
 
     const workerId = newWorkerId(actor === "internal" ? "svc" : actor);
 

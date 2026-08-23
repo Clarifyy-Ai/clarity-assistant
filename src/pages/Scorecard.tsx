@@ -108,7 +108,21 @@ export default function Scorecard() {
     );
   }
 
-  const scoreGrade = getScoreGrade(scorecard.overall_score);
+  const dominantQuality = scorecard.question_scores?.find((q) =>
+    q.quality_class &&
+    q.quality_class !== "VALID",
+  )?.quality_class;
+  const allPoor =
+    (scorecard.question_scores?.length ?? 0) > 0 &&
+    scorecard.question_scores.every((q) =>
+      q.quality_class &&
+      q.quality_class !== "VALID" &&
+      q.quality_class !== "LOW_QUALITY",
+    );
+  const scoreGrade = getScoreGrade(
+    scorecard.overall_score,
+    allPoor ? dominantQuality ?? "IRRELEVANT" : undefined,
+  );
   const looksEmpty =
     scorecard.overall_score === 0 &&
     (scorecard.question_scores?.length ?? 0) === 0 &&
@@ -340,7 +354,7 @@ function QuestionScoreCard({
 }: {
   question: any; isExpanded: boolean; onToggle: () => void;
 }) {
-  const grade = getScoreGrade(question.score);
+  const grade = getScoreGrade(question.score, question.quality_class);
   return (
     <div className="bg-secondary border border-border rounded-xl overflow-hidden">
       <button
@@ -460,7 +474,21 @@ function MiniScoreBar({ value }: { value: number }) {
 // Helpers
 // ─────────────────────────────────────────────────────────────────
 
-function getScoreGrade(score: number) {
+function getScoreGrade(score: number, qualityClass?: string) {
+  const poor =
+    qualityClass === "IRRELEVANT" ||
+    qualityClass === "NON_RESPONSIVE" ||
+    qualityClass === "GIBBERISH" ||
+    qualityClass === "REPEATED" ||
+    qualityClass === "EMPTY";
+  if (poor || (score <= 5 && qualityClass && qualityClass !== "VALID")) {
+    return {
+      label: "Irrelevant or non-responsive answer",
+      color: "text-red-400",
+      bg: "bg-red-500/10",
+      border: "border-red-500/20",
+    };
+  }
   if (score >= 85) return { label: "Excellent",    color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20" };
   if (score >= 70) return { label: "Good",         color: "text-green-400",   bg: "bg-green-500/10",   border: "border-green-500/20" };
   if (score >= 55) return { label: "Average",      color: "text-yellow-400",  bg: "bg-yellow-500/10",  border: "border-yellow-500/20" };

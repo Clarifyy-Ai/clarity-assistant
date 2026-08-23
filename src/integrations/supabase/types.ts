@@ -2697,6 +2697,36 @@ export type Database = {
           },
         ]
       }
+      gov_exam_requests: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          query_text: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          query_text: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          query_text?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       gov_exam_topics: {
         Row: {
           created_at: string
@@ -3878,6 +3908,7 @@ export type Database = {
           question_ids: string[]
           rank_status: string
           started_at: string | null
+          expires_at: string | null
           status: string
           submitted_at: string | null
           test_name: string
@@ -3896,6 +3927,7 @@ export type Database = {
           question_ids?: string[]
           rank_status?: string
           started_at?: string | null
+          expires_at?: string | null
           status?: string
           submitted_at?: string | null
           test_name: string
@@ -3914,6 +3946,7 @@ export type Database = {
           question_ids?: string[]
           rank_status?: string
           started_at?: string | null
+          expires_at?: string | null
           status?: string
           submitted_at?: string | null
           test_name?: string
@@ -4307,41 +4340,68 @@ export type Database = {
         Row: {
           answers: Json
           created_at: string
+          current_index: number
           difficulty: string | null
+          elapsed_seconds: number
           ended_at: string | null
+          expires_at: string | null
           id: string
           interview_type: string
+          mode: string | null
           notes: string | null
+          question_order: Json
+          question_source: string | null
           role: string | null
           scores: Json | null
+          skipped: Json
           started_at: string
+          status: string
           user_id: string
+          version: number
         }
         Insert: {
           answers?: Json
           created_at?: string
+          current_index?: number
           difficulty?: string | null
+          elapsed_seconds?: number
           ended_at?: string | null
+          expires_at?: string | null
           id?: string
           interview_type: string
+          mode?: string | null
           notes?: string | null
+          question_order?: Json
+          question_source?: string | null
           role?: string | null
           scores?: Json | null
+          skipped?: Json
           started_at?: string
+          status?: string
           user_id: string
+          version?: number
         }
         Update: {
           answers?: Json
           created_at?: string
+          current_index?: number
           difficulty?: string | null
+          elapsed_seconds?: number
           ended_at?: string | null
+          expires_at?: string | null
           id?: string
           interview_type?: string
+          mode?: string | null
           notes?: string | null
+          question_order?: Json
+          question_source?: string | null
           role?: string | null
           scores?: Json | null
+          skipped?: Json
           started_at?: string
+          status?: string
           user_id?: string
+          version?: number
         }
         Relationships: []
       }

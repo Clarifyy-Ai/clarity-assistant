@@ -1,4 +1,4 @@
-import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders, withBrowserCors, applyCors } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import {
@@ -8,6 +8,20 @@ import {
   RATE_LIMIT_PRESETS,
 } from "../_shared/rateLimit.ts";
 
+/** Map DB status + retryable flag to the public job contract. */
+function mapPublicStatus(
+  status: string | null | undefined,
+  retryable?: boolean | null,
+): string {
+  const s = String(status ?? "").trim();
+  if (s === "failed_retryable" || s === "failed_permanent") return s;
+  if (s === "failed") {
+    return retryable === false ? "failed_permanent" : "failed_retryable";
+  }
+  if (s === "expired") return "failed_permanent";
+  return s || "queued";
+}
+
 function json(req: Request, payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -15,7 +29,7 @@ function json(req: Request, payload: unknown, status = 200) {
   });
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withBrowserCors("get-paper-generation-job", async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
@@ -23,7 +37,7 @@ Deno.serve(async (req) => {
 
   try {
     const auth = await authenticateRequest(req);
-    if (auth.error) return auth.error;
+    if (auth.error) return applyCors(req, auth.error);
     const user = auth.context.user;
 
     const rateLimitResult = await checkRateLimitAsync(db, {
@@ -31,7 +45,7 @@ Deno.serve(async (req) => {
       ...RATE_LIMIT_PRESETS.SESSION_ACTION,
     });
     if (!rateLimitResult.allowed) {
-      return rateLimitResponse(rateLimitResult);
+      return rateLimitResponse(rateLimitResult, req);
     }
 
     const url = new URL(req.url);
@@ -49,7 +63,7 @@ Deno.serve(async (req) => {
     const { data: job, error } = await db
       .from("gov_paper_generation_jobs")
       .select(
-        "id, status, progress_stage, mock_test_id, generated_paper_id, error_code, error_message, blueprint_json, credits_charged, created_at, completed_at, mode, language, attempt_count, retryable, lease_expires_at, heartbeat_at, worker_id",
+        "id, status, progress_stage, mock_test_id, generated_paper_id, error_code, error_message, blueprint_json, credits_charged, created_at, completed_at, mode, language, attempt_count, retryable, lease_expires_at, heartbeat_at, worker_id, started_at, exam_id",
       )
       .eq("id", jobId)
       .eq("user_id", user.id)
@@ -59,10 +73,12 @@ Deno.serve(async (req) => {
       return json(req, { error: "Job not found", code: "PAPER_NOT_FOUND" }, 404);
     }
 
+    const publicStatus = mapPublicStatus(job.status, job.retryable as boolean | null);
+
     return json(req, {
       jobId: job.id,
-      status: job.status,
-      progressStage: job.progress_stage,
+      status: publicStatus,
+      progressStage: job.progress_stage ?? publicStatus,
       mockTestId: job.mock_test_id,
       paperId: job.generated_paper_id,
       errorCode: job.error_code,
@@ -71,7 +87,9 @@ Deno.serve(async (req) => {
       creditsCharged: job.credits_charged,
       mode: job.mode,
       language: job.language,
+      examId: job.exam_id,
       createdAt: job.created_at,
+      startedAt: job.started_at,
       completedAt: job.completed_at,
       attemptCount: job.attempt_count ?? 0,
       retryable: job.retryable ?? true,
@@ -83,4 +101,4 @@ Deno.serve(async (req) => {
     console.error("[get-paper-generation-job]", err);
     return json(req, { error: "Internal server error", code: "INTERNAL_ERROR" }, 500);
   }
-});
+}));

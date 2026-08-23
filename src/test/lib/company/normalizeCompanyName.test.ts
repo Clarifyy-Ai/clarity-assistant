@@ -18,6 +18,9 @@ const CASES: Array<[string, string]> = [
   ["Goldman\tSachs", "goldman sachs"],
   ["Goldman\nSachs", "goldman sachs"],
   [" Tata  Consultancy   Services ", "tata consultancy services"],
+  ["https://www.Acme.com/", "acme.com"],
+  ["HTTPS://WWW.GOOGLE.COM/about", "google.com"],
+  ["acme.io", "acme.io"],
   ["", ""],
   ["   ", ""],
 ];
@@ -52,12 +55,12 @@ describe("normalizeCompanyName", () => {
     const sql = fs.readFileSync(
       path.join(
         process.cwd(),
-        "supabase/migrations/20260823041904_company_research_identity_and_unique.sql",
+        "supabase/migrations/20260823140000_company_research_url_normalize_and_drop_legacy_unique.sql",
       ),
       "utf8",
     );
-    expect(sql).toContain("lower(trim(regexp_replace(COALESCE(p_name, ''), '\\s+', ' ', 'g')))");
-    expect(sql).toContain("UNIQUE (user_id, company_name_normalized)");
+    expect(sql).toContain("normalize_company_name");
+    expect(sql).toContain("DROP CONSTRAINT IF EXISTS company_research_user_company_unique");
   });
 });
 
@@ -68,7 +71,7 @@ describe("companyResearchIdempotencyKey", () => {
     const a = companyResearchIdempotencyKey({ userId, normalizedCompany: "acme corp" });
     const b = companyResearchIdempotencyKey({ userId, normalizedCompany: "acme corp" });
     expect(a).toBe(b);
-    expect(a).toBe(`company-research:${userId}:acme corp`);
+    expect(a).toBe(`company-research:${userId}:acme-corp`);
   });
 
   it("separates users and companies", () => {

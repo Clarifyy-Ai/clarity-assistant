@@ -22,10 +22,15 @@ import {
 import {
   buildExamOrFilter,
   buildPagination,
+  decodeSearchCursor,
+  escapeIlikePattern,
+  rankExamResults,
   resolveFamily,
   resolvePagination,
-  SEARCH_SERVICE_UNAVAILABLE,
-  SEARCH_SERVICE_UNAVAILABLE_MESSAGE,
+  validateSearchQuery,
+  MAX_PAGE_SIZE,
+  SERVICE_UNAVAILABLE,
+  SERVICE_UNAVAILABLE_MESSAGE,
   SEARCH_FAILED,
   SEARCH_FAILED_MESSAGE,
   INVALID_QUERY,
@@ -77,8 +82,8 @@ function searchUnavailable(req: Request, detail: string) {
   return corsError(
     req,
     503,
-    SEARCH_SERVICE_UNAVAILABLE,
-    SEARCH_SERVICE_UNAVAILABLE_MESSAGE,
+    SERVICE_UNAVAILABLE,
+    SERVICE_UNAVAILABLE_MESSAGE,
   );
 }
 
@@ -146,6 +151,7 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
     let rawFamily: unknown = url.searchParams.get("family") ?? "";
     let rawPage: unknown = url.searchParams.get("page") ?? undefined;
     let rawPageSize: unknown = url.searchParams.get("pageSize") ?? undefined;
+    let rawCursor: unknown = url.searchParams.get("cursor") ?? undefined;
 
     if (req.method === "POST") {
       const raw = await req.text();
@@ -167,6 +173,7 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
         if (!String(rawFamily ?? "").trim()) rawFamily = record.family ?? "";
         if (rawPage === undefined) rawPage = record.page;
         if (rawPageSize === undefined) rawPageSize = record.pageSize;
+        if (rawCursor === undefined) rawCursor = record.cursor ?? record.nextCursor;
       }
     } else if (req.method !== "GET" && req.method !== "HEAD") {
       return corsError(req, 405, "BAD_REQUEST", "Method not allowed.");
@@ -177,8 +184,16 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
       return corsError(req, 422, "VALIDATION_ERROR", familyResult.message);
     }
     const family = familyResult.family;
-    const q = String(rawQuery ?? "").trim().slice(0, 120);
-    const pageRequest = resolvePagination({ page: rawPage, pageSize: rawPageSize });
+    const queryValidation = validateSearchQuery(rawQuery);
+    if (!queryValidation.ok) {
+      return corsError(req, 422, queryValidation.code, queryValidation.message);
+    }
+    const q = queryValidation.query;
+    const cursorPage = decodeSearchCursor(rawCursor);
+    const pageRequest = resolvePagination({
+      page: cursorPage ?? rawPage,
+      pageSize: rawPageSize,
+    });
 
     const { data: profileRow } = await db
       .from("profiles")
@@ -190,11 +205,13 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
     // Alias hits cannot be expressed as a PostgREST filter on gov_exams, so
     // resolve matching exam ids first and union them into the main filter.
     let aliasExamIds: string[] = [];
+    let bodyExamIds: string[] = [];
     if (q) {
+      const like = `%${escapeIlikePattern(q)}%`;
       const { data: aliasRows, error: aliasError } = await db
         .from("gov_exam_aliases")
         .select("exam_id")
-        .ilike("alias", `%${q}%`)
+        .ilike("alias", like)
         .limit(200);
       if (aliasError) {
         return searchUnavailable(req, `aliases: ${aliasError.message}`);
@@ -206,6 +223,36 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
             .filter(Boolean),
         ),
       ];
+
+      // Recruiting body name/code matches — union exam ids (body is a relation).
+      const { data: bodyRows, error: bodyError } = await db
+        .from("recruiting_bodies")
+        .select("id")
+        .or(`name.ilike.${like},code.ilike.${like}`)
+        .limit(50);
+      if (bodyError) {
+        console.warn("[search-exams] recruiting_bodies lookup:", bodyError.message);
+      } else {
+        const bodyIds = (bodyRows ?? [])
+          .map((row) => String((row as { id?: string }).id ?? ""))
+          .filter(Boolean);
+        if (bodyIds.length > 0) {
+          const { data: examByBody, error: examByBodyErr } = await db
+            .from("gov_exams")
+            .select("id")
+            .in("recruiting_body_id", bodyIds)
+            .eq("is_public", true)
+            .eq("review_state", "approved")
+            .limit(200);
+          if (examByBodyErr) {
+            console.warn("[search-exams] exams-by-body:", examByBodyErr.message);
+          } else {
+            bodyExamIds = (examByBody ?? [])
+              .map((row) => String((row as { id?: string }).id ?? ""))
+              .filter(Boolean);
+          }
+        }
+      }
     }
 
     // Filtering and paging happen in PostgREST so a large registry never gets
@@ -228,23 +275,28 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
       }
     }
     if (q) {
+      const idUnion = [...new Set([...aliasExamIds, ...bodyExamIds])];
       query = query.or(
-        aliasExamIds.length > 0
-          ? `${buildExamOrFilter(q)},id.in.(${aliasExamIds.join(",")})`
+        idUnion.length > 0
+          ? `${buildExamOrFilter(q)},id.in.(${idUnion.join(",")})`
           : buildExamOrFilter(q),
       );
     }
 
+    // Fetch a wider window then rank in-memory so relevance beats alpha order.
+    const fetchSize = Math.min(MAX_PAGE_SIZE * 3, 120);
     const { data: exams, error, count } = await query
       .order("name")
-      .range(pageRequest.from, pageRequest.to);
+      .range(0, fetchSize - 1);
 
     if (error) {
       return searchUnavailable(req, error.message);
     }
 
     const pagination = buildPagination(pageRequest, count ?? 0);
-    const results = ((exams ?? []) as ExamRow[]).map(mapExam);
+    const mapped = ((exams ?? []) as ExamRow[]).map(mapExam);
+    const ranked = rankExamResults(mapped, q);
+    const results = ranked.slice(pageRequest.from, pageRequest.to + 1);
 
     // No matches is a successful empty result, never an error.
     if (results.length === 0) {
@@ -371,7 +423,7 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
       success: true,
       query: q,
       family: family ?? null,
-      count: enriched.length,
+      count: pagination.total,
       results: enriched,
       pagination,
       isIndiaUser,

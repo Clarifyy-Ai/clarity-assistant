@@ -1,9 +1,9 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   BookOpen, Upload, ClipboardList,
   ChevronRight, Zap, Target, Clock,
-  FlaskConical, BarChart2, Flame, Search,
+  FlaskConical, BarChart2, Flame,
 } from "lucide-react";
 import {
   mockTestsDB,
@@ -21,9 +21,9 @@ import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { LazyMotion, domAnimation } from "framer-motion";
 import { GovExamShowcase } from "@/components/marketing/GovExamShowcase";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { ExamSearchCombobox } from "@/components/gov-exam/ExamSearchCombobox";
 import {
-  searchGovExams,
-  mapGovSearchError,
+  requestGovExam,
   type GovExamSearchResult,
 } from "@/lib/gov-exam/api";
 import { formatBankCoverage } from "@/lib/gov-exam/bankReadiness";
@@ -37,14 +37,16 @@ import { supabase } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { userFacingDbError } from "@/lib/errors/userFacingDbError";
 
-const SEARCH_DEBOUNCE_MS = 300;
-
 const FAMILY_FILTERS = [
   { id: "", label: "All" },
   { id: "upsc", label: "UPSC" },
   { id: "ssc", label: "SSC" },
   { id: "railways", label: "Railways" },
   { id: "banking", label: "Banking" },
+  { id: "state_psc", label: "State PSC" },
+  { id: "defence", label: "Defence" },
+  { id: "teaching", label: "Teaching" },
+  { id: "other", label: "Other" },
 ] as const;
 
 const RECENT_CHIP_KEY = "clarify_gov_exam_recent";
@@ -63,10 +65,11 @@ interface HubStats {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Exam type quick-start cards
+// Legacy bank exams (non-registry) — JEE/NEET/PSU stay on configure path.
+// Government registry exams are discovered only via search above.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const EXAM_TYPES = [
+const LEGACY_BANK_EXAMS = [
   {
     id: "JEE_MAIN",
     name: "JEE Main",
@@ -84,33 +87,6 @@ const EXAM_TYPES = [
     border: "border-green-500/30",
     badge: "Medical",
     badgeColor: "bg-green-500/10 text-green-600",
-  },
-  {
-    id: "UPSC",
-    name: "UPSC CSE",
-    description: "GS Paper 1 & 2 · Current Affairs",
-    color: "from-amber-500/20 to-amber-600/10",
-    border: "border-amber-500/30",
-    badge: "Civil Services",
-    badgeColor: "bg-amber-500/10 text-amber-600",
-  },
-  {
-    id: "SSC_CGL",
-    name: "SSC CGL",
-    description: "Reasoning · Quant · English · GK",
-    color: "from-primary/20 to-primary/10",
-    border: "border-primary/30",
-    badge: "Government",
-    badgeColor: "bg-primary/10 text-primary",
-  },
-  {
-    id: "IBPS_PO",
-    name: "IBPS PO",
-    description: "Reasoning · Quant · English · Banking",
-    color: "from-rose-500/20 to-rose-600/10",
-    border: "border-rose-500/30",
-    badge: "Banking",
-    badgeColor: "bg-rose-500/10 text-rose-600",
   },
   {
     id: "HPCL_ENGINEER",
@@ -189,13 +165,13 @@ export default function MockTestHub(): React.ReactElement {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [searchQ, setSearchQ] = useState("");
+  const [syncQuery, setSyncQuery] = useState<string | undefined>(undefined);
   const [family, setFamily] = useState("");
   const [govResults, setGovResults] = useState<GovExamSearchResult[]>([]);
+  const [selectedExamId, setSelectedExamId] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchState, setSearchState] = useState<"idle" | "searching" | "success" | "empty" | "error">("idle");
   const [searchError, setSearchError] = useState<string | null>(null);
-  const searchAbortRef = useRef<AbortController | null>(null);
-  const searchReqIdRef = useRef(0);
   const [recentChips, setRecentChips] = useState<string[]>([]);
   const [hubReadiness, setHubReadiness] = useState<Awaited<
     ReturnType<typeof fetchLatestExamReadiness>
@@ -220,42 +196,11 @@ export default function MockTestHub(): React.ReactElement {
   }, []);
 
   async function runGovSearch(q: string, fam = family) {
-    searchAbortRef.current?.abort();
-    const controller = new AbortController();
-    searchAbortRef.current = controller;
-    const reqId = ++searchReqIdRef.current;
-
-    setSearching(true);
-    setSearchState("searching");
-    setSearchError(null);
-    try {
-      const data = await searchGovExams(
-        { q, family: fam || undefined },
-        { signal: controller.signal },
-      );
-      if (reqId !== searchReqIdRef.current) return;
-      setGovResults(data.results);
-      setSearchState(data.results.length === 0 ? "empty" : "success");
-    } catch (err) {
-      if (controller.signal.aborted) return;
-      if (reqId !== searchReqIdRef.current) return;
-      setGovResults([]);
-      const mapped = mapGovSearchError(err);
-      setSearchState("error");
-      setSearchError(mapped.message);
-    } finally {
-      if (reqId === searchReqIdRef.current) setSearching(false);
-    }
+    // Kept for recent-chip / family-chip compatibility; combobox owns live search.
+    setSearchQ(q);
+    setSyncQuery(q);
+    setFamily(fam);
   }
-
-  // Debounced search for typing + initial empty query; chips/submit also call runGovSearch.
-  useEffect(() => {
-    const handle = window.setTimeout(() => {
-      void runGovSearch(searchQ.trim(), family);
-    }, SEARCH_DEBOUNCE_MS);
-    return () => window.clearTimeout(handle);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQ, family]);
 
   function rememberChip(label: string) {
     const next = [label, ...recentChips.filter((c) => c !== label)].slice(0, 6);
@@ -406,24 +351,44 @@ export default function MockTestHub(): React.ReactElement {
 
       {/* ── Search-first discovery ─────────────────────────── */}
       <section className="rounded-2xl border border-border bg-gradient-to-b from-muted/30 to-background p-5 sm:p-6 space-y-4">
-        <form
-          className="relative"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (searchQ.trim()) rememberChip(searchQ.trim());
-            void runGovSearch(searchQ.trim());
+        <ExamSearchCombobox
+          value={selectedExamId}
+          family={family}
+          browseWhenEmpty
+          syncQuery={syncQuery}
+          placeholder="Search exam, post, recruiting body, or subject — e.g. SSC CGL, Railway NTPC, IBPS PO"
+          onSelect={(exam) => {
+            setSelectedExamId(exam.examId);
+            setSearchQ(exam.name);
+            rememberChip(exam.name);
+            setGovResults((prev) => {
+              if (prev.some((p) => p.examId === exam.examId)) return prev;
+              return [exam, ...prev];
+            });
+            setSearchState("success");
           }}
-        >
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <input
-            type="search"
-            value={searchQ}
-            onChange={(e) => setSearchQ(e.target.value)}
-            placeholder="Search exam, post, recruiting body, or subject — e.g. SSC CGL, Railway NTPC, IBPS PO"
-            className="w-full rounded-xl border border-border bg-background pl-10 pr-4 py-3 text-sm"
-            aria-label="Search government exams"
-          />
-        </form>
+          onClear={() => setSelectedExamId("")}
+          onRequestExam={(q) => {
+            void requestGovExam({ queryText: q || searchQ || "requested exam" })
+              .then(() => toast.success("Exam request submitted."))
+              .catch((err) =>
+                toast.error(
+                  err instanceof Error ? err.message : "Could not submit request.",
+                ),
+              );
+          }}
+          onResultsChange={(results, meta) => {
+            setGovResults(results);
+            setSearchQ(meta.query);
+            setSearching(meta.state === "loading");
+            if (meta.state === "loading") setSearchState("searching");
+            else if (meta.state === "empty") setSearchState("empty");
+            else if (meta.state === "error") {
+              setSearchState("error");
+              setSearchError(meta.error);
+            } else setSearchState(results.length ? "success" : "idle");
+          }}
+        />
         <div className="flex flex-wrap gap-2 items-center">
             <span className="text-xs text-muted-foreground">Recent:</span>
             {(recentChips.length ? recentChips : ["SSC CGL", "RRB NTPC", "IBPS PO"]).map((chip) => (
@@ -432,7 +397,6 @@ export default function MockTestHub(): React.ReactElement {
                 type="button"
                 className="text-xs rounded-full border border-border px-2.5 py-1 hover:bg-secondary/60"
                 onClick={() => {
-                  setSearchQ(chip);
                   rememberChip(chip);
                   void runGovSearch(chip);
                 }}
@@ -453,7 +417,7 @@ export default function MockTestHub(): React.ReactElement {
               }`}
               onClick={() => {
                 setFamily(f.id);
-                void runGovSearch(searchQ.trim(), f.id);
+                setSyncQuery(searchQ);
               }}
             >
               {f.label}
@@ -468,9 +432,28 @@ export default function MockTestHub(): React.ReactElement {
             />
           )}
           {searchState === "empty" && !searching && (
-            <p className="text-sm text-muted-foreground" data-testid="gov-exam-search-empty">
-              No matching results found. Pilot packs: SSC CGL, RRB NTPC, IBPS PO, UPSC Prelims.
-            </p>
+            <div className="space-y-2" data-testid="gov-exam-search-empty">
+              <p className="text-sm text-muted-foreground">
+                No exams found for that search. Try another name, alias, or recruiting body.
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const q = searchQ.trim() || "requested exam";
+                  void requestGovExam({ queryText: q })
+                    .then(() => toast.success("Exam request submitted."))
+                    .catch((err) =>
+                      toast.error(
+                        err instanceof Error ? err.message : "Could not submit request.",
+                      ),
+                    );
+                }}
+              >
+                Request this exam
+              </Button>
+            </div>
           )}
           {govResults.map((exam) => {
             const bank = exam.bankReadiness;
@@ -612,13 +595,16 @@ export default function MockTestHub(): React.ReactElement {
         </CardContent>
       </Card>
 
-      {/* ── Exam type cards ───────────────────────────────── */}
+      {/* ── Legacy bank exams (non-registry) ───────────────── */}
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-3">
-          Start a Test
+          Other bank exams
         </h2>
+        <p className="text-xs text-muted-foreground mb-3">
+          Engineering, medical, and PSU banks use the classic configure flow. Government exams are searched above from the live registry.
+        </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-stretch gap-4">
-          {EXAM_TYPES.map((exam) => (
+          {LEGACY_BANK_EXAMS.map((exam) => (
             <div
               key={exam.id}
               className={`h-full p-4 flex flex-col rounded-xl border ${exam.border} bg-gradient-to-br ${exam.color} transition-all hover:shadow-md`}

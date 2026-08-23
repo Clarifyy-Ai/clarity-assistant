@@ -42,6 +42,10 @@ import {
 } from "@/lib/session/sessionStartEligibility";
 import { useAuthStore } from "@/store/authStore";
 import { ApiClientError } from "@/lib/api/apiClient";
+import { syncOverlayAuthReady } from "@/lib/session/overlayProductSession";
+import { resetTransientOverlaySessionStores } from "@/lib/session/resetOverlaySessionStores";
+import { useOverlaySessionAuthorityStore } from "@/store/overlaySessionAuthorityStore";
+import { OverlaySessionPreparing } from "@/components/overlay/OverlaySessionPreparing";
 
 const PREP_LABELS = [
   "Analysing your profile…",
@@ -72,18 +76,27 @@ export default function LiveOverlay() {
 function LiveOverlaySession() {
   const navigate = useNavigate();
   const sessionStatus = useSessionStore((s) => s.status);
+  const sessionId = useSessionStore((s) => s.session_id);
   const isMobile = useIsMobile();
   const authUserId = useAuthStore((s) => s.user?.id);
+  const canMountOverlay = useOverlaySessionAuthorityStore((s) => s.canMountOverlay());
+  const authorityLifecycle = useOverlaySessionAuthorityStore((s) => s.lifecycle);
 
   const skipWizardRef = useRef(Boolean(peekPendingPracticeSetup()));
   const [phase, setPhase] = useState<"setup" | "starting" | "active" | "expired">("setup");
   const [config, setConfig] = useState<LiveSessionConfig>(DEFAULT_CONFIG);
   const [lastSessionId, setLastSessionId] = useState<string | null>(null);
+  const [restoreSessionId, setRestoreSessionId] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const [terminalReason, setTerminalReason] = useState<string | null>(null);
 
   const hasStartedRef = useRef(false);
   const didEndRef = useRef(false);
+  const restoreAttemptedRef = useRef(false);
+
+  useEffect(() => {
+    syncOverlayAuthReady(Boolean(authUserId));
+  }, [authUserId]);
 
   useEffect(() => {
     const prefs = useOverlayStore.getState();
@@ -119,6 +132,7 @@ function LiveOverlaySession() {
   const call = useCallSession({
     config,
     sessionType: "rehearsal",
+    existingSessionId: restoreSessionId,
   });
   const copilot = call.copilot;
 
@@ -142,17 +156,21 @@ function LiveOverlaySession() {
   // ── Setup ────────────────────────────────────────────────────────────────
   const handleSetup = useCallback((sessionConfig: LiveSessionConfig) => {
     saveLastPracticeSetup(sessionConfig);
-    useSessionStore.getState().resetSession();
-    useOverlayStore.getState().resetSessionState();
+    // Soft clear only — authoritative begin happens in startLiveSession.
+    resetTransientOverlaySessionStores({
+      hideOverlay: true,
+      stopTts: true,
+      releaseAuthority: true,
+    });
 
     useOverlayStore.getState().setStealthMode(!!sessionConfig.stealth_mode);
     useOverlayStore.getState().setProctorSafe(false);
-
     useOverlayStore.getState().setActiveModel(sessionConfig.model);
     useOverlayStore.getState().setHintStyle(sessionConfig.hint_style);
 
     hasStartedRef.current = false;
     didEndRef.current = false;
+    setRestoreSessionId(null);
 
     setLastSessionId(null);
     setStartError(null);
@@ -176,6 +194,7 @@ function LiveOverlaySession() {
     call
       .startSession()
       .then(() => {
+        setLastSessionId(useSessionStore.getState().session_id);
         setPhase("active");
       })
       .catch((err: unknown) => {
@@ -188,17 +207,14 @@ function LiveOverlaySession() {
         toast.error(message);
         setStartError(message);
         hasStartedRef.current = false;
-        useSessionStore.getState().resetSession();
-        useOverlayStore.getState().hideOverlay();
+        resetTransientOverlaySessionStores({
+          hideOverlay: true,
+          stopTts: true,
+          releaseAuthority: true,
+        });
         setPhase("setup");
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase]);
-
-  // Ensure overlay is visible in active phase by default
-  useEffect(() => {
-    if (phase !== "active") return;
-    useOverlayStore.getState().showOverlay();
   }, [phase]);
 
   // ── Cleanup on unmount: do NOT end the server session. Refresh must restore. ──
@@ -210,6 +226,8 @@ function LiveOverlaySession() {
 
   useEffect(() => {
     if (!authUserId || phase === "starting") return;
+    if (restoreAttemptedRef.current) return;
+    restoreAttemptedRef.current = true;
     let cancelled = false;
     void restoreOwnedSession({ session_type: "rehearsal" })
       .then((restored) => {
@@ -222,10 +240,11 @@ function LiveOverlaySession() {
           return;
         }
         if (restored.found && restored.session_id && restored.reason === "ACTIVE") {
-          useSessionStore.getState().setSessionId(restored.session_id);
-          useSessionStore.getState().setStatus("active");
+          // Refresh: re-bind existing session — do not create a new server session.
+          setRestoreSessionId(restored.session_id);
           setLastSessionId(restored.session_id);
-          setPhase("active");
+          hasStartedRef.current = false;
+          setPhase("starting");
         }
       })
       .catch((err: unknown) => {
@@ -239,13 +258,15 @@ function LiveOverlaySession() {
     return () => {
       cancelled = true;
     };
-  }, [authUserId]);
+  }, [authUserId, phase]);
 
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
       const sessionId = useSessionStore.getState().session_id;
+      const auth = useOverlaySessionAuthorityStore.getState();
       if (!sessionId || phase !== "active") return;
+      if (auth.mode !== "live" || auth.lifecycle === "terminal") return;
       void heartbeatOwnedSession(sessionId).then((result) => {
         if (result.reason === "SESSION_EXPIRED") {
           setTerminalReason(result.terminal_reason ?? "SESSION_TIMEOUT");
@@ -305,7 +326,11 @@ function LiveOverlaySession() {
     store.showOverlay();
 
     const utterances = useAudioStore.getState().transcript?.utterances ?? [];
-    const question = resolveQuestionFromTranscript(utterances, store.current_question);
+    const question = resolveQuestionFromTranscript(
+      utterances,
+      store.current_question,
+      { allowMicOnlyFallback: !config.enable_system_audio },
+    );
     if (question) {
       store.setCurrentQuestion(question);
       void copilot.requestLiveHint(question);
@@ -447,25 +472,35 @@ function LiveOverlaySession() {
         trackIdleTime={false}
       />
 
-      <OverlayWindow
-        onToggleMic={copilot.toggleMute}
-        onToggleSystemAudio={copilot.toggleSystemAudio}
-        onGenerate={handleGenerate}
-        onRegenerate={() => copilot.requestAnswerModification("regenerate")}
-        onShorten={() => copilot.requestAnswerModification("shorten")}
-        onExpand={() => copilot.requestAnswerModification("expand")}
-        onCaptureCoding={() => void copilot.captureCodingAnswer()}
-        onAdjustRegion={() => void copilot.adjustRegionCodingAnswer()}
-        onEndSession={handleStop}
-        onManualQuestion={handleManualQuestion}
-        onStartSession={handleSetup}
-        onSetupNewSession={() => setPhase("setup")}
-        onReconnectAudio={() => void copilot.reconnectAudio?.()}
-        lastSessionId={lastSessionId}
-        isPreparingSession={copilot.isPreparingSession}
-        prepStepIndex={copilot.prepStepIndex}
-        interviewType={config.interview_type}
-      />
+      {(authorityLifecycle === "initializing" ||
+        (phase === "active" && !canMountOverlay)) && (
+        <div className="mx-auto flex min-h-[40vh] max-w-md flex-col justify-center px-4">
+          <OverlaySessionPreparing stepIndex={copilot.prepStepIndex} />
+        </div>
+      )}
+
+      {canMountOverlay && (
+        <OverlayWindow
+          key={`live-overlay-${sessionId ?? lastSessionId ?? "pending"}`}
+          onToggleMic={copilot.toggleMute}
+          onToggleSystemAudio={copilot.toggleSystemAudio}
+          onGenerate={handleGenerate}
+          onRegenerate={() => copilot.requestAnswerModification("regenerate")}
+          onShorten={() => copilot.requestAnswerModification("shorten")}
+          onExpand={() => copilot.requestAnswerModification("expand")}
+          onCaptureCoding={() => void copilot.captureCodingAnswer()}
+          onAdjustRegion={() => void copilot.adjustRegionCodingAnswer()}
+          onEndSession={handleStop}
+          onManualQuestion={handleManualQuestion}
+          onStartSession={handleSetup}
+          onSetupNewSession={() => setPhase("setup")}
+          onReconnectAudio={() => void copilot.reconnectAudio?.()}
+          lastSessionId={lastSessionId}
+          isPreparingSession={copilot.isPreparingSession}
+          prepStepIndex={copilot.prepStepIndex}
+          interviewType={config.interview_type}
+        />
+      )}
 
       {/* Recovery pill — visible when overlay is hidden during an active/paused session */}
       {(isActive || isPaused) && !overlayVisible && (

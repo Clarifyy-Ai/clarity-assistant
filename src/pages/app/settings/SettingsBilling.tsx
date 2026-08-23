@@ -27,6 +27,7 @@ import {
 } from "@/lib/billing/pendingPlan";
 import {
   openRazorpayCheckout,
+  toPaymentUserFacingError,
   type RazorpayProductType,
 } from "@/lib/api/payments";
 
@@ -37,7 +38,7 @@ import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PAYMENTS_UNAVAILABLE_MESSAGE, resolveCanonicalBillingStatus } from "@/lib/billing/canonicalBillingStatus";
+import { resolveCanonicalBillingStatus } from "@/lib/billing/canonicalBillingStatus";
 import { toast } from "sonner";
 import { creditsDB } from "@/lib/supabase/database";
 import {
@@ -118,20 +119,7 @@ function checkoutBusyLabel(
 }
 
 function checkoutErrorMessage(error: unknown): string {
-  const msg = error instanceof Error ? error.message : "";
-  if (msg.includes("Checkout could not be prepared")) {
-    return msg;
-  }
-  if (msg.includes("Razorpay not configured") || msg.includes("not configured")) {
-    return PAYMENTS_UNAVAILABLE_MESSAGE;
-  }
-  if (msg.includes("Billing configuration")) {
-    return "Billing is not fully configured on the server yet.";
-  }
-  if (msg.toLowerCase().includes("verif")) {
-    return msg || "Payment could not be verified. No credits were added.";
-  }
-  return msg.trim() || "Checkout failed. Try again or contact support.";
+  return toPaymentUserFacingError(error);
 }
 
 export default function SettingsBilling(): JSX.Element {

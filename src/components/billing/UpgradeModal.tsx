@@ -15,9 +15,12 @@ import {
 } from "@/lib/billing/priceCalculator"
 import { Check, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { openRazorpayCheckout, type RazorpayProductType } from "@/lib/api/payments"
+import {
+  openRazorpayCheckout,
+  toPaymentUserFacingError,
+  type RazorpayProductType,
+} from "@/lib/billing/razorpayCheckout"
 import { toast } from "sonner"
-import { PAYMENTS_UNAVAILABLE_MESSAGE } from "@/lib/billing/canonicalBillingStatus"
 
 const MODAL_PLANS: Array<{
   id: PlanId
@@ -37,15 +40,7 @@ function checkoutBusyLabel(phase: CheckoutPhase | null, idle: string): string {
 }
 
 function checkoutErrorMessage(error: unknown): string {
-  const msg = error instanceof Error ? error.message : ""
-  if (msg.includes("Checkout could not be prepared")) return msg
-  if (msg.includes("Razorpay not configured") || msg.includes("not configured")) {
-    return PAYMENTS_UNAVAILABLE_MESSAGE
-  }
-  if (msg.toLowerCase().includes("verif")) {
-    return msg || "Payment could not be verified. No credits were added."
-  }
-  return msg.trim() || "Checkout failed. Open Settings → Billing to pay with Razorpay."
+  return toPaymentUserFacingError(error)
 }
 
 export function UpgradeModal() {

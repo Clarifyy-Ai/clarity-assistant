@@ -1,5 +1,5 @@
 // create-exam-paper — validate, reserve credits, enqueue job; process async when possible.
-import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders, withBrowserCors, applyCors } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient, deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
@@ -47,7 +47,7 @@ function uuidOrNull(v: unknown): string | null {
     : null;
 }
 
-Deno.serve(async (req) => {
+Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
 
   try {
     const auth = await authenticateRequest(req);
-    if (auth.error) return auth.error;
+    if (auth.error) return applyCors(req, auth.error);
     const user = auth.context.user;
 
     if (await isUserBanned(db, user.id)) {
@@ -277,6 +277,7 @@ Deno.serve(async (req) => {
         progress_stage: "queued",
         idempotency_key: idempotencyKey,
         credits_charged: COST,
+        credit_reservation: `gov_paper:${idempotencyKey}`,
         random_seed: randomSeed,
         attempt_count: 0,
         retryable: true,
@@ -392,4 +393,4 @@ Deno.serve(async (req) => {
     console.error("[create-exam-paper] Error:", err);
     return json(req, { error: "Internal server error", code: "INTERNAL_ERROR" }, 500);
   }
-});
+}));

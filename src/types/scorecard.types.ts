@@ -12,6 +12,7 @@ export interface QuestionScore {
   key_strength: string;
   key_weakness: string;
   coach_tip: string;
+  quality_class?: string;
 }
 
 /** Extended fields stored in scorecards.details JSONB. */

@@ -29,6 +29,10 @@ import type {
 } from "@/types/audio.types";
 import { useAudioStore } from "@/store/audioStore";
 import { isInterviewerQuestionText } from "./interviewerQuestion";
+import {
+  canBecomeInterviewerQuestion,
+  MIN_QUESTION_CONFIDENCE,
+} from "./liveQuestionGate";
 
 /* ─── FILLER WORD CONSTANTS ──────────────────────────────────────────────── */
 
@@ -66,23 +70,13 @@ export interface SpeakerChangeEvent {
 /**
  * Maps a completed TranscriptUtterance to its final Speaker label.
  *
- * This is intentionally simple — Deepgram's native diarization (diarize=true)
- * is authoritative. The previous heuristic-based overrides have been removed
- * because they fought Deepgram's ML model and were unreachable dead code
- * (speaker was already a string by the time this was called).
- *
- * The only remaining logic is the "first voice = interviewer" convention,
- * which matches how the WebSocket session is typically established
- * (interviewer speaks first to introduce themselves or ask an opener).
+ * Live dual-channel path passes `forcedSpeaker` and never relies on
+ * "first voice = interviewer". When speaker is missing/ambiguous, return
+ * `unknown` — do not invent interviewer identity.
  */
 export function classifySpeaker(utterance: TranscriptUtterance): Speaker {
-  // Trust Deepgram's diarization — already converted from numeric index
-  // by deepgramStream.ts handleMessage via getMajoritySpeaker().
   if (utterance.speaker === "interviewer") return "interviewer";
-  if (utterance.speaker === "candidate")   return "candidate";
-
-  // Only reached if speaker field is "unknown" or missing
-  // In streaming + diarize=true, this should be rare
+  if (utterance.speaker === "candidate") return "candidate";
   return "unknown";
 }
 
@@ -231,23 +225,38 @@ export function buildDiarizationSegment(
 
 /**
  * Processes a final utterance through the diarization pipeline:
- * 1. Classifies speaker (trusts Deepgram — no heuristic override)
+ * 1. Classifies speaker (forced channel wins; else Deepgram label; never invent)
  * 2. Builds diarization segment
  * 3. Updates audio store
- * 4. Sets last question if utterance is a detected interviewer question
+ * 4. Sets last question only when gate passes (interviewer + syntax + confidence)
  */
 export function processUtteranceForDiarization(
   utterance: TranscriptUtterance,
-  options?: { forcedSpeaker?: TranscriptUtterance["speaker"] },
+  options?: {
+    forcedSpeaker?: TranscriptUtterance["speaker"];
+    /** Live dual-channel: true when tab/system interviewer STT is connected. */
+    hasInterviewerChannel?: boolean;
+  },
 ): TranscriptUtterance {
-  const store  = useAudioStore.getState();
+  const store = useAudioStore.getState();
   const speaker = options?.forcedSpeaker ?? classifySpeaker(utterance);
+  const hasInterviewerChannel =
+    options?.hasInterviewerChannel ??
+    // Forced interviewer implies a dedicated channel; mixed/unknown does not.
+    options?.forcedSpeaker === "interviewer";
+
+  const isQuestion = canBecomeInterviewerQuestion({
+    speaker,
+    text: utterance.text,
+    isFinal: utterance.is_final,
+    confidence: utterance.confidence,
+    hasInterviewerChannel,
+  });
 
   const enriched: TranscriptUtterance = {
     ...utterance,
     speaker,
-    is_interviewer_question:
-      speaker === "interviewer" && isInterviewerQuestionText(utterance.text),
+    is_interviewer_question: isQuestion,
   };
 
   store.setCurrentSpeaker(speaker);
@@ -260,6 +269,8 @@ export function processUtteranceForDiarization(
 
   return enriched;
 }
+
+export { MIN_QUESTION_CONFIDENCE };
 
 /* ─── TRANSCRIPT SPLIT BY SPEAKER ────────────────────────────────────────── */
 

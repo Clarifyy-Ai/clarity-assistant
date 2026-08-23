@@ -3,12 +3,13 @@ import type { TranscriptUtterance } from "@/types/audio.types";
 
 /**
  * Pick the interviewer question the coach should answer from live transcript.
- * Prefers marked interviewer questions, then interviewer speech, then any
- * question-shaped utterance (mic-only sessions often lack speaker labels).
+ * Prefers marked interviewer questions, then interviewer speech.
+ * Mic-only fallback: only when tab audio was never expected (Mock / no system audio).
  */
 export function resolveQuestionFromTranscript(
   utterances: TranscriptUtterance[] | null | undefined,
   currentQuestion?: string | null,
+  options?: { allowMicOnlyFallback?: boolean },
 ): string {
   const stored = currentQuestion?.trim() ?? "";
   if (stored) return stored;
@@ -25,6 +26,10 @@ export function resolveQuestionFromTranscript(
     .reverse()
     .find((u) => u.speaker === "interviewer" && u.text?.trim());
   if (lastInterviewer?.text?.trim()) return lastInterviewer.text.trim();
+
+  // Do not treat candidate-labelled speech as an interviewer question in Live
+  // (mic-only with enable_system_audio would mis-attribute).
+  if (!options?.allowMicOnlyFallback) return "";
 
   const lastQuestionShaped = [...list]
     .reverse()

@@ -197,6 +197,11 @@ const startSessionSchema = z.object({
     .nullable()
     .optional(),
 
+  session_call_type: z
+    .enum(["interview", "regular_call"])
+    .nullable()
+    .optional(),
+
   action: z
     .enum(["start", "eligibility", "restore", "heartbeat"])
     .optional()
@@ -387,7 +392,7 @@ function buildSessionTags(options: {
   return tags;
 }
 
-/** Only keep IDs that exist in public.documents (resume IDs live in resumes). */
+/** Only keep IDs that exist in public.documents (sessions.document_id / jd_id FK). */
 async function resolveDocumentsFk(
   db: ReturnType<typeof createServiceClient>,
   id: string | null | undefined,
@@ -406,6 +411,81 @@ async function resolveDocumentsFk(
   }
 
   return data?.id ?? null;
+}
+
+/** Validate resume ownership in resumes table (wizard IDs live here, not documents). */
+async function assertOwnedResume(
+  db: ReturnType<typeof createServiceClient>,
+  userId: string,
+  resumeId: string | null | undefined,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (!resumeId) return { ok: true };
+  const { data, error } = await db
+    .from("resumes")
+    .select("id, user_id")
+    .eq("id", resumeId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) {
+    console.warn("[start-session] resume ownership lookup failed:", error.message);
+    return { ok: false, message: "Could not verify the selected resume." };
+  }
+  if (!data) {
+    // Resume may live in documents instead (legacy / unified docs).
+    const { data: doc, error: docErr } = await db
+      .from("documents")
+      .select("id, user_id, document_type")
+      .eq("id", resumeId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (docErr || !doc) {
+      return { ok: false, message: "Resume is required and must belong to you." };
+    }
+  }
+  return { ok: true };
+}
+
+async function assertOwnedJd(
+  db: ReturnType<typeof createServiceClient>,
+  userId: string,
+  jdId: string | null | undefined,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (!jdId) return { ok: true };
+  const { data, error } = await db
+    .from("job_descriptions")
+    .select("id, user_id, parse_status")
+    .eq("id", jdId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!error && data) {
+    const status = String((data as { parse_status?: string }).parse_status ?? "ready");
+    if (status && !["ready", "completed", ""].includes(status)) {
+      return { ok: false, message: "Job description is still processing." };
+    }
+    return { ok: true };
+  }
+  const { data: doc, error: docErr } = await db
+    .from("documents")
+    .select("id, user_id")
+    .eq("id", jdId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (docErr || !doc) {
+    return { ok: false, message: "The selected job description is no longer available." };
+  }
+  return { ok: true };
+}
+
+function setupInvalid(
+  corsHeaders: HeadersInit,
+  message: string,
+  fields?: string[],
+): Response {
+  return json(corsHeaders, 400, {
+    error: message,
+    code: "SETUP_INVALID",
+    fields: fields ?? [],
+  });
 }
 
 function buildSessionTitle(options: {
@@ -729,6 +809,27 @@ Deno.serve(async (req: Request) => {
   const sessionTags = buildSessionTags({ sessionType, isPractice });
   const company = sanitizeShortText(body.company);
   const role = sanitizeShortText(body.role);
+  const callType = body.session_call_type ?? null;
+
+  // Enforce Practice Coach interview contract when the client declares interview mode.
+  if (callType === "interview") {
+    if (!role) {
+      return setupInvalid(corsHeaders, "Choose a target role before continuing.", ["role"]);
+    }
+    if (!body.resume_id) {
+      return setupInvalid(corsHeaders, "Resume is required.", ["resume_id"]);
+    }
+  }
+
+  const resumeOwned = await assertOwnedResume(db, user.id, body.resume_id);
+  if (!resumeOwned.ok) {
+    return setupInvalid(corsHeaders, resumeOwned.message, ["resume_id"]);
+  }
+  const jdOwned = await assertOwnedJd(db, user.id, body.jd_id);
+  if (!jdOwned.ok) {
+    return setupInvalid(corsHeaders, jdOwned.message, ["jd_id"]);
+  }
+
   const durationMinutes = capDurationMinutes(
     profile?.plan_id ?? "free",
     body.duration_minutes,
@@ -775,6 +876,7 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // sessions.document_id / jd_id FK → documents only; keep wizard IDs in config.
   const documentId = await resolveDocumentsFk(db, body.resume_id);
   const jdId = await resolveDocumentsFk(db, body.jd_id);
 

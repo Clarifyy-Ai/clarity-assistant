@@ -4,7 +4,6 @@ import { sha256 } from "@/lib/utils/hashUtils";
 import {
   getAiUserFacingError,
   isAiProviderUnavailableError,
-  isInsufficientCreditsError,
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
 import { supabase } from "@/integrations/supabase/client";
@@ -85,6 +84,9 @@ export default function SystemDesign() {
   const { user } = useAuthStore();
   const whiteboardRef = useRef<WhiteboardHandle>(null);
   const inflightKeyRef = useRef<string | null>(null);
+  const genInFlightRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const generationSeqRef = useRef(0);
   const prefersReducedMotion = usePrefersReducedMotion();
   const [activePreset, setActivePreset] = useState<string | null>(null);
   /** 'auto' follows reduced-motion preference; user can override. */
@@ -135,7 +137,12 @@ export default function SystemDesign() {
       }));
       setTopics(mapped);
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      abortRef.current?.abort();
+      abortRef.current = null;
+      genInFlightRef.current = false;
+    };
   }, []);
 
   const activeTopic = topics?.find((t) => t.id === selected) ?? null;
@@ -150,14 +157,22 @@ export default function SystemDesign() {
 
   async function getAIBreakdown() {
     if (!activeTopic || generating || saving) return;
+    if (genInFlightRef.current) return;
     if (!credits.canAfford("system_design")) return;
 
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const seq = ++generationSeqRef.current;
+    genInFlightRef.current = true;
     setGenPhase("VALIDATING");
     setError(null);
 
     try {
       const input = buildInput(activeTopic, notes);
       const contentHash = await sha256(input);
+      if (controller.signal.aborted || seq !== generationSeqRef.current) return;
+
       const idempotencyKey =
         inflightKeyRef.current ??
         prepToolContentIdempotencyKey("system_design", contentHash);
@@ -171,7 +186,10 @@ export default function SystemDesign() {
         headers: {
           "x-idempotency-key": idempotencyKey,
         },
+        signal: controller.signal,
       });
+
+      if (controller.signal.aborted || seq !== generationSeqRef.current) return;
 
       setGenPhase("VALIDATING_OUTPUT");
       const result = typeof data.result === "string" ? data.result.trim() : "";
@@ -187,8 +205,9 @@ export default function SystemDesign() {
       setBreakdown(result);
       setGenPhase("COMPLETED");
       inflightKeyRef.current = null;
-      await refreshCredits();
+      await refreshCredits().catch(() => undefined);
     } catch (err) {
+      if (controller.signal.aborted || seq !== generationSeqRef.current) return;
       openUpgradeIfInsufficientCredits(err);
       const message = isAiProviderUnavailableError(err)
         ? AI_UNAVAILABLE
@@ -196,11 +215,11 @@ export default function SystemDesign() {
       setGenPhase("FAILED");
       setError(message);
       toast.error(message);
-      // Keep inflight key on failure so Retry of the same input does not double-charge.
-      if (isInsufficientCreditsError(err)) {
-        // credit denial — keep key for retry of same content
-      }
       await refreshCredits().catch(() => undefined);
+    } finally {
+      if (seq === generationSeqRef.current) {
+        genInFlightRef.current = false;
+      }
     }
   }
 
@@ -232,6 +251,9 @@ export default function SystemDesign() {
 
   function selectTopic(id: string) {
     if (generating || saving) return;
+    abortRef.current?.abort();
+    generationSeqRef.current += 1;
+    genInFlightRef.current = false;
     setSelected(id);
     setBreakdown("");
     setNotes("");

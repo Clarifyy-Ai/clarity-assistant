@@ -175,16 +175,28 @@ export async function streamFullAnswer(opts: GeminiStreamOptions): Promise<void>
         parsed = null;
       }
       const code = String(parsed?.code ?? "").toUpperCase() || "API_ERROR";
+      const providerUnavailable =
+        response.status === 502 ||
+        response.status === 503 ||
+        code === "PROVIDER_UNAVAILABLE" ||
+        code === "AI_PROVIDER_UNAVAILABLE";
+      const insufficientCredits =
+        !providerUnavailable &&
+        (code === "INSUFFICIENT_CREDITS" ||
+          code === "NO_CREDITS" ||
+          response.status === 402);
       const message =
         parsed?.error ||
         parsed?.message ||
-        (response.status === 402
+        (insufficientCredits
           ? "Insufficient credits. Please top up to generate full answers."
-          : `AI Help failed (${response.status}).`);
+          : providerUnavailable
+            ? "AI Help is temporarily unavailable. Please try again."
+            : `AI Help failed (${response.status}).`);
       throw new ApiClientError({
         message,
-        status: response.status,
-        code,
+        status: providerUnavailable ? response.status : response.status,
+        code: providerUnavailable ? "AI_PROVIDER_UNAVAILABLE" : code,
       });
     }
 

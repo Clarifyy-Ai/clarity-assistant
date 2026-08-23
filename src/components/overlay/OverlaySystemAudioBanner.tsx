@@ -35,12 +35,13 @@ export function OverlaySystemAudioBanner({ enabled, onRetry }: Props) {
       <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
       <div className="flex-1 min-w-0">
         <p className="text-[11px] font-semibold leading-tight">
-          Interviewer audio not shared
+          Interviewer audio unavailable
         </p>
         <p className="text-[10px] text-amber-200/70 leading-snug mt-0.5">
-          Mic-only. Share the interview tab and tick{" "}
-          <span className="font-semibold">“Share tab audio”</span> in Chrome to
-          capture the interviewer.
+          Mic-only — the coach cannot auto-detect interviewer questions. Share
+          the interview tab and tick{" "}
+          <span className="font-semibold">“Share tab audio”</span> in Chrome, or
+          type the question in Chat.
         </p>
       </div>
       <div className="flex shrink-0 items-center gap-1">

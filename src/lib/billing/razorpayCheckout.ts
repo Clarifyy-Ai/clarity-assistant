@@ -1,4 +1,5 @@
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { createIdempotencyKey } from "@/lib/network/idempotency";
 
 export type RazorpayProductType =
   | "pro_monthly"
@@ -29,6 +30,8 @@ declare global {
 const RAZORPAY_SCRIPT = "https://checkout.razorpay.com/v1/checkout.js";
 
 const CHECKOUT_PREPARE_ERROR = "Checkout could not be prepared. Please try again.";
+export const PAYMENT_UNAVAILABLE =
+  "Payment service is temporarily unavailable.";
 
 /** Require a non-empty internal payment order id before opening Razorpay. */
 export function assertInternalOrderId(id: string | null | undefined): string {
@@ -38,21 +41,67 @@ export function assertInternalOrderId(id: string | null | undefined): string {
   return id.trim();
 }
 
+/** Singleton script load — never append checkout.js more than once. */
+let razorpayScriptPromise: Promise<void> | null = null;
+
 function loadRazorpayScript(): Promise<void> {
+  if (typeof window === "undefined") {
+    return Promise.reject(new Error(PAYMENT_UNAVAILABLE));
+  }
   if (window.Razorpay) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector(`script[src="${RAZORPAY_SCRIPT}"]`);
+  if (razorpayScriptPromise) return razorpayScriptPromise;
+
+  razorpayScriptPromise = new Promise<void>((resolve, reject) => {
+    if (window.Razorpay) {
+      resolve();
+      return;
+    }
+    const existing = document.querySelector(
+      `script[src="${RAZORPAY_SCRIPT}"]`,
+    ) as HTMLScriptElement | null;
     if (existing) {
-      existing.addEventListener("load", () => resolve());
+      if (window.Razorpay) {
+        resolve();
+        return;
+      }
+      const onLoad = () => {
+        existing.removeEventListener("load", onLoad);
+        existing.removeEventListener("error", onError);
+        if (window.Razorpay) resolve();
+        else {
+          razorpayScriptPromise = null;
+          reject(new Error(PAYMENT_UNAVAILABLE));
+        }
+      };
+      const onError = () => {
+        existing.removeEventListener("load", onLoad);
+        existing.removeEventListener("error", onError);
+        razorpayScriptPromise = null;
+        reject(new Error(PAYMENT_UNAVAILABLE));
+      };
+      existing.addEventListener("load", onLoad);
+      existing.addEventListener("error", onError);
       return;
     }
     const script = document.createElement("script");
     script.src = RAZORPAY_SCRIPT;
     script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Failed to load Razorpay checkout"));
+    script.onload = () => {
+      if (window.Razorpay) resolve();
+      else {
+        razorpayScriptPromise = null;
+        reject(new Error(PAYMENT_UNAVAILABLE));
+      }
+    };
+    script.onerror = () => {
+      razorpayScriptPromise = null;
+      script.remove();
+      reject(new Error(PAYMENT_UNAVAILABLE));
+    };
     document.body.appendChild(script);
   });
+
+  return razorpayScriptPromise;
 }
 
 function razorpayDescription(productType: RazorpayProductType): string {
@@ -70,14 +119,45 @@ function razorpayDescription(productType: RazorpayProductType): string {
   }
 }
 
+export function toPaymentUserFacingError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  if (/localhost|127\.0\.0\.1|cors|failed to fetch|network/i.test(msg)) {
+    return PAYMENT_UNAVAILABLE;
+  }
+  if (
+    msg === CHECKOUT_PREPARE_ERROR ||
+    msg === PAYMENT_UNAVAILABLE ||
+    /checkout|payment|razorpay/i.test(msg)
+  ) {
+    return msg.includes("verification")
+      ? "Payment verification failed. Please try again."
+      : msg.length < 120 && !/http|stack|env|secret/i.test(msg)
+        ? msg
+        : PAYMENT_UNAVAILABLE;
+  }
+  return PAYMENT_UNAVAILABLE;
+}
+
+let checkoutInFlight = false;
+
 export async function createRazorpayOrder(
   productType: RazorpayProductType,
   promoCode?: string,
+  idempotencyKey?: string,
 ): Promise<RazorpayOrderResponse> {
-  return fetchEdgeJson<RazorpayOrderResponse>("razorpay-create-order", {
-    product_type: productType,
-    promo_code: promoCode,
-  });
+  const key = idempotencyKey ?? createIdempotencyKey("razorpay-create-order");
+  return fetchEdgeJson<RazorpayOrderResponse>(
+    "razorpay-create-order",
+    {
+      product_type: productType,
+      promo_code: promoCode,
+    },
+    {
+      headers: {
+        "x-idempotency-key": key,
+      },
+    },
+  );
 }
 
 export async function openRazorpayCheckout(options: {
@@ -90,61 +170,81 @@ export async function openRazorpayCheckout(options: {
   onSuccess?: () => void;
   onDismiss?: () => void;
 }): Promise<void> {
-  const order = await createRazorpayOrder(options.productType, options.promoCode);
-  assertInternalOrderId(order.payment_order_id);
-  await loadRazorpayScript();
-
-  if (!window.Razorpay) {
-    throw new Error("Razorpay checkout unavailable");
+  if (checkoutInFlight) {
+    throw new Error("A checkout is already in progress.");
   }
+  checkoutInFlight = true;
+  const orderKey = createIdempotencyKey(
+    `razorpay-create-order:${options.productType}`,
+  );
 
-  options.onReady?.();
+  try {
+    // Order first — never load checkout.js / open modal without a valid order.
+    const order = await createRazorpayOrder(
+      options.productType,
+      options.promoCode,
+      orderKey,
+    );
+    assertInternalOrderId(order.payment_order_id);
+    await loadRazorpayScript();
 
-  return new Promise((resolve, reject) => {
-    const rzp = new window.Razorpay!({
-      key: order.key_id,
-      amount: order.amount,
-      currency: order.currency,
-      name: "Clarify AI",
-      description: razorpayDescription(options.productType),
-      order_id: order.order_id,
-      prefill: {
-        email: options.userEmail,
-        name: options.userName,
-      },
-      theme: { color: "#6366f1" },
-      handler: (response: {
-        razorpay_order_id?: string;
-        razorpay_payment_id?: string;
-        razorpay_signature?: string;
-      }) => {
-        void fetchEdgeJson("razorpay-verify-payment", {
-          razorpay_order_id: response.razorpay_order_id,
-          razorpay_payment_id: response.razorpay_payment_id,
-          razorpay_signature: response.razorpay_signature,
-        })
-          .then(() => {
-            options.onSuccess?.();
-            resolve();
-          })
-          .catch((error: unknown) => {
-            reject(error instanceof Error ? error : new Error("Payment verification failed"));
-          });
-      },
-      modal: {
-        ondismiss: () => {
-          options.onDismiss?.();
-          resolve();
+    if (!window.Razorpay) {
+      throw new Error(PAYMENT_UNAVAILABLE);
+    }
+
+    options.onReady?.();
+
+    return await new Promise<void>((resolve, reject) => {
+      const rzp = new window.Razorpay!({
+        key: order.key_id,
+        amount: order.amount,
+        currency: order.currency,
+        name: "Clarify AI",
+        description: razorpayDescription(options.productType),
+        order_id: order.order_id,
+        prefill: {
+          email: options.userEmail,
+          name: options.userName,
         },
-      },
+        theme: { color: "#6366f1" },
+        handler: (response: {
+          razorpay_order_id?: string;
+          razorpay_payment_id?: string;
+          razorpay_signature?: string;
+        }) => {
+          void fetchEdgeJson("razorpay-verify-payment", {
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature,
+          })
+            .then(() => {
+              options.onSuccess?.();
+              resolve();
+            })
+            .catch((error: unknown) => {
+              reject(
+                error instanceof Error
+                  ? error
+                  : new Error("Payment verification failed"),
+              );
+            });
+        },
+        modal: {
+          ondismiss: () => {
+            options.onDismiss?.();
+            resolve();
+          },
+        },
+      });
+      rzp.on("payment.failed", (res: unknown) => {
+        reject(new Error(PAYMENT_UNAVAILABLE));
+        void res;
+      });
+      rzp.open();
     });
-    rzp.on("payment.failed", (res: unknown) => {
-      const description =
-        res && typeof res === "object" && "error" in res
-          ? String((res as { error?: { description?: string } }).error?.description ?? "Payment failed")
-          : "Payment failed";
-      reject(new Error(description));
-    });
-    rzp.open();
-  });
+  } catch (err) {
+    throw new Error(toPaymentUserFacingError(err));
+  } finally {
+    checkoutInFlight = false;
+  }
 }

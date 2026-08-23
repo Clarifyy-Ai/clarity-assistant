@@ -70,6 +70,14 @@ export function isInsufficientCreditsError(err: unknown): boolean {
 
   const status = errorStatus(err);
   if (status === 402) {
+    // Gateway/provider 402 without explicit credit codes is not a user balance issue.
+    if (
+      code === "PROVIDER_UNAVAILABLE" ||
+      code === "AI_PROVIDER_UNAVAILABLE" ||
+      code === "BAD_GATEWAY"
+    ) {
+      return false;
+    }
     return true;
   }
 

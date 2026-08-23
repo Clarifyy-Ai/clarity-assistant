@@ -217,6 +217,28 @@ export function validateAssembledPaperHardConstraints(input: {
     errors.push("Duration minutes must be greater than zero");
   }
 
+  // 5b. Exact section quotas when slots carry section codes
+  if (Array.isArray(blueprint.sections) && blueprint.sections.length > 0) {
+    const bySection = new Map<string, number>();
+    for (const q of questions) {
+      const code = String(q.section_code ?? "").trim();
+      if (!code) continue;
+      bySection.set(code, (bySection.get(code) ?? 0) + 1);
+    }
+    const assigned = [...bySection.values()].reduce((a, b) => a + b, 0);
+    // Only enforce when the assembled set is section-tagged (slots → section_code).
+    if (assigned === questions.length) {
+      for (const section of blueprint.sections) {
+        const got = bySection.get(section.code) ?? 0;
+        if (got !== section.question_count) {
+          errors.push(
+            `Section quota failed for ${section.code}: got ${got}, expected ${section.question_count}`,
+          );
+        }
+      }
+    }
+  }
+
   // 6. No duplicate questions
   const seenIds = new Set<string>();
   const seenTexts = new Set<string>();

@@ -4,6 +4,7 @@
  */
 
 import { createServiceClient, refundCredits } from "./supabase.ts";
+import { claimJobCreditsForRefund } from "./claimJobCredits.ts";
 import {
   buildBlueprint,
   seededShuffle,
@@ -181,8 +182,8 @@ async function failJob(
     db,
     job.id,
     {
-      status: "failed",
-      progress_stage: "failed",
+      status: "failed_permanent",
+      progress_stage: "failed_permanent",
       error_code: errorCode,
       error_message: errorMessage,
       retryable: false,
@@ -193,14 +194,14 @@ async function failJob(
     },
     { workerId },
   );
-  const cost = Math.max(0, Number(job.credits_charged) || 0);
+  const cost = await claimJobCreditsForRefund(db, job.id);
   if (cost > 0) {
     await refundCredits({
       userId: job.user_id,
       cost,
       reason: `refund_paper_gen_${errorCode.toLowerCase()}`,
+      idempotencyKey: `refund_paper_job:${job.id}`,
     }).catch(() => {});
-    await clearJobLease(db, job.id, { credits_charged: 0 });
   }
 }
 
@@ -783,13 +784,14 @@ export async function assembleClaimedPaperJob(
     // Hard constraint validation on assembled question set before freezing
     const assembledHard = validateAssembledPaperHardConstraints({
       blueprint,
-      questions: selected.slice(0, blueprint.total_questions).map((r) => ({
+      questions: selected.slice(0, blueprint.total_questions).map((r, idx) => ({
         id: String(r.id),
         question_text: String(r.question_text ?? ""),
         options: r.options,
         correct_answer: r.correct_answer,
         subject: r.subject,
         topic: r.topic,
+        section_code: blueprint.slots[idx]?.section_code ?? null,
       })),
       aiQuestionIds,
     });
@@ -806,7 +808,7 @@ export async function assembleClaimedPaperJob(
       );
       return {
         ok: false,
-        status: "failed",
+        status: "failed_permanent",
         errorCode: "HARD_CONSTRAINT_VIOLATION",
         error: `Hard constraint violation: ${assembledHard.errors.join("; ")}`,
         httpStatus: 422,

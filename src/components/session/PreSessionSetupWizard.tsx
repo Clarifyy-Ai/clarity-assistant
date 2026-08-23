@@ -35,6 +35,10 @@ import {
   wizardStepBlocker,
 } from "@/lib/session/wizardValidation";
 import {
+  PRACTICE_COACH_WIZARD_STEPS,
+  setupFieldRequirement,
+} from "@/lib/session/practiceCoachSetupContract";
+import {
   isFreePlan,
   maxSessionMinutesForPlan,
 } from "@/lib/constants/freeTier";
@@ -120,6 +124,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     loadError: documentsLoadError,
     reload: reloadDocuments,
     allAnswers,
+    isLoading: documentsLoading,
   } = useDocuments();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
@@ -195,6 +200,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const [resumeId,         setResumeId]         = useState<string | null>(activeResumeId);
   const [jdId,             setJdId]             = useState<string | null>(activeJdId);
   const [extraDocIds,      setExtraDocIds]      = useState<string[]>([]);
+  const documentsHydrated = useRef(false);
 
   const skipDraftSave = useRef(true);
   useEffect(() => {
@@ -624,6 +630,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
 
   const canProceed = step < totalSteps;
   const isLastStep = step === totalSteps;
+  const settingsStep = PRACTICE_COACH_WIZARD_STEPS.settings;
   const fieldOpts = {
     sessionCallType,
     role,
@@ -636,16 +643,36 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const selectedJd = jds.find((item) => item.id === jdId);
   const resumeParseStatus = String((selectedResume as { parse_status?: string } | undefined)?.parse_status ?? "");
   const jdParseStatus = String((selectedJd as { parse_status?: string } | undefined)?.parse_status ?? "");
+
+  // Scrub orphan Resume/JD IDs once documents have finished loading so Next
+  // is not silently blocked by a stale draft/active ID that is not owned.
+  useEffect(() => {
+    if (documentsLoading || documentsLoadError) return;
+    documentsHydrated.current = true;
+    if (resumeId && !resumes.some((r) => r.id === resumeId)) {
+      setResumeId(null);
+    }
+    if (jdId && !jds.some((j) => j.id === jdId)) {
+      setJdId(null);
+    }
+  }, [documentsLoading, documentsLoadError, resumes, jds, resumeId, jdId]);
+
   const documentBlocker =
-    sessionCallType === "interview" && !selectedResume
-      ? "Select a resume you own before continuing."
-      : resumeParseStatus && !["ready", "completed"].includes(resumeParseStatus)
-        ? "Wait for the selected resume to finish processing before continuing."
-        : jdId && !selectedJd
-          ? "The selected job description is no longer available. Choose it again."
-          : jdParseStatus && !["ready", "completed"].includes(jdParseStatus)
-            ? "Wait for the selected job description to finish processing before continuing."
-            : null;
+    documentsLoadError
+      ? "Documents could not be loaded. Retry before continuing."
+      : documentsLoading && setupFieldRequirement(sessionCallType, "resume") === "REQUIRED"
+        ? "Loading your documents…"
+        : setupFieldRequirement(sessionCallType, "resume") === "REQUIRED" && !resumeId
+          ? "Resume is required"
+          : resumeId && !selectedResume && documentsHydrated.current
+            ? "Select a resume you own before continuing."
+            : resumeParseStatus && !["ready", "completed", ""].includes(resumeParseStatus)
+              ? "Resume is still processing"
+              : jdId && !selectedJd && documentsHydrated.current
+                ? "The selected job description is no longer available. Choose it again."
+                : jdParseStatus && !["ready", "completed", ""].includes(jdParseStatus)
+                  ? "Job description is still processing"
+                  : null;
   const modelLock = smartRouting ? null : getModelLockReason(model, typedProfile?.plan_id);
   const modelBlocker =
     modelLock === "provider"
@@ -656,9 +683,37 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const stepBlocker = wizardStepBlocker({
     step,
     resumeStep,
+    settingsStep,
     ...fieldOpts,
   });
+  const nextBlocker =
+    stepBlocker ??
+    (step === resumeStep ? documentBlocker : null) ??
+    (step === settingsStep ? modelBlocker : null);
   const startBlocker = wizardRequiredFieldsBlocker(fieldOpts) ?? documentBlocker ?? modelBlocker;
+  const voiceMandatoryBlocker =
+    voiceRequired &&
+    step === connectStep &&
+    (devicePrecheck.micState === MicState.PERMISSION_DENIED ||
+      devicePrecheck.micState === MicState.ERROR ||
+      devicePrecheck.micState === MicState.DEVICE_UNAVAILABLE ||
+      devicePrecheck.micState === MicState.BROWSER_UNSUPPORTED)
+      ? "This mode requires voice input, but voice input is currently unavailable. Switch to text mode to continue."
+      : null;
+  const startDisabledReason =
+    startBlocker ??
+    voiceMandatoryBlocker ??
+    (voiceRequired && !localAudioReady
+      ? "Finish microphone and speaker checks, or switch to text mode."
+      : devicePrecheck.micState === MicState.CHECKING
+        ? "Microphone check is still running."
+        : !visibilityAck
+          ? "Acknowledge the visibility notice before starting."
+          : !responsibleUseAck
+            ? "Acknowledge responsible use before starting."
+            : !isOnline
+              ? "You are offline. Reconnect to start a session."
+              : null);
 
   useEffect(() => {
     if (isMobile) return;
@@ -666,13 +721,8 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       if (e.key === "Enter" && !e.shiftKey && canProceed) {
         const target = e.target as HTMLElement;
         if (target.tagName === "TEXTAREA" || target.tagName === "SELECT") return;
-        const blocker = wizardStepBlocker({
-          step,
-          resumeStep,
-          ...fieldOpts,
-        });
-        if (blocker) {
-          toast.message(blocker);
+        if (nextBlocker) {
+          toast.message(nextBlocker);
           return;
         }
         e.preventDefault();
@@ -685,7 +735,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [step, canProceed, isMobile, resumeStep, sessionCallType, role, hintStyle, model, smartRouting, resumeId]);
+  }, [step, canProceed, isMobile, nextBlocker]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -805,8 +855,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
             {step !== resumeStep && (
             <SessionContextChip
               resumeLabel={
-                resumes.find((r) => r.id === resumeId)?.title ??
-                (resumeId ? "Selected resume" : null)
+                resumes.find((r) => r.id === resumeId)?.title ?? null
               }
               language={language}
             />
@@ -964,7 +1013,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                      Company (optional)
+                      Company · Optional
                     </label>
                       <SearchableCombobox
                         value={company}
@@ -977,7 +1026,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1.5">
-                      Role {sessionCallType === "interview" ? "(required)" : "(optional)"}
+                      Role · Required
                     </label>
                       <SearchableCombobox
                         value={role}
@@ -1225,7 +1274,10 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
 
               <div>
                 <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-1.5">
-                  <FileText className="w-3.5 h-3.5" /> Resume {sessionCallType === "interview" ? "(required)" : "(optional)"}
+                  <FileText className="w-3.5 h-3.5" /> Resume ·{" "}
+                  {setupFieldRequirement(sessionCallType, "resume") === "REQUIRED"
+                    ? "Required"
+                    : "Optional"}
                 </label>
                 {resumeId && resumes.some((r) => r.id === resumeId) ? (
                   <p className="text-sm text-foreground rounded-xl border border-border bg-secondary/30 px-3 py-2.5">
@@ -1242,6 +1294,8 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 <select
                   value={resumeId ?? ""}
                   onChange={(e) => setResumeId(e.target.value || null)}
+                  required={setupFieldRequirement(sessionCallType, "resume") === "REQUIRED"}
+                  aria-required={setupFieldRequirement(sessionCallType, "resume") === "REQUIRED"}
                   className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 text-sm"
                 >
                   <option value="">None selected</option>
@@ -1254,7 +1308,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
 
               <div>
                 <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-1.5">
-                  <Briefcase className="w-3.5 h-3.5" /> Job Description
+                  <Briefcase className="w-3.5 h-3.5" /> Job Description · Optional
                 </label>
                 <select
                   value={jdId ?? ""}
@@ -1755,15 +1809,20 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
             Microphone ready. Transcription service is temporarily unavailable.
           </p>
         )}
-
-        {stepBlocker && !isLastStep && (
+        {voiceMandatoryBlocker && (
           <p role="status" className="text-xs text-amber-600 dark:text-amber-400">
-            {stepBlocker}
+            {voiceMandatoryBlocker}
           </p>
         )}
-        {isLastStep && startBlocker && (
-          <p role="status" className="text-xs text-amber-600 dark:text-amber-400">
-            {startBlocker}
+
+        {!isLastStep && nextBlocker && (
+          <p role="status" aria-live="polite" className="text-xs text-amber-600 dark:text-amber-400">
+            Complete the following: {nextBlocker}
+          </p>
+        )}
+        {isLastStep && startDisabledReason && (
+          <p role="status" aria-live="polite" className="text-xs text-amber-600 dark:text-amber-400">
+            Complete the following: {startDisabledReason}
           </p>
         )}
         <div className="flex gap-3">
@@ -1790,22 +1849,12 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
           {isLastStep ? (
             <button
               onClick={handleStart}
-              disabled={
-                Boolean(startBlocker) ||
-                (voiceRequired && !localAudioReady) ||
-                devicePrecheck.micState === MicState.CHECKING ||
-                !visibilityAck ||
-                !responsibleUseAck ||
-                !isOnline
-              }
+              disabled={Boolean(startDisabledReason)}
+              title={startDisabledReason ?? undefined}
+              aria-disabled={Boolean(startDisabledReason)}
               className={cn(
                 "flex-1 py-3.5 font-semibold rounded-xl transition-all flex items-center justify-center gap-2",
-                Boolean(startBlocker) ||
-                  (voiceRequired && !localAudioReady) ||
-                  devicePrecheck.micState === MicState.CHECKING ||
-                  !visibilityAck ||
-                  !responsibleUseAck ||
-                  !isOnline
+                startDisabledReason
                   ? "bg-muted text-muted-foreground cursor-not-allowed"
                   : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-foreground"
               )}
@@ -1816,13 +1865,15 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
           ) : (
             <button
               onClick={() => {
-                if (stepBlocker || (step === resumeStep && documentBlocker) || (step === 3 && modelBlocker)) {
-                  toast.message(stepBlocker ?? documentBlocker ?? modelBlocker ?? "");
+                if (nextBlocker) {
+                  toast.message(`Complete the following: ${nextBlocker}`);
                   return;
                 }
                 setStep((p) => p + 1);
               }}
-              disabled={Boolean(stepBlocker || (step === resumeStep && documentBlocker) || (step === 3 && modelBlocker))}
+              disabled={Boolean(nextBlocker)}
+              title={nextBlocker ? `Complete the following: ${nextBlocker}` : undefined}
+              aria-disabled={Boolean(nextBlocker)}
               className="flex-1 flex items-center justify-center gap-1.5 py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-foreground font-semibold rounded-xl transition-all text-sm"
             >
               Next

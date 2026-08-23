@@ -35,9 +35,9 @@ export function Modal({
     <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent
         showClose={false}
-        overlayClassName="z-[100] bg-black/60 backdrop-blur-sm"
+        overlayClassName="z-[1300] bg-black/60 backdrop-blur-sm"
         className={cn(
-          "z-[100] w-full max-h-[min(90vh,720px)] p-0 gap-0 overflow-y-auto overflow-x-hidden",
+          "z-[1300] w-full max-h-[min(90vh,720px)] p-0 gap-0 overflow-y-auto overflow-x-hidden",
           SIZES[size],
           className,
         )}

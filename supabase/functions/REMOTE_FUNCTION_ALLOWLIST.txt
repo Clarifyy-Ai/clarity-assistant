@@ -13,6 +13,7 @@ billing-status
 bulk-import-questions
 cancel-paper-generation-job
 cancel-subscription
+check-exam-paper-availability
 collect-exam-papers
 company-research
 create-billing-portal

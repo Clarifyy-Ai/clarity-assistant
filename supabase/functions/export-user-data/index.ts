@@ -31,7 +31,13 @@ function jsonError(
 }
 
 function exportAttachment(req: Request, type: string, exportData: Record<string, unknown>): Response {
-  const jsonBlob = JSON.stringify(exportData, null, 2);
+  let jsonBlob: string;
+  try {
+    jsonBlob = JSON.stringify(exportData, null, 2);
+    JSON.parse(jsonBlob);
+  } catch {
+    throw new Error("EXPORT_SERIALIZE_FAILED");
+  }
   const encoded = new TextEncoder().encode(jsonBlob);
   return new Response(encoded, {
     headers: {
@@ -40,6 +46,26 @@ function exportAttachment(req: Request, type: string, exportData: Record<string,
       "Content-Disposition": `attachment; filename="clarify-ai-export-${type}.json"`,
     },
   });
+}
+
+async function safeSelect(
+  label: string,
+  run: () => Promise<{ data: unknown; error: { message?: string } | null }>,
+  sectionErrors: Array<{ section: string; code: string }>,
+): Promise<unknown> {
+  try {
+    const { data, error } = await run();
+    if (error) {
+      console.warn(`[export-user-data] ${label}:`, error.message);
+      sectionErrors.push({ section: label, code: "SECTION_SKIPPED" });
+      return null;
+    }
+    return data;
+  } catch (err) {
+    console.warn(`[export-user-data] ${label} threw:`, err);
+    sectionErrors.push({ section: label, code: "SECTION_SKIPPED" });
+    return null;
+  }
 }
 
 function readIdempotencyKey(req: Request, body: Record<string, unknown> | null): string | null {
@@ -119,87 +145,120 @@ Deno.serve(async (req) => {
        BUILD EXPORT (server-authoritative, user-scoped)
     --------------------------------------------------- */
     const exportData: Record<string, unknown> = {};
+    const sectionErrors: Array<{ section: string; code: string }> = [];
     let sessionIds: string[] = [];
 
     if (type === "full" || type === "sessions" || type === "transcripts") {
-      const { data: sessions, error: sErr } = await db
-        .from("sessions")
-        .select("*")
-        .eq("user_id", user_id)
-        .order("created_at", { ascending: false });
+      const sessions = await safeSelect(
+        "sessions",
+        async () =>
+          await db
+            .from("sessions")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("created_at", { ascending: false }),
+        sectionErrors,
+      );
 
-      if (sErr) throw sErr;
+      const sessionRows = Array.isArray(sessions) ? sessions : [];
+      sessionIds = sessionRows.map((s: { id: string }) => s.id);
 
-      exportData.sessions = sessions ?? [];
-      sessionIds = (sessions ?? []).map((s: { id: string }) => s.id);
+      if (type === "sessions" && sessionIds.length > 0) {
+        const answerScores = await safeSelect(
+          "session_answers",
+          async () =>
+            await db
+              .from("session_answers")
+              .select("session_id, question, answer, score, ai_feedback, created_at")
+              .in("session_id", sessionIds),
+          sectionErrors,
+        );
+        const scoresBySession = new Map<string, unknown[]>();
+        for (const row of (Array.isArray(answerScores) ? answerScores : [])) {
+          const sid = String((row as { session_id?: string }).session_id ?? "");
+          if (!sid) continue;
+          const list = scoresBySession.get(sid) ?? [];
+          list.push(row);
+          scoresBySession.set(sid, list);
+        }
+        exportData.sessions = sessionRows.map((s: Record<string, unknown>) => ({
+          ...s,
+          answer_scores: scoresBySession.get(String(s.id ?? "")) ?? [],
+        }));
+      } else {
+        exportData.sessions = sessionRows;
+      }
     }
 
     if (type === "full" || type === "transcripts") {
       const ids = sessionIds.length ? sessionIds : ["-no-sessions-"];
-
-      const { data: answers, error: aErr } = await db
-        .from("session_answers")
-        .select("question, answer, score, ai_feedback, created_at")
-        .in("session_id", ids);
-
-      if (aErr) throw aErr;
-
-      exportData.transcripts = answers ?? [];
+      const answers = await safeSelect(
+        "transcripts",
+        async () =>
+          await db
+            .from("session_answers")
+            .select("question, answer, score, ai_feedback, created_at")
+            .in("session_id", ids),
+        sectionErrors,
+      );
+      exportData.transcripts = Array.isArray(answers) ? answers : [];
     }
 
     if (type === "full" || type === "answers") {
-      const { data: bank, error: bErr } = await db
-        .from("answer_bank")
-        .select("*")
-        .eq("user_id", user_id);
-
-      if (bErr) throw bErr;
-
-      exportData.answer_bank = bank ?? [];
+      const bank = await safeSelect(
+        "answer_bank",
+        async () =>
+          await db.from("answer_bank").select("*").eq("user_id", user_id),
+        sectionErrors,
+      );
+      exportData.answer_bank = Array.isArray(bank) ? bank : [];
     }
 
     if (type === "full" || type === "interviews") {
-      const { data: interviews, error: iErr } = await db
-        .from("interviews")
-        .select("*")
-        .eq("user_id", user_id);
-
-      if (iErr) throw iErr;
-
-      exportData.interviews = interviews ?? [];
+      const interviews = await safeSelect(
+        "interviews",
+        async () =>
+          await db.from("interviews").select("*").eq("user_id", user_id),
+        sectionErrors,
+      );
+      exportData.interviews = Array.isArray(interviews) ? interviews : [];
     }
 
     if (type === "full") {
-      const { data: profile, error: pErr } = await db
-        .from("profiles")
-        .select(
-          "full_name, email, plan, created_at, experience_level, target_role",
-        )
-        .eq("id", user_id)
-        .maybeSingle();
+      const profile = await safeSelect(
+        "profile",
+        async () =>
+          await db
+            .from("profiles")
+            .select(
+              "full_name, email, plan_id, created_at, experience_years, target_role",
+            )
+            .eq("id", user_id)
+            .maybeSingle(),
+        sectionErrors,
+      );
+      exportData.profile = profile ?? null;
 
-      if (pErr) throw pErr;
-
-      exportData.profile = profile;
-
-      const { data: debriefs, error: dErr } = await db
-        .from("session_debriefs")
-        .select("*")
-        .eq("user_id", user_id);
-
-      if (dErr) throw dErr;
-
-      exportData.debriefs = debriefs ?? [];
+      const debriefs = await safeSelect(
+        "debriefs",
+        async () =>
+          await db.from("session_debriefs").select("*").eq("user_id", user_id),
+        sectionErrors,
+      );
+      exportData.debriefs = Array.isArray(debriefs) ? debriefs : [];
     }
 
     exportData.exported_at = new Date().toISOString();
     exportData.user_id = user_id;
+    if (sectionErrors.length > 0) {
+      exportData.section_errors = sectionErrors;
+    }
 
     await logDataExportAudit({
       req,
       userId: user_id,
       status: "success",
-      metadata: { type },
+      metadata: { type, section_errors: sectionErrors.length },
     });
 
     if (idempotencyKey) {
@@ -214,7 +273,16 @@ Deno.serve(async (req) => {
       );
     }
 
-    return exportAttachment(req, type, exportData);
+    try {
+      return exportAttachment(req, type, exportData);
+    } catch {
+      return jsonError(
+        req,
+        500,
+        "EXPORT_FAILED",
+        "We couldn't prepare your export. Please try again in a moment.",
+      );
+    }
   } catch (err) {
     console.error("[export-user-data] error:", err);
     return jsonError(

@@ -4,6 +4,7 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { refundCredits } from "./supabase.ts";
+import { claimJobCreditsForRefund } from "./claimJobCredits.ts";
 
 export const PAPER_JOB_LEASE_MS = 180_000;
 export const PAPER_JOB_MAX_ATTEMPTS = 3;
@@ -11,17 +12,22 @@ export const PAPER_JOB_MAX_ATTEMPTS = 3;
 export const PAPER_JOB_TERMINAL = new Set([
   "completed",
   "failed",
+  "failed_retryable",
+  "failed_permanent",
   "cancelled",
   "expired",
 ]);
 
 export const PAPER_JOB_IN_FLIGHT = new Set([
   "queued",
+  "validating",
   "retrieving_sources",
   "analyzing_pattern",
   "planning_blueprint",
+  "building_blueprint",
   "selecting_questions",
   "generating_questions",
+  "generating_missing_slots",
   "validating_questions",
   "checking_similarity",
   "assembling",
@@ -123,7 +129,7 @@ export async function claimPaperGenerationJob(
 
   // Auto-claim: in-flight only. Explicit jobId also allows retryable failed rows.
   const claimableStatuses = opts.jobId
-    ? [...PAPER_JOB_IN_FLIGHT, "failed"]
+    ? [...PAPER_JOB_IN_FLIGHT, "failed", "failed_retryable"]
     : [...PAPER_JOB_IN_FLIGHT];
 
   let pick = db
@@ -151,12 +157,12 @@ export async function claimPaperGenerationJob(
 
   const priorAttempts = Number(candidate.attempt_count) || 0;
   if (priorAttempts >= maxAttempts) {
-    const creditsCharged = Math.max(0, Number(candidate.credits_charged) || 0);
+    const creditsCharged = await claimJobCreditsForRefund(db, String(candidate.id));
     await db
       .from("gov_paper_generation_jobs")
       .update({
-        status: "failed",
-        progress_stage: "failed",
+        status: "failed_permanent",
+        progress_stage: "failed_permanent",
         retryable: false,
         error_code: "MAX_ATTEMPTS",
         error_message: `Exceeded max attempts (${maxAttempts})`,
@@ -164,15 +170,15 @@ export async function claimPaperGenerationJob(
         updated_at: nowIso,
         lease_expires_at: null,
         worker_id: null,
-        credits_charged: 0,
       })
       .eq("id", candidate.id)
-      .filter("status", "not.in", "(completed,cancelled,expired)");
+      .filter("status", "not.in", "(completed,cancelled,expired,failed_permanent)");
     if (creditsCharged > 0 && candidate.user_id) {
       await refundCredits({
         userId: String(candidate.user_id),
         cost: creditsCharged,
         reason: "refund_paper_gen_max_attempts",
+        idempotencyKey: `refund_paper_job:${candidate.id}`,
       }).catch(() => {});
     }
     return { ok: false, reason: "max_attempts" };
@@ -181,8 +187,10 @@ export async function claimPaperGenerationJob(
   const nextAttempt = priorAttempts + 1;
   const leaseUntil = leaseExpiryIso(Date.now(), leaseMs);
   const resumeStatus =
-    candidate.status === "queued" || candidate.status === "failed"
-      ? "analyzing_pattern"
+    candidate.status === "queued" ||
+    candidate.status === "failed" ||
+    candidate.status === "failed_retryable"
+      ? "validating"
       : String(candidate.status);
 
   // Optimistic claim: only if still claimable (same lease window / still non-terminal).
@@ -239,4 +247,80 @@ export async function clearJobLease(
       updated_at: new Date().toISOString(),
     })
     .eq("id", jobId);
+}
+
+/**
+ * Reclaim lease-expired in-flight jobs. Marks failed_permanent after max attempts;
+ * otherwise clears the lease so a worker can claim again.
+ */
+export async function reclaimExpiredPaperJobs(
+  db: ServiceDb,
+  opts: { limit?: number; maxAttempts?: number } = {},
+): Promise<{ reclaimed: number; permanentlyFailed: number }> {
+  const limit = opts.limit ?? 20;
+  const maxAttempts = opts.maxAttempts ?? PAPER_JOB_MAX_ATTEMPTS;
+  const nowIso = new Date().toISOString();
+  let reclaimed = 0;
+  let permanentlyFailed = 0;
+
+  const { data: rows, error } = await db
+    .from("gov_paper_generation_jobs")
+    .select("id, user_id, attempt_count, credits_charged, status")
+    .in("status", [...PAPER_JOB_IN_FLIGHT])
+    .lt("lease_expires_at", nowIso)
+    .order("lease_expires_at", { ascending: true })
+    .limit(limit);
+
+  if (error || !rows?.length) {
+    return { reclaimed: 0, permanentlyFailed: 0 };
+  }
+
+  for (const row of rows) {
+    const attempts = Number(row.attempt_count) || 0;
+    if (attempts >= maxAttempts) {
+      const creditsCharged = await claimJobCreditsForRefund(db, String(row.id));
+      await db
+        .from("gov_paper_generation_jobs")
+        .update({
+          status: "failed_permanent",
+          progress_stage: "failed_permanent",
+          retryable: false,
+          error_code: "GENERATION_TIMEOUT",
+          error_message: "Generation worker lease expired too many times.",
+          completed_at: nowIso,
+          updated_at: nowIso,
+          worker_id: null,
+          lease_expires_at: null,
+        })
+        .eq("id", row.id)
+        .in("status", [...PAPER_JOB_IN_FLIGHT]);
+      if (creditsCharged > 0 && row.user_id) {
+        await refundCredits({
+          userId: String(row.user_id),
+          cost: creditsCharged,
+          reason: "refund_paper_gen_lease_timeout",
+          idempotencyKey: `refund_paper_job:${row.id}`,
+        }).catch(() => {});
+      }
+      permanentlyFailed += 1;
+    } else {
+      await db
+        .from("gov_paper_generation_jobs")
+        .update({
+          status: "failed_retryable",
+          progress_stage: "failed_retryable",
+          retryable: true,
+          error_code: "WORKER_LEASE_EXPIRED",
+          error_message: "Generation worker lost its lease. Retry is available.",
+          worker_id: null,
+          lease_expires_at: null,
+          updated_at: nowIso,
+        })
+        .eq("id", row.id)
+        .in("status", [...PAPER_JOB_IN_FLIGHT]);
+      reclaimed += 1;
+    }
+  }
+
+  return { reclaimed, permanentlyFailed };
 }

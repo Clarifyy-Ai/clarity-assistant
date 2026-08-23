@@ -83,6 +83,9 @@ const NO_NETWORK_RETRY_FNS = new Set([
   "company-research",
   // Export burns rate-limit quota; browser retries must not double-consume.
   "export-user-data",
+  // Payment order creation / verify must never storm on TypeError retries.
+  "razorpay-create-order",
+  "razorpay-verify-payment",
 ]);
 
 function unreachableUserMessage(fnName: string): string {

@@ -1,6 +1,7 @@
 import { invokeFunction } from "@/lib/api/functions";
 import {
   openRazorpayCheckout,
+  toPaymentUserFacingError,
   type RazorpayProductType,
 } from "@/lib/billing/razorpayCheckout";
 
@@ -27,7 +28,7 @@ export async function recordReferralViaEdge(
   });
 }
 
-export { openRazorpayCheckout, type RazorpayProductType };
+export { openRazorpayCheckout, toPaymentUserFacingError, type RazorpayProductType };
 
 export type PaymentOrderRow = {
   id: string;

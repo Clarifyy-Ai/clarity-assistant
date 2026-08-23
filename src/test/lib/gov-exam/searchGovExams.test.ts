@@ -63,7 +63,9 @@ describe("searchGovExams", () => {
 
     expect(res.results).toHaveLength(1);
     expect(res.results[0].examId).toBe("exam-1");
-    expect(res.pagination).toEqual({ page: 2, pageSize: 20, total: 21 });
+    expect(res.pagination).toMatchObject({ page: 2, pageSize: 20, total: 21 });
+    expect(res.pagination.hasMore).toBe(false);
+    expect(res.pagination.nextCursor).toBe(null);
   });
 
   it("throws a coded unavailable error when the service reports failure", async () => {
@@ -81,7 +83,7 @@ describe("searchGovExams", () => {
     expect(isSearchUnavailableError(err)).toBe(true);
     expect(mapGovSearchError(err)).toEqual({
       code: "SEARCH_UNAVAILABLE",
-      message: "Exam search is temporarily unavailable. Please try again.",
+      message: "Exam search is temporarily unavailable.",
     });
   });
 
@@ -99,7 +101,9 @@ describe("searchGovExams", () => {
 
     const res = await searchGovExams({ pageSize: 40 });
 
-    expect(res.pagination).toEqual({ page: 1, pageSize: 40, total: 1 });
+    expect(res.pagination).toMatchObject({ page: 1, pageSize: 40, total: 1 });
+    expect(res.pagination.hasMore).toBe(false);
+    expect(res.pagination.nextCursor).toBe(null);
   });
 
   it("forwards query, family and pagination to the edge function", async () => {

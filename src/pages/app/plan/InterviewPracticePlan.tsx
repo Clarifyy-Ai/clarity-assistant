@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import { CheckCircle2, Circle, ListTodo, Loader2, RotateCcw } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -21,10 +21,19 @@ export default function InterviewPracticePlanPage() {
   const [loading, setLoading] = useState(true);
   const [saveStates, setSaveStates] = useState<Record<string, ItemSaveState>>({});
   const [error, setError] = useState<string | null>(null);
+  const pendingSaveRef = useRef(false);
 
-  const daysLeft = daysUntilInterview(
-    (profile as { interview_date?: string | null } | null)?.interview_date ?? null,
-  );
+  const profileInterviewDate = (profile as { interview_date?: string | null } | null)?.interview_date ?? null;
+  const profileWeakAreas =
+    (profile as { interview_weaknesses?: string[] | null; improvement_goals?: string[] | null } | null)
+      ?.interview_weaknesses ??
+    (profile as { improvement_goals?: string[] | null } | null)?.improvement_goals ??
+    [];
+  const profileStrongAreas =
+    (profile as { interview_strengths?: string[] | null } | null)?.interview_strengths ?? [];
+  const profileTargetRole = profile?.target_role;
+
+  const daysLeft = daysUntilInterview(profileInterviewDate);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,16 +46,11 @@ export default function InterviewPracticePlanPage() {
       setError(null);
       try {
         const next = await loadOrCreatePlan(user.id, {
-          weakAreas:
-            (profile as { interview_weaknesses?: string[] | null; improvement_goals?: string[] | null } | null)
-              ?.interview_weaknesses ??
-            (profile as { improvement_goals?: string[] | null } | null)?.improvement_goals ??
-            [],
-          strongAreas:
-            (profile as { interview_strengths?: string[] | null } | null)?.interview_strengths ?? [],
+          weakAreas: profileWeakAreas,
+          strongAreas: profileStrongAreas,
           missingSkills: [],
-          targetRole: profile?.target_role,
-          interviewDate: (profile as { interview_date?: string | null } | null)?.interview_date,
+          targetRole: profileTargetRole,
+          interviewDate: profileInterviewDate,
         });
         if (!cancelled) {
           setItems(next);
@@ -64,7 +68,22 @@ export default function InterviewPracticePlanPage() {
     return () => {
       cancelled = true;
     };
-  }, [user?.id, profile]);
+  }, [user?.id, profileInterviewDate, profileTargetRole, profileWeakAreas.join("|"), profileStrongAreas.join("|")]);
+
+  useEffect(() => {
+    const hasPending = Object.values(saveStates).some(
+      (s) => s === "SAVING" || s === "SAVE_FAILED",
+    );
+    pendingSaveRef.current = hasPending;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (pendingSaveRef.current) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [saveStates]);
 
   const remaining = useMemo(() => items.filter((i) => !i.completed).length, [items]);
 

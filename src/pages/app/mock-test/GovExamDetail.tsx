@@ -181,7 +181,23 @@ export default function GovExamDetail(): React.ReactElement {
   }
 
   useEffect(() => {
+    // Clear dependent tab state when navigating to a different exam code.
+    setDetails(null);
+    setPatternDetail(null);
+    setSyllabusDetail(null);
+    setTrends(null);
+    setUserMocks([]);
+    setReadiness(null);
+    setMasteryRows([]);
+    setPrepPlan(null);
+    setSelectedTopics([]);
+    setRegistryPapers([]);
+    setBankEmpty(false);
+    setBankMessage(null);
+    setTab("overview");
+    setError(null);
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examCode]);
 
   useEffect(() => {

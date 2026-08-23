@@ -11,10 +11,27 @@ import {
 } from "@/lib/overlay/overlaySessionStates";
 import { clampPreferredModel } from "@/lib/ai/modelOptions";
 import { useAuthStore } from "@/store/authStore";
+import { getOverlaySessionAuthority } from "@/store/overlaySessionAuthorityStore";
 
 /** Ignore duplicate Ctrl+Shift+H from Electron globalShortcut + in-page listener. */
 let lastMinimizeToggleAt = 0;
 const MINIMIZE_TOGGLE_GUARD_MS = 80;
+
+/** Reject late Live/Mock updates after terminal / generation mismatch. */
+function guardSessionMutation(): boolean {
+  return getOverlaySessionAuthority().canAcceptSessionMutations();
+}
+
+function productMode() {
+  return getOverlaySessionAuthority().mode;
+}
+
+function transitionWithMode(
+  from: OverlaySessionState,
+  to: OverlaySessionState,
+): OverlaySessionState {
+  return transitionOverlayState(from, to, productMode());
+}
 
 // ─────────────────────────────────────────────────────────────────
 // Overlay Position
@@ -85,6 +102,10 @@ interface OverlayStore {
   current_hint: string;
   hint_state: HintState;
   streaming_buffer: string;
+  /** Active Live hint generation — stale chunks must not commit. */
+  active_hint_operation_id: string | null;
+  active_hint_session_id: string | null;
+  active_hint_question_id: string | null;
   error_message: string | null;
 
   hint_style: HintStyle;
@@ -163,9 +184,20 @@ interface OverlayStore {
   setSessionPipelineState: (state: OverlaySessionState) => void;
   setAlwaysOnTop: (enabled: boolean) => void;
   setPresentationSafeMode: (enabled: boolean) => void;
-  appendStreamChunk: (chunk: string) => void;
-  commitStreamedHint: () => void;
+  /**
+   * Start a hint generation op. Clears prior stream buffer so an old
+   * question's tokens cannot appear under the new question.
+   */
+  beginHintOperation: (args: {
+    operationId: string;
+    sessionId: string | null;
+    questionId: string;
+    question: string;
+  }) => void;
+  appendStreamChunk: (chunk: string, operationId?: string) => void;
+  commitStreamedHint: (operationId?: string) => void;
   clearHint: () => void;
+  clearPendingHintOperation: () => void;
   setError: (message: string | null) => void;
   setOfflineFallback: (hint: string) => void;
 
@@ -264,6 +296,9 @@ export const useOverlayStore = create<OverlayStore>()(
       current_hint: "",
       hint_state: "idle",
       streaming_buffer: "",
+      active_hint_operation_id: null,
+      active_hint_session_id: null,
+      active_hint_question_id: null,
       error_message: null,
 
       hint_style: "short_hints",
@@ -441,12 +476,17 @@ export const useOverlayStore = create<OverlayStore>()(
           };
         }),
 
-      setCurrentQuestion: (current_question) =>
+      setCurrentQuestion: (current_question) => {
+        if (!guardSessionMutation()) return;
         set((s) => ({
           current_question,
           hint_state: "listening",
           current_hint: "",
           streaming_buffer: "",
+          // New question invalidates any in-flight hint stream.
+          active_hint_operation_id: null,
+          active_hint_session_id: null,
+          active_hint_question_id: null,
           questions_detected:
             current_question !== s.current_question
               ? s.questions_detected + 1
@@ -458,33 +498,35 @@ export const useOverlayStore = create<OverlayStore>()(
                   { event: "question_detected", timestamp: Date.now() },
                 ]
               : s.activity_log,
-        })),
+        }));
+      },
 
-      setHintState: (hint_state) =>
+      setHintState: (hint_state) => {
+        if (!guardSessionMutation()) return;
         set((s) => {
           let session_pipeline_state = s.session_pipeline_state;
           if (hint_state === "generating") {
-            session_pipeline_state = transitionOverlayState(
+            session_pipeline_state = transitionWithMode(
               s.session_pipeline_state,
               "generating_guidance",
             );
           } else if (hint_state === "streaming") {
-            session_pipeline_state = transitionOverlayState(
+            session_pipeline_state = transitionWithMode(
               s.session_pipeline_state,
               "generating_guidance",
             );
           } else if (hint_state === "ready") {
-            session_pipeline_state = transitionOverlayState(
+            session_pipeline_state = transitionWithMode(
               s.session_pipeline_state,
               "guidance_ready",
             );
           } else if (hint_state === "error") {
-            session_pipeline_state = transitionOverlayState(
+            session_pipeline_state = transitionWithMode(
               s.session_pipeline_state,
               "ai_provider_unavailable",
             );
           } else if (hint_state === "offline_fallback") {
-            session_pipeline_state = transitionOverlayState(
+            session_pipeline_state = transitionWithMode(
               s.session_pipeline_state,
               "backend_unavailable",
             );
@@ -496,38 +538,88 @@ export const useOverlayStore = create<OverlayStore>()(
               ? { current_hint: "", streaming_buffer: "", error_message: null }
               : {}),
           };
-        }),
+        });
+      },
 
-      setSessionPipelineState: (next) =>
+      setSessionPipelineState: (next) => {
+        const allowTerminalPath =
+          next === "session_ending" || next === "session_saved";
+        if (!allowTerminalPath && !guardSessionMutation()) return;
         set((s) => ({
-          session_pipeline_state: transitionOverlayState(
+          session_pipeline_state: transitionWithMode(
             s.session_pipeline_state,
             next,
           ),
-        })),
+        }));
+      },
 
       setAlwaysOnTop: (always_on_top) => set({ always_on_top: Boolean(always_on_top) }),
       setPresentationSafeMode: (presentation_safe_mode) =>
         set({ presentation_safe_mode: Boolean(presentation_safe_mode) }),
 
-      appendStreamChunk: (chunk) =>
-        set((state) => ({
-          streaming_buffer: state.streaming_buffer + chunk,
-          hint_state: "streaming",
-          session_pipeline_state: transitionOverlayState(
-            state.session_pipeline_state,
+      beginHintOperation: ({ operationId, sessionId, questionId, question }) => {
+        if (!guardSessionMutation()) return;
+        set((s) => ({
+          current_question: question,
+          current_hint: "",
+          streaming_buffer: "",
+          hint_state: "generating" as HintState,
+          error_message: null,
+          active_hint_operation_id: operationId,
+          active_hint_session_id: sessionId,
+          active_hint_question_id: questionId,
+          questions_detected:
+            question !== s.current_question
+              ? s.questions_detected + 1
+              : s.questions_detected,
+          session_pipeline_state: transitionWithMode(
+            s.session_pipeline_state,
             "generating_guidance",
           ),
-        })),
+        }));
+      },
 
-      commitStreamedHint: () =>
+      appendStreamChunk: (chunk, operationId) => {
+        if (!guardSessionMutation()) return;
         set((state) => {
+          if (
+            operationId &&
+            state.active_hint_operation_id &&
+            operationId !== state.active_hint_operation_id
+          ) {
+            return state;
+          }
+          return {
+            streaming_buffer: state.streaming_buffer + chunk,
+            hint_state: "streaming" as HintState,
+            session_pipeline_state: transitionWithMode(
+              state.session_pipeline_state,
+              "generating_guidance",
+            ),
+          };
+        });
+      },
+
+      commitStreamedHint: (operationId) => {
+        if (!guardSessionMutation()) return;
+        set((state) => {
+          if (
+            operationId &&
+            state.active_hint_operation_id &&
+            operationId !== state.active_hint_operation_id
+          ) {
+            return state;
+          }
+
           const text = state.streaming_buffer.trim();
           if (!text) {
             return {
               streaming_buffer: "",
               hint_state: "idle" as HintState,
-              session_pipeline_state: transitionOverlayState(
+              active_hint_operation_id: null,
+              active_hint_session_id: null,
+              active_hint_question_id: null,
+              session_pipeline_state: transitionWithMode(
                 state.session_pipeline_state,
                 "listening",
               ),
@@ -547,7 +639,10 @@ export const useOverlayStore = create<OverlayStore>()(
             current_hint: text,
             streaming_buffer: "",
             hint_state: "ready" as HintState,
-            session_pipeline_state: transitionOverlayState(
+            active_hint_operation_id: null,
+            active_hint_session_id: null,
+            active_hint_question_id: null,
+            session_pipeline_state: transitionWithMode(
               state.session_pipeline_state,
               "guidance_ready",
             ),
@@ -558,44 +653,64 @@ export const useOverlayStore = create<OverlayStore>()(
               { event: "hint_generated", timestamp: Date.now() },
             ],
           };
-        }),
+        });
+      },
 
-      clearHint: () =>
+      clearHint: () => {
+        if (!guardSessionMutation()) return;
         set((s) => ({
           current_hint: "",
           streaming_buffer: "",
           hint_state: "idle" as HintState,
           error_message: null,
           screenshot_hint: null,
-          session_pipeline_state: transitionOverlayState(
+          active_hint_operation_id: null,
+          active_hint_session_id: null,
+          active_hint_question_id: null,
+          session_pipeline_state: transitionWithMode(
             s.session_pipeline_state,
             "listening",
           ),
-        })),
+        }));
+      },
 
-      setError: (error_message) =>
+      clearPendingHintOperation: () => {
+        set({
+          streaming_buffer: "",
+          active_hint_operation_id: null,
+          active_hint_session_id: null,
+          active_hint_question_id: null,
+          hint_state: "idle",
+        });
+      },
+
+      setError: (error_message) => {
+        if (!guardSessionMutation()) return;
         set((s) => {
           const next = pipelineStateFromErrorMessage(error_message);
           return {
             error_message,
             hint_state: "error" as HintState,
-            session_pipeline_state: transitionOverlayState(
+            session_pipeline_state: transitionWithMode(
               s.session_pipeline_state,
               next,
             ),
           };
-        }),
+        });
+      },
 
-      setOfflineFallback: (hint) =>
+      setOfflineFallback: (hint) => {
+        if (!guardSessionMutation()) return;
         set((s) => ({
           current_hint: hint,
           streaming_buffer: "",
           hint_state: "offline_fallback" as HintState,
-          session_pipeline_state: transitionOverlayState(
+          session_pipeline_state: transitionWithMode(
             s.session_pipeline_state,
             "guidance_ready",
           ),
-        })),
+        }));
+      },
 
       setHintStyle: (hint_style) => set({ hint_style }),
 
@@ -660,20 +775,33 @@ export const useOverlayStore = create<OverlayStore>()(
       setSessionLanguage: (session_language) => set({ session_language }),
       setActiveTab: (active_tab) => set({ active_tab }),
 
-      addChatMessage: (msg) =>
+      addChatMessage: (msg) => {
+        if (!guardSessionMutation()) return;
         set((s) => ({
           chat_history: [...s.chat_history, msg],
           is_chat_generating: false,
-        })),
-      clearChatHistory: () =>
-        set({ chat_history: [], is_chat_generating: false }),
-      setChatGenerating: (is_chat_generating) => set({ is_chat_generating }),
+        }));
+      },
+      clearChatHistory: () => {
+        if (!guardSessionMutation()) return;
+        set({ chat_history: [], is_chat_generating: false });
+      },
+      setChatGenerating: (is_chat_generating) => {
+        if (!guardSessionMutation()) return;
+        set({ is_chat_generating });
+      },
 
-      setResumeContext: (resume_context) => set({ resume_context }),
-      setResumeTalkingPoints: (resume_talking_points) =>
-        set({ resume_talking_points }),
+      setResumeContext: (resume_context) => {
+        if (!guardSessionMutation()) return;
+        set({ resume_context });
+      },
+      setResumeTalkingPoints: (resume_talking_points) => {
+        if (!guardSessionMutation()) return;
+        set({ resume_talking_points });
+      },
 
-      togglePinHint: (hint, question) =>
+      togglePinHint: (hint, question) => {
+        if (!guardSessionMutation()) return;
         set((s) => {
           const alreadyPinned = s.pinned_hints.some((p) => p.hint === hint);
           if (alreadyPinned) {
@@ -688,8 +816,12 @@ export const useOverlayStore = create<OverlayStore>()(
             timestamp: Date.now(),
           };
           return { pinned_hints: [...s.pinned_hints, newPin] };
-        }),
-      clearPinnedHints: () => set({ pinned_hints: [] }),
+        });
+      },
+      clearPinnedHints: () => {
+        if (!guardSessionMutation()) return;
+        set({ pinned_hints: [] });
+      },
 
       setNetworkColor: (network_color) => set({ network_color }),
 
@@ -710,6 +842,9 @@ export const useOverlayStore = create<OverlayStore>()(
           hint_state: "idle",
           session_pipeline_state: "idle",
           streaming_buffer: "",
+          active_hint_operation_id: null,
+          active_hint_session_id: null,
+          active_hint_question_id: null,
           error_message: null,
 
           hint_history: [],

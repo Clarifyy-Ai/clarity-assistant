@@ -2,9 +2,15 @@
  * cancel-paper-generation-job — JWT; owner-only cancel + credit refund if charged.
  */
 
-import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import {
+  handleCors,
+  getCorsHeaders,
+  withBrowserCors,
+  applyCors,
+} from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient, refundCredits } from "../_shared/supabase.ts";
+import { claimJobCreditsForRefund } from "../_shared/claimJobCredits.ts";
 import { isUserBanned, bannedResponse } from "../_shared/banCheck.ts";
 import {
   checkRateLimitAsync,
@@ -28,9 +34,14 @@ function uuidOrNull(v: unknown): string | null {
     : null;
 }
 
-const TERMINAL = new Set(["completed", "cancelled", "expired"]);
+const TERMINAL = new Set([
+  "completed",
+  "cancelled",
+  "expired",
+  "failed_permanent",
+]);
 
-Deno.serve(async (req) => {
+Deno.serve(withBrowserCors("cancel-paper-generation-job", async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
@@ -38,7 +49,7 @@ Deno.serve(async (req) => {
 
   try {
     const auth = await authenticateRequest(req);
-    if (auth.error) return auth.error;
+    if (auth.error) return applyCors(req, auth.error);
     const user = auth.context.user;
 
     if (await isUserBanned(db, user.id)) {
@@ -50,7 +61,7 @@ Deno.serve(async (req) => {
       ...RATE_LIMIT_PRESETS.SESSION_ACTION,
     });
     if (!rateLimitResult.allowed) {
-      return rateLimitResponse(rateLimitResult);
+      return rateLimitResponse(rateLimitResult, req);
     }
 
     const body = await req.json().catch(() => null);
@@ -94,8 +105,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    const creditsCharged = Math.max(0, Number(job.credits_charged) || 0);
-
     const { error: updErr } = await db
       .from("gov_paper_generation_jobs")
       .update({
@@ -119,24 +128,19 @@ Deno.serve(async (req) => {
     }
 
     let creditsRefunded = 0;
-    if (creditsCharged > 0) {
+    const claimed = await claimJobCreditsForRefund(db, jobId);
+    if (claimed > 0) {
       const refund = await refundCredits({
         userId: user.id,
-        cost: creditsCharged,
+        cost: claimed,
         reason: "refund_cancel_paper_generation_job",
+        idempotencyKey: `refund_paper_job:${jobId}`,
       }).catch((e) => {
         console.warn("[cancel-paper-generation-job] refund:", e);
         return { success: false as const };
       });
       if (refund?.success) {
-        creditsRefunded = creditsCharged;
-        await db
-          .from("gov_paper_generation_jobs")
-          .update({
-            credits_charged: 0,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", jobId);
+        creditsRefunded = claimed;
       }
     }
 
@@ -150,4 +154,4 @@ Deno.serve(async (req) => {
     console.error("[cancel-paper-generation-job]", err);
     return json(req, { error: "Internal server error", code: "INTERNAL_ERROR" }, 500);
   }
-});
+}));

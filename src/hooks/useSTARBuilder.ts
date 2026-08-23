@@ -78,6 +78,9 @@ export function useSTARBuilder() {
     question: string,
     context?: string
   ): Promise<void> => {
+    throw new Error(
+      "useSTARBuilder is deprecated. Use /app/prep/star-builder with server-side factual integrity instead.",
+    );
     if (!question.trim()) return;
 
     setState((s) => ({ ...s, isGenerating: true, error: null }));
@@ -118,6 +121,9 @@ Generate realistic STAR components. Return ONLY valid JSON:
   // ── Analyse existing STAR answer ──────────────────────────────
 
   const analyseAnswer = useCallback(async (): Promise<void> => {
+    throw new Error(
+      "useSTARBuilder is deprecated. Use /app/prep/star-builder with server-side factual integrity instead.",
+    );
     const { question, components } = state;
     if (!components.situation || !components.action || !components.result) return;
 
@@ -171,6 +177,9 @@ Return ONLY valid JSON:
   // ── Polish answer with AI ─────────────────────────────────────
 
   const polishAnswer = useCallback(async (): Promise<void> => {
+    throw new Error(
+      "useSTARBuilder is deprecated. Use /app/prep/star-builder with server-side factual integrity instead.",
+    );
     const { components, question } = state;
     if (!components.action) return;
 

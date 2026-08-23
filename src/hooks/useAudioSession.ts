@@ -23,8 +23,10 @@ import { toast } from "sonner";
 import type { Speaker, TranscriptUtterance } from "@/types/audio.types";
 
 // ─────────────────────────────────────────────────────────────────
-// useAudioSession — master pipeline:
-// mic + system audio → Deepgram → diarization → VAD → filler → WPM → stores
+// useAudioSession — Live dual-channel pipeline:
+//   mic  → Deepgram (forced candidate)
+//   tab  → Deepgram (forced interviewer)  [optional]
+// Do NOT mix streams for Live STT. Mock uses mic-only (enableSystemAudio: false).
 // ─────────────────────────────────────────────────────────────────
 
 interface UseAudioSessionOptions {
@@ -40,7 +42,6 @@ interface UseAudioSessionOptions {
 }
 
 export function useAudioSession(opts: UseAudioSessionOptions) {
-  // reactive selectors
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
   const isMuted = useAudioStore((s) => s.is_muted ?? false);
   const deepgramStatus = useAudioStore((s) => s.deepgram_status ?? "disconnected");
@@ -48,7 +49,6 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
   const isSpeaking = useAudioStore((s) => s.levels?.is_speaking ?? false);
   const streamError = useAudioStore((s) => s.streams?.error ?? null);
 
-  // refs
   const deepgramMicRef = useRef<DeepgramStreamClient | null>(null);
   const deepgramSystemRef = useRef<DeepgramStreamClient | null>(null);
   const vadRef = useRef<VADDetector | null>(null);
@@ -64,16 +64,35 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
   const isStartedRef = useRef(false);
   const levelTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastAudioAtRef = useRef(0);
+  /** True while a dedicated interviewer (tab) Deepgram client is connected. */
+  const hasInterviewerChannelRef = useRef(false);
+  const optsRef = useRef(opts);
+  optsRef.current = opts;
 
-  // ── Handle final utterance ────────────────────────────────────
+  const markInterviewerChannel = useCallback((active: boolean) => {
+    hasInterviewerChannelRef.current = active;
+    const store = useAudioStore.getState();
+    store.setSystemAudioAvailable(active);
+    if (active) {
+      if (store.pipeline_status === "microphone_only") {
+        store.setPipelineStatus("listening");
+      }
+    } else if (isStartedRef.current && store.deepgram_status === "connected") {
+      store.setPipelineStatus("microphone_only");
+    }
+  }, []);
+
   const handleUtterance = useCallback(
     (utterance: TranscriptUtterance, forcedSpeaker?: Speaker) => {
+      if (!isStartedRef.current) return;
+
       const store = useAudioStore.getState();
+      const hasInterviewerChannel = hasInterviewerChannelRef.current;
 
       const enriched = processUtteranceForDiarization(utterance, {
         forcedSpeaker,
+        hasInterviewerChannel,
       });
-      store.addUtterance(enriched);
       store.setPipelineStatus("transcribing");
 
       if (enriched.speaker) {
@@ -83,9 +102,17 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       if (enriched.speaker === "candidate") {
         wpmRef.current?.processText(enriched.text);
         fillerAccRef.current?.processText(enriched.text, enriched.start_ms / 1000);
+        // Cancel pending finalize only on real candidate finals (not VAD blips).
+        silenceRef.current?.onCandidateSpeechStart();
+        useOverlayStore.getState().setSessionPipelineState("speech_detected");
       }
 
-      if (enriched.is_interviewer_question) {
+      if (enriched.speaker === "interviewer") {
+        silenceRef.current?.onInterviewerSpeaking();
+        useOverlayStore.getState().setSessionPipelineState("tab_audio_detected");
+      }
+
+      if (enriched.is_interviewer_question && hasInterviewerChannel) {
         store.setLastQuestion(enriched.text);
         silenceRef.current?.onInterviewerUtteranceEnd(enriched.text);
       }
@@ -110,10 +137,15 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
         },
         onUtterance: (u) => handleUtterance(u, forcedSpeaker),
         onInterim: (text) => {
+          if (!isStartedRef.current) return;
           store.setPipelineStatus("transcribing");
+          if (forcedSpeaker === "interviewer") {
+            silenceRef.current?.onInterviewerSpeaking();
+          }
           if (onInterim) onInterim(text);
         },
         onError: (error) => {
+          if (!isStartedRef.current) return;
           store.setStreamError({
             code: "DEEPGRAM_CONNECTION_FAILED",
             message: error.message,
@@ -122,13 +154,21 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
           });
         },
         onStatusChange: (status) => {
-          store.setDeepgramStatus(status);
+          if (!isStartedRef.current) return;
+          if (forcedSpeaker === "candidate" || !deepgramMicRef.current) {
+            store.setDeepgramStatus(status);
+          }
           if (status === "connecting") store.setPipelineStatus("connecting");
           else if (status === "reconnecting") store.setPipelineStatus("reconnecting");
-          else if (status === "connected") store.setPipelineStatus("listening");
-          else if (status === "error") store.setPipelineStatus("unavailable");
+          else if (status === "connected") {
+            store.setPipelineStatus(
+              hasInterviewerChannelRef.current ? "listening" : "microphone_only",
+            );
+          } else if (status === "error") store.setPipelineStatus("unavailable");
           else if (status === "disconnected" && isStartedRef.current) {
-            store.setPipelineStatus("microphone_only");
+            store.setPipelineStatus(
+              hasInterviewerChannelRef.current ? "listening" : "microphone_only",
+            );
           }
         },
       });
@@ -138,10 +178,10 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     [handleUtterance],
   );
 
-  // ── Start pipeline ────────────────────────────────────────────
   const start = useCallback(async () => {
     if (isStartedRef.current) return;
     isStartedRef.current = true;
+    hasInterviewerChannelRef.current = false;
 
     const store = useAudioStore.getState();
     store.setIsCapturing(false);
@@ -151,14 +191,12 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     useOverlayStore.getState().setSessionPipelineState("connecting");
 
     try {
-      // 1) mic
       const micStream = await captureMicrophone(opts.micDeviceId, {
         noiseSuppression: opts.noiseSuppression ?? true,
         autoGainControl: opts.autoGainControl ?? true,
       });
       store.setMicStream(micStream);
 
-      // 2) optional system audio — separate stream + Deepgram channel (P1-A)
       let sysStream: MediaStream | null = null;
       if (opts.enableSystemAudio && isSystemAudioSupported()) {
         const proceed = await confirmTabAudioCapture();
@@ -166,13 +204,26 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
           try {
             sysStream = await captureSystemAudio();
             store.setSystemStream(sysStream);
-            store.setSystemAudioAvailable(true);
 
             cleanupSysRef.current = watchStreamEnded(sysStream, () => {
+              if (!isStartedRef.current) return;
               deepgramSystemRef.current?.disconnect();
               deepgramSystemRef.current = null;
               store.setSystemStream(null);
-              toast.warning("Tab audio stopped. Interviewer speech may no longer be captured.");
+              markInterviewerChannel(false);
+              useOverlayStore.getState().setSessionPipelineState("audio_unavailable");
+              toast.warning(
+                "Interviewer audio unavailable — tab share stopped. Share again to detect interviewer questions.",
+                {
+                  duration: Infinity,
+                  action: {
+                    label: "Retry",
+                    onClick: () => {
+                      void toggleSystemAudioRef.current?.();
+                    },
+                  },
+                },
+              );
             });
           } catch (err) {
             const message = err instanceof Error ? err.message : "Tab audio capture failed";
@@ -184,31 +235,35 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
               message,
               recoverable: true,
               suggestion: isNoAudioTrack
-                ? "In the share dialog, tick \"Share tab audio\" (or \"Share audio\") before clicking Share."
-                : "Share the interview tab and check \"Share tab audio\", then retry from the toolbar.",
+                ? 'In the share dialog, tick "Share tab audio" (or "Share audio") before clicking Share.'
+                : 'Share the interview tab and check "Share tab audio", then retry from the toolbar.',
             });
             toast.error(
               isNoAudioTrack
-                ? "Interviewer audio not captured — \"Share tab audio\" wasn't ticked."
-                : "Interviewer audio not captured — only your mic is active.",
+                ? 'Interviewer audio unavailable — "Share tab audio" wasn\'t ticked.'
+                : "Interviewer audio unavailable — only your mic is active.",
               {
                 duration: Infinity,
                 action: {
                   label: "Retry",
-                  onClick: () => { void toggleSystemAudioRef.current?.(); },
+                  onClick: () => {
+                    void toggleSystemAudioRef.current?.();
+                  },
                 },
-              }
+              },
             );
             toast.warning(
-              "Without tab audio, the coach cannot hear the interviewer — use Chat or enable tab audio from the toolbar.",
+              "Mic-only mode: interviewer questions will not auto-detect. Use Chat or Generate, or enable tab audio.",
               { duration: Infinity },
             );
           }
         } else {
           store.setSystemAudioAvailable(false);
-          toast.message("Continuing with mic only. Enable tab audio from the toolbar to capture the interviewer.");
+          toast.message(
+            "Continuing with mic only. Enable tab audio from the toolbar to capture the interviewer.",
+          );
           toast.warning(
-            "Without tab audio, the coach cannot hear the interviewer — use Chat or enable tab audio from the toolbar.",
+            "Interviewer audio unavailable — coach cannot auto-detect interviewer questions until tab audio is shared.",
             { duration: Infinity },
           );
         }
@@ -221,10 +276,11 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
           suggestion: "Use Chrome/Edge and join the interview in a browser tab.",
         });
         toast.warning(
-          "Tab audio is not supported in this browser. Only your microphone will be transcribed. Type a question in the Chat tab as a fallback.",
+          "Interviewer audio unavailable in this browser. Only your microphone will be transcribed. Type a question in Chat as a fallback.",
         );
       }
 
+      // combined_stream is mic-only for analyser/legacy — NOT a mix for Deepgram.
       store.setCombinedStream(micStream);
       store.setIsCapturing(true);
       store.setPipelineStatus("connecting");
@@ -242,19 +298,27 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
         }
       });
 
-      // 3) analyser → VAD (mic only — candidate speech metrics)
       const analyser = createLevelAnalyser(micStream);
       levelAnalyserRef.current = analyser;
       lastAudioAtRef.current = Date.now();
       levelTimerRef.current = setInterval(() => {
+        if (!isStartedRef.current) return;
         const level = analyser.getLevel();
         const currentStore = useAudioStore.getState();
         currentStore.setCurrentLevel(level);
         currentStore.setIsSpeaking(level > 0.015);
         if (level > 0.01) {
           lastAudioAtRef.current = Date.now();
-          currentStore.setPipelineStatus("receiving_audio");
-        } else if (Date.now() - lastAudioAtRef.current > 10_000 && currentStore.deepgram_status === "connected") {
+          if (
+            currentStore.pipeline_status !== "microphone_only" &&
+            currentStore.pipeline_status !== "transcribing"
+          ) {
+            currentStore.setPipelineStatus("receiving_audio");
+          }
+        } else if (
+          Date.now() - lastAudioAtRef.current > 10_000 &&
+          currentStore.deepgram_status === "connected"
+        ) {
           currentStore.setPipelineStatus("unavailable");
           useOverlayStore.getState().setSessionPipelineState("audio_unavailable");
           currentStore.setStreamError({
@@ -268,45 +332,42 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
 
       const vad = new VADDetector({
         onSpeechStart: () => {
-          silenceRef.current?.onCandidateSpeechStart();
           useOverlayStore.getState().setSessionPipelineState("speech_detected");
         },
         onSpeechEnd: () => {
           const wpm = wpmRef.current?.getCurrentWPM() ?? 0;
-          opts.onWPMUpdate(wpm);
+          optsRef.current.onWPMUpdate(wpm);
           useSessionStore.getState().setCurrentWPM(wpm);
         },
       });
       vadRef.current = vad;
       vad.start(analyser.getLevel);
 
-      // 4) silence boundary — triggers question detection
       const silenceSeconds =
         useOverlayStore.getState().auto_answer_silence_seconds ?? 3;
       const silenceBoundary = new SilenceBoundaryDetector(
         (question) => {
-          useOverlayStore.getState().setSessionPipelineState("transcribing");
-          opts.onQuestionDetected(question);
+          if (!isStartedRef.current) return;
+          if (!hasInterviewerChannelRef.current) return;
+          useOverlayStore.getState().setSessionPipelineState("question_detected");
+          optsRef.current.onQuestionDetected(question);
         },
         Math.max(1000, Math.min(10000, silenceSeconds * 1000)),
       );
       silenceRef.current = silenceBoundary;
 
-      // 5) filler
       fillerAccRef.current = new FillerAccumulator();
       fillerRTRef.current = new RealTimeFillerCounter((count) => {
-        opts.onFillerDetected(count);
+        optsRef.current.onFillerDetected(count);
       });
 
-      // 6) wpm
       const wpmTracker = new WPMTracker((wpm) => {
-        opts.onWPMUpdate(wpm);
+        optsRef.current.onWPMUpdate(wpm);
         useSessionStore.getState().setCurrentWPM(wpm);
       });
       wpmRef.current = wpmTracker;
       wpmTracker.start();
 
-      // 7) dual Deepgram — mic = candidate, system = interviewer
       try {
         deepgramMicRef.current = await connectDeepgram(
           micStream,
@@ -318,30 +379,35 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
         );
 
         if (sysStream) {
-          deepgramSystemRef.current = await connectDeepgram(
-            sysStream,
-            "interviewer",
-          );
+          deepgramSystemRef.current = await connectDeepgram(sysStream, "interviewer");
+          markInterviewerChannel(true);
+        } else if (opts.enableSystemAudio) {
+          markInterviewerChannel(false);
+          store.setPipelineStatus("microphone_only");
         }
 
         store.setDeepgramStatus("connected");
-        store.setPipelineStatus("listening");
+        if (hasInterviewerChannelRef.current) {
+          store.setPipelineStatus("listening");
+        } else {
+          store.setPipelineStatus(
+            opts.enableSystemAudio ? "microphone_only" : "listening",
+          );
+        }
         useOverlayStore.getState().setSessionPipelineState("listening");
       } catch (dgErr) {
         console.warn("[useAudioSession] Deepgram unavailable — mic-only mode:", dgErr);
         store.setDeepgramStatus("disconnected");
         store.setPipelineStatus("microphone_only");
+        markInterviewerChannel(false);
         const dgMsg =
-          dgErr instanceof Error
-            ? dgErr.message
-            : "Live transcription unavailable";
+          dgErr instanceof Error ? dgErr.message : "Live transcription unavailable";
         if (!opts.micOptional) {
           store.setStreamError({
             code: "UNKNOWN",
             message: dgMsg,
             recoverable: true,
-            suggestion:
-              "Type questions in Chat, or retry listening from the toolbar.",
+            suggestion: "Type questions in Chat, or retry listening from the toolbar.",
           });
           useOverlayStore.getState().setSessionPipelineState("audio_unavailable");
           toast.error(
@@ -353,8 +419,8 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
         }
       }
 
-      // 8) watch mic end
       cleanupMicRef.current = watchStreamEnded(micStream, () => {
+        if (!isStartedRef.current) return;
         store.setStreamError({
           code: "STREAM_ENDED",
           message: "Microphone stream ended",
@@ -367,6 +433,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       });
     } catch (err) {
       isStartedRef.current = false;
+      hasInterviewerChannelRef.current = false;
       const message = err instanceof Error ? err.message : "Audio start failed";
 
       if (opts.micOptional) {
@@ -386,17 +453,25 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       });
       store.setDeepgramStatus("error");
       store.setPipelineStatus("unavailable");
-      const denied =
-        /permission|denied|notallowed|not allowed/i.test(message);
+      const denied = /permission|denied|notallowed|not allowed/i.test(message);
       useOverlayStore
         .getState()
         .setSessionPipelineState(denied ? "permission_denied" : "audio_unavailable");
     }
-  }, [opts.micDeviceId, opts.noiseSuppression, opts.autoGainControl, opts.enableSystemAudio, opts.micOptional, opts.onQuestionDetected, opts.onFillerDetected, opts.onWPMUpdate, handleUtterance, connectDeepgram]);
+  }, [
+    opts.micDeviceId,
+    opts.noiseSuppression,
+    opts.autoGainControl,
+    opts.enableSystemAudio,
+    opts.micOptional,
+    connectDeepgram,
+    markInterviewerChannel,
+  ]);
 
-  // ── Stop pipeline ─────────────────────────────────────────────
   const stop = useCallback(() => {
     isStartedRef.current = false;
+    hasInterviewerChannelRef.current = false;
+
     if (levelTimerRef.current) {
       clearInterval(levelTimerRef.current);
       levelTimerRef.current = null;
@@ -407,15 +482,12 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     deepgramSystemRef.current?.disconnect();
     deepgramSystemRef.current = null;
 
-    // vad
     vadRef.current?.stop();
     vadRef.current = null;
 
-    // silence
     silenceRef.current?.destroy();
     silenceRef.current = null;
 
-    // analyser
     levelAnalyserRef.current?.disconnect();
     levelAnalyserRef.current = null;
 
@@ -442,15 +514,42 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     store.setPipelineStatus("ended");
   }, []);
 
-  // ── Mute/unmute ───────────────────────────────────────────────
   const toggleMute = useCallback(() => {
     const store = useAudioStore.getState();
     const stream = store.streams.mic_stream;
     if (!stream) return;
 
     const muted = !store.is_muted;
-    stream.getAudioTracks().forEach((t) => (t.enabled = !muted));
+    stream.getAudioTracks().forEach((t) => {
+      t.enabled = !muted;
+    });
     store.setIsMuted(muted);
+  }, []);
+
+  /**
+   * Temporarily disable mic tracks without flipping user mute UI.
+   * Mock Interview uses this while INTERVIEWER_AUDIO (TTS) plays so echo
+   * is not transcribed as CANDIDATE_AUDIO. Live Copilot should not call this.
+   */
+  const suspendCandidateCapture = useCallback(() => {
+    const store = useAudioStore.getState();
+    const stream = store.streams.mic_stream;
+    if (!stream) return;
+    stream.getAudioTracks().forEach((t) => {
+      t.enabled = false;
+    });
+    store.updateInterimText("");
+  }, []);
+
+  /** Re-enable mic tracks unless the user explicitly muted. */
+  const resumeCandidateCapture = useCallback(() => {
+    const store = useAudioStore.getState();
+    if (store.is_muted) return;
+    const stream = store.streams.mic_stream;
+    if (!stream) return;
+    stream.getAudioTracks().forEach((t) => {
+      t.enabled = true;
+    });
   }, []);
 
   const setNoiseSuppression = useCallback(async (enabled: boolean) => {
@@ -464,12 +563,11 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     );
   }, []);
 
-  // ── Toggle system audio at runtime ───────────────────────────
   const toggleSystemAudio = useCallback(async () => {
+    if (!isStartedRef.current) return;
     const store = useAudioStore.getState();
     const currentSysStream = store.streams.system_stream;
 
-    // stop sys audio
     if (currentSysStream) {
       deepgramSystemRef.current?.disconnect();
       deepgramSystemRef.current = null;
@@ -477,73 +575,62 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       cleanupSysRef.current = null;
       stopStream(currentSysStream);
       store.setSystemStream(null);
-    } else {
-      // start sys audio
-      if (!isSystemAudioSupported()) {
-        store.setStreamError({
-          code: "SYSTEM_AUDIO_NOT_SUPPORTED",
-          message: "System audio capture is only supported in Chrome and Edge.",
-          recoverable: false,
-          suggestion: "Please use Chrome or Edge to capture interviewer audio.",
-        });
-        return;
-      }
-
-      const proceed = await confirmTabAudioCapture();
-      if (!proceed) return;
-
-      try {
-        const sysStream = await captureSystemAudio();
-        store.setSystemStream(sysStream);
-        store.setSystemAudioAvailable(true);
-
-        cleanupSysRef.current = watchStreamEnded(sysStream, () => {
-          store.setSystemStream(null);
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "System audio capture failed";
-        store.setStreamError({
-          code: "SYSTEM_AUDIO_FAILED",
-          message,
-          recoverable: true,
-          suggestion: "Make sure you selected 'Share audio' in the dialog. Try again.",
-        });
-        store.setSystemAudioAvailable(false);
-        return;
-      }
+      markInterviewerChannel(false);
+      toast.message(
+        "Interviewer audio unavailable — mic-only. Share tab audio to resume detection.",
+      );
+      return;
     }
 
-    const micStream = store.streams.mic_stream;
-    if (!micStream) return;
-
-    store.setCombinedStream(micStream);
-
-    if (store.streams.system_stream) {
-      try {
-        deepgramSystemRef.current = await connectDeepgram(
-          store.streams.system_stream,
-          "interviewer",
-        );
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "System audio failed";
-        store.setStreamError({
-          code: "SYSTEM_AUDIO_FAILED",
-          message,
-          recoverable: true,
-          suggestion: "Share the interview tab with \"Share tab audio\" enabled.",
-        });
-      }
+    if (!isSystemAudioSupported()) {
+      store.setStreamError({
+        code: "SYSTEM_AUDIO_NOT_SUPPORTED",
+        message: "System audio capture is only supported in Chrome and Edge.",
+        recoverable: false,
+        suggestion: "Please use Chrome or Edge to capture interviewer audio.",
+      });
+      return;
     }
-  }, [connectDeepgram]);
 
-  // Expose toggleSystemAudio to the `start` closure (for "Retry" toast action)
+    const proceed = await confirmTabAudioCapture();
+    if (!proceed) return;
+
+    try {
+      const sysStream = await captureSystemAudio();
+      store.setSystemStream(sysStream);
+
+      cleanupSysRef.current = watchStreamEnded(sysStream, () => {
+        if (!isStartedRef.current) return;
+        deepgramSystemRef.current?.disconnect();
+        deepgramSystemRef.current = null;
+        store.setSystemStream(null);
+        markInterviewerChannel(false);
+        toast.warning("Interviewer audio unavailable — tab share ended.");
+      });
+
+      deepgramSystemRef.current = await connectDeepgram(sysStream, "interviewer");
+      markInterviewerChannel(true);
+      store.setPipelineStatus("listening");
+      useOverlayStore.getState().setSessionPipelineState("listening");
+      toast.success("Interviewer (tab) audio connected.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "System audio capture failed";
+      store.setStreamError({
+        code: "SYSTEM_AUDIO_FAILED",
+        message,
+        recoverable: true,
+        suggestion: "Make sure you selected 'Share audio' in the dialog. Try again.",
+      });
+      markInterviewerChannel(false);
+    }
+  }, [connectDeepgram, markInterviewerChannel]);
+
   useEffect(() => {
     toggleSystemAudioRef.current = toggleSystemAudio;
   }, [toggleSystemAudio]);
 
   const isSystemAudioActive = useAudioStore((s) => s.streams.system_stream !== null);
 
-  // ── Reconnect ─────────────────────────────────────────────────
   const reconnect = useCallback(async () => {
     useOverlayStore.getState().setSessionPipelineState("reconnecting");
     stop();
@@ -551,44 +638,46 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     await start();
   }, [start, stop]);
 
-  // ── Snapshot helpers ──────────────────────────────────────────
-  const getFillerSnapshot = useCallback(() => fillerAccRef.current?.getSnapshot() ?? [], []);
-  const getWPMDataPoints = useCallback(() => wpmRef.current?.getDataPoints() ?? [], []);
+  const getFillerSnapshot = useCallback(
+    () => fillerAccRef.current?.getSnapshot() ?? [],
+    [],
+  );
+  const getWPMDataPoints = useCallback(
+    () => wpmRef.current?.getDataPoints() ?? [],
+    [],
+  );
   const getAverageWPM = useCallback(() => wpmRef.current?.getAverageWPM() ?? 0, []);
 
-  // Warn if interviewer audio likely missing after warm-up
   useEffect(() => {
-    if (!isStartedRef.current) return;
+    if (!opts.enableSystemAudio) return;
 
     const timer = setTimeout(() => {
+      if (!isStartedRef.current) return;
+      if (hasInterviewerChannelRef.current) return;
+
       const store = useAudioStore.getState();
-      if (store.streams.system_stream) return;
-
-      const utterances = store.transcript?.utterances ?? [];
-      const hasInterviewer = utterances.some(
-        (u) => u.speaker === "interviewer" || u.is_interviewer_question
-      );
-      if (hasInterviewer) return;
-
       store.setStreamError({
         code: "SYSTEM_AUDIO_FAILED",
-        message: "Interviewer audio not detected — only your microphone is active.",
+        message: "Interviewer audio unavailable — only your microphone is active.",
         recoverable: true,
-        suggestion: "Share the interview tab with \"Share tab audio\" enabled using the toolbar button.",
+        suggestion:
+          'Share the interview tab with "Share tab audio" enabled using the toolbar button.',
       });
-      toast.warning("Still only hearing your mic — interviewer audio isn't being captured.", {
+      store.setPipelineStatus("microphone_only");
+      toast.warning("Interviewer audio unavailable — still mic-only after warm-up.", {
         duration: Infinity,
         action: {
           label: "Enable tab audio",
-          onClick: () => { void toggleSystemAudioRef.current?.(); },
+          onClick: () => {
+            void toggleSystemAudioRef.current?.();
+          },
         },
       });
     }, 25_000);
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [opts.enableSystemAudio]);
 
-  // cleanup on unmount
   useEffect(() => {
     return () => {
       stop();
@@ -600,6 +689,8 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     stop,
     reconnect,
     toggleMute,
+    suspendCandidateCapture,
+    resumeCandidateCapture,
     setNoiseSuppression,
     toggleSystemAudio,
     isSystemAudioActive,

@@ -63,6 +63,9 @@ verify_jwt = true
 [functions.create-exam-paper]
 verify_jwt = true
 
+[functions.check-exam-paper-availability]
+verify_jwt = true
+
 [functions.process-paper-generation-job]
 # Auth handled in-function (internal secret, service role, admin JWT, or owner JWT).
 verify_jwt = false

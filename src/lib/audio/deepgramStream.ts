@@ -364,8 +364,16 @@ export class DeepgramStreamClient {
           type: w.type,
         }));
 
+        // Do NOT assume speaker-0 = interviewer. Without word-level speaker
+        // labels (or when diarize is off), leave as unknown — Live overrides
+        // via forcedSpeaker on dual channels.
         const speakerIndex = getMajoritySpeaker(words);
-        const speaker = speakerIndex === 0 ? "interviewer" : "candidate";
+        const speaker =
+          speakerIndex === null
+            ? "unknown"
+            : speakerIndex === 0
+              ? "interviewer"
+              : "candidate";
         const text = String(alt.transcript ?? "").trim();
         if (!text) return;
         const fingerprint = [
@@ -385,6 +393,8 @@ export class DeepgramStreamClient {
         const fillerCount = fillerWords.length;
         const fillerList = fillerWords.map((w) => String(w.word ?? "").toLowerCase());
 
+        // Ambiguous speakers must not mark interviewer questions — Live dual
+        // path re-evaluates after forcedSpeaker in processUtteranceForDiarization.
         const utterance: TranscriptUtterance = {
           id: generateId(),
           speaker,
@@ -527,7 +537,8 @@ async function fetchDeepgramToken(): Promise<TokenResponse> {
   }
 }
 
-function getMajoritySpeaker(words: TranscriptWord[]): number {
+/** Returns null when no word-level speaker labels exist (do not invent 0). */
+function getMajoritySpeaker(words: TranscriptWord[]): number | null {
   const counts = new Map<number, number>();
 
   for (const w of words) {
@@ -536,7 +547,7 @@ function getMajoritySpeaker(words: TranscriptWord[]): number {
     }
   }
 
-  if (counts.size === 0) return 0;
+  if (counts.size === 0) return null;
 
   let dominant = 0;
   let maxCount = 0;

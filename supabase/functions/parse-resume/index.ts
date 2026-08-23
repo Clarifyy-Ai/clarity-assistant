@@ -371,7 +371,7 @@ Deno.serve(async (req) => {
     const { data: fileData, error: downloadError } = await db.storage.from("resumes").download(file_path);
     if (downloadError || !fileData) {
       console.error("Storage download error:", downloadError);
-      return new Response(JSON.stringify({ error: "Failed to download resume file", code: "SERVICE_UNAVAILABLE" }), { status: 502, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ error: "Failed to download resume file", code: "PARSER_UNAVAILABLE" }), { status: 503, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } });
     }
 
     const buf = await fileData.arrayBuffer();
@@ -596,7 +596,7 @@ Deno.serve(async (req) => {
     if (effectiveVersionId) {
       await db.from("resume_versions").update({ parse_status: "error", parse_error: failMsg }).eq("id", effectiveVersionId);
     }
-    return new Response(JSON.stringify({ error: "Resume parsing failed after all attempts.", code: "PARSE_FAILED" }), { status: 422, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } });
+    return new Response(JSON.stringify({ error: "Resume parsing failed after all attempts.", code: "PARSER_FAILED" }), { status: 422, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } });
 
   } catch (err) {
     if (err instanceof Response) return err;

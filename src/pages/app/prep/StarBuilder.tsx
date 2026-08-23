@@ -1,5 +1,6 @@
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
-import { prepToolIdempotencyKey } from "@/lib/network/idempotency";
+import { prepToolContentIdempotencyKey } from "@/lib/network/idempotency";
+import { sha256 } from "@/lib/utils/hashUtils";
 import {
   getAiUserFacingError,
   isAiProviderUnavailableError,
@@ -47,7 +48,7 @@ type AiPhase = "IDLE" | "GENERATING" | "GENERATED" | "GENERATION_FAILED";
 type SavePhase = "IDLE" | "SAVING" | "SAVED" | "SAVE_FAILED";
 
 const EMPTY_STAR: StarFields = { situation: "", task: "", action: "", result: "" };
-const AI_REWRITE_UNAVAILABLE = "AI improvement is temporarily unavailable.";
+const AI_REWRITE_UNAVAILABLE = "AI rewrite is temporarily unavailable.";
 const SAVE_FAILED_MSG =
   "Your improvement was generated but could not be saved.";
 
@@ -68,6 +69,7 @@ export default function StarBuilder() {
   const [polishError, setPolishError] = useState<string | null>(null);
   const [savePhase, setSavePhase] = useState<SavePhase>("IDLE");
   const polishKeyRef = useRef<string | null>(null);
+  const polishInFlightRef = useRef(false);
   const originalStarRef = useRef<StarFields | null>(null);
   const [hasOriginalDraft, setHasOriginalDraft] = useState(false);
   const polishing = aiPhase === "GENERATING";
@@ -161,19 +163,23 @@ export default function StarBuilder() {
       toast.error("Write something in the STAR fields first.");
       return;
     }
-    if (polishing) return;
+    if (polishing || polishInFlightRef.current) return;
 
+    polishInFlightRef.current = true;
     // Preserve original before any AI overwrite.
     originalStarRef.current = { ...star };
     setHasOriginalDraft(true);
     setAiPhase("GENERATING");
     setPolishError(null);
+
+    const input = `Question: ${question || "(general behavioral)"}\n\nSituation: ${star.situation}\nTask: ${star.task}\nAction: ${star.action}\nResult: ${star.result}`;
+    const contentHash = await sha256(input);
     const idempotencyKey =
-      polishKeyRef.current ?? prepToolIdempotencyKey("star_method");
+      polishKeyRef.current ??
+      prepToolContentIdempotencyKey("star_method", contentHash);
     polishKeyRef.current = idempotencyKey;
 
     try {
-      const input = `Question: ${question || "(general behavioral)"}\n\nSituation: ${star.situation}\nTask: ${star.task}\nAction: ${star.action}\nResult: ${star.result}`;
 
       const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
         tool_id: "star_method",
@@ -241,6 +247,8 @@ export default function StarBuilder() {
       setPolishError(message);
       toast.error(message);
       await refreshCredits().catch(() => undefined);
+    } finally {
+      polishInFlightRef.current = false;
     }
   }
 

@@ -21,9 +21,19 @@ export function speakQuestionText(
     onEnd?: () => void;
   },
 ): void {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+    queueMicrotask(() => {
+      if (options.isCurrent(options.questionId)) options.onEnd?.();
+    });
+    return;
+  }
   const trimmed = text.trim();
-  if (!trimmed) return;
+  if (!trimmed) {
+    queueMicrotask(() => {
+      if (options.isCurrent(options.questionId)) options.onEnd?.();
+    });
+    return;
+  }
 
   stopBrowserTts();
 
@@ -44,7 +54,9 @@ export function speakQuestionText(
   };
 
   utterance.onerror = () => {
-    /* swallow — caller owns session UX */
+    // Treat error as end so callers leave question_speaking and open listening.
+    if (!options.isCurrent(options.questionId)) return;
+    options.onEnd?.();
   };
 
   // Defer speak so cancel() of prior utterance settles.
@@ -53,7 +65,7 @@ export function speakQuestionText(
     try {
       window.speechSynthesis.speak(utterance);
     } catch {
-      /* ignore */
+      if (options.isCurrent(options.questionId)) options.onEnd?.();
     }
   });
 }

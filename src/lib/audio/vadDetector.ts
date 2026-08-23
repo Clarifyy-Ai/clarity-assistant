@@ -1,5 +1,8 @@
 import type { VADConfig, VADEvent } from "@/types/audio.types";
 import { useAudioStore } from "@/store/audioStore";
+import type { LiveSpeechEvent } from "./liveQuestionGate";
+
+export type { LiveSpeechEvent };
 
 // ─────────────────────────────────────────────────────────────────
 // Voice Activity Detection (VAD)
@@ -178,44 +181,80 @@ export class VADDetector {
 
 // ─────────────────────────────────────────────────────────────────
 // Silence boundary detector
-// Emits an event when interviewer stops talking (question complete).
-// This is the primary trigger for AI hint generation.
+// Finalizes a *pre-gated* interviewer question after silence.
+// Silence alone NEVER creates a question — pending text is required.
 // ─────────────────────────────────────────────────────────────────
 
 export class SilenceBoundaryDetector {
-  private lastInterviewerSpeechEnd: number | null = null;
   private triggerThresholdMs: number;
   private onQuestionComplete: (question: string) => void;
+  private onEvent?: (event: LiveSpeechEvent) => void;
   private triggered = false;
   private pendingQuestion: string | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private event: LiveSpeechEvent = "NO_AUDIO";
+  private destroyed = false;
 
   constructor(
     onQuestionComplete: (question: string) => void,
-    triggerThresholdMs = 1200
+    triggerThresholdMs = 1200,
+    onEvent?: (event: LiveSpeechEvent) => void,
   ) {
     this.onQuestionComplete = onQuestionComplete;
     this.triggerThresholdMs = triggerThresholdMs;
+    this.onEvent = onEvent;
   }
 
+  get currentEvent(): LiveSpeechEvent {
+    return this.event;
+  }
+
+  private setEvent(next: LiveSpeechEvent): void {
+    if (this.destroyed || this.event === next) return;
+    this.event = next;
+    this.onEvent?.(next);
+  }
+
+  /** Interviewer started speaking (tab/system channel). */
+  onInterviewerSpeaking(): void {
+    if (this.destroyed) return;
+    this.setEvent("INTERVIEWER_SPEAKING");
+  }
+
+  /**
+   * Interviewer final utterance that already passed the question gate.
+   * Starts the silence timer — does not emit QUESTION_FINALIZED yet.
+   */
   onInterviewerUtteranceEnd(question: string): void {
-    this.pendingQuestion = question;
+    if (this.destroyed) return;
+    const trimmed = question.trim();
+    if (!trimmed) return;
+
+    this.pendingQuestion = trimmed;
     this.triggered = false;
+    this.setEvent("QUESTION_CANDIDATE");
 
     if (this.timer) clearTimeout(this.timer);
 
-    // Wait for silence threshold before triggering hint
+    // Silence finalizes an existing candidate — never invents one.
     this.timer = setTimeout(() => {
-      if (this.pendingQuestion && !this.triggered) {
-        this.triggered = true;
-        this.onQuestionComplete(this.pendingQuestion);
-        this.pendingQuestion = null;
-      }
+      if (this.destroyed) return;
+      if (!this.pendingQuestion || this.triggered) return;
+      this.triggered = true;
+      const finalized = this.pendingQuestion;
+      this.pendingQuestion = null;
+      this.setEvent("QUESTION_FINALIZED");
+      this.onQuestionComplete(finalized);
     }, this.triggerThresholdMs);
   }
 
+  /**
+   * Candidate final utterance (or sustained answer) — cancel pending finalize.
+   * Do not call on every mic energy blip.
+   */
   onCandidateSpeechStart(): void {
-    // Candidate started answering — cancel pending trigger
+    if (this.destroyed) return;
+    this.setEvent("CANDIDATE_SPEAKING");
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = null;
@@ -223,6 +262,10 @@ export class SilenceBoundaryDetector {
   }
 
   destroy(): void {
+    this.destroyed = true;
     if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    this.pendingQuestion = null;
+    this.event = "NO_AUDIO";
   }
 }

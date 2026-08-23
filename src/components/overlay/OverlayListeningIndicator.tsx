@@ -67,6 +67,12 @@ export const OverlayListeningIndicator = memo(function OverlayListeningIndicator
   } else if (
     pipeline === "generating_guidance" ||
     pipeline === "question_detected" ||
+    pipeline === "tab_audio_detected" ||
+    pipeline === "question_generated" ||
+    pipeline === "question_spoken" ||
+    pipeline === "candidate_answering" ||
+    pipeline === "answer_finalizing" ||
+    pipeline === "next_question_pending" ||
     pipeline === "transcribing" ||
     pipeline === "speech_detected" ||
     pipeline === "reconnecting" ||

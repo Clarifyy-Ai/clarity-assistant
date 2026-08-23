@@ -9,7 +9,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { userFacingDbError } from "@/lib/errors/userFacingDbError";
-import { messageFromExportCaught } from "@/lib/export/exportUserFacingError";
+import { fetchEdge } from "@/lib/network/fetchEdge";
+import { createExportIdempotencyKey, messageFromExportCaught } from "@/lib/export/exportUserFacingError";
 
 type RetentionKey = "transcripts" | "ai_answers" | "debriefs" | "documents";
 type ChannelKey = "email" | "push" | "in_app";
@@ -86,23 +87,34 @@ export default function SettingsPolish() {
   }
 
   async function exportSessionsCsv() {
-    if (!user) return;
+    if (!user || exporting) return;
     setExporting(true);
     try {
-      const { data, error } = await (supabase as any)
-        .from("sessions")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1000);
-      if (error) throw error;
-      const rows: any[] = data ?? [];
+      const idempotencyKey = createExportIdempotencyKey("sessions-csv");
+      const res = await fetchEdge(
+        "export-user-data",
+        { type: "sessions", idempotencyKey },
+        {
+          headers: {
+            "Idempotency-Key": idempotencyKey,
+            "x-idempotency-key": idempotencyKey,
+          },
+        },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw Object.assign(new Error(messageFromExportCaught(body)), { status: res.status, code: body?.code });
+      }
+      const payload = await res.json();
+      const rows: Record<string, unknown>[] = Array.isArray(payload?.sessions)
+        ? payload.sessions
+        : [];
       if (rows.length === 0) {
         toast.info("No sessions to export");
         return;
       }
-      const cols = Object.keys(rows[0]);
-      const escape = (v: any) => {
+      const cols = Object.keys(rows[0] ?? {});
+      const escape = (v: unknown) => {
         if (v === null || v === undefined) return "";
         const s = typeof v === "object" ? JSON.stringify(v) : String(v);
         return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -119,7 +131,7 @@ export default function SettingsPolish() {
       a.click();
       URL.revokeObjectURL(url);
       toast.success(`Exported ${rows.length} sessions`);
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast.error(messageFromExportCaught(e));
     } finally {
       setExporting(false);

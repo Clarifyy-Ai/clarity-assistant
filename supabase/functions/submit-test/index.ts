@@ -9,7 +9,7 @@ import {
   errorResponse,
   log,
 } from "../_shared/utils.ts";
-import { createServiceClient } from "../_shared/supabase.ts";
+import { createServiceClient, getIdempotentResponse, storeIdempotentResponse } from "../_shared/supabase.ts";
 import { withBrowserCors } from "../_shared/cors.ts";
 import {
   checkRateLimitAsync,
@@ -403,18 +403,34 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
 
     const body = await parseBody<{ test_id: string; idempotencyKey?: string }>(req);
     const testId = safeString(body?.test_id);
-    const _submitKey = safeString(body?.idempotencyKey) || (testId ? `submit:${testId}` : "");
+    const clientKey = safeString(body?.idempotencyKey);
+    const submitKey =
+      clientKey || (testId ? `submit:${testId}` : "");
+    const durableKey =
+      testId && userId
+        ? `submit_test:${userId}:${testId}`.slice(0, 150)
+        : "";
 
     if (!testId) {
       return errorResponse("Missing test_id", "VALIDATION_ERROR", 400, req);
     }
 
-    log(FN, "info", "submit accepted", { testId, submitKey: _submitKey || "none" });
+    log(FN, "info", "submit accepted", { testId, submitKey: submitKey || "none" });
+
+    if (durableKey) {
+      const prior = await getIdempotentResponse(db, durableKey, {
+        userId,
+        action: "submit_test",
+      });
+      if (prior?.success === true && prior.payload && typeof prior.payload === "object") {
+        return successResponse(prior.payload as Record<string, unknown>, undefined, 200, req);
+      }
+    }
 
     /* -------------------------- FETCH TEST -------------------------- */
     const { data: testRaw, error: testErr } = await db
       .from("mock_tests")
-      .select("id, config, question_ids, status, started_at, time_limit_minutes")
+      .select("id, config, question_ids, status, started_at, time_limit_minutes, expires_at")
       .eq("id", testId)
       .eq("user_id", userId)
       .single();
@@ -426,6 +442,9 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
     const timedOut = isExamExpired(
       testRaw.started_at as string | null,
       testRaw.time_limit_minutes as number | null,
+      Date.now(),
+      2_000,
+      testRaw.expires_at as string | null,
     );
 
     if (testRaw.status === "COMPLETED") {
@@ -435,12 +454,22 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
         .eq("test_id", testId)
         .maybeSingle();
 
-      return successResponse({
+      const alreadyPayload = {
         success: true,
         already_completed: true,
         expired: timedOut,
         analysis: existing ?? null,
-      }, undefined, 200, req);
+      };
+      if (durableKey) {
+        await storeIdempotentResponse(
+          db,
+          durableKey,
+          { success: true, credits: 0, balance: 0, payload: alreadyPayload },
+          { userId, action: "submit_test" },
+        ).catch(() => {});
+      }
+
+      return successResponse(alreadyPayload, undefined, 200, req);
     }
 
     const questionIds = Array.isArray(testRaw.question_ids)
@@ -697,12 +726,22 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
         .eq("test_id", testId)
         .maybeSingle();
 
-      return successResponse({
+      const alreadyPayload = {
         success: true,
         already_completed: true,
         expired: timedOut,
         analysis: existing ?? null,
-      }, undefined, 200, req);
+      };
+      if (durableKey) {
+        await storeIdempotentResponse(
+          db,
+          durableKey,
+          { success: true, credits: 0, balance: 0, payload: alreadyPayload },
+          { userId, action: "submit_test" },
+        ).catch(() => {});
+      }
+
+      return successResponse(alreadyPayload, undefined, 200, req);
     } else {
       const { data: analysisRow } = await db
         .from("test_analyses")
@@ -847,7 +886,7 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
     }
 
     /* -------------------------- FINAL RESPONSE -------------------------- */
-    return successResponse({
+    const finalPayload = {
       success: true,
       expired: timedOut,
       total_score: boundedTotalScore,
@@ -862,7 +901,18 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
       rank_tier: rankTier,
       rank_status: rankStatus,
       analysis: finalAnalysis,
-    }, undefined, 200, req);
+    };
+
+    if (durableKey) {
+      await storeIdempotentResponse(
+        db,
+        durableKey,
+        { success: true, credits: 0, balance: 0, payload: finalPayload },
+        { userId, action: "submit_test" },
+      ).catch(() => {});
+    }
+
+    return successResponse(finalPayload, undefined, 200, req);
   } catch (err) {
     if (err instanceof Response) return err;
     log(FN, "error", "Unhandled error", err instanceof Error ? err.message : "unknown");

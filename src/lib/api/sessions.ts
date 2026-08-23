@@ -37,6 +37,7 @@ export type StartSessionRequest = {
   focus_areas?: string[];
   practice_context_id?: string | null;
   source_type?: string | null;
+  session_call_type?: "interview" | "regular_call" | null;
 };
 
 export type StartSessionResponse = {

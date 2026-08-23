@@ -131,7 +131,7 @@ export function sessionDurationSeconds(input: {
   if (!input.started_at || !input.ended_at) return 0;
   const ms = new Date(input.ended_at).getTime() - new Date(input.started_at).getTime();
   if (!Number.isFinite(ms)) return 0;
-  return Math.max(0, Math.round(ms / 1000));
+  return Math.max(0, Math.floor(ms / 1000));
 }
 
 export function isPracticeSessionExpired(input: {

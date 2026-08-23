@@ -519,6 +519,37 @@ export async function setupSupabaseMocks(
       ]);
     }
 
+    if (url.includes("/rest/v1/practice_workspace_sessions")) {
+      if (method === "GET") {
+        const wantsActive = url.includes("status=eq.active") || url.includes("status%3Deq.active");
+        if (wantsActive) {
+          return fulfillJson(route, 200, []);
+        }
+        return fulfillJson(route, 200, []);
+      }
+      if (method === "POST") {
+        const body = (route.request().postDataJSON() as Record<string, unknown>) ?? {};
+        return fulfillJson(route, 201, {
+          id: "e2e-practice-draft-shared",
+          version: 1,
+          user_id: E2E_TEST_USER.id,
+          status: "active",
+          current_index: 0,
+          started_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          ...body,
+        });
+      }
+      if (method === "PATCH" || method === "PUT") {
+        const body = (route.request().postDataJSON() as Record<string, unknown>) ?? {};
+        return fulfillJson(route, 200, {
+          id: "e2e-practice-draft-shared",
+          version: Number(body.version ?? 2),
+          ...body,
+        });
+      }
+    }
+
     // ── Storage ───────────────────────────────────────────────────────────
     if (url.includes("/storage/v1/object/") && method === "POST") {
       const objectPath = decodeURIComponent(

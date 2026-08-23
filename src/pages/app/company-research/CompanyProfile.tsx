@@ -92,6 +92,7 @@ export default function CompanyProfile() {
         return;
       }
 
+      // Omit x-idempotency-key so the Edge Function derives minute-bucketed force keys.
       const result = await fetchEdgeJson<CompanyResearchResponse>(
         "company-research",
         {
@@ -99,15 +100,31 @@ export default function CompanyProfile() {
           role: params.get("role") ?? "",
           force: true,
         },
-        { headers: { "x-idempotency-key": `company-research:${user?.id ?? "anon"}:${normalizeCompanyName(companyName).replace(/\s+/g, "-")}:gen` } },
       );
 
       if (!result?.persisted || !result?.brief) {
-        setError("Research was generated, but we couldn't save it. Please retry.");
+        setError("Research was generated but could not be saved. Please retry.");
         return;
       }
 
-      setBrief(result.brief);
+      // Confirm persistence from DB — do not rely on React state alone after refresh.
+      const { data: persisted, error: verifyErr } = await supabase
+        .from("company_research")
+        .select("raw_data")
+        .eq("user_id", user?.id ?? "")
+        .eq("company_name_normalized", normalizeCompanyName(companyName))
+        .maybeSingle();
+
+      if (verifyErr) {
+        console.warn("[CompanyProfile] Post-save verify failed:", verifyErr.message);
+      }
+
+      const briefFromDb =
+        persisted?.raw_data && typeof persisted.raw_data === "object"
+          ? persisted.raw_data
+          : result.brief;
+
+      setBrief(briefFromDb);
       setNeedsGenerateConfirm(false);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to generate brief";

@@ -20,6 +20,9 @@ test.describe("Government exam generation and submission UX", () => {
         contentType: "application/json",
         headers: { "access-control-allow-origin": "*" },
         body: JSON.stringify({
+          success: true,
+          query: "",
+          count: 1,
           results: [
             {
               resultType: "official_exam",
@@ -54,7 +57,6 @@ test.describe("Government exam generation and submission UX", () => {
             },
           ],
           disclaimer: "practice",
-          count: 1,
         }),
       });
     });
@@ -101,14 +103,16 @@ test.describe("Government exam generation and submission UX", () => {
     await expect(page.getByRole("heading", { name: /Generate practice paper/i })).toBeVisible({
       timeout: 30_000,
     });
-    await expect(page.getByText(/23 \/ 100 questions available|23\/100 approved/i)).toBeVisible({
+    await expect(
+      page.getByText(/23 \/ 100 questions available|23\/100 approved/i).first(),
+    ).toBeVisible({
       timeout: 20_000,
     });
     await page.getByRole("button", { name: "Continue" }).click();
     await page.getByRole("button", { name: "Continue" }).click();
     await page.getByRole("button", { name: "Continue" }).click();
     await expect(
-      page.getByText(/Only 23 approved questions are currently available/i),
+      page.getByText(/Only 23 approved questions are currently available/i).first(),
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: /Generate Custom Practice Set — up to 23/i }),

@@ -3,14 +3,17 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Check, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
+import { ExamSearchCombobox } from "@/components/gov-exam/ExamSearchCombobox";
 import {
   CREATE_EXAM_PAPER_CREDIT_COST,
+  cancelPaperGenerationJob,
+  checkExamPaperAvailability,
   createExamPaper,
   generateTopicPractice,
   getExamSyllabus,
   getPaperGenerationJob,
-  searchGovExams,
-  isSearchUnavailableError,
+  requestGovExam,
+  type ExamPaperAvailability,
   type GovExamSearchResult,
   type PaperJobResult,
 } from "@/lib/gov-exam/api";
@@ -32,11 +35,16 @@ import { useAuthStore } from "@/store/userStore";
 import { resolveCreditBalance } from "@/lib/billing/resolveCreditBalance";
 import { fetchSpendableCredits } from "@/lib/billing/fetchSpendableCredits";
 import {
-  AI_GENERATED_PAPER_LABEL,
-  CUSTOM_PRACTICE_PAPER_LABEL,
   GOV_EXAM_AFFILIATION_DISCLAIMER,
 } from "@/lib/gov-exam/disclaimers";
 import { flattenSyllabusTopicLabels } from "@/lib/gov-exam/topicFilter";
+import {
+  clearActivePaperJob,
+  isPaperJobTerminal,
+  loadActivePaperJob,
+  mapPaperJobPublicStatus,
+  saveActivePaperJob,
+} from "@/lib/gov-exam/paperJobStatus";
 import { toast } from "sonner";
 
 const STEPS = ["Exam", "Paper basis", "Customize", "Review"] as const;
@@ -54,10 +62,15 @@ function paperJobErrorMessage(job: PaperJobResult): string {
 }
 
 const JOB_STAGES = [
+  "queued",
+  "validating",
+  "retrieving_sources",
   "analyzing_pattern",
   "planning_blueprint",
+  "building_blueprint",
   "selecting_questions",
   "generating_questions",
+  "generating_missing_slots",
   "validating_questions",
   "checking_similarity",
   "assembling",
@@ -66,22 +79,29 @@ const JOB_STAGES = [
 
 const STAGE_LABEL: Record<string, string> = {
   queued: "Queued",
+  validating: "Validating request",
+  retrieving_sources: "Retrieving sources",
   analyzing_pattern: "Analyzing syllabus & pattern",
   planning_blueprint: "Building blueprint",
+  building_blueprint: "Building blueprint",
   selecting_questions: "Selecting reviewed questions",
   generating_questions: "Generating remaining unique questions with AI",
+  generating_missing_slots: "Filling missing question slots",
   validating_questions: "Validating answers",
   checking_similarity: "Checking duplicates",
   assembling: "Assembling paper",
   completed: "Final quality check complete",
   failed: "Failed",
+  failed_retryable: "Failed — retry available",
+  failed_permanent: "Failed",
+  cancelled: "Cancelled",
 };
 
 export default function GenerateGovPaper(): React.ReactElement {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
-  const [exams, setExams] = useState<GovExamSearchResult[]>([]);
+  const [selectedExam, setSelectedExam] = useState<GovExamSearchResult | null>(null);
   const [examId, setExamId] = useState(params.get("examId") ?? "");
   const [stageId, setStageId] = useState(params.get("stageId") ?? "");
   const [basis, setBasis] = useState<
@@ -96,6 +116,8 @@ export default function GenerateGovPaper(): React.ReactElement {
   const [difficulty, setDifficulty] = useState<"" | "EASY" | "MEDIUM" | "HARD">("");
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState<PaperJobResult | null>(null);
+  const [serverAvailability, setServerAvailability] = useState<ExamPaperAvailability | null>(null);
+  const pollAbortRef = useRef(false);
   const generatingRef = useRef(false);
   const idempotencyKeyRef = useRef<string | null>(null);
   const profile = useAuthStore((s) => s.profile);
@@ -122,10 +144,7 @@ export default function GenerateGovPaper(): React.ReactElement {
 
   const displayCredits = serverCredits ?? (creditBalance.known ? creditBalance.balance : null);
 
-  const selected = useMemo(
-    () => exams.find((e) => e.examId === examId) ?? null,
-    [exams, examId],
-  );
+  const selected = selectedExam;
 
   const bank = selected?.bankReadiness ?? null;
   const fullSimAvailable = bank?.fullSimulationAvailable === true;
@@ -139,34 +158,171 @@ export default function GenerateGovPaper(): React.ReactElement {
   // AI generation of missing questions is a Pro-and-above capability (rank >= 2).
   // The server re-checks this; the flag only decides what the UI may offer.
   const aiFillAvailable = planRank(profile?.plan_id) >= 2;
+  const inventoryAvailable =
+    serverAvailability?.available ?? bank?.approvedPublicCount ?? 0;
   const inventory = decideQuestionInventory({
-    available: bank?.approvedPublicCount ?? 0,
+    available: inventoryAvailable,
     requested: requestedForConfig,
-    aiFillAvailable,
+    aiFillAvailable: serverAvailability?.aiFillAllowed ?? aiFillAvailable,
   });
 
+  function applyExamSelection(exam: GovExamSearchResult) {
+    setSelectedExam(exam);
+    setExamId(exam.examId);
+    setStageId(exam.stage?.id ?? exam.stages[0]?.id ?? "");
+    setLanguage(exam.languages?.[0] ?? "en");
+    setServerAvailability(null);
+    setSelectedTopics([]);
+    setTopicChoices([]);
+    setTopicDraft("");
+    setDifficulty("");
+    if (exam.pattern) {
+      if (basis === "full_sim") {
+        setQuestionCount(exam.pattern.totalQuestions);
+        setDurationMinutes(exam.pattern.durationMinutes);
+      }
+    }
+  }
+
+  function clearExamSelection() {
+    setSelectedExam(null);
+    setExamId("");
+    setStageId("");
+    setServerAvailability(null);
+    setSelectedTopics([]);
+    setTopicChoices([]);
+    setTopicDraft("");
+    setDifficulty("");
+  }
+
+  // Hydrate selection from deep-link query params without auto-picking search hits.
   useEffect(() => {
-    void searchGovExams({ q: "" })
-      .then((d) => {
-        setExams(d.results);
-        if (!examId && d.results[0]) {
-          const preferred =
-            d.results.find((r) => r.family !== "state_psc" && r.code !== "APPSC_GROUP2") ??
-            d.results[0];
-          setExamId(preferred.examId);
-          setStageId(preferred.stage?.id ?? preferred.stages[0]?.id ?? "");
+    const linkedExamId = params.get("examId");
+    const linkedStageId = params.get("stageId");
+    if (!linkedExamId || selectedExam) return;
+    let cancelled = false;
+    void import("@/lib/gov-exam/api").then(({ getExamDetails, searchGovExams }) =>
+      searchGovExams({ q: params.get("code") ?? "" })
+        .then(async (d) => {
+          if (cancelled) return;
+          const hit = d.results.find((r) => r.examId === linkedExamId) ?? d.results[0];
+          if (hit && hit.examId === linkedExamId) {
+            applyExamSelection(hit);
+            if (linkedStageId) setStageId(linkedStageId);
+            return;
+          }
+          const details = await getExamDetails({ examId: linkedExamId });
+          if (cancelled) return;
+          const mapped: GovExamSearchResult = {
+            resultType: "official_exam",
+            examId: details.exam.examId,
+            code: details.exam.code,
+            name: details.exam.name,
+            family: details.exam.family,
+            description: details.exam.description,
+            legacyExamType: details.exam.legacyExamType,
+            recruitingBody: details.body
+              ? {
+                  id: details.body.id,
+                  code: details.body.code,
+                  name: details.body.name,
+                  officialUrl: details.body.officialUrl,
+                }
+              : null,
+            aliases: details.exam.aliases ?? [],
+            stages: (details.stages ?? []).map((s) => ({
+              id: s.id,
+              code: s.code,
+              name: s.name,
+              sort_order: s.sort_order ?? 0,
+            })),
+            stage: details.primaryStage
+              ? {
+                  id: details.primaryStage.id,
+                  code: details.primaryStage.code,
+                  name: details.primaryStage.name,
+                  sort_order: details.primaryStage.sort_order ?? 0,
+                }
+              : details.stages?.[0],
+            pattern: details.activePatternSummary
+              ? {
+                  version: details.activePatternSummary.version,
+                  totalQuestions: details.activePatternSummary.totalQuestions,
+                  totalMarks: details.activePatternSummary.totalMarks,
+                  durationMinutes: details.activePatternSummary.durationMinutes,
+                  negativeMark: details.activePatternSummary.negativeMark,
+                  sourceUrl: details.activePatternSummary.sourceUrl,
+                }
+              : null,
+            languages: details.languages?.length ? details.languages : ["en"],
+            lastVerified: details.activePatternSummary?.effectiveDate ?? null,
+            bankReadiness: details.bankReadiness ?? null,
+            primaryActions: ["view_exam", "generate_mock", "start_preparation"],
+          };
+          applyExamSelection(mapped);
+          if (linkedStageId) setStageId(linkedStageId);
+        })
+        .catch(() => {
+          /* leave combobox empty; user can search */
+        }),
+    );
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
+
+  // Resume an in-flight job after refresh — never auto-restart generation.
+  useEffect(() => {
+    const userId = profile?.id;
+    if (!userId) return;
+    const fromUrl = params.get("jobId");
+    const stored = loadActivePaperJob(userId);
+    const jobId = fromUrl || stored?.jobId;
+    if (!jobId) return;
+    let cancelled = false;
+    pollAbortRef.current = false;
+    setBusy(true);
+    setStep(3);
+    void (async () => {
+      try {
+        let current = await getPaperGenerationJob(jobId);
+        if (cancelled) return;
+        setJob(current);
+        if (stored?.examId) setExamId(stored.examId);
+        const status = mapPaperJobPublicStatus(current.status);
+        if (isPaperJobTerminal(status)) {
+          clearActivePaperJob();
+          setBusy(false);
+          if (status === "completed" && current.mockTestId) {
+            navigate(`/app/mock-test/session/${current.mockTestId}`);
+          }
+          return;
         }
-      })
-      .catch((e) =>
-        toast.error(
-          isSearchUnavailableError(e)
-            ? "Exam search is temporarily unavailable. Please try again."
-            : e instanceof Error
-              ? e.message
-              : "Search failed",
-        ),
-      );
-  }, []);
+        while (!pollAbortRef.current && !isPaperJobTerminal(current.status)) {
+          await new Promise((r) => setTimeout(r, 1500));
+          if (pollAbortRef.current || cancelled) return;
+          current = await getPaperGenerationJob(jobId);
+          setJob(current);
+        }
+        if (current.status === "completed" && current.mockTestId) {
+          clearActivePaperJob();
+          navigate(`/app/mock-test/session/${current.mockTestId}`);
+        } else if (isPaperJobTerminal(current.status)) {
+          clearActivePaperJob();
+        }
+      } catch {
+        /* leave UI; user can retry */
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      pollAbortRef.current = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile?.id]);
 
   useEffect(() => {
     if (!selected) return;
@@ -181,6 +337,41 @@ export default function GenerateGovPaper(): React.ReactElement {
     }
   }, [selected, basis]);
 
+  // Server-authoritative availability before charge.
+  useEffect(() => {
+    if (!examId || !stageId || step < 2) return;
+    let cancelled = false;
+    const mode =
+      basis === "full_sim" ? ("generated_mock" as const) : ("custom_mock" as const);
+    void checkExamPaperAvailability({
+      examId,
+      stageId,
+      mode,
+      language,
+      questionCount: requestedForConfig,
+      topics: basis === "topic" ? resolvedTopicsSafe() : [],
+      difficulty: difficulty || null,
+    })
+      .then((avail) => {
+        if (!cancelled) setServerAvailability(avail);
+      })
+      .catch(() => {
+        if (!cancelled) setServerAvailability(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [examId, stageId, basis, language, questionCount, difficulty, step]);
+
+  function resolvedTopicsSafe(): string[] {
+    const fromDraft = topicDraft
+      .split(/[,;\n]+/)
+      .map((t) => t.trim())
+      .filter(Boolean);
+    return [...new Set([...selectedTopics, ...fromDraft])].slice(0, 20);
+  }
+
   useEffect(() => {
     if (basis !== "topic" || !examId || !stageId) return;
     let cancelled = false;
@@ -189,7 +380,6 @@ export default function GenerateGovPaper(): React.ReactElement {
         if (cancelled) return;
         const labels = flattenSyllabusTopicLabels(res.syllabus.topicsJson);
         setTopicChoices(labels);
-        // Prefer URL topics / user picks; only seed defaults when nothing selected yet.
         setSelectedTopics((prev) => (prev.length || topicDraft.trim() ? prev : labels.slice(0, 3)));
       })
       .catch(() => {
@@ -213,6 +403,41 @@ export default function GenerateGovPaper(): React.ReactElement {
     return [...new Set([...selectedTopics, ...fromDraft])].slice(0, 20);
   }, [selectedTopics, topicDraft]);
 
+  async function pollJobUntilTerminal(jobId: string, seed: PaperJobResult): Promise<PaperJobResult> {
+    let current = seed;
+    let polls = 0;
+    const maxPolls = 120;
+    pollAbortRef.current = false;
+    while (
+      !isPaperJobTerminal(current.status) &&
+      !pollAbortRef.current &&
+      polls < maxPolls
+    ) {
+      await new Promise((r) => setTimeout(r, 1500));
+      if (pollAbortRef.current) break;
+      current = await getPaperGenerationJob(jobId);
+      setJob(current);
+      polls += 1;
+    }
+    return current;
+  }
+
+  async function handleCancelJob() {
+    if (!job?.jobId) return;
+    pollAbortRef.current = true;
+    try {
+      const res = await cancelPaperGenerationJob(job.jobId);
+      setJob({ ...job, status: res.status || "cancelled" });
+      clearActivePaperJob();
+      toast.message("Generation cancelled.");
+    } catch (e) {
+      toast.error(formatGovExamOperationError(e));
+    } finally {
+      generatingRef.current = false;
+      setBusy(false);
+    }
+  }
+
   async function handleGenerate(overrideCount?: number) {
     if (!examId || !stageId) {
       toast.error("Select an exam and stage");
@@ -224,17 +449,39 @@ export default function GenerateGovPaper(): React.ReactElement {
       return;
     }
     const requested = overrideCount ?? requestedForConfig;
-    const liveInventory = decideQuestionInventory({
-      available: bank?.approvedPublicCount ?? 0,
-      requested,
-      aiFillAvailable,
-    });
-    if (!liveInventory.canGenerateRequested) {
-      toast.error(
-        `Only ${liveInventory.available} approved questions are currently available for this configuration.`,
-      );
+
+    // Preflight — never charge when insufficiency is already known.
+    try {
+      const avail = await checkExamPaperAvailability({
+        examId,
+        stageId,
+        mode: overrideCount != null ? "custom_mock" : mode,
+        language,
+        questionCount: requested,
+        topics: basis === "topic" ? resolvedTopics : [],
+        difficulty: difficulty || null,
+      });
+      setServerAvailability(avail);
+      if (avail.blocked && mode === "generated_mock") {
+        toast.error(avail.message);
+        return;
+      }
+      const liveInventory = decideQuestionInventory({
+        available: avail.available,
+        requested,
+        aiFillAvailable: avail.aiFillAllowed,
+      });
+      if (!liveInventory.canGenerateRequested) {
+        toast.error(
+          `Only ${liveInventory.available} approved questions are currently available for this configuration.`,
+        );
+        return;
+      }
+    } catch (e) {
+      toast.error(formatGovExamOperationError(e));
       return;
     }
+
     generatingRef.current = true;
     setBusy(true);
     setJob(null);
@@ -254,7 +501,7 @@ export default function GenerateGovPaper(): React.ReactElement {
           idempotencyKey,
         });
         setJob(result);
-        if (result.status === "failed" || !result.mockTestId) {
+        if (result.status === "failed" || result.status === "failed_permanent" || !result.mockTestId) {
           idempotencyKeyRef.current = null;
           toast.error(paperJobErrorMessage(result));
           return;
@@ -281,29 +528,23 @@ export default function GenerateGovPaper(): React.ReactElement {
         idempotencyKey,
       });
       setJob(result);
+      if (profile?.id && result.jobId) {
+        saveActivePaperJob({ jobId: result.jobId, examId, userId: profile.id });
+      }
 
-      if (result.status === "failed") {
+      const publicStatus = mapPaperJobPublicStatus(result.status);
+      if (publicStatus === "failed_permanent" || publicStatus === "failed_retryable") {
         idempotencyKeyRef.current = null;
+        clearActivePaperJob();
         toast.error(paperJobErrorMessage(result));
         return;
       }
 
-      let current = result;
-      let polls = 0;
-      const maxPolls = 120;
-      while (
-        current.status !== "completed" &&
-        current.status !== "failed" &&
-        current.status !== "cancelled" &&
-        polls < maxPolls
-      ) {
-        await new Promise((r) => setTimeout(r, 1500));
-        current = await getPaperGenerationJob(result.jobId);
-        setJob(current);
-        polls += 1;
-      }
+      const current = await pollJobUntilTerminal(result.jobId, result);
+      const terminal = mapPaperJobPublicStatus(current.status);
 
-      if (current.status === "completed" && current.mockTestId) {
+      if (terminal === "completed" && current.mockTestId) {
+        clearActivePaperJob();
         const expected =
           basis === "full_sim" ? selected?.pattern?.totalQuestions : questionCount;
         const actual = current.questionCount;
@@ -326,12 +567,16 @@ export default function GenerateGovPaper(): React.ReactElement {
               : "Practice paper ready",
         );
         navigate(`/app/mock-test/session/${current.mockTestId}`);
-      } else if (current.status === "failed") {
+      } else if (terminal === "failed_retryable" || terminal === "failed_permanent" || terminal === "failed") {
         idempotencyKeyRef.current = null;
+        clearActivePaperJob();
         toast.error(paperJobErrorMessage(current));
+      } else if (terminal === "cancelled") {
+        clearActivePaperJob();
+        toast.message("Generation cancelled.");
       } else {
         toast.message(
-          "Paper generation is still running on the server. Open Mock Tests in a moment to start the attempt.",
+          "Paper generation is still running. Refresh this page to resume monitoring — it will not restart.",
         );
       }
     } catch (e) {
@@ -385,37 +630,74 @@ export default function GenerateGovPaper(): React.ReactElement {
         <div className="space-y-4 rounded-2xl border border-border p-5">
           {step === 0 && (
             <div className="space-y-3">
-              <label className="text-sm font-medium">Select exam</label>
-              <select
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              <p className="text-sm font-medium">Select exam</p>
+              <ExamSearchCombobox
                 value={examId}
-                onChange={(e) => {
-                  setExamId(e.target.value);
-                  const ex = exams.find((x) => x.examId === e.target.value);
-                  setStageId(ex?.stage?.id ?? ex?.stages[0]?.id ?? "");
+                browseWhenEmpty
+                onSelect={applyExamSelection}
+                onClear={clearExamSelection}
+                onRequestExam={(q) => {
+                  void requestGovExam({ queryText: q })
+                    .then(() => {
+                      toast.success("Exam request submitted. We’ll review it for the registry.");
+                    })
+                    .catch((err) => {
+                      toast.error(
+                        err instanceof Error ? err.message : "Could not submit exam request.",
+                      );
+                    });
                 }}
-              >
-                {exams.map((e) => (
-                  <option key={e.examId} value={e.examId}>
-                    {e.name} ({e.recruitingBody?.code})
-                  </option>
-                ))}
-              </select>
-              {selected?.lastVerified && (
-                <p className="text-xs text-muted-foreground">
-                  Last verified pattern effective: {selected.lastVerified}
-                </p>
-              )}
-              {bank && (
-                <p
-                  className={`text-xs ${
-                    fullSimAvailable
-                      ? "text-emerald-700 dark:text-emerald-400"
-                      : "text-amber-700 dark:text-amber-400"
-                  }`}
-                >
-                  {bankCoverageLabel} · {bankReadinessLabel(bank.status)}
-                </p>
+              />
+              {selected && (
+                <div className="space-y-1 text-xs text-muted-foreground">
+                  <p>
+                    {selected.family}
+                    {selected.recruitingBody?.name ? ` · ${selected.recruitingBody.name}` : ""}
+                    {selected.stages?.length
+                      ? ` · ${selected.stages.length} stage(s)`
+                      : ""}
+                    {selected.languages?.length
+                      ? ` · ${selected.languages.join(", ")}`
+                      : ""}
+                  </p>
+                  {selected.stages && selected.stages.length > 1 && (
+                    <label className="block space-y-1">
+                      <span className="font-medium text-foreground">Stage</span>
+                      <select
+                        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground"
+                        value={stageId}
+                        onChange={(e) => {
+                          setStageId(e.target.value);
+                          setServerAvailability(null);
+                        }}
+                      >
+                        {selected.stages.map((st) => (
+                          <option key={st.id} value={st.id}>
+                            {st.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {selected.lastVerified && (
+                    <p>Last verified pattern: {selected.lastVerified}</p>
+                  )}
+                  {bank && (
+                    <p
+                      className={
+                        fullSimAvailable
+                          ? "text-emerald-700 dark:text-emerald-400"
+                          : "text-amber-700 dark:text-amber-400"
+                      }
+                    >
+                      Requested {requestedForConfig} · Available {bank.approvedPublicCount}
+                      {" · "}Missing{" "}
+                      {Math.max(0, requestedForConfig - bank.approvedPublicCount)}
+                      {" · "}
+                      {bankCoverageLabel} · {bankReadinessLabel(bank.status)}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -659,26 +941,47 @@ export default function GenerateGovPaper(): React.ReactElement {
                   configuration.
                 </p>
               )}
+              {serverAvailability && (
+                <p className="text-sm text-muted-foreground" aria-live="polite">
+                  Server check — Available: {serverAvailability.available}, Requested:{" "}
+                  {serverAvailability.requested}, Missing: {serverAvailability.missing}.
+                  {serverAvailability.blocked
+                    ? " Full mock disabled. Custom Practice Set available up to available count."
+                    : ""}
+                </p>
+              )}
 
               {busy && job && (
-                <ul className="space-y-1.5 mt-4" aria-live="polite">
-                  {JOB_STAGES.map((s, i) => {
-                    const done = currentStageIdx > i || job.status === "completed";
-                    const active = job.progressStage === s || (job.status === s);
-                    return (
-                      <li key={s} className="flex items-center gap-2 text-xs">
-                        {done ? (
-                          <Check className="h-3.5 w-3.5 text-green-600" />
-                        ) : active ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <span className="h-3.5 w-3.5 rounded-full border border-border" />
-                        )}
-                        {STAGE_LABEL[s] ?? s}
-                      </li>
-                    );
-                  })}
-                </ul>
+                <div className="space-y-2 mt-4">
+                  <ul className="space-y-1.5" aria-live="polite">
+                    {JOB_STAGES.map((s, i) => {
+                      const done = currentStageIdx > i || job.status === "completed";
+                      const active = job.progressStage === s || job.status === s;
+                      return (
+                        <li key={s} className="flex items-center gap-2 text-xs">
+                          {done ? (
+                            <Check className="h-3.5 w-3.5 text-green-600" />
+                          ) : active ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <span className="h-3.5 w-3.5 rounded-full border border-border" />
+                          )}
+                          {STAGE_LABEL[s] ?? s}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {!isPaperJobTerminal(job.status) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void handleCancelJob()}
+                    >
+                      Cancel generation
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
           )}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { answerBankDB, practiceContextsDB } from "@/lib/supabase/database";
@@ -46,6 +46,14 @@ const CATEGORIES = ["All", "Behavioural", "Technical", "Leadership", "System Des
 const MAX_ANSWER_LENGTH = 5000;
 
 type LoadPhase = "IDLE" | "LOADING" | "SUCCESS" | "EMPTY" | "ERROR";
+
+function safeLower(value: string | null | undefined): string {
+  return typeof value === "string" ? value.toLowerCase() : "";
+}
+
+function safeCategory(value: string | null | undefined): string {
+  return typeof value === "string" ? value : "";
+}
 
 function formatCreatedAt(value: string | null | undefined): string {
   if (!value) return "";
@@ -152,17 +160,18 @@ export default function AnswerBank() {
     }
   }
 
-  const filtered = answers.filter((a) => {
-    if (category !== "All" && a.category !== category) return false;
-    if (search) {
-      const q = search.toLowerCase();
+  const filtered = useMemo(() => {
+    const q = safeLower(search.trim());
+    return answers.filter((a) => {
+      const rowCategory = safeCategory(a.category);
+      if (category !== "All" && rowCategory !== category) return false;
+      if (!q) return true;
       return (
-        a.question_text?.toLowerCase().includes(q) ||
-        a.answer_text?.toLowerCase().includes(q)
+        safeLower(a.question_text).includes(q) ||
+        safeLower(a.answer_text).includes(q)
       );
-    }
-    return true;
-  });
+    });
+  }, [answers, category, search]);
 
   const loading = loadPhase === "LOADING" || loadPhase === "IDLE";
   const showEmpty =

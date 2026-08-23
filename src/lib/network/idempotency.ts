@@ -34,6 +34,16 @@ export function prepToolIdempotencyKey(toolId: string): string {
   }
 }
 
+/** Fresh key for a mutating Edge call (send as `x-idempotency-key`). */
+export function createIdempotencyKey(prefix: string): string {
+  const p = prefix.replace(/[^A-Za-z0-9._:-]/g, "").slice(0, 48) || "op";
+  try {
+    return clampKey(`${p}:${crypto.randomUUID()}`);
+  } catch {
+    return clampKey(`${p}:${Date.now()}:${Math.random().toString(36).slice(2)}`);
+  }
+}
+
 export function isValidClientIdempotencyKey(key: string): boolean {
   return KEY_RE.test(key);
 }

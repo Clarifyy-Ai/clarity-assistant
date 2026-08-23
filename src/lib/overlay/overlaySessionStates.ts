@@ -1,7 +1,12 @@
 /**
- * Overlay session interaction states (Practice Coach).
+ * Overlay session interaction states (Practice Coach + Mock Interview).
  * Visual/status mapping for capture → transcript → guidance pipeline.
+ *
+ * Live and Mock share common states but have mode-specific transitions.
+ * Do not force both products through the exact same FSM path.
  */
+
+import type { OverlayProductMode } from "@/store/overlaySessionAuthorityStore";
 
 export type OverlaySessionState =
   | "idle"
@@ -9,7 +14,13 @@ export type OverlaySessionState =
   | "listening"
   | "speech_detected"
   | "transcribing"
+  | "tab_audio_detected"
   | "question_detected"
+  | "question_generated"
+  | "question_spoken"
+  | "candidate_answering"
+  | "answer_finalizing"
+  | "next_question_pending"
   | "generating_guidance"
   | "guidance_ready"
   | "follow_up_detected"
@@ -24,29 +35,52 @@ export type OverlaySessionState =
   | "session_ending"
   | "session_saved";
 
-const TRANSITIONS: Record<OverlaySessionState, readonly OverlaySessionState[]> = {
-  idle: ["connecting", "permission_denied"],
-    connecting: ["listening", "generating_guidance", "permission_denied", "audio_unavailable", "backend_unavailable", "idle"],
-  listening: [
-    "speech_detected",
-    "question_detected",
+const COMMON_FROM_LISTENING: readonly OverlaySessionState[] = [
+  "speech_detected",
+  "question_detected",
+  "generating_guidance",
+  "paused",
+  "reconnecting",
+  "permission_denied",
+  "audio_unavailable",
+  "backend_unavailable",
+  "ai_provider_unavailable",
+  "rate_limited",
+  "insufficient_credits",
+  "session_ending",
+];
+
+const BASE_TRANSITIONS: Record<OverlaySessionState, readonly OverlaySessionState[]> = {
+  idle: ["connecting", "question_generated", "permission_denied"],
+  connecting: [
+    "listening",
     "generating_guidance",
-    "paused",
-    "reconnecting",
     "permission_denied",
     "audio_unavailable",
     "backend_unavailable",
-    "ai_provider_unavailable",
-    "rate_limited",
-    "insufficient_credits",
+    "idle",
+  ],
+  listening: [...COMMON_FROM_LISTENING, "tab_audio_detected", "candidate_answering"],
+  speech_detected: [
+    "transcribing",
+    "listening",
+    "candidate_answering",
+    "paused",
     "session_ending",
   ],
-  speech_detected: ["transcribing", "listening", "paused", "session_ending"],
   transcribing: [
     "listening",
     "question_detected",
+    "candidate_answering",
     "paused",
     "reconnecting",
+    "session_ending",
+  ],
+  tab_audio_detected: [
+    "transcribing",
+    "question_detected",
+    "listening",
+    "paused",
     "session_ending",
   ],
   question_detected: [
@@ -57,6 +91,43 @@ const TRANSITIONS: Record<OverlaySessionState, readonly OverlaySessionState[]> =
     "paused",
     "session_ending",
   ],
+  question_generated: [
+    "question_spoken",
+    "generating_guidance",
+    "listening",
+    "paused",
+    "session_ending",
+  ],
+  question_spoken: [
+    "candidate_answering",
+    "listening",
+    "generating_guidance",
+    "paused",
+    "session_ending",
+  ],
+  candidate_answering: [
+    "answer_finalizing",
+    "speech_detected",
+    "transcribing",
+    "listening",
+    "generating_guidance",
+    "paused",
+    "session_ending",
+  ],
+  answer_finalizing: [
+    "next_question_pending",
+    "guidance_ready",
+    "listening",
+    "paused",
+    "session_ending",
+  ],
+  next_question_pending: [
+    "question_generated",
+    "connecting",
+    "listening",
+    "paused",
+    "session_ending",
+  ],
   generating_guidance: [
     "guidance_ready",
     "ai_provider_unavailable",
@@ -64,6 +135,7 @@ const TRANSITIONS: Record<OverlaySessionState, readonly OverlaySessionState[]> =
     "rate_limited",
     "insufficient_credits",
     "listening",
+    "candidate_answering",
     "paused",
     "session_ending",
   ],
@@ -71,6 +143,8 @@ const TRANSITIONS: Record<OverlaySessionState, readonly OverlaySessionState[]> =
     "listening",
     "follow_up_detected",
     "generating_guidance",
+    "candidate_answering",
+    "next_question_pending",
     "paused",
     "session_ending",
   ],
@@ -80,7 +154,7 @@ const TRANSITIONS: Record<OverlaySessionState, readonly OverlaySessionState[]> =
     "paused",
     "session_ending",
   ],
-  paused: ["listening", "connecting", "session_ending", "idle"],
+  paused: ["listening", "connecting", "question_generated", "session_ending", "idle"],
   reconnecting: ["listening", "paused", "backend_unavailable", "session_ending"],
   rate_limited: ["listening", "paused", "session_ending"],
   insufficient_credits: ["paused", "session_ending", "idle"],
@@ -91,6 +165,22 @@ const TRANSITIONS: Record<OverlaySessionState, readonly OverlaySessionState[]> =
   session_ending: ["session_saved", "idle"],
   session_saved: ["idle"],
 };
+
+/** Live-only states that Mock should not enter via normal transitions. */
+const LIVE_ONLY: ReadonlySet<OverlaySessionState> = new Set([
+  "tab_audio_detected",
+  "question_detected",
+  "follow_up_detected",
+]);
+
+/** Mock-only states that Live should not enter via normal transitions. */
+const MOCK_ONLY: ReadonlySet<OverlaySessionState> = new Set([
+  "question_generated",
+  "question_spoken",
+  "candidate_answering",
+  "answer_finalizing",
+  "next_question_pending",
+]);
 
 const FAILURE_STATES: readonly OverlaySessionState[] = [
   "rate_limited",
@@ -104,18 +194,26 @@ const FAILURE_STATES: readonly OverlaySessionState[] = [
 export function canTransition(
   from: OverlaySessionState,
   to: OverlaySessionState,
+  mode?: OverlayProductMode | null,
 ): boolean {
   if (from === to) return true;
   // Failures must always be visible — do not swallow API / audio errors.
   if (FAILURE_STATES.includes(to) && from !== "session_saved") return true;
-  return TRANSITIONS[from]?.includes(to) ?? false;
+  // Terminal path always allowed.
+  if (to === "session_ending" || to === "session_saved") return true;
+
+  if (mode === "live" && MOCK_ONLY.has(to)) return false;
+  if (mode === "mock" && LIVE_ONLY.has(to)) return false;
+
+  return BASE_TRANSITIONS[from]?.includes(to) ?? false;
 }
 
 export function transitionOverlayState(
   from: OverlaySessionState,
   to: OverlaySessionState,
+  mode?: OverlayProductMode | null,
 ): OverlaySessionState {
-  if (canTransition(from, to)) return to;
+  if (canTransition(from, to, mode)) return to;
   return from;
 }
 
@@ -126,7 +224,13 @@ export function overlayStateLabel(state: OverlaySessionState): string {
     listening: "Listening",
     speech_detected: "Speech detected",
     transcribing: "Transcribing",
+    tab_audio_detected: "Tab audio detected",
     question_detected: "Question detected",
+    question_generated: "Question ready",
+    question_spoken: "Question spoken",
+    candidate_answering: "Your turn",
+    answer_finalizing: "Finalizing answer",
+    next_question_pending: "Next question",
     generating_guidance: "Generating guidance",
     guidance_ready: "Guidance ready",
     follow_up_detected: "Follow-up detected",
@@ -148,17 +252,25 @@ export function overlayStateRecovery(state: OverlaySessionState): string {
   const recovery: Partial<Record<OverlaySessionState, string>> = {
     permission_denied: "Allow microphone access in system settings, then retry.",
     audio_unavailable: "Check your audio device and try again.",
-    backend_unavailable: "The AI request did not go through. Check your connection, then retry.",
+    backend_unavailable:
+      "The AI request did not go through. Check your connection, then retry.",
     ai_provider_unavailable: "This AI model is unavailable. Switch to Gemini Flash or retry.",
     rate_limited: "Wait briefly, then request guidance again.",
     insufficient_credits: "Add credits or choose a plan, then continue practice.",
     reconnecting: "Stay on this screen; capture will resume when connected.",
+    question_generated: "Listen to the question, then answer when ready.",
+    question_spoken: "Answer out loud or request a hint when ready.",
+    candidate_answering: "Keep speaking — silence advances when you finish.",
+    next_question_pending: "Preparing the next interview question.",
+    tab_audio_detected: "Hearing the interviewer — wait for the full question.",
   };
   return recovery[state] ?? "Continue when ready, or end the session safely.";
 }
 
 /** Map a user-facing error string to the overlay pipeline state (not always "AI unavailable"). */
-export function pipelineStateFromErrorMessage(message: string | null | undefined): OverlaySessionState {
+export function pipelineStateFromErrorMessage(
+  message: string | null | undefined,
+): OverlaySessionState {
   const msg = (message ?? "").toLowerCase();
   if (msg.includes("credit")) return "insufficient_credits";
   if (msg.includes("rate") || msg.includes("429")) return "rate_limited";

@@ -50,13 +50,29 @@ describe("resolveQuestionFromTranscript", () => {
     ).toBe("Walk me through a recent project.");
   });
 
-  it("uses question-shaped candidate-labelled speech in mic-only sessions", () => {
+  it("uses question-shaped candidate-labelled speech only when mic-only fallback allowed", () => {
     expect(
-      resolveQuestionFromTranscript([
-        utt({ speaker: "candidate", text: "yeah I worked on that last year" }),
-        utt({ speaker: "candidate", text: "What is your biggest strength?" }),
-      ]),
+      resolveQuestionFromTranscript(
+        [
+          utt({ speaker: "candidate", text: "yeah I worked on that last year" }),
+          utt({ speaker: "candidate", text: "What is your biggest strength?" }),
+        ],
+        null,
+        { allowMicOnlyFallback: true },
+      ),
     ).toBe("What is your biggest strength?");
+  });
+
+  it("does not use candidate speech when live tab audio is expected", () => {
+    expect(
+      resolveQuestionFromTranscript(
+        [
+          utt({ speaker: "candidate", text: "What is your biggest strength?" }),
+        ],
+        null,
+        { allowMicOnlyFallback: false },
+      ),
+    ).toBe("");
   });
 
   it("returns empty when there is no transcript", () => {

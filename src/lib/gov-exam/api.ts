@@ -48,6 +48,9 @@ export type GovExamSearchPagination = {
   page: number;
   pageSize: number;
   total: number;
+  totalPages?: number;
+  hasMore: boolean;
+  nextCursor: string | null;
 };
 
 export type GovExamSearchSuccess = {
@@ -62,6 +65,8 @@ export type GovExamSearchFailure = {
   success: false;
   code: string;
   error?: string;
+  message?: string;
+  correlation_id?: string;
 };
 
 /**
@@ -73,8 +78,14 @@ type GovExamSearchWire = {
   success?: boolean;
   code?: string;
   error?: string;
+  message?: string;
+  correlation_id?: string;
   results?: GovExamSearchResult[];
-  pagination?: GovExamSearchPagination;
+  pagination?: Partial<GovExamSearchPagination> & {
+    page?: number;
+    pageSize?: number;
+    total?: number;
+  };
   count?: number;
   disclaimer?: string;
 };
@@ -85,6 +96,7 @@ export async function searchGovExams(
     family?: string;
     page?: number;
     pageSize?: number;
+    cursor?: string | null;
   },
   options?: { signal?: AbortSignal },
 ): Promise<GovExamSearchSuccess> {
@@ -95,27 +107,47 @@ export async function searchGovExams(
       family: params.family ?? "",
       page: params.page ?? 1,
       pageSize: params.pageSize ?? 20,
+      cursor: params.cursor ?? undefined,
     },
     { signal: options?.signal },
   );
 
   if (payload?.success === false) {
-    const code = String(payload.code ?? "SEARCH_SERVICE_UNAVAILABLE");
+    const code = String(payload.code ?? "SERVICE_UNAVAILABLE");
     const err = new Error(
-      payload.error ||
-        (code === "SEARCH_SERVICE_UNAVAILABLE"
-          ? "Exam search is temporarily unavailable. Please try again."
+      payload.message ||
+        payload.error ||
+        (code === "SERVICE_UNAVAILABLE" || code === "SEARCH_SERVICE_UNAVAILABLE"
+          ? "Exam search is temporarily unavailable."
           : "Exam search failed."),
-    ) as Error & { code?: string };
+    ) as Error & { code?: string; correlation_id?: string };
     err.code = code;
+    err.correlation_id = payload.correlation_id;
     throw err;
   }
 
   const results = Array.isArray(payload?.results) ? payload.results : [];
-  const pagination = payload?.pagination ?? {
-    page: params.page ?? 1,
-    pageSize: params.pageSize ?? 20,
-    total: payload?.count ?? results.length,
+  const page = payload?.pagination?.page ?? params.page ?? 1;
+  const pageSize = payload?.pagination?.pageSize ?? params.pageSize ?? 20;
+  const total = payload?.pagination?.total ?? payload?.count ?? results.length;
+  const hasMore =
+    typeof payload?.pagination?.hasMore === "boolean"
+      ? payload.pagination.hasMore
+      : page * pageSize < total;
+  const nextCursor =
+    payload?.pagination?.nextCursor !== undefined
+      ? payload.pagination.nextCursor
+      : hasMore
+        ? `p${page + 1}`
+        : null;
+
+  const pagination: GovExamSearchPagination = {
+    page,
+    pageSize,
+    total,
+    totalPages: payload?.pagination?.totalPages,
+    hasMore,
+    nextCursor,
   };
 
   return {
@@ -128,12 +160,16 @@ export async function searchGovExams(
 }
 
 export function isSearchUnavailableError(err: unknown): boolean {
-  const code = String((err as { code?: string } | null)?.code ?? "");
+  const code = String((err as { code?: string } | null)?.code ?? "").toUpperCase();
+  const status = (err as { status?: number } | null)?.status;
   return (
     code === "SEARCH_SERVICE_UNAVAILABLE" ||
     code === "SERVICE_UNAVAILABLE" ||
     code === "PROVIDER_UNAVAILABLE" ||
-    code === "SEARCH_UNAVAILABLE"
+    code === "SEARCH_UNAVAILABLE" ||
+    code === "BAD_GATEWAY" ||
+    status === 502 ||
+    status === 503
   );
 }
 
@@ -141,7 +177,8 @@ export function mapGovSearchError(err: unknown): {
   code: "RATE_LIMITED" | "INVALID_QUERY" | "SEARCH_UNAVAILABLE" | "SEARCH_FAILED";
   message: string;
 } {
-  const code = String((err as { code?: string } | null)?.code ?? "");
+  const code = String((err as { code?: string } | null)?.code ?? "").toUpperCase();
+  const status = (err as { status?: number } | null)?.status;
   if (code === "RATE_LIMITED" || code === "RATE_LIMIT_BACKEND_UNAVAILABLE") {
     return {
       code: "RATE_LIMITED",
@@ -154,10 +191,10 @@ export function mapGovSearchError(err: unknown): {
       message: "That search query isn't valid. Try a shorter keyword.",
     };
   }
-  if (isSearchUnavailableError(err)) {
+  if (isSearchUnavailableError(err) || status === 502 || status === 503) {
     return {
       code: "SEARCH_UNAVAILABLE",
-      message: "Exam search is temporarily unavailable. Please try again.",
+      message: "Exam search is temporarily unavailable.",
     };
   }
   return {
@@ -464,6 +501,77 @@ export async function cancelPaperGenerationJob(jobId: string): Promise<{
   message?: string;
 }> {
   return fetchEdgeJson("cancel-paper-generation-job", { jobId });
+}
+
+export type ExamPaperAvailability = {
+  success: true;
+  examId: string;
+  stageId: string;
+  language: string;
+  mode: string;
+  requested: number;
+  available: number;
+  missing: number;
+  fullMockAllowed: boolean;
+  customPracticeMax: number;
+  aiFillAllowed: boolean;
+  blocked: boolean;
+  blockCode: string | null;
+  message: string;
+  pattern?: {
+    totalQuestions: number;
+    totalMarks: number;
+    durationMinutes: number;
+    negativeMark: number;
+    languages: string[];
+  };
+};
+
+export async function checkExamPaperAvailability(params: {
+  examId: string;
+  stageId: string;
+  mode?: "official_previous" | "generated_mock" | "custom_mock" | "adaptive";
+  language?: string;
+  questionCount?: number;
+  topics?: string[];
+  difficulty?: "EASY" | "MEDIUM" | "HARD" | null;
+}): Promise<ExamPaperAvailability> {
+  return fetchEdgeJson("check-exam-paper-availability", {
+    examId: params.examId,
+    stageId: params.stageId,
+    mode: params.mode ?? "custom_mock",
+    language: params.language ?? "en",
+    questionCount: params.questionCount,
+    topics: params.topics ?? [],
+    difficulty: params.difficulty ?? null,
+  });
+}
+
+export async function requestGovExam(params: {
+  queryText: string;
+  notes?: string;
+}): Promise<{ id: string }> {
+  const { supabase } = await import("@/lib/supabase/client");
+  const queryText = params.queryText.trim().slice(0, 200);
+  if (queryText.length < 2) {
+    throw new Error("Enter at least 2 characters to request an exam.");
+  }
+  const { data: userData, error: userErr } = await supabase.auth.getUser();
+  if (userErr || !userData.user) {
+    throw new Error("Sign in to request an exam.");
+  }
+  const { data, error } = await supabase
+    .from("gov_exam_requests")
+    .insert({
+      user_id: userData.user.id,
+      query_text: queryText,
+      notes: params.notes?.trim().slice(0, 1000) ?? null,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  if (!data?.id) throw new Error("Request was not saved.");
+  return { id: data.id };
 }
 
 export async function reportQuestion(params: {

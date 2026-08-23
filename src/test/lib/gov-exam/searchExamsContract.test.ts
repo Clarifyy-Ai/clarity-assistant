@@ -9,9 +9,13 @@ import {
   escapeIlikePattern,
   GOV_EXAM_FAMILIES,
   MAX_PAGE_SIZE,
+  normalizeSearchQuery,
+  rankExamResults,
   resolveFamily,
   resolvePagination,
   SEARCH_SERVICE_UNAVAILABLE,
+  SERVICE_UNAVAILABLE,
+  validateSearchQuery,
 } from "../../../../supabase/functions/_shared/govExamSearch";
 
 const root = process.cwd();
@@ -90,12 +94,15 @@ describe("pagination payload", () => {
       total: 0,
       totalPages: 0,
       hasMore: false,
+      nextCursor: null,
     });
   });
 
   it("flags more pages only while they exist", () => {
     expect(buildPagination({ page: 1, pageSize: 20 }, 45).hasMore).toBe(true);
+    expect(buildPagination({ page: 1, pageSize: 20 }, 45).nextCursor).toBe("p2");
     expect(buildPagination({ page: 3, pageSize: 20 }, 45).hasMore).toBe(false);
+    expect(buildPagination({ page: 3, pageSize: 20 }, 45).nextCursor).toBe(null);
     expect(buildPagination({ page: 1, pageSize: 20 }, 45).totalPages).toBe(3);
   });
 
@@ -113,11 +120,41 @@ describe("query filter escaping", () => {
     expect(escapeIlikePattern("(x)")).toBe("\\(x\\)");
   });
 
-  it("searches name, code, and description", () => {
+  it("searches name, code, description, and legacy exam type", () => {
     const filter = buildExamOrFilter("ssc cgl");
     expect(filter).toContain("name.ilike.%ssc cgl%");
     expect(filter).toContain("code.ilike.%ssc cgl%");
     expect(filter).toContain("description.ilike.%ssc cgl%");
+    expect(filter).toContain("legacy_exam_type.ilike.%ssc cgl%");
+  });
+});
+
+describe("search query normalization and validation", () => {
+  it("normalizes unicode whitespace and strips controls", () => {
+    expect(normalizeSearchQuery("  SSC\u0000 CGL  ")).toBe("SSC CGL");
+    expect(normalizeSearchQuery("a\n\tb")).toBe("a b");
+  });
+
+  it("rejects HTML / script-ish payloads and short queries", () => {
+    expect(validateSearchQuery("<script>").ok).toBe(false);
+    expect(validateSearchQuery("a").ok).toBe(false);
+    expect(validateSearchQuery("!!").ok).toBe(false);
+    expect(validateSearchQuery("ss").ok).toBe(true);
+    expect(validateSearchQuery("").ok).toBe(true);
+  });
+});
+
+describe("exam search ranking", () => {
+  it("ranks exact code ahead of fuzzy name matches", () => {
+    const ranked = rankExamResults(
+      [
+        { code: "OTHER", name: "Something with ssc inside", aliases: [] },
+        { code: "SSC_CGL", name: "SSC Combined Graduate Level", aliases: ["CGL"] },
+        { code: "X", name: "Banking", aliases: ["ssc"] },
+      ],
+      "SSC_CGL",
+    );
+    expect(ranked[0]?.code).toBe("SSC_CGL");
   });
 });
 
@@ -133,17 +170,17 @@ describe("search-exams edge contract", () => {
     expect(emptyBranch).not.toContain("corsError");
   });
 
-  it("maps database failures to SEARCH_SERVICE_UNAVAILABLE", () => {
+  it("maps database failures to SERVICE_UNAVAILABLE", () => {
     expect(EDGE).toContain(`import {`);
-    expect(EDGE).toContain("SEARCH_SERVICE_UNAVAILABLE");
-    expect(SEARCH_SERVICE_UNAVAILABLE).toBe("SEARCH_SERVICE_UNAVAILABLE");
+    expect(EDGE).toContain("SERVICE_UNAVAILABLE");
+    expect(SERVICE_UNAVAILABLE).toBe("SERVICE_UNAVAILABLE");
     const helper = EDGE.slice(
       EDGE.indexOf("function searchUnavailable"),
       EDGE.indexOf("function mapExam"),
     );
     expect(helper).toContain("503");
-    expect(helper).toContain("SEARCH_SERVICE_UNAVAILABLE");
-    expect(helper).toContain("SEARCH_SERVICE_UNAVAILABLE_MESSAGE");
+    expect(helper).toContain("SERVICE_UNAVAILABLE");
+    expect(helper).toContain("SERVICE_UNAVAILABLE_MESSAGE");
   });
 
   it("never leaks a raw PostgREST message to the client", () => {
@@ -162,10 +199,11 @@ describe("search-exams edge contract", () => {
     expect(EDGE).toContain('corsError(req, 422, "VALIDATION_ERROR", familyResult.message)');
   });
 
-  it("pages and filters in the database rather than in memory", () => {
+  it("pages and filters in the database rather than loading the full registry", () => {
     expect(EDGE).toContain('.select(EXAM_SELECT, { count: "exact" })');
-    expect(EDGE).toContain(".range(pageRequest.from, pageRequest.to)");
     expect(EDGE).toContain("query = query.eq(\"family\", family)");
+    expect(EDGE).toContain("rankExamResults");
+    expect(EDGE).toContain("fetchSize");
   });
 
   it("bounds pattern enrichment to the current page", () => {
@@ -190,21 +228,26 @@ describe("client search mapping", () => {
 
   it("always returns an array of results and a pagination block", () => {
     expect(CLIENT_API).toContain("Array.isArray(payload?.results) ? payload.results : []");
-    expect(CLIENT_API).toContain("payload?.pagination ??");
+    expect(CLIENT_API).toContain("hasMore");
+    expect(CLIENT_API).toContain("nextCursor");
   });
 });
 
 describe("MockTestHub search states", () => {
   const HUB = read("src/pages/app/mock-test/MockTestHub.tsx");
+  const COMBO = read("src/components/gov-exam/ExamSearchCombobox.tsx");
 
   it("models idle, searching, success, empty, and error distinctly", () => {
     expect(HUB).toContain('"idle" | "searching" | "success" | "empty" | "error"');
-    expect(HUB).toContain('setSearchState(data.results.length === 0 ? "empty" : "success")');
+    expect(HUB).toContain('ExamSearchCombobox');
+    expect(HUB).toContain("onResultsChange");
+    expect(HUB).toContain('setSearchState("searching")');
+    expect(HUB).toContain('setSearchState("empty")');
   });
 
-  it("guards against out-of-order responses", () => {
-    expect(HUB).toContain("new AbortController()");
-    expect(HUB).toContain("searchAbortRef.current?.abort()");
-    expect(HUB).toContain("if (reqId !== searchReqIdRef.current) return;");
+  it("guards against out-of-order responses via ExamSearchCombobox", () => {
+    expect(COMBO).toContain("new AbortController()");
+    expect(COMBO).toContain("abortRef.current?.abort()");
+    expect(COMBO).toContain("if (reqId !== reqIdRef.current) return;");
   });
 });

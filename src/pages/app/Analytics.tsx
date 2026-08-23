@@ -833,35 +833,52 @@ function SessionPicker({
   }[];
   onChange: (id: string) => void;
 }) {
+  // Only list sessions eligible for comparison — disabled native options look
+  // like a broken (unopenable) dropdown on many platforms.
+  const eligible = sessions.filter((s) => s.comparable === true);
+
+  if (eligible.length === 0) {
+    return (
+      <div>
+        <label className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1 block">
+          {label}
+        </label>
+        <p className="text-xs text-muted-foreground rounded-md border border-dashed border-border px-2 py-2">
+          No comparable sessions yet (need completed + scored).
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div>
       <label className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1 block">
         {label}
       </label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full h-9 rounded-md border border-border bg-background px-2 text-xs"
-      >
-        <option value="">Select session…</option>
-        {sessions.map((s) => (
-          <option
-            key={s.session_id}
-            value={s.session_id}
-            disabled={s.comparable !== true}
-          >
-            {sessionPickerLabel({
-              dateIso: s.started_at ?? s.date,
-              timeZone,
-              sessionType: s.mode,
-              company: s.company ?? s.title,
-              score: s.overall_score,
-              scoreStatus: s.score_status,
-              completionState: s.completion_state,
-            })}
-          </option>
-        ))}
-      </select>
+      <Select value={value || undefined} onValueChange={onChange}>
+        <SelectTrigger
+          className="w-full h-9 text-xs"
+          aria-label={label}
+          data-testid={`compare-${label.replace(/\s+/g, "-").toLowerCase()}`}
+        >
+          <SelectValue placeholder="Select session…" />
+        </SelectTrigger>
+        <SelectContent className="z-[80]">
+          {eligible.map((s) => (
+            <SelectItem key={s.session_id} value={s.session_id} className="text-xs">
+              {sessionPickerLabel({
+                dateIso: s.started_at ?? s.date,
+                timeZone,
+                sessionType: s.mode,
+                company: s.company ?? s.title,
+                score: s.overall_score,
+                scoreStatus: s.score_status,
+                completionState: s.completion_state,
+              })}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

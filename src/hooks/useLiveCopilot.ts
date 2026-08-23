@@ -36,6 +36,7 @@ import { parsePrivacyPrefs } from "@/lib/privacy/privacyPrefs";
 import { createDragHandler } from "@/lib/overlay/stealthMouse";
 import { generateId } from "@/lib/utils";
 import { questionFingerprint, hintIdempotencyKey } from "@/lib/ai/questionDetection";
+import { createLiveHintOperationId } from "@/lib/audio/liveQuestionGate";
 import {
   sessionsDB,
   jobDescriptionsDB,
@@ -62,6 +63,15 @@ import {
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
 import { noteProviderFailureFromError } from "@/lib/ai/providerAvailability";
+import {
+  beginOverlayProductSession,
+  bindOverlayProductSessionId,
+  markOverlayProductSessionActive,
+  markOverlayProductSessionReady,
+  markOverlayProductSessionTerminal,
+  teardownOverlayProductSession,
+} from "@/lib/session/overlayProductSession";
+import { getOverlaySessionAuthority } from "@/store/overlaySessionAuthorityStore";
 
 interface UseLiveCopilotOptions {
   config: LiveSessionConfig;
@@ -89,6 +99,11 @@ export function useLiveCopilot({
   const lastQuestionRef = useRef<string | null>(null);
   const dragCleanupRef = useRef<(() => void) | null>(null);
   const sessionIdRef = useRef<string>(generateId());
+  /** Authoritative overlay generation for this live ownership. */
+  const overlayGenerationRef = useRef<number>(0);
+  /** When true, ignore late question / transcript / hint events. */
+  const sessionEndedRef = useRef(false);
+  const hintOperationIdRef = useRef<string | null>(null);
   const pendingCaptureMetaRef = useRef<{
     question: string;
     thumbnail?: string;
@@ -401,6 +416,19 @@ export function useLiveCopilot({
   const seenQuestionFingerprintsRef = useRef<Set<string>>(new Set());
 
   const handleQuestionDetected = useCallback((question: string) => {
+    if (sessionEndedRef.current) return;
+    const auth = getOverlaySessionAuthority();
+    if (
+      !auth.matchesGeneration(overlayGenerationRef.current) ||
+      !auth.canAcceptSessionMutations() ||
+      auth.mode !== "live"
+    ) {
+      return;
+    }
+
+    const sessionStatusNow = useSessionStore.getState().status;
+    if (sessionStatusNow !== "active" && sessionStatusNow !== "paused") return;
+
     const trimmed = question.trim();
     if (!trimmed) return;
     const fingerprint = questionFingerprint(trimmed);
@@ -413,6 +441,12 @@ export function useLiveCopilot({
     if (trimmed === lastQuestionRef.current) return;
     if (fingerprint) seenQuestionFingerprintsRef.current.add(fingerprint);
     lastQuestionRef.current = trimmed;
+
+    // Newest question wins — abort prior hint stream before swapping.
+    abortRef.current?.abort();
+    abortRef.current = null;
+    hintOperationIdRef.current = null;
+    useOverlayStore.getState().clearPendingHintOperation();
 
     const overlay = useOverlayStore.getState();
     overlay.setSessionPipelineState("question_detected");
@@ -441,10 +475,13 @@ export function useLiveCopilot({
     signal: AbortSignal,
     screenshotBase64?: string | null,
     idempotencyKey?: string,
+    operationId?: string,
   ): Promise<void> {
+    if (sessionEndedRef.current) return;
     if (screenshotBase64 && screenshotRequestInFlightRef.current) return;
     if (screenshotBase64) screenshotRequestInFlightRef.current = true;
     const overlay = useOverlayStore.getState();
+    const opId = operationId ?? hintOperationIdRef.current;
     try {
       overlay.setHintState("generating");
 
@@ -479,10 +516,14 @@ export function useLiveCopilot({
       mode: aiModeForSessionType(sessionType as SessionType),
       screenshotBase64: screenshotBase64 ?? null,
       idempotencyKey: answerKey,
-      onToken: (chunk) => useOverlayStore.getState().appendStreamChunk(chunk),
+      onToken: (chunk) => {
+        if (sessionEndedRef.current) return;
+        useOverlayStore.getState().appendStreamChunk(chunk, opId ?? undefined);
+      },
       onDone: async () => {
+        if (sessionEndedRef.current) return;
         const overlayState = useOverlayStore.getState();
-        overlayState.commitStreamedHint();
+        overlayState.commitStreamedHint(opId ?? undefined);
 
         const pendingCapture = pendingCaptureMetaRef.current;
         if (screenshotBase64 && pendingCapture) {
@@ -500,6 +541,7 @@ export function useLiveCopilot({
         }
       },
       onError: (err) => {
+        if (sessionEndedRef.current) return;
         openUpgradeIfInsufficientCredits(err);
         noteProviderFailureFromError(err);
         useOverlayStore.getState().setError(
@@ -517,6 +559,10 @@ export function useLiveCopilot({
 
   const requestLiveHint = useCallback(
     async (question: string, modifier?: "regenerate" | "shorten" | "expand") => {
+      if (sessionEndedRef.current) return;
+      const gen = overlayGenerationRef.current;
+      if (!getOverlaySessionAuthority().matchesGeneration(gen)) return;
+
       const overlayHome = useOverlayStore.getState();
       overlayHome.setActiveTab("answer");
       overlayHome.setMinimalMode(false);
@@ -528,6 +574,8 @@ export function useLiveCopilot({
       const baseContext = coachStore.getContext() ?? getSafeContext();
       if (!baseContext) return;
       let context = await enrichContextForAi(baseContext as Record<string, unknown>);
+      if (!getOverlaySessionAuthority().matchesGeneration(gen)) return;
+      if (sessionEndedRef.current) return;
 
       if (modifier === "shorten") {
         context = {
@@ -574,14 +622,32 @@ export function useLiveCopilot({
       const controller = new AbortController();
       abortRef.current = controller;
 
-      const requestId = hintIdempotencyKey(sessionIdRef.current, question);
-      const overlay = useOverlayStore.getState();
-      overlay.setCurrentQuestion(question);
-      overlay.setHintState("generating");
+      const questionId = hintIdempotencyKey(sessionIdRef.current, question);
+      const operationId = createLiveHintOperationId(sessionIdRef.current, questionId);
+      hintOperationIdRef.current = operationId;
+
+      useOverlayStore.getState().beginHintOperation({
+        operationId,
+        sessionId: sessionIdRef.current,
+        questionId,
+        question,
+      });
+
+      const stillCurrent = () =>
+        !sessionEndedRef.current &&
+        hintOperationIdRef.current === operationId &&
+        getOverlaySessionAuthority().matchesGeneration(gen) &&
+        getOverlaySessionAuthority().canAcceptSessionMutations();
 
       try {
         if (answerMode === "full_answer") {
-          await requestFullAnswer(question, controller.signal, null, requestId);
+          await requestFullAnswer(
+            question,
+            controller.signal,
+            null,
+            questionId,
+            operationId,
+          );
           return;
         }
 
@@ -592,20 +658,25 @@ export function useLiveCopilot({
           interviewType: String(context.session_type ?? "behavioral") as InterviewType,
           isLive: true,
           sessionId: sessionIdRef.current,
-          questionId: requestId,
+          questionId,
           simpleLanguage: useOverlayStore.getState().simple_language,
           callType: useOverlayStore.getState().session_call_type,
           language: useOverlayStore.getState().session_language,
           answerMode: "hint",
-          onChunk: (chunk) => useOverlayStore.getState().appendStreamChunk(chunk),
+          onChunk: (chunk) => {
+            if (!stillCurrent()) return;
+            useOverlayStore.getState().appendStreamChunk(chunk, operationId);
+          },
           onDone: async () => {
-            useOverlayStore.getState().commitStreamedHint();
+            if (!stillCurrent()) return;
+            useOverlayStore.getState().commitStreamedHint(operationId);
             const remaining = await refreshCredits();
-            if (remaining !== null) {
+            if (remaining !== null && stillCurrent()) {
               useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
             }
           },
           onError: (error) => {
+            if (!stillCurrent()) return;
             openUpgradeIfInsufficientCredits(error);
             noteProviderFailureFromError(error);
             useOverlayStore.getState().setError(getAiUserFacingError(error));
@@ -614,7 +685,7 @@ export function useLiveCopilot({
           signal: controller.signal,
         });
       } catch (err) {
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted && stillCurrent()) {
           openUpgradeIfInsufficientCredits(err);
           noteProviderFailureFromError(err);
           useOverlayStore.getState().setError(
@@ -753,6 +824,14 @@ export function useLiveCopilot({
     setIsPreparingSession(true);
     setPrepStepIndex(0);
 
+    abortRef.current?.abort();
+    chatAbortRef.current?.abort();
+    sessionEndedRef.current = false;
+    hintOperationIdRef.current = null;
+
+    const { generation } = beginOverlayProductSession({ mode: "live" });
+    overlayGenerationRef.current = generation;
+
     try {
       const privateMode = getPrivateMode();
       const reusableSessionId = cfg.practice_context_id
@@ -777,27 +856,42 @@ export function useLiveCopilot({
           duration_minutes: cfg.duration_minutes ?? 30,
           practice_context_id: cfg.practice_context_id ?? null,
           source_type: cfg.source_type ?? null,
+          session_call_type: cfg.session_call_type ?? null,
         });
         sessionIdRef.current = result.session_id;
       } else {
         sessionIdRef.current = generateId();
       }
 
+      if (!getOverlaySessionAuthority().matchesGeneration(generation)) {
+        return;
+      }
+
+      bindOverlayProductSessionId(sessionIdRef.current, generation);
+
       seenQuestionFingerprintsRef.current.clear();
       lastQuestionRef.current = "";
       await initSessionFromConfig();
+      if (!getOverlaySessionAuthority().matchesGeneration(generation)) {
+        return;
+      }
+
       setPrepStepIndex(2);
+      markOverlayProductSessionReady(generation);
       useOverlayStore.getState().showOverlay();
       useOverlayStore.getState().setSessionPipelineState("connecting");
       await audio.start();
-      useSessionStore.getState().setStatus("active");
+      if (!getOverlaySessionAuthority().matchesGeneration(generation)) {
+        audio.stop();
+        return;
+      }
+      markOverlayProductSessionActive(generation);
       markFirstListening();
     } catch (err) {
       console.error("[useLiveCopilot] Failed to start live session:", err);
       audio.stop();
-      useSessionStore.getState().resetSession();
-      useOverlayStore.getState().hideOverlay();
-      useOverlayStore.getState().resetSessionState();
+      markOverlayProductSessionTerminal(generation, "FAILED");
+      teardownOverlayProductSession(generation);
       if (!handleSessionStartError(err)) {
         throw err instanceof Error ? err : new Error("Failed to start live session");
       }
@@ -808,18 +902,28 @@ export function useLiveCopilot({
   }, [audio, initSessionFromConfig, profile?.id, sessionType]);
 
   const endLiveSession = useCallback(async (): Promise<{ answersRecorded: number }> => {
+    const gen = overlayGenerationRef.current;
+    sessionEndedRef.current = true;
+    hintOperationIdRef.current = null;
     abortRef.current?.abort();
-    useOverlayStore.getState().setSessionPipelineState("session_ending");
-    audio.stop();
+    chatAbortRef.current?.abort();
+    abortRef.current = null;
+    chatAbortRef.current = null;
+    useOverlayStore.getState().clearPendingHintOperation();
 
+    // Snapshot while stores are still mutable, then freeze against late updates.
     const session = useSessionStore.getState();
     const overlay = useOverlayStore.getState();
+    const audioState = useAudioStore.getState();
     const userId = profile?.id;
     let answersRecorded = 0;
 
+    useOverlayStore.getState().setSessionPipelineState("session_ending");
+    markOverlayProductSessionTerminal(gen, "USER_ENDED");
+    audio.stop();
+
     if (userId && session.session_id && !getPrivateMode()) {
       try {
-        const audioState = useAudioStore.getState();
         const fullTranscript = audioState.transcript?.full_transcript ?? "";
         const utterances = audioState.transcript?.utterances ?? [];
         const questionCount = utterances.filter((u) => u.is_interviewer_question).length;
@@ -827,7 +931,7 @@ export function useLiveCopilot({
 
         const dbModel = toDbModel(overlay.active_model);
         const saveTranscript =
-          useOverlayStore.getState().save_transcript &&
+          overlay.save_transcript &&
           parsePrivacyPrefs(profile?.privacy_prefs).store_transcripts;
 
         // Server-authoritative finalization first (status/ended_at/terminal_reason/duration_seconds).
@@ -884,8 +988,8 @@ export function useLiveCopilot({
       }
     }
 
-    useSessionStore.getState().setStatus("idle");
-    useOverlayStore.getState().hideOverlay();
+    useOverlayStore.getState().setSessionPipelineState("session_saved");
+    teardownOverlayProductSession(gen);
     return { answersRecorded };
   }, [audio, profile?.id]);
 
