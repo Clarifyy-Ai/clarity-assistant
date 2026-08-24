@@ -78,9 +78,22 @@ function env(name: string): string {
   return (Deno.env.get(name) ?? "").trim();
 }
 
-/** Resolve FastAPI base URL (no trailing slash). Tries env vars in order. */
+/**
+ * Resolve FastAPI base URL (no trailing slash).
+ *
+ * Must include the same keys as `_shared/pythonClient.ts` (`PYTHON_SERVICE_URL` /
+ * `SCRAPER_URL`) so hybrid-health "Python connected" also enables gov-exam dispatch.
+ * Gov-specific aliases remain first for dedicated overrides.
+ */
 export function resolvePythonGovExamBaseUrl(): string | null {
-  for (const key of ["GOV_EXAM_PYTHON_URL", "PAPER_FACTORY_URL", "SCRAPER_SERVICE_URL"]) {
+  for (const key of [
+    "GOV_EXAM_PYTHON_URL",
+    "PAPER_FACTORY_URL",
+    "SCRAPER_SERVICE_URL",
+    // Align with pythonClient / hybrid-health / .env.example
+    "PYTHON_SERVICE_URL",
+    "SCRAPER_URL",
+  ]) {
     const raw = env(key);
     if (!raw) continue;
     try {
@@ -95,7 +108,10 @@ export function resolvePythonGovExamBaseUrl(): string | null {
 }
 
 export function resolvePythonGovExamSecret(): string | null {
-  const secret = env("DOCUMENT_INTELLIGENCE_AUTH_SECRET");
+  // Same secret chain as pythonClient.getAuthSecret (HMAC shared with Render).
+  const secret =
+    env("DOCUMENT_INTELLIGENCE_AUTH_SECRET") ||
+    env("PYTHON_SERVICE_AUTH_SECRET");
   return secret.length >= 16 ? secret : null;
 }
 

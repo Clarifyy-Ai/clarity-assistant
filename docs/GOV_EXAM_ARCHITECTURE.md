@@ -81,7 +81,7 @@ HMAC-protected (`DOCUMENT_INTELLIGENCE_AUTH_SECRET`):
 | `POST /internal/gov-exams/process-job` | Full hybrid job pipeline |
 | `GET /internal/gov-exams/health` | Authenticated probe |
 
-Edge env for dispatch: `GOV_EXAM_PYTHON_URL` (or `PAPER_FACTORY_URL` / `SCRAPER_SERVICE_URL`) + same HMAC secret.
+Edge env for dispatch: `PYTHON_SERVICE_URL` / `SCRAPER_URL` (same as hybrid-health), or gov aliases `GOV_EXAM_PYTHON_URL` / `PAPER_FACTORY_URL` / `SCRAPER_SERVICE_URL`, plus `DOCUMENT_INTELLIGENCE_AUTH_SECRET` (or `PYTHON_SERVICE_AUTH_SECRET`).
 
 Embedded paper-factory worker starts **without** AI keys (bank-only / deterministic).
 

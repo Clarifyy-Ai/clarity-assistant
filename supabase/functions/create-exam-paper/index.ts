@@ -16,7 +16,10 @@ import {
   scheduleWithWaitUntil,
 } from "../_shared/govPaperAssembly.ts";
 import { newWorkerId } from "../_shared/govPaperJobLease.ts";
-import { hasCapability } from "../_shared/requireCapability.ts";
+import {
+  hasCapability,
+  requireCapabilityForFunction,
+} from "../_shared/requireCapability.ts";
 import { creditDenialResponse } from "../_shared/creditAuthority.ts";
 import { countEligibleGovQuestions } from "../_shared/govQuestionInventory.ts";
 import {
@@ -309,6 +312,14 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
       }));
       return json(req, { ...payload, correlationId }, payload.code === "CAPABILITY_REQUIRED" ? 403 : 409);
     }
+    if (plan.kind === "ai_assisted") {
+      const capabilityGate = await requireCapabilityForFunction(
+        profile?.plan_id,
+        "create-exam-paper",
+        req,
+      );
+      if (capabilityGate) return applyCors(req, capabilityGate);
+    }
 
     const creditResult = await deductCreditsAtomic({
       userId: user.id,
@@ -438,7 +449,11 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
         }));
       });
 
-      scheduleWithWaitUntil(dispatch);
+      // Prefer waitUntil so we can 202 immediately; if unavailable, await so the
+      // isolate does not freeze before the HMAC fetch reaches Render.
+      if (!scheduleWithWaitUntil(dispatch)) {
+        await dispatch;
+      }
 
       return json(req, {
         jobId,
