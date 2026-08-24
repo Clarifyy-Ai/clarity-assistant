@@ -86,22 +86,23 @@ export const AI_CREDIT_COSTS = {
 
 export type AICreditCostKey = keyof typeof AI_CREDIT_COSTS;
 
+/** Pack ids match Edge Razorpay catalog (`credits_50` / `credits_150` / `credits_500`). */
 export const CREDIT_PACK_DEFINITIONS = [
   {
-    id: "pack_50",
+    id: "credits_50",
     credits: 50,
     priceUsdCents: 799,
     label: "50 Credits",
   },
   {
-    id: "pack_150",
+    id: "credits_150",
     credits: 150,
     priceUsdCents: 2_199,
     label: "150 Credits",
     badge: "Most Popular",
   },
   {
-    id: "pack_500",
+    id: "credits_500",
     credits: 500,
     priceUsdCents: 6_999,
     label: "500 Credits",

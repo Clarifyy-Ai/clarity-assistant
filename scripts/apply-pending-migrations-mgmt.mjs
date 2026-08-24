@@ -46,6 +46,16 @@ const pending = [
   "20260824120100_gov_exam_practice_bank_seeds.sql",
   "20260824140000_moderator_role.sql",
   "20260824190000_algorithm_security_consistency.sql",
+  "20260824200000_razorpay_refund_atomicity.sql",
+  "20260824213000_gov_question_quality_versions.sql",
+  "20260824223000_question_lifecycle_hardening.sql",
+  "20260824230000_account_deletion_retention.sql",
+  "20260824231000_learning_community_coding_hardening.sql",
+  "20260824233000_settings_contract_hardening.sql",
+  "20260824234500_atomic_session_finalization.sql",
+  "20260824240000_scorecards_server_authority.sql",
+  "20260825090000_practice_plan_idempotency.sql",
+  "20260825120000_wave2_p1_coach_session_rls.sql",
 ];
 
 async function runQuery(sql) {

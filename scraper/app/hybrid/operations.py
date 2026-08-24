@@ -512,48 +512,34 @@ def mock_question_bank(payload: dict[str, Any]) -> dict[str, Any]:
 # ── Practice coach ───────────────────────────────────────────────────────────
 
 def practice_coach_hint(payload: dict[str, Any]) -> dict[str, Any]:
-    question = _str(payload, "questionText", "question_text", "question")
-    transcript = _str(payload, "transcript", "transcript_snippet", "transcriptSnippet")
-    return {
-        "question": question or None,
-        "scaffold": {
-            "clarify": [
-                "Restate the question in one sentence to confirm scope.",
-                "Ask what success looks like if the prompt is ambiguous.",
-            ],
-            "structure": [
-                "Open with a one-line thesis.",
-                "Use 2–3 supporting points, then a crisp close.",
-                "For behavioral prompts, use STAR (Situation → Task → Action → Result).",
-            ],
-            "star_reminder": {
-                "situation": "Set context in ≤2 sentences.",
-                "task": "State your responsibility / goal.",
-                "action": "Focus on what *you* did (verbs, decisions).",
-                "result": "Quantify outcome when you have real numbers — never invent.",
-            },
-            "follow_ups": [
-                "What would you do differently next time?",
-                "How did stakeholders react?",
-                "Which tradeoff was hardest?",
-            ],
-        },
-        "transcript_used": bool(transcript),
-        "transcript_signals": {
-            "length_chars": len(transcript),
-            "has_content": bool(transcript.strip()),
-            "hint": (
-                "Tighten structure and cut filler; map answer back to the question."
-                if transcript
-                else "No transcript provided — rehearse aloud using the scaffold."
-            ),
-        },
-        "source": "python_scaffold",
-        "needs_ai_polish": _thin(question, min_chars=12),
-    }
+    """Legacy hybrid op - delegates to practice_coach contract ({reply, hints}).
 
+    Kept for older /internal/operations callers. User-facing Edge coach paths must
+    use callPythonProcess(practice_coach) -> /v1/process, not this scaffold path.
+    """
+    from app.engines.practice_coach import run_practice_coach
 
-# ── Document extract ─────────────────────────────────────────────────────────
+    adapted = dict(payload or {})
+    if (
+        "operation_type" not in adapted
+        and "help_type" not in adapted
+        and "mode" not in adapted
+    ):
+        adapted["operation_type"] = "hint"
+    if "question" not in adapted:
+        q = _str(adapted, "questionText", "question_text")
+        if q:
+            adapted["question"] = q
+    if "transcript" not in adapted:
+        tr = _str(adapted, "transcript_snippet", "transcriptSnippet")
+        if tr:
+            adapted["transcript"] = tr
+    return run_practice_coach(
+        adapted,
+        operation_id=str(adapted.get("operation_id") or "hybrid_practice_coach"),
+        correlation_id=str(adapted.get("correlation_id") or "hybrid_practice_coach"),
+    )
+
 
 def document_extract(payload: dict[str, Any]) -> dict[str, Any]:
     text = _str(payload, "text", "content", "body")
@@ -605,6 +591,7 @@ _HANDLERS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "company_research_skeleton": company_research_skeleton,
     "mock_question_bank": mock_question_bank,
     "practice_coach_hint": practice_coach_hint,
+    "practice_coach": practice_coach_hint,
     "document_extract": document_extract,
     "ping": ping,
 }

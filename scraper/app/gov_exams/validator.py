@@ -123,6 +123,12 @@ def validate_question_payloads(
             difficulty=str(payload.difficulty or "MEDIUM").upper(),
             explanation=str(payload.explanation or ""),
             source_class="bank",
+            source_type=(
+                "official_verified"
+                if source in {"OFFICIAL_PYP", "PYP", "PREVIOUS YEAR PAPER"}
+                else "approved_bank"
+            ),
+            language=payload.language or request.language,
             question_id=payload.id,
         )
         validator.register(question)

@@ -431,7 +431,7 @@ Deno.serve(async (req: Request) => {
     const toolCost = getToolCost(tool_id);
     // Prefer x-idempotency-key / Idempotency-Key; never invent a random key
     // (that defeats client retries and can double-charge).
-    const idempotencyKey =
+    const suppliedIdempotencyKey =
       req.headers.get("x-idempotency-key") ??
       req.headers.get("Idempotency-Key") ??
       req.headers.get("idempotency-key") ??
@@ -444,6 +444,13 @@ Deno.serve(async (req: Request) => {
         .map((byte) => byte.toString(16).padStart(2, "0"))
         .join("")
     );
+    // System-design generation is credit-bearing. Give callers that omit a
+    // key a stable, request-scoped key so retries/concurrent submits share one
+    // reservation instead of starting multiple provider calls.
+    const idempotencyKey =
+      tool_id === "system_design" && !suppliedIdempotencyKey
+        ? `system-design:${userId}:${requestHash}`.slice(0, 150)
+        : suppliedIdempotencyKey;
 
     // Full-result replay: same key already completed → no second charge / AI call.
     const db = createServiceClient();
@@ -465,6 +472,7 @@ Deno.serve(async (req: Request) => {
           alternatives: priorPayload.alternatives,
           source: priorPayload.source ?? "ai",
           draft_kind: priorPayload.draft_kind,
+          diagram_spec: priorPayload.diagram_spec ?? null,
           cached: true,
         },
         { creditsCharged: 0 },
@@ -494,9 +502,6 @@ Deno.serve(async (req: Request) => {
         creditAction: `prep_tool_${tool_id}`,
         body: { input: sanitizedInput, tool_id },
         runDeterministic: async () => {
-          if ((Deno.env.get("HYBRID_PREFER_DETERMINISTIC") ?? "").trim() !== "1") {
-            return null;
-          }
           const tpl = buildSystemDesignTemplate(sanitizedInput);
           if (tpl.result.length < 80) return null;
           return {
@@ -550,6 +555,7 @@ Deno.serve(async (req: Request) => {
       });
 
       if (!hybrid.ok) {
+        await db.from("idempotency_log").delete().eq("key", idempotencyKey);
         return structuredError(
           req,
           "System design is temporarily unavailable.",
@@ -593,19 +599,35 @@ Deno.serve(async (req: Request) => {
     /* ---- Python-first path for star_method ---- */
     if (tool_id === "star_method") {
       const starParts = parseStarSections(sanitizedInput);
-      const pythonStar = await callPythonProcess({
-        operation: "star_evidence",
-        operationId: `prep_star:${correlationId}`,
-        correlationId,
-        payload: { ...starParts, input: sanitizedInput },
-      });
+      let pythonStar: Awaited<ReturnType<typeof callPythonProcess>> | null = null;
+      try {
+        pythonStar = await callPythonProcess({
+          operation: "star_evidence",
+          operationId: `prep_star:${correlationId}`,
+          correlationId,
+          payload: {
+            operation_type: "star_method",
+            ...starParts,
+            input: sanitizedInput,
+          },
+        });
+      } catch (err) {
+        log(FN, "warn", "STAR Python fallback unavailable; using source draft", {
+          userId,
+          err: err instanceof Error ? err.message : String(err),
+          correlationId,
+        });
+      }
 
       let pythonDraft = "";
-      if (pythonStar.ok && pythonStar.data) {
+      if (pythonStar?.ok && pythonStar.data) {
         pythonDraft = formatStarDraftFromPython(pythonStar.data);
       }
       if (!pythonDraft) {
         pythonDraft = formatStarDraft(starParts);
+      }
+      if (!starParts.result.trim()) {
+        pythonDraft += "\n\nResult: [Add measurable result if available]";
       }
 
       let cleaned = "";

@@ -93,8 +93,16 @@ async def process_job(
                 stage=stage,
             )
 
+    async def on_progress(_completed: int, _total: int) -> None:
+        # Long provider calls can outlive the lease; stage writes renew it.
+        await asyncio.to_thread(repo.set_stage, job_id, "generating_missing_slots")
+
     try:
-        result = await factory.generate(request, on_stage=on_stage)
+        result = await factory.generate(
+            request,
+            on_stage=on_stage,
+            on_progress=on_progress,
+        )
     except PaperFactoryError as exc:
         if exc.code in {"AI_PROVIDER_UNCONFIGURED", "GENERATION_INCOMPLETE", "CONTENT_INSUFFICIENT"}:
             gov_exam_log(

@@ -94,7 +94,9 @@ Deno.serve(async (req: Request) => {
     return json(req, { error: "Payment could not be confirmed" }, 400);
   }
   const status = String(remote.status ?? "");
-  if (status !== "captured" && status !== "authorized") {
+  // Entitlements are granted only after Razorpay confirms capture. An
+  // authorized payment may still be cancelled or expire without settlement.
+  if (status !== "captured") {
     return json(req, { error: `Payment is ${status || "incomplete"}` }, 409);
   }
 

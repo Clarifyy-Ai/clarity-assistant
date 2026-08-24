@@ -109,7 +109,22 @@ export function isNearDuplicate(
 ): boolean {
   const d = similarityBreakdown(a, b);
   if (d.exact) return true;
-  return d.score >= threshold;
+  const composite =
+    d.tokenJaccard * DEDUP_POLICY.composite_weights.token +
+    d.ngramJaccard * DEDUP_POLICY.composite_weights.ngram;
+  const template = (value: string) =>
+    normalizeQuestionText(value)
+      .replace(/\b\d+(?:\.\d+)?\b/g, "<num>")
+      .replace(/\b[xyzabc]\b/g, "<var>");
+  const templateA = template(a);
+  const templateB = template(b);
+  const templateSimilarity = tokenJaccard(templateA, templateB);
+  return (
+    composite >= Math.max(threshold, DEDUP_POLICY.near_duplicate_composite) ||
+    d.score >= DEDUP_POLICY.stem_max_near ||
+    templateA === templateB ||
+    templateSimilarity >= DEDUP_POLICY.template_clone_similarity
+  );
 }
 
 export function conflictsWithSelected(
@@ -148,8 +163,8 @@ export function validateSingleCorrectMcq(q: {
   if (text.length < 8) {
     return { ok: false, code: "QUESTION_VALIDATION_FAILED", message: "Question text too short." };
   }
-  if (!Array.isArray(q.options) || q.options.length < 2) {
-    return { ok: false, code: "QUESTION_VALIDATION_FAILED", message: "Need at least 2 options." };
+  if (!Array.isArray(q.options) || q.options.length !== 4) {
+    return { ok: false, code: "QUESTION_VALIDATION_FAILED", message: "Government exam MCQs require exactly 4 options." };
   }
   if (q.options.some((o) => !String(o ?? "").trim())) {
     return { ok: false, code: "QUESTION_VALIDATION_FAILED", message: "Empty option." };

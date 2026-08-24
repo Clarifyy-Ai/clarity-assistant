@@ -22,6 +22,7 @@ from app.paper_factory.models import (
     PatternVersion,
     SectionBlueprint,
 )
+from app.document_intelligence.deduplication import QuestionDeduplicationEngine
 
 # Difficulty distribution by exam profile, expressed as percentages.
 EXAM_DIFFICULTY_MIX: dict[str, dict[Difficulty, int]] = {
@@ -331,6 +332,25 @@ def validate_assembled_paper(
 
     per_section: dict[str, int] = {}
     seen_stems: set[str] = set()
+    seen_ids: set[str] = set()
+    prior_questions: list[PaperQuestion] = []
+    dedup = QuestionDeduplicationEngine()
+    authentic_sources = {
+        "official_verified",
+        "verified_public_source",
+        "approved_bank",
+        "internal_question_bank",
+        "admin_uploaded",
+    }
+    rejected_generated = {
+        "generated_practice",
+        "ai_generated_practice",
+        "generated",
+        "deterministic",
+    }
+    has_deterministic_practice = any(
+        question.source_class == "deterministic" for question in questions
+    )
     for index, question in enumerate(questions, start=1):
         per_section[question.section_code] = per_section.get(question.section_code, 0) + 1
 
@@ -340,12 +360,52 @@ def validate_assembled_paper(
             errors.append(f"Question {index} has an out-of-range correct answer")
         if not question.question_text.strip():
             errors.append(f"Question {index} has an empty stem")
+        if question.question_id and question.question_id in seen_ids:
+            errors.append(f"Duplicate question id at position {index}")
+        if question.question_id:
+            seen_ids.add(question.question_id)
+        if question.language.lower() != blueprint.language.lower():
+            errors.append(f"Question {index} language does not match paper")
+        if question.marks_positive != blueprint.marks_per_question:
+            errors.append(f"Question {index} positive marks do not match blueprint")
+        if question.marks_negative != blueprint.negative_mark:
+            errors.append(f"Question {index} negative marks do not match blueprint")
+        if question.difficulty not in DIFFICULTIES:
+            errors.append(f"Question {index} has invalid difficulty")
+        if not question.topic.strip():
+            errors.append(f"Question {index} has no topic")
+        if blueprint.mode == "official_previous":
+            st = (question.source_type or "").strip().lower()
+            if (
+                not st
+                or st not in authentic_sources
+                or st in rejected_generated
+                or "generated" in st
+                or st.startswith("ai_")
+            ):
+                errors.append(f"Question {index} has generated provenance in official mode")
 
         normalized = re.sub(r"\s+", " ", question.question_text.strip().lower())
         if len(normalized) > 10:
             if normalized in seen_stems:
                 errors.append(f"Duplicate question stem at position {index}")
             seen_stems.add(normalized)
+        for previous in prior_questions:
+            decision = dedup.evaluate_pair(
+                question.question_text,
+                question.options,
+                previous.question_text,
+                previous.options,
+            )["decision"]
+            if decision in {"exact_duplicate", "near_duplicate"} or (
+                decision == "template_clone"
+                and question.source_class != "deterministic"
+                and previous.source_class != "deterministic"
+                and not has_deterministic_practice
+            ):
+                errors.append(f"{decision} at position {index}")
+                break
+        prior_questions.append(question)
 
     for section in blueprint.sections:
         actual = per_section.get(section.code, 0)
@@ -354,6 +414,18 @@ def validate_assembled_paper(
                 f"Section {section.code} has {actual} questions, "
                 f"expected {section.question_count}"
             )
+        expected_topics = {
+            topic.strip().lower()
+            for topic, count in section.topic_counts
+            if count > 0
+        }
+        actual_topics = {
+            q.topic.strip().lower()
+            for q in questions
+            if q.section_code == section.code and q.topic.strip()
+        }
+        if not expected_topics.issubset(actual_topics):
+            errors.append(f"Section {section.code} is missing required topic coverage")
 
     return errors
 

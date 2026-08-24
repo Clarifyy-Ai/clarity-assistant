@@ -1,4 +1,3 @@
-import { createIdempotencyKey } from "@/lib/api/functions";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { ApiClientError } from "@/lib/api/apiClient";
 import {
@@ -58,8 +57,9 @@ function mapUserFacingGenerationError(err: unknown): string {
   return QUESTION_GENERATION_USER_ERROR;
 }
 
+/** Stable per-session question op id — no random UUID (idempotent refresh / retry). */
 export function createMockQuestionOperationId(sessionId: string, index: number): string {
-  return createIdempotencyKey(`gq:${sessionId.slice(0, 8)}:q${index}`);
+  return `gq:${sessionId}:q${index}`;
 }
 
 /**

@@ -235,6 +235,8 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
     let bodyExamIds: string[] = [];
     let stageExamIds: string[] = [];
     let cycleExamIds: string[] = [];
+    let languageExamIds: string[] = [];
+    let paperExamIds: string[] = [];
     if (q) {
       const like = `%${escapeIlikePattern(q)}%`;
       const { data: aliasRows, error: aliasError } = await db
@@ -321,6 +323,48 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
           ];
         }
       }
+
+      const { data: languageRows, error: languageErr } = await db
+        .from("gov_exam_languages")
+        .select("exam_id")
+        .ilike("language_code", like)
+        .eq("review_state", "approved")
+        .limit(200);
+      if (languageErr) {
+        return searchUnavailable(req, `languages: ${languageErr.message}`);
+      }
+      languageExamIds = [
+        ...new Set(
+          (languageRows ?? [])
+            .map((row) => String((row as { exam_id?: string }).exam_id ?? ""))
+            .filter(Boolean),
+        ),
+      ];
+
+      const { data: paperRows, error: paperErr } = await db
+        .from("previous_year_papers")
+        .select("exam_id")
+        .or(
+          [
+            `title.ilike.${like}`,
+            `cycle.ilike.${like}`,
+            `tier.ilike.${like}`,
+            `shift.ilike.${like}`,
+            `language.ilike.${like}`,
+          ].join(","),
+        )
+        .in("review_status", ["approved", "in_review"])
+        .limit(200);
+      if (paperErr) {
+        return searchUnavailable(req, `papers: ${paperErr.message}`);
+      }
+      paperExamIds = [
+        ...new Set(
+          (paperRows ?? [])
+            .map((row) => String((row as { exam_id?: string }).exam_id ?? ""))
+            .filter(Boolean),
+        ),
+      ];
     }
 
     let query = db
@@ -347,6 +391,8 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
           ...bodyExamIds,
           ...stageExamIds,
           ...cycleExamIds,
+          ...languageExamIds,
+          ...paperExamIds,
         ]),
       ];
       query = query.or(
@@ -356,7 +402,9 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
       );
     }
 
-    const fetchSize = Math.min(MAX_PAGE_SIZE * 3, 120);
+    // Fetch through the requested page before ranking so deep pagination does
+    // not incorrectly return an empty list once page three is reached.
+    const fetchSize = Math.min(Math.max(MAX_PAGE_SIZE * 3, pageRequest.to + 1), 1000);
     const { data: exams, error, count } = await query
       .order("name")
       .range(0, fetchSize - 1);

@@ -760,7 +760,7 @@ Deno.serve(async (req: Request) => {
       await refundCreditsSafely({ db, userId: user.id, reason: "AI call failure" });
       return json(corsHeaders, 502, {
         error: "AI Help is temporarily unavailable. Please try again.",
-        code: "PROVIDER_UNAVAILABLE",
+        code: "AI_UNAVAILABLE",
       });
     }
   }
@@ -795,7 +795,7 @@ Deno.serve(async (req: Request) => {
 
     return json(corsHeaders, 503, {
       error: "AI Help is temporarily unavailable. Please try again.",
-      code: "PROVIDER_UNAVAILABLE",
+      code: "AI_UNAVAILABLE",
     });
   }
 
@@ -870,7 +870,7 @@ Deno.serve(async (req: Request) => {
 
     return json(corsHeaders, 502, {
       error: "AI Help is temporarily unavailable. Please try again.",
-      code: "PROVIDER_UNAVAILABLE",
+      code: "AI_UNAVAILABLE",
     });
   }
 
@@ -913,7 +913,7 @@ Deno.serve(async (req: Request) => {
 
     return json(corsHeaders, 502, {
       error: "AI Help is temporarily unavailable. Please try again.",
-      code: "PROVIDER_UNAVAILABLE",
+      code: "AI_UNAVAILABLE",
     });
   }
 
@@ -947,7 +947,7 @@ Deno.serve(async (req: Request) => {
 
     return json(corsHeaders, 502, {
       error: "AI Help is temporarily unavailable. Please try again.",
-      code: "PROVIDER_UNAVAILABLE",
+      code: "AI_UNAVAILABLE",
     });
   }
 

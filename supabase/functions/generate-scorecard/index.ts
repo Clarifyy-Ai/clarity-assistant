@@ -78,6 +78,8 @@ type SessionRow = {
   type?: string | null;
   session_type?: string | null;
   title?: string | null;
+  status?: string | null;
+  lifecycle_status?: string | null;
   avg_wpm?: number | null;
   filler_words?: number | null;
 };
@@ -855,7 +857,7 @@ Deno.serve(async (req: Request) => {
   try {
     const { data: sessionData, error: sessionError } = await db
       .from("sessions")
-      .select("id,user_id,type,session_type,title,avg_wpm,filler_words")
+      .select("id,user_id,type,session_type,title,status,lifecycle_status,avg_wpm,filler_words")
       .eq("id", sessionId)
       .eq("user_id", userId)
       .maybeSingle();
@@ -869,6 +871,19 @@ Deno.serve(async (req: Request) => {
     }
 
     const session = sessionData as SessionRow;
+    const status = String(session.status ?? "").toLowerCase();
+    const lifecycle = String(session.lifecycle_status ?? "").toUpperCase();
+    if (
+      status !== "completed" &&
+      lifecycle !== "COMPLETED" &&
+      lifecycle !== "ANALYZED"
+    ) {
+      return json(corsHeaders, 422, {
+        error: "A scorecard can only be generated for a completed session.",
+        code: "SESSION_NOT_COMPLETED",
+        request_id: requestId,
+      });
+    }
 
     const { data: existing } = await db
       .from("scorecards")

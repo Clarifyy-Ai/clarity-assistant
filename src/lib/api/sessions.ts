@@ -104,3 +104,28 @@ export async function endSession(input: {
 }> {
   return invokeFunction("end-session", input);
 }
+
+export type FinalizeSessionInput = {
+  session_id: string;
+  terminal_reason?: string;
+  answers?: Array<{
+    question_index: number;
+    question: string;
+    answer?: string | null;
+    duration_ms?: number | null;
+  }>;
+  transcript?: { content: string; utterances?: unknown } | null;
+  metrics?: Record<string, unknown>;
+};
+
+export async function finalizeSession(input: FinalizeSessionInput) {
+  return invokeFunction<{
+    session_id: string;
+    status: string;
+    lifecycle_status: string | null;
+    terminal_reason: string | null;
+    ended_at: string | null;
+    duration_seconds: number | null;
+    already_terminal?: boolean;
+  }>("finalize-session", input);
+}

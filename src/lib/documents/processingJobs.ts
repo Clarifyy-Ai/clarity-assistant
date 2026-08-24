@@ -30,31 +30,89 @@ export type DocumentJob = {
   completed_at?: string | null;
 };
 
-const IN_FLIGHT = new Set([
+/** Job-table + library-projection statuses that mean work is still running. */
+export const IN_FLIGHT_JOB_STATUSES = [
   "queued",
   "leased",
   "downloading",
   "extracting",
   "OCR",
+  "ocr_required",
+  "ocr_processing",
   "segmenting",
+  "structuring",
+  "processing",
   "validating",
   "awaiting_review",
-]);
+] as const;
+
+const IN_FLIGHT = new Set<string>(IN_FLIGHT_JOB_STATUSES);
 
 export function isInFlightJobStatus(status: string | undefined): boolean {
-  return Boolean(status && IN_FLIGHT.has(status));
+  const normalized = String(status ?? "").trim().toLowerCase();
+  if (!normalized) return false;
+  if (normalized === "processing" || normalized === "validating") return true;
+  return IN_FLIGHT.has(normalized === "ocr" ? "OCR" : normalized);
+}
+
+export function isTerminalLibraryStatus(status: string | undefined): boolean {
+  const normalized = String(status ?? "").trim().toLowerCase();
+  return (
+    normalized === "completed" ||
+    normalized === "ready" ||
+    normalized === "cancelled" ||
+    normalized === "rejected" ||
+    isFailedJobStatus(status)
+  );
+}
+
+export function libraryStatusFromJob(status: string | undefined): string {
+  const normalized = String(status ?? "").trim();
+  if (normalized === "completed" || normalized === "ready") return "completed";
+  if (!normalized) return "uploaded";
+  return normalized;
 }
 
 export function isFailedJobStatus(status: string | undefined): boolean {
-  return status === "failed_retryable" || status === "failed_permanent" || status === "error" || status === "failed";
+  const normalized = String(status ?? "").trim().toLowerCase();
+  return normalized === "failed_retryable" || normalized === "failed_permanent" ||
+    normalized === "error" || normalized === "failed";
 }
 
 export function userFacingJobError(job: Pick<DocumentJob, "error_code" | "error_message"> | null | undefined): string {
   const code = String(job?.error_code ?? "");
-  if (code === "INSUFFICIENT_CREDITS") {
-    return "Not enough credits to process this document.";
+  const messages: Record<string, string> = {
+    INSUFFICIENT_CREDITS: "Not enough credits to process this document.",
+    FILE_TOO_LARGE: "This file is too large to process.",
+    UNSUPPORTED_FILE_TYPE: "This file type is not supported.",
+    PARSER_UNAVAILABLE: "Document parsing is temporarily unavailable. You can retry.",
+    PARSER_FAILED: "The document could not be parsed. Try another file or retry.",
+  };
+  if (messages[code]) {
+    return messages[code];
   }
   return job?.error_message || "Document processing failed. You can retry.";
+}
+
+export function userFacingDocumentError(err: unknown): string {
+  const code = err instanceof ApiClientError ? String(err.code ?? "") : "";
+  const status = err instanceof ApiClientError ? err.status : 0;
+  const messages: Record<string, string> = {
+    UNSUPPORTED_FILE_TYPE: "This file type is not supported.",
+    FILE_TOO_LARGE: "This file is too large to process.",
+    EMPTY_FILE: "This file is empty.",
+    CORRUPT_FILE: "The file is corrupt or unreadable.",
+    ENCRYPTED_FILE: "This document is encrypted and cannot be read.",
+    PARSER_FAILED: "The document could not be parsed. Try another file or retry.",
+    PARSER_UNAVAILABLE: "Document parsing is temporarily unavailable. You can retry.",
+    OCR_UNAVAILABLE: "OCR is temporarily unavailable. You can retry.",
+    INSUFFICIENT_CREDITS: "Not enough credits to process this document.",
+    STORAGE_FAILED: "The document could not be read from private storage.",
+  };
+  if (messages[code]) return messages[code];
+  if (status === 402) return messages.INSUFFICIENT_CREDITS;
+  if (status === 503 || status === 502) return messages.PARSER_UNAVAILABLE;
+  return "Document processing failed. You can retry.";
 }
 
 type CreateJobResult = {

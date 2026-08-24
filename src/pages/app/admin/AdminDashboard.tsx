@@ -133,7 +133,7 @@ export default function AdminDashboard() {
       const { totalUsers, proUsers, todaySessions, totalSessions } = counts;
 
       const since = subDays(new Date(), 7).toISOString();
-      const [{ data: subs }, { data: usage }] = await Promise.all([
+      const [{ data: subs, error: subsError }, { data: usage, error: usageError }] = await Promise.all([
         supabase
           .from("subscriptions")
           .select("plan_id, status")
@@ -143,6 +143,8 @@ export default function AdminDashboard() {
           .select("cost_microcents")
           .gte("created_at", since),
       ]);
+      if (subsError) throw subsError;
+      if (usageError) throw usageError;
 
       let mrrPaise = 0;
       for (const sub of subs ?? []) {

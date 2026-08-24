@@ -1,4 +1,6 @@
 /** Blueprint construction for create-exam-paper (mirrors src/lib/gov-exam/blueprintEngine.ts). */
+import { isNearDuplicate } from "./govMcqValidator.ts";
+import { PAPER_BLUEPRINT_VERSION } from "./algorithmCatalog.ts";
 
 export interface PatternSection {
   code: string;
@@ -134,9 +136,9 @@ export function buildBlueprint(input: {
     source_years: input.sourceYears,
     mode: input.mode,
     paper_class,
-    generation_policy_version: "gov_paper_v1",
+    generation_policy_version: PAPER_BLUEPRINT_VERSION,
     random_seed: input.randomSeed,
-    algorithm_version: "recency_v1",
+    algorithm_version: PAPER_BLUEPRINT_VERSION,
     hard_constraints_ok: true,
     label: paper_class === "ai_generated"
       ? AI_LABEL
@@ -171,6 +173,11 @@ export interface AssembledQuestionItem {
   section_code?: string | null;
   subject?: string | null;
   topic?: string | null;
+  difficulty?: string | null;
+  language?: string | null;
+  source_type?: string | null;
+  marks_positive?: number | null;
+  marks_negative?: number | null;
 }
 
 /**
@@ -242,6 +249,20 @@ export function validateAssembledPaperHardConstraints(input: {
   // 6. No duplicate questions
   const seenIds = new Set<string>();
   const seenTexts = new Set<string>();
+  const priorStems: string[] = [];
+  const authenticSources = new Set([
+    "official_verified",
+    "verified_public_source",
+    "approved_bank",
+    "internal_question_bank",
+    "admin_uploaded",
+  ]);
+  const rejectedGenerated = new Set([
+    "generated_practice",
+    "ai_generated_practice",
+    "generated",
+    "deterministic",
+  ]);
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i];
     const qid = String(q.id || `idx-${i}`);
@@ -257,6 +278,34 @@ export function validateAssembledPaperHardConstraints(input: {
       }
       seenTexts.add(normText);
     }
+    if (q.language && q.language.toLowerCase() !== blueprint.language.toLowerCase()) {
+      errors.push(`Question at position ${i + 1} has a language mismatch`);
+    }
+    if (q.marks_positive != null && q.marks_positive !== blueprint.marks_per_question) {
+      errors.push(`Question at position ${i + 1} has incorrect positive marks`);
+    }
+    if (q.marks_negative != null && q.marks_negative !== blueprint.negative_mark) {
+      errors.push(`Question at position ${i + 1} has incorrect negative marks`);
+    }
+    if (q.difficulty && !["EASY", "MEDIUM", "HARD", "easy", "medium", "hard"].includes(q.difficulty)) {
+      errors.push(`Question at position ${i + 1} has invalid difficulty`);
+    }
+    const sourceType = String(q.source_type ?? "").trim().toLowerCase();
+    if (blueprint.mode === "official_previous") {
+      if (!sourceType || !authenticSources.has(sourceType) || rejectedGenerated.has(sourceType)) {
+        errors.push(`Question at position ${i + 1} has generated provenance in official mode`);
+      }
+      if (sourceType.includes("generated") || sourceType.includes("ai_")) {
+        errors.push(`Question at position ${i + 1} cannot be generated in official mode`);
+      }
+    }
+    for (const previous of priorStems) {
+      if (isNearDuplicate(normText, previous, 0.8)) {
+        errors.push(`Near-duplicate question detected at position ${i + 1}`);
+        break;
+      }
+    }
+    priorStems.push(normText);
 
     // 7. Valid answer for every question
     if (q.correct_answer == null || String(q.correct_answer).trim() === "") {
@@ -264,8 +313,8 @@ export function validateAssembledPaperHardConstraints(input: {
     }
 
     // 8. Options validity
-    if (!Array.isArray(q.options) || q.options.length < 2) {
-      errors.push(`Question at position ${i + 1} (${qid}) has fewer than 2 options`);
+    if (!Array.isArray(q.options) || q.options.length !== 4) {
+      errors.push(`Question at position ${i + 1} (${qid}) must have exactly 4 options`);
     }
   }
 

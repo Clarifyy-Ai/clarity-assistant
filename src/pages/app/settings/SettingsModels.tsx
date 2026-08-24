@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { Card } from "@/components/ui/Card";
@@ -28,7 +27,7 @@ import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 export default function SettingsModels() {
   const profile = useAuthStore((s) => s.profile);
   const planId = useAuthStore((s) => s.planId);
-  const setProfile = useAuthStore((s) => s.setProfile);
+  const updateProfile = useAuthStore((s) => s.updateProfile);
 
   const [selected, setSelected] = useState<PreferredAIModel>(
     normalizePreferredModel(profile?.preferred_model)
@@ -61,19 +60,9 @@ export default function SettingsModels() {
     }
     setSaving(true);
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .update({
-          preferred_model: toDbPreferredModel(selected) as any,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", profile.id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      if (data) setProfile(data as unknown as typeof profile);
-
+      await updateProfile({
+        preferred_model: toDbPreferredModel(selected) as any,
+      });
       useOverlayStore.getState().setActiveModel(normalizePreferredModel(selected));
 
       toast.success("AI model preference saved.");

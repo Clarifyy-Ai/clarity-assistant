@@ -1,7 +1,6 @@
 // @ts-nocheck
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/userStore";
-import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/switch";
@@ -37,7 +36,7 @@ function readPrefs(profile: unknown): NotificationPrefs {
 }
 
 export default function SettingsNotifications() {
-  const { profile, user } = useAuthStore();
+  const { profile, user, updateProfile } = useAuthStore();
 
   const [prefs, setPrefs] = useState<NotificationPrefs>(() => readPrefs(profile));
   const [emailNotifications, setEmailNotifications] = useState(
@@ -51,6 +50,20 @@ export default function SettingsNotifications() {
   );
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!profile) return;
+    setPrefs(readPrefs(profile));
+    setEmailNotifications(profile.email_notifications ?? true);
+    setSessionReminders(profile.session_reminders ?? true);
+    setMarketingEmails(profile.marketing_emails ?? false);
+  }, [
+    profile?.id,
+    profile?.notification_prefs,
+    profile?.email_notifications,
+    profile?.session_reminders,
+    profile?.marketing_emails,
+  ]);
 
   function toggleCategory(key: keyof NotificationPrefs) {
     setPrefs((p) => ({ ...p, [key]: !p[key] }));
@@ -73,17 +86,12 @@ export default function SettingsNotifications() {
     if (!user) return;
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          email_notifications: emailNotifications,
-          session_reminders: sessionReminders,
-          marketing_emails: marketingEmails,
-          notification_prefs: prefs,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", user.id);
-      if (error) throw error;
+      await updateProfile({
+        email_notifications: emailNotifications,
+        session_reminders: sessionReminders,
+        marketing_emails: marketingEmails,
+        notification_prefs: prefs,
+      });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       toast.success("Notification preferences saved");

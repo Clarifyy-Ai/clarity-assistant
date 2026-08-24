@@ -1,6 +1,6 @@
 // Sprint E: Settings polish — per-feature retention, notification channels (email/push/in-app),
 // test-notification button, CSV export of session history. Stored in profiles.metadata jsonb.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "sonner";
@@ -46,6 +46,7 @@ export default function SettingsPolish() {
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [testing, setTesting] = useState(false);
+  const exportRetryKey = useRef<string | null>(null);
 
   useEffect(() => {
     const meta: any = (profile as any)?.metadata ?? {};
@@ -89,8 +90,10 @@ export default function SettingsPolish() {
   async function exportSessionsCsv() {
     if (!user || exporting) return;
     setExporting(true);
+    const idempotencyKey =
+      exportRetryKey.current ?? createExportIdempotencyKey("sessions-csv");
+    exportRetryKey.current = idempotencyKey;
     try {
-      const idempotencyKey = createExportIdempotencyKey("sessions-csv");
       const res = await fetchEdge(
         "export-user-data",
         { type: "sessions", idempotencyKey },
@@ -111,6 +114,7 @@ export default function SettingsPolish() {
         : [];
       if (rows.length === 0) {
         toast.info("No sessions to export");
+        exportRetryKey.current = null;
         return;
       }
       const cols = Object.keys(rows[0] ?? {});
@@ -130,6 +134,7 @@ export default function SettingsPolish() {
       a.download = `clarify-sessions-${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
       URL.revokeObjectURL(url);
+      exportRetryKey.current = null;
       toast.success(`Exported ${rows.length} sessions`);
     } catch (e: unknown) {
       toast.error(messageFromExportCaught(e));

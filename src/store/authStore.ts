@@ -128,20 +128,14 @@ async function resolveAdminRole(
 
     try {
       const isAdmin = await attempt();
-      let isModerator = false;
-      try {
-        isModerator = await userRolesDB.hasRole(userId, "moderator");
-      } catch {
-        isModerator = false;
-      }
       logger.info(LogEvents.AUTH_ROLE_LOAD_SUCCEEDED, {
         operation: "role.load",
         attempt: 1,
         durationMs: Date.now() - startedAt,
         outcome: "succeeded",
-        authState: isAdmin ? "admin" : isModerator ? "moderator" : "non_admin",
+        authState: isAdmin ? "admin" : "non_admin",
       });
-      return { resolved: true, isAdmin, isModerator };
+      return { resolved: true, isAdmin, isModerator: false };
     } catch (err) {
       if (isNonRetryableAuthError(err)) {
         logger.warn(LogEvents.AUTH_ROLE_LOAD_FAILED, {
@@ -176,20 +170,14 @@ async function resolveAdminRole(
       console.warn("[authStore] Admin role check failed; retrying once:", err);
       try {
         const isAdmin = await attempt();
-        let isModerator = false;
-        try {
-          isModerator = await userRolesDB.hasRole(userId, "moderator");
-        } catch {
-          isModerator = false;
-        }
         logger.info(LogEvents.AUTH_ROLE_LOAD_SUCCEEDED, {
           operation: "role.load",
           attempt: 2,
           durationMs: Date.now() - startedAt,
           outcome: "succeeded",
-          authState: isAdmin ? "admin" : isModerator ? "moderator" : "non_admin",
+          authState: isAdmin ? "admin" : "non_admin",
         });
-        return { resolved: true, isAdmin, isModerator };
+        return { resolved: true, isAdmin, isModerator: false };
       } catch (retryErr) {
         const retryTimedOut = isTimeoutError(retryErr);
         logger.error(
@@ -389,6 +377,20 @@ function scheduleAdminRoleResolve(
 ): void {
   void resolveAdminRole(userId).then((roleResult) => {
     applyAdminRoleResult(userId, roleResult, set, get);
+    void withTimeout(
+      userRolesDB.hasRole(userId, "moderator"),
+      ROLE_CHECK_TIMEOUT_MS,
+      "Moderator role check",
+    )
+      .then((isModerator) => {
+        if (get().user?.id !== userId) return;
+        set((state) => {
+          state.isModerator = isModerator;
+        });
+      })
+      .catch(() => {
+        // Moderator access fails closed; admin resolution is already complete.
+      });
   });
 }
 

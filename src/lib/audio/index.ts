@@ -24,6 +24,7 @@ export { DeepgramStreamClient, resetDeepgramTokenClient } from "./deepgramStream
 export {
   fetchDeepgramTokenBounded,
   resetDeepgramTokenClient as resetDeepgramTokenCache,
+  unblockDeepgramTokenClient,
   isDeepgramTokenBlocked,
 } from "./deepgramToken";
 export { TranscriptionState, TRANSCRIPTION_STATUS_COPY } from "./transcriptionStates";

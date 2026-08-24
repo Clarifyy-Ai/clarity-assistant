@@ -1,6 +1,7 @@
 /**
  * Blueprint construction from approved pattern + soft historical quotas.
  */
+import { PAPER_BLUEPRINT_VERSION } from "./algorithmCatalog";
 
 export interface PatternSection {
   code: string;
@@ -136,7 +137,7 @@ export function buildBlueprint(input: {
     paper_class,
     generation_policy_version: "gov_paper_v1",
     random_seed: input.randomSeed,
-    algorithm_version: "recency_v1",
+    algorithm_version: PAPER_BLUEPRINT_VERSION,
     hard_constraints_ok: true,
     label:
       paper_class === "ai_generated"

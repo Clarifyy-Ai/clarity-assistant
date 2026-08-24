@@ -72,6 +72,9 @@ const REQUIRED_SECRETS = [
   "STRIPE_SECRET_KEY",
   "STRIPE_WEBHOOK_SECRET",
   "RESEND_API_KEY",
+  // Required for Edge → Render HMAC (gov exams, docs, coach hybrid).
+  "DOCUMENT_INTELLIGENCE_AUTH_SECRET",
+  // At least one Python base URL must be present (checked separately below).
 ];
 
 let failed = false;
@@ -179,6 +182,12 @@ console.log(
 for (const s of REQUIRED_SECRETS) {
   console.log(`  - ${s}`);
 }
+console.log(
+  "  - PYTHON_SERVICE_URL (or SCRAPER_URL / GOV_EXAM_PYTHON_URL) — FastAPI base URL",
+);
+console.log(
+  "  NOTE: DOCUMENT_INTELLIGENCE_AUTH_SECRET must match Render clarity-scraper env exactly.",
+);
 
 console.log(
   "\nOptional secrets (required for Pro multi-model routing):",

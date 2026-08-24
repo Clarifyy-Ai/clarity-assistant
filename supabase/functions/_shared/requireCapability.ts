@@ -120,6 +120,8 @@ export const AI_FUNCTION_CAPABILITY: Record<string, Capability> = {
   "polish-star-section": "prep_star",
   "prep-tool": "prep_star",
   "gap-analysis": "analytics",
+  "analytics-dashboard": "analytics",
+  "compare-sessions": "analytics",
   "parse-resume": "live_rehearsal",
   "parse-document": "live_rehearsal",
   "company-research": "company_research",

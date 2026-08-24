@@ -113,7 +113,19 @@ async function getOrCreatePlanId(userId: string): Promise<string> {
     .select("id")
     .maybeSingle();
 
-  if (planError) throw planError;
+  if (planError) {
+    // Another tab may have won the create race after our initial read.
+    const { data: racedPlan, error: racedPlanError } = await supabase
+      .from("interview_practice_plans")
+      .select("id")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (racedPlanError) throw planError;
+    if (racedPlan?.id) return racedPlan.id as string;
+    throw planError;
+  }
   if (!plan?.id) throw new Error("Could not create practice plan.");
   return plan.id as string;
 }
@@ -146,7 +158,20 @@ export async function loadOrCreatePlan(
     .insert(payloads)
     .select("*");
 
-  if (itemsError) throw itemsError;
+  if (itemsError) {
+    // A concurrent loader may have inserted the same generated activities.
+    const { data: racedItems, error: racedItemsError } = await supabase
+      .from("interview_practice_plan_items")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("plan_id", planId)
+      .order("due_offset_days", { ascending: true });
+    if (racedItemsError) throw itemsError;
+    if (racedItems && racedItems.length > 0) {
+      return (racedItems as PracticePlanItemRow[]).map(mapRowToItem);
+    }
+    throw itemsError;
+  }
   if (!inserted || inserted.length === 0) {
     throw new Error("Practice plan items were not saved.");
   }

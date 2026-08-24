@@ -37,7 +37,6 @@ import {
 } from "@/store/overlaySessionAuthorityStore";
 import {
   sessionsDB,
-  sessionTranscriptsDB,
   sessionAnswersDB,
   resumesDB,
   jobDescriptionsDB,
@@ -51,6 +50,13 @@ import {
   generateMockInterviewQuestion,
   QUESTION_GENERATION_USER_ERROR,
 } from "@/lib/mock/generateMockQuestion";
+import {
+  encodeMockProgressNotes,
+  isSkippedAnswerText,
+  parseMockProgressNotes,
+  SKIPPED_ANSWER_SENTINEL,
+  type MockProgressAnswer,
+} from "@/lib/mock/mockSessionProgress";
 import {
   createQuestionGenerationSnapshot,
   isQuestionGenerationInFlight,
@@ -76,6 +82,7 @@ import {
 } from "@/lib/mock/answerNextFsm";
 import { finalizeMockAnswer } from "@/lib/mock/mockAnswerCapture";
 import { toDbModel } from "@/lib/ai/modelMapping";
+import { finalizeSession as finalizeSessionApi } from "@/lib/api/sessions";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
@@ -148,6 +155,8 @@ interface MockSessionSummaryStats {
 }
 
 const INCOMPLETE_NO_ANSWERS_NOTE = "not_scored";
+const ANSWER_PERSISTENCE_USER_ERROR =
+  "Your answer could not be saved. Please retry before moving on.";
 
 function formatDuration(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -339,6 +348,9 @@ export default function MockSession() {
   const [sessionElapsed, setSessionElapsed] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const sessionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** Elapsed seconds restored from progress — survives stale React state in handleSetup. */
+  const restoredElapsedRef = useRef(0);
+  const sessionElapsedRef = useRef(0);
 
   const endCalledRef = useRef(false);
 
@@ -451,6 +463,24 @@ export default function MockSession() {
     useAudioStore.getState().updateInterimText("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orchestrator.currentQuestionIndex]);
+
+  // Keep elapsed + question list durable across refresh while answering.
+  useEffect(() => {
+    if (phase !== "active") return;
+    const id = window.setInterval(() => {
+      if (!isMockSessionMutable(lifecycleRef.current)) return;
+      void writeMockProgress();
+    }, 15_000);
+    const onHide = () => {
+      if (document.visibilityState === "hidden") void writeMockProgress();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onHide);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
   // Next-question only — overlay H/P/M are OverlayKeyboardHandler (avoid double-toggle).
   useHotkeys({
@@ -632,6 +662,239 @@ export default function MockSession() {
     return entry;
   }
 
+  async function persistCurrentAnswers(): Promise<void> {
+    const userId = profile?.id;
+    const sessionId = useSessionStore.getState().session_id;
+    if (!userId || !sessionId) {
+      throw new Error("Mock session identity is unavailable.");
+    }
+
+    // Persist every visited question — including skipped — so refresh can restore.
+    const visited = answersRef.current;
+    if (visited.length === 0) return;
+
+    await sessionAnswersDB.createMany(
+      visited.map((a) => ({
+        session_id: sessionId,
+        user_id: userId,
+        question: a.question_text,
+        answer: a.skipped
+          ? SKIPPED_ANSWER_SENTINEL
+          : (a.answer_text ?? "").trim().length > 0
+            ? a.answer_text
+            : "",
+        duration_ms: a.duration_seconds * 1000,
+        question_index: a.question_index,
+      })),
+    );
+  }
+
+  async function writeMockProgress(): Promise<void> {
+    const sessionId = useSessionStore.getState().session_id;
+    if (!sessionId) return;
+    const questions = useSessionStore.getState().questions;
+    if (!questions.length) return;
+
+    const progressNotes = encodeMockProgressNotes({
+      current_question_index: useSessionStore.getState().current_question_index ?? 0,
+      elapsed_seconds: sessionElapsedRef.current,
+      target_question_count: targetQuestionCount,
+      started_at: startTimeRef.current,
+      questions,
+      answers: answersRef.current.map(
+        (a): MockProgressAnswer => ({
+          question_id: a.question_id,
+          question_text: a.question_text,
+          answer_text: a.answer_text,
+          question_index: a.question_index,
+          skipped: a.skipped,
+          status: a.status,
+          outcome: a.outcome,
+          filler_count: a.filler_count,
+          wpm: a.wpm,
+          duration_seconds: a.duration_seconds,
+          timestamp: a.timestamp,
+        }),
+      ),
+    });
+
+    try {
+      await sessionsDB.update(sessionId, {
+        notes: progressNotes,
+        questions_asked: targetQuestionCount,
+      } as Parameters<typeof sessionsDB.update>[1]);
+    } catch (err) {
+      console.warn("[MockSession] progress checkpoint failed:", err);
+    }
+  }
+
+  function rebuildMockTranscriptFromProgress(
+    questions: SessionQuestion[],
+    answers: QuestionAnswer[],
+  ) {
+    const store = useAudioStore.getState();
+    store.clearTranscript();
+    const byIndex = new Map(answers.map((a) => [a.question_index, a]));
+    const now = Date.now();
+    questions.forEach((q, index) => {
+      const qText = q.question_text?.trim();
+      if (!qText) return;
+      store.addUtterance({
+        id: `mock-q-${index}`,
+        text: qText,
+        speaker: "interviewer",
+        words: [],
+        start_ms: now + index * 2000,
+        end_ms: now + index * 2000 + 500,
+        is_final: true,
+        is_interviewer_question: true,
+        confidence: 1,
+      });
+      const ans = byIndex.get(index);
+      if (ans && !ans.skipped && (ans.answer_text ?? "").trim()) {
+        store.addUtterance({
+          id: `mock-a-${index}`,
+          text: ans.answer_text.trim(),
+          speaker: "candidate",
+          words: [],
+          start_ms: now + index * 2000 + 600,
+          end_ms: now + index * 2000 + 1500,
+          is_final: true,
+          is_interviewer_question: false,
+          confidence: 1,
+        });
+      }
+    });
+    const current = questions[useSessionStore.getState().current_question_index];
+    if (current?.question_text) {
+      store.setLastQuestion(current.question_text);
+    }
+  }
+
+  /**
+   * Hydrate from session_answers + sessions.notes progress when refreshing an
+   * in-progress mock. Returns true when Q1 generation should be skipped.
+   */
+  async function tryRestoreMockProgress(
+    dbSessionId: string,
+    mockConfig: MockConfig,
+  ): Promise<boolean> {
+    let progress = null as ReturnType<typeof parseMockProgressNotes>;
+    try {
+      const row = await sessionsDB.getByIdForUser(dbSessionId, profile!.id);
+      progress = parseMockProgressNotes(row?.notes);
+      if (typeof row?.questions_asked === "number" && row.questions_asked > 0) {
+        setTargetQuestionCount(row.questions_asked);
+      }
+    } catch (err) {
+      console.warn("[MockSession] failed to load session for restore:", err);
+    }
+
+    let answerRows: Awaited<ReturnType<typeof sessionAnswersDB.listBySessionId>> = [];
+    try {
+      answerRows = await sessionAnswersDB.listBySessionId(dbSessionId);
+    } catch (err) {
+      console.warn("[MockSession] failed to load session_answers for restore:", err);
+    }
+
+    if (!progress?.questions?.length && answerRows.length === 0) {
+      return false;
+    }
+
+    const restoredAnswers: QuestionAnswer[] = progress?.answers?.length
+      ? progress.answers.map((a) => ({
+          question_id: a.question_id,
+          question_text: a.question_text,
+          answer_text: a.skipped ? "" : a.answer_text,
+          question_index: a.question_index,
+          skipped: a.skipped,
+          status: a.status,
+          outcome: a.outcome,
+          filler_count: a.filler_count,
+          wpm: a.wpm,
+          duration_seconds: a.duration_seconds,
+          timestamp: a.timestamp,
+        }))
+      : answerRows.map((row) => {
+          const skipped = isSkippedAnswerText(row.answer);
+          const qIndex =
+            typeof row.question_index === "number" ? row.question_index : 0;
+          return {
+            question_id: `q-${qIndex}`,
+            question_text: row.question,
+            answer_text: skipped ? "" : (row.answer ?? ""),
+            question_index: qIndex,
+            skipped,
+            status: (skipped ? "skipped" : "answered") as MockAnswerStatus,
+            outcome: (skipped ? "SKIPPED" : "VALID_ANSWER") as AnswerFinalizationOutcome,
+            filler_count: 0,
+            wpm: 0,
+            duration_seconds: Math.round((row.duration_ms ?? 0) / 1000),
+            timestamp: row.created_at,
+          };
+        });
+
+    answersRef.current = restoredAnswers;
+
+    const restoredQuestions: SessionQuestion[] = progress?.questions?.length
+      ? progress.questions
+      : answerRows.map((row, i) => {
+          const qIndex =
+            typeof row.question_index === "number" ? row.question_index : i;
+          return {
+            id: `restored-${dbSessionId}-q${qIndex}`,
+            session_id: dbSessionId,
+            question_number: qIndex + 1,
+            question_text: row.question,
+            question_type: (mockConfig.interview_type as SessionQuestion["question_type"]) ?? "behavioural",
+            expected_duration_seconds: 120,
+            difficulty: "medium",
+            tags: [],
+            company_specific: false,
+          };
+        });
+
+    if (!restoredQuestions.length) return false;
+
+    const { questionCount } = resolveMockConfigFields(mockConfig);
+    const target =
+      progress?.target_question_count ??
+      (typeof questionCount === "number" ? questionCount : restoredQuestions.length);
+    setTargetQuestionCount(target);
+
+    orchestrator.setQuestions(restoredQuestions);
+    questionsCacheRef.current = useSessionStore.getState().questions;
+
+    const maxAnsweredIndex = restoredAnswers.reduce(
+      (max, a) => Math.max(max, a.question_index),
+      -1,
+    );
+    let restoreIndex =
+      typeof progress?.current_question_index === "number"
+        ? progress.current_question_index
+        : Math.max(maxAnsweredIndex, 0);
+    restoreIndex = Math.min(
+      Math.max(0, restoreIndex),
+      Math.max(restoredQuestions.length - 1, 0),
+    );
+    useSessionStore.getState().setCurrentQuestionIndex(restoreIndex);
+
+    const elapsed = progress?.elapsed_seconds ?? 0;
+    restoredElapsedRef.current = elapsed;
+    sessionElapsedRef.current = elapsed;
+    if (progress?.started_at) {
+      startTimeRef.current = progress.started_at;
+    } else if (elapsed > 0) {
+      startTimeRef.current = new Date(Date.now() - elapsed * 1000).toISOString();
+    }
+    setSessionElapsed(elapsed);
+    setSessionTimeLeft(Math.max(0, SESSION_DURATION - elapsed));
+
+    rebuildMockTranscriptFromProgress(restoredQuestions, restoredAnswers);
+    toast.message("Resuming your in-progress mock interview");
+    return true;
+  }
+
   function cleanupQuestionAudio(options?: { preserveListeningWindow?: boolean }) {
     speakingQuestionIdRef.current = null;
     interviewerAudioActiveRef.current = false;
@@ -807,6 +1070,7 @@ export default function MockSession() {
       if (useSessionStore.getState().questions[0]?.tags?.includes("fallback_bank")) {
         toast.message("Using built-in practice questions — AI generation was unavailable.");
       }
+      await writeMockProgress();
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
       console.warn("[MockSession] question generation failed:", err);
@@ -833,6 +1097,9 @@ export default function MockSession() {
     setGenerationSnap(createQuestionGenerationSnapshot());
     questionsCacheRef.current = null;
     speakingQuestionIdRef.current = null;
+    restoredElapsedRef.current = 0;
+    sessionElapsedRef.current = 0;
+    answersRef.current = [];
 
     sessionConfigRef.current = config;
     setMicDeviceId(config.mic_device_id ?? null);
@@ -914,7 +1181,10 @@ export default function MockSession() {
       }
 
       setSetupStep("questions");
-      await loadQuestions(dbSessionId!, mockConfig);
+      const restored = await tryRestoreMockProgress(dbSessionId!, mockConfig);
+      if (!restored) {
+        await loadQuestions(dbSessionId!, mockConfig);
+      }
     } catch (err) {
       console.error("[MockSession] setup failed:", err);
       if (handleSessionStartError(err)) {
@@ -956,8 +1226,10 @@ export default function MockSession() {
       markOverlayProductSessionReady(generation);
       setSetupStep("audio");
       await audio.start();
-      setSessionTimeLeft(SESSION_DURATION);
-      setSessionElapsed(0);
+      const restoredElapsed = restoredElapsedRef.current;
+      sessionElapsedRef.current = restoredElapsed;
+      setSessionElapsed(restoredElapsed);
+      setSessionTimeLeft(Math.max(0, SESSION_DURATION - restoredElapsed));
       setIsPaused(false);
       if (!getOverlaySessionAuthority().matchesGeneration(generation)) {
         audio.stop();
@@ -968,13 +1240,22 @@ export default function MockSession() {
       setPhase("active");
       setOverlayInitState("ready");
       useOverlayStore.getState().showOverlay();
+      // audio.start() clears transcript — re-apply restored utterances after start.
+      if (answersRef.current.length || questionsCacheRef.current?.length) {
+        rebuildMockTranscriptFromProgress(
+          useSessionStore.getState().questions,
+          answersRef.current,
+        );
+      }
     } catch (err) {
       console.error("[MockSession] audio start failed:", err);
       // micOptional allows text-only mock — still enter active session.
       toast.warning("Mic unavailable — continuing with overlay chat and hints.");
       useAudioStore.getState().setStreamError(null);
-      setSessionTimeLeft(SESSION_DURATION);
-      setSessionElapsed(0);
+      const restoredElapsed = restoredElapsedRef.current;
+      sessionElapsedRef.current = restoredElapsed;
+      setSessionElapsed(restoredElapsed);
+      setSessionTimeLeft(Math.max(0, SESSION_DURATION - restoredElapsed));
       setIsPaused(false);
       if (getOverlaySessionAuthority().matchesGeneration(generation)) {
         markOverlayProductSessionReady(generation);
@@ -982,6 +1263,12 @@ export default function MockSession() {
         setPhase("active");
         setOverlayInitState("ready");
         useOverlayStore.getState().showOverlay();
+        if (answersRef.current.length || questionsCacheRef.current?.length) {
+          rebuildMockTranscriptFromProgress(
+            useSessionStore.getState().questions,
+            answersRef.current,
+          );
+        }
       }
     } finally {
       isStartingRef.current = false;
@@ -1202,11 +1489,17 @@ export default function MockSession() {
       }
 
       if (!options?.skipCapture) {
-        const saved = captureAnswer(Boolean(options?.skipped));
-        setAnswerNextState((s) => reduceAnswerNext(s, { type: "ANSWER_SAVED" }));
-        // Product rule: empty Next → unanswered (not auto-answered). Skip is explicit.
-        void saved;
+        captureAnswer(Boolean(options?.skipped));
       }
+      try {
+        await persistCurrentAnswers();
+        await writeMockProgress();
+      } catch (err) {
+        console.error("[MockSession] answer persistence failed:", err);
+        throw new Error(ANSWER_PERSISTENCE_USER_ERROR);
+      }
+      setAnswerNextState((s) => reduceAnswerNext(s, { type: "ANSWER_SAVED" }));
+      // Product rule: empty Next → unanswered (not auto-answered). Skip is explicit.
 
       cleanupQuestionAudio();
       setTypedAnswer("");
@@ -1253,6 +1546,7 @@ export default function MockSession() {
       setCurrentAnswerStatus("unanswered");
       setAnswerNextState((s) => reduceAnswerNext(s, { type: "QUESTION_READY" }));
       setAnswerNextState((s) => reduceAnswerNext(s, { type: "NEXT_READY" }));
+      void writeMockProgress();
     } catch (err) {
       if (
         (err instanceof DOMException && err.name === "AbortError") ||
@@ -1265,8 +1559,12 @@ export default function MockSession() {
         return;
       }
       console.warn("[MockSession] next question generation failed:", err);
-      setNextQuestionError(QUESTION_GENERATION_USER_ERROR);
-      toast.error(QUESTION_GENERATION_USER_ERROR);
+      const userError =
+        err instanceof Error && err.message === ANSWER_PERSISTENCE_USER_ERROR
+          ? ANSWER_PERSISTENCE_USER_ERROR
+          : QUESTION_GENERATION_USER_ERROR;
+      setNextQuestionError(userError);
+      toast.error(userError);
       if (opId === answerNextOpRef.current) {
         setAnswerNextState((s) => reduceAnswerNext(s, { type: "FAIL" }));
       }
@@ -1300,10 +1598,6 @@ export default function MockSession() {
       const audioState = useAudioStore.getState();
       const transcript = audioState.transcript?.full_transcript ?? candidateTranscript;
       const utterances = audioState.transcript?.utterances ?? [];
-      const startedMs = startTimeRef.current
-        ? new Date(startTimeRef.current).getTime()
-        : Date.now();
-      const duration_seconds = Math.max(0, Math.floor((Date.now() - startedMs) / 1000));
       const answeredCount = answersRef.current.filter(
         (a) =>
           !a.skipped &&
@@ -1320,78 +1614,47 @@ export default function MockSession() {
         persistTranscripts && !incompleteNoAnswers ? transcript || null : null,
       ].filter(Boolean);
 
-      // Server finalization owns status / ended_at / terminal_reason /
-      // duration_seconds. Only fall back to a local terminal write when the
-      // server round-trip fails, and tell the user it degraded.
-      let endedByRpc = false;
-      try {
-        const { endSession } = await import("@/lib/api/sessions");
-        await endSession({
-          session_id: sessionId,
-          terminal_reason: incompleteNoAnswers ? "CANCELLED" : "USER_ENDED",
-        });
-        endedByRpc = true;
-      } catch (err) {
-        console.error("[MockSession] end-session failed:", err);
-        endedByRpc = false;
-        toast.error(
-          "We couldn't confirm the end of this session with the server. Your results were saved locally.",
-        );
-      }
-
-      await sessionsDB.update(sessionId, {
-        ...(endedByRpc
-          ? {}
-          : {
-              status: incompleteNoAnswers ? "abandoned" : "completed",
-              ended_at: new Date().toISOString(),
-              duration_seconds,
-              terminal_reason: incompleteNoAnswers ? "CANCELLED" : "USER_ENDED",
-              lifecycle_status: incompleteNoAnswers ? "CANCELLED" : "COMPLETED",
-            }),
-        credits_used: session.credits_consumed,
-        model_used: dbModel as any,
-        filler_words: fillerHook.totalCount,
-        avg_wpm: wpmHook.wpm,
-        hints_used: overlay.hint_history.length,
-        answers_generated: answeredCount,
-        questions_asked: targetQuestionCount,
-        ...(incompleteNoAnswers ? { overall_score: null } : {}),
-        notes: notesParts.length > 0 ? notesParts.join("\n") : null,
-        session_type: "mock",
-      } as any);
-
-      if (transcript && !incompleteNoAnswers && persistTranscripts) {
-        await sessionTranscriptsDB.create({
-          session_id: sessionId,
-          user_id: userId,
-          transcript,
-          utterances,
-        });
-      }
-
       const scoredAnswers = answersRef.current.filter(
         (a) =>
           !a.skipped &&
           a.status === "answered" &&
           (a.answer_text ?? "").trim().length > 0,
       );
-      if (scoredAnswers.length > 0) {
-        await sessionAnswersDB.createMany(
-          scoredAnswers.map((a) => ({
-            session_id: sessionId,
-            user_id: userId,
-            question: a.question_text,
-            answer: a.answer_text,
-            duration_ms: a.duration_seconds * 1000,
-          })),
-        );
-      }
+      let endedByRpc = false;
+      await finalizeSessionApi({
+        session_id: sessionId,
+        terminal_reason: incompleteNoAnswers ? "CANCELLED" : "USER_ENDED",
+        answers: scoredAnswers.map((a) => ({
+          question_index: a.question_index,
+          question: a.question_text,
+          answer: a.answer_text,
+          duration_ms: a.duration_seconds * 1000,
+        })),
+        transcript:
+          transcript && !incompleteNoAnswers && persistTranscripts
+            ? { content: transcript, utterances }
+            : null,
+        metrics: {
+          credits_used: session.credits_consumed,
+          model_used: dbModel,
+          filler_words: fillerHook.totalCount,
+          avg_wpm: wpmHook.wpm,
+          hints_used: overlay.hint_history.length,
+          answers_generated: answeredCount,
+          questions_asked: targetQuestionCount,
+          notes: notesParts.length > 0 ? notesParts.join("\n") : null,
+          ...(endedByRpc
+          ? {}
+          : {}),
+        },
+      });
+      endedByRpc = true;
 
       await useAuthStore.getState().refreshCredits();
     } catch (err) {
       console.error("[MockSession] Failed to persist session:", err);
-      toast.error("Could not save this session. Your practice ran, but the scorecard may be missing.");
+      toast.error("Session could not be fully saved. Please retry.");
+      throw err;
     }
   }
 
@@ -1672,7 +1935,10 @@ export default function MockSession() {
         timerMode={timerMode}
         sessionDurationSeconds={SESSION_DURATION}
         onTickCountdown={setSessionTimeLeft}
-        onTickCountup={setSessionElapsed}
+        onTickCountup={(seconds) => {
+          sessionElapsedRef.current = seconds;
+          setSessionElapsed(seconds);
+        }}
         onAutoEnd={() => {
           void handleEndSessionRef.current?.();
         }}

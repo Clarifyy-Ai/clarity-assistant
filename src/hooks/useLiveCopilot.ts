@@ -38,21 +38,23 @@ import { generateId } from "@/lib/utils";
 import { questionFingerprint, hintIdempotencyKey } from "@/lib/ai/questionDetection";
 import { createLiveHintOperationId } from "@/lib/audio/liveQuestionGate";
 import {
-  sessionsDB,
   jobDescriptionsDB,
   resumesDB,
-  sessionTranscriptsDB,
   answerBankDB,
-  sessionAnswersDB,
 } from "@/lib/supabase/database";
 import { pairLiveSessionAnswers } from "@/lib/session/liveSessionAnswers";
+import {
+  clearLiveSessionCheckpoint,
+  loadLiveSessionCheckpoint,
+  saveLiveSessionCheckpoint,
+} from "@/lib/session/liveSessionCheckpoint";
 import { notifySessionsChanged } from "@/lib/session/sessionReuse";
 import {
   activateSession,
   aiModeForSessionType,
   type SessionType,
 } from "@/lib/session/sessionLifecycle";
-import { startSession as startSessionApi } from "@/lib/api/sessions";
+import { startSession as startSessionApi, finalizeSession as finalizeSessionApi } from "@/lib/api/sessions";
 import { handleSessionStartError } from "@/lib/billing/sessionStartErrors";
 import { toDbModel } from "@/lib/ai/modelMapping";
 import { markFirstListening } from "@/lib/analytics/uxMetrics";
@@ -118,6 +120,48 @@ export function useLiveCopilot({
 
   const [isPreparingSession, setIsPreparingSession] = useState(false);
   const [prepStepIndex, setPrepStepIndex] = useState(0);
+
+  const checkpointLiveSession = useCallback(() => {
+    const sid = sessionIdRef.current;
+    if (
+      !sid ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sid)
+    ) {
+      return;
+    }
+    if (sessionEndedRef.current || getPrivateMode()) return;
+    const overlay = useOverlayStore.getState();
+    const audioState = useAudioStore.getState();
+    saveLiveSessionCheckpoint({
+      v: 1,
+      session_id: sid,
+      saved_at: Date.now(),
+      full_transcript: audioState.transcript?.full_transcript ?? "",
+      utterances: audioState.transcript?.utterances ?? [],
+      hint_history: overlay.hint_history ?? [],
+      current_question: overlay.current_question ?? "",
+      current_hint: overlay.current_hint ?? "",
+      elapsed_seconds: useSessionStore.getState().elapsed_seconds ?? 0,
+    });
+  }, []);
+
+  // Periodic + visibility checkpoint so refresh can restore transcript/hints.
+  useEffect(() => {
+    if (sessionStatus !== "active") return;
+    const tick = () => checkpointLiveSession();
+    tick();
+    const id = window.setInterval(tick, 8_000);
+    const onHide = () => {
+      if (document.visibilityState === "hidden") tick();
+    };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", tick);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", tick);
+    };
+  }, [sessionStatus, checkpointLiveSession]);
 
   // ✅ Use selected mic if present (setup wizard / device selection)
   const selectedMicId = useAudioStore((s) => s.setup?.selected_mic_id ?? null);
@@ -524,6 +568,7 @@ export function useLiveCopilot({
         if (sessionEndedRef.current) return;
         const overlayState = useOverlayStore.getState();
         overlayState.commitStreamedHint(opId ?? undefined);
+        checkpointLiveSession();
 
         const pendingCapture = pendingCaptureMetaRef.current;
         if (screenshotBase64 && pendingCapture) {
@@ -670,6 +715,7 @@ export function useLiveCopilot({
           onDone: async () => {
             if (!stillCurrent()) return;
             useOverlayStore.getState().commitStreamedHint(operationId);
+            checkpointLiveSession();
             const remaining = await refreshCredits();
             if (remaining !== null && stillCurrent()) {
               useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
@@ -695,7 +741,7 @@ export function useLiveCopilot({
         }
       }
     },
-    [profile, coachStore, getSafeContext, enrichContextForAi],
+    [profile, coachStore, getSafeContext, enrichContextForAi, checkpointLiveSession],
   );
 
   const requestAnswerModification = useCallback(
@@ -826,8 +872,15 @@ export function useLiveCopilot({
 
       bindOverlayProductSessionId(sessionIdRef.current, generation);
 
-      seenQuestionFingerprintsRef.current.clear();
-      lastQuestionRef.current = "";
+      const restoringExisting =
+        Boolean(reusableSessionId) &&
+        sessionIdRef.current === reusableSessionId &&
+        !getPrivateMode();
+
+      if (!restoringExisting) {
+        seenQuestionFingerprintsRef.current.clear();
+        lastQuestionRef.current = "";
+      }
       await initSessionFromConfig();
       if (!getOverlaySessionAuthority().matchesGeneration(generation)) {
         return;
@@ -844,7 +897,40 @@ export function useLiveCopilot({
       }
       markOverlayProductSessionActive(generation);
       markFirstListening();
-      useOverlayStore.getState().clearChatHistory();
+
+      if (restoringExisting) {
+        const checkpoint = loadLiveSessionCheckpoint(reusableSessionId!);
+        if (checkpoint) {
+          // Hydrate before clearing chat/audio so refresh keeps context.
+          useAudioStore.getState().restoreTranscript({
+            utterances: checkpoint.utterances,
+            full_transcript: checkpoint.full_transcript,
+            last_question: checkpoint.current_question || null,
+          });
+          useOverlayStore.getState().restoreHintHistory(checkpoint.hint_history, {
+            current_question: checkpoint.current_question,
+            current_hint: checkpoint.current_hint,
+          });
+          if (checkpoint.elapsed_seconds > 0) {
+            useSessionStore.getState().setElapsedSeconds(checkpoint.elapsed_seconds);
+          }
+          if (checkpoint.current_question) {
+            lastQuestionRef.current = checkpoint.current_question;
+          }
+          for (const u of checkpoint.utterances) {
+            const text = (u.text ?? "").trim();
+            if (!text) continue;
+            if (u.is_interviewer_question || u.speaker === "interviewer") {
+              const fp = questionFingerprint(text);
+              if (fp) seenQuestionFingerprintsRef.current.add(fp);
+            }
+          }
+        }
+        // Keep coach chat; do not wipe mid-session restore.
+      } else {
+        useOverlayStore.getState().clearChatHistory();
+      }
+
       const sid = sessionIdRef.current;
       if (
         sid &&
@@ -857,6 +943,7 @@ export function useLiveCopilot({
           loadCoachChatHistory(sid),
         );
       }
+      checkpointLiveSession();
     } catch (err) {
       console.error("[useLiveCopilot] Failed to start live session:", err);
       audio.stop();
@@ -869,7 +956,7 @@ export function useLiveCopilot({
       setIsPreparingSession(false);
       setPrepStepIndex(0);
     }
-  }, [audio, initSessionFromConfig, profile?.id, sessionType]);
+  }, [audio, checkpointLiveSession, initSessionFromConfig, profile?.id, sessionType]);
 
   const endLiveSession = useCallback(async (): Promise<{ answersRecorded: number }> => {
     const gen = overlayGenerationRef.current;
@@ -891,6 +978,9 @@ export function useLiveCopilot({
     useOverlayStore.getState().setSessionPipelineState("session_ending");
     markOverlayProductSessionTerminal(gen, "USER_ENDED");
     audio.stop();
+    if (session.session_id) {
+      clearLiveSessionCheckpoint(session.session_id);
+    }
 
     if (userId && session.session_id && !getPrivateMode()) {
       try {
@@ -904,13 +994,6 @@ export function useLiveCopilot({
           overlay.save_transcript &&
           parsePrivacyPrefs(profile?.privacy_prefs).store_transcripts;
 
-        // Server-authoritative finalization first (status/ended_at/terminal_reason/duration_seconds).
-        const { endSession } = await import("@/lib/api/sessions");
-        await endSession({
-          session_id: session.session_id,
-          terminal_reason: "USER_ENDED",
-        });
-
         // Mark coach conversation closed (history rows retained for the session).
         try {
           const { supabase } = await import("@/lib/supabase/client");
@@ -923,43 +1006,31 @@ export function useLiveCopilot({
           /* non-fatal */
         }
 
-        // Metrics-only follow-up — never overwrite terminal fields or duration.
-        await sessionsDB.updateForUser(session.session_id, userId, {
-          credits_used: session.credits_consumed,
-          model_used: dbModel as any,
-          filler_words: session.filler_count,
-          avg_wpm: session.current_wpm,
-          hints_used: overlay.hint_history.length,
-          answers_generated: pairs.length,
-          questions_asked: Math.max(questionCount, pairs.length),
-          notes: saveTranscript && fullTranscript ? fullTranscript : null,
-        } as Parameters<typeof sessionsDB.updateForUser>[2]);
-
-        if (pairs.length > 0) {
-          await sessionAnswersDB.createMany(
-            pairs.map((p) => ({
-              session_id: session.session_id!,
-              user_id: userId,
-              question: p.question,
-              answer: p.answer,
-              duration_ms: p.duration_ms,
-            })),
-          );
-          answersRecorded = pairs.length;
-        }
-
-        if (fullTranscript && saveTranscript) {
-          try {
-            await sessionTranscriptsDB.create({
-              session_id: session.session_id,
-              user_id: userId,
-              transcript: fullTranscript,
-              utterances,
-            });
-          } catch (err) {
-            console.error("[useLiveCopilot] Failed to save transcript:", err);
-          }
-        }
+        const result = await finalizeSessionApi({
+          session_id: session.session_id,
+          terminal_reason: "USER_ENDED",
+          answers: pairs.map((p, index) => ({
+            question_index: index,
+            question: p.question,
+            answer: p.answer,
+            duration_ms: p.duration_ms,
+          })),
+          transcript:
+            fullTranscript && saveTranscript
+              ? { content: fullTranscript, utterances }
+              : null,
+          metrics: {
+            credits_used: session.credits_consumed,
+            model_used: dbModel,
+            filler_words: session.filler_count,
+            avg_wpm: session.current_wpm,
+            hints_used: overlay.hint_history.length,
+            answers_generated: pairs.length,
+            questions_asked: Math.max(questionCount, pairs.length),
+            notes: saveTranscript && fullTranscript ? fullTranscript : null,
+          },
+        });
+        answersRecorded = result.already_terminal ? 0 : pairs.length;
 
         toast.success("Session saved");
         notifySessionsChanged();

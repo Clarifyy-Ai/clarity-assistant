@@ -47,6 +47,7 @@ interface SessionStore extends ActiveSessionState {
   tickElapsed: () => void;
   tickQuestionElapsed: () => void;
   resetQuestionElapsed: () => void;
+  setElapsedSeconds: (seconds: number) => void;
 
   // Advanced metrics (optional now, but matches analytics schema). [file:1][file:3]
   setWpmSeries: (points: WPMDataPoint[]) => void;
@@ -170,6 +171,9 @@ export const useSessionStore = create<SessionStore>()(
       })),
 
     resetQuestionElapsed: () => set({ question_elapsed_seconds: 0 }),
+
+    setElapsedSeconds: (seconds) =>
+      set({ elapsed_seconds: Math.max(0, Math.floor(seconds)) }),
 
     setWpmSeries: (points) => set({ wpm_series: points } as any),
     setFillerOccurrences: (occurrences) =>

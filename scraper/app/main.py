@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -55,7 +56,19 @@ async def lifespan(app: FastAPI):
 
     factory_settings = get_factory_settings()
     # Bank-only / deterministic jobs must still run when AI keys are absent.
-    start_factory_worker = settings.paper_factory_embedded_worker
+    # Test and local health checks may intentionally use placeholder credentials.
+    # Do not let a background worker make the whole FastAPI lifespan fail because
+    # the Supabase SDK rejects those credentials before any job is processed.
+    service_key_is_jwt = bool(
+        re.match(
+            r"^[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*$",
+            settings.supabase_service_role_key,
+        )
+    )
+    start_factory_worker = (
+        settings.paper_factory_embedded_worker
+        and service_key_is_jwt
+    )
     if start_factory_worker:
         background_tasks.append(
             asyncio.create_task(
@@ -71,7 +84,9 @@ async def lifespan(app: FastAPI):
 
     # Document intelligence embedded worker — only when enabled and secret present.
     start_document_worker = (
-        settings.document_worker_embedded and bool(settings.internal_auth_secret)
+        settings.document_worker_embedded
+        and bool(settings.internal_auth_secret)
+        and service_key_is_jwt
     )
     if start_document_worker:
         try:

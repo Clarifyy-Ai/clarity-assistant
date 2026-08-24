@@ -16,9 +16,16 @@ from app.shared.algorithm_catalog import (
 
 Difficulty = Literal["EASY", "MEDIUM", "HARD"]
 DIFFICULTIES: tuple[Difficulty, ...] = ("EASY", "MEDIUM", "HARD")
+QuestionSourceType = Literal[
+    "official_verified",
+    "verified_public_source",
+    "approved_bank",
+    "generated_practice",
+    "ai_generated_practice",
+]
 
-GENERATION_POLICY_VERSION = "gov_paper_v2_python_factory"
-ALGORITHM_VERSION = "syllabus_topic_weighted_v2"
+GENERATION_POLICY_VERSION = paper_blueprint_version()
+ALGORITHM_VERSION = paper_blueprint_version()
 
 AI_PAPER_DISCLAIMER = (
     "AI-generated practice paper based on the selected syllabus, pattern, and "
@@ -203,7 +210,9 @@ class PaperQuestion:
     explanation: str = ""
     marks_positive: float = 1.0
     marks_negative: float = 0.0
-    source_class: Literal["bank", "generated", "previous_year"] = "generated"
+    source_class: Literal["bank", "generated", "deterministic", "previous_year"] = "generated"
+    source_type: QuestionSourceType = "generated_practice"
+    language: str = "en"
     question_id: str | None = None
     quality_score: float = 0.0
 
@@ -240,6 +249,19 @@ class PaperResult:
         return len(self.questions) == self.blueprint.total_questions
 
     def provenance_json(self) -> dict[str, Any]:
+        deterministic_questions = sum(
+            1 for question in self.questions if question.source_class == "deterministic"
+        )
+        source_mix: dict[str, int] = {}
+        for question in self.questions:
+            source = (
+                "approved_bank"
+                if question.source_class == "bank"
+                else "generated_practice"
+                if question.source_class == "deterministic"
+                else "ai_generated_practice"
+            )
+            source_mix[source] = source_mix.get(source, 0) + 1
         return {
             "generator": "python_paper_factory",
             "generation_policy_version": GENERATION_POLICY_VERSION,
@@ -249,6 +271,8 @@ class PaperResult:
             "paper_blueprint_version": paper_blueprint_version(),
             "bank_questions": self.bank_count,
             "ai_questions": self.generated_count,
+            "deterministic_questions": deterministic_questions,
+            "source_mix": source_mix,
             "ai_calls": self.ai_calls,
             "rejected_candidates": self.rejected_count,
             "rejection_reasons": self.rejection_reasons,

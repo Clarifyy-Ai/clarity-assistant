@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
@@ -21,10 +21,6 @@ import {
   razorpayPaiseForPack,
 } from "@/lib/billing/priceCalculator";
 
-import {
-  clearPendingPlan,
-  isPaidSignupPlan,
-} from "@/lib/billing/pendingPlan";
 import {
   openRazorpayCheckout,
   toPaymentUserFacingError,
@@ -101,10 +97,11 @@ function razorpayProductForPlan(planId: string): RazorpayProductType | null {
   return null;
 }
 
+/** Pack ids are already Edge catalog ids (`credits_*`). */
 function razorpayProductForPack(packId: string): RazorpayProductType | null {
-  if (packId === "pack_50") return "credits_50";
-  if (packId === "pack_150") return "credits_150";
-  if (packId === "pack_500") return "credits_500";
+  if (packId === "credits_50" || packId === "pack_50") return "credits_50";
+  if (packId === "credits_150" || packId === "pack_150") return "credits_150";
+  if (packId === "credits_500" || packId === "pack_500") return "credits_500";
   return null;
 }
 
@@ -127,7 +124,6 @@ export default function SettingsBilling(): JSX.Element {
   const profile = useAuthStore((state) => state.profile);
   const planId = useAuthStore((state) => state.planId);
   const refreshCredits = useAuthStore((state) => state.refreshCredits);
-  const loadProfile = useAuthStore((state) => state.loadProfile);
 
   const credits = useCredits();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -140,13 +136,39 @@ export default function SettingsBilling(): JSX.Element {
   const [checkoutPhase, setCheckoutPhase] = useState<CheckoutPhase | null>(null);
   /** Sum of debit amounts this calendar month; null when unknown / N/A. */
   const [creditsUsedThisPeriod, setCreditsUsedThisPeriod] = useState<number | null>(null);
-  const upgradeCheckoutStartedRef = useRef(false);
+  /** Sync lock so double-click before React re-render cannot start two checkouts. */
+  const checkoutLockRef = useRef(false);
 
   const effectivePlanId = (planId as PlanId) || "free";
   const currentPlan = PLANS[effectivePlanId] ?? PLANS.free;
   const currentPlanLabel = getPlanDisplayName(effectivePlanId);
+  const checkoutBusy = Boolean(razorpayLoading);
 
-  async function reloadBillingState(): Promise<void> {
+  const loadPeriodUsage = useCallback(async (): Promise<void> => {
+    if (!user?.id) {
+      setCreditsUsedThisPeriod(null);
+      return;
+    }
+    try {
+      const monthStart = new Date();
+      monthStart.setDate(1);
+      monthStart.setHours(0, 0, 0, 0);
+
+      const rows = await creditsDB.listByUserId(user.id, 200);
+      const used = rows
+        .filter((tx) => {
+          const created = new Date(tx.created_at).getTime();
+          return created >= monthStart.getTime() && (tx.amount ?? 0) < 0;
+        })
+        .reduce((sum, tx) => sum + Math.abs(tx.amount ?? 0), 0);
+
+      setCreditsUsedThisPeriod(used);
+    } catch {
+      setCreditsUsedThisPeriod(null);
+    }
+  }, [user?.id]);
+
+  const reloadBillingState = useCallback(async (): Promise<void> => {
     if (!user?.id) {
       setSubscription(null);
       setLoadingSub(false);
@@ -157,89 +179,44 @@ export default function SettingsBilling(): JSX.Element {
     setSubError(null);
 
     try {
+      // One pass: subscription + credits refresh (avoid overlapping profile storms).
       const sub = await getUserSubscription(user.id);
       setSubscription(sub);
-      await Promise.all([refreshCredits(), loadProfile()]);
+      await refreshCredits();
+      await loadPeriodUsage();
     } catch (error) {
       console.error("[SettingsBilling] Failed to load billing details:", error);
       setSubError("Could not load billing details. Please refresh.");
     } finally {
       setLoadingSub(false);
     }
-  }
+  }, [user?.id, refreshCredits, loadPeriodUsage]);
 
+  // Mount / user change only — do not re-run when callback identities churn.
   useEffect(() => {
     void reloadBillingState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: user.id only
   }, [user?.id]);
-
-  useEffect(() => {
-    if (!user?.id) {
-      setCreditsUsedThisPeriod(null);
-      return;
-    }
-
-    let cancelled = false;
-
-    async function loadPeriodUsage(): Promise<void> {
-      try {
-        const monthStart = new Date();
-        monthStart.setDate(1);
-        monthStart.setHours(0, 0, 0, 0);
-
-        const rows = await creditsDB.listByUserId(user!.id, 200);
-        const used = rows
-          .filter((tx) => {
-            const created = new Date(tx.created_at).getTime();
-            return created >= monthStart.getTime() && (tx.amount ?? 0) < 0;
-          })
-          .reduce((sum, tx) => sum + Math.abs(tx.amount ?? 0), 0);
-
-        if (!cancelled) setCreditsUsedThisPeriod(used);
-      } catch {
-        if (!cancelled) setCreditsUsedThisPeriod(null);
-      }
-    }
-
-    void loadPeriodUsage();
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id, credits.balance]);
 
   useEffect(() => {
     const checkoutStatus = searchParams.get("checkout");
     const legacySuccess = searchParams.get("success");
     const legacyCanceled = searchParams.get("canceled");
-    const upgradePlan = searchParams.get("upgrade");
+    if (!checkoutStatus && !legacySuccess && !legacyCanceled) return;
 
     if (checkoutStatus === "success" || legacySuccess === "1") {
       // Query-string return is not proof of payment. Refresh only; do not claim success.
       setSearchParams({}, { replace: true });
       void reloadBillingState();
-      void refreshCredits();
       return;
     }
 
     if (checkoutStatus === "cancelled" || legacyCanceled === "1") {
       toast.info("Checkout was cancelled. No payment was taken.");
       setSearchParams({}, { replace: true });
-      return;
     }
-
-    if (
-      isPaidSignupPlan(upgradePlan) &&
-      !upgradeCheckoutStartedRef.current
-    ) {
-      upgradeCheckoutStartedRef.current = true;
-      clearPendingPlan();
-      setSearchParams({}, { replace: true });
-
-      const product = razorpayProductForPlan(upgradePlan) ?? "pro_monthly";
-      void handleRazorpayCheckout(product).catch(() => {
-        upgradeCheckoutStartedRef.current = false;
-      });
-    }
-  }, [searchParams, setSearchParams, refreshCredits]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run on query change only
+  }, [searchParams, setSearchParams]);
 
   const canonicalStatus = resolveCanonicalBillingStatus(
     profile?.subscription_status,
@@ -269,8 +246,8 @@ export default function SettingsBilling(): JSX.Element {
   );
 
   async function handleRazorpayCheckout(productType: RazorpayProductType): Promise<void> {
-    if (razorpayLoading) return;
-
+    if (checkoutLockRef.current || razorpayLoading) return;
+    checkoutLockRef.current = true;
     setRazorpayLoading(productType);
     setCheckoutPhase("creating");
     try {
@@ -282,7 +259,6 @@ export default function SettingsBilling(): JSX.Element {
         onReady: () => setCheckoutPhase("processing"),
         onSuccess: () => {
           toast.success("Payment completed");
-          void credits.refresh();
           void reloadBillingState();
         },
       });
@@ -291,6 +267,7 @@ export default function SettingsBilling(): JSX.Element {
       toast.error(checkoutErrorMessage(error));
       throw error;
     } finally {
+      checkoutLockRef.current = false;
       setRazorpayLoading(null);
       setCheckoutPhase(null);
     }
@@ -361,6 +338,7 @@ export default function SettingsBilling(): JSX.Element {
               size="sm"
               onClick={() => void handleUpgrade("pro")}
               loading={razorpayLoading === "pro_monthly"}
+              disabled={checkoutBusy}
               className="shrink-0"
             >
               <RefreshCw className="w-3.5 h-3.5 mr-1" />
@@ -439,7 +417,7 @@ export default function SettingsBilling(): JSX.Element {
                   size="sm"
                   onClick={() => void handleUpgrade("pro")}
                   loading={razorpayLoading === "pro_monthly"}
-                  disabled={false}
+                  disabled={checkoutBusy}
                 >
                   <ArrowUpRight className="w-3.5 h-3.5 mr-1" />
                   {checkoutBusyLabel(razorpayLoading, checkoutPhase, "pro_monthly", "Upgrade to Pro")}
@@ -554,6 +532,7 @@ export default function SettingsBilling(): JSX.Element {
                       )
                 }
                 loading={Boolean(product && razorpayLoading === product)}
+                disabled={checkoutBusy}
               />
             );
           })}
@@ -583,6 +562,7 @@ export default function SettingsBilling(): JSX.Element {
             <Button
               size="sm"
               loading={razorpayLoading === "pro_monthly"}
+              disabled={checkoutBusy}
               onClick={() => void handleUpgrade("pro")}
             >
               {checkoutBusyLabel(razorpayLoading, checkoutPhase, "pro_monthly", "Pro — one-time (Razorpay)")}
@@ -591,6 +571,7 @@ export default function SettingsBilling(): JSX.Element {
               size="sm"
               variant="secondary"
               loading={razorpayLoading === "enterprise_monthly"}
+              disabled={checkoutBusy}
               onClick={() => void handleUpgrade("enterprise")}
             >
               {checkoutBusyLabel(razorpayLoading, checkoutPhase, "enterprise_monthly", "Max — one-time (Razorpay)")}
@@ -599,6 +580,7 @@ export default function SettingsBilling(): JSX.Element {
               size="sm"
               variant="secondary"
               loading={razorpayLoading === "credits_150"}
+              disabled={checkoutBusy}
               onClick={() => void handleRazorpayCheckout("credits_150").catch(() => undefined)}
             >
               {checkoutBusyLabel(razorpayLoading, checkoutPhase, "credits_150", "150 credits (one-time)")}
@@ -607,6 +589,7 @@ export default function SettingsBilling(): JSX.Element {
               size="sm"
               variant="secondary"
               loading={razorpayLoading === "credits_500"}
+              disabled={checkoutBusy}
               onClick={() => void handleRazorpayCheckout("credits_500").catch(() => undefined)}
             >
               {checkoutBusyLabel(razorpayLoading, checkoutPhase, "credits_500", "500 credits (one-time)")}
@@ -665,7 +648,7 @@ export default function SettingsBilling(): JSX.Element {
                           variant="secondary"
                           size="xs"
                           loading={Boolean(packProduct && razorpayLoading === packProduct)}
-                          disabled={false}
+                          disabled={checkoutBusy}
                           onClick={() => void handleBuyCredits(pack.id)}
                         >
                           {checkoutBusyLabel(
@@ -729,7 +712,7 @@ export default function SettingsBilling(): JSX.Element {
                   size="sm"
                   className="w-full mt-auto"
                   loading={Boolean(packProduct && razorpayLoading === packProduct)}
-                  disabled={false}
+                  disabled={checkoutBusy}
                   onClick={() => void handleBuyCredits(pack.id)}
                 >
                   <CreditCard className="w-3.5 h-3.5 mr-1" />

@@ -88,7 +88,15 @@ export function scorePracticeAnswers(
   const qualityClasses = classifySessionAnswers(
     answers.map((a) => ({ question: a.question, answer: a.answer })),
   );
-  const allBad = qualityClasses.every((c) => c !== "VALID");
+  const hasSubstantiveAnswer = answers.some(
+    (answer, index) =>
+      wordCount(answer.answer) >= 15 &&
+      qualityClasses[index] !== "EMPTY" &&
+      qualityClasses[index] !== "NON_RESPONSIVE" &&
+      qualityClasses[index] !== "GIBBERISH",
+  );
+  const allBad =
+    qualityClasses.every((c) => c !== "VALID") && !hasSubstantiveAnswer;
   if (allBad) {
     const labels = [...new Set(qualityClasses.map(qualityClassLabel))];
     return {
@@ -104,19 +112,38 @@ export function scorePracticeAnswers(
 
   const lengths = answers.map((a) => wordCount(a.answer));
   const avgWords = lengths.reduce((s, n) => s + n, 0) / lengths.length;
-  const validCount = qualityClasses.filter((c) => c === "VALID").length;
+  const validCount = qualityClasses.filter(
+    (c, index) =>
+      c === "VALID" ||
+      (hasSubstantiveAnswer &&
+        wordCount(answers[index]?.answer) >= 15 &&
+        c !== "EMPTY" &&
+        c !== "NON_RESPONSIVE" &&
+        c !== "GIBBERISH"),
+  ).length;
 
   const communication = clamp(
     avgWords >= 80 ? 75 : avgWords >= 40 ? 55 : avgWords >= 15 ? 35 : 15,
   );
 
-  const starHits = answers.filter((a, i) => qualityClasses[i] === "VALID" && hasStar(a.answer)).length;
+  const starHits = answers.filter((a, i) =>   (qualityClasses[i] === "VALID" ||
+    (hasSubstantiveAnswer &&
+      wordCount(a.answer) >= 15 &&
+      qualityClasses[i] !== "EMPTY" &&
+      qualityClasses[i] !== "NON_RESPONSIVE" &&
+      qualityClasses[i] !== "GIBBERISH")) &&
+  hasStar(a.answer)).length;
   const starRatio = validCount > 0 ? starHits / validCount : 0;
   // No artificial +40 baseline — quality comes from STAR + substance among valid answers.
   const answerQuality = clamp(starRatio * 70 + Math.min(25, avgWords / 8));
 
   const keywordHits = answers.filter((a, i) =>
-    qualityClasses[i] === "VALID" &&
+    (qualityClasses[i] === "VALID" ||
+      (hasSubstantiveAnswer &&
+        wordCount(a.answer) >= 15 &&
+        qualityClasses[i] !== "EMPTY" &&
+        qualityClasses[i] !== "NON_RESPONSIVE" &&
+        qualityClasses[i] !== "GIBBERISH")) &&
     /\b(api|system|database|latency|scale|react|python|sql|trade-?off|metric)\b/i.test(a.answer),
   ).length;
   const relevanceAvg =

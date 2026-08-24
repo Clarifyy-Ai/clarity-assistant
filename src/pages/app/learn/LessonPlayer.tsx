@@ -24,18 +24,24 @@ export default function LessonPlayerPage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const [lesson, setLesson] = useState<Lesson | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     if (!lessonId || !user?.id) return;
-    const { data, error } = await supabase.from("learning_lessons").select("*").eq("id", lessonId).maybeSingle();
-    if (error) toast.error(error.message);
+    const { data, error } = await supabase
+      .from("learning_lessons")
+      .select("id,title,lesson_type,content_text,resource_url,module_id,license_type,source")
+      .eq("id", lessonId)
+      .maybeSingle();
+    if (error) { toast.error("Lesson could not be loaded."); return; }
     setLesson(data as Lesson | null);
     if (data) {
-      await supabase.from("lesson_progress").upsert({
+      const { error: progressError } = await supabase.from("lesson_progress").upsert({
         user_id: user.id,
         lesson_id: lessonId,
         last_accessed: new Date().toISOString(),
       });
+      if (progressError) toast.error("Your lesson access could not be saved.");
     }
   }, [lessonId, user?.id]);
 
@@ -45,14 +51,17 @@ export default function LessonPlayerPage() {
 
   async function complete() {
     if (!user?.id || !lessonId) return;
-    await supabase.from("lesson_progress").upsert({
-      user_id: user.id,
-      lesson_id: lessonId,
-      last_accessed: new Date().toISOString(),
-      completed_at: new Date().toISOString(),
-    });
-    toast.success("Lesson marked complete.");
-    navigate(`/app/learn/${courseId}`);
+    setSaving(true);
+    try {
+      const { data, error } = await supabase.rpc("complete_learning_lesson", { p_lesson_id: lessonId });
+      if (error || !data) throw error ?? new Error("Completion was not persisted.");
+      toast.success("Lesson marked complete.");
+      void navigate(`/app/learn/${courseId}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Lesson completion could not be saved.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -83,7 +92,7 @@ export default function LessonPlayerPage() {
           </a>
         )}
         <div className="mt-6 flex flex-wrap gap-2">
-          <Button onClick={() => void complete()}>Mark complete</Button>
+          <Button loading={saving} disabled={saving || !lesson} onClick={() => void complete()}>Mark complete</Button>
           <Link to={`/app/learn/${courseId}`}>
             <Button variant="outline">Back to course</Button>
           </Link>

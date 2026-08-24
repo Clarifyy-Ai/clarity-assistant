@@ -49,6 +49,10 @@ export default function SettingsSecurity() {
   const verifiedTotp = factors.find((f) => f.factor_type === "totp" && f.status === "verified");
 
   async function handleChangePassword() {
+    if (!currentPw) {
+      toast.error("Enter your current password.");
+      return;
+    }
     if (!newPw || newPw.length < 8) {
       toast.error("Password must be at least 8 characters.");
       return;
@@ -60,6 +64,14 @@ export default function SettingsSecurity() {
 
     setSaving(true);
     try {
+      const { data: session } = await supabase.auth.getSession();
+      const email = session.session?.user.email;
+      if (!email) throw new Error("Your session has expired. Please sign in again.");
+      const { error: verifyError } = await supabase.auth.signInWithPassword({
+        email,
+        password: currentPw,
+      });
+      if (verifyError) throw new Error("Current password is incorrect.");
       const { error } = await supabase.auth.updateUser({ password: newPw });
       if (error) throw error;
       toast.success("Password updated successfully");

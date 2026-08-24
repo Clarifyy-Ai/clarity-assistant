@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { toast } from "sonner";
 import { BookOpen } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -25,30 +24,37 @@ export default function LearningHubPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [progress, setProgress] = useState<Record<string, number>>({});
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    void (async () => {
-      try {
+  async function load() {
+    setLoaded(false);
+    setError(null);
+    try {
       const { data, error } = await supabase
         .from("learning_courses")
         .select("id,slug,title,description,duration_hours")
         .eq("publish_status", "published")
         .order("title");
-      if (error) toast.error(error.message);
+      if (error) throw error;
       setCourses((data as Course[]) ?? []);
       if (!user?.id) return;
-      const { data: enrolls } = await supabase
+      const { data: enrolls, error: enrollError } = await supabase
         .from("course_enrollments")
         .select("course_id,percentage")
         .eq("user_id", user.id);
+      if (enrollError) throw enrollError;
       const map: Record<string, number> = {};
       for (const row of enrolls ?? []) map[row.course_id as string] = Number(row.percentage ?? 0);
       setProgress(map);
-      } finally {
-        setLoaded(true);
-      }
-    })();
-  }, [user?.id]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Courses could not be loaded.");
+      setCourses([]);
+    } finally {
+      setLoaded(true);
+    }
+  }
+
+  useEffect(() => { void load(); }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isPreview = loaded && courses.length === 0;
 
@@ -63,7 +69,10 @@ export default function LearningHubPage() {
             : "Original Clarify courses. This is not a third-party LMS and not an official certification program."
         }
       />
-      {isPreview ? (
+      {error && (
+        <EmptyState title="Learning Hub unavailable" description={error} actionLabel="Retry" onAction={() => void load()} />
+      )}
+      {!error && isPreview ? (
         <EmptyState
           icon={BookOpen}
           title="No published courses yet"
@@ -71,7 +80,7 @@ export default function LearningHubPage() {
           actionLabel={isAdmin ? "Create a course" : undefined}
           onAction={isAdmin ? () => navigate("/app/admin/learning") : undefined}
         />
-      ) : (
+      ) : !error ? (
       <div className={STACK_GRID}>
         {courses.map((course) => (
           <Card key={course.id} className="flex min-w-0 flex-col">
@@ -85,7 +94,7 @@ export default function LearningHubPage() {
           </Card>
         ))}
       </div>
-      )}
+      ) : null}
     </div>
   );
 }

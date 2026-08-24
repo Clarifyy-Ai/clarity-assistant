@@ -565,43 +565,6 @@ Deno.serve(async (req: Request) => {
     conversationId = created.id as string;
   }
 
-  // Persist user message
-  const { data: userMsg, error: userMsgErr } = await db
-    .from("coach_messages")
-    .insert({
-      conversation_id: conversationId,
-      session_id: body.session_id,
-      user_id: user.id,
-      role: "user",
-      content: body.message,
-      operation_id: operationId,
-      source: null,
-      status: "complete",
-    })
-    .select("id")
-    .single();
-
-  if (userMsgErr || !userMsg?.id) {
-    console.error("[ai-coach-chat] insert user message failed", userMsgErr);
-    return json(corsHeaders, 500, {
-      success: false,
-      error: "Could not save message.",
-      code: "DB_ERROR",
-      correlation_id: correlationId,
-    });
-  }
-
-  // Load history excluding the message we just inserted (or include prior only)
-  const { data: historyRows } = await db
-    .from("coach_messages")
-    .select("id, role, content")
-    .eq("conversation_id", conversationId)
-    .neq("id", userMsg.id)
-    .order("created_at", { ascending: true })
-    .limit(HISTORY_LIMIT);
-
-  const history = (historyRows ?? []) as MessageRow[];
-
   const idempotencyKey = getIdempotencyKey(req);
   const creditResult = await deductCreditsAtomic({
     userId: user.id,
@@ -639,6 +602,50 @@ Deno.serve(async (req: Request) => {
       correlation_id: correlationId,
     });
   }
+
+  // Persist user message only after the credit reservation succeeds.
+  const { data: userMsg, error: userMsgErr } = await db
+    .from("coach_messages")
+    .insert({
+      conversation_id: conversationId,
+      session_id: body.session_id,
+      user_id: user.id,
+      role: "user",
+      content: body.message,
+      operation_id: operationId,
+      source: null,
+      status: "complete",
+    })
+    .select("id")
+    .single();
+
+  if (userMsgErr || !userMsg?.id) {
+    console.error("[ai-coach-chat] insert user message failed", userMsgErr);
+    await refundCredits({
+      userId: user.id,
+      cost: CREDIT_COST,
+      reason: "ai_coach_chat user message persistence failed",
+      sessionId: body.session_id,
+    });
+    return json(corsHeaders, 500, {
+      success: false,
+      error: "Could not save message.",
+      code: "DB_ERROR",
+      correlation_id: correlationId,
+    });
+  }
+
+  // Load history excluding the message we just inserted (or include prior only)
+  const { data: historyRows } = await db
+    .from("coach_messages")
+    .select("id, role, content")
+    .eq("conversation_id", conversationId)
+    .neq("id", userMsg.id)
+    // Fetch the newest bounded window, then restore chronological order for the model.
+    .order("created_at", { ascending: false })
+    .limit(HISTORY_LIMIT);
+
+  const history = ((historyRows ?? []) as MessageRow[]).reverse();
 
   const model = sanitizeModel(body.model);
   const systemPrompt = `${BASE_SYSTEM_PROMPT}\n\n${buildToneStyleSystemAddon(
@@ -808,6 +815,9 @@ Deno.serve(async (req: Request) => {
       };
 
       const runFallbackChain = async (): Promise<boolean> => {
+        const recentHistory = history
+          .map((item) => `${item.role === "coach" ? "Coach" : "Candidate"}: ${item.content}`)
+          .join("\n");
         const pythonCoach = await callPythonProcess({
           operation: "practice_coach",
           operationId: `coach:${operationId}`,
@@ -816,7 +826,9 @@ Deno.serve(async (req: Request) => {
             operation_type: "coach_chat",
             question: body.context.current_question,
             message: body.message,
-            transcript: body.context.recent_transcript,
+            transcript: [body.context.recent_transcript, recentHistory]
+              .filter(Boolean)
+              .join("\n"),
             resume_context: body.context.resume_context,
           },
         });

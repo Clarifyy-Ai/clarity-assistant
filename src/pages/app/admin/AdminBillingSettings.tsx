@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { toast } from "sonner";
 import { Settings2 } from "lucide-react";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { toAdminUserMessage } from "@/lib/admin/adminErrors";
 
 type BillingSettings = {
   referral_discount_percent: number;
@@ -18,30 +20,21 @@ type BillingSettings = {
   credits_500_inr_paise: number;
 };
 
-const defaults: BillingSettings = {
-  referral_discount_percent: 50,
-  referrer_credit_reward: 25,
-  referee_credit_reward: 25,
-  razorpay_enabled: true,
-  pro_monthly_inr_paise: 249900,
-  enterprise_monthly_inr_paise: 679900,
-  credits_50_inr_paise: 69900,
-  credits_150_inr_paise: 189900,
-  credits_500_inr_paise: 599900,
-};
-
 export default function AdminBillingSettings() {
-  const [settings, setSettings] = useState<BillingSettings>(defaults);
+  const [settings, setSettings] = useState<BillingSettings | null>(null);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("billing_settings")
         .select("*")
         .eq("id", 1)
         .maybeSingle();
-      if (data) {
+      if (error) {
+        setLoadError(toAdminUserMessage(error, undefined, "AdminBillingSettings.load"));
+      } else if (data) {
         setSettings({
           referral_discount_percent: data.referral_discount_percent,
           referrer_credit_reward: data.referrer_credit_reward,
@@ -53,11 +46,14 @@ export default function AdminBillingSettings() {
           credits_150_inr_paise: data.credits_150_inr_paise,
           credits_500_inr_paise: data.credits_500_inr_paise,
         });
+      } else {
+        setLoadError("Billing settings are unavailable.");
       }
     })();
   }, []);
 
   async function save() {
+    if (!settings) return;
     setSaving(true);
     const { error } = await supabase
       .from("billing_settings")
@@ -86,6 +82,7 @@ export default function AdminBillingSettings() {
     key: keyof BillingSettings,
     type: "number" | "checkbox" = "number",
   ) {
+    if (!settings) return null;
     if (type === "checkbox") {
       return (
         <label className="flex items-center gap-2 text-sm">
@@ -123,7 +120,9 @@ export default function AdminBillingSettings() {
         icon={<Settings2 className="w-5 h-5 text-red-400" />}
       />
 
-      <Card className="p-4 space-y-4">
+      {loadError && <InlineErrorRetry message={loadError} onRetry={() => window.location.reload()} />}
+      {!settings && !loadError && <p className="text-sm text-muted-foreground">Loading billing settings…</p>}
+      {settings && <><Card className="p-4 space-y-4">
         <h3 className="font-semibold text-sm">Referral program</h3>
         {field("Referral discount on first purchase (%)", "referral_discount_percent")}
         {field("Credits for referrer", "referrer_credit_reward")}
@@ -142,6 +141,7 @@ export default function AdminBillingSettings() {
           {saving ? "Saving…" : "Save settings"}
         </Button>
       </Card>
+      </>}
     </div>
   );
 }

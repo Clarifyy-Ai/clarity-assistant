@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
     const jobId = typeof body?.jobId === "string" ? body.jobId.trim() : "";
     if (!isUuid(jobId)) return json(req, { success: false, error: safeError("VALIDATION_ERROR", "A valid jobId is required.", "validation", correlationId) }, 400);
     const { data: existing } = await db.from("document_processing_jobs")
-      .select("id, status, attempt_count, max_attempts")
+      .select("id, status, attempt_count, max_attempts, document_id")
       .eq("id", jobId).eq("owner_id", user.id).maybeSingle();
     if (!existing) return json(req, { success: false, error: safeError("JOB_NOT_FOUND", "Processing job not found.", "ownership", correlationId) }, 404);
     if (existing.status === "completed") return json(req, { success: true, idempotent: true, jobId, state: existing.status });
@@ -47,9 +47,18 @@ Deno.serve(async (req) => {
         updated_at: new Date().toISOString(),
       })
       .eq("id", jobId).eq("owner_id", user.id).eq("status", "failed_retryable")
-      .select("id, status, attempt_count, max_attempts").maybeSingle();
+      .select("id, status, attempt_count, max_attempts, document_id").maybeSingle();
     if (error) return json(req, { success: false, error: safeError("RETRY_FAILED", "Job could not be retried.", "retry", correlationId, true) }, 503);
     if (!job) return json(req, { success: true, idempotent: true, jobId, state: "queued" });
+
+    const documentId = job.document_id ?? existing.document_id;
+    if (documentId) {
+      await db.from("personal_library_documents").update({
+        processing_status: "queued",
+        processing_error: null,
+      }).eq("id", documentId).eq("owner_id", user.id);
+    }
+
     return json(req, { success: true, jobId: job.id, state: job.status, attemptCount: job.attempt_count, correlationId }, 202);
   } catch (error) {
     console.error("[retry-document-processing-job]", error);

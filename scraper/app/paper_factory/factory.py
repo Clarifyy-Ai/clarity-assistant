@@ -14,6 +14,10 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Sequence
 
 from app.core.logger import get_logger
+from app.gov_exams.deterministic_generate import (
+    PRACTICE_DISCLAIMER,
+    generate_practice_variants,
+)
 from app.paper_factory.ai import MCQGenerator
 from app.paper_factory.blueprint import (
     build_blueprint,
@@ -200,13 +204,48 @@ class PaperFactory:
                 for item in available:
                     if len(bank_selected[section.code]) >= section.question_count:
                         break
+                    item_source = item.source_type.strip().lower()
+                    if not item_source:
+                        legacy_source = item.source.strip().lower()
+                        item_source = (
+                            "official_verified"
+                            if legacy_source in {"official", "official_pyp", "pyp", "previous_year", "pyq"}
+                            else "approved_bank"
+                        )
+                    if "ai" in item_source or item_source in {
+                        "generated_practice",
+                        "ai_generated_practice",
+                        "generated",
+                    }:
+                        item_source = (
+                            "ai_generated_practice"
+                            if "ai" in item_source
+                            else "generated_practice"
+                        )
+                    if request.mode == "official_previous" and item_source not in {
+                        "official_verified",
+                        "verified_public_source",
+                        "approved_bank",
+                        "internal_question_bank",
+                        "admin_uploaded",
+                    }:
+                        continue
+                    # Content validators own the score — never invent verified=100 from provenance.
                     quality = score_assembled_question(
                         stem=item.question_text,
                         options=list(item.options),
                         correct_index=item.correct_index,
+                        source_confidence=0.7,
                     )
                     if quality < MIN_QUALITY_SCORE:
                         continue
+                    legacy_class = (
+                        "previous_year"
+                        if item_source == "official_verified"
+                        else "generated"
+                        if item_source in {"generated_practice", "ai_generated_practice"}
+                        else "bank"
+                    )
                     bank_selected[section.code].append(
                         PaperQuestion(
                             question_text=item.question_text,
@@ -218,7 +257,19 @@ class PaperFactory:
                             difficulty=item.difficulty or "MEDIUM",
                             marks_positive=blueprint.marks_per_question,
                             marks_negative=blueprint.negative_mark,
-                            source_class="bank",
+                            source_class=legacy_class,  # type: ignore[arg-type]
+                            source_type=(
+                                item_source
+                                if item_source in {
+                                    "official_verified",
+                                    "verified_public_source",
+                                    "approved_bank",
+                                    "generated_practice",
+                                    "ai_generated_practice",
+                                }
+                                else "approved_bank"
+                            ),
+                            language=blueprint.language,
                             question_id=item.id,
                             quality_score=quality,
                         )
@@ -233,51 +284,52 @@ class PaperFactory:
         if needed > 0:
             if self.settings.has_ai_provider:
                 await self._stage(on_stage, "generating_questions")
-                async with MCQGenerator(self.settings) as ai:
-                    report = await generate_for_slots(
-                        exam=exam,
-                        blueprint=blueprint,
-                        slots=outstanding,
-                        generator=ai,
-                        validator=validator,
-                        batch_size=self.settings.batch_size,
-                        max_repair_rounds=self.settings.max_repair_rounds,
-                        on_progress=on_progress,
+                try:
+                    async with MCQGenerator(self.settings) as ai:
+                        report = await generate_for_slots(
+                            exam=exam,
+                            blueprint=blueprint,
+                            slots=outstanding,
+                            generator=ai,
+                            validator=validator,
+                            batch_size=self.settings.batch_size,
+                            max_repair_rounds=self.settings.max_repair_rounds,
+                            on_progress=on_progress,
+                        )
+                except Exception as exc:
+                    log.warning(
+                        "paper_factory_ai_unavailable_using_deterministic_fallback",
+                        exam=exam.code,
+                        error=str(exc),
                     )
+                    report = None
 
-                if report.shortfalls:
-                    missing = sum(report.shortfalls.values())
-                    raise PaperFactoryError(
-                        "GENERATION_INCOMPLETE",
-                        f"Could not generate {missing} of {needed} questions after "
-                        f"{self.settings.max_repair_rounds + 1} rounds. "
-                        f"Top rejection reasons: {dict(report.reasons.most_common(4))}",
-                        retryable=True,
+                if report is None or report.shortfalls:
+                    # Provider failures/shortfalls must not make the product AI-only.
+                    # Fill only the unresolved blueprint slots with deterministic,
+                    # practice-labelled templates before declaring the paper incomplete.
+                    report = await self._fill_deterministic_slots(
+                        blueprint,
+                        bank_selected,
+                        report,
+                        seed=request.random_seed or request.job_id or "gov-paper",
                     )
             else:
-                # Bank-only path: shrink custom/adaptive papers; fail exact modes.
-                assembled_so_far = sum(len(v) for v in bank_selected.values())
-                allow_partial = request.mode in ("custom_mock", "adaptive")
-                if allow_partial and assembled_so_far >= 5:
-                    log.info(
-                        "paper_factory_bank_only_partial",
-                        exam=exam.code,
-                        bank=assembled_so_far,
-                        requested=blueprint.total_questions,
-                        missing=needed,
-                    )
-                    blueprint.total_questions = assembled_so_far
-                    blueprint.total_marks = (
-                        assembled_so_far * blueprint.marks_per_question
-                    )
-                    blueprint.paper_class = "custom_practice"
-                else:
+                # Deterministic practice is the no-provider fallback. Official
+                # previous-year mode remains exact and never fabricates content.
+                if request.mode == "official_previous":
                     raise PaperFactoryError(
                         "CONTENT_INSUFFICIENT",
-                        f"{needed} questions are missing and no AI provider is configured "
-                        f"for bank-only completion (have {assembled_so_far}).",
+                        f"{needed} official questions are missing and cannot be fabricated.",
                         retryable=False,
                     )
+                await self._fill_deterministic_slots(
+                    blueprint,
+                    bank_selected,
+                    None,
+                    seed=request.random_seed or request.job_id or "gov-paper",
+                )
+                blueprint.paper_class = "custom_practice"
 
         # ── Assemble in section order ─────────────────────────────────────────
         await self._stage(on_stage, "validating_questions")
@@ -291,7 +343,10 @@ class PaperFactory:
                 "Assembled paper failed hard constraints: " + "; ".join(errors[:5]),
             )
 
-        generated = [q for q in questions if q.source_class == "generated"]
+        generated = [
+            q for q in questions if q.source_class in ("generated", "deterministic")
+        ]
+        ai_generated = [q for q in generated if q.source_class == "generated"]
         quality = (
             round(sum(q.quality_score for q in questions) / len(questions), 2)
             if questions
@@ -302,7 +357,7 @@ class PaperFactory:
             questions=questions,
             job_id=request.job_id,
             quality_score=quality,
-            generated_count=len(generated),
+            generated_count=len(ai_generated),
             bank_count=bank_count,
             ai_calls=report.ai_calls if report else 0,
             rejected_count=report.rejected if report else 0,
@@ -355,6 +410,62 @@ class PaperFactory:
             paper_id=paper_id,
         )
         return result
+
+    async def _fill_deterministic_slots(
+        self,
+        blueprint: PaperBlueprint,
+        bank_selected: dict[str, list[PaperQuestion]],
+        report: Any,
+        *,
+        seed: str,
+    ) -> Any:
+        """Add validated, explicitly practice-labelled variants for open slots."""
+        for section in blueprint.sections:
+            current = len(bank_selected.get(section.code, []))
+            if report is not None:
+                current += sum(
+                    len(items)
+                    for key, items in report.accepted.items()
+                    if key.split("::", 1)[0] == section.code
+                )
+            needed = max(0, section.question_count - current)
+            if needed <= 0:
+                continue
+
+            variants = generate_practice_variants(
+                count=needed,
+                seed=f"{seed}:{section.code}",
+                section_code=section.code,
+                section_name=section.name,
+            )
+            for variant in variants:
+                score = score_assembled_question(
+                    stem=variant.question_text,
+                    options=list(variant.options),
+                    correct_index=variant.correct_index,
+                    explanation=variant.explanation,
+                )
+                if score < MIN_QUALITY_SCORE:
+                    continue
+                bank_selected[section.code].append(
+                    PaperQuestion(
+                        question_text=variant.question_text,
+                        options=list(variant.options),
+                        correct_index=variant.correct_index,
+                        section_code=section.code,
+                        subject=variant.subject,
+                        topic=variant.topic,
+                        difficulty=variant.difficulty,
+                        explanation=f"{variant.explanation} {PRACTICE_DISCLAIMER}",
+                        marks_positive=blueprint.marks_per_question,
+                        marks_negative=blueprint.negative_mark,
+                        source_class="deterministic",
+                        source_type="generated_practice",
+                        language=blueprint.language,
+                        quality_score=score,
+                    )
+                )
+        return report
 
     # ── internals ─────────────────────────────────────────────────────────────
 

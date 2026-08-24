@@ -76,6 +76,8 @@ Deno.serve(async (req) => {
   }
 
   const db = createServiceClient();
+  let claimedJobId: string | null = null;
+  let claimedWorkerId: string | null = null;
 
   try {
     const body = await req.json().catch(() => ({}));
@@ -203,6 +205,8 @@ Deno.serve(async (req) => {
       }, 202);
     }
 
+    claimedJobId = String(claimed.job.id);
+    claimedWorkerId = claimed.workerId;
     const result = await assembleClaimedPaperJob(db, claimed.job, claimed.workerId);
 
     if (result.ok) {
@@ -233,6 +237,25 @@ Deno.serve(async (req) => {
     }, result.status === "cancelled" ? 202 : (result.httpStatus ?? 500));
   } catch (err) {
     console.error("[process-paper-generation-job]", err);
+    if (claimedJobId && claimedWorkerId) {
+      const now = new Date().toISOString();
+      await db
+        .from("gov_paper_generation_jobs")
+        .update({
+          status: "failed_retryable",
+          progress_stage: "failed_retryable",
+          retryable: true,
+          error_code: "WORKER_EXCEPTION",
+          error_message: "Generation worker failed unexpectedly. Retry is available.",
+          worker_id: null,
+          lease_expires_at: null,
+          completed_at: null,
+          updated_at: now,
+        })
+        .eq("id", claimedJobId)
+        .eq("worker_id", claimedWorkerId)
+        .filter("status", "not.in", "(completed,cancelled,failed_permanent)");
+    }
     return json(req, { error: "Internal server error", code: "INTERNAL_ERROR" }, 500);
   }
 });

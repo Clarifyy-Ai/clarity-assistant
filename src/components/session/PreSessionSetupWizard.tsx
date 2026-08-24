@@ -657,20 +657,23 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     }
   }, [documentsLoading, documentsLoadError, resumes, jds, resumeId, jdId]);
 
+  const resumeRequired =
+    setupFieldRequirement(sessionCallType, "resume") === "REQUIRED";
+  const hasSelectedJd = Boolean(jdId);
   const documentBlocker =
-    documentsLoadError
+    documentsLoadError && (resumeRequired || hasSelectedJd)
       ? "Documents could not be loaded. Retry before continuing."
-      : documentsLoading && setupFieldRequirement(sessionCallType, "resume") === "REQUIRED"
+      : documentsLoading && (resumeRequired || hasSelectedJd)
         ? "Loading your documents…"
-        : setupFieldRequirement(sessionCallType, "resume") === "REQUIRED" && !resumeId
+        : resumeRequired && !resumeId
           ? "Resume is required"
-          : resumeId && !selectedResume && documentsHydrated.current
+          : resumeRequired && resumeId && !selectedResume && documentsHydrated.current
             ? "Select a resume you own before continuing."
-            : resumeParseStatus && !["ready", "completed", ""].includes(resumeParseStatus)
+            : resumeRequired && resumeParseStatus && !["ready", "completed", ""].includes(resumeParseStatus)
               ? "Resume is still processing"
-              : jdId && !selectedJd && documentsHydrated.current
-                ? "The selected job description is no longer available. Choose it again."
-                : jdParseStatus && !["ready", "completed", ""].includes(jdParseStatus)
+              : hasSelectedJd && !selectedJd && documentsHydrated.current
+                ? "Select a job description you own before continuing."
+                : hasSelectedJd && jdParseStatus && !["ready", "completed", ""].includes(jdParseStatus)
                   ? "Job description is still processing"
                   : null;
   const modelLock = smartRouting ? null : getModelLockReason(model, typedProfile?.plan_id);
@@ -1669,7 +1672,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 onChangeMic={devicePrecheck.changeMicDevice}
                 onPlaySpeaker={() => void devicePrecheck.runSpeakerCheck()}
                 onChangeSpeaker={devicePrecheck.changeSpeakerDevice}
-                onRecheckStt={() => void devicePrecheck.runSttCheck()}
+                onRecheckStt={() => void devicePrecheck.runSttCheck({ force: true })}
               />
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">

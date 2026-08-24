@@ -121,7 +121,7 @@ const MATRIX: Record<HybridOperation, Omit<RouteDecision, "operation" | "canUseP
   },
   // database cache → Python normalize → optional AI enrichment
   company_research: {
-    canCompleteDeterministically: false,
+    canCompleteDeterministically: true,
     canCompleteWithDatabase: true,
     isAiOptional: true,
     isAiRequired: false,

@@ -210,6 +210,11 @@ interface OverlayStore {
   setAnswerMode: (mode: "hint" | "full_answer") => void;
 
   navigateHintHistory: (direction: "prev" | "next") => void;
+  /** Hydrate hint history after live session refresh restore. */
+  restoreHintHistory: (
+    history: Array<{ question: string; hint: string; timestamp: number }>,
+    options?: { current_question?: string; current_hint?: string },
+  ) => void;
 
   setPosition: (position: OverlayPosition) => void;
   resetPosition: () => void;
@@ -758,6 +763,19 @@ export const useOverlayStore = create<OverlayStore>()(
             streaming_buffer: "",
           };
         }),
+
+      restoreHintHistory: (history, options) => {
+        const safe = Array.isArray(history) ? history : [];
+        const last = safe[safe.length - 1];
+        set({
+          hint_history: safe,
+          hint_history_index: safe.length > 0 ? safe.length - 1 : -1,
+          current_question: options?.current_question ?? last?.question ?? "",
+          current_hint: options?.current_hint ?? last?.hint ?? "",
+          hint_state: (options?.current_hint || last?.hint) ? ("ready" as HintState) : ("idle" as HintState),
+          questions_detected: Math.max(safe.length, 0),
+        });
+      },
 
       setPosition: (position) => set({ position }),
       resetPosition: () => set({ position: DEFAULT_POSITION }),

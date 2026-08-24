@@ -146,8 +146,7 @@ export function normalizeSearchQuery(raw: unknown): string {
     .normalize("NFC")
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
     .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, MAX_QUERY_LENGTH);
+    .trim();
 }
 
 export type QueryValidation =

@@ -70,6 +70,7 @@ async function handleRefundEvent(
   const paymentId =
     (refund?.payment_id as string | undefined) ??
     (payment?.id as string | undefined);
+  const refundId = (refund?.id as string | undefined) ?? paymentId;
   const orderId = payment?.order_id as string | undefined;
 
   if (!paymentId && !orderId) {
@@ -95,70 +96,37 @@ async function handleRefundEvent(
     });
   }
 
-  if (order.status === "refunded") {
-    return new Response(JSON.stringify({ received: true, duplicate: true }), {
-      status: 200,
-      headers: { ...headers, "Content-Type": "application/json" },
-    });
-  }
-
-  const nowIso = new Date().toISOString();
-  await db
-    .from("payment_orders")
-    .update({ status: "refunded" })
-    .eq("id", order.id);
-
   const catalogCredits = creditsForRazorpayProductType(order.product_type as string);
   const granted =
     typeof order.credits_granted === "number" && order.credits_granted > 0
       ? order.credits_granted
       : catalogCredits;
 
-  const { data: profile } = await db
-    .from("profiles")
-    .select("id, credits")
-    .eq("id", order.user_id)
-    .maybeSingle();
-
-  let clawed = 0;
-  if (profile) {
-    const decision = decideRefundClawback({
-      currentBalance: profile.credits ?? 0,
-      creditsGranted: granted,
-    });
-    if (decision.shouldClawback && decision.clawbackAmount > 0) {
-      const { data: updated } = await db
-        .from("profiles")
-        .update({
-          credits: (profile.credits ?? 0) - decision.clawbackAmount,
-          updated_at: nowIso,
-        })
-        .eq("id", profile.id)
-        .gte("credits", decision.clawbackAmount)
-        .select("credits")
-        .maybeSingle();
-
-      if (updated) {
-        clawed = decision.clawbackAmount;
-        await db.from("credit_transactions").insert({
-          user_id: profile.id,
-          action: "refund",
-          amount: -clawed,
-          balance_after: updated.credits,
-          description: `Razorpay refund clawback (${paymentId ?? orderId})`,
-          stripe_payment_id: `rzp_refund_${paymentId ?? orderId}`,
-          created_at: nowIso,
-        });
-      }
-    }
+  const { data: refundResult, error: refundError } = await db.rpc(
+    "apply_razorpay_refund",
+    {
+      p_order_id: order.id,
+      p_refund_key: refundId ?? orderId,
+      p_credits_granted: granted,
+    },
+  );
+  if (refundError) throw refundError;
+  const refundDecision = refundResult as
+    | { success?: boolean; code?: string; clawed?: number }
+    | null;
+  if (!refundDecision?.success) {
+    throw new Error(
+      `Razorpay refund application failed: ${refundDecision?.code ?? "UNKNOWN"}`,
+    );
   }
+  const clawed = Number(refundDecision.clawed ?? 0);
 
   opsLog({
     function_name: "razorpay-webhook",
     operation: String(event.event ?? "refund"),
     result: "ok",
     provider: "razorpay",
-    provider_event_id: paymentId ?? orderId,
+    provider_event_id: refundId ?? orderId,
     meta: { clawed, order_id: order.id },
   });
 

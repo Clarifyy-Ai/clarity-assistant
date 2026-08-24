@@ -1,5 +1,6 @@
 const DIFFICULTIES = new Set(["EASY", "MEDIUM", "HARD"]);
-const REVIEW_STATUSES = new Set(["unreviewed", "approved", "rejected"]);
+const REVIEW_STATUSES = new Set(["draft", "review_required", "unreviewed", "approved", "rejected", "archived"]);
+const QUESTION_TYPES = new Set(["MCQ", "MULTIPLE_SELECT", "TRUE_FALSE", "SHORT_ANSWER", "NUMERICAL"]);
 
 export type QualityQuestion = {
   question_text?: string | null;
@@ -54,14 +55,31 @@ export function optionLabelsIncludeAnswer(options: unknown, correctAnswer: strin
 
 export function validateQuestionQuality(question: QualityQuestion): QualityIssue[] {
   const issues: QualityIssue[] = [];
-  if (!String(question.question_text ?? "").trim()) {
+  const text = String(question.question_text ?? "");
+  if (!text.trim()) {
     issues.push({ code: "missing_question_text", message: "Question text is required." });
+  } else if (text.trim().length < 8 || text.length > 4000) {
+    issues.push({ code: "invalid_question_text_length", message: "Question text must be between 8 and 4000 characters." });
+  }
+  if ([...text].some((character) => {
+    const code = character.charCodeAt(0);
+    return (code >= 0 && code <= 8) || code === 11 || code === 12 ||
+      (code >= 14 && code <= 31) || code === 127;
+  })) {
+    issues.push({ code: "invalid_question_text_characters", message: "Question text contains unsupported control characters." });
   }
   const type = String(question.question_type ?? "MCQ").toUpperCase();
+  if (!QUESTION_TYPES.has(type)) {
+    issues.push({ code: "unsupported_question_type", message: "Question type is not supported." });
+  }
   const options = asLabeledOptions(question.options);
   if (type === "MCQ" || type === "TRUE_FALSE" || type === "MULTIPLE_SELECT") {
     if (options.length < 2) {
       issues.push({ code: "invalid_options", message: "At least two options are required." });
+    }
+    if (new Set(options.map((option) => option.label.toUpperCase())).size !== options.length ||
+        new Set(options.map((option) => option.text.toLowerCase())).size !== options.length) {
+      issues.push({ code: "duplicate_options", message: "Options must be unique." });
     }
     if (!optionLabelsIncludeAnswer(question.options, question.correct_answer)) {
       issues.push({ code: "invalid_correct_answer", message: "Correct answer must match an option." });

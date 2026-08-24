@@ -124,21 +124,25 @@ export function toPaymentUserFacingError(err: unknown): string {
   if (/localhost|127\.0\.0\.1|cors|failed to fetch|network/i.test(msg)) {
     return PAYMENT_UNAVAILABLE;
   }
-  if (
-    msg === CHECKOUT_PREPARE_ERROR ||
-    msg === PAYMENT_UNAVAILABLE ||
-    /checkout|payment|razorpay/i.test(msg)
-  ) {
-    return msg.includes("verification")
-      ? "Payment verification failed. Please try again."
-      : msg.length < 120 && !/http|stack|env|secret/i.test(msg)
-        ? msg
-        : PAYMENT_UNAVAILABLE;
-  }
+  if (msg.includes("verification")) return "Payment verification failed. Please try again.";
+  if (msg === CHECKOUT_PREPARE_ERROR || msg === PAYMENT_UNAVAILABLE) return msg;
   return PAYMENT_UNAVAILABLE;
 }
 
 let checkoutInFlight = false;
+/** Reuse the same idempotency key for a product+promo within this window (one Buy → one logical order). */
+const ORDER_KEY_TTL_MS = 300_000;
+const recentOrderKeys = new Map<string, { key: string; createdAt: number }>();
+
+function checkoutOrderKey(productType: RazorpayProductType, promoCode?: string): string {
+  const key = `${productType}:${(promoCode ?? "").trim().toUpperCase()}`;
+  const now = Date.now();
+  const existing = recentOrderKeys.get(key);
+  if (existing && now - existing.createdAt < ORDER_KEY_TTL_MS) return existing.key;
+  const generated = createIdempotencyKey(`razorpay-create-order:${productType}`);
+  recentOrderKeys.set(key, { key: generated, createdAt: now });
+  return generated;
+}
 
 export async function createRazorpayOrder(
   productType: RazorpayProductType,
@@ -174,9 +178,7 @@ export async function openRazorpayCheckout(options: {
     throw new Error("A checkout is already in progress.");
   }
   checkoutInFlight = true;
-  const orderKey = createIdempotencyKey(
-    `razorpay-create-order:${options.productType}`,
-  );
+  const orderKey = checkoutOrderKey(options.productType, options.promoCode);
 
   try {
     // Order first — never load checkout.js / open modal without a valid order.

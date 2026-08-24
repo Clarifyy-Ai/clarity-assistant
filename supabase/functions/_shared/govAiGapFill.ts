@@ -16,7 +16,12 @@ import {
   resolveCorrectIndex,
   validateSingleCorrectMcq,
 } from "./govMcqValidator.ts";
-import { MIN_BANK_QUESTION_QUALITY, scoreQuestionQuality } from "./govQualityScore.ts";
+import {
+  MIN_BANK_QUESTION_QUALITY,
+  QUALITY_ALGORITHM_VERSION,
+  scoreQuestionQuality,
+} from "./govQualityScore.ts";
+import { DEDUP_ALGORITHM_VERSION } from "./algorithmCatalog.ts";
 
 export const GAP_FILL_BATCH = 10;
 export const GAP_FILL_MAX_BATCHES = 16;
@@ -30,6 +35,7 @@ export type GapFillRow = {
   topic: string | null;
   difficulty: string | null;
   source: string | null;
+  source_type?: string | null;
   source_year: number | null;
   is_public: boolean | null;
   is_verified: boolean | null;
@@ -250,12 +256,19 @@ async function generateAndInsertBatch(args: {
       difficulty,
       exam_type: args.examType || null,
       source: "AI_GENERATED",
+      source_type: "ai_generated_practice",
       is_verified: false,
       is_public: false,
       uploaded_by: systemUserId,
       marks_positive: args.marksPositive,
       marks_negative: args.marksNegative,
       latex_present: /[=+\-*/^]/.test(text),
+      quality_score: quality.score,
+      quality_algorithm_version: QUALITY_ALGORITHM_VERSION,
+      duplicate_algorithm_version: DEDUP_ALGORITHM_VERSION,
+      validation_status: "valid",
+      generator_version: "gov_ai_gap_fill_v2",
+      generation_method: "ai_gap_fill",
     });
   }
 
@@ -267,7 +280,7 @@ async function generateAndInsertBatch(args: {
     .from("questions")
     .insert(inserts)
     .select(
-      "id, question_text, options, correct_answer, subject, topic, difficulty, source, source_year, is_public, is_verified",
+      "id, question_text, options, correct_answer, subject, topic, difficulty, source, source_type, source_year, is_public, is_verified",
     );
 
   if (error) {

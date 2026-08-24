@@ -150,8 +150,33 @@ async def process_job(
             },
         )
 
+    worker_id = f"http_{uuid.uuid4().hex[:12]}"
+    claimed = await asyncio.to_thread(repo.claim_job, body.job_id, worker_id)
+    if not claimed:
+        current = await asyncio.to_thread(repo.get_job, body.job_id)
+        if current and str(current.get("status") or "") in {"completed", "cancelled"}:
+            return ProcessJobResponse(
+                success=current["status"] == "completed",
+                job_id=body.job_id,
+                status=str(current["status"]),
+                paper_id=current.get("generated_paper_id"),
+                mock_test_id=current.get("mock_test_id"),
+                error_code=current.get("error_code"),
+                error_message=current.get("error_message"),
+            )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "JOB_NOT_CLAIMABLE",
+                "message": "Generation job is already being processed or is not Python-routed.",
+                "retryable": True,
+                "stage": "claim",
+                "correlation_id": correlation,
+            },
+        )
+
     result = await process_gov_exam_job(
-        job,
+        claimed,
         settings=settings,
         repo=repo,
         correlation_id=correlation,
@@ -212,8 +237,36 @@ async def build_paper(
             },
         )
 
+    # The durable job row is authoritative. Claim it before doing any work so
+    # concurrent HTTP retries cannot generate/publish the same paper twice.
+    worker_id = f"http_{uuid.uuid4().hex[:12]}"
+    claimed = await asyncio.to_thread(repo.claim_job, body.job_id, worker_id)
+    if not claimed:
+        current = await asyncio.to_thread(repo.get_job, body.job_id)
+        if current and str(current.get("status") or "") in {"completed", "cancelled"}:
+            return BuildPaperResponse(
+                success=current["status"] == "completed",
+                job_id=body.job_id,
+                status=str(current["status"]),
+                validation_status="completed" if current["status"] == "completed" else "cancelled",
+                missing_slots=0,
+                error_code=current.get("error_code"),
+                error_message=current.get("error_message"),
+                retryable=False,
+            )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "JOB_NOT_CLAIMABLE",
+                "message": "Generation job is already being processed or is not Python-routed.",
+                "retryable": True,
+                "stage": "claim",
+                "correlation_id": correlation,
+            },
+        )
+
     result = await process_gov_exam_job(
-        job,
+        claimed,
         settings=settings,
         repo=repo,
         correlation_id=correlation,

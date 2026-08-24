@@ -8,7 +8,6 @@ import { CheckCircle, Mic, Volume2, Settings2, Play, Square } from "lucide-react
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/userStore";
 import { useAudioStore } from "@/store/audioStore";
-import { supabase } from "@/lib/supabase/client";
 import { enumerateAudioDevices, enumerateAudioOutputDevices } from "@/lib/audio/audioCapture";
 import type { AudioDevice } from "@/types/audio.types";
 import { toast } from "sonner";
@@ -51,7 +50,7 @@ function resolveDeviceId(devices: AudioDevice[], preferred: string): string {
 }
 
 export default function SettingsAudio() {
-  const { user, profile, setProfile } = useAuthStore();
+  const { user, profile, updateProfile } = useAuthStore();
   const vadConfig = useAudioStore((s) => s.vad_config);
   const setVADConfig = useAudioStore((s) => s.setVADConfig);
   const setMicDeviceId = useAudioStore((s) => s.setMicDeviceId);
@@ -67,7 +66,6 @@ export default function SettingsAudio() {
   const savedInputId =
     (typeof overlaySettings.audio_input_device === "string" && overlaySettings.audio_input_device) ||
     profile?.audio_input_device ||
-    profile?.mic_device_id ||
     "";
   const savedOutputId =
     (typeof overlaySettings.audio_output_device === "string" && overlaySettings.audio_output_device) ||
@@ -103,6 +101,39 @@ export default function SettingsAudio() {
   const chunksRef = useRef<BlobPart[]>([]);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const playbackRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    if (!profile) return;
+    setLanguage(profile.stt_language ?? "en-US");
+    setFillerWords(profile.custom_filler_words ?? FILLER_WORDS_DEFAULT);
+    setAutoGain(profile.auto_gain ?? true);
+    setNoiseSup(profile.noise_suppression ?? true);
+    const overlay = (profile.overlay_settings ?? {}) as Record<string, unknown>;
+    const ui = (profile.ui_preferences ?? {}) as Record<string, unknown>;
+    setSelectedMic(
+      (typeof overlay.audio_input_device === "string" && overlay.audio_input_device) ||
+        profile.audio_input_device ||
+        "",
+    );
+    setSelectedSpeaker(
+      (typeof overlay.audio_output_device === "string" && overlay.audio_output_device) ||
+        profile.audio_output_device ||
+        "",
+    );
+    if (typeof ui.vad_noise_floor === "number") {
+      setVadSensitivity(noiseFloorToVadSensitivity(ui.vad_noise_floor));
+    }
+  }, [
+    profile?.id,
+    profile?.stt_language,
+    profile?.custom_filler_words,
+    profile?.auto_gain,
+    profile?.noise_suppression,
+    profile?.audio_input_device,
+    profile?.audio_output_device,
+    profile?.overlay_settings,
+    profile?.ui_preferences,
+  ]);
 
   const stopMicTest = useCallback(() => {
     setTesting(false);
@@ -268,9 +299,7 @@ export default function SettingsAudio() {
       vad_noise_floor: noiseFloor,
     };
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .update({
+      await updateProfile({
           stt_language:        language,
           custom_filler_words: fillerWords,
           auto_gain:           autoGain,
@@ -278,16 +307,19 @@ export default function SettingsAudio() {
           audio_input_device:  selectedMic || null,
           audio_output_device: selectedSpeaker || null,
           ui_preferences:      mergedUiPrefs,
-        })
-        .eq("id", user.id)
-        .select()
-        .maybeSingle();
-      if (error) throw error;
+          overlay_settings: {
+            ...(typeof profile?.overlay_settings === "object" && profile?.overlay_settings
+              ? profile.overlay_settings
+              : {}),
+            audio_input_device: selectedMic || null,
+            audio_output_device: selectedSpeaker || null,
+          },
+      });
       setVADConfig({ noise_floor: noiseFloor });
       setMicDeviceId(selectedMic || null);
       setSelectedMicId(selectedMic || null);
-      if (data) setProfile(data);
       setSaved(true);
+      toast.success("Audio settings saved");
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       toast.error(err?.message ?? "Failed to save audio settings.");

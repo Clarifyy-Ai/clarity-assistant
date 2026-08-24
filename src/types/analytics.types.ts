@@ -17,9 +17,9 @@ export interface ConfidenceTrendPoint {
 
 export interface FillerWordTrendPoint {
   date: string;
-  filler_rate: number;             // fillers per minute
-  total_fillers: number;
-  session_id: string;
+  filler_rate: number | null;      // fillers per minute
+  total_fillers: number | null;    // absolute count when known; never invent from rate
+  session_id?: string;
   top_filler: string | null;
 }
 
@@ -151,8 +151,8 @@ export interface AnalyticsDashboardData {
   avg_filler_rate: number | null;
   avg_filler_delta_30d: number | null;
   avg_wpm: number | null;
-  current_streak: number;
-  longest_streak: number;
+  current_streak: number | null;
+  longest_streak: number | null;
   total_xp: number;
 
   // Chart data

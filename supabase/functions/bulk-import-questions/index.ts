@@ -16,6 +16,13 @@ import { getClientIp } from "../_shared/auth.ts";
 import { takeUniqueStemRows } from "../_shared/questionStemDedupe.ts";
 import { mapExamType } from "../_shared/examTypeMap.ts";
 import {
+  normalizeMcqOptions,
+  resolveCorrectIndex,
+  validateSingleCorrectMcq,
+  conflictsWithSelected,
+} from "../_shared/govMcqValidator.ts";
+import { MIN_BANK_QUESTION_QUALITY, scoreQuestionQuality } from "../_shared/govQualityScore.ts";
+import {
   createRateLimitKey,
   enforceRateLimitAsync,
   RATE_LIMIT_PRESETS,
@@ -278,6 +285,7 @@ Deno.serve(async (req) => {
         difficulty: normalizeDifficulty(q.difficulty),
         exam_type: examType,
         source: "OFFICIAL_PYP",
+        source_type: "official_verified",
         source_year: sourceYear,
         is_verified: true,
         is_public: true,
@@ -293,28 +301,73 @@ Deno.serve(async (req) => {
     return json({ error: "No valid questions in payload" }, 400, req);
   }
 
-  const { data: existingPublic } = await db
+  const { data: existingQuestions } = await db
     .from("questions")
-    .select("question_text")
+    .select("question_text, options")
     .eq("exam_type", examType)
-    .eq("is_public", true)
     .limit(4000);
 
   const { novel, skipped } = takeUniqueStemRows(
     rows,
-    (existingPublic ?? []).map((r) => String((r as { question_text?: string }).question_text ?? "")),
+    (existingQuestions ?? []).map((r) => String((r as { question_text?: string }).question_text ?? "")),
   );
-  const skippedCount = rawQuestions.length - rows.length + skipped;
+  const existingTexts = (existingQuestions ?? []).map((r) =>
+    String((r as { question_text?: string }).question_text ?? "")
+  );
+  const accepted: typeof novel = [];
+  const rowErrors: Array<{ row: number; code: string; message: string }> = [];
+  for (const row of novel) {
+    const options = normalizeMcqOptions(row.options);
+    const correctIndex = resolveCorrectIndex(row.correct_answer, options.length);
+    const structural = validateSingleCorrectMcq({
+      question_text: row.question_text,
+      options,
+      correct_index: correctIndex ?? -1,
+    });
+    if (!structural.ok) {
+      rowErrors.push({ row: rawQuestions.indexOf(row) + 1, code: structural.code, message: structural.message });
+      continue;
+    }
+    if (conflictsWithSelected(row.question_text, [...existingTexts, ...accepted.map((q) => q.question_text)])) {
+      rowErrors.push({ row: rawQuestions.indexOf(row) + 1, code: "DUPLICATE_QUESTION", message: "Exact or near-duplicate question." });
+      continue;
+    }
+    const quality = scoreQuestionQuality({
+      question_text: row.question_text,
+      options,
+      correct_index: correctIndex ?? -1,
+      sourceConfidence: 0.9,
+    });
+    if (quality.hardFail || quality.score < MIN_BANK_QUESTION_QUALITY) {
+      rowErrors.push({ row: rawQuestions.indexOf(row) + 1, code: "QUALITY_FAILED", message: "Question did not meet the quality threshold." });
+      continue;
+    }
+    accepted.push({
+      ...row,
+      options: options.map((text, index) => ({ label: VALID_ANSWER[index], text })),
+      correct_answer: VALID_ANSWER[correctIndex!],
+      quality_score: quality.score,
+      is_public: false,
+      is_verified: false,
+      publish_status: "draft",
+      review_status: "review_required",
+      validation_status: "valid",
+    });
+  }
+  const validatedNovel = accepted;
+  const skippedCount = rawQuestions.length - rows.length + skipped + novel.length - validatedNovel.length;
 
-  if (novel.length === 0) {
+  if (validatedNovel.length === 0) {
     return json(
       {
         success: true,
         paper_id: paperId,
         inserted_count: 0,
         skipped_count: skippedCount,
+        row_errors: rowErrors,
         exam_type: examType,
         source_year: sourceYear,
+        row_errors: rowErrors,
         message: "All questions already exist in the public bank.",
       },
       200,
@@ -324,7 +377,7 @@ Deno.serve(async (req) => {
 
   const { data: inserted, error: insertErr } = await db
     .from("questions")
-    .insert(novel)
+    .insert(validatedNovel)
     .select("id");
 
   if (insertErr) {

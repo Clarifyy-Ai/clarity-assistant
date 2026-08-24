@@ -526,6 +526,11 @@ async function pythonPublicGet(
 }
 
 /** Map Edge hybrid operation ids → Python /internal/operations operation_type. */
+/** Edge hybrid ids -> /internal/operations types.
+ * Coach chat/hint/answer MUST NOT map to scaffold-only practice_coach_hint -
+ * those go through callPythonProcess (/v1/process, practice_coach).
+ * speech_process / sprint_review_transcript / gov_exam_assemble are not coach aliases.
+ */
 const OPERATION_TYPE_MAP: Record<string, string> = {
   star_builder: "star_format",
   star_evidence: "star_format",
@@ -537,11 +542,6 @@ const OPERATION_TYPE_MAP: Record<string, string> = {
   company_normalize: "company_research_skeleton",
   mock_question_generation: "mock_question_bank",
   mock_question_validate: "mock_question_bank",
-  practice_coach_help: "practice_coach_hint",
-  practice_coach: "practice_coach_hint",
-  speech_process: "practice_coach_hint",
-  gov_exam_assemble: "ping", // durable path uses paper factory; ping only for smoke
-  sprint_review_transcript: "practice_coach_hint",
   ping: "ping",
   star_format: "star_format",
   system_design_outline: "system_design_outline",
@@ -549,7 +549,9 @@ const OPERATION_TYPE_MAP: Record<string, string> = {
   document_extract: "document_extract",
   company_research_skeleton: "company_research_skeleton",
   mock_question_bank: "mock_question_bank",
+  // Legacy scaffold op only - not for user-facing coach chat.
   practice_coach_hint: "practice_coach_hint",
+  speech_process: "speech_process",
 };
 
 export function mapPythonOperationType(operation: string): string {
@@ -591,13 +593,52 @@ export async function pythonExecuteOperation(
   const operationId =
     (typeof payload.operation_id === "string" && payload.operation_id) ||
     newRequestId();
-  const operationType = mapPythonOperationType(String(payload.operation ?? ""));
+  const rawOperation = String(payload.operation ?? "").trim();
   const bodyPayload =
     (payload.payload && typeof payload.payload === "object"
       ? payload.payload
       : null) ??
     (payload.input && typeof payload.input === "object" ? payload.input : {}) ??
     {};
+
+  // User-facing coach -> /v1/process practice_coach ({ reply, hints }).
+  // Never route practice_coach / practice_coach_help through scaffold practice_coach_hint.
+  if (
+    rawOperation === "practice_coach" ||
+    rawOperation === "practice_coach_help"
+  ) {
+    const processResult = await callPythonProcess({
+      operation: "practice_coach",
+      operationId,
+      correlationId,
+      payload: bodyPayload as Record<string, unknown>,
+      timeoutMs: options?.timeoutMs,
+    });
+    if (processResult.ok) {
+      return {
+        ok: true,
+        status: 200,
+        json: { success: true, data: processResult.data },
+        latencyMs: 0,
+        requestId: correlationId,
+      };
+    }
+    return {
+      ok: false,
+      status: 503,
+      json: {
+        success: false,
+        code: processResult.code,
+        message: processResult.message,
+      },
+      latencyMs: 0,
+      requestId: correlationId,
+      errorCode: processResult.code as DomainErrorCode,
+      errorMessage: processResult.message,
+    };
+  }
+
+  const operationType = mapPythonOperationType(rawOperation);
 
   const body = {
     operation_type: operationType,

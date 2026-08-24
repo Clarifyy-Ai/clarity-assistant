@@ -246,7 +246,6 @@ export function ExamSearchCombobox({
           }}
           onFocus={() => {
             setOpen(true);
-            void runSearch(query);
           }}
           onKeyDown={onKeyDown}
           onBlur={() => {

@@ -7,7 +7,6 @@ import { Card } from "@/components/ui/Card";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
-import { applyReport } from "@/lib/community/moderation";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 
 type Post = {
@@ -22,7 +21,6 @@ type Post = {
   accepted_answer_id: string | null;
 };
 type Answer = { id: string; user_id: string; body: string; is_accepted: boolean; created_at: string };
-type Comment = { id: string; answer_id: string | null; body: string; user_id: string };
 
 export default function CommunityPostPage() {
   const { postId } = useParams<{ postId: string }>();
@@ -30,7 +28,6 @@ export default function CommunityPostPage() {
   const isAdmin = useAuthStore((s) => s.isAdmin);
   const [post, setPost] = useState<Post | null>(null);
   const [answers, setAnswers] = useState<Answer[]>([]);
-  const [comments, setComments] = useState<Comment[]>([]);
   const [answer, setAnswer] = useState("");
   const [comment, setComment] = useState("");
 
@@ -43,7 +40,7 @@ export default function CommunityPostPage() {
     ]);
     setPost(postRow as Post | null);
     setAnswers((answerRows as Answer[]) ?? []);
-    setComments((commentRows as Comment[]) ?? []);
+    void commentRows;
   }, [postId]);
 
   useEffect(() => {
@@ -85,13 +82,16 @@ export default function CommunityPostPage() {
 
   async function report() {
     if (!user?.id || !post) return;
-    await supabase.from("community_reports").insert({
+    const { error } = await supabase.from("community_reports").insert({
       reporter_id: user.id,
       target_type: "post",
       target_id: post.id,
       reason: "Reported by user",
     });
-    await supabase.from("community_posts").update({ status: applyReport(post.status as "PUBLISHED") }).eq("id", post.id);
+    if (error) {
+      toast.error(error.code === "23505" ? "You have already reported this post." : "Report could not be submitted.");
+      return;
+    }
     toast.success("Reported for review.");
     void load();
   }

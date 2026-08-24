@@ -67,10 +67,38 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (existing) return json(req, { success: true, idempotent: true, jobId: existing.id, ...existing }, 200);
 
+    // Same document already has an in-flight job → reuse it (refresh / no duplicate create).
+    const { data: activeForDoc } = await db
+      .from("document_processing_jobs")
+      .select("id, status, result_reference, warnings, error_code, error_message, attempt_count, credits_reserved")
+      .eq("owner_id", user.id)
+      .eq("document_id", documentId)
+      .in("status", ["queued", "leased", "downloading", "extracting", "OCR", "segmenting", "validating", "awaiting_review"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (activeForDoc) {
+      return json(req, { success: true, idempotent: true, jobId: activeForDoc.id, ...activeForDoc }, 200);
+    }
+
     const document = await getOwnedDocument(db, documentId, user.id);
     if (!document) return json(req, { success: false, error: safeError("DOCUMENT_NOT_FOUND", "Document not found.", "ownership", correlationId) }, 404);
     const validation = validateDocumentRecord(document, user.id);
     if (!validation.ok) return json(req, { success: false, error: safeError(validation.code, validation.message, "validation", correlationId) }, 422);
+
+    // The library parser endpoint is the safe synchronous fallback. Do not
+    // reserve credits or create a durable job when no Python worker exists.
+    // This prevents an orphaned reservation and lets the client invoke the
+    // non-AI deterministic parser path.
+    if (!isPythonConfigured()) {
+      return json(req, {
+        success: true,
+        jobId: null,
+        state: "uploaded",
+        pythonConfigured: false,
+        correlationId,
+      }, 202);
+    }
 
     const credit = await deductCreditsAtomic({
       userId: user.id,
@@ -96,6 +124,8 @@ Deno.serve(async (req) => {
         bucket: "documents",
         path: document.storage_path,
         content_hash: document.content_hash,
+        file_category: document.file_category,
+        mime_type: document.mime_type,
       },
       parser_version: "2026.08.21.1",
       credits_reserved: COST,
@@ -105,10 +135,24 @@ Deno.serve(async (req) => {
     if (error || !job) {
       // A unique conflict means another request won the race. The idempotent
       // credit key prevents a second charge; return the winner if available.
-      const { data: winner } = await db.from("document_processing_jobs")
+      const { data: winnerByKey } = await db.from("document_processing_jobs")
         .select("id, status, attempt_count, created_at")
         .eq("owner_id", user.id).eq("idempotency_key", idempotencyKey).maybeSingle();
-      if (winner) return json(req, { success: true, idempotent: true, jobId: winner.id, ...winner }, 200);
+      if (winnerByKey) return json(req, { success: true, idempotent: true, jobId: winnerByKey.id, ...winnerByKey }, 200);
+
+      // Also reuse any still-active job for this document (refresh / double-submit).
+      const { data: activeForDoc } = await db.from("document_processing_jobs")
+        .select("id, status, attempt_count, created_at")
+        .eq("owner_id", user.id)
+        .eq("document_id", documentId)
+        .in("status", ["queued", "leased", "downloading", "extracting", "OCR", "segmenting", "validating", "awaiting_review"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (activeForDoc) {
+        return json(req, { success: true, idempotent: true, jobId: activeForDoc.id, ...activeForDoc }, 200);
+      }
+
       await refundCredits({ userId: user.id, cost: COST, reason: `refund_document_job_create:${documentId}` });
       return json(req, { success: false, error: safeError("JOB_CREATE_FAILED", "Processing job could not be created.", "queueing", correlationId, true) }, 503);
     }
@@ -127,6 +171,8 @@ Deno.serve(async (req) => {
             bucket: "documents",
             path: document.storage_path,
             content_hash: document.content_hash,
+            file_category: document.file_category,
+            mime_type: document.mime_type,
           },
         },
         requestId: correlationId,

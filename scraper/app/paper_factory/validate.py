@@ -290,14 +290,21 @@ class CandidateValidator:
         worst = 0.0
 
         for other in self._signatures:
+            template_similarity = _jaccard(
+                candidate.template_tokens, other.template_tokens
+            )
+            token_similarity = _jaccard(candidate.tokens, other.tokens)
             if (
-                candidate.template == other.template
-                or _jaccard(candidate.template_tokens, other.template_tokens)
-                >= self.template_clone_threshold
+                (candidate.template == other.template
+                 and token_similarity >= self.template_clone_threshold)
+                or (
+                    template_similarity >= self.template_clone_threshold
+                    and token_similarity >= self.template_clone_threshold
+                )
             ):
                 return 1.0, "template_clone"
 
-            token_sim = _jaccard(candidate.tokens, other.tokens)
+            token_sim = token_similarity
             ngram_sim = _jaccard(candidate.ngrams, other.ngrams)
             option_overlap = _jaccard(candidate.options, other.options)
             stem_max = max(token_sim, ngram_sim)
@@ -307,6 +314,14 @@ class CandidateValidator:
                 + ngram_sim * float(cw["ngram"])
                 + option_overlap * float(cw["option_overlap"])
             )
+            shorter, longer = sorted(
+                (candidate.stem, other.stem), key=len,
+            )
+            containment = (
+                len(shorter) / len(longer)
+                if shorter and shorter in longer
+                else 0.0
+            )
 
             if (
                 composite >= self.near_duplicate_threshold
@@ -315,6 +330,7 @@ class CandidateValidator:
                     and stem_max >= float(_DEDUP["stem_max_near_with_options"])
                 )
                 or stem_max >= float(_DEDUP["stem_max_near"])
+                or containment >= float(_DEDUP["stem_only_conflict"])
             ):
                 return 1.0, "near_duplicate"
 
@@ -331,7 +347,7 @@ class CandidateValidator:
         marks_positive: float,
         marks_negative: float,
         language: str = "en",
-        source_confidence: float = 60.0,
+        source_confidence: float = 55.0,
     ) -> ValidationOutcome:
         """Normalise and validate one AI candidate against every hard rule."""
         stem = re.sub(r"\s+", " ", str(candidate.get("question_text") or "")).strip()
@@ -411,6 +427,8 @@ class CandidateValidator:
             marks_positive=marks_positive,
             marks_negative=marks_negative,
             source_class="generated",
+            source_type="ai_generated_practice",
+            language=language,
             quality_score=score,
         )
         self.register(question)

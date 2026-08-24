@@ -145,8 +145,38 @@ AlertSeverity = Literal["info", "warning", "critical"]
 class AlertManager:
     """Evaluates production metric thresholds and emits alerts."""
 
-    def __init__(self) -> None:
+    def __init__(self, max_alerts: int = 500, dedupe_window_seconds: int = 60) -> None:
         self.active_alerts: list[dict[str, Any]] = []
+        self._max_alerts = max_alerts
+        self._dedupe_window_seconds = dedupe_window_seconds
+
+    def _record(self, alert: dict[str, Any]) -> dict[str, Any]:
+        now = float(alert["timestamp"])
+        identity = (alert.get("alert"), alert.get("severity"), alert.get("message"))
+        self.active_alerts = [
+            existing
+            for existing in self.active_alerts
+            if now - float(existing.get("timestamp", 0)) <= self._dedupe_window_seconds
+            or (
+                existing.get("alert"),
+                existing.get("severity"),
+                existing.get("message"),
+            )
+            != identity
+        ]
+        if not any(
+            (
+                existing.get("alert"),
+                existing.get("severity"),
+                existing.get("message"),
+            )
+            == identity
+            for existing in self.active_alerts
+        ):
+            self.active_alerts.append(alert)
+        if len(self.active_alerts) > self._max_alerts:
+            self.active_alerts = self.active_alerts[-self._max_alerts :]
+        return alert
 
     def check_stuck_queue(self, queue_depth: int, oldest_age_seconds: float) -> dict[str, Any] | None:
         if queue_depth > 100 or oldest_age_seconds > 300:
@@ -156,8 +186,7 @@ class AlertManager:
                 "message": f"Processing queue has {queue_depth} jobs; oldest job queued {int(oldest_age_seconds)}s ago.",
                 "timestamp": time.time(),
             }
-            self.active_alerts.append(alert)
-            return alert
+            return self._record(alert)
         return None
 
     def check_repeated_lease_expirations(self, expirations_in_window: int) -> dict[str, Any] | None:
@@ -168,8 +197,7 @@ class AlertManager:
                 "message": f"Detected {expirations_in_window} worker lease expirations within the observation window.",
                 "timestamp": time.time(),
             }
-            self.active_alerts.append(alert)
-            return alert
+            return self._record(alert)
         return None
 
     def check_high_ocr_failure(self, failure_rate: float) -> dict[str, Any] | None:
@@ -180,8 +208,7 @@ class AlertManager:
                 "message": f"OCR failure rate is {failure_rate * 100:.1f}%, exceeding 20% threshold.",
                 "timestamp": time.time(),
             }
-            self.active_alerts.append(alert)
-            return alert
+            return self._record(alert)
         return None
 
     def check_published_paper_integrity(self, missing_answers_count: int, count_mismatch: bool) -> dict[str, Any] | None:
@@ -192,8 +219,7 @@ class AlertManager:
                 "message": f"Integrity failure: missing answers={missing_answers_count}, count_mismatch={count_mismatch}.",
                 "timestamp": time.time(),
             }
-            self.active_alerts.append(alert)
-            return alert
+            return self._record(alert)
         return None
 
     def check_cross_user_access(self, violation_detected: bool, details: str = "") -> dict[str, Any] | None:
@@ -204,8 +230,7 @@ class AlertManager:
                 "message": f"Unauthorized cross-tenant access attempt detected. {details}".strip(),
                 "timestamp": time.time(),
             }
-            self.active_alerts.append(alert)
-            return alert
+            return self._record(alert)
         return None
 
     def check_duplicate_credit_charge(self, duplicate_detected: bool, idempotency_key: str = "") -> dict[str, Any] | None:
@@ -216,8 +241,7 @@ class AlertManager:
                 "message": f"Duplicate credit deduction intercepted for key: {idempotency_key}.",
                 "timestamp": time.time(),
             }
-            self.active_alerts.append(alert)
-            return alert
+            return self._record(alert)
         return None
 
 

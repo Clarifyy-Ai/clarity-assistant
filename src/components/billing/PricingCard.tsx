@@ -105,6 +105,11 @@ interface PricingCardProps {
    */
   loading?: boolean;
 
+  /**
+   * Extra disable (e.g. another checkout in flight)
+   */
+  disabled?: boolean;
+
   className?: string;
 }
 
@@ -160,6 +165,8 @@ export function PricingCard({
   yearlyPrice,
   subtitle,
   size = 'md',
+  loading = false,
+  disabled = false,
   className,
 }: PricingCardProps) {
   const colors = colorMap[color];
@@ -279,7 +286,8 @@ export function PricingCard({
       {/* CTA Button */}
       <Button
         onClick={onUpgrade}
-        disabled={isCurrent}
+        disabled={isCurrent || loading || disabled}
+        loading={loading}
         className={cn(
           'mt-6 w-full rounded-xl text-foreground font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900',
           sizes.button,

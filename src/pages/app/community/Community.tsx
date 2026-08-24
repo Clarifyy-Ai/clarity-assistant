@@ -41,22 +41,27 @@ export default function CommunityPage() {
   const [tags, setTags] = useState("");
   const [postCategory, setPostCategory] = useState("Interview");
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   async function load() {
+    setError(null);
     let q = supabase.from("community_posts").select("*").order("created_at", { ascending: false }).limit(50);
     if (category !== "all") q = q.eq("category", category);
     const { data, error } = await q;
-    if (error) toast.error(error.message);
+    if (error) { setError("Community could not be loaded."); setPosts([]); setLoaded(true); return; }
     setPosts((data as Post[]) ?? []);
     setLoaded(true);
   }
 
-  useEffect(() => {
-    void load();
-  }, [category]);
+  useEffect(() => { void load(); }, [category]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function ask() {
-    if (!user?.id || !title.trim() || !body.trim()) return;
+    if (!user?.id || !title.trim() || !body.trim() || title.trim().length > 200 || body.trim().length > 10000) {
+      toast.error("Enter a title and body within the allowed limits."); return;
+    }
+    if (saving) return;
+    setSaving(true);
     const { error } = await supabase.from("community_posts").insert({
       user_id: user.id,
       title: title.trim(),
@@ -65,13 +70,14 @@ export default function CommunityPage() {
       category: postCategory,
       status: "PUBLISHED",
     });
-    if (error) toast.error(error.message);
+    if (error) toast.error("Your question could not be posted.");
     else {
       setTitle("");
       setBody("");
       setTags("");
       void load();
     }
+    setSaving(false);
   }
 
   const isPreview = loaded && posts.length === 0;
@@ -88,7 +94,9 @@ export default function CommunityPage() {
             : "Ask interview and career questions. This is Clarify’s own community, not a third-party forum."
         }
       />
-      {isPreview && (
+      {error ? (
+        <EmptyState title="Community unavailable" description={error} actionLabel="Retry" onAction={() => void load()} />
+      ) : isPreview && (
         <EmptyState
           icon={MessageSquare}
           title="No published questions yet"
@@ -110,7 +118,7 @@ export default function CommunityPage() {
             ))}
           </SelectContent>
         </Select>
-        <Button onClick={() => void ask()}>Post question</Button>
+        <Button loading={saving} disabled={saving} onClick={() => void ask()}>Post question</Button>
       </Card>
       <div className="mb-3 flex flex-wrap gap-2">
         <Button size="sm" variant={category === "all" ? "primary" : "outline"} onClick={() => setCategory("all")}>All</Button>

@@ -17,7 +17,7 @@ export const ASSESSMENT_ROLE_SLUGS = [
 
 export type AssessmentRoleSlug = (typeof ASSESSMENT_ROLE_SLUGS)[number];
 
-export const REVIEW_STATUSES = ["unreviewed", "approved", "rejected"] as const;
+export const REVIEW_STATUSES = ["draft", "review_required", "approved", "rejected", "archived"] as const;
 export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
 
 /** Categories that are frontend-only unless explicitly marked cross-functional. */

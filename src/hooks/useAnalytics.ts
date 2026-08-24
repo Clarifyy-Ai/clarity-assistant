@@ -71,7 +71,12 @@ export function useAnalytics() {
     try {
       const result = await fetchEdgeJson<AnalyticsDashboardData>(
         "analytics-dashboard",
-        { filter },
+        {
+          filter,
+          timezone: resolveDisplayTimeZone(
+            useAuthStore.getState().profile?.timezone,
+          ),
+        },
         { timeoutMs: 25_000 },
       );
       if (result?.recent_sessions) {
@@ -80,11 +85,13 @@ export function useAnalytics() {
         );
       }
       setData(result);
+      setComparison(null);
+      setCompareError(null);
       hasDataRef.current = true;
       setIsStale(false);
     } catch (err) {
       // Keep last-known data so optional 503s do not blank the shell.
-      setError(toSafeUiError(err, "Couldn't load analytics"));
+      setError(toSafeUiError(err, "We couldn't load your analytics."));
       setData((prev) => {
         setIsStale(Boolean(prev));
         return prev;
@@ -116,6 +123,7 @@ export function useAnalytics() {
   ): Promise<void> => {
     setIsComparing(true);
     setCompareError(null);
+    setComparison(null);
     try {
       const timeZone = resolveDisplayTimeZone(
         useAuthStore.getState().profile?.timezone,
@@ -233,8 +241,13 @@ export function useAnalytics() {
   if (data?.filler_trend) {
     for (const fp of data.filler_trend) {
       if (fp.top_filler) {
+        // Prefer real counts; otherwise count one occurrence of the top filler.
+        const weight =
+          typeof fp.total_fillers === "number" && Number.isFinite(fp.total_fillers)
+            ? fp.total_fillers
+            : 1;
         fillerBreakdown[fp.top_filler] =
-          (fillerBreakdown[fp.top_filler] ?? 0) + fp.total_fillers;
+          (fillerBreakdown[fp.top_filler] ?? 0) + weight;
       }
     }
   }
@@ -344,4 +357,3 @@ function payloadToComparison(payload: SessionComparisonPayload): SessionComparis
     deltas: payload.deltas,
   };
 }
-

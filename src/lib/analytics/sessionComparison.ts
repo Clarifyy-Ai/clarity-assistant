@@ -289,12 +289,16 @@ export function questionCounts(
     };
   }
 
-  const total = isFiniteNumber(asked) ? asked : generated ?? 0;
-  const answered = isFiniteNumber(generated) ? generated : 0;
+  // Only invent zeros when both sides are known; otherwise keep missing as null.
+  const total = isFiniteNumber(asked) ? asked : (isFiniteNumber(generated) ? generated : null);
+  const answered = isFiniteNumber(generated) ? generated : null;
   return {
     question_count: total,
     answered_count: answered,
-    unanswered_count: Math.max(0, total - answered),
+    unanswered_count:
+      isFiniteNumber(total) && isFiniteNumber(answered)
+        ? Math.max(0, total - answered)
+        : null,
   };
 }
 

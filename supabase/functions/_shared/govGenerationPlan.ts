@@ -26,8 +26,8 @@ export type { GeneratorPreference };
 export { parseGeneratorPreference, resolvePaperGenerator };
 
 /** Modes where fresh AI / deterministic practice questions are acceptable. */
-const FILL_ELIGIBLE_MODES = new Set(["generated_mock", "custom_mock", "adaptive"]);
-const AI_ELIGIBLE_MODES = FILL_ELIGIBLE_MODES;
+const AI_ELIGIBLE_MODES = new Set(["generated_mock", "custom_mock", "adaptive"]);
+const FILL_ELIGIBLE_MODES = AI_ELIGIBLE_MODES;
 
 export interface GenerationPlan {
   kind: GenerationPlanKind;

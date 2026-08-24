@@ -120,6 +120,53 @@ class DocumentJobWorker:
         payload = response.data if isinstance(response.data, dict) else {}
         return payload.get("success") is True
 
+    def project_document(
+        self,
+        job: dict[str, Any],
+        *,
+        status: str,
+        parsed: Any = None,
+        error_code: str | None = None,
+        error_message: str | None = None,
+    ) -> None:
+        """Persist the job's user-visible state on the library document.
+
+        Durable jobs and library rows are separate records.  Keeping this
+        projection in the worker makes refreshes truthful even when the Edge
+        request that created the job has already ended.
+        """
+        document_id = job.get("document_id")
+        if not document_id or not hasattr(self.db, "from_"):
+            return
+
+        payload: dict[str, Any] = {
+            "processing_status": status,
+            "processing_error": error_message,
+        }
+        if parsed is not None:
+            doc = parsed[0] if isinstance(parsed, tuple) and parsed else parsed
+            if hasattr(doc, "model_dump"):
+                value = doc.model_dump(mode="json")
+                payload["parsed_content"] = value.get("text", "")
+                payload["parsed_metadata"] = {
+                    key: value[key]
+                    for key in ("filename", "media_type", "pages", "warnings", "confidence", "review_required")
+                    if key in value
+                }
+                payload["parser_version"] = value.get("parser_version")
+            elif isinstance(doc, dict):
+                payload["parsed_content"] = str(doc.get("text") or "")
+                payload["parsed_metadata"] = doc
+
+        response = (
+            self.db.from_("personal_library_documents")
+            .update(payload)
+            .eq("id", str(document_id))
+            .execute()
+        )
+        if getattr(response, "error", None):
+            raise RuntimeError(f"Could not persist document state: {response.error}")
+
     def execute_pipeline(
         self,
         claimed: ClaimedJob,
@@ -150,6 +197,7 @@ class DocumentJobWorker:
         max_attempts = int(job.get("max_attempts") or 3)
 
         try:
+            self.project_document(job, status="processing")
             # Stage 1: downloading
             if not self.transition(job_id, JobState.DOWNLOADING, stage="downloading", attempt_count=attempt_count):
                 logger.warning("Failed to transition job %s to downloading (lease lost or cancelled)", job_id)
@@ -172,13 +220,15 @@ class DocumentJobWorker:
 
             self.heartbeat(job_id)
 
-            # Stage 3: OCR
-            if not self.transition(job_id, JobState.OCR, stage="OCR", attempt_count=attempt_count):
-                logger.warning("Failed to transition job %s to OCR (lease lost or cancelled)", job_id)
-                return False
-
             ocr_res = None
-            if ocr_processor:
+            should_ocr = _needs_ocr(extracted)
+            if should_ocr:
+                self.project_document(job, status="ocr_required", parsed=extracted)
+                if not self.transition(job_id, JobState.OCR, stage="OCR", attempt_count=attempt_count):
+                    logger.warning("Failed to transition job %s to OCR (lease lost or cancelled)", job_id)
+                    return False
+                self.project_document(job, status="ocr_processing", parsed=extracted)
+            if should_ocr and ocr_processor:
                 try:
                     ocr_res = ocr_processor(raw_bytes, job, extracted)
                 except TypeError:
@@ -208,6 +258,9 @@ class DocumentJobWorker:
                     raise ValueError("Document validation failed schema checks.")
 
             self.heartbeat(job_id)
+            # Segmentation is derived structure; persist the parser result as
+            # the document's canonical readable content.
+            final_document = ocr_res or extracted
 
             # Stage 6: awaiting_review or completed
             requires_human_review = False
@@ -215,6 +268,7 @@ class DocumentJobWorker:
                 requires_human_review = bool(needs_review(segmented or extracted, job))
 
             if requires_human_review:
+                self.project_document(job, status="processing", parsed=final_document)
                 ok = self.transition(
                     job_id,
                     JobState.AWAITING_REVIEW,
@@ -224,6 +278,7 @@ class DocumentJobWorker:
                 )
                 return ok
 
+            self.project_document(job, status="completed", parsed=final_document)
             ok = self.transition(
                 job_id,
                 JobState.COMPLETED,
@@ -238,11 +293,26 @@ class DocumentJobWorker:
 
         except Exception as exc:
             logger.exception("Error processing document job %s: %s", job_id, exc)
-            is_retryable = not isinstance(exc, (ValueError, TypeError))
-            error_code = "PROCESSING_ERROR" if is_retryable else "FATAL_PARSER_ERROR"
+            is_retryable = getattr(exc, "retryable", None)
+            if is_retryable is None:
+                is_retryable = not isinstance(exc, (ValueError, TypeError))
+            error_code = getattr(exc, "code", None) or (
+                "PARSER_FAILED" if isinstance(exc, (ValueError, TypeError)) else "PARSER_UNAVAILABLE"
+            )
+            error_code = {
+                "UNSUPPORTED_FORMAT": "UNSUPPORTED_FILE_TYPE",
+                "OCR_UNAVAILABLE": "PARSER_UNAVAILABLE",
+                "OCR_EMPTY": "PARSER_FAILED",
+            }.get(error_code, error_code)
             error_message = str(exc)
 
             if is_retryable and attempt_count < max_attempts:
+                self.project_document(
+                    job,
+                    status="failed_retryable",
+                    error_code=error_code,
+                    error_message=error_message,
+                )
                 self.transition(
                     job_id,
                     JobState.FAILED_RETRYABLE,
@@ -253,6 +323,12 @@ class DocumentJobWorker:
                     attempt_count=attempt_count,
                 )
             else:
+                self.project_document(
+                    job,
+                    status="failed_permanent",
+                    error_code=error_code,
+                    error_message=error_message,
+                )
                 self.transition(
                     job_id,
                     JobState.FAILED_PERMANENT,
@@ -281,8 +357,12 @@ def _download_document(db: Client, job: dict[str, Any]) -> bytes:
 
 def _needs_ocr(extracted: Any) -> bool:
     doc = extracted[0] if isinstance(extracted, tuple) and extracted else extracted
-    text = str(getattr(doc, "text", "") or "").strip()
-    confidence = getattr(doc, "confidence", None)
+    if isinstance(doc, dict):
+        text = str(doc.get("text") or "").strip()
+        confidence = doc.get("confidence")
+    else:
+        text = str(getattr(doc, "text", "") or "").strip()
+        confidence = getattr(doc, "confidence", None)
     if not text:
         return True
     if confidence is not None and float(confidence) < 0.6:
@@ -332,10 +412,11 @@ def _extract_document(raw_bytes: bytes, job: dict[str, Any]) -> tuple[Any, Any]:
         path = str(storage_ref.get("path") or "")
         if path:
             filename = path.rsplit("/", 1)[-1] or filename
-    try:
-        return parse_document_bytes(raw_bytes, filename, "resume_pdf")
-    except ParseError:
-        return parse_document_bytes(raw_bytes, filename, "job_description")
+    category = str(job.get("category") or job.get("file_category") or "").lower()
+    if category in {"resume_pdf", "job_description"}:
+        return parse_document_bytes(raw_bytes, filename, category)
+    from app.document_intelligence.parsers.document import parse_bytes
+    return parse_bytes(raw_bytes, filename), None
 
 
 def _validate_extraction(extracted: Any, _job: dict[str, Any]) -> bool:

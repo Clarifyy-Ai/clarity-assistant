@@ -1,0 +1,14 @@
+﻿RENDER HMAC SYNC REQUIRED
+=========================
+Edge now has DOCUMENT_INTELLIGENCE_AUTH_SECRET set.
+Render rejected HMAC (AUTH_SIGNATURE_INVALID) — secrets do not match.
+
+1. Open .env.local locally
+2. Copy DOCUMENT_INTELLIGENCE_AUTH_SECRET value
+3. Render Dashboard → clarity-scraper (clarity-assistant-az05) → Environment
+4. Set DOCUMENT_INTELLIGENCE_AUTH_SECRET to the SAME value
+5. Save + Manual Deploy / restart the service
+6. Then run: node --use-system-ca scripts/set-python-hmac-secret.mjs --secret=<same>
+   (should print render_hmac_probe 200)
+
+Until this matches, Edge WILL call Python but Render returns 401 — you may see auth logs, not [GOV_EXAM] success logs.

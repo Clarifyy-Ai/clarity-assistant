@@ -249,7 +249,7 @@ def test_normal_processing() -> None:
     )
 
     assert ok is True
-    assert stages_hit == ["download", "extract", "ocr", "segment", "validate"]
+    assert stages_hit == ["download", "extract", "segment", "validate"]
     job = db.jobs["job-normal"]
     assert job["status"] == "completed"
     assert job["credits_settled_at"] is not None
@@ -429,4 +429,3 @@ def test_credit_finalization_isolation() -> None:
 
     # Worker never called any direct credit table updates
     assert len(db.credit_mutations) == 0
-

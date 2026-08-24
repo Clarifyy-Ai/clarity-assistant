@@ -1,6 +1,7 @@
 import { handleCors, getCorsHeaders, withBrowserCors, applyCors } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
+import { reclaimExpiredPaperJobs } from "../_shared/govPaperJobLease.ts";
 import {
   checkRateLimitAsync,
   createRateLimitKey,
@@ -39,6 +40,12 @@ Deno.serve(withBrowserCors("get-paper-generation-job", async (req) => {
     const auth = await authenticateRequest(req);
     if (auth.error) return applyCors(req, auth.error);
     const user = auth.context.user;
+
+    // Polling is also a recovery opportunity when no background worker is
+    // running. Reclaim only expired leases; active workers remain untouched.
+    await reclaimExpiredPaperJobs(db, { limit: 10 }).catch((err) => {
+      console.warn("[get-paper-generation-job] reclaim:", err);
+    });
 
     const rateLimitResult = await checkRateLimitAsync(db, {
       key: createRateLimitKey("get-paper-generation-job", user.id),

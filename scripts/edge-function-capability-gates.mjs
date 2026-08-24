@@ -29,6 +29,7 @@ for (const fn of fnNames) {
   const text = fs.readFileSync(indexPath, "utf8");
   const hasGate =
     /requireCapabilityForFunction\s*\(/.test(text) ||
+    /requireCapabilityAsync\s*\(/.test(text) ||
     /requireCapability\s*\(/.test(text);
   if (!hasGate) {
     console.error(

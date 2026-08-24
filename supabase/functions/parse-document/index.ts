@@ -8,7 +8,7 @@ import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import {
   enforceAiRateLimitAsync,
 } from "../_shared/rateLimit.ts";
-import { validateUploadMime } from "../_shared/uploadValidation.ts";
+import { resolveUploadMime, validateUploadMime } from "../_shared/uploadValidation.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { creditDenialResponse } from "../_shared/creditAuthority.ts";
 import { callPythonProcess } from "../_shared/pythonClient.ts";
@@ -230,7 +230,7 @@ Deno.serve(async (req) => {
           libraryDoc.storage_path.includes("..")) {
         return response(req, { error: "Invalid storage path", code: "FORBIDDEN" }, 403);
       }
-      if (libraryDoc.processing_status === "ready" && libraryDoc.content_hash) {
+      if (libraryDoc.processing_status === "completed" && libraryDoc.content_hash) {
         return response(req, { success: true, duplicate: true, reused: true, code: "DUPLICATE_DOCUMENT" });
       }
       await db.from("personal_library_documents")
@@ -241,13 +241,30 @@ Deno.serve(async (req) => {
         .from("documents").download(libraryDoc.storage_path);
       if (downloadError || !fileData) {
         await db.from("personal_library_documents").update({
-          processing_status: "error", processing_error: "Document file could not be downloaded.",
+          processing_status: "failed_retryable", processing_error: "Document file could not be downloaded.",
         }).eq("id", libraryDocumentId);
         return response(req, { error: "Document file could not be downloaded.", code: "PARSER_UNAVAILABLE" }, 503);
       }
       const buf = await fileData.arrayBuffer();
       if (!buf.byteLength || buf.byteLength > MAX_FILE_BYTES) {
-        return response(req, { error: "File empty or too large.", code: "BAD_REQUEST" }, 400);
+        await db.from("personal_library_documents").update({
+          processing_status: "rejected",
+          processing_error: !buf.byteLength ? "File is empty." : "File is too large.",
+        }).eq("id", libraryDocumentId).eq("owner_id", userId);
+        return response(req, {
+          error: !buf.byteLength ? "File is empty." : "File is too large.",
+          code: buf.byteLength ? "FILE_TOO_LARGE" : "PARSER_FAILED",
+        }, 400);
+      }
+      const resolvedMime = resolveUploadMime(libraryDoc.mime_type, {
+        filePath: libraryDoc.storage_path,
+        bytes: new Uint8Array(buf),
+      });
+      if (!resolvedMime.ok) {
+        await db.from("personal_library_documents").update({
+          processing_status: "rejected", processing_error: "File content does not match its declared type.",
+        }).eq("id", libraryDocumentId).eq("owner_id", userId);
+        return response(req, { error: "File content does not match its declared type.", code: "CORRUPT_FILE" }, 422);
       }
       const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", buf)))
         .map((byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -268,7 +285,12 @@ Deno.serve(async (req) => {
         if (mimeCheck.mimeType === "text/plain" || mimeCheck.mimeType === "text/csv" || mimeCheck.mimeType === "application/csv" || mimeCheck.mimeType === "application/vnd.ms-excel") {
           if (looksBinary(bytes)) return response(req, { error: "This file is not valid text.", code: "UNSUPPORTED_ENCODING" }, 400);
           const text = bytesToUtf8(bytes).replace(/^\uFEFF/, "").trim();
-          if (text.length < 1) return response(req, { error: "The document contains no readable text.", code: "BAD_REQUEST" }, 400);
+          if (text.length < 1) {
+            await db.from("personal_library_documents").update({
+              processing_status: "rejected", processing_error: "The document contains no readable text.",
+            }).eq("id", libraryDocumentId).eq("owner_id", userId);
+            return response(req, { error: "The document contains no readable text.", code: "PARSER_FAILED" }, 422);
+          }
           extracted = { full_text: text.slice(0, 50000), summary: text.slice(0, 400) };
         } else if (mimeCheck.mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
           const text = await extractZipText(bytes, false);
@@ -282,14 +304,14 @@ Deno.serve(async (req) => {
       }
       if (!extracted) {
         await db.from("personal_library_documents").update({
-          processing_status: "error", processing_error: "Could not extract readable text from this document.",
+          processing_status: "failed_permanent", processing_error: "Could not extract readable text from this document.",
           content_hash: hash,
         }).eq("id", libraryDocumentId);
         return response(req, { error: "Could not extract readable text from this document.", code: "PARSER_FAILED" }, 422);
       }
       await db.from("personal_library_documents").update({
         content_hash: hash, parsed_content: extracted.full_text, parsed_metadata: { summary: extracted.summary },
-        processing_status: "ready", processing_error: null, parser_version: PARSER_VERSION,
+        processing_status: "completed", processing_error: null, parser_version: PARSER_VERSION,
       }).eq("id", libraryDocumentId).eq("owner_id", userId);
       return response(req, {
         success: true, content: extracted.full_text, parsed_summary: extracted.summary,

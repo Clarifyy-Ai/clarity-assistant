@@ -184,6 +184,62 @@ async function persistCompanyResearch(
   return null;
 }
 
+async function persistCompanyResearchWithRetry(
+  admin: ReturnType<typeof getAdminClient>,
+  userId: string,
+  company: string,
+  normalized: string,
+  role: string,
+  data: ResearchBrief,
+): Promise<{ id: string } | null> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const saved = await persistCompanyResearch(
+      admin,
+      userId,
+      company,
+      normalized,
+      role,
+      data,
+    );
+    if (saved?.id) return saved;
+    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+  }
+  return null;
+}
+
+function briefFromPythonCompany(data: unknown, company: string, role: string): ResearchBrief | null {
+  if (!data || typeof data !== "object") return null;
+  const profile = (data as Record<string, unknown>).profile;
+  if (!profile || typeof profile !== "object") return null;
+  const p = profile as Record<string, unknown>;
+  const name = String(p.company_name ?? company).trim();
+  const industry = String(p.industry ?? "").trim();
+  const description = String(p.description ?? "").trim();
+  const products = Array.isArray(p.products)
+    ? p.products.filter((item): item is string => typeof item === "string").slice(0, 8)
+    : [];
+  const overview = description.length >= 40
+    ? description
+    : `${name} is being researched for ${role || "interview preparation"}. ` +
+      `${industry ? `Known industry context: ${industry}. ` : ""}` +
+      "Use verified company information and ask targeted questions before relying on assumptions.";
+  const brief = validateResponse({
+    overview,
+    industry: industry || "Company research",
+    tags: products,
+    interview_process: [],
+    questions: [
+      `What recent priorities or products are most relevant to this ${role || "role"}?`,
+    ],
+    values: [],
+    tips: [
+      "Verify company-specific claims against the employer's official sources.",
+    ],
+    watch_outs: ["Do not present unverified assumptions as company facts."],
+  });
+  return isMeaningfulBrief(brief) ? brief : null;
+}
+
 function legacyJsonResponse(req: Request, body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -363,26 +419,45 @@ Deno.serve(async (req) => {
       },
       runPython: async (ctx) => {
         // Deterministic normalize first; optional AI enrichment in-path.
-        const py = await callPythonProcess({
-          operation: "company_normalize",
-          operationId: ctx.operationId,
-          correlationId: ctx.correlationId,
-          payload: {
-            company,
-            company_name: company,
-            role,
-            role_title: role,
-            normalized,
-          },
-        });
+        let pyData: unknown = null;
+        let source = "deterministic";
+        try {
+          const py = await callPythonProcess({
+            operation: "company_normalize",
+            operationId: ctx.operationId,
+            correlationId: ctx.correlationId,
+            payload: {
+              company,
+              company_name: company,
+              role,
+              role_title: role,
+              normalized,
+            },
+          });
+          if (py.ok) {
+            pyData = py.data;
+            source = "python";
+          }
+        } catch (err) {
+          log(FN, "warn", "Python normalization unavailable; using deterministic brief", {
+            requestId,
+            error: String(err),
+          });
+        }
 
-        let brief = py.ok ? briefFromUnknown(py.data) : null;
-        let source = "python";
+        let brief = briefFromPythonCompany(pyData, company, role);
+        if (!brief) {
+          brief = briefFromPythonCompany(
+            { profile: { company_name: company, company_name_normalized: normalized } },
+            company,
+            role,
+          );
+        }
 
         try {
           const aiBrief = await generateBriefWithAi(company, role, userId);
           brief = aiBrief;
-          source = py.ok ? "python+ai" : "ai";
+          source = source === "python" ? "python+ai" : "ai";
         } catch (err) {
           log(FN, "warn", "AI enrichment failed; keeping python brief if present", {
             requestId,
@@ -393,7 +468,7 @@ Deno.serve(async (req) => {
 
         if (!brief) return null;
 
-        const saved = await persistCompanyResearch(
+        const saved = await persistCompanyResearchWithRetry(
           admin,
           userId,
           company,
@@ -417,10 +492,40 @@ Deno.serve(async (req) => {
           source,
         };
       },
+      runDeterministic: async () => {
+        const brief = briefFromPythonCompany(
+          { profile: { company_name: company, company_name_normalized: normalized } },
+          company,
+          role,
+        );
+        if (!brief) return null;
+        const saved = await persistCompanyResearchWithRetry(
+          admin,
+          userId,
+          company,
+          normalized,
+          role,
+          brief,
+        );
+        if (!saved?.id) {
+          throw new DomainError(
+            "DATABASE_FAILURE",
+            "Research was generated, but we could not save it after conflict recovery.",
+          );
+        }
+        return {
+          persisted: true,
+          cached: false,
+          id: saved.id,
+          data: brief,
+          brief,
+          source: "deterministic",
+        };
+      },
       runAi: async () => {
         // Fallback when Python path unavailable.
         const brief = await generateBriefWithAi(company, role, userId);
-        const saved = await persistCompanyResearch(
+        const saved = await persistCompanyResearchWithRetry(
           admin,
           userId,
           company,

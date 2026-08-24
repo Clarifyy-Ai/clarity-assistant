@@ -21,7 +21,8 @@ import {
   enforceAdmin,
   createServiceRoleClient,
 } from "../_shared/auth.ts";
-import { isPythonConfigured, pythonHealth, pythonReady } from "../_shared/pythonClient.ts";
+import { isPythonConfigured, pythonFetch, pythonHealth, pythonReady } from "../_shared/pythonClient.ts";
+import { isPythonGovExamConfigured } from "../_shared/pythonGovExamClient.ts";
 import { validateBillingConfig } from "../_shared/billingConfig.ts";
 
 function present(name: string): boolean {
@@ -93,12 +94,44 @@ Deno.serve(async (req) => {
   const configured = isPythonConfigured();
   let health: { ok: boolean; status: number; latency_ms: number } | null = null;
   let ready: { ok: boolean; status: number; latency_ms: number } | null = null;
+  let signedInternal: {
+    ok: boolean;
+    status: number;
+    latency_ms: number;
+    code?: string;
+  } | null = null;
 
   if (configured) {
     const [h, r] = await Promise.all([pythonHealth(), pythonReady()]);
     health = { ok: h.ok, status: h.status, latency_ms: h.latencyMs };
     ready = { ok: r.ok, status: r.status, latency_ms: r.latencyMs };
+
+    // Public /health can be green while HMAC is wrong — probe a signed route.
+    const signedStarted = Date.now();
+    const signed = await pythonFetch("/internal/gov-exams/health", {
+      method: "GET",
+      timeoutMs: 8_000,
+      requestId: `hybrid-health-${correlationId.slice(0, 24)}`,
+    });
+    signedInternal = {
+      ok: signed.ok,
+      status: signed.status,
+      latency_ms: Date.now() - signedStarted,
+      code: signed.ok
+        ? undefined
+        : String(signed.errorCode ?? "PYTHON_HMAC_FAILED"),
+    };
   }
+
+  const publicOk = Boolean(health?.ok && ready?.ok);
+  const hmacOk = Boolean(signedInternal?.ok);
+  const pythonStatus = !configured
+    ? "not_configured"
+    : hmacOk
+    ? "ok"
+    : publicOk
+    ? "hmac_mismatch"
+    : "degraded";
 
   const billing = validateBillingConfig({
     requireRazorpay: false,
@@ -121,9 +154,13 @@ Deno.serve(async (req) => {
     storage,
     python: {
       configured,
-      status: configured ? (health?.ok && ready?.ok ? "ok" : "degraded") : "not_configured",
+      /** True only when signed internal auth succeeds — not merely /health. */
+      hmac_ok: hmacOk,
+      gov_exam_client_configured: isPythonGovExamConfigured(),
+      status: pythonStatus,
       health,
       ready,
+      signed_internal: signedInternal,
     },
     ai: {
       gemini: classifyOptional(present("GEMINI_API_KEY") || present("GOOGLE_AI_API_KEY")),

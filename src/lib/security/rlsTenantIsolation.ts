@@ -13,7 +13,7 @@ export type IsolationTable = {
 export const USER_OWNED_TABLES: IsolationTable[] = [
   { table: "profiles", ownerColumn: "id", crossUserSelect: "denied" },
   { table: "user_roles", ownerColumn: "user_id", crossUserSelect: "admin_only" },
-  { table: "sessions", ownerColumn: "user_id", crossUserSelect: "denied" },
+  { table: "sessions", ownerColumn: "user_id", crossUserSelect: "admin_only" },
   { table: "resumes", ownerColumn: "user_id", crossUserSelect: "denied" },
   { table: "job_descriptions", ownerColumn: "user_id", crossUserSelect: "denied" },
   { table: "mock_tests", ownerColumn: "user_id", crossUserSelect: "denied" },

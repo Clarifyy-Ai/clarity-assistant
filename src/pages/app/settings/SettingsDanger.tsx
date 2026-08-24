@@ -1,6 +1,6 @@
 // @ts-nocheck -- retained: Supabase RPC / table types not in generated schema
 import { fetchEdge } from "@/lib/network/fetchEdge";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import { supabase } from "@/lib/supabase/client";
@@ -43,13 +43,17 @@ export default function SettingsDanger() {
   const [deleting,    setDeleting]    = useState(false);
   const [resetting,   setResetting]   = useState(false);
   const [exporting,   setExporting]   = useState(false);
+  const deleteIdempotencyKey = useRef<string | null>(null);
+  const exportIdempotencyKey = useRef<string | null>(null);
 
   // ── Export data ──────────────────────────────────────────────
 
   async function handleExport() {
     if (exporting) return;
     setExporting(true);
-    const idempotencyKey = createExportIdempotencyKey("full");
+    const idempotencyKey =
+      exportIdempotencyKey.current ?? createExportIdempotencyKey("full");
+    exportIdempotencyKey.current = idempotencyKey;
     try {
       const res = await fetchEdge(
         "export-user-data",
@@ -58,7 +62,11 @@ export default function SettingsDanger() {
       );
 
       if (!res.ok) {
-        toast.error(await messageFromExportResponse(res));
+        if (res.status === 409) {
+          toast.info("Export already in progress — please wait a moment.");
+        } else {
+          toast.error(await messageFromExportResponse(res));
+        }
         return;
       }
 
@@ -69,6 +77,7 @@ export default function SettingsDanger() {
       a.download = `clarify-ai-export-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
+      exportIdempotencyKey.current = null;
       toast.success("Export downloaded successfully");
     } catch (err: unknown) {
       toast.error(messageFromExportCaught(err));
@@ -133,8 +142,17 @@ export default function SettingsDanger() {
 
     setDeleting(true);
     try {
+      const idempotencyKey =
+        deleteIdempotencyKey.current ??
+        (typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `delete-${Date.now()}`);
+      deleteIdempotencyKey.current = idempotencyKey;
       const res = await fetchEdge("delete-account", {
         confirmation: usePasswordConfirm ? "DELETE" : confirm,
+        idempotencyKey,
+      }, {
+        headers: { "Idempotency-Key": idempotencyKey },
       });
 
       if (!res.ok) {
@@ -142,6 +160,9 @@ export default function SettingsDanger() {
       }
 
       const payload = await res.json().catch(() => ({}));
+      if (payload?.success !== true || payload?.status !== "completed") {
+        throw new Error("delete_incomplete");
+      }
       setDeleteOpen(false);
       if (payload?.status && !isTerminalDeletionStatus(String(payload.status))) {
         toast.success(

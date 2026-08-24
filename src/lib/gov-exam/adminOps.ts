@@ -15,12 +15,14 @@ import {
   writeAdminAudit,
   type AdminAuditPayload,
 } from "@/lib/admin/writeAdminAudit";
+import { QUALITY_ALGORITHM_VERSION } from "@/lib/gov-exam/algorithmCatalog";
 
 export { writeAdminAudit };
 export type { AdminAuditPayload };
 
 export { TRANSLATION_REVIEW_STATES };
 export type { TranslationReviewState };
+export { QUALITY_ALGORITHM_VERSION };
 
 /** Untyped accessor — gov_* tables are not yet in generated Database types. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -198,12 +200,17 @@ async function mutateWithAudit(params: {
   targetType: string;
   oldValue?: unknown;
 }): Promise<{ error: string | null }> {
-  const { error } = await db()
+  const { data, error } = await db()
     .from(params.table)
     .update(params.patch)
-    .eq("id", params.id);
+    .eq("id", params.id)
+    .select("id")
+    .maybeSingle();
 
   if (error) return { error: error.message };
+  if (!data) {
+    return { error: "Update matched 0 rows (missing id or insufficient permissions)" };
+  }
 
   const audit = await writeAdminAudit({
     action: params.action,
@@ -577,6 +584,9 @@ export type QuestionReviewRow = {
   subject: string;
   difficulty: string | null;
   source: string | null;
+  source_type: string | null;
+  quality_score: number | null;
+  quality_algorithm_version?: string | null;
   is_verified: boolean | null;
   is_public: boolean | null;
   metadata?: Record<string, unknown> | null;
@@ -599,7 +609,7 @@ export async function listQuestionsForReview(filters: {
   let q = db()
     .from("questions")
     .select(
-      "id, question_text, exam_type, topic, subject, difficulty, source, is_verified, is_public, metadata, created_at",
+      "id, question_text, exam_type, topic, subject, difficulty, source, source_type, quality_score, metadata, is_verified, is_public, created_at",
     )
     .order("created_at", { ascending: false })
     .limit(filters.limit ?? 200);

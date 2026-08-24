@@ -34,6 +34,8 @@ class EligibleQuestion:
     difficulty: str
     exam_type: str
     source: str
+    source_type: str = ""
+    is_verified: bool = False
 
 
 def _topic_needles(topics: Sequence[str]) -> list[str]:
@@ -90,8 +92,8 @@ def load_eligible_bank(
         repo.db.table("questions")
         .select(
             "id, question_text, options, correct_answer, subject, topic, "
-            "difficulty, exam_type, source, is_public, is_verified, metadata, "
-            "publish_status"
+            "difficulty, exam_type, source, source_type, is_public, is_verified, "
+            "metadata, publish_status"
         )
         .in_("exam_type", keys)
         .eq("is_public", True)
@@ -153,6 +155,8 @@ def load_eligible_bank(
                 difficulty=str(row.get("difficulty") or "MEDIUM"),
                 exam_type=str(row.get("exam_type") or ""),
                 source=str(row.get("source") or ""),
+                source_type=str(row.get("source_type") or ""),
+                is_verified=bool(row.get("is_verified")),
             )
         )
 

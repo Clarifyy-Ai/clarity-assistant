@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
@@ -19,13 +19,16 @@ import { LICENSE_TYPES, type LicenseType } from "@/lib/content/license";
 import {
   cancelDocumentProcessingJob,
   createDocumentProcessingJob,
+  getDocumentProcessingJob,
   isFailedJobStatus,
   isInFlightJobStatus,
+  libraryStatusFromJob,
   parseDocumentFallback,
   pollDocumentJobUntilDone,
   retryDocumentProcessingJob,
   shouldFallbackToSyncParse,
   userFacingJobError,
+  userFacingDocumentError,
 } from "@/lib/documents/processingJobs";
 import {
   Select,
@@ -34,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 type Doc = {
   id: string;
@@ -48,6 +52,8 @@ type Doc = {
   created_at: string;
 };
 
+type StatusTone = "uploaded" | "queued" | "processing" | "completed" | "failed" | "cancelled";
+
 function mimeForDoc(name: string, mime: string | null): string {
   if (mime) return mime;
   return ({
@@ -59,20 +65,39 @@ function mimeForDoc(name: string, mime: string | null): string {
   }[name.split(".").pop()?.toLowerCase() ?? ""] ?? "application/octet-stream");
 }
 
+function statusTone(status: string | undefined): StatusTone {
+  const s = String(status ?? "").trim().toLowerCase();
+  if (!s || s === "uploaded") return "uploaded";
+  if (s === "queued") return "queued";
+  if (s === "completed" || s === "ready") return "completed";
+  if (s === "cancelled" || s === "rejected") return "cancelled";
+  if (isFailedJobStatus(status)) return "failed";
+  if (isInFlightJobStatus(status)) return "processing";
+  return "uploaded";
+}
+
 function statusLabel(status: string | undefined): string {
-  switch (status) {
+  switch (String(status ?? "").trim()) {
+    case "":
+    case "uploaded":
+      return "Uploaded";
     case "queued":
       return "Queued";
     case "leased":
     case "downloading":
     case "extracting":
     case "OCR":
+    case "ocr_required":
+    case "ocr_processing":
     case "segmenting":
+    case "structuring":
     case "processing":
     case "validating":
     case "awaiting_review":
-      return "Processing…";
+      return "Processing";
     case "failed_retryable":
+    case "error":
+    case "failed":
       return "Failed — Retry";
     case "failed_permanent":
       return "Failed";
@@ -81,15 +106,51 @@ function statusLabel(status: string | undefined): string {
     case "ready":
     case "completed":
       return "Completed";
-    case "error":
-    case "failed":
-      return "Failed — Retry";
     case "rejected":
       return "Rejected";
     default:
       return status ?? "Uploaded";
   }
 }
+
+const TONE_CLASS: Record<StatusTone, string> = {
+  uploaded: "text-muted-foreground",
+  queued: "text-amber-700 dark:text-amber-400",
+  processing: "text-blue-700 dark:text-blue-400",
+  completed: "text-emerald-700 dark:text-emerald-400",
+  failed: "text-destructive",
+  cancelled: "text-muted-foreground",
+};
+
+const JOB_STORAGE_PREFIX = "doc-processing-job:";
+
+function rememberJobId(documentId: string, jobId: string): void {
+  try {
+    sessionStorage.setItem(`${JOB_STORAGE_PREFIX}${documentId}`, jobId);
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+function recalledJobId(documentId: string): string | null {
+  try {
+    return sessionStorage.getItem(`${JOB_STORAGE_PREFIX}${documentId}`);
+  } catch {
+    return null;
+  }
+}
+
+/** Active statuses on document_processing_jobs (CHECK constraint set). */
+const ACTIVE_JOB_DB_STATUSES = [
+  "queued",
+  "leased",
+  "downloading",
+  "extracting",
+  "OCR",
+  "segmenting",
+  "validating",
+  "awaiting_review",
+] as const;
 
 export default function DocumentLibraryPage() {
   const user = useAuthStore((s) => s.user);
@@ -99,6 +160,7 @@ export default function DocumentLibraryPage() {
   const [source, setSource] = useState("personal");
   const [uploading, setUploading] = useState(false);
   const [selectedName, setSelectedName] = useState<string | null>(null);
+  const resumedDocsRef = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     if (!user?.id) return;
@@ -115,18 +177,87 @@ export default function DocumentLibraryPage() {
     void load();
   }, [load]);
 
+  /** Resume existing jobs after refresh — same job id, never create duplicates. */
   useEffect(() => {
+    if (!user?.id) return;
     const inflight = docs.filter((d) => isInFlightJobStatus(d.processing_status));
     if (!inflight.length) return;
+
     let cancelled = false;
+
+    async function findExistingJob(documentId: string) {
+      const remembered = recalledJobId(documentId);
+      if (remembered) {
+        const { data: byId } = await supabase
+          .from("document_processing_jobs")
+          .select("id, status, error_code, error_message")
+          .eq("id", remembered)
+          .eq("owner_id", user!.id)
+          .maybeSingle();
+        if (byId?.id) return byId;
+      }
+      const { data } = await supabase
+        .from("document_processing_jobs")
+        .select("id, status, error_code, error_message")
+        .eq("document_id", documentId)
+        .eq("owner_id", user!.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data;
+    }
+
+    async function syncDocFromJob(
+      documentId: string,
+      job: { id: string; status: string; error_code?: string | null; error_message?: string | null },
+    ) {
+      rememberJobId(documentId, job.id);
+      const nextStatus = libraryStatusFromJob(job.status);
+      await supabase
+        .from("personal_library_documents")
+        .update({
+          processing_status: nextStatus,
+          processing_error: isFailedJobStatus(job.status) ? userFacingJobError(job) : null,
+        })
+        .eq("id", documentId)
+        .eq("owner_id", user!.id);
+    }
+
+    async function resumeOnce(): Promise<void> {
+      for (const doc of inflight) {
+        if (cancelled || resumedDocsRef.current.has(doc.id)) continue;
+        resumedDocsRef.current.add(doc.id);
+        try {
+          const job = await findExistingJob(doc.id);
+          if (!job?.id) continue;
+          rememberJobId(doc.id, job.id);
+          if (!isInFlightJobStatus(job.status)) {
+            await syncDocFromJob(doc.id, job);
+            continue;
+          }
+          // Soft edge poll — confirms ownership and refreshes status without create.
+          const live = await getDocumentProcessingJob(job.id);
+          if (live && !isInFlightJobStatus(live.status)) {
+            await syncDocFromJob(doc.id, live);
+          }
+        } catch {
+          resumedDocsRef.current.delete(doc.id);
+        }
+      }
+      if (!cancelled) void load();
+    }
+
+    void resumeOnce();
+
     const timer = window.setInterval(() => {
       if (!cancelled) void load();
     }, 3000);
+
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [docs, load]);
+  }, [docs, load, user?.id]);
 
   async function processLibraryDocument(opts: {
     documentId: string;
@@ -137,18 +268,20 @@ export default function DocumentLibraryPage() {
     const idempotencyKey = opts.isRetry
       ? `library-retry:${opts.documentId}:${crypto.randomUUID()}`
       : `library-parse:${user?.id}:${opts.contentHash}`;
+    let created: Awaited<ReturnType<typeof createDocumentProcessingJob>> | null = null;
     try {
-      const created = await createDocumentProcessingJob({
+      created = await createDocumentProcessingJob({
         documentId: opts.documentId,
         idempotencyKey,
       });
       if (created.jobId) {
+        rememberJobId(opts.documentId, created.jobId);
         await supabase.from("personal_library_documents").update({
           processing_status: created.state || "queued",
           processing_error: null,
         }).eq("id", opts.documentId);
       }
-      if (shouldFallbackToSyncParse(null, created) || !created.jobId) {
+      if (!created.jobId) {
         await parseDocumentFallback({
           libraryDocumentId: opts.documentId,
           mimeType: opts.mimeType,
@@ -158,10 +291,22 @@ export default function DocumentLibraryPage() {
       }
       const job = await pollDocumentJobUntilDone(created.jobId);
       if (job && isFailedJobStatus(job.status)) {
+        await supabase.from("personal_library_documents").update({
+          processing_status: job.status,
+          processing_error: userFacingJobError(job),
+        }).eq("id", opts.documentId).eq("owner_id", user?.id);
         throw new Error(userFacingJobError(job));
       }
+      if (job && ["completed", "ready"].includes(job.status)) {
+        await supabase.from("personal_library_documents").update({
+          processing_status: "completed",
+          processing_error: null,
+        }).eq("id", opts.documentId).eq("owner_id", user?.id);
+      }
     } catch (err) {
-      if (shouldFallbackToSyncParse(err)) {
+      // Never fall back after a durable job was created: that job owns the
+      // credit reservation and remains the single source of truth.
+      if (!created?.jobId && shouldFallbackToSyncParse(err)) {
         await parseDocumentFallback({
           libraryDocumentId: opts.documentId,
           mimeType: opts.mimeType,
@@ -171,6 +316,39 @@ export default function DocumentLibraryPage() {
       }
       throw err;
     }
+  }
+
+  async function resumeExistingDocumentJob(doc: Doc): Promise<boolean> {
+    const { data: job } = await supabase
+      .from("document_processing_jobs")
+      .select("id, status, error_code, error_message")
+      .eq("document_id", doc.id)
+      .eq("owner_id", user?.id ?? "")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!job?.id) return false;
+    rememberJobId(doc.id, job.id);
+    if (isInFlightJobStatus(job.status)) {
+      toast.message("Processing already in progress for this document.");
+      void load();
+      return true;
+    }
+    if (isFailedJobStatus(job.status)) {
+      toast.message("This document already failed processing. Use Retry if available.");
+      void load();
+      return true;
+    }
+    if (job.status === "completed" || job.status === "ready") {
+      await supabase.from("personal_library_documents").update({
+        processing_status: "completed",
+        processing_error: null,
+      }).eq("id", doc.id).eq("owner_id", user?.id);
+      toast.message("This document is already in your library.");
+      void load();
+      return true;
+    }
+    return false;
   }
 
   async function upload(file: File) {
@@ -202,8 +380,11 @@ export default function DocumentLibraryPage() {
       .eq("content_hash", contentHash)
       .maybeSingle();
     if (duplicate) {
-      toast.message("This document is already in your library. Reusing it without another upload or charge.");
-      void load();
+      const resumed = await resumeExistingDocumentJob(duplicate as Doc);
+      if (!resumed) {
+        toast.message("This document is already in your library. Reusing it without another upload or charge.");
+        void load();
+      }
       setUploading(false);
       return;
     }
@@ -227,7 +408,7 @@ export default function DocumentLibraryPage() {
         content_hash: contentHash,
         file_size_bytes: file.size,
         file_category: "library",
-        processing_status: "queued",
+        processing_status: "uploaded",
       });
       if (error) {
         await supabase.storage.from(STORAGE_BUCKETS.DOCUMENTS).remove([path]);
@@ -241,6 +422,7 @@ export default function DocumentLibraryPage() {
             .eq("storage_path", path)
             .single();
           if (inserted.data?.id) {
+            void load();
             await processLibraryDocument({
               documentId: inserted.data.id,
               mimeType: mimeForDoc(file.name, file.type),
@@ -249,9 +431,7 @@ export default function DocumentLibraryPage() {
           }
           toast.success("Document uploaded. Processing will continue if you refresh.");
         } catch (parseError) {
-          toast.warning(parseError instanceof Error
-            ? `Uploaded, but processing needs a retry: ${parseError.message}`
-            : "Uploaded, but processing needs a retry.");
+          toast.warning(`Uploaded, but processing needs a retry: ${userFacingDocumentError(parseError)}`);
         }
         void load();
       }
@@ -274,6 +454,21 @@ export default function DocumentLibraryPage() {
   }
 
   async function remove(doc: Doc) {
+    const { data: activeJob } = await supabase
+      .from("document_processing_jobs")
+      .select("id, status")
+      .eq("document_id", doc.id)
+      .eq("owner_id", user?.id ?? "")
+      .in("status", [...ACTIVE_JOB_DB_STATUSES])
+      .maybeSingle();
+    if (activeJob?.id) {
+      try {
+        await cancelDocumentProcessingJob(activeJob.id);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not cancel document processing.");
+        return;
+      }
+    }
     if (doc.storage_path) await supabase.storage.from(STORAGE_BUCKETS.DOCUMENTS).remove([doc.storage_path]);
     const { error } = await supabase.from("personal_library_documents").delete().eq("id", doc.id);
     if (error) toast.error(error.message);
@@ -310,6 +505,12 @@ export default function DocumentLibraryPage() {
         .maybeSingle();
       if (job?.id && job.status === "failed_retryable") {
         await retryDocumentProcessingJob(job.id);
+        rememberJobId(doc.id, job.id);
+        resumedDocsRef.current.delete(doc.id);
+        await supabase.from("personal_library_documents").update({
+          processing_status: "queued",
+          processing_error: null,
+        }).eq("id", doc.id).eq("owner_id", user?.id);
         toast.success("Retry queued.");
       } else {
         await processLibraryDocument({
@@ -322,26 +523,47 @@ export default function DocumentLibraryPage() {
       }
       void load();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Document processing failed.");
+      toast.error(userFacingDocumentError(error));
       void load();
     }
   }
 
   async function cancelProcessing(doc: Doc) {
-    const { data: job } = await supabase
-      .from("document_processing_jobs")
-      .select("id, status")
-      .eq("document_id", doc.id)
-      .eq("owner_id", user?.id ?? "")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (!job?.id || !isInFlightJobStatus(job.status)) {
+    const remembered = recalledJobId(doc.id);
+    let jobId = remembered;
+    let jobStatus: string | undefined;
+    if (jobId) {
+      const { data } = await supabase
+        .from("document_processing_jobs")
+        .select("id, status")
+        .eq("id", jobId)
+        .eq("owner_id", user?.id ?? "")
+        .maybeSingle();
+      jobId = data?.id ?? null;
+      jobStatus = data?.status;
+    }
+    if (!jobId) {
+      const { data: job } = await supabase
+        .from("document_processing_jobs")
+        .select("id, status")
+        .eq("document_id", doc.id)
+        .eq("owner_id", user?.id ?? "")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      jobId = job?.id ?? null;
+      jobStatus = job?.status;
+    }
+    if (!jobId || !isInFlightJobStatus(jobStatus)) {
       toast.error("No in-progress job to cancel.");
       return;
     }
     try {
-      await cancelDocumentProcessingJob(job.id);
+      await cancelDocumentProcessingJob(jobId);
+      await supabase.from("personal_library_documents").update({
+        processing_status: "cancelled",
+        processing_error: null,
+      }).eq("id", doc.id).eq("owner_id", user?.id);
       toast.success("Processing cancelled.");
       void load();
     } catch (error) {
@@ -388,33 +610,40 @@ export default function DocumentLibraryPage() {
         )}
       </Card>
       <ul className="space-y-2">
-        {docs.map((doc) => (
-          <li key={doc.id}>
-            <Card className="min-w-0">
-              <p className="font-medium break-words">{doc.document_name}</p>
-              <p className="text-xs text-muted-foreground">
-                {doc.content_rights} · {doc.source} · {statusLabel(doc.processing_status)} ·{" "}
-                {new Date(doc.created_at).toLocaleString()}
-              </p>
-              {doc.processing_error && (
-                <p className="mt-1 text-xs text-destructive" role="alert">
-                  {doc.processing_error}
+        {docs.map((doc) => {
+          const tone = statusTone(doc.processing_status);
+          return (
+            <li key={doc.id}>
+              <Card className="min-w-0">
+                <p className="font-medium break-words">{doc.document_name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {doc.content_rights} · {doc.source} ·{" "}
+                  <span className={cn("font-medium", TONE_CLASS[tone])} data-status={tone}>
+                    {statusLabel(doc.processing_status)}
+                  </span>
+                  {" · "}
+                  {new Date(doc.created_at).toLocaleString()}
                 </p>
-              )}
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" onClick={() => void download(doc)}>Download</Button>
-                {(doc.processing_status === "error" || isFailedJobStatus(doc.processing_status)) && (
-                  <Button size="sm" variant="outline" onClick={() => void retryProcessing(doc)}>Retry processing</Button>
+                {doc.processing_error && (
+                  <p className="mt-1 text-xs text-destructive" role="alert">
+                    {doc.processing_error}
+                  </p>
                 )}
-                {isInFlightJobStatus(doc.processing_status) && (
-                  <Button size="sm" variant="outline" onClick={() => void cancelProcessing(doc)}>Cancel processing</Button>
-                )}
-                <Button size="sm" variant="outline" onClick={() => void createPracticeSet(doc)}>Create practice set</Button>
-                <Button size="sm" variant="danger" onClick={() => void remove(doc)}>Delete</Button>
-              </div>
-            </Card>
-          </li>
-        ))}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" onClick={() => void download(doc)}>Download</Button>
+                  {(doc.processing_status === "error" || isFailedJobStatus(doc.processing_status)) && (
+                    <Button size="sm" variant="outline" onClick={() => void retryProcessing(doc)}>Retry processing</Button>
+                  )}
+                  {isInFlightJobStatus(doc.processing_status) && (
+                    <Button size="sm" variant="outline" onClick={() => void cancelProcessing(doc)}>Cancel processing</Button>
+                  )}
+                  <Button size="sm" variant="outline" onClick={() => void createPracticeSet(doc)}>Create practice set</Button>
+                  <Button size="sm" variant="danger" onClick={() => void remove(doc)}>Delete</Button>
+                </div>
+              </Card>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

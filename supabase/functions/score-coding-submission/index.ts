@@ -20,6 +20,13 @@ function runVisibleJavascriptTests(
   if (typeof source !== "string" || source.trim().length === 0) {
     return { ok: false, results: [] as Array<{ passed: boolean }>, blockedReason: "No source to run." };
   }
+  if (/\bwhile\s*\(\s*true\s*\)|\bfor\s*\(\s*;\s*;\s*\)/.test(source)) {
+    return {
+      ok: false,
+      results: [{ passed: false }],
+      blockedReason: "Execution timed out.",
+    };
+  }
   if (/\bimport\s+|require\s*\(|fetch\s*\(|XMLHttpRequest|process\.|Deno\./.test(source)) {
     return {
       ok: false,
@@ -108,6 +115,9 @@ Deno.serve(async (req) => {
     return json(req, { status: "limit_exceeded", score: null, message: "Maximum submissions reached." }, 429);
   }
 
+  if (language !== question.language) {
+    return json(req, { error: "Selected language is not supported for this problem." }, 400);
+  }
   if (question.evaluation_mode !== "javascript_solve" || language !== "javascript") {
     const { data: row } = await db.from("coding_submissions").insert({
       user_id: userId,
@@ -133,7 +143,7 @@ Deno.serve(async (req) => {
   const { data: cases, error: cErr } = await db.rpc("coding_hidden_cases_for_scoring", {
     p_question_id: questionId,
   });
-  if (cErr) return json(req, { error: cErr.message }, 500);
+  if (cErr) return json(req, { error: "Code execution service is temporarily unavailable." }, 503);
 
   const mapped = ((cases ?? []) as Array<{
     id: string;
@@ -152,7 +162,9 @@ Deno.serve(async (req) => {
   const passed = outcome.results.filter((r) => r.passed).length;
   const failed = outcome.results.length - passed;
   const score = mapped.length === 0 ? 0 : Math.round((passed / mapped.length) * 100);
-  const execution_status = outcome.blockedReason ? "blocked" : failed === 0 && passed > 0 ? "passed" : "failed";
+  const execution_status = outcome.blockedReason === "Execution timed out."
+    ? "timeout"
+    : outcome.blockedReason ? "blocked" : failed === 0 && passed > 0 ? "passed" : "failed";
 
   const { data: row, error: insErr } = await db.from("coding_submissions").insert({
     user_id: userId,

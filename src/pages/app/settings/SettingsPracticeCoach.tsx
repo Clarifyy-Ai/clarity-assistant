@@ -1,7 +1,6 @@
 // @ts-nocheck -- hint_style / coach_tone live in profiles JSON preferences; not yet on generated Tables<"profiles"> Update type.
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -58,7 +57,7 @@ const COACH_TONE_OPTIONS: { value: CoachTone; label: string; desc: string }[] = 
 
 export default function SettingsPracticeCoach() {
   const profile = useAuthStore((s) => s.profile);
-  const setProfile = useAuthStore((s) => s.setProfile);
+  const updateProfile = useAuthStore((s) => s.updateProfile);
   const navigate = useNavigate();
 
   const [hintStyle, setHintStyle] = useState<HintStyle>((profile?.hint_style as HintStyle) ?? "short_hints");
@@ -76,19 +75,10 @@ export default function SettingsPracticeCoach() {
     if (!profile?.id) return;
     setSaving(true);
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .update({
+      await updateProfile({
           hint_style: hintStyle as any,
           coach_tone: coachTone as any,
-          updated_at: new Date().toISOString(),
         })
-        .eq("id", profile.id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      if (data) setProfile(data as unknown as typeof profile);
       toast.success("Practice Coach preferences saved successfully.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save coach preferences.");

@@ -137,7 +137,7 @@ async function fetchBankQuestions(
 
   if (opts.wantsPYP) {
     await addFromQuery(
-      db.from("questions").select(baseSelect).eq("is_public", true).in("source", PYP_SOURCES),
+      db.from("questions").select(baseSelect).eq("is_public", true).eq("publish_status", "published").eq("review_status", "approved").in("source", PYP_SOURCES),
     );
   }
   if (opts.wantsAI) {
@@ -158,7 +158,7 @@ async function fetchBankQuestions(
   // Default: public bank when no source flags (should not happen after validation)
   if (!opts.wantsPYP && !opts.wantsAI && !opts.includeUserUploads) {
     await addFromQuery(
-      db.from("questions").select(baseSelect).eq("is_public", true),
+      db.from("questions").select(baseSelect).eq("is_public", true).eq("publish_status", "published").eq("review_status", "approved"),
     );
   }
 
@@ -188,6 +188,8 @@ async function fetchBankQuestions(
         db.from("questions")
           .select(baseSelect)
           .eq("is_public", true)
+          .eq("publish_status", "published")
+          .eq("review_status", "approved")
           .in("source", PYP_SOURCES),
       );
     }

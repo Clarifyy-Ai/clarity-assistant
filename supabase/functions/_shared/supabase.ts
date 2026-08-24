@@ -269,6 +269,51 @@ export async function storeIdempotentResponse(
   }
 }
 
+/**
+ * Claim an idempotency key before doing expensive work.
+ * Returns "claimed" on first insert, "duplicate" on unique violation.
+ * Callers must store the final response or release the claim on failure.
+ */
+export async function claimIdempotencyKey(
+  db: SupabaseClient,
+  key: string | null | undefined,
+  scope?: { userId: string; action: string; requestHash?: string | null },
+): Promise<"claimed" | "duplicate" | "skipped"> {
+  if (!key || !isValidIdempotencyKey(key)) return "skipped";
+
+  const { error } = await db.from(IDEMPOTENCY_TABLE).insert({
+    key,
+    response: { status: "pending" },
+    expires_at: new Date(Date.now() + IDEMPOTENCY_TTL_MS).toISOString(),
+    metadata: {
+      ...(scope?.userId ? { user_id: scope.userId } : {}),
+      ...(scope?.action ? { action: normalizeAction(scope.action) } : {}),
+      ...(scope?.requestHash ? { request_hash: scope.requestHash } : {}),
+    },
+  });
+
+  if (!error) return "claimed";
+  if ((error as { code?: string }).code === "23505") return "duplicate";
+  console.error("[supabase] claimIdempotencyKey failed:", error.message);
+  // Fail open so export still works if the table is unavailable.
+  return "skipped";
+}
+
+export async function releaseIdempotencyKey(
+  db: SupabaseClient,
+  key: string | null | undefined,
+): Promise<void> {
+  if (!key || !isValidIdempotencyKey(key)) return;
+  try {
+    await db.from(IDEMPOTENCY_TABLE).delete().eq("key", key);
+  } catch (error) {
+    console.error(
+      "[supabase] Failed to release idempotency key:",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /*                              CREDIT SYSTEM                                  */
 /* -------------------------------------------------------------------------- */

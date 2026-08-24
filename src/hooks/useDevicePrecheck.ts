@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { AudioDevice } from "@/types/audio.types";
 import { runLocalMicCheck } from "@/lib/audio/localMicPrecheck";
 import { checkSttHealth } from "@/lib/audio/sttHealthCheck";
-import { resetDeepgramTokenClient } from "@/lib/audio/deepgramToken";
+import {
+  fetchDeepgramTokenBounded,
+  unblockDeepgramTokenClient,
+} from "@/lib/audio/deepgramToken";
 import {
   cancelSpeakerTest,
   disposeSpeakerTestResources,
@@ -86,16 +89,25 @@ export function useDevicePrecheck({
     };
   }, [cleanupPending]);
 
-  const runSttCheck = useCallback(async () => {
+  const runSttCheck = useCallback(async (opts?: { force?: boolean }) => {
     const op = sttGuard.current.next();
     sttAbortRef.current?.abort();
     const ac = new AbortController();
     sttAbortRef.current = ac;
-    resetDeepgramTokenClient();
+    // Never wipe the module token cache on remount/auto-check — that storms
+    // deepgram-token. Only unblock the failure circuit on an explicit user recheck.
+    if (opts?.force) {
+      unblockDeepgramTokenClient();
+    }
     setSttState(SttState.STT_CHECKING);
     setSttMessage(null);
     try {
-      const result = await checkSttHealth({ signal: ac.signal });
+      const result = await checkSttHealth({
+        signal: ac.signal,
+        fetchToken: opts?.force
+          ? () => fetchDeepgramTokenBounded({ signal: ac.signal, force: true })
+          : undefined,
+      });
       if (!mountedRef.current || !op.isCurrent()) return result;
       setSttState(result.state);
       setSttMessage(result.message);

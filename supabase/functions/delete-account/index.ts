@@ -1,6 +1,7 @@
 import { handleCors, getCorsHeaders, withCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
-import { createServiceClient } from "../_shared/supabase.ts";
+import { createServiceClient, refundCredits } from "../_shared/supabase.ts";
+import { claimJobCreditsForRefund } from "../_shared/claimJobCredits.ts";
 import {
   enforceAccountDeletionRateLimitAsync,
 } from "../_shared/rateLimit.ts";
@@ -115,7 +116,45 @@ const WIPE_TABLES: WipeSpec[] = [
   { table: "user_roles", column: "user_id" },
 ];
 
-const STORAGE_BUCKETS = ["resumes", "avatars", "documents", "exports"];
+const STORAGE_BUCKETS = [
+  "resumes",
+  "avatars",
+  "documents",
+  "exports",
+  "scorecards",
+  "jd-files",
+  "room-recordings",
+];
+
+async function removeUserStorage(
+  db: ReturnType<typeof createServiceClient>,
+  userId: string,
+): Promise<void> {
+  for (const bucket of STORAGE_BUCKETS) {
+    const paths: string[] = [];
+    const pending = [userId];
+    while (pending.length) {
+      const prefix = pending.pop()!;
+      const { data, error } = await db.storage.from(bucket).list(prefix, {
+        limit: 1000,
+        offset: 0,
+      });
+      if (error) {
+        if (String(error.message ?? "").toLowerCase().includes("not found")) continue;
+        throw new Error(`Storage listing failed for ${bucket}`);
+      }
+      for (const entry of data ?? []) {
+        const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+        if (entry.id) paths.push(path);
+        else pending.push(path);
+      }
+    }
+    for (let i = 0; i < paths.length; i += 100) {
+      const { error } = await db.storage.from(bucket).remove(paths.slice(i, i + 100));
+      if (error) throw new Error(`Storage removal failed for ${bucket}`);
+    }
+  }
+}
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
@@ -135,6 +174,9 @@ Deno.serve(async (req) => {
     const confirmation = typeof body?.confirmation === "string"
       ? body.confirmation.trim()
       : "";
+    const idempotencyKey = typeof body?.idempotencyKey === "string"
+      ? body.idempotencyKey.trim().slice(0, 150)
+      : req.headers.get("Idempotency-Key")?.trim().slice(0, 150) ?? "";
 
     if (confirmation !== "DELETE" && confirmation !== userEmail) {
       return jsonWithCors(
@@ -151,13 +193,17 @@ Deno.serve(async (req) => {
     const correlationId =
       req.headers.get("x-request-id")?.trim() || crypto.randomUUID();
 
-    const { data: existingOp } = await db
+    let existingQuery = db
       .from("account_deletion_operations")
       .select("id, status")
-      .eq("user_id", targetUserId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .eq("user_id", targetUserId);
+    if (idempotencyKey) {
+      existingQuery = existingQuery.eq("idempotency_key", idempotencyKey);
+    } else {
+      existingQuery = existingQuery.order("created_at", { ascending: false }).limit(1);
+    }
+    const { data: existingOp, error: existingOpError } = await existingQuery.maybeSingle();
+    if (existingOpError) throw existingOpError;
 
     if (existingOp?.status === "completed") {
       return jsonWithCors(req, {
@@ -170,16 +216,18 @@ Deno.serve(async (req) => {
 
     let operationId = existingOp?.id as string | undefined;
     if (!operationId) {
-      const { data: created } = await db
+      const { data: created, error: createOpError } = await db
         .from("account_deletion_operations")
         .insert({
           user_id: targetUserId,
           status: "identity_confirmed",
           correlation_id: correlationId,
           current_step: "confirmed",
+          idempotency_key: idempotencyKey || null,
         })
         .select("id")
         .single();
+      if (createOpError) throw createOpError;
       operationId = created?.id;
     }
 
@@ -195,7 +243,50 @@ Deno.serve(async (req) => {
         .eq("id", operationId);
     }
 
-    await db.auth.admin.signOut(targetUserId, "global").catch(() => {});
+    const { error: signOutError } = await db.auth.admin.signOut(targetUserId, "global");
+    if (signOutError) throw signOutError;
+
+    // Stop owned workers before deleting their rows. Refund each charged
+    // generation exactly once through the job credit claim.
+    const { data: paperJobs, error: paperJobsError } = await db
+      .from("gov_paper_generation_jobs")
+      .select("id, credits_charged")
+      .eq("user_id", targetUserId)
+      .not("status", "in", "(completed,cancelled,failed_permanent,expired)");
+    if (paperJobsError) throw paperJobsError;
+    for (const paperJob of paperJobs ?? []) {
+      await db.from("gov_paper_generation_jobs").update({
+        status: "cancelled",
+        progress_stage: "cancelled",
+        retryable: false,
+        error_code: "ACCOUNT_DELETION",
+        error_message: "Cancelled because the account is being deleted.",
+        worker_id: null,
+        lease_expires_at: null,
+        completed_at: new Date().toISOString(),
+      }).eq("id", paperJob.id).eq("user_id", targetUserId);
+      const claimed = await claimJobCreditsForRefund(db, String(paperJob.id));
+      if (claimed > 0) {
+        await refundCredits({
+          userId: targetUserId,
+          cost: claimed,
+          reason: "refund_account_deletion_paper_job",
+          idempotencyKey: `refund_paper_job:${paperJob.id}`,
+        });
+      }
+    }
+    const { error: documentJobsError } = await db.from("document_processing_jobs")
+      .update({
+        status: "cancelled",
+        retryable: false,
+        cancel_requested_at: new Date().toISOString(),
+        lease_expires_at: null,
+        worker_id: null,
+        completed_at: new Date().toISOString(),
+      })
+      .eq("owner_id", targetUserId)
+      .in("status", ["queued", "leased", "downloading", "extracting", "OCR", "segmenting", "validating", "awaiting_review", "failed_retryable"]);
+    if (documentJobsError && !isMissingRelation(documentJobsError)) throw documentJobsError;
 
     await db.from("referrals").delete().eq("referred_id", targetUserId);
     await db.from("referrals").delete().eq("referrer_id", targetUserId);
@@ -226,25 +317,30 @@ Deno.serve(async (req) => {
       }
     }
 
-    await db.from("payment_orders").update({
+    const { error: paymentError } = await db.from("payment_orders").update({
       user_id: null,
       metadata: { anonymized: true, deleted_at: new Date().toISOString() },
       promo_code: null,
     }).eq("user_id", targetUserId);
+    if (paymentError && !isMissingRelation(paymentError)) throw paymentError;
 
-    await db.from("credit_transactions").update({
+    const { error: creditError } = await db.from("credit_transactions").update({
+      user_id: null,
       description: "anonymized",
     }).eq("user_id", targetUserId);
+    if (creditError && !isMissingRelation(creditError)) throw creditError;
 
-    await db.from("billing_reconciliation_incidents").update({
+    const { error: reconciliationError } = await db.from("billing_reconciliation_incidents").update({
       user_id: null,
       details: { anonymized: true },
     }).eq("user_id", targetUserId);
+    if (reconciliationError && !isMissingRelation(reconciliationError)) throw reconciliationError;
 
     // RETAIN_REQUIRED: ops provenance stays; drop the user pointer.
-    await db.from("backend_operation_log").update({
+    const { error: operationLogError } = await db.from("backend_operation_log").update({
       user_id: null,
     }).eq("user_id", targetUserId);
+    if (operationLogError && !isMissingRelation(operationLogError)) throw operationLogError;
 
     await db.from("content_quality_incidents").update({
       reported_by: null,
@@ -257,17 +353,10 @@ Deno.serve(async (req) => {
     await db.from("room_questions").update({ created_by: null }).eq("created_by", targetUserId);
     await db.from("promo_codes").update({ created_by: null }).eq("created_by", targetUserId);
 
-    for (const bucket of STORAGE_BUCKETS) {
-      const { data, error: listErr } = await db.storage.from(bucket).list(targetUserId);
-      if (listErr || !data?.length) continue;
-      const paths = data.map((f: { name: string }) => `${targetUserId}/${f.name}`);
-      await db.storage.from(bucket).remove(paths);
-    }
+    await removeUserStorage(db, targetUserId);
 
     const { error: profileErr } = await db.from("profiles").delete().eq("id", targetUserId);
-    if (profileErr && !isMissingRelation(profileErr)) {
-      console.error("profile delete error:", profileErr);
-    }
+    if (profileErr && !isMissingRelation(profileErr)) throw profileErr;
 
     const { error: deleteErr } = await db.auth.admin.deleteUser(targetUserId);
     if (deleteErr && !String(deleteErr.message ?? "").toLowerCase().includes("not found")) {

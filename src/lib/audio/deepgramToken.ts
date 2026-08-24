@@ -1,6 +1,7 @@
 /**
  * Client-side Deepgram token cache with in-flight dedup and bounded retries.
  * Never loops deepgram-token on persistent failure — marks unavailable and stops.
+ * Remounts / aborted prechecks must share cache + inflight; do not reset on every check.
  */
 
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
@@ -27,11 +28,27 @@ export function isDeepgramTokenBlocked(): boolean {
   return blocked;
 }
 
+/** Full reset — use only on permanent auth failure or intentional session teardown. */
 export function resetDeepgramTokenClient(): void {
   cached = null;
   inflight = null;
   consecutiveFailures = 0;
   blocked = false;
+}
+
+/**
+ * Allow another bounded attempt after a user-initiated recheck without wiping a
+ * still-fresh cached token (avoids remount / Strict Mode token storms).
+ */
+export function unblockDeepgramTokenClient(): void {
+  consecutiveFailures = 0;
+  blocked = false;
+}
+
+function isAbortError(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === "AbortError") return true;
+  if (err instanceof Error && /abort|cancelled/i.test(err.message)) return true;
+  return false;
 }
 
 /** Refresh buffer: leave meaningful lifetime (e.g. refresh ~15s before expiry when TTL >= 60s). */
@@ -49,6 +66,10 @@ export async function fetchDeepgramTokenBounded(options?: {
   signal?: AbortSignal;
   force?: boolean;
 }): Promise<CachedDeepgramToken> {
+  if (options?.force) {
+    unblockDeepgramTokenClient();
+  }
+
   if (blocked && !options?.force) {
     throw new Error(
       "Live transcription is unavailable. You can still type questions in Chat.",
@@ -64,6 +85,9 @@ export async function fetchDeepgramTokenBounded(options?: {
 
   inflight = (async () => {
     try {
+      if (options?.signal?.aborted) {
+        throw new DOMException("Aborted", "AbortError");
+      }
       const data = await fetchEdgeJson<DeepgramTokenResponse>(
         "deepgram-token",
         {},
@@ -82,6 +106,10 @@ export async function fetchDeepgramTokenBounded(options?: {
       blocked = false;
       return entry;
     } catch (err) {
+      if (isAbortError(err)) {
+        throw err instanceof Error ? err : new DOMException("Aborted", "AbortError");
+      }
+
       consecutiveFailures += 1;
       cached = null;
       if (consecutiveFailures >= MAX_DEEPGRAM_TOKEN_ATTEMPTS) {

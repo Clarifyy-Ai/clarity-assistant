@@ -22,9 +22,11 @@ import {
 } from "./govMcqValidator.ts";
 import {
   MIN_BANK_QUESTION_QUALITY,
+  QUALITY_ALGORITHM_VERSION,
   scorePaperQuality,
   scoreQuestionQuality,
 } from "./govQualityScore.ts";
+import { DEDUP_ALGORITHM_VERSION } from "./algorithmCatalog.ts";
 import {
   runBankMultiAgentValidation,
   validatePaperSimilarity,
@@ -123,6 +125,75 @@ type JobRow = {
   mock_test_id: string | null;
   generated_paper_id: string | null;
 };
+
+type PaperSourceType =
+  | "official_verified"
+  | "verified_public_source"
+  | "approved_bank"
+  | "generated_practice"
+  | "ai_generated_practice";
+
+const OFFICIAL_MODE_ALLOWED = new Set<PaperSourceType>([
+  "official_verified",
+  "verified_public_source",
+  "approved_bank",
+]);
+
+const GENERATED_SOURCE_TYPES = new Set<PaperSourceType>([
+  "generated_practice",
+  "ai_generated_practice",
+]);
+
+function canonicalSourceType(row: Record<string, unknown>, aiQuestionIds: Set<string>): PaperSourceType {
+  if (aiQuestionIds.has(String(row.id ?? ""))) return "ai_generated_practice";
+  const explicit = String(row.source_type ?? "").trim().toLowerCase();
+  if (
+    explicit === "official_verified" ||
+    explicit === "verified_public_source" ||
+    explicit === "approved_bank" ||
+    explicit === "generated_practice" ||
+    explicit === "ai_generated_practice"
+  ) {
+    return explicit;
+  }
+  const source = String(row.source ?? "").trim().toLowerCase();
+  if (["official_pyp", "official", "previous_year", "pyq", "pyp"].includes(source)) {
+    return "official_verified";
+  }
+  if (source.includes("ai")) return "ai_generated_practice";
+  if (source.includes("generated") || source.includes("deterministic")) {
+    return "generated_practice";
+  }
+  return "approved_bank";
+}
+
+/** DB CHECK on gov_generated_paper_questions.source_class. */
+function mapToLegacySourceClass(sourceType: PaperSourceType): "previous_year" | "generated" | "bank" {
+  if (sourceType === "official_verified") return "previous_year";
+  if (GENERATED_SOURCE_TYPES.has(sourceType)) return "generated";
+  return "bank";
+}
+
+function allowedSourceForMode(mode: string, sourceType: PaperSourceType): boolean {
+  if (mode === "official_previous") {
+    return OFFICIAL_MODE_ALLOWED.has(sourceType) && !GENERATED_SOURCE_TYPES.has(sourceType);
+  }
+  return true;
+}
+
+function resolvePaperSource(mix: Record<string, number>, mode: string): string {
+  if (mode === "official_previous") return "official_verified";
+  const generated = (mix.generated_practice ?? 0) + (mix.ai_generated_practice ?? 0);
+  const bankish =
+    (mix.official_verified ?? 0) +
+    (mix.verified_public_source ?? 0) +
+    (mix.approved_bank ?? 0);
+  if (generated > 0 && bankish > 0) return "hybrid_realistic_mock";
+  if ((mix.ai_generated_practice ?? 0) > 0) return "ai_generated_practice";
+  if ((mix.generated_practice ?? 0) > 0) return "generated_practice";
+  if ((mix.official_verified ?? 0) > 0) return "official_verified";
+  return "approved_bank";
+}
 
 async function stage(
   db: ServiceDb,
@@ -465,9 +536,11 @@ export async function assembleClaimedPaperJob(
       let bankQuery = db
         .from("questions")
         .select(
-          "id, question_text, options, correct_answer, subject, topic, difficulty, source, source_year, is_public, is_verified",
+          "id, question_text, options, correct_answer, subject, topic, difficulty, source, source_type, source_year, is_public, is_verified",
         )
         .eq("is_public", true)
+        .eq("publish_status", "published")
+        .eq("review_status", "approved")
         .in("exam_type", examTypeKeys)
         .limit(2000);
       if (mode === "official_previous") {
@@ -532,6 +605,15 @@ export async function assembleClaimedPaperJob(
 
     for (const row of candidates) {
       if (selected.length >= blueprint.total_questions) break;
+      const sourceType = canonicalSourceType(row as unknown as Record<string, unknown>, aiQuestionIds);
+      if (!allowedSourceForMode(mode, sourceType)) {
+        rejectedQuality.push({
+          id: String(row.id),
+          reason: "GENERATED_PROVENANCE_REJECTED",
+          score: 0,
+        });
+        continue;
+      }
       const text = String(row.question_text ?? "");
       const options = normalizeMcqOptions(row.options);
       const correctIndex = resolveCorrectIndex(row.correct_answer, options.length);
@@ -550,12 +632,13 @@ export async function assembleClaimedPaperJob(
       const peerTexts = selected.map((p) => String(p.question_text ?? ""));
       if (conflictsWithSelected(text, peerTexts)) continue;
 
+      // Content validators drive quality — never invent verified=100 from provenance alone.
       const quality = scoreQuestionQuality({
         question_text: text,
         options,
         correct_index: correctIndex,
         peers: peerTexts,
-        sourceConfidence: 0.8,
+        sourceConfidence: 0.7,
       });
       if (quality.hardFail || quality.score < MIN_BANK_QUESTION_QUALITY) {
         rejectedQuality.push({
@@ -571,7 +654,7 @@ export async function assembleClaimedPaperJob(
         options,
         correct_index: correctIndex,
         peers: peerTexts,
-        sourceConfidence: 0.8,
+        sourceConfidence: 0.7,
         language: job.language,
       });
       if (!agent.publishable) {
@@ -635,6 +718,8 @@ export async function assembleClaimedPaperJob(
       for (const row of candidates) {
         if (selected.length >= blueprint.total_questions) break;
         if (selectedIds.has(String(row.id))) continue;
+        const sourceType = canonicalSourceType(row as unknown as Record<string, unknown>, aiQuestionIds);
+        if (!allowedSourceForMode(mode, sourceType)) continue;
         const text = String(row.question_text ?? "");
         const options = normalizeMcqOptions(row.options);
         const correctIndex = resolveCorrectIndex(row.correct_answer, options.length);
@@ -751,14 +836,18 @@ export async function assembleClaimedPaperJob(
             const { data: pyRows } = await db
               .from("questions")
               .select(
-                "id, question_text, options, correct_answer, subject, topic, difficulty, source, source_year, is_public, is_verified",
+                "id, question_text, options, correct_answer, subject, topic, difficulty, source, source_type, source_year, is_public, is_verified",
               )
               .in("id", pySel.data.question_ids)
-              .eq("is_public", true);
+              .eq("is_public", true)
+              .eq("publish_status", "published")
+              .eq("review_status", "approved");
             for (const row of (pyRows ?? []) as GapFillRow[]) {
               if (selected.length >= blueprint.total_questions) break;
               const id = String(row.id);
               if (selectedIds.has(id)) continue;
+              const sourceType = canonicalSourceType(row as unknown as Record<string, unknown>, aiQuestionIds);
+              if (!allowedSourceForMode(mode, sourceType)) continue;
               selectedIds.add(id);
               selected.push(row);
             }
@@ -778,6 +867,8 @@ export async function assembleClaimedPaperJob(
             if (selected.length >= blueprint.total_questions) break;
             const id = String(row.id);
             if (selectedIds.has(id)) continue;
+            const sourceType = canonicalSourceType(row as unknown as Record<string, unknown>, aiQuestionIds);
+            if (!allowedSourceForMode(mode, sourceType)) continue;
             const text = String(row.question_text ?? "");
             const options = normalizeMcqOptions(row.options);
             const correctIndex = resolveCorrectIndex(row.correct_answer, options.length);
@@ -879,6 +970,9 @@ export async function assembleClaimedPaperJob(
         subject: r.subject,
         topic: r.topic,
         section_code: blueprint.slots[idx]?.section_code ?? null,
+        difficulty: r.difficulty,
+        language: blueprint.language,
+        source_type: canonicalSourceType(r as unknown as Record<string, unknown>, aiQuestionIds),
       })),
       aiQuestionIds,
     });
@@ -902,6 +996,38 @@ export async function assembleClaimedPaperJob(
       };
     }
 
+    const paperQuality = scorePaperQuality(
+      selected.slice(0, blueprint.total_questions).map((row) => {
+        const options = normalizeMcqOptions(row.options);
+        return {
+          question_text: String(row.question_text ?? ""),
+          options,
+          correct_index: resolveCorrectIndex(row.correct_answer, options.length) ?? -1,
+          peers: [],
+          // Neutral provenance weight — content validators own the score.
+          sourceConfidence: 0.7,
+        };
+      }),
+    );
+    if (paperQuality.hardFailCount > 0 || paperQuality.score < MIN_BANK_QUESTION_QUALITY) {
+      await failJob(
+        db,
+        job,
+        workerId,
+        "QUALITY_POLICY_VIOLATION",
+        `Canonical quality policy ${paperQuality.algorithm_version} rejected the assembled paper.`,
+        false,
+        { blueprint_json: blueprint },
+      );
+      return {
+        ok: false,
+        status: "failed_permanent",
+        errorCode: "QUALITY_POLICY_VIOLATION",
+        error: `Canonical quality policy ${paperQuality.algorithm_version} rejected the assembled paper.`,
+        httpStatus: 422,
+      };
+    }
+
     st = await stage(db, job.id, workerId, "assembling", { blueprint_json: blueprint });
     if (st === "cancelled") {
       return { ok: false, status: "cancelled", errorCode: "CANCELLED", error: "Cancelled" };
@@ -911,19 +1037,14 @@ export async function assembleClaimedPaperJob(
     }
 
     const questionIds = selected.slice(0, blueprint.total_questions).map((q) => q.id);
-
-    const paperQuality = scorePaperQuality(
-      selected.slice(0, blueprint.total_questions).map((row) => {
-        const options = normalizeMcqOptions(row.options);
-        return {
-          question_text: String(row.question_text ?? ""),
-          options,
-          correct_index: resolveCorrectIndex(row.correct_answer, options.length) ?? 0,
-          peers: [],
-          sourceConfidence: aiQuestionIds.has(row.id) ? 0.55 : 0.8,
-        };
-      }),
-    );
+    const selectedRows = selected.slice(0, blueprint.total_questions);
+    const sourceMix: Record<string, number> = {};
+    const questionSourceTypes = selectedRows.map((row) => {
+      const sourceType = canonicalSourceType(row as unknown as Record<string, unknown>, aiQuestionIds);
+      sourceMix[sourceType] = (sourceMix[sourceType] ?? 0) + 1;
+      return sourceType;
+    });
+    const paperSource = resolvePaperSource(sourceMix, mode);
 
     const { data: mockTest, error: mtErr } = await db
       .from("mock_tests")
@@ -950,7 +1071,11 @@ export async function assembleClaimedPaperJob(
           shuffle_questions: false,
           shuffle_options: false,
           quality_score: paperQuality.score,
+          quality_algorithm_version: QUALITY_ALGORITHM_VERSION,
+          dedup_algorithm_version: DEDUP_ALGORITHM_VERSION,
           requested_question_count: requestedQuestionCount,
+          source_mix: sourceMix,
+          paper_source: paperSource,
         },
         status: "DRAFT",
       })
@@ -984,11 +1109,16 @@ export async function assembleClaimedPaperJob(
           source_years: sourceYears,
           question_ids: questionIds,
           quality_score: paperQuality.score,
+          quality_algorithm_version: QUALITY_ALGORITHM_VERSION,
+          duplicate_algorithm_version: DEDUP_ALGORITHM_VERSION,
           quality_hard_fail_count: paperQuality.hardFailCount,
           rejected_quality_sample: rejectedQuality.slice(0, 20),
           review_queue: reviewQueue.slice(0, 50),
           llm_generator: aiFilledCount > 0,
           ai_filled_count: aiFilledCount,
+          source_mix: sourceMix,
+          paper_source: paperSource,
+          question_source_types: questionSourceTypes,
           exam_type_keys: examTypeKeys,
           missing_coverage: selected.length < requestedQuestionCount ? {
             requested: requestedQuestionCount,
@@ -1006,6 +1136,8 @@ export async function assembleClaimedPaperJob(
           : "machine_validated",
         disclaimer: blueprint.label,
         mock_test_id: mockTest.id,
+        paper_source: paperSource,
+        source_mix: sourceMix,
       })
       .select("id")
       .single();
@@ -1019,7 +1151,15 @@ export async function assembleClaimedPaperJob(
       question_id: qid,
       section_code: blueprint.slots[idx]?.section_code ?? null,
       sort_order: idx,
-      source_class: aiQuestionIds.has(qid) ? ("generated" as const) : ("bank" as const),
+      source_class: mapToLegacySourceClass(questionSourceTypes[idx] ?? "approved_bank"),
+      question_source_type: questionSourceTypes[idx],
+      quality_score: paperQuality.perQuestion[idx]?.score ?? null,
+      validation_status: paperQuality.perQuestion[idx]?.hardFail ? "invalid" : "valid",
+      duplicate_status: paperQuality.perQuestion[idx]?.hardFailCodes.includes("NEAR_DUPLICATE")
+        ? "near_duplicate"
+        : "unique",
+      quality_algorithm_version: QUALITY_ALGORITHM_VERSION,
+      duplicate_algorithm_version: DEDUP_ALGORITHM_VERSION,
     }));
 
     if (linkRows.length) {
@@ -1036,6 +1176,8 @@ export async function assembleClaimedPaperJob(
         generated_paper_id: paper.id,
         completed_at: new Date().toISOString(),
         blueprint_json: blueprint,
+        source_mix: sourceMix,
+        missing_count: Math.max(0, requestedQuestionCount - questionIds.length),
         worker_id: null,
         lease_expires_at: null,
         retryable: false,

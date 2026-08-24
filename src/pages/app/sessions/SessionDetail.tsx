@@ -51,21 +51,31 @@ export default function SessionDetail() {
 
       setSession(sess);
       setAnswers(
-        ans.map((row, index) => ({
-          id: row.id,
-          question_text: row.question,
-          transcript: row.answer,
-          score: row.score,
-          ai_feedback: row.ai_feedback,
-          question_index: index,
-          question_tags: [],
-          content_score: row.score,
-          structure_score: null,
-          communication_score: null,
-          confidence_score: null,
-          session_id: id,
-          star_breakdown: null,
-        })),
+        [...ans]
+          .sort((a, b) => {
+            const ai = a.question_index;
+            const bi = b.question_index;
+            if (typeof ai === "number" && typeof bi === "number" && ai !== bi) return ai - bi;
+            if (typeof ai === "number" && typeof bi !== "number") return -1;
+            if (typeof bi === "number" && typeof ai !== "number") return 1;
+            return String(a.created_at).localeCompare(String(b.created_at));
+          })
+          .map((row) => ({
+            id: row.id,
+            question_text: row.question,
+            transcript: row.answer,
+            score: row.score,
+            ai_feedback: row.ai_feedback,
+            question_index:
+              typeof row.question_index === "number" ? row.question_index : null,
+            question_tags: [],
+            content_score: row.score,
+            structure_score: null,
+            communication_score: null,
+            confidence_score: null,
+            session_id: id,
+            star_breakdown: null,
+          })),
       );
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : "Failed to load session");
@@ -84,14 +94,14 @@ export default function SessionDetail() {
 
   const rawOverall = session?.overall_score;
   const hasOverallScore = rawOverall !== null && rawOverall !== undefined;
-  const score = hasOverallScore ? Number(rawOverall) : 0;
+  const score = hasOverallScore ? Number(rawOverall) : null;
   const scoreColor =
-    !hasOverallScore ? "gray" :
+    score === null ? "gray" :
     score >= 80 ? "emerald" :
     score >= 60 ? "amber"   : "red";
 
   const scoreTier =
-    !hasOverallScore ? "Not scored" :
+    score === null ? "Not scored" :
     score >= 85 ? "Excellent" :
     score >= 70 ? "Good" :
     score >= 55 ? "Fair" : "Needs work";
@@ -231,11 +241,11 @@ export default function SessionDetail() {
             scoreColor === "amber"   ? "text-amber-400"   :
             scoreColor === "gray"    ? "text-muted-foreground" : "text-red-400"
           )}>
-            {hasOverallScore ? score : "—"}
+            {hasOverallScore && score !== null ? score : "—"}
           </div>
           <p className="text-foreground text-sm font-medium">{scoreTier}</p>
           <p className="text-muted-foreground text-xs mt-1">Overall score</p>
-          {hasOverallScore && (
+          {hasOverallScore && score !== null && (
             <ProgressBar value={score} max={100} color={scoreColor === "gray" ? "violet" : scoreColor} size="sm" className="mt-4 w-32" />
           )}
         </Card>
@@ -284,8 +294,8 @@ export default function SessionDetail() {
         {[
           { icon: <Clock className="w-4 h-4 text-blue-400" />,         label: "Duration",     value: duration },
           { icon: <MessageSquare className="w-4 h-4 text-primary" />,label: "Questions",    value: `${answers.length} / ${session.question_count ?? answers.length}` },
-          { icon: <Volume2 className="w-4 h-4 text-emerald-400" />,    label: "Avg WPM",      value: session.avg_wpm ? `${session.avg_wpm}` : "—" },
-          { icon: <Mic className="w-4 h-4 text-amber-400" />, label: "Total fillers",value: session.total_filler_words ?? "—" },
+          { icon: <Volume2 className="w-4 h-4 text-emerald-400" />,    label: "Avg WPM",      value: typeof session.avg_wpm === "number" ? `${session.avg_wpm}` : "—" },
+          { icon: <Mic className="w-4 h-4 text-amber-400" />, label: "Total fillers",value: typeof session.filler_words === "number" ? session.filler_words : (typeof session.total_filler_words === "number" ? session.total_filler_words : "—") },
         ].map((stat) => (
           <Card key={stat.label} padding="sm" className="flex items-center gap-3">
             {stat.icon}
@@ -356,6 +366,8 @@ export default function SessionDetail() {
             </Card>
           ) : answers.map((ans, i) => {
             const isOpen  = expanded[ans.id];
+            const displayIndex =
+              typeof ans.question_index === "number" ? ans.question_index + 1 : i + 1;
             const qScore  = ans.score ?? null;
             const qColor  =
               qScore === null ? "gray"    :
@@ -369,7 +381,7 @@ export default function SessionDetail() {
                   onClick={() => setExpanded((p) => ({ ...p, [ans.id]: !p[ans.id] }))}
                 >
                   <div className="w-7 h-7 bg-secondary rounded-lg flex items-center justify-center text-xs font-bold text-muted-foreground shrink-0 mt-0.5">
-                    {i + 1}
+                    {displayIndex}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-foreground line-clamp-2">

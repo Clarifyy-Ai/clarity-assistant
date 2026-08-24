@@ -6,6 +6,7 @@ import {
   createRateLimitKey,
   rateLimitResponse,
 } from "../_shared/rateLimit.ts";
+import { isFeatureKilled, killSwitchResponse } from "../_shared/featureKillSwitch.ts";
 import {
   CompareSessionsError,
   buildComparisonPayload,
@@ -109,6 +110,10 @@ Deno.serve(async (req: Request) => {
 
     const user = auth.context.user;
     const db = createServiceClient();
+
+    if (await isFeatureKilled("analytics")) {
+      return killSwitchResponse(req);
+    }
 
     const rateLimitResult = await checkRateLimitAsync(db, {
       key: createRateLimitKey(FUNCTION_NAME, user.id),

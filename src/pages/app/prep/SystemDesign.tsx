@@ -166,6 +166,33 @@ export default function SystemDesign() {
     diagramLoadedRef.current = key;
   }, [diagramSpec, genPhase, useNotesOnly]);
 
+  useEffect(() => {
+    if (!activeTopic || generating || saving) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error: loadError } = await supabase
+        .from("answer_bank")
+        .select("id, answer_text, created_at")
+        .eq("source", "prep_lab")
+        .eq("question_text", `System Design: ${activeTopic.title}`)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (cancelled || loadError || !data) return;
+      const answer = String(data.answer_text ?? "");
+      const marker = "\n\n--- AI Breakdown ---\n";
+      const markerIndex = answer.indexOf(marker);
+      setNotes(markerIndex >= 0 ? answer.slice(0, markerIndex) : "");
+      setBreakdown(markerIndex >= 0 ? answer.slice(markerIndex + marker.length) : answer);
+      setSavedAnswerId(String(data.id));
+      setSavePhase("SAVED");
+      setGenPhase("COMPLETED");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTopic, generating, saving]);
+
   function buildInput(topic: DesignTopic, candidateNotes: string): string {
     return `Topic: ${topic.title}\n\nPrompt: ${topic.prompt}\n\nKey areas: ${topic.keyAreas.join(", ")}${candidateNotes ? `\n\nCandidate notes:\n${candidateNotes}` : ""}`;
   }

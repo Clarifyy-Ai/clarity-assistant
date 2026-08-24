@@ -30,9 +30,9 @@ export interface CreditPack {
 export const CREDIT_PACKS: CreditPack[] = CREDIT_PACK_DEFINITIONS.map((pack) => ({
   ...pack,
   stripePriceId:
-    pack.id === "pack_50"
+    pack.id === "credits_50"
       ? ENV.STRIPE_PRICE_CREDITS_50
-      : pack.id === "pack_150"
+      : pack.id === "credits_150"
         ? ENV.STRIPE_PRICE_CREDITS_150
         : ENV.STRIPE_PRICE_CREDITS_500,
 }));
@@ -117,9 +117,9 @@ export function catalogPaiseForPlan(planId: string): number {
 }
 
 export function razorpayPaiseForPack(packId: string): number | null {
-  if (packId === "pack_50") return RAZORPAY_INR_PAISE.credits_50;
-  if (packId === "pack_150") return RAZORPAY_INR_PAISE.credits_150;
-  if (packId === "pack_500") return RAZORPAY_INR_PAISE.credits_500;
+  if (packId === "credits_50" || packId === "pack_50") return RAZORPAY_INR_PAISE.credits_50;
+  if (packId === "credits_150" || packId === "pack_150") return RAZORPAY_INR_PAISE.credits_150;
+  if (packId === "credits_500" || packId === "pack_500") return RAZORPAY_INR_PAISE.credits_500;
   return null;
 }
 

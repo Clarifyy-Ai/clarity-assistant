@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useUIStore, type Theme } from "@/store/uiStore";
 import { useThemeStore } from "@/store/themeStore";
+import { useAuthStore } from "@/store/authStore";
 import { applyAppearancePreferences } from "@/lib/theme/applyAppearance";
 import {
   getDefaultOverlayEnabled,
@@ -12,6 +13,7 @@ import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/switch";
 import { CheckCircle, Palette, Monitor, Sun, Moon, Layers, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 
 const THEMES = [
@@ -37,11 +39,26 @@ export default function SettingsAppearance() {
   const setUITheme   = useUIStore((s) => s.setTheme);
   const extras       = useThemeStore();
   const stealthMode  = useUIStore((s) => s.stealth_mode);
+  const profile = useAuthStore((s) => s.profile);
+  const updateProfile = useAuthStore((s) => s.updateProfile);
 
   const [accent,   setAccent]   = useState(extras.accentColor ?? "violet");
   const [fontSize, setFontSize] = useState(extras.fontSize ?? "Default");
   const [density,  setDensity]  = useState(extras.density ?? "Default");
   const [saved,    setSaved]    = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const prefs = profile?.ui_preferences;
+    if (!prefs || typeof prefs !== "object" || Array.isArray(prefs)) return;
+    const stored = prefs as Record<string, unknown>;
+    if (stored.theme === "light" || stored.theme === "dark" || stored.theme === "system") {
+      setUITheme(stored.theme);
+    }
+    if (typeof stored.accentColor === "string") setAccent(stored.accentColor);
+    if (typeof stored.fontSize === "string") setFontSize(stored.fontSize);
+    if (typeof stored.density === "string") setDensity(stored.density);
+  }, [profile?.id, profile?.ui_preferences, setUITheme]);
 
   useEffect(() => {
     applyAppearancePreferences({
@@ -55,13 +72,28 @@ export default function SettingsAppearance() {
     setUITheme(t);
   }
 
-  function handleSave() {
-    extras.setAccentColor(accent);
-    extras.setFontSize(fontSize);
-    extras.setDensity(density);
-    applyAppearancePreferences({ accentColor: accent, fontSize, density });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  async function handleSave() {
+    if (!profile?.id) return;
+    setSaving(true);
+    const existing =
+      profile.ui_preferences && typeof profile.ui_preferences === "object"
+        ? profile.ui_preferences
+        : {};
+    try {
+      await updateProfile({
+        ui_preferences: { ...existing, theme: currentTheme, accentColor: accent, fontSize, density },
+      });
+      extras.setAccentColor(accent);
+      extras.setFontSize(fontSize);
+      extras.setDensity(density);
+      applyAppearancePreferences({ accentColor: accent, fontSize, density });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save appearance settings.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -166,7 +198,8 @@ export default function SettingsAppearance() {
         <Button
           variant={saved ? "success" : "primary"}
           size="md"
-          onClick={handleSave}
+          onClick={() => void handleSave()}
+          loading={saving}
           leftIcon={saved
             ? <CheckCircle className="w-4 h-4" />
             : <Palette className="w-4 h-4" />

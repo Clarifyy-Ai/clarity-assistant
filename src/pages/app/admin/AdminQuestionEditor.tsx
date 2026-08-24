@@ -23,6 +23,8 @@ import {
 } from "@/components/admin/blocks";
 import { QUESTION_EXAM_TYPE_OPTIONS } from "@/lib/mock-test/examTypes";
 import { ASSESSMENT_ROLE_SLUGS, REVIEW_STATUSES } from "@/lib/assessments/taxonomy";
+import { validateQuestionQuality } from "@/lib/assessments/questionQuality";
+import { writeAdminAudit } from "@/lib/admin/writeAdminAudit";
 
 const EXAMS = [...QUESTION_EXAM_TYPE_OPTIONS];
 const DIFFICULTIES = ["EASY", "MEDIUM", "HARD"];
@@ -53,7 +55,7 @@ export default function AdminQuestionEditor() {
   const { id } = useParams<{ id?: string }>();
   const isAdmin = useAuthStore((s) => s.isAdmin);
 
-  if (id === "new" && !isAdmin) {
+  if (!isAdmin) {
     return <ListView />;
   }
 
@@ -97,6 +99,11 @@ function ListView() {
     setDeleting(true);
     try {
       await questionsDB.delete(deleteId);
+      void writeAdminAudit({
+        action: "question_delete",
+        targetType: "question",
+        targetId: deleteId,
+      });
       toast.success("Deleted");
       void load();
     } catch (err) {
@@ -258,12 +265,12 @@ function makeEmpty(): EditorState {
     sourceYear: String(new Date().getFullYear()),
     marksPositive: 4,
     marksNegative: 1,
-    isVerified: true,
-    isPublic: true,
+    isVerified: false,
+    isPublic: false,
     category: "",
     eligibleRoles: [],
     crossFunctional: false,
-    reviewStatus: "unreviewed",
+    reviewStatus: "review_required",
   };
 }
 
@@ -338,12 +345,17 @@ function EditorView({ id }: { id?: string }) {
     if (blocksToPlainText(state.qBlocks).length < 3) {
       return toast.error("Question body cannot be empty.");
     }
+    if (!blocksToPlainText(state.explanationBlocks).trim()) {
+      return toast.error("Explanation is required.");
+    }
 
     setSaving(true);
     try {
-      const optionsPlain: Record<string, string> = {};
+      const optionsPlain: Array<{ label: string; text: string }> = [];
       for (const L of OPTION_LETTERS) {
-        optionsPlain[L] = blocksToPlainText(state.optionBlocks[L]) || `Option ${L}`;
+        const option = blocksToPlainText(state.optionBlocks[L]).trim();
+        if (!option) return toast.error(`Option ${L} is required.`);
+        optionsPlain.push({ label: L, text: option });
       }
 
       const payload: any = {
@@ -362,8 +374,13 @@ function EditorView({ id }: { id?: string }) {
         source_year: Number(state.sourceYear) || null,
         marks_positive: state.marksPositive,
         marks_negative: state.marksNegative,
-        is_verified: state.isVerified,
-        is_public: state.isPublic,
+        is_verified: state.reviewStatus === "approved" && state.isVerified,
+        is_public: state.reviewStatus === "approved" && state.isPublic,
+        publish_status: state.reviewStatus === "approved" && state.isPublic ? "published" : "draft",
+        source: "USER_UPLOAD",
+        source_type: "admin_uploaded",
+        license_type: "INTERNAL",
+        validation_status: "valid",
         question_type: "MCQ",
         uploaded_by: user.id,
         category: state.category.trim() || state.subject.trim(),
@@ -371,13 +388,29 @@ function EditorView({ id }: { id?: string }) {
         cross_functional: state.crossFunctional,
         review_status: state.reviewStatus,
       };
+      const validationIssues = validateQuestionQuality(payload);
+      if (validationIssues.length > 0) {
+        return toast.error(validationIssues[0].message);
+      }
 
       if (isNew) {
         const { id: newId } = await questionsDB.create(payload);
+        void writeAdminAudit({
+          action: "question_create",
+          targetType: "question",
+          targetId: newId,
+          newValue: payload,
+        });
         toast.success("Question created");
         navigate(`/app/admin/questions/${newId}`);
       } else {
         await questionsDB.update(id!, payload);
+        void writeAdminAudit({
+          action: "question_edit",
+          targetType: "question",
+          targetId: id!,
+          newValue: payload,
+        });
         toast.success("Saved");
       }
     } catch (err: any) {

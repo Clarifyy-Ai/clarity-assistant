@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { supabase } from "@/lib/supabase/client";
 
@@ -98,6 +98,7 @@ export default function AdminUsers() {
   const [selected, setSelected] = useState<UserRow | null>(null);
 
   const [actionLoading, setActionLoading] = useState(false);
+  const requestSequence = useRef(0);
 
 
 
@@ -110,7 +111,7 @@ export default function AdminUsers() {
 
 
   async function fetchUsers() {
-
+    const requestId = ++requestSequence.current;
     setLoading(true);
 
     setFetchError(null);
@@ -189,6 +190,7 @@ export default function AdminUsers() {
 
 
 
+      if (requestId !== requestSequence.current) return;
       setUsers(rows.map((r) => ({
         ...r,
         is_admin: adminIds.has(r.id),
@@ -201,7 +203,8 @@ export default function AdminUsers() {
 
       console.error("[AdminUsers] fetch failed:", err);
 
-      const message = err instanceof Error ? err.message : "Failed to load users";
+      const message = adminActionFailedMessage(err, "AdminUsers.load");
+      if (requestId !== requestSequence.current) return;
 
       setFetchError(message);
 
@@ -212,9 +215,7 @@ export default function AdminUsers() {
       toast.error(message);
 
     } finally {
-
-      setLoading(false);
-
+      if (requestId === requestSequence.current) setLoading(false);
     }
 
   }
@@ -311,6 +312,7 @@ export default function AdminUsers() {
           case "add_credits":
 
             patch.add_credits = 100;
+            patch.reason = "Admin portal grant";
 
             break;
 
@@ -776,4 +778,3 @@ export default function AdminUsers() {
   );
 
 }
-

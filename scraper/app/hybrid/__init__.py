@@ -11,6 +11,7 @@ SUPPORTED_OPERATIONS: tuple[str, ...] = (
     "company_research_skeleton",
     "mock_question_bank",
     "practice_coach_hint",
+    "practice_coach",
     "document_extract",
     "ping",
 )

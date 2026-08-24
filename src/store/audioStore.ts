@@ -48,6 +48,12 @@ interface AudioStore extends AudioStoreState {
   finaliseUtterance: (id: string) => void;
   setLastQuestion: (question: string | null) => void;
   clearTranscript: () => void;
+  /** Hydrate transcript after refresh restore (replaces current buffer). */
+  restoreTranscript: (payload: {
+    utterances?: TranscriptUtterance[];
+    full_transcript?: string;
+    last_question?: string | null;
+  }) => void;
 
   // Deepgram actions
   setDeepgramStatus: (status: DeepgramConnectionStatus) => void;
@@ -269,6 +275,32 @@ export const useAudioStore = create<AudioStore>()(
           last_question_at: null,
         },
       })),
+
+    restoreTranscript: (payload) =>
+      set((s) => {
+        const utterances = Array.isArray(payload.utterances) ? payload.utterances : [];
+        const full_transcript =
+          typeof payload.full_transcript === "string" && payload.full_transcript
+            ? payload.full_transcript
+            : utterances
+                .filter((u) => u.is_final !== false)
+                .map((u) => `[${u.speaker}]: ${u.text}`)
+                .join("\n");
+        const last_question =
+          payload.last_question !== undefined
+            ? payload.last_question
+            : s.transcript.last_question;
+        return {
+          transcript: {
+            ...s.transcript,
+            utterances,
+            full_transcript,
+            interim_text: "",
+            last_question,
+            last_question_at: last_question ? Date.now() : null,
+          },
+        };
+      }),
 
     // ── Deepgram actions ───────────────────────────────────
     setDeepgramStatus: (deepgram_status) =>

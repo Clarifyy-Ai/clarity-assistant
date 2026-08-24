@@ -6,6 +6,7 @@ import {
   createRateLimitKey,
   rateLimitResponse,
 } from "../_shared/rateLimit.ts";
+import { isFeatureKilled, killSwitchResponse } from "../_shared/featureKillSwitch.ts";
 
 Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
@@ -16,6 +17,11 @@ Deno.serve(async (req: Request) => {
     if (auth.error) return auth.error;
 
     const user = auth.context.user;
+
+    // Server-side kill-switch: analytics must not work when flag is disabled.
+    if (await isFeatureKilled("analytics")) {
+      return killSwitchResponse(req);
+    }
 
     // Controlled degradation: RPC outage must not blank Analytics with 503.
     const rateLimitResult = await checkRateLimitAsync(createServiceClient(), {
@@ -35,6 +41,10 @@ Deno.serve(async (req: Request) => {
     --------------------------- */
     const body = await req.json().catch(() => ({}));
     const filter = body?.filter ?? {};
+    const timeZone =
+      typeof body?.timezone === "string" && body.timezone.length > 0
+        ? body.timezone
+        : "UTC";
 
     const rawPage = Number(body?.page);
     const rawPerPage = Number(body?.per_page);
@@ -52,40 +62,97 @@ Deno.serve(async (req: Request) => {
 
     const days = periodDays[filter.period] ?? 30;
     const since = new Date();
-    since.setDate(since.getDate() - days);
+    if (filter.period !== "all") {
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(since);
+      const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+      const localDate = new Date(
+        Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day) - days),
+      );
+      const localDateUtc = localDate.getTime();
+      const offsetParts = new Intl.DateTimeFormat("en-CA", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hourCycle: "h23",
+      }).formatToParts(new Date(localDateUtc));
+      const offsetValues = Object.fromEntries(
+        offsetParts.map((part) => [part.type, part.value]),
+      );
+      const representedUtc = Date.UTC(
+        Number(offsetValues.year),
+        Number(offsetValues.month) - 1,
+        Number(offsetValues.day),
+        Number(offsetValues.hour),
+        Number(offsetValues.minute),
+        Number(offsetValues.second),
+      );
+      since.setTime(localDateUtc - (representedUtc - localDateUtc));
+    }
 
     /* ---------------------------
        FETCH SESSIONS
     --------------------------- */
-    const offset = (page - 1) * perPage;
-
-    const { data: sessions, error: sessErr, count: totalCount } = await db
+    let sessionsQuery = db
       .from("sessions")
       .select(
         "id,user_id,title,type,status,lifecycle_status,deleted_at,started_at,ended_at,created_at,questions_asked,answers_generated,avg_wpm,filler_words,tags",
-        { count: "exact" },
       )
       .eq("user_id", user.id)
       .is("deleted_at", null)
-      .gte("created_at", since.toISOString())
-      .not("tags", "cs", "{private}")
-      .order("created_at", { ascending: false })
-      .range(offset, offset + perPage - 1);
+      .or("status.eq.completed,lifecycle_status.eq.COMPLETED,lifecycle_status.eq.ANALYZED")
+      .order("created_at", { ascending: false });
+    if (filter.period !== "all") {
+      sessionsQuery = sessionsQuery.gte("started_at", since.toISOString());
+    }
+    if (filter.interview_type && filter.interview_type !== "all") {
+      sessionsQuery = sessionsQuery.eq("type", filter.interview_type);
+    }
+    const { data: sessions, error: sessErr } =
+      await sessionsQuery;
 
     if (sessErr) throw sessErr;
+
+    const sessionListRaw = (sessions ?? []).filter((s) => {
+      if (Array.isArray(s.tags) && s.tags.includes("private")) return false;
+      if (!filter.session_filter || filter.session_filter === "all") return true;
+      const type = String(s.type ?? "").toLowerCase();
+      return filter.session_filter === "real_interview"
+        ? type === "real_interview"
+        : type === filter.session_filter;
+    });
+
+    // Deduplicate by session id (defensive against duplicate query rows).
+    const seenSessionIds = new Set<string>();
+    const sessionList = sessionListRaw.filter((s) => {
+      const id = String(s.id ?? "");
+      if (!id || seenSessionIds.has(id)) return false;
+      seenSessionIds.add(id);
+      return true;
+    });
 
     /* ---------------------------
        FETCH SCORECARDS (FILTERED)
     --------------------------- */
-    const { data: scorecards, error: scErr } = await db
-      .from("scorecards")
-      .select("*")
-      .eq("user_id", user.id)
-      .gte("created_at", since.toISOString());
+    const { data: scorecards, error: scErr } = sessionList.length
+      ? await db
+        .from("scorecards")
+        .select("*")
+        .eq("user_id", user.id)
+        .in("session_id", sessionList.map((s) => s.id))
+      : { data: [], error: null };
 
     if (scErr) throw scErr;
 
-    const sessionIds = (sessions ?? []).map((s: { id: string }) => s.id);
+    const sessionIds = sessionList.map((s: { id: string }) => s.id);
     const { data: answerRows } = sessionIds.length
       ? await db
         .from("session_answers")
@@ -103,8 +170,14 @@ Deno.serve(async (req: Request) => {
       .eq("id", user.id)
       .maybeSingle();
 
-    const sessionList = sessions ?? [];
-    const scorecardList = scorecards ?? [];
+    const scorecardListRaw = scorecards ?? [];
+    const seenScorecardSessions = new Set<string>();
+    const scorecardList = scorecardListRaw.filter((sc) => {
+      const sid = String(sc.session_id ?? "");
+      if (!sid || seenScorecardSessions.has(sid)) return false;
+      seenScorecardSessions.add(sid);
+      return true;
+    });
     const scorecardMetric = (
       scorecard: Record<string, unknown>,
       key: "filler_rate" | "wpm_avg" | "top_filler_word",
@@ -190,13 +263,17 @@ Deno.serve(async (req: Request) => {
     const fillerTrend = scorecardList
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
       .slice(-30)
-      .map((sc) => ({
-        date: sc.created_at,
-        total_fillers: typeof scorecardMetric(sc, "filler_rate") === "number"
-          ? Math.round(scorecardMetric(sc, "filler_rate") as number * 10)
-          : null,
-        top_filler: scorecardMetric(sc, "top_filler_word"),
-      }));
+      .map((sc) => {
+        const rate = scorecardMetric(sc, "filler_rate");
+        const top = scorecardMetric(sc, "top_filler_word");
+        return {
+          date: sc.created_at,
+          filler_rate: typeof rate === "number" ? rate : null,
+          // Do not invent absolute counts from rate (* 10 was fake).
+          total_fillers: null as number | null,
+          top_filler: typeof top === "string" ? top : null,
+        };
+      });
 
     const byType = new Map<string, { sum: number; count: number; sessions: number }>();
     for (const sc of scorecardList) {
@@ -226,7 +303,7 @@ Deno.serve(async (req: Request) => {
       answersBySession.set(sid, cur);
     }
 
-    const recentSessions = sessionList.slice(0, 50).map((s) => {
+    const recentSessions = sessionList.map((s) => {
       const sc = scorecardList.find((x) => x.session_id === s.id);
       const hasScore = typeof sc?.overall_score === "number";
       const status = String(s.status ?? "").toLowerCase();
@@ -329,18 +406,19 @@ Deno.serve(async (req: Request) => {
       pagination: {
         page,
         per_page: perPage,
-        total: totalCount ?? totalSessions,
-        total_pages: Math.ceil((totalCount ?? totalSessions) / perPage),
+        // Use filtered+deduped list length so private/filter exclusions match KPIs.
+        total: totalSessions,
+        total_pages: Math.max(1, Math.ceil(totalSessions / perPage)),
       },
       // This metric powers the selected-period KPI. The profile counter is a
       // lifetime value and must not override the filtered query count.
-      total_sessions: totalCount ?? totalSessions,
+      total_sessions: totalSessions,
       total_practice_hours: Math.round((totalMinutes / 60) * 10) / 10,
       avg_confidence_score: avgScore,
       avg_confidence_delta_30d: scoreDelta30d,
 
-      current_streak: profile?.streak_days ?? 0,
-      longest_streak: profile?.longest_streak ?? 0,
+      current_streak: typeof profile?.streak_days === "number" ? profile.streak_days : null,
+      longest_streak: typeof profile?.longest_streak === "number" ? profile.longest_streak : null,
 
       avg_filler_rate: avgOf(scorecardList, "filler_rate"),
 

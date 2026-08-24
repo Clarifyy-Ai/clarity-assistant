@@ -25,7 +25,7 @@ export default function AdminBulkUpload() {
     <div className="space-y-6 max-w-5xl pb-20">
       <PageHeader
         title="Bulk Upload Questions"
-        description="Import questions and answers from Excel, CSV, or PDF into the public exam question bank."
+      description="Import questions and answers for validation and review before publication."
         actions={
           <Link
             to="/app/admin/questions"
@@ -50,7 +50,7 @@ export default function AdminBulkUpload() {
               extracts questions automatically (may take 30–60 seconds per file).
             </p>
             <p>
-              All admin uploads are published to the <strong className="text-foreground">public question bank</strong> as verified official PYP.
+              Imports enter review-required status. They are not public or official until an authorized reviewer approves and publishes them.
             </p>
           </div>
         </CardContent>

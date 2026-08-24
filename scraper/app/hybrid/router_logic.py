@@ -39,10 +39,16 @@ _CAPABILITIES: dict[str, dict[str, Any]] = {
         "inputs": ["type", "difficulty", "count"],
     },
     "practice_coach_hint": {
-        "engine": "python_scaffold",
+        "engine": "practice_coach",
         "requires_ai": False,
         "category": "coach",
-        "inputs": ["questionText", "transcript"],
+        "inputs": ["questionText", "transcript", "question", "operation_type"],
+    },
+    "practice_coach": {
+        "engine": "practice_coach",
+        "requires_ai": False,
+        "category": "coach",
+        "inputs": ["question", "message", "transcript", "operation_type"],
     },
     "document_extract": {
         "engine": "document_parser",

@@ -337,6 +337,50 @@ export async function executeHybridOperation<T = unknown>(
     }
   }
 
+  // Resolve durable database results before reserving credits. This closes the
+  // race where two cache misses both reach the credit path, then one observes
+  // the row persisted by the other request.
+  if (input.runDatabase && route.canCompleteWithDatabase) {
+    try {
+      const cached = await input.runDatabase();
+      if (cached != null) {
+        const data = input.validate ? await input.validate(cached, "database") : cached;
+        const executionMs = Date.now() - started;
+        const stored: DeductCreditsAtomicResult = {
+          success: true,
+          payload: {
+            data,
+            source: "database",
+            operation_id: operationId,
+            meta: { execution_ms: executionMs },
+          } as Record<string, unknown>,
+        };
+        await storeIdempotentResponse(db, opKey, stored, {
+          userId,
+          action: `hybrid:${operation}`,
+        });
+        return {
+          ok: true,
+          data,
+          source: "database",
+          operationId,
+          correlationId,
+          executionMs,
+          response: hybridSuccess({
+            req: input.req,
+            data,
+            source: "database",
+            operationId,
+            correlationId,
+            meta: { execution_ms: executionMs, cached: true },
+          }),
+        };
+      }
+    } catch (error) {
+      console.warn("[hybrid] database preflight failed; continuing", error);
+    }
+  }
+
   // --- Credit reserve (once) ---
   let creditsReserved = false;
   let creditFinalized = false;
@@ -349,7 +393,9 @@ export async function executeHybridOperation<T = unknown>(
       userId,
       action: creditAction,
       cost: creditCost,
-      idempotencyKey: `hyb-crd:${operationId}`.slice(0, 150),
+      // Reuse the caller's durable key so concurrent/retried requests cannot
+      // reserve credits independently of the operation idempotency record.
+      idempotencyKey: `hyb-crd:${opKey ?? operationId}`.slice(0, 150),
     });
 
     if (!credit.success) {

@@ -4944,6 +4944,7 @@ export type Database = {
         Row: {
           audio_input_device: string | null
           audio_output_device: string | null
+          auto_gain: boolean
           auto_deduct_credits: boolean
           auto_transcript: boolean
           avatar_url: string | null
@@ -4958,6 +4959,8 @@ export type Database = {
           credits_used_this_month: number
           current_company: string | null
           current_title: string | null
+          coach_tone: string
+          custom_filler_words: string[]
           data_collection: boolean
           data_retention_days: number
           deepgram_model: string
@@ -4970,6 +4973,7 @@ export type Database = {
           full_name: string | null
           github_url: string | null
           headline: string | null
+          hint_style: string
           id: string
           improvement_goals: string[]
           industry: string | null
@@ -4987,6 +4991,7 @@ export type Database = {
           longest_streak: number
           marketing_emails: boolean
           noise_suppression: boolean
+          stt_language: string
           notice_period: string | null
           notification_prefs: Json | null
           onboarding_completed: boolean
@@ -5003,6 +5008,8 @@ export type Database = {
           preferred_model: Database["public"]["Enums"]["ai_model"]
           preferred_salary: string | null
           privacy_prefs: Json | null
+          ui_preferences: Json
+          overlay_settings: Json
           profile_visibility: string
           referral_code: string | null
           referred_by: string | null
@@ -5030,6 +5037,7 @@ export type Database = {
         Insert: {
           audio_input_device?: string | null
           audio_output_device?: string | null
+          auto_gain?: boolean
           auto_deduct_credits?: boolean
           auto_transcript?: boolean
           avatar_url?: string | null
@@ -5044,6 +5052,8 @@ export type Database = {
           credits_used_this_month?: number
           current_company?: string | null
           current_title?: string | null
+          coach_tone?: string
+          custom_filler_words?: string[]
           data_collection?: boolean
           data_retention_days?: number
           deepgram_model?: string
@@ -5056,6 +5066,7 @@ export type Database = {
           full_name?: string | null
           github_url?: string | null
           headline?: string | null
+          hint_style?: string
           id: string
           improvement_goals?: string[]
           industry?: string | null
@@ -5073,6 +5084,7 @@ export type Database = {
           longest_streak?: number
           marketing_emails?: boolean
           noise_suppression?: boolean
+          stt_language?: string
           notice_period?: string | null
           notification_prefs?: Json | null
           onboarding_completed?: boolean
@@ -5089,6 +5101,8 @@ export type Database = {
           preferred_model?: Database["public"]["Enums"]["ai_model"]
           preferred_salary?: string | null
           privacy_prefs?: Json | null
+          ui_preferences?: Json
+          overlay_settings?: Json
           profile_visibility?: string
           referral_code?: string | null
           referred_by?: string | null
@@ -5116,6 +5130,7 @@ export type Database = {
         Update: {
           audio_input_device?: string | null
           audio_output_device?: string | null
+          auto_gain?: boolean
           auto_deduct_credits?: boolean
           auto_transcript?: boolean
           avatar_url?: string | null
@@ -5130,6 +5145,8 @@ export type Database = {
           credits_used_this_month?: number
           current_company?: string | null
           current_title?: string | null
+          coach_tone?: string
+          custom_filler_words?: string[]
           data_collection?: boolean
           data_retention_days?: number
           deepgram_model?: string
@@ -5142,6 +5159,7 @@ export type Database = {
           full_name?: string | null
           github_url?: string | null
           headline?: string | null
+          hint_style?: string
           id?: string
           improvement_goals?: string[]
           industry?: string | null
@@ -5159,6 +5177,7 @@ export type Database = {
           longest_streak?: number
           marketing_emails?: boolean
           noise_suppression?: boolean
+          stt_language?: string
           notice_period?: string | null
           notification_prefs?: Json | null
           onboarding_completed?: boolean
@@ -5175,6 +5194,8 @@ export type Database = {
           preferred_model?: Database["public"]["Enums"]["ai_model"]
           preferred_salary?: string | null
           privacy_prefs?: Json | null
+          ui_preferences?: Json
+          overlay_settings?: Json
           profile_visibility?: string
           referral_code?: string | null
           referred_by?: string | null
@@ -7697,6 +7718,17 @@ export type Database = {
         }
         Returns: Json
       }
+      finalize_owned_session: {
+        Args: {
+          p_user_id: string
+          p_session_id: string
+          p_terminal_reason?: string
+          p_answers?: Json
+          p_transcript?: Json | null
+          p_metrics?: Json
+        }
+        Returns: Json
+      }
       restore_owned_session: {
         Args: {
           p_user_id: string
@@ -7920,6 +7952,7 @@ export type Database = {
       }
       demote_admin: { Args: { p_user_id: string }; Returns: undefined }
       issue_course_certificate: { Args: { p_course_id: string }; Returns: Json }
+      complete_learning_lesson: { Args: { p_lesson_id: string }; Returns: Json }
       mark_notifications_read: {
         Args: { p_user_id: string }
         Returns: undefined

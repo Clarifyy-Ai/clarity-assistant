@@ -88,12 +88,16 @@ def _resolve_operation_type(payload: dict[str, Any]) -> str:
 
 
 def _envelope(operation_type: str, reply: str, **extra: Any) -> dict[str, Any]:
+    # Canonical /v1/process practice_coach contract: always { reply, hints }.
     out: dict[str, Any] = {
         "operation_type": operation_type,
         "reply": reply.strip(),
+        "hints": [],
         "source": "python",
     }
     out.update(extra)
+    if out.get("hints") is None:
+        out["hints"] = []
     return out
 
 

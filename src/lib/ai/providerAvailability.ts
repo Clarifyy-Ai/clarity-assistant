@@ -100,7 +100,9 @@ export async function refreshProviderAvailability(): Promise<ProviderFlags> {
       if (json && typeof json === "object" && "providers" in json && json.providers) {
         console.warn("[providerAvailability] ignoring public provider inventory");
       }
-      loaded = true;
+      // Liveness is not provider inventory. Keep provider availability
+      // unknown until an authenticated operation reports a concrete result.
+      loaded = false;
       emit();
     } catch {
       // Keep last known flags — do not mark Gemini down on a probe failure.

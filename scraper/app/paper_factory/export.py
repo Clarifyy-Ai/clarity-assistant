@@ -82,6 +82,8 @@ def to_dict(result: PaperResult) -> dict[str, Any]:
                 "topic": question.topic,
                 "difficulty": question.difficulty,
                 "source_class": question.source_class,
+                "source_type": question.source_type,
+                "language": question.language,
                 "question_text": question.question_text,
                 "options": question.options_json(),
                 "correct_answer": question.correct_answer_letter,

@@ -350,11 +350,19 @@ export default function GenerateGovPaper(): React.ReactElement {
           }
           return;
         }
-        while (!pollAbortRef.current && !isPaperJobTerminal(current.status)) {
+        let polls = 0;
+        const maxPolls = 400;
+        while (
+          !pollAbortRef.current &&
+          !cancelled &&
+          !isPaperJobTerminal(current.status) &&
+          polls < maxPolls
+        ) {
           await new Promise((r) => setTimeout(r, 1500));
           if (pollAbortRef.current || cancelled) return;
           current = await getPaperGenerationJob(jobId);
           setJob(current);
+          polls += 1;
         }
         if (current.status === "completed" && current.mockTestId) {
           clearActivePaperJob();
@@ -374,8 +382,7 @@ export default function GenerateGovPaper(): React.ReactElement {
       cancelled = true;
       pollAbortRef.current = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.id]);
+  }, [profile?.id, params]);
 
   useEffect(() => {
     if (!selected) return;
@@ -517,7 +524,7 @@ export default function GenerateGovPaper(): React.ReactElement {
   async function pollJobUntilTerminal(jobId: string, seed: PaperJobResult): Promise<PaperJobResult> {
     let current = seed;
     let polls = 0;
-    const maxPolls = 120;
+    const maxPolls = 400;
     pollAbortRef.current = false;
     while (
       !isPaperJobTerminal(current.status) &&
@@ -561,6 +568,10 @@ export default function GenerateGovPaper(): React.ReactElement {
       return;
     }
     const requested = overrideCount ?? requestedForConfig;
+    // Lock before preflight as well as generation. Otherwise rapid clicks can
+    // run duplicate availability checks and race into the create request.
+    generatingRef.current = true;
+    setBusy(true);
 
     // Preflight — never charge when insufficiency is already known.
     try {
@@ -581,6 +592,8 @@ export default function GenerateGovPaper(): React.ReactElement {
               ? " Try Custom Practice Set."
               : ""),
         );
+        generatingRef.current = false;
+        setBusy(false);
         return;
       }
       if (
@@ -592,6 +605,8 @@ export default function GenerateGovPaper(): React.ReactElement {
           inventoryAvailabilityMessage(avail.available) +
             " Try Custom Practice Set.",
         );
+        generatingRef.current = false;
+        setBusy(false);
         return;
       }
       const liveInventory = decideQuestionInventory({
@@ -604,15 +619,17 @@ export default function GenerateGovPaper(): React.ReactElement {
       });
       if (!liveInventory.canGenerateRequested) {
         toast.error(inventoryAvailabilityMessage(liveInventory.available));
+        generatingRef.current = false;
+        setBusy(false);
         return;
       }
     } catch (e) {
       toast.error(formatGovExamOperationError(e));
+      generatingRef.current = false;
+      setBusy(false);
       return;
     }
 
-    generatingRef.current = true;
-    setBusy(true);
     setJob(null);
     if (!idempotencyKeyRef.current) {
       idempotencyKeyRef.current = crypto.randomUUID();
@@ -1145,7 +1162,7 @@ export default function GenerateGovPaper(): React.ReactElement {
                 </p>
               )}
 
-              {busy && job && (
+              {job && (
                 <div className="space-y-2 mt-4">
                   <ul className="space-y-1.5" aria-live="polite">
                     {PAPER_JOB_USER_STAGES.map((s, i) => {
@@ -1205,7 +1222,7 @@ export default function GenerateGovPaper(): React.ReactElement {
             ) : canGenerateRequested ? (
               <Button
                 onClick={() => void handleGenerate()}
-                disabled={busy || !stageId}
+                disabled={busy || (job != null && !isPaperJobTerminal(job.status)) || !stageId}
               >
                 {busy ? (
                   <>

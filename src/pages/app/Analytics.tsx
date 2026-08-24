@@ -112,7 +112,7 @@ export default function Analytics() {
         <Card>
           <EmptyState
             icon={BarChart2}
-            title="No sessions yet"
+            title="No completed sessions yet."
             description="Complete a mock interview or practice session to unlock performance trends, speech metrics, and activity insights."
             actionLabel="Start mock interview"
             onAction={() => navigate("/app/mock")}
@@ -675,12 +675,12 @@ function SessionComparePanel({ analytics }: { analytics: ReturnType<typeof useAn
     }
   }, [comparable, sessionA, sessionB]);
 
-  if (sessions.length < 2) {
+  if (comparable.length < 2) {
     return (
       <Card className="text-center py-10">
         <GitCompare className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
         <p className="text-muted-foreground text-sm">
-          Complete at least two sessions to compare.
+          Complete another interview to compare sessions.
         </p>
       </Card>
     );
@@ -707,16 +707,16 @@ function SessionComparePanel({ analytics }: { analytics: ReturnType<typeof useAn
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
           <SessionPicker
-            label="Session A"
+            label="Baseline"
             value={sessionA}
-            sessions={sessions}
+            sessions={comparable}
             timeZone={timeZone}
             onChange={setSessionA}
           />
           <SessionPicker
-            label="Session B"
+            label="Comparison"
             value={sessionB}
-            sessions={sessions}
+            sessions={comparable}
             timeZone={timeZone}
             onChange={setSessionB}
           />

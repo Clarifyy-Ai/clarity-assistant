@@ -100,8 +100,9 @@ const PROFILE_SAFE_COLUMNS = [
   "payment_failed_at","phone","plan_id","preferred_language","preferred_model","preferred_salary",
   "privacy_prefs","profile_visibility","referral_code","referred_by",
   "response_style","role_type","session_reminders","stealth_mode","streak_days",
-  "subscription_status","target_companies","target_role","timezone",
+  "subscription_status","target_companies","target_role","timezone","ui_preferences","overlay_settings",
   "total_practice_minutes","total_sessions","updated_at","website_url","xp",
+  "hint_style","coach_tone","stt_language","custom_filler_words","auto_gain",
   "years_of_exp",
 ].join(", ");
 
@@ -120,16 +121,30 @@ const PROFILE_BOOT_COLUMNS = [
   "onboarding_completed",
   "onboarding_step",
   "preferred_model",
+  "hint_style",
+  "coach_tone",
+  "stt_language",
+  "custom_filler_words",
+  "auto_gain",
+  "noise_suppression",
+  "audio_input_device",
+  "audio_output_device",
+  "notification_prefs",
+  "email_notifications",
+  "session_reminders",
+  "marketing_emails",
   "target_role",
   "role_type",
   "overlay_opacity",
   "overlay_position",
   "overlay_font_size",
+  "overlay_settings",
   "stealth_mode",
   "timezone",
   "locale",
   "referral_code",
   "privacy_prefs",
+  "ui_preferences",
   "updated_at",
 ].join(", ");
 
@@ -738,26 +753,14 @@ export const sessionAnswersDB = {
       question: string;
       answer: string;
       duration_ms?: number;
+      question_index?: number;
     }>,
   ): Promise<void> {
     if (rows.length === 0) return;
 
-    const sessionIds = [...new Set(rows.map((row) => row.session_id).filter(Boolean))];
-    for (const sessionId of sessionIds) {
-      const { error: deleteError } = await supabase
-        .from("session_answers")
-        .delete()
-        .eq("session_id", sessionId);
-      if (deleteError) {
-        throw new DatabaseError(deleteError.message, ErrorCode.DB_QUERY_FAILED, {
-          table: "session_answers",
-          operation: "createMany.replace",
-        });
-      }
-    }
-
-    const { error } = await supabase.from("session_answers").insert(
+    const { error } = await supabase.from("session_answers").upsert(
       rows as TablesInsert<"session_answers">[],
+      { onConflict: "session_id,user_id,question_index" },
     );
 
     if (error) {
@@ -787,6 +790,7 @@ export const sessionAnswersDB = {
       .from("session_answers")
       .select("*")
       .eq("session_id", sessionId)
+      .order("question_index", { ascending: true, nullsFirst: false })
       .order("created_at", { ascending: true });
 
     if (error) {
@@ -795,7 +799,16 @@ export const sessionAnswersDB = {
         operation: "listBySessionId",
       });
     }
-    return data ?? [];
+    // Stable display order: prefer DB question_index, then created_at.
+    const rows = data ?? [];
+    return [...rows].sort((a, b) => {
+      const ai = a.question_index;
+      const bi = b.question_index;
+      if (typeof ai === "number" && typeof bi === "number" && ai !== bi) return ai - bi;
+      if (typeof ai === "number" && typeof bi !== "number") return -1;
+      if (typeof bi === "number" && typeof ai !== "number") return 1;
+      return String(a.created_at).localeCompare(String(b.created_at));
+    });
   },
 };
 
@@ -2666,30 +2679,50 @@ export const featureFlagsDB = {
     }
 
     if (existing?.id) {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("feature_flags")
         .update({ is_enabled, updated_at: new Date().toISOString() })
-        .eq("key", key);
+        .eq("key", key)
+        .select("id")
+        .maybeSingle();
       if (error) {
         throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
           table: "feature_flags",
           operation: "upsertEnabled",
         });
       }
+      if (!data) {
+        throw new DatabaseError(
+          "Feature flag update matched 0 rows (RLS or missing key)",
+          ErrorCode.DB_QUERY_FAILED,
+          { table: "feature_flags", operation: "upsertEnabled" },
+        );
+      }
       return;
     }
 
-    const { error } = await supabase.from("feature_flags").insert({
-      key,
-      name: key.replace(/_/g, " "),
-      is_enabled,
-      rollout_percent: 100,
-    });
+    const { data, error } = await supabase
+      .from("feature_flags")
+      .insert({
+        key,
+        name: key.replace(/_/g, " "),
+        is_enabled,
+        rollout_percent: 100,
+      })
+      .select("id")
+      .maybeSingle();
     if (error) {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
         table: "feature_flags",
         operation: "upsertEnabled",
       });
+    }
+    if (!data) {
+      throw new DatabaseError(
+        "Feature flag insert returned no row",
+        ErrorCode.DB_QUERY_FAILED,
+        { table: "feature_flags", operation: "upsertEnabled" },
+      );
     }
   },
 };

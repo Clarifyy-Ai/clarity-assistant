@@ -22,6 +22,7 @@ type Course = {
   description: string | null;
   duration_hours: number | null;
   unlock_mode: "sequential" | "open";
+  publish_status: "draft" | "published" | "archived";
 };
 
 type ModuleRow = { id: string; title: string; sort_order: number };
@@ -32,40 +33,54 @@ export default function CourseDetailPage() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const profile = useAuthStore((s) => s.profile);
+  const isAdmin = useAuthStore((s) => s.isAdmin);
   const [course, setCourse] = useState<Course | null>(null);
   const [modules, setModules] = useState<ModuleRow[]>([]);
   const [lessons, setLessons] = useState<LessonRow[]>([]);
   const [completed, setCompleted] = useState<Set<string>>(new Set());
   const [certCode, setCertCode] = useState<string | null>(null);
   const [quizzes, setQuizzes] = useState<Array<{ id: string; title: string; question_ids: string[]; passing_percentage: number; is_final: boolean }>>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!courseId || !user?.id) return;
-    const [{ data: courseRow }, { data: moduleRows }] = await Promise.all([
+    setError(null);
+    const [{ data: courseRow, error: courseError }, { data: moduleRows, error: moduleError }] = await Promise.all([
       supabase.from("learning_courses").select("*").eq("id", courseId).maybeSingle(),
       supabase.from("learning_modules").select("*").eq("course_id", courseId).order("sort_order"),
     ]);
+    if (courseError || moduleError) { setError("Course could not be loaded."); return; }
+    if (!courseRow || (courseRow.publish_status !== "published" && !isAdmin)) {
+      setError("This course is not currently available.");
+      return;
+    }
     setCourse(courseRow as Course | null);
     setModules((moduleRows as ModuleRow[]) ?? []);
     const moduleIds = ((moduleRows as ModuleRow[]) ?? []).map((m) => m.id);
+    let loadedLessons: LessonRow[] = [];
     if (moduleIds.length) {
-      const { data: lessonRows } = await supabase
+      const { data: lessonRows, error: lessonError } = await supabase
         .from("learning_lessons")
         .select("id,module_id,title,sort_order,lesson_type")
         .in("module_id", moduleIds)
         .order("sort_order");
-      setLessons((lessonRows as LessonRow[]) ?? []);
+      if (lessonError) { setError("Course lessons could not be loaded."); return; }
+      loadedLessons = (lessonRows as LessonRow[]) ?? [];
+      setLessons(loadedLessons);
     }
-    await supabase.from("course_enrollments").upsert({
+    const { error: enrollmentError } = await supabase.from("course_enrollments").upsert({
       user_id: user.id,
       course_id: courseId,
       last_accessed: new Date().toISOString(),
     });
-    const { data: progress } = await supabase
+    if (enrollmentError) { setError("Your course progress could not be loaded."); return; }
+    const { data: progress, error: progressError } = await supabase
       .from("lesson_progress")
       .select("lesson_id,completed_at")
       .eq("user_id", user.id);
-    setCompleted(new Set((progress ?? []).filter((p) => p.completed_at).map((p) => p.lesson_id as string)));
+    if (progressError) { setError("Your lesson progress could not be loaded."); return; }
+    const lessonIds = new Set(loadedLessons.map((lesson) => lesson.id));
+    setCompleted(new Set((progress ?? []).filter((p) => p.completed_at && lessonIds.has(p.lesson_id as string)).map((p) => p.lesson_id as string)));
     const { data: cert } = await supabase
       .from("course_certificates")
       .select("certificate_code")
@@ -86,7 +101,7 @@ export default function CourseDetailPage() {
         is_final: boolean;
       }>,
     );
-  }, [courseId, user?.id]);
+  }, [courseId, user?.id, isAdmin]);
 
   useEffect(() => {
     void load();
@@ -108,19 +123,6 @@ export default function CourseDetailPage() {
   const views = moduleProgressViews(moduleRefs, completed, course?.unlock_mode ?? "sequential");
   const percent = coursePercentage(moduleRefs, completed);
 
-  useEffect(() => {
-    if (!user?.id || !courseId) return;
-    void supabase
-      .from("course_enrollments")
-      .update({
-        percentage: percent,
-        completed_at: percent >= 100 ? new Date().toISOString() : null,
-        last_accessed: new Date().toISOString(),
-      })
-      .eq("user_id", user.id)
-      .eq("course_id", courseId);
-  }, [percent, user?.id, courseId]);
-
   async function issueCert() {
     if (!courseId) return;
     try {
@@ -131,6 +133,15 @@ export default function CourseDetailPage() {
       if (code) {
         setCertCode(code);
         toast.success(`${certificateKindLabel()} issued.`);
+      }
+
+      if (error) {
+        return (
+          <div className={PAGE_SHELL}>
+            <PageHeader title="Course unavailable" breadcrumbs={[{ label: "Learning Hub", href: "/app/learn" }, { label: "Course" }]} />
+            <Card><p className="text-sm text-destructive">{error}</p><Button className="mt-3" variant="outline" onClick={() => void load()}>Retry</Button></Card>
+          </div>
+        );
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Certificate could not be issued.");
@@ -179,7 +190,7 @@ export default function CourseDetailPage() {
                 .maybeSingle()
                 .then(({ data, error }) => {
                   if (error || !data) toast.error(error?.message ?? "Quiz could not start.");
-                  else navigate(`/app/assessments/session/${data.id}`);
+                  else void navigate(`/app/assessments/session/${data.id}`);
                 });
             }}
           >

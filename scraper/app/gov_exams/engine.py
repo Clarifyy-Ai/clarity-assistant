@@ -15,6 +15,8 @@ from app.gov_exams.observability import gov_exam_log
 from app.gov_exams.schemas import ProcessJobResponse
 from app.gov_exams.selection import seeded_shuffle
 from app.gov_exams.source_priority import (
+    allowed_for_mode,
+    map_to_legacy_source_class,
     normalize_source_type,
     resolve_paper_source,
     sort_by_source_priority,
@@ -193,9 +195,9 @@ async def process_gov_exam_job(
                 subject=row.subject,
                 topic=row.topic,
                 difficulty=row.difficulty,
-                is_verified=True,
+                is_verified=row.is_verified,
                 source=row.source,
-                source_type="",
+                source_type=row.source_type,
             )
             for row in bank_rows
         ]
@@ -217,15 +219,25 @@ async def process_gov_exam_job(
         bank_selected: dict[str, list[PaperQuestion]] = defaultdict(list)
         bank_count = 0
         for section in blueprint.sections:
-            available = buckets.get(section.code, [])[: section.question_count]
+            available = buckets.get(section.code, [])
             for item in available:
+                if len(bank_selected[section.code]) >= section.question_count:
+                    break
+                item_source = normalize_source_type(
+                    source=item.source,
+                    source_type=item.source_type,
+                    source_class="bank",
+                )
+                if not allowed_for_mode(mode, item_source):
+                    continue
+                # Content validators own the score — never invent verified=100 from provenance.
                 scored = score_assembled_question(
                     stem=item.question_text,
                     options=list(item.options),
                     correct_index=item.correct_index,
                     explanation=str(getattr(item, "explanation", "") or ""),
                     peers=[q.question_text for q in bank_selected[section.code]],
-                    source_confidence=0.85 if item.is_verified else 0.7,
+                    source_confidence=0.7,
                 )
                 if scored < MIN_QUALITY_SCORE:
                     continue
@@ -240,12 +252,14 @@ async def process_gov_exam_job(
                         difficulty=item.difficulty or "MEDIUM",
                         marks_positive=blueprint.marks_per_question,
                         marks_negative=blueprint.negative_mark,
-                        source_class="bank",
+                        source_class=map_to_legacy_source_class(item_source),  # type: ignore[arg-type]
+                        source_type=item_source,
+                        language=blueprint.language,
                         question_id=item.id,
                         quality_score=scored,
                     )
                 )
-            bank_count += len(available)
+            bank_count += len(bank_selected[section.code])
 
         outstanding = PaperFactory._subtract_bank_coverage(blueprint, bank_selected)
         needed = sum(slot.count for slot in outstanding)
@@ -418,6 +432,8 @@ async def process_gov_exam_job(
                                 marks_positive=blueprint.marks_per_question,
                                 marks_negative=blueprint.negative_mark,
                                 source_class="generated",
+                                source_type="generated_practice",
+                                language=blueprint.language,
                                 question_id=qid,
                                 quality_score=det_score,
                             )
@@ -518,17 +534,23 @@ async def process_gov_exam_job(
         provenance = result.provenance_json()
         question_source_types: list[str] = []
         for q in questions:
+            st = normalize_source_type(
+                source_type=getattr(q, "source_type", None) or getattr(q, "question_source_type", None),
+                source_class=q.source_class,
+            )
             if q.source_class == "previous_year":
                 st = "official_verified"
             elif q.source_class == "generated":
                 if q.question_id and q.question_id in deterministic_ids:
                     st = PRACTICE_SOURCE_TYPE
-                else:
+                elif st not in {"generated_practice", "ai_generated_practice"}:
                     st = "ai_generated_practice"
-            else:
-                st = normalize_source_type(source_class="bank")
+            elif q.source_class == "deterministic":
+                st = PRACTICE_SOURCE_TYPE
             question_source_types.append(st)
             setattr(q, "question_source_type", st)
+            # Persist DB-compatible legacy source_class alongside canonical type.
+            q.source_class = map_to_legacy_source_class(st)  # type: ignore[assignment]
 
         mix = {
             k: v

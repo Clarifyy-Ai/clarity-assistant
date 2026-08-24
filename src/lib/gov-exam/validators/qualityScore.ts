@@ -231,7 +231,12 @@ export function scoreQuestionQuality(input: QualityScoreInput): QualityScoreResu
 /** Mean of per-question scores; hard-failed questions count as 0. */
 export function scorePaperQuality(
   questions: QualityScoreInput[],
-): { score: number; perQuestion: QualityScoreResult[]; hardFailCount: number } {
+): {
+  score: number;
+  perQuestion: QualityScoreResult[];
+  hardFailCount: number;
+  algorithm_version: string;
+} {
   const perQuestion = questions.map((q) => scoreQuestionQuality(q));
   const hardFailCount = perQuestion.filter((r) => r.hardFail).length;
   const score =
@@ -240,7 +245,12 @@ export function scorePaperQuality(
       : Math.round(
           (perQuestion.reduce((a, r) => a + r.score, 0) / perQuestion.length) * 10,
         ) / 10;
-  return { score, perQuestion, hardFailCount };
+  return {
+    score,
+    perQuestion,
+    hardFailCount,
+    algorithm_version: QUALITY_ALGORITHM_VERSION,
+  };
 }
 
 /** Minimum quality to accept a bank item into a paper during assembly. */

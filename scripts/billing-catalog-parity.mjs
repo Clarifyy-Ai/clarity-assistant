@@ -1,14 +1,18 @@
 #!/usr/bin/env node
 /**
- * Verifies frontend planCatalog ranks match backend billingCatalog ranks.
+ * Verifies frontend planCatalog ranks + credit pack ids match Edge billingCatalog.
  */
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
-const fe = fs.readFileSync(
+const fePlan = fs.readFileSync(
   path.join(root, "src/lib/billing/planCatalog.ts"),
+  "utf8",
+);
+const feEconomics = fs.readFileSync(
+  path.join(root, "src/lib/constants/creditEconomics.ts"),
   "utf8",
 );
 const be = fs.readFileSync(
@@ -26,7 +30,14 @@ function extractRanks(source) {
   return ranks;
 }
 
-const feRanks = extractRanks(fe);
+function extractPackIds(source, key = "id") {
+  const ids = [];
+  const re = new RegExp(`${key}:\\s*"(credits_\\d+)"`, "g");
+  for (const m of source.matchAll(re)) ids.push(m[1]);
+  return ids;
+}
+
+const feRanks = extractRanks(fePlan);
 const beRanks = extractRanks(be);
 
 let failed = false;
@@ -43,5 +54,17 @@ if (!/enterprise:\s*\{[\s\S]*?displayName:\s*"Max"/.test(be)) {
   failed = true;
 }
 
+const fePacks = extractPackIds(feEconomics, "id");
+const bePacks = extractPackIds(be, "packId");
+const expected = ["credits_50", "credits_150", "credits_500"];
+if (JSON.stringify(fePacks) !== JSON.stringify(expected)) {
+  console.error(`FAIL: FE pack ids ${JSON.stringify(fePacks)} !== ${JSON.stringify(expected)}`);
+  failed = true;
+}
+if (JSON.stringify(bePacks) !== JSON.stringify(expected)) {
+  console.error(`FAIL: Edge pack ids ${JSON.stringify(bePacks)} !== ${JSON.stringify(expected)}`);
+  failed = true;
+}
+
 if (failed) process.exit(1);
-console.log("OK: billing catalog parity passed");
+console.log("OK: billing catalog parity passed (ranks + credit packs)");

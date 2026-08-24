@@ -121,22 +121,8 @@ export default function CodingAssessmentPage() {
           ?? `Status ${result.status}. Score ${result.score ?? "pending"}. Passed ${result.passed_tests ?? "—"}. Failed ${result.failed_tests ?? "—"}.`,
       );
       void load();
-    } catch {
-      const { error: insertError } = await supabase.from("coding_submissions").insert({
-        user_id: user.id,
-        question_id: questionId,
-        code,
-        language: question?.language ?? "javascript",
-        status: "submitted",
-        score: null,
-        result_payload: { note: "Awaiting server evaluation. Client scores are not trusted." },
-      });
-      setServerResult(
-        insertError
-          ? insertError.message
-          : "Submission stored. Score will appear after server evaluation — client results are not used.",
-      );
-      void load();
+    } catch (error) {
+      setServerResult(error instanceof Error ? error.message : "Code execution service is temporarily unavailable.");
     } finally {
       setBusy(false);
     }

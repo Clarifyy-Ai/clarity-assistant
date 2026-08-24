@@ -21,7 +21,7 @@ export const CAPABILITY_KILL_FLAG: Partial<Record<Capability, string>> = {
   analytics: "analytics",
   company_research: "company_research",
   calendar_sync: "calendar_sync",
-  gov_exam_ai_fill: "mock_sessions",
+  gov_exam_ai_fill: "gov_exam_ai_fill",
 };
 
 /** Edge function name → feature_flags.key (when not derived from capability). */
@@ -36,6 +36,8 @@ export const FUNCTION_KILL_FLAG: Record<string, string> = {
   "generate-debrief": "session_debrief",
   "generate-scorecard": "session_debrief",
   "gap-analysis": "analytics",
+  "analytics-dashboard": "analytics",
+  "compare-sessions": "analytics",
   "company-research": "company_research",
   "sync-calendar": "calendar_sync",
   "parse-resume": "resume_analysis",

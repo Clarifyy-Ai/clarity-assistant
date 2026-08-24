@@ -5,6 +5,7 @@ from datetime import date, datetime
 import hashlib
 import re
 from typing import Any
+from app.shared.algorithm_catalog import dedup_spec
 
 
 def normalize_text(text: str) -> str:
@@ -81,13 +82,20 @@ class QuestionDeduplicationEngine:
 
     def __init__(
         self,
-        exact_threshold: float = 1.0,
-        near_dup_threshold: float = 0.65,
-        template_clone_threshold: float = 0.9,
+        exact_threshold: float | None = None,
+        near_dup_threshold: float | None = None,
+        template_clone_threshold: float | None = None,
     ) -> None:
-        self.exact_threshold = exact_threshold
-        self.near_dup_threshold = near_dup_threshold
-        self.template_clone_threshold = template_clone_threshold
+        policy = dedup_spec()
+        self.exact_threshold = 1.0 if exact_threshold is None else exact_threshold
+        self.near_dup_threshold = (
+            float(policy["near_duplicate_composite"])
+            if near_dup_threshold is None else near_dup_threshold
+        )
+        self.template_clone_threshold = (
+            float(policy["template_clone_similarity"])
+            if template_clone_threshold is None else template_clone_threshold
+        )
 
     def evaluate_pair(
         self,
@@ -126,7 +134,20 @@ class QuestionDeduplicationEngine:
         )
 
         stem_max_sim = max(token_sim, ngram_sim)
-        composite_score = (token_sim * 0.4) + (ngram_sim * 0.4) + (opt_overlap * 0.2)
+        shorter, longer = sorted(
+            (normalize_text(q1_text), normalize_text(q2_text)), key=len,
+        )
+        containment = (
+            len(shorter) / len(longer)
+            if shorter and shorter in longer
+            else 0.0
+        )
+        weights = dedup_spec()["composite_weights"]
+        composite_score = (
+            token_sim * float(weights["token"])
+            + ngram_sim * float(weights["ngram"])
+            + opt_overlap * float(weights["option_overlap"])
+        )
 
         # 3. Template clone check
         tpl1 = compute_template_fingerprint(q1_text)
@@ -134,11 +155,26 @@ class QuestionDeduplicationEngine:
         tpl_sim = token_jaccard_similarity(tpl1, tpl2)
         is_template_clone = (tpl1 == tpl2 or tpl_sim >= self.template_clone_threshold) and h1 != h2
 
+        policy = dedup_spec()
         if is_template_clone:
             decision = "template_clone"
-        elif composite_score >= self.near_dup_threshold or (opt_overlap >= 0.8 and stem_max_sim >= 0.5) or stem_max_sim >= 0.8:
+        elif (
+            composite_score >= self.near_dup_threshold
+            or (
+                opt_overlap >= float(policy["option_overlap_near"])
+                and stem_max_sim >= float(policy["stem_max_near_with_options"])
+            )
+            or stem_max_sim >= float(policy["stem_max_near"])
+            or containment >= float(policy["stem_only_conflict"])
+        ):
             decision = "near_duplicate"
-        elif composite_score >= 0.45 or (opt_overlap > 0.4 and stem_max_sim >= 0.35):
+        elif (
+            composite_score >= float(policy["review_composite"])
+            or (
+                opt_overlap > float(policy["review_option_overlap"])
+                and stem_max_sim >= float(policy["review_stem_max"])
+            )
+        ):
             decision = "flagged_for_review"
         else:
             decision = "unique"

@@ -11,7 +11,7 @@ import {
 describe("CREDIT_PACKS configuration", () => {
   it("defines exactly three launch packs", () => {
     expect(CREDIT_PACKS).toHaveLength(3);
-    expect(CREDIT_PACKS.map((p) => p.id)).toEqual(["pack_50", "pack_150", "pack_500"]);
+    expect(CREDIT_PACKS.map((p) => p.id)).toEqual(["credits_50", "credits_150", "credits_500"]);
   });
 
   it("has monotonically increasing credit amounts", () => {
@@ -21,7 +21,7 @@ describe("CREDIT_PACKS configuration", () => {
   });
 
   it("resolves pack by id", () => {
-    const pack = getCreditPackById("pack_150");
+    const pack = getCreditPackById("credits_150");
     expect(pack?.credits).toBe(150);
     expect(pack?.label).toMatch(/150/);
   });

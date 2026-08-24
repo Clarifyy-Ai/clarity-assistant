@@ -80,6 +80,25 @@ export function normalizePythonCoachData(data: unknown): NormalizedPythonCoachDa
 
   let hints = collectHints(obj);
 
+  // Legacy /internal/operations practice_coach_hint scaffold (no reply) -> flatten.
+  if (!reply && obj.scaffold && typeof obj.scaffold === "object") {
+    const scaffold = obj.scaffold as Record<string, unknown>;
+    const parts: string[] = [];
+    for (const key of ["clarify", "structure", "follow_ups", "followups"]) {
+      const arr = scaffold[key];
+      if (Array.isArray(arr)) {
+        for (const item of arr) {
+          const s = asString(item);
+          if (s) parts.push(s);
+        }
+      }
+    }
+    if (parts.length) {
+      hints = hints.length ? hints : parts.slice(0, 3);
+      reply = parts.map((p) => (p.startsWith("\u2022") ? p : `\u2022 ${p}`)).join("\n");
+    }
+  }
+
   if (!reply && hints.length > 0) {
     reply = hints.map((h) => (h.startsWith("•") ? h : `• ${h}`)).join("\n");
   }

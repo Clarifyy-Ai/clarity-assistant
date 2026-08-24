@@ -9,11 +9,9 @@ export type ExportErrorBody = {
   retryAfterSeconds?: number;
 };
 
-const RATE_LIMIT_MESSAGE =
-  "Export limit reached. Please try again in a few minutes.";
+const RATE_LIMIT_MESSAGE = "Export limit reached. Please try again in a few minutes.";
 
-const GENERIC_EXPORT_FAILED =
-  "We couldn't prepare your export. Please try again in a moment.";
+const GENERIC_EXPORT_FAILED = "We couldn't prepare your export. Please try again in a moment.";
 
 export function messageForExportCode(code: string | undefined): string {
   switch (code) {
@@ -22,9 +20,18 @@ export function messageForExportCode(code: string | undefined): string {
       return RATE_LIMIT_MESSAGE;
     case "INVALID_EXPORT_TYPE":
       return "That export type isn't supported. Please try again.";
+    case "INVALID_EXPORT_REQUEST":
+      return "Those export filters are invalid. Please try again.";
+    case "FORBIDDEN":
+      return "You can only export your own session data.";
+    case "NO_DATA":
+      return "There is no completed session data to export.";
     case "UNAUTHORIZED":
       return "Please sign in again to export your data.";
     case "EXPORT_FAILED":
+      return GENERIC_EXPORT_FAILED;
+    case "EXPORT_IN_PROGRESS":
+      return "An export is already in progress. Please wait a moment and try again.";
     default:
       return GENERIC_EXPORT_FAILED;
   }
