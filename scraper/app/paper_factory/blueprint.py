@@ -407,13 +407,19 @@ def validate_assembled_paper(
                 break
         prior_questions.append(question)
 
+    # Exact full-paper modes must hit section quotas + topic coverage.
+    # Custom/adaptive practice is bank-sampled to a smaller N and must not
+    # fail just because syllabus topic labels don't match slot names.
+    exact_mode = blueprint.mode in ("official_previous", "generated_mock")
     for section in blueprint.sections:
         actual = per_section.get(section.code, 0)
-        if actual != section.question_count:
+        if exact_mode and actual != section.question_count:
             errors.append(
                 f"Section {section.code} has {actual} questions, "
                 f"expected {section.question_count}"
             )
+        if not exact_mode:
+            continue
         expected_topics = {
             topic.strip().lower()
             for topic, count in section.topic_counts
@@ -424,8 +430,19 @@ def validate_assembled_paper(
             for q in questions
             if q.section_code == section.code and q.topic.strip()
         }
-        if not expected_topics.issubset(actual_topics):
+        if expected_topics and not expected_topics.issubset(actual_topics):
             errors.append(f"Section {section.code} is missing required topic coverage")
+
+    if not exact_mode and blueprint.sections:
+        # Soft check: every question should land in a known section when tagged.
+        known = {s.code for s in blueprint.sections}
+        unknown = sorted(
+            code for code in per_section if code and code not in known
+        )
+        if unknown:
+            errors.append(
+                "Unexpected section codes in custom paper: " + ", ".join(unknown[:5])
+            )
 
     return errors
 

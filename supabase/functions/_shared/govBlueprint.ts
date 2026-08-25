@@ -224,8 +224,11 @@ export function validateAssembledPaperHardConstraints(input: {
     errors.push("Duration minutes must be greater than zero");
   }
 
-  // 5b. Exact section quotas when slots carry section codes
-  if (Array.isArray(blueprint.sections) && blueprint.sections.length > 0) {
+  // 5b. Exact section quotas for full-paper modes only.
+  // Custom/adaptive practice may undersample sections from the bank.
+  const exactMode =
+    blueprint.mode === "official_previous" || blueprint.mode === "generated_mock";
+  if (exactMode && Array.isArray(blueprint.sections) && blueprint.sections.length > 0) {
     const bySection = new Map<string, number>();
     for (const q of questions) {
       const code = String(q.section_code ?? "").trim();
