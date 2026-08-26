@@ -3,6 +3,7 @@ import { AlertTriangle, WifiOff, Wifi, RefreshCw, X, ExternalLink } from "lucide
 import { cn } from "@/lib/utils";
 import { NetworkErrorPage } from "@/components/common/NetworkErrorPage";
 import { useIsOffline } from "@/hooks/useIsOffline";
+import { agentLog70dd4b } from "@/lib/debug/agentLog70dd4b";
 
 type NetworkState = "online" | "reconnecting" | "offline";
 
@@ -247,15 +248,55 @@ export function NetworkBanner() {
         )}
 
         {!isOffline && (
-          <button
-            type="button"
-            onClick={() => setDismissed(true)}
-            className={cn("rounded-lg p-1.5 transition-colors", dismissColor)}
-            aria-label="Dismiss network banner"
-            title="Dismiss"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                const started = performance.now();
+                void fetch("/", { method: "HEAD", cache: "no-store" })
+                  .then(() => {
+                    const ms = Math.round(performance.now() - started);
+                    const conn =
+                      typeof navigator !== "undefined"
+                        ? (navigator as Navigator & {
+                            connection?: { downlink?: number; rtt?: number; effectiveType?: string };
+                          }).connection
+                        : undefined;
+                    if (conn?.effectiveType) setEffectiveType(conn.effectiveType);
+                    if (typeof conn?.downlink === "number") setDownlink(conn.downlink);
+                    if (typeof conn?.rtt === "number") setRtt(conn.rtt);
+                    // #region agent log
+                    agentLog70dd4b({
+                      hypothesisId: "H-DASH-005",
+                      location: "NetworkBanner.tsx:testConnection",
+                      message: "connection check done",
+                      data: {
+                        latencyMs: ms,
+                        effectiveType: conn?.effectiveType ?? null,
+                        downlink: conn?.downlink ?? null,
+                      },
+                    });
+                    // #endregion
+                  })
+                  .catch(() => {
+                    setNetworkState("offline");
+                  });
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary/80"
+            >
+              <Wifi className="h-3.5 w-3.5" />
+              Test connection
+            </button>
+            <button
+              type="button"
+              onClick={() => setDismissed(true)}
+              className={cn("rounded-lg p-1.5 transition-colors", dismissColor)}
+              aria-label="Dismiss network banner"
+              title="Dismiss"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </>
         )}
 
         {isDegradedButOnline && (

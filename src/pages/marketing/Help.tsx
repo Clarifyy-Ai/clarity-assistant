@@ -281,23 +281,23 @@ export default function Help() {
           >
             <Mail className="w-4 h-4" /> Contact Support
           </a>
-          <p className="text-xs text-muted-foreground mt-4">
+          <p className="text-sm text-muted-foreground mt-4">
             System status:{" "}
             {STATUS_PAGE_URL ? (
               <a
                 href={STATUS_PAGE_URL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-primary hover:underline"
+                className="text-sm text-primary hover:underline"
               >
                 View status page
               </a>
             ) : (
-              <span>
+              <span className="text-sm text-muted-foreground">
                 No public status page configured —{" "}
                 <a
                   href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Clarify AI system status")}`}
-                  className="text-primary hover:underline"
+                  className="text-sm text-primary hover:underline"
                 >
                   email {SUPPORT_EMAIL}
                 </a>{" "}

@@ -242,8 +242,9 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
     category:    "navigation",
   },
   GO_ANSWERS: {
-    keys:        "Ctrl+Shift+W",
-    mac:         "⌘+Shift+W",
+    // Avoid Ctrl+Shift+W — Chrome/Edge close the browser window (TC-SET-006).
+    keys:        "Ctrl+Alt+A",
+    mac:         "⌘+⌥+A",
     action:      "nav:answers",
     description: "Open answer bank",
     category:    "navigation",

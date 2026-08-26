@@ -159,9 +159,17 @@ export default function AdminRevenue() {
       prevSince.setDate(prevSince.getDate() - days * 2);
       const prevSinceIso = prevSince.toISOString();
 
-      const { data: profileData } = await supabase
+      // Canonical subscription IDs live on `subscriptions`, not profiles.
+      // profiles.subscription_id is revoked for authenticated (column privilege);
+      // selecting it (or the obsolete stripe_subscription_id name) yields 400.
+      const { data: profileData, error: profileError } = await supabase
         .from("profiles")
-        .select("plan_id, credits, subscription_id, subscription_status");
+        .select("plan_id, subscription_status");
+
+
+      if (profileError) {
+        throw profileError;
+      }
 
       if (profileData) {
         const planCounts: Record<string, number> = {};

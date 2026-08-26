@@ -28,7 +28,7 @@ import {
 
   User, Bell, Mic, Brain, Calendar, Sparkles, Lock, CreditCard,
 
-  CalendarDays, Building2, Gift, History, Trash2,
+  CalendarDays, Building2, Gift, History, Trash2, Shield, ScrollText, Tag,
 
 } from "lucide-react";
 
@@ -41,6 +41,8 @@ import { useUIStore } from "@/store/uiStore";
 import { useIndiaRegion } from "@/hooks/useIndiaRegion";
 
 import { useGlobalStore } from "@/store/globalStore";
+
+import { useAuthStore } from "@/store/authStore";
 
 import type { FeatureFlagId } from "@/types";
 
@@ -67,9 +69,12 @@ interface NavCommand {
 
   icon: React.ComponentType<{ className?: string }>;
 
-  group: "Navigate" | "Sessions" | "Prep" | "Account";
+  group: "Navigate" | "Sessions" | "Prep" | "Account" | "Admin";
 
   featureFlag?: FeatureFlagId;
+
+  /** When true, only shown to resolved admin users. */
+  adminOnly?: boolean;
 }
 
 const MAX_SEARCH_LENGTH = 200;
@@ -145,6 +150,20 @@ const COMMANDS: NavCommand[] = [
 
   { label: PRODUCT_NAMES.answerBank, path: "/app/answers", icon: BookOpen, group: "Prep", featureFlag: "answer_bank" },
 
+  // Admin destinations (adminOnly) — align Global Search with sidebar + direct routes
+  { label: "Admin dashboard", path: "/app/admin", icon: Shield, group: "Admin", keywords: "admin portal home", adminOnly: true },
+  { label: "Admin users", path: "/app/admin/users", icon: User, group: "Admin", keywords: "admin users", adminOnly: true },
+  { label: "Admin revenue", path: "/app/admin/revenue", icon: CreditCard, group: "Admin", keywords: "admin billing revenue mrr", adminOnly: true },
+  { label: "Admin questions", path: "/app/admin/questions", icon: FileText, group: "Admin", keywords: "admin question bank editor", adminOnly: true },
+  { label: "Admin audit log", path: "/app/admin/audit-log", icon: ScrollText, group: "Admin", keywords: "admin audit", adminOnly: true },
+  { label: "Admin diagnostics", path: "/app/admin/diagnostics", icon: Shield, group: "Admin", keywords: "admin diagnostics health", adminOnly: true },
+  { label: "Admin blog", path: "/app/admin/blog", icon: FileText, group: "Admin", keywords: "admin blog cms", adminOnly: true },
+  { label: "Admin help articles", path: "/app/admin/help-articles", icon: BookOpen, group: "Admin", keywords: "admin help cms faq", adminOnly: true },
+  { label: "Admin promo codes", path: "/app/admin/promo-codes", icon: Tag, group: "Admin", keywords: "admin promo coupon credits", adminOnly: true },
+  { label: "Admin gov exams", path: "/app/admin/gov/exams", icon: Brain, group: "Admin", keywords: "admin gov exam registry", adminOnly: true },
+  { label: "Admin gov sources", path: "/app/admin/gov/sources", icon: FileText, group: "Admin", keywords: "admin gov sources", adminOnly: true },
+  { label: "Admin PDF ingest", path: "/app/admin/gov/ingest", icon: FileText, group: "Admin", keywords: "admin gov pdf ocr ingest", adminOnly: true },
+
 ];
 
 
@@ -183,8 +202,11 @@ export function CommandPalette() {
 
   const isFeatureEnabled = useGlobalStore((s) => s.isFeatureEnabled);
 
+  const isAdmin = useAuthStore((s) => s.isAdmin);
+
   const visibleCommands = useMemo(
     () => COMMANDS.filter((c) => {
+      if (c.adminOnly && !isAdmin) return false;
       if (!isIndia && c.path === "/app/mock-test") return false;
       if (!c.featureFlag) return true;
       return (
@@ -193,7 +215,7 @@ export function CommandPalette() {
         killSwitches[c.featureFlag] !== false
       );
     }),
-    [isIndia, killSwitches, featureFlags, isFeatureEnabled],
+    [isAdmin, isIndia, killSwitches, featureFlags, isFeatureEnabled],
   );
 
 
@@ -214,6 +236,7 @@ export function CommandPalette() {
 
       resetCmdkListScroll();
 
+
     } else {
 
       setQuery("");
@@ -221,7 +244,7 @@ export function CommandPalette() {
 
     }
 
-  }, [open]);
+  }, [open, isAdmin]);
 
   // Debounce the query so filtering/ranking doesn't run on every keystroke,
   // and cancel any in-flight debounce timer when a newer query supersedes it.

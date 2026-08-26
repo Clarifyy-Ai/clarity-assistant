@@ -57,6 +57,12 @@ const ALLOWED_OAUTH_PROVIDERS = new Set<OAuthProviderName>(
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   provider_disabled:
     "{provider} login is currently unavailable — please use email/password.",
+  "provider is not enabled":
+    "{provider} login is not configured. Please use email/password.",
+  "unsupported provider":
+    "{provider} login is not configured. Please use email/password.",
+  validation_failed:
+    "{provider} login is not available. Please use email/password.",
   oauth_provider_not_found:
     "{provider} login is not configured. Please use email/password.",
   redirect_uri_mismatch:

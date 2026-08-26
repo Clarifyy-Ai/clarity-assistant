@@ -172,13 +172,13 @@ export function MobileNav(): JSX.Element {
             }}
             aria-label={tab.label}
             className={cn(
-              "flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-all",
+              "flex-1 flex flex-col items-center justify-center gap-0.5 py-2 min-h-14 text-[10px] font-medium transition-all min-w-0 px-0.5",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
               isActive ? "text-primary" : "text-muted-foreground hover:text-foreground",
             )}
           >
-            <Icon className={cn("w-5 h-5 transition-transform", isActive && "scale-105")} aria-hidden="true" />
-            <span>{tab.label}</span>
+            <Icon className={cn("w-5 h-5 shrink-0 transition-transform", isActive && "scale-105")} aria-hidden="true" />
+            <span className="truncate max-w-full px-0.5 leading-tight">{tab.label}</span>
           </NavLink>
         );
       })}
@@ -189,7 +189,7 @@ export function MobileNav(): JSX.Element {
             type="button"
             aria-label="More navigation"
             className={cn(
-              "flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-all",
+              "flex-1 flex flex-col items-center justify-center gap-0.5 py-2 min-h-14 text-[10px] font-medium transition-all min-w-0",
               moreActive ? "text-primary" : "text-muted-foreground hover:text-foreground",
             )}
           >

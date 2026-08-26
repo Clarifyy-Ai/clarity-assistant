@@ -101,7 +101,10 @@ export default function SettingsProfile() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword,     setNewPassword]     = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPasswords,   setShowPasswords]   = useState(false);
+  const [showCurrentPw,   setShowCurrentPw]   = useState(false);
+  const [showNewPw,       setShowNewPw]       = useState(false);
+  const [showConfirmPw,   setShowConfirmPw]   = useState(false);
+  const [showEmailPw,     setShowEmailPw]     = useState(false);
   const [passwordSaving,  setPasswordSaving]  = useState(false);
 
   const passwordStrength = getPasswordStrength(newPassword);
@@ -421,13 +424,24 @@ export default function SettingsProfile() {
             onChange={(e) => setNewEmail(e.target.value)}
             placeholder="you@example.com"
           />
-          <Input
-            label="Confirm with current password"
-            type={showPasswords ? "text" : "password"}
-            value={emailPassword}
-            onChange={(e) => setEmailPassword(e.target.value)}
-            placeholder="Current password"
-          />
+          <div className="relative">
+            <Input
+              label="Confirm with current password"
+              type={showEmailPw ? "text" : "password"}
+              value={emailPassword}
+              onChange={(e) => setEmailPassword(e.target.value)}
+              placeholder="Current password"
+            />
+            <button
+              type="button"
+              onClick={() => setShowEmailPw((v) => !v)}
+              aria-label={showEmailPw ? "Hide email confirmation password" : "Show email confirmation password"}
+              aria-pressed={showEmailPw}
+              className="absolute right-2.5 bottom-2.5 text-muted-foreground hover:text-foreground"
+            >
+              {showEmailPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
           <Button
             variant="secondary"
             size="sm"
@@ -446,19 +460,41 @@ export default function SettingsProfile() {
           Password
         </h3>
         <div className="space-y-3 max-w-md">
-          <Input
-            label="Current password"
-            type={showPasswords ? "text" : "password"}
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-          />
-          <div>
+          <div className="relative">
             <Input
-              label="New password"
-              type={showPasswords ? "text" : "password"}
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
+              label="Current password"
+              type={showCurrentPw ? "text" : "password"}
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
             />
+            <button
+              type="button"
+              onClick={() => setShowCurrentPw((v) => !v)}
+              aria-label={showCurrentPw ? "Hide current password" : "Show current password"}
+              aria-pressed={showCurrentPw}
+              className="absolute right-2.5 bottom-2.5 text-muted-foreground hover:text-foreground"
+            >
+              {showCurrentPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+          <div>
+            <div className="relative">
+              <Input
+                label="New password"
+                type={showNewPw ? "text" : "password"}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPw((v) => !v)}
+                aria-label={showNewPw ? "Hide new password" : "Show new password"}
+                aria-pressed={showNewPw}
+                className="absolute right-2.5 bottom-2.5 text-muted-foreground hover:text-foreground"
+              >
+                {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
             {newPassword && (
               <div className="mt-2 space-y-1">
                 <div className="flex gap-1">
@@ -488,20 +524,23 @@ export default function SettingsProfile() {
               </div>
             )}
           </div>
-          <Input
-            label="Confirm new password"
-            type={showPasswords ? "text" : "password"}
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-          />
-          <button
-            type="button"
-            onClick={() => setShowPasswords((v) => !v)}
-            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-          >
-            {showPasswords ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-            {showPasswords ? "Hide passwords" : "Show passwords"}
-          </button>
+          <div className="relative">
+            <Input
+              label="Confirm new password"
+              type={showConfirmPw ? "text" : "password"}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirmPw((v) => !v)}
+              aria-label={showConfirmPw ? "Hide confirm password" : "Show confirm password"}
+              aria-pressed={showConfirmPw}
+              className="absolute right-2.5 bottom-2.5 text-muted-foreground hover:text-foreground"
+            >
+              {showConfirmPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
           <Button
             variant="secondary"
             size="sm"

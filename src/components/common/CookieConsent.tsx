@@ -13,6 +13,21 @@ export function CookieConsent() {
     }
   }, []);
 
+  useEffect(() => {
+    const root = document.documentElement;
+    if (visible) {
+      root.setAttribute("data-cookie-banner", "1");
+      document.body.classList.add("cookie-banner-visible");
+    } else {
+      root.removeAttribute("data-cookie-banner");
+      document.body.classList.remove("cookie-banner-visible");
+    }
+    return () => {
+      root.removeAttribute("data-cookie-banner");
+      document.body.classList.remove("cookie-banner-visible");
+    };
+  }, [visible]);
+
   function accept() {
     localStorage.setItem(CONSENT_KEY, "accepted");
     setVisible(false);
@@ -27,14 +42,15 @@ export function CookieConsent() {
 
   return (
     <div
-      className="fixed inset-x-0 z-[9998] p-3 sm:p-4 bottom-16 md:bottom-0"
+      className="fixed inset-x-0 z-[9998] p-3 sm:p-4 bottom-16 md:bottom-0 pointer-events-none"
       role="dialog"
       aria-label="Cookie notice"
+      data-testid="cookie-consent-banner"
     >
-      <div className="max-w-2xl mx-auto bg-card border border-border rounded-2xl shadow-2xl shadow-black/20 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+      <div className="pointer-events-auto max-w-2xl mx-auto bg-card border border-border rounded-2xl shadow-2xl shadow-black/20 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-foreground mb-1">Cookie Notice</p>
-          <p className="text-xs text-muted-foreground leading-relaxed">
+          <p className="text-xs text-muted-foreground leading-relaxed break-words">
             We use essential cookies for authentication and optional analytics cookies to improve the experience.{" "}
             {/* Plain <a>: this banner may mount outside RouterProvider (App.tsx sibling). */}
             <a href="/privacy" className="text-primary hover:underline">

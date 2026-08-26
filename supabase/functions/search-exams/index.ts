@@ -15,8 +15,6 @@ import {
 } from "../_shared/rateLimit.ts";
 import { resolveIsIndiaProfile } from "../_shared/indiaRegion.ts";
 import {
-  computeBankReadinessStatus,
-  toBankReadinessPayload,
   type BankReadinessPayload,
 } from "../_shared/govBankReadiness.ts";
 import {
@@ -241,31 +239,68 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
     if (q) {
       const like = `%${escapeIlikePattern(q)}%`;
       const likeOr = ilikeFilterValue(q);
-      const { data: aliasRows, error: aliasError } = await db
-        .from("gov_exam_aliases")
-        .select("exam_id")
-        .ilike("alias", like)
-        .limit(200);
-      if (aliasError) {
-        return searchUnavailable(req, `aliases: ${aliasError.message}`);
+      // Optional year match via exam cycles (e.g. "2024").
+      const yearMatch = /^20\d{2}$/.test(q.trim()) ? Number(q.trim()) : null;
+
+      // Independent secondary indexes — run in parallel (sequential was ~4–5s).
+      const [aliasRes, bodyRes, stageRes, cycleRes, languageRes, paperRes] =
+        await Promise.all([
+          db.from("gov_exam_aliases").select("exam_id").ilike("alias", like).limit(200),
+          db
+            .from("recruiting_bodies")
+            .select("id")
+            .or(`name.ilike.${likeOr},code.ilike.${likeOr}`)
+            .limit(50),
+          db
+            .from("gov_exam_stages")
+            .select("exam_id")
+            .or(`name.ilike.${likeOr},code.ilike.${likeOr}`)
+            .limit(200),
+          yearMatch
+            ? db
+              .from("gov_exam_cycles")
+              .select("exam_id")
+              .eq("year", yearMatch)
+              .eq("review_state", "approved")
+              .limit(200)
+            : Promise.resolve({ data: [] as { exam_id?: string }[], error: null }),
+          db
+            .from("gov_exam_languages")
+            .select("exam_id")
+            .ilike("language_code", like)
+            .eq("review_state", "approved")
+            .limit(200),
+          db
+            .from("previous_year_papers")
+            .select("exam_id")
+            .or(
+              [
+                `title.ilike.${likeOr}`,
+                `cycle.ilike.${likeOr}`,
+                `tier.ilike.${likeOr}`,
+                `shift.ilike.${likeOr}`,
+                `language.ilike.${likeOr}`,
+              ].join(","),
+            )
+            .in("review_status", ["approved", "in_review"])
+            .limit(200),
+        ]);
+
+      if (aliasRes.error) {
+        return searchUnavailable(req, `aliases: ${aliasRes.error.message}`);
       }
       aliasExamIds = [
         ...new Set(
-          (aliasRows ?? [])
+          (aliasRes.data ?? [])
             .map((row) => String((row as { exam_id?: string }).exam_id ?? ""))
             .filter(Boolean),
         ),
       ];
 
-      const { data: bodyRows, error: bodyError } = await db
-        .from("recruiting_bodies")
-        .select("id")
-        .or(`name.ilike.${likeOr},code.ilike.${likeOr}`)
-        .limit(50);
-      if (bodyError) {
-        console.warn("[search-exams] recruiting_bodies lookup:", bodyError.message);
+      if (bodyRes.error) {
+        console.warn("[search-exams] recruiting_bodies lookup:", bodyRes.error.message);
       } else {
-        const bodyIds = (bodyRows ?? [])
+        const bodyIds = (bodyRes.data ?? [])
           .map((row) => String((row as { id?: string }).id ?? ""))
           .filter(Boolean);
         if (bodyIds.length > 0) {
@@ -286,86 +321,50 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
         }
       }
 
-      // Stage name / code matches (e.g. "Tier I", "Prelims").
-      const { data: stageRows, error: stageErr } = await db
-        .from("gov_exam_stages")
-        .select("exam_id")
-        .or(`name.ilike.${likeOr},code.ilike.${likeOr}`)
-        .limit(200);
-      if (stageErr) {
-        console.warn("[search-exams] stages lookup:", stageErr.message);
+      if (stageRes.error) {
+        console.warn("[search-exams] stages lookup:", stageRes.error.message);
       } else {
         stageExamIds = [
           ...new Set(
-            (stageRows ?? [])
+            (stageRes.data ?? [])
               .map((row) => String((row as { exam_id?: string }).exam_id ?? ""))
               .filter(Boolean),
           ),
         ];
       }
 
-      // Optional year match via exam cycles (e.g. "2024").
-      const yearMatch = /^20\d{2}$/.test(q.trim()) ? Number(q.trim()) : null;
-      if (yearMatch) {
-        const { data: cycleRows, error: cycleErr } = await db
-          .from("gov_exam_cycles")
-          .select("exam_id")
-          .eq("year", yearMatch)
-          .eq("review_state", "approved")
-          .limit(200);
-        if (cycleErr) {
-          console.warn("[search-exams] cycles lookup:", cycleErr.message);
-        } else {
-          cycleExamIds = [
-            ...new Set(
-              (cycleRows ?? [])
-                .map((row) => String((row as { exam_id?: string }).exam_id ?? ""))
-                .filter(Boolean),
-            ),
-          ];
-        }
+      if (cycleRes.error) {
+        console.warn("[search-exams] cycles lookup:", cycleRes.error.message);
+      } else {
+        cycleExamIds = [
+          ...new Set(
+            (cycleRes.data ?? [])
+              .map((row) => String((row as { exam_id?: string }).exam_id ?? ""))
+              .filter(Boolean),
+          ),
+        ];
       }
 
-      const { data: languageRows, error: languageErr } = await db
-        .from("gov_exam_languages")
-        .select("exam_id")
-        .ilike("language_code", like)
-        .eq("review_state", "approved")
-        .limit(200);
-      if (languageErr) {
+      if (languageRes.error) {
         // Soft-fail: language index is optional enrichment, not required for name/alias hits.
-        console.warn("[search-exams] languages lookup:", languageErr.message);
+        console.warn("[search-exams] languages lookup:", languageRes.error.message);
       } else {
         languageExamIds = [
           ...new Set(
-            (languageRows ?? [])
+            (languageRes.data ?? [])
               .map((row) => String((row as { exam_id?: string }).exam_id ?? ""))
               .filter(Boolean),
           ),
         ];
       }
 
-      const { data: paperRows, error: paperErr } = await db
-        .from("previous_year_papers")
-        .select("exam_id")
-        .or(
-          [
-            `title.ilike.${likeOr}`,
-            `cycle.ilike.${likeOr}`,
-            `tier.ilike.${likeOr}`,
-            `shift.ilike.${likeOr}`,
-            `language.ilike.${likeOr}`,
-          ].join(","),
-        )
-        .in("review_status", ["approved", "in_review"])
-        .limit(200);
-      if (paperErr) {
+      if (paperRes.error) {
         // Soft-fail: paper title search must not 503 the whole registry browse.
-        console.warn("[search-exams] papers lookup:", paperErr.message);
+        console.warn("[search-exams] papers lookup:", paperRes.error.message);
       } else {
         paperExamIds = [
           ...new Set(
-            (paperRows ?? [])
+            (paperRes.data ?? [])
               .map((row) => String((row as { exam_id?: string }).exam_id ?? ""))
               .filter(Boolean),
           ),
@@ -438,21 +437,8 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
       });
     }
 
-    const readinessByExam = new Map<string, BankReadinessPayload>();
-    const { data: readinessRows, error: readinessErr } = await db.rpc(
-      "get_gov_exam_bank_readiness",
-    );
-    if (readinessErr) {
-      console.warn("[search-exams] bank readiness RPC unavailable:", readinessErr.message);
-    } else {
-      for (const row of readinessRows ?? []) {
-        const examId = String((row as { exam_id?: string }).exam_id ?? "");
-        if (!examId) continue;
-        readinessByExam.set(examId, toBankReadinessPayload(row as Record<string, unknown>));
-      }
-    }
-
     // One pattern query for the current page — avoid N+1 that blows the client timeout.
+    // Intentionally skip get_gov_exam_bank_readiness on search (questions scan); detail pages load counts.
     type PatternRow = {
       exam_id: string;
       stage_id: string;
@@ -468,6 +454,8 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
     const patternByExamStage = new Map<string, PatternRow>();
     const pageExamIds = [...new Set(results.map((r) => r.examId).filter(Boolean))];
     if (pageExamIds.length > 0) {
+      // Search typeahead must stay fast: skip get_gov_exam_bank_readiness (questions
+      // table scan). Detail/generate pages still load accurate bank counts.
       const { data: patternRows, error: patternErr } = await db
         .from("gov_exam_pattern_versions")
         .select(
@@ -476,6 +464,7 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
         .in("exam_id", pageExamIds)
         .eq("review_state", "approved")
         .order("effective_date", { ascending: false });
+
       if (patternErr) {
         console.warn("[search-exams] pattern batch lookup:", patternErr.message);
       } else {
@@ -488,16 +477,15 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
       }
     }
 
-    const enriched = await Promise.all(
-      results.map(async (r) => {
+    const enriched = results.map((r) => {
       const stage = r.stages[0];
       const registryLanguages = r.languages ?? [];
       if (!stage) {
-        const emptyBank = readinessByExam.get(r.examId) ?? {
+        const emptyBank: BankReadinessPayload = {
           approvedPublicCount: 0,
           publicCount: 0,
           requiredQuestions: 0,
-          status: "empty" as const,
+          status: "empty",
           fullSimulationAvailable: false,
         };
         return {
@@ -512,31 +500,15 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
       }
 
       const pat = patternByExamStage.get(`${r.examId}:${stage.id}`);
-      const fromRpc = readinessByExam.get(r.examId);
-      const requiredQuestions = pat?.total_questions ?? fromRpc?.requiredQuestions ?? 0;
-      let bankReadiness: BankReadinessPayload;
-      if (fromRpc) {
-        const resolvedRequired = requiredQuestions || fromRpc.requiredQuestions;
-        const status = computeBankReadinessStatus(
-          fromRpc.approvedPublicCount,
-          resolvedRequired,
-        );
-        bankReadiness = {
-          ...fromRpc,
-          requiredQuestions: resolvedRequired,
-          status,
-          fullSimulationAvailable: status === "ready",
-        };
-      } else {
-        // Prefer RPC counts; skip per-row questions table probes (latency).
-        bankReadiness = {
-          approvedPublicCount: 0,
-          publicCount: 0,
-          requiredQuestions,
-          status: "empty",
-          fullSimulationAvailable: false,
-        };
-      }
+      const requiredQuestions = pat?.total_questions ?? 0;
+      // Search omits live bank counts (see above); avoid fabricating readiness.
+      const bankReadiness: BankReadinessPayload = {
+        approvedPublicCount: 0,
+        publicCount: 0,
+        requiredQuestions,
+        status: requiredQuestions > 0 ? "partial" : "empty",
+        fullSimulationAvailable: false,
+      };
 
       const patternLanguages = (pat?.languages as string[] | null) ?? [];
       const languages = [
@@ -562,8 +534,7 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
         bankReadiness,
         approvedQuestionCount: bankReadiness.approvedPublicCount,
       };
-      }),
-    );
+    });
 
     return json(req, {
       success: true,

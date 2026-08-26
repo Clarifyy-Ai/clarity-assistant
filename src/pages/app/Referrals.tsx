@@ -9,6 +9,7 @@ import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { Gift, Copy, Users, Zap, Check, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 
 export default function Referrals() {
   const { profile, user } = useAuthStore();
@@ -122,7 +123,7 @@ export default function Referrals() {
   ];
 
   return (
-    <PageContent>
+    <PageContent data-testid="page-width-root" className={PAGE_SHELL}>
       <PageHeader
         title="Referrals"
         description="Invite friends and earn bonus credits"

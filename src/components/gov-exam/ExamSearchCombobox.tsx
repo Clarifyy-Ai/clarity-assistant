@@ -10,6 +10,29 @@ import { Button } from "@/components/ui/Button";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 
 const DEBOUNCE_MS = 280;
+const SEARCH_CACHE_TTL_MS = 60_000;
+
+type SearchCacheEntry = {
+  q: string;
+  family: string;
+  results: GovExamSearchResult[];
+  at: number;
+};
+
+/** Survives remounts so browse/search does not flash Searching… after a good hit. */
+let searchResultCache: SearchCacheEntry | null = null;
+
+function readSearchCache(q: string, family: string | undefined): GovExamSearchResult[] | null {
+  const entry = searchResultCache;
+  if (!entry) return null;
+  if (Date.now() - entry.at > SEARCH_CACHE_TTL_MS) return null;
+  if (entry.q !== q || entry.family !== (family || "")) return null;
+  return entry.results;
+}
+
+function writeSearchCache(q: string, family: string | undefined, results: GovExamSearchResult[]) {
+  searchResultCache = { q, family: family || "", results, at: Date.now() };
+}
 
 export type ExamSearchComboboxProps = {
   value: string;
@@ -89,6 +112,8 @@ export function ExamSearchCombobox({
   const [picked, setPicked] = useState<GovExamSearchResult | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const reqIdRef = useRef(0);
+  const resultsRef = useRef<GovExamSearchResult[]>([]);
+  resultsRef.current = results;
   // Keep parent callbacks / family out of runSearch deps — inline onResultsChange
   // (e.g. MockTestHub setState) would otherwise recreate runSearch every render,
   // re-debounce, abort the in-flight request, and spin forever.
@@ -96,6 +121,22 @@ export function ExamSearchCombobox({
   onResultsChangeRef.current = onResultsChange;
   const familyRef = useRef(family);
   familyRef.current = family;
+
+
+  // Hydrate from remount-safe cache so empty browse does not blank the list.
+  useEffect(() => {
+    const cached = readSearchCache(query.trim().length >= 2 ? query.trim() : "", family);
+    if (cached && cached.length > 0 && results.length === 0) {
+      setResults(cached);
+      setState("idle");
+      onResultsChangeRef.current?.(cached, {
+        state: "idle",
+        error: null,
+        query: query.trim(),
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const selected =
     (value && picked?.examId === value ? picked : null) ??
@@ -129,9 +170,24 @@ export function ExamSearchCombobox({
         notify?.([], { state: "idle", error: null, query: "" });
         return;
       }
-      setState("loading");
-      setError(null);
-      notify?.([], { state: "loading", error: null, query: trimmed });
+      const cacheKey = trimmed.length >= 2 ? trimmed : "";
+      const cached =
+        readSearchCache(cacheKey, familyRef.current) ??
+        (resultsRef.current.length > 0 ? resultsRef.current : null);
+      const softRefresh = Boolean(cached && cached.length > 0);
+      if (!softRefresh) {
+        setState("loading");
+        setError(null);
+        notify?.([], { state: "loading", error: null, query: trimmed });
+      } else {
+        // Keep prior hits visible while refreshing (remount / focus must not flash Searching…).
+        setError(null);
+        if (resultsRef.current.length === 0 && cached) {
+          setResults(cached);
+          setState("idle");
+        }
+      }
+      const startedAt = Date.now();
       try {
         const data = await searchGovExams(
           {
@@ -140,7 +196,20 @@ export function ExamSearchCombobox({
           },
           { signal: ac.signal },
         );
-        if (reqId !== reqIdRef.current || ac.signal.aborted) return;
+        if (reqId !== reqIdRef.current) {
+          return;
+        }
+        if (ac.signal.aborted) {
+          setState("idle");
+          setError(null);
+          notify?.(resultsRef.current, {
+            state: "idle",
+            error: null,
+            query: trimmed,
+          });
+          return;
+        }
+        writeSearchCache(cacheKey, familyRef.current, data.results);
         setResults(data.results);
         const nextState = data.results.length === 0 ? "empty" : "idle";
         setState(nextState);
@@ -151,10 +220,23 @@ export function ExamSearchCombobox({
           query: trimmed,
         });
       } catch (err) {
-        if (ac.signal.aborted || reqId !== reqIdRef.current) return;
         const msg = err instanceof Error ? err.message : String(err ?? "");
-        // fetchEdge maps AbortError → "Request was cancelled…" — stay silent.
-        if (/cancelled|aborted/i.test(msg)) return;
+        const superseded = reqId !== reqIdRef.current;
+        const aborted = ac.signal.aborted;
+        const cancelMsg = /cancelled|aborted/i.test(msg);
+        // Newer request owns UI state — do not clear its loading spinner.
+        if (superseded) return;
+        // Abort/cancel of the *current* request must not leave Searching… (DEF-001).
+        if (aborted || cancelMsg) {
+          setState("idle");
+          setError(null);
+          notify?.(resultsRef.current, {
+            state: "idle",
+            error: null,
+            query: trimmed,
+          });
+          return;
+        }
         // Never keep a stale / fake list after a search failure (e.g. 503).
         setResults([]);
         const mapped = mapGovSearchError(err);

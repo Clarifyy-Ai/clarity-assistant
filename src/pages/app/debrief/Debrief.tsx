@@ -20,6 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import type { Tables } from "@/integrations/supabase";
+import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 
 type DebriefSummary = Pick<
   Tables<"session_debriefs">,
@@ -107,7 +108,7 @@ export default function Debrief() {
 
   if (loading) {
     return (
-      <PageContent className="space-y-5 max-w-3xl">
+      <PageContent data-testid="page-width-root" className={cn(PAGE_SHELL, "space-y-5")}>
         <PageHeader
           title="Debriefs"
           subtitle="Deep-dive AI analysis of each session"
@@ -124,7 +125,7 @@ export default function Debrief() {
   }
 
   return (
-    <PageContent className="space-y-5 max-w-3xl">
+    <PageContent data-testid="page-width-root" className={cn(PAGE_SHELL, "space-y-5")}>
       <PageHeader
         title="Debriefs"
         subtitle="Deep-dive AI analysis of each session"

@@ -115,15 +115,36 @@ export function BillingHistory({
           };
         });
 
-        const paymentRows: Transaction[] = (payments ?? []).map((p: PaymentOrderRow) => ({
-          id: p.id,
-          date: new Date(p.paid_at ?? p.created_at),
-          type: p.status === "paid" ? "purchase" as const : "usage" as const,
-          description: `${p.provider} — ${p.product_type.replace(/_/g, " ")}`,
-          amount: p.amount_paise / 100,
-          credits: 0,
-          status: p.status === "paid" ? "completed" as const : "pending" as const,
-        }));
+        // Fulfillment marks orders `fulfilled` (not `paid`). Treat both as completed.
+        const isCompleted = (status: string) =>
+          status === "paid" || status === "fulfilled";
+        const isFailed = (status: string) =>
+          status === "failed" || status === "cancelled" || status === "canceled";
+        const isRefunded = (status: string) => status === "refunded";
+
+        const paymentRows: Transaction[] = (payments ?? []).map((p: PaymentOrderRow) => {
+          const completed = isCompleted(p.status);
+          const refunded = isRefunded(p.status);
+          const failed = isFailed(p.status);
+          return {
+            id: p.id,
+            date: new Date(p.paid_at ?? p.created_at),
+            type: refunded
+              ? ("refund" as const)
+              : completed
+                ? ("purchase" as const)
+                : ("usage" as const),
+            description: `${p.provider} — ${p.product_type.replace(/_/g, " ")}`,
+            amount: p.amount_paise / 100,
+            credits: 0,
+            status: completed || refunded
+              ? ("completed" as const)
+              : failed
+                ? ("failed" as const)
+                : ("pending" as const),
+          };
+        });
+
 
         setTransactions(
           [...mapped, ...paymentRows].sort(

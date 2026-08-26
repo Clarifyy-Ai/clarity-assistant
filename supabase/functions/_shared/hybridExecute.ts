@@ -26,6 +26,10 @@ import {
   type DomainErrorCode,
 } from "./domainErrors.ts";
 import {
+  classifyCreditFailure,
+  creditDenialResponse,
+} from "./creditAuthority.ts";
+import {
   hybridFailure,
   hybridSuccess,
   type HybridMeta,
@@ -399,10 +403,15 @@ export async function executeHybridOperation<T = unknown>(
     });
 
     if (!credit.success) {
+      // Preserve RPC classification — never collapse Forbidden/service errors into
+      // INSUFFICIENT_CREDITS (that hid the service-role JWT detection bug).
+      const creditCode = classifyCreditFailure(credit.error, credit.code);
       const code: DomainErrorCode =
-        credit.code === "CAPABILITY_REQUIRED"
+        creditCode === "CAPABILITY_REQUIRED"
           ? "CAPABILITY_REQUIRED"
-          : "INSUFFICIENT_CREDITS";
+          : creditCode === "INSUFFICIENT_CREDITS" || creditCode === "PAYMENT_REQUIRED"
+          ? "INSUFFICIENT_CREDITS"
+          : "DATABASE_FAILURE";
       const executionMs = Date.now() - started;
       await recordOperationSource({
         operationId,
@@ -412,19 +421,14 @@ export async function executeHybridOperation<T = unknown>(
         status: "failure",
         correlationId,
         executionMs,
-        fallbackReason: code,
+        fallbackReason: creditCode,
       });
       return {
         ok: false,
         code,
         correlationId,
         executionMs,
-        response: hybridFailure({
-          req: input.req,
-          code,
-          message: credit.error,
-          correlationId,
-        }),
+        response: creditDenialResponse(input.req, credit, creditCost),
       };
     }
     creditsReserved = true;

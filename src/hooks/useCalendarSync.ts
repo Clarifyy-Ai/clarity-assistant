@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase/client";
 import { fetchEdge, fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useAuthStore } from "@/store/userStore";
 import type { AuthChangeEvent } from "@supabase/supabase-js";
+import { agentLog70dd4b } from "@/lib/debug/agentLog70dd4b";
 
 async function parseEdgeJson<T>(res: Response): Promise<T> {
   const text = await res.text().catch(() => "");
@@ -33,6 +34,57 @@ function isCalendarUnavailableError(err: Error & { code?: string; status?: numbe
   );
 }
 
+/** Cross-mount cache — avoids hammering sync-calendar with 501 probes on every page. */
+const SYNC_PROBE_TTL_MS = 5 * 60 * 1000;
+let syncProbeCache: { available: boolean; checkedAt: number; unavailable: boolean } | null = null;
+let syncProbeInflight: Promise<{ available: boolean; unavailable: boolean }> | null = null;
+
+async function probeSyncAvailabilityCached(): Promise<{ available: boolean; unavailable: boolean }> {
+  const now = Date.now();
+  if (syncProbeCache && now - syncProbeCache.checkedAt < SYNC_PROBE_TTL_MS) {
+    return {
+      available: syncProbeCache.available,
+      unavailable: syncProbeCache.unavailable,
+    };
+  }
+  if (syncProbeInflight) return syncProbeInflight;
+
+  syncProbeInflight = (async () => {
+    try {
+      await fetchEdgeJson("sync-calendar", { probe: true });
+      syncProbeCache = { available: true, checkedAt: Date.now(), unavailable: false };
+      return { available: true, unavailable: false };
+    } catch (err) {
+      const e = err as Error & { code?: string; status?: number };
+      const unavailable = isCalendarUnavailableError(e);
+      syncProbeCache = {
+        available: false,
+        checkedAt: Date.now(),
+        unavailable,
+      };
+      // #region agent log
+      agentLog70dd4b({
+        hypothesisId: "H-INT-501",
+        location: "useCalendarSync.ts:probe",
+        message: "sync probe result",
+        data: {
+          syncAvailable: false,
+          status: e.status ?? null,
+          code: e.code ?? null,
+          unavailable,
+          cached: false,
+        },
+      });
+      // #endregion
+      return { available: false, unavailable };
+    } finally {
+      syncProbeInflight = null;
+    }
+  })();
+
+  return syncProbeInflight;
+}
+
 // ─────────────────────────────────────────────────────────────────
 // useCalendarSync
 // Google OAuth connect/disconnect; event import only when sync-calendar is configured.
@@ -55,8 +107,12 @@ export function useCalendarSync() {
   const [importedCount,        setImportedCount]        = useState<number | null>(null);
   const [error,                setError]                = useState<string | null>(null);
   const [isConnected,          setIsConnected]          = useState(false);
-  const [syncAvailable,        setSyncAvailable]        = useState(false);
-  const [isProbingSync,        setIsProbingSync]        = useState(true);
+  const [syncAvailable,        setSyncAvailable]        = useState(
+    () => syncProbeCache?.available === true,
+  );
+  const [isProbingSync,        setIsProbingSync]        = useState(
+    () => !(syncProbeCache && Date.now() - syncProbeCache.checkedAt < SYNC_PROBE_TTL_MS),
+  );
 
   // ── Check connection status ───────────────────────────────────
   // Uses GET on disconnect-calendar which returns { connected: boolean }.
@@ -74,9 +130,31 @@ export function useCalendarSync() {
         { method: "GET" }
       );
       setIsConnected(!!data?.connected);
-    } catch {
-      const { data: sessionData } = await supabase.auth.getSession();
-      setIsConnected(!!sessionData?.session?.provider_token);
+      // #region agent log
+      agentLog70dd4b({
+        hypothesisId: "H-SCH-001",
+        location: "useCalendarSync.ts:checkConnection",
+        message: "calendar connection status",
+        data: { connected: !!data?.connected },
+      });
+      // #endregion
+    } catch (err) {
+      const e = err as Error & { code?: string; status?: number };
+      // Auth/session failures must not fake a "Connected" state from a stale provider_token.
+      if (e.status === 401 || e.code === "AUTH_REQUIRED" || e.code === "AUTH_EXPIRED" || e.code === "AUTH_INVALID") {
+        setIsConnected(false);
+        // #region agent log
+        agentLog70dd4b({
+          hypothesisId: "H-SCH-001",
+          location: "useCalendarSync.ts:checkConnection:401",
+          message: "calendar status auth failure",
+          data: { status: e.status ?? null, code: e.code ?? null },
+        });
+        // #endregion
+      } else {
+        const { data: sessionData } = await supabase.auth.getSession();
+        setIsConnected(!!sessionData?.session?.provider_token);
+      }
     } finally {
       setIsCheckingConnection(false);
     }
@@ -85,14 +163,23 @@ export function useCalendarSync() {
   const probeSyncAvailability = useCallback(async (): Promise<void> => {
     setIsProbingSync(true);
     try {
-      await fetchEdgeJson("sync-calendar", { probe: true });
-      setSyncAvailable(true);
-    } catch (err) {
-      const e = err as Error & { code?: string; status?: number };
-      setSyncAvailable(false);
-      if (isCalendarUnavailableError(e)) {
-        setError(CALENDAR_UNAVAILABLE_MSG);
-      }
+      const fromCache =
+        !!syncProbeCache && Date.now() - syncProbeCache.checkedAt < SYNC_PROBE_TTL_MS;
+      const result = await probeSyncAvailabilityCached();
+      setSyncAvailable(result.available);
+      if (result.unavailable) setError(CALENDAR_UNAVAILABLE_MSG);
+      // #region agent log
+      agentLog70dd4b({
+        hypothesisId: "H-INT-501",
+        location: "useCalendarSync.ts:probe:resolved",
+        message: "sync probe resolved",
+        data: {
+          syncAvailable: result.available,
+          unavailable: result.unavailable,
+          fromCache,
+        },
+      });
+      // #endregion
     } finally {
       setIsProbingSync(false);
     }

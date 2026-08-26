@@ -108,8 +108,8 @@ export default function DebriefDetail() {
         if (db.session_id) {
           try {
             const [sess, ans, sc, segments] = await Promise.all([
-              sessionsDB.getById(db.session_id),
-              sessionAnswersDB.listBySessionId(db.session_id),
+              sessionsDB.getByIdForUser(db.session_id, user.id),
+              sessionAnswersDB.listBySessionIdForUser(db.session_id, user.id),
               scorecardsDB.getBySessionId(db.session_id).catch(() => null),
               sessionTranscriptsDB.listSegmentsBySessionId(db.session_id).catch(() => []),
             ]);

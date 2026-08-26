@@ -322,6 +322,7 @@ export async function fetchEdge(
     });
   }
 
+
   try {
     const url = buildEdgeUrl(fnName);
     const payload =
@@ -351,6 +352,7 @@ export async function fetchEdge(
       }
       try {
         let response = await doFetch(headers);
+
 
         // One safe refresh/retry for expired/invalid JWTs — never loop.
         if (

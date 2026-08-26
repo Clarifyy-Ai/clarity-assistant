@@ -27,6 +27,7 @@ import {
   saveLastPracticeSetup,
   stashPendingPracticeSetup,
 } from "@/lib/session/lastPracticeSetup";
+import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 
 export default function LiveRehearsal() {
   const navigate = useNavigate();
@@ -86,7 +87,10 @@ export default function LiveRehearsal() {
   }
 
   return (
-    <div className="space-y-6 max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-200">
+    <div
+      data-testid="page-width-root"
+      className={cn(PAGE_SHELL, "space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-200")}
+    >
       <PageHeader
         title={PRODUCT_NAMES.practiceCoach}
         description="Configure your live rehearsal session, then open Overlay mode."
@@ -150,7 +154,7 @@ export default function LiveRehearsal() {
               Floating overlay, global hotkeys, and tab-audio capture work best in the desktop app.
               Browser Overlay sessions remain fully available.
             </p>
-            <DesktopDownloadButton />
+            <DesktopDownloadButton compact fullWidth showGuideLink={false} />
           </div>
         </div>
       )}

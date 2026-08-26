@@ -59,7 +59,7 @@ export default function LearningHubPage() {
   const isPreview = loaded && courses.length === 0;
 
   return (
-    <div className={PAGE_SHELL}>
+    <div data-testid="page-width-root" className={PAGE_SHELL}>
       <PageHeader
         title="Learning Hub"
         badge="Preview"

@@ -38,7 +38,9 @@ import type { AnalyticsPeriod } from "@/types/analytics.types";
 import { cn } from "@/lib/utils";
 import { format, subDays } from "date-fns";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { agentLog70dd4b } from "@/lib/debug/agentLog70dd4b";
 import { formatAggregateScore, formatSessionScore } from "@/lib/analytics/scoreStatus";
+import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 import {
   canEnableCompare,
   formatSessionDateTime,
@@ -56,7 +58,7 @@ export default function Analytics() {
 
   if (analytics.isLoading) {
     return (
-      <div className="space-y-6 max-w-5xl">
+      <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-6`}>
         <PageHeader
           title={PRODUCT_NAMES.analytics}
           subtitle="Track your interview performance over time"
@@ -77,7 +79,7 @@ export default function Analytics() {
 
   if (analytics.error && !analytics.data) {
     return (
-      <div className="space-y-6 max-w-5xl">
+      <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-6`}>
         <PageHeader
           title={PRODUCT_NAMES.analytics}
           subtitle="Track your interview performance over time"
@@ -100,7 +102,7 @@ export default function Analytics() {
 
   if (!hasSessions) {
     return (
-      <div className="space-y-6 max-w-5xl">
+      <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-6`}>
         <PageHeader
           title={PRODUCT_NAMES.analytics}
           subtitle="Track your interview performance over time"
@@ -125,7 +127,7 @@ export default function Analytics() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-6`}>
       <PageHeader
         title={PRODUCT_NAMES.analytics}
         subtitle="Track your interview performance over time"
@@ -437,6 +439,7 @@ function CategoryBreakdown({
 }: {
   categories: { category: string; avg_score: number; count: number }[];
 }) {
+  const navigate = useNavigate();
   if (!categories.length) {
     return (
       <Card className="text-center py-10">
@@ -447,6 +450,7 @@ function CategoryBreakdown({
   }
 
   const sorted = [...categories].sort((a, b) => b.avg_score - a.avg_score);
+  const weakest = sorted[sorted.length - 1];
 
   return (
     <div className="space-y-3">
@@ -476,19 +480,37 @@ function CategoryBreakdown({
         );
       })}
 
-      {/* Weakest category highlight */}
-      {sorted.length > 0 && sorted[sorted.length - 1].avg_score < 60 && (
+      {/* Weakest category highlight — navigable to Prep Lab (TC-AN-003) */}
+      {weakest && weakest.avg_score < 60 && (
         <Card className="border-amber-500/20 bg-amber-500/5">
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-            <div>
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-amber-300">
-                Focus area: {sorted[sorted.length - 1].category}
+                Focus area: {weakest.category}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Your weakest category. Consider drilling{" "}
-                {sorted[sorted.length - 1].category} questions in Prep Lab.
+                Your weakest category. Drill {weakest.category} questions in Prep Lab.
               </p>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="mt-3"
+                onClick={() => {
+                  // #region agent log
+                  agentLog70dd4b({
+                    hypothesisId: "H-AN-003",
+                    location: "Analytics.tsx:weak-topic",
+                    message: "navigate prep lab from weak topic",
+                    data: { category: weakest.category, avg: weakest.avg_score },
+                  });
+                  // #endregion
+                  navigate(`/app/prep?focus=${encodeURIComponent(weakest.category)}`);
+                }}
+              >
+                Practice in Prep Lab
+              </Button>
             </div>
           </div>
         </Card>

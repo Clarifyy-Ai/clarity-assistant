@@ -40,8 +40,8 @@ export function clearRecentSearches(): void {
   }
 }
 
-export const PALETTE_GROUPS_DEFAULT = ["Navigate", "Sessions", "Prep", "Account"] as const;
-export const PALETTE_GROUPS_PREP_FIRST = ["Prep", "Navigate", "Sessions", "Account"] as const;
+export const PALETTE_GROUPS_DEFAULT = ["Navigate", "Sessions", "Prep", "Account", "Admin"] as const;
+export const PALETTE_GROUPS_PREP_FIRST = ["Prep", "Navigate", "Sessions", "Account", "Admin"] as const;
 
 /** Rank Prep Lab / STAR / Rephraser above later sections when the query mentions prep. */
 export function paletteGroupOrder(query: string): readonly string[] {

@@ -450,8 +450,11 @@ async function assertOwnedJd(
   db: ReturnType<typeof createServiceClient>,
   userId: string,
   jdId: string | null | undefined,
-): Promise<{ ok: true } | { ok: false; message: string }> {
-  if (!jdId) return { ok: true };
+): Promise<
+  | { ok: true; effectiveJdId: string | null }
+  | { ok: false; message: string }
+> {
+  if (!jdId) return { ok: true, effectiveJdId: null };
   const { data, error } = await db
     .from("job_descriptions")
     .select("id, user_id, parse_status")
@@ -460,10 +463,16 @@ async function assertOwnedJd(
     .maybeSingle();
   if (!error && data) {
     const status = String((data as { parse_status?: string }).parse_status ?? "ready");
+    // JD is optional. A still-processing or failed parse must not block session start —
+    // proceed without attaching JD context (TC-REG-010 / Practice Coach).
     if (status && !["ready", "completed", ""].includes(status)) {
-      return { ok: false, message: "Job description is still processing." };
+      console.warn(
+        "[start-session] optional JD not ready — starting without jd_id",
+        { jdId, status },
+      );
+      return { ok: true, effectiveJdId: null };
     }
-    return { ok: true };
+    return { ok: true, effectiveJdId: jdId };
   }
   const { data: doc, error: docErr } = await db
     .from("documents")
@@ -474,7 +483,7 @@ async function assertOwnedJd(
   if (docErr || !doc) {
     return { ok: false, message: "The selected job description is no longer available." };
   }
-  return { ok: true };
+  return { ok: true, effectiveJdId: jdId };
 }
 
 function setupInvalid(
@@ -831,6 +840,8 @@ Deno.serve(async (req: Request) => {
   if (!jdOwned.ok) {
     return setupInvalid(corsHeaders, jdOwned.message, ["jd_id"]);
   }
+  // May be null when an optional JD is still processing / failed — session continues without it.
+  const resolvedJdInput = jdOwned.effectiveJdId;
 
   const durationMinutes = capDurationMinutes(
     profile?.plan_id ?? "free",
@@ -838,8 +849,9 @@ Deno.serve(async (req: Request) => {
   );
   const questionCount = body.question_count;
   const nowIso = new Date().toISOString();
+  // Keep session config consistent with FK: drop optional JD when skipped as not-ready.
   const config = buildConfig({
-    body,
+    body: { ...body, jd_id: resolvedJdInput },
     sessionType,
     durationMinutes,
     questionCount,
@@ -880,7 +892,7 @@ Deno.serve(async (req: Request) => {
 
   // sessions.document_id / jd_id FK → documents only; keep wizard IDs in config.
   const documentId = await resolveDocumentsFk(db, body.resume_id);
-  const jdId = await resolveDocumentsFk(db, body.jd_id);
+  const jdId = await resolveDocumentsFk(db, resolvedJdInput);
 
   const { data: started, error: startErr } = await rpcJson(db, "start_owned_session", {
     p_user_id: user.id,

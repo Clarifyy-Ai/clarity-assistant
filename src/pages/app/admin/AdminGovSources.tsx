@@ -11,7 +11,8 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Link2, Loader2, Plus } from "lucide-react";
+import { Link2, Loader2, Plus, ArrowLeft } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { AdminGovDisclaimer } from "./AdminGovDisclaimer";
 import {
   DOCUMENT_TYPES,
@@ -35,6 +36,7 @@ function reviewBadgeVariant(state: string): "gray" | "amber" | "emerald" | "red"
 }
 
 export default function AdminGovSources() {
+  const navigate = useNavigate();
   const [rows, setRows] = useState<OfficialSourceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -135,6 +137,16 @@ export default function AdminGovSources() {
           { label: "Gov Exams", href: "/app/admin/gov/exams" },
           { label: "Sources" },
         ]}
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate("/app/admin/gov/exams")}
+            leftIcon={<ArrowLeft className="w-4 h-4" />}
+          >
+            Back to Gov Exams
+          </Button>
+        }
       />
       <AdminGovDisclaimer />
 

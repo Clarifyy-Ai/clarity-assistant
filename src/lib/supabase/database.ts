@@ -813,6 +813,36 @@ export const sessionAnswersDB = {
       return String(a.created_at).localeCompare(String(b.created_at));
     });
   },
+
+  /** Owner-scoped answers list (defense in depth alongside RLS). */
+  async listBySessionIdForUser(
+    sessionId: string,
+    userId: string,
+  ): Promise<Tables<"session_answers">[]> {
+    const { data, error } = await supabase
+      .from("session_answers")
+      .select("*")
+      .eq("session_id", sessionId)
+      .eq("user_id", userId)
+      .order("question_index", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "session_answers",
+        operation: "listBySessionIdForUser",
+      });
+    }
+    const rows = data ?? [];
+    return [...rows].sort((a, b) => {
+      const ai = a.question_index;
+      const bi = b.question_index;
+      if (typeof ai === "number" && typeof bi === "number" && ai !== bi) return ai - bi;
+      if (typeof ai === "number" && typeof bi !== "number") return -1;
+      if (typeof bi === "number" && typeof ai !== "number") return 1;
+      return String(a.created_at).localeCompare(String(b.created_at));
+    });
+  },
 };
 
 // ─── Interviews ────────────────────────────────────────────────────────────────

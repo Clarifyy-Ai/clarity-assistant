@@ -81,8 +81,8 @@ export const STT_STATUS_COPY: Record<SttState, string> = {
   STT_RECEIVING_AUDIO: "Receiving audio",
   STT_TRANSCRIBING: "Transcribing",
   STT_RECONNECTING: "Reconnecting transcription…",
-  STT_UNAVAILABLE: "Transcription unavailable",
-  STT_ERROR: "Transcription unavailable",
+  STT_UNAVAILABLE: "Transcription temporarily unavailable — text mode still works",
+  STT_ERROR: "Transcription temporarily unavailable — text mode still works",
 };
 
 export const MIC_PERMISSION_RECOVERY =

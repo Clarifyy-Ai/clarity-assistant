@@ -10,6 +10,8 @@ interface DesktopDownloadButtonProps {
   variant?: ButtonProps["variant"];
   showGuideLink?: boolean;
   fullWidth?: boolean;
+  /** Hide verbose SmartScreen / unpublished copy (dashboard cards). */
+  compact?: boolean;
   /** When installer is unpublished, primary path for Practice Coach. */
   webCoachHref?: string;
 }
@@ -20,12 +22,13 @@ export function DesktopDownloadButton({
   variant = "primary",
   showGuideLink = true,
   fullWidth = false,
+  compact = false,
   webCoachHref = "/app/live",
 }: DesktopDownloadButtonProps) {
   const { osLabel, url, loading, download, installGuidePath } = useDesktopDownload();
 
   return (
-    <div className={cn("flex flex-col gap-2", fullWidth && "w-full", className)}>
+    <div className={cn("flex flex-col gap-2 min-w-0", fullWidth && "w-full", className)}>
       {url ? (
         <>
           <Button
@@ -45,14 +48,16 @@ export function DesktopDownloadButton({
           >
             {loading ? "Finding installer…" : `Download for ${osLabel}`}
           </Button>
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            Windows SmartScreen may warn on first install until the build is code-signed. Choose{" "}
-            <strong className="text-foreground">More info → Run anyway</strong> if you trust this
-            release.
-          </p>
+          {!compact && (
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Windows SmartScreen may warn on first install until the build is code-signed. Choose{" "}
+              <strong className="text-foreground">More info → Run anyway</strong> if you trust this
+              release.
+            </p>
+          )}
         </>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2 min-w-0">
           <Link
             to={webCoachHref}
             className={cn(
@@ -65,7 +70,7 @@ export function DesktopDownloadButton({
           >
             Continue in web Practice Coach
           </Link>
-          {!loading && (
+          {!loading && !compact && (
             <div className="rounded-lg border border-border bg-muted/40 p-3 space-y-2 max-w-md">
               <p className="text-xs text-foreground font-medium">Desktop installer</p>
               <p className="text-[11px] text-muted-foreground leading-relaxed">

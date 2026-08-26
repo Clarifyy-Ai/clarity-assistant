@@ -159,6 +159,7 @@ export default function NewInterview() {
   // ✅ FIX: Mounted ref so we never call toast/setState after navigate() unmounts us
   const mountedRef = useRef(true);
   const prefilledRef = useRef(false);
+  const roundPrefilledRef = useRef(false);
   useEffect(() => () => { mountedRef.current = false; }, []);
 
   useEffect(() => {
@@ -194,16 +195,19 @@ export default function NewInterview() {
   }, [activeJdId]);
 
   useEffect(() => {
-    if (!isEditMode || !editingInterview || prefilledRef.current) return;
-    prefilledRef.current = true;
+    if (!isEditMode || !editingInterview) return;
+    // Prefill parent fields once; allow a second pass when round data arrives later
+    // (store hydrate race — DevTools focus used to mask this by triggering reload).
+    if (!prefilledRef.current) {
+      setCompany(editingInterview.company_name ?? "");
+      setRoleTitle(editingInterview.role_title ?? "");
+      setNotes(editingInterview.notes ?? "");
+      setResumeId(editingInterview.resume_id ?? null);
+      setJdId(editingInterview.jd_id ?? null);
+      prefilledRef.current = true;
+    }
 
-    setCompany(editingInterview.company_name ?? "");
-    setRoleTitle(editingInterview.role_title ?? "");
-    setNotes(editingInterview.notes ?? "");
-    setResumeId(editingInterview.resume_id ?? null);
-    setJdId(editingInterview.jd_id ?? null);
-
-    if (editingRound) {
+    if (editingRound && !roundPrefilledRef.current) {
       setInterviewType(fromInterviewTypeSlug(editingRound.interview_type ?? "behavioural"));
       setRoundNumber(editingRound.round_number ?? 1);
       setScheduleDate(formatDateInput(editingRound.scheduled_at));
@@ -212,8 +216,9 @@ export default function NewInterview() {
       setInterviewerName(editingRound.interviewer_name ?? "");
       setMeetingLink(editingRound.meeting_link ?? "");
       setPlatform(editingRound.platform ?? "zoom");
+      roundPrefilledRef.current = true;
     }
-  }, [isEditMode, editingInterview, editingRound]);
+  }, [isEditMode, editingInterview, editingRound, editId]);
 
   const minDate = todayDateString();
   const timeSlots = useMemo(() => {
@@ -365,7 +370,11 @@ export default function NewInterview() {
       toast.success("Interview scheduled!");
 
       try {
-        await fetchEdgeJson<{ success?: boolean; email_sent?: boolean }>(
+        const reminder = await fetchEdgeJson<{
+          success?: boolean;
+          email_sent?: boolean;
+          email_configured?: boolean;
+        }>(
           "schedule-interview",
           {
             interview_id: id,
@@ -374,8 +383,20 @@ export default function NewInterview() {
             scheduled_at: scheduledAtIso,
           }
         );
+        if (reminder?.email_sent) {
+          toast.message("Email reminder sent to your account address.");
+        } else if (reminder?.email_configured === false) {
+          toast.message(
+            "In-app reminder created. Email reminders are not configured on this environment (requires Resend).",
+          );
+        } else {
+          toast.message(
+            "In-app reminder created. Email reminder could not be sent — check notification email preferences.",
+          );
+        }
       } catch (remErr) {
         console.warn("[NewInterview] schedule-interview:", remErr);
+        toast.message("Interview saved. In-app reminder setup failed; email was not sent.");
       }
     }
 

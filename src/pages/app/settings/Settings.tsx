@@ -120,7 +120,10 @@ export default function Settings() {
   }
 
   return (
-    <div className="flex flex-col gap-6 max-w-5xl w-full">
+    <div
+      data-testid="settings-layout"
+      className="flex flex-col gap-4 lg:gap-6 w-full min-w-0"
+    >
       {showSettingsHeader && (
         <PageHeader
           title="Settings"
@@ -137,9 +140,9 @@ export default function Settings() {
         />
       )}
 
-      <div className="flex flex-col md:flex-row gap-6">
-      {/* Desktop Sidebar */}
-      <aside className="w-52 shrink-0 hidden md:block">
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
+      {/* Desktop Sidebar — lg+ only so tablet keeps stacked nav without dead zones */}
+      <aside className="w-52 shrink-0 hidden lg:block self-start sticky top-4">
         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 mb-3">
           Settings
         </p>
@@ -168,9 +171,9 @@ export default function Settings() {
         </nav>
       </aside>
 
-      {/* Mobile: horizontal scrolling tab bar (shows when not at root) */}
+      {/* Mobile/tablet: horizontal scrolling tab bar (shows when not at root) */}
       {!isRoot && (
-        <div className="md:hidden -mx-3 px-3 overflow-x-auto scrollbar-hide">
+        <div className="lg:hidden -mx-3 px-3 overflow-x-auto scrollbar-hide">
           <nav className="flex gap-1 pb-3 min-w-max">
             {SETTINGS_NAV.map((item) => (
               <NavLink
@@ -181,11 +184,11 @@ export default function Settings() {
                     "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all",
                     isActive
                       ? item.danger
-                        ? "bg-red-500/10 text-red-500"
+                        ? "bg-red-500/10 text-red-600 dark:text-red-400"
                         : "bg-primary/10 text-primary"
                       : item.danger
-                      ? "text-red-500 hover:bg-red-500/5"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                      ? "text-red-600 dark:text-red-400 hover:bg-red-500/5"
+                      : "text-foreground/80 hover:text-foreground hover:bg-secondary/60"
                   )
                 }
               >
@@ -198,9 +201,9 @@ export default function Settings() {
       )}
 
       {/* Content — Outlet always mounted so nested settings routes resolve */}
-      <div className="flex-1 min-w-0">
+      <div data-testid="settings-content" className="flex-1 min-w-0">
         {isRoot && (
-          <div className="md:hidden space-y-4 mb-4">
+          <div className="lg:hidden space-y-4 mb-4">
             <button
               type="button"
               onClick={() => void handleSignOut()}

@@ -29,9 +29,11 @@ import {
 import {
   RAZORPAY_QA_SANDBOX_HINT,
   showRazorpayQaSandboxHint,
+  type RazorpayOrderResponse,
 } from "@/lib/billing/razorpayCheckout";
 
 import { PricingCard } from "@/components/billing/PricingCard";
+import { BillingHistory } from "@/components/billing/BillingHistory";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -254,15 +256,23 @@ export default function SettingsBilling(): JSX.Element {
     checkoutLockRef.current = true;
     setRazorpayLoading(productType);
     setCheckoutPhase("creating");
+    const enteredPromo = promoCode.trim();
     try {
       await openRazorpayCheckout({
         productType,
-        promoCode: promoCode.trim() || undefined,
+        promoCode: enteredPromo || undefined,
         userEmail: profile?.email ?? user?.email ?? undefined,
         userName: profile?.full_name ?? undefined,
-        onReady: () => setCheckoutPhase("processing"),
+        onReady: (order: RazorpayOrderResponse) => {
+          setCheckoutPhase("processing");
+          if (enteredPromo && order.promo_applied) {
+            toast.success(`Promo “${order.promo_applied}” applied to this checkout.`);
+          } else if (enteredPromo && !order.promo_applied) {
+            toast.message("Promo/referral code was not applied — charging full catalog price.");
+          }
+        },
         onSuccess: () => {
-          toast.success("Payment completed");
+          toast.success("Payment completed — credits update from your ledger.");
           void reloadBillingState();
         },
       });
@@ -549,8 +559,9 @@ export default function SettingsBilling(): JSX.Element {
         </h3>
         <Card className="p-4 mb-4 space-y-3">
           <p className="text-xs text-muted-foreground">
-            Pay in INR via Razorpay. Referral codes and admin offers apply at checkout.
-            Credits auto-deduct when you use AI features.
+            Pay in INR via Razorpay. Admin promo codes entered below are validated when you
+            start checkout (not on a separate Save). Friend referral rewards use the
+            referral flow separately from this field.
           </p>
           <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
             Razorpay checkout is a one-time payment for Pro/Max access or credit packs.
@@ -561,12 +572,22 @@ export default function SettingsBilling(): JSX.Element {
               {RAZORPAY_QA_SANDBOX_HINT}
             </p>
           ) : null}
-          <input
-            className="w-full max-w-xs rounded-lg border border-border bg-background px-3 py-2 text-sm"
-            placeholder="Promo / referral code"
-            value={promoCode}
-            onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
-          />
+          <div className="space-y-1.5 max-w-xs">
+            <label htmlFor="billing-promo-code" className="text-xs font-medium text-foreground">
+              Promo code (optional)
+            </label>
+            <input
+              id="billing-promo-code"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              placeholder="Enter promo code"
+              value={promoCode}
+              onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+              autoComplete="off"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Applied automatically on Buy/Upgrade. Invalid codes are ignored and full price is charged.
+            </p>
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
@@ -736,6 +757,10 @@ export default function SettingsBilling(): JSX.Element {
             );
           })}
         </div>
+      </div>
+
+      <div>
+        <BillingHistory itemsPerPage={8} />
       </div>
     </div>
   );

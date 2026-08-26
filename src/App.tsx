@@ -27,6 +27,7 @@ import type { PlanId } from "@/lib/constants/pricing";
 import { useOverlayStore } from "@/store/overlayStore";
 import { toast } from "sonner";
 import { RETIRED_ROOMS_REDIRECT, RETIRED_ROOMS_TOAST } from "@/lib/routes/canonical";
+import { agentLog70dd4b } from "@/lib/debug/agentLog70dd4b";
 
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { FeatureKillGate } from "@/components/layout/PlanGate";
@@ -413,6 +414,7 @@ function AppShell(): JSX.Element {
   const mobileNavOpen = useUIStore((state) => state.mobile_nav_open);
   const setMobileNavOpen = useUIStore((state) => state.setMobileNavOpen);
 
+
   // Mid-session Practice Coach always runs on /app/live/overlay (outside AppShell).
   // /app/live is setup + post-session summary only — keep chrome visible there.
   const hideChromeForLiveSession = false;
@@ -496,8 +498,8 @@ function AppShell(): JSX.Element {
         <NetworkBanner />
         <AppHotkeyListener />
 
-        <main id="main-content" className="flex-1 overflow-y-auto pb-16 md:pb-0">
-          <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 md:py-6">
+        <main id="main-content" className="flex-1 overflow-y-auto pb-16 md:pb-0 body-cookie-pad">
+          <div className="max-w-7xl mx-auto w-full min-w-0 px-3 sm:px-4 md:px-6 lg:px-8 py-4 md:py-6">
             {showSetupChecklist && (
               <div className="mb-6">
                 <SetupChecklist prominent dismissible />
@@ -1016,6 +1018,20 @@ export default function App(): JSX.Element {
   const stealthMode = useUIStore((state) => state.stealth_mode);
 
   useFocusRecoveryCoordinator();
+
+  useEffect(() => {
+    // #region agent log
+    agentLog70dd4b({
+      hypothesisId: "H-BOOT",
+      location: "App.tsx:mount",
+      message: "instrumented app boot",
+      data: {
+        href: typeof location !== "undefined" ? location.href.slice(0, 120) : null,
+        host: typeof location !== "undefined" ? location.host : null,
+      },
+    });
+    // #endregion
+  }, []);
 
   useEffect(() => {
     void initialize();

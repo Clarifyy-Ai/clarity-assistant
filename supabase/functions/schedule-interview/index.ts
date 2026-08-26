@@ -155,8 +155,9 @@ Deno.serve(async (req) => {
 
     const { data: authUser } = await db.auth.admin.getUserById(userId);
     const email = authUser?.user?.email ?? "";
+    const emailConfigured = Boolean(RESEND_API_KEY);
     let emailSent = false;
-    if (email) {
+    if (email && emailConfigured) {
       emailSent = await sendReminderEmail(email, company, role, scheduledAt);
     }
 
@@ -165,6 +166,7 @@ Deno.serve(async (req) => {
         success: true,
         notification_id: notification?.id,
         email_sent: emailSent,
+        email_configured: emailConfigured,
       }),
       { headers }
     );

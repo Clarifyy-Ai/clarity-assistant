@@ -10,6 +10,9 @@ const PAST_DUE_ALLOWED_FUNCTIONS = new Set([
   "create-checkout",
   "create-billing-portal",
   "razorpay-create-order",
+  // Past-due users must verify checkout so recovery grants can complete client-side
+  // (webhook still fulfills independently when configured).
+  "razorpay-verify-payment",
   "cancel-subscription",
   "resume-subscription",
   "send-email",

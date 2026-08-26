@@ -150,7 +150,9 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const lastSetup = useMemo(() => loadLastPracticeSetup(), []);
   const practiceContextId = searchParams.get("context");
   const [showWizard, setShowWizard] = useState(
-    () => sessionType === "live" || !lastSetup || Boolean(practiceContextId),
+    // Mock always uses the full wizard so options cards and Practice Coach
+    // quick-start never stack/bleed on the same page.
+    () => sessionType === "mock" || sessionType === "live" || !lastSetup || Boolean(practiceContextId),
   );
   const [practiceQuestion, setPracticeQuestion] = useState<string | null>(null);
   const [contextLoadError, setContextLoadError] = useState<string | null>(null);
@@ -766,7 +768,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
 
   if (creditsExhausted) {
     return (
-      <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">
+      <div className="w-full bg-background text-foreground flex items-center justify-center p-4 sm:p-6">
         <div className="w-full max-w-md rounded-2xl border border-border bg-card">
           <CreditExhaustedState />
         </div>
@@ -794,13 +796,15 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     const quickLanguage = lastSetup.language ?? "English";
 
     return (
-      <div className="w-full space-y-5">
+      <div data-testid="wizard-quick-start" className="w-full space-y-5 pb-6">
           <div className="text-left sm:text-center space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-sm font-medium">
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-700 dark:text-emerald-400 text-sm font-medium">
               <Radio className="w-3.5 h-3.5 animate-pulse" aria-hidden />
               Ready to practice
             </div>
-            <h2 className="text-xl font-bold text-foreground">Start {PRODUCT_NAMES.practiceCoach}</h2>
+            <h2 className="text-xl font-bold text-foreground">
+              Start {sessionType === "mock" ? PRODUCT_NAMES.mockInterview : PRODUCT_NAMES.practiceCoach}
+            </h2>
             <p className="text-sm text-muted-foreground">
               {formatPracticeSetupSummary(lastSetup)}
             </p>
@@ -818,14 +822,14 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
           <AudioOkBadge onReady={setQuickAudioReady} />
           <div
             role="note"
-            className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+            className="rounded-xl border border-amber-600/40 bg-amber-100/90 dark:bg-amber-500/15 px-4 py-3.5 text-sm text-amber-950 dark:text-amber-100 min-w-0 break-words leading-relaxed"
           >
             <strong>Practice only.</strong> This opens the Overlay session window. Interviewers
             cannot see the Overlay unless you share that window.
           </div>
           <Button
             variant="primary"
-            className="w-full"
+            className="w-full relative z-10"
             size="lg"
             leftIcon={<Play className="w-4 h-4" />}
             onClick={() => {
@@ -838,7 +842,11 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
               setStep(connectStep);
             }}
           >
-            {quickAudioReady ? "Start Practice Session" : "Continue — check mic & speaker"}
+            {quickAudioReady
+              ? sessionType === "mock"
+                ? "Start Mock Session"
+                : "Start Practice Session"
+              : "Continue — check mic & speaker"}
           </Button>
           <button
             type="button"

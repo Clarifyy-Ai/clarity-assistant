@@ -23,13 +23,14 @@ export function SessionTrustBanner({
   return (
     <div
       role="note"
+      data-testid="session-trust-banner"
       className={cn(
-        "flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300",
+        "flex items-start gap-3 rounded-xl border border-amber-600/40 bg-amber-100/90 dark:bg-amber-500/15 px-4 py-3.5 text-sm text-amber-950 dark:text-amber-100 min-w-0",
         className,
       )}
     >
-      <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden />
-      <span>
+      <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-amber-800 dark:text-amber-300" aria-hidden />
+      <span className="min-w-0 flex-1 break-words leading-relaxed">
         <strong>Practice only.</strong> {COPY[variant]}
       </span>
     </div>

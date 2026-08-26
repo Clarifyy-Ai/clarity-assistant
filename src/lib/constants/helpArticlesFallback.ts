@@ -225,11 +225,16 @@ export function resolveHelpArticleDisplay(row: HelpArticleItem): HelpArticleItem
   const fallback = getFallbackArticleBySlug(row.slug);
   const answer = sanitizeHelpText(row.answer ?? "");
   const body = sanitizeHelpText(row.body_md ?? "");
+  const rawCombined = `${row.answer ?? ""}${row.body_md ?? ""}`;
   const looksCorrupt =
-    /Ã.|â€|Â[₹· ]|Ã\u0080/.test(`${row.answer ?? ""}${row.body_md ?? ""}`) ||
+    /Ã.|â€|Â[₹· ]|Ã\u0080/.test(rawCombined) ||
     (row.slug === "gs-3" &&
       /what happens after i sign up/i.test(row.question) &&
-      /free plan/i.test(answer));
+      /free plan/i.test(answer)) ||
+    // Stale bi-5 seed: mojibake-prone "À la carte" and/or obsolete Enterprise unlimited copy
+    (row.slug === "bi-5" &&
+      (/À\s*la carte|Ã€\s*la carte|Enterprise.*unlimited|unlimited credits/i.test(rawCombined)));
+
 
   if (looksCorrupt && fallback) {
     return fallback;

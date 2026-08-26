@@ -35,7 +35,7 @@ export const PAYMENT_UNAVAILABLE =
 
 /** Short QA copy for Razorpay test-mode sandboxes (never Stripe 4242). */
 export const RAZORPAY_QA_SANDBOX_HINT =
-  "QA (Razorpay test mode): use Razorpay test payment methods — success/failure cards or UPI test. Do not use Stripe 4242.";
+  "QA (Razorpay test mode): use Razorpay India test methods (test cards/UPI from the Razorpay dashboard). Do not use Stripe 4242 or unsupported international cards — those return international_transaction_not_allowed.";
 
 /** Show sandbox hints outside production builds. */
 export function showRazorpayQaSandboxHint(): boolean {
@@ -131,12 +131,40 @@ function razorpayDescription(productType: RazorpayProductType): string {
 }
 
 export function toPaymentUserFacingError(err: unknown): string {
+  const code =
+    err && typeof err === "object" && "code" in err
+      ? String((err as { code?: unknown }).code ?? "")
+      : "";
+  const status =
+    err && typeof err === "object" && "status" in err
+      ? Number((err as { status?: unknown }).status)
+      : NaN;
   const msg = err instanceof Error ? err.message : String(err ?? "");
+
+  // Auth failures must not be masked as a generic payment outage (TC-REG-006/013).
+  if (
+    status === 401 ||
+    code === "AUTH_REQUIRED" ||
+    code === "AUTH_EXPIRED" ||
+    code === "AUTH_INVALID" ||
+    /AUTH_(REQUIRED|EXPIRED|INVALID)|unauthorized|invalid or expired token/i.test(
+      `${code} ${msg}`,
+    )
+  ) {
+    return "Your session expired. Please sign in again and retry checkout.";
+  }
+  if (code === "BILLING_PAST_DUE" || status === 403) {
+    return msg || "Update your payment method to continue.";
+  }
+  if (/payment failed|international_transaction|card.*(declined|not allowed)/i.test(msg)) {
+    return "Payment was declined by the provider. Try another Razorpay test method (India cards/UPI), not an unsupported international card.";
+  }
   if (/localhost|127\.0\.0\.1|cors|failed to fetch|network/i.test(msg)) {
     return PAYMENT_UNAVAILABLE;
   }
   if (msg.includes("verification")) return "Payment verification failed. Please try again.";
   if (msg === CHECKOUT_PREPARE_ERROR || msg === PAYMENT_UNAVAILABLE) return msg;
+  if (msg && msg !== "Error" && msg.length < 180) return msg;
   return PAYMENT_UNAVAILABLE;
 }
 
@@ -181,7 +209,7 @@ export async function openRazorpayCheckout(options: {
   userEmail?: string;
   userName?: string;
   /** Fired after the order is created and Razorpay is about to open. */
-  onReady?: () => void;
+  onReady?: (order: RazorpayOrderResponse) => void;
   onSuccess?: () => void;
   onDismiss?: () => void;
 }): Promise<void> {
@@ -205,7 +233,7 @@ export async function openRazorpayCheckout(options: {
       throw new Error(PAYMENT_UNAVAILABLE);
     }
 
-    options.onReady?.();
+    options.onReady?.(order);
 
     return await new Promise<void>((resolve, reject) => {
       const rzp = new window.Razorpay!({
@@ -250,8 +278,22 @@ export async function openRazorpayCheckout(options: {
         },
       });
       rzp.on("payment.failed", (res: unknown) => {
-        reject(new Error(PAYMENT_UNAVAILABLE));
-        void res;
+        const detail =
+          res && typeof res === "object" && "error" in res
+            ? String(
+                (res as { error?: { description?: string; reason?: string } }).error
+                  ?.description ??
+                  (res as { error?: { reason?: string } }).error?.reason ??
+                  "",
+              )
+            : "";
+        reject(
+          new Error(
+            detail
+              ? `Payment failed: ${detail}`
+              : "Payment failed. No credits were granted.",
+          ),
+        );
       });
       rzp.open();
     });

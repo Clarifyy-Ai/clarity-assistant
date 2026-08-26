@@ -82,7 +82,10 @@ export function PageHeader({
   }, [breadcrumbs, stealth]);
 
   return (
-    <div className={cn("space-y-4 mb-6 md:mb-8", className)}>
+    <div
+      data-testid="page-header"
+      className={cn("space-y-4 mb-6 md:mb-8", className)}
+    >
       {displayBreadcrumbs && displayBreadcrumbs.length > 0 && (
         <nav className="flex items-center gap-1 text-xs sm:text-sm" aria-label="Breadcrumb">
           {displayBreadcrumbs.map((breadcrumb, index) => (
@@ -122,19 +125,19 @@ export function PageHeader({
         </nav>
       )}
 
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-start gap-3 flex-1">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <div className="flex items-start gap-3 flex-1 min-w-0">
           {icon && (
             <div className={cn(
-              "mt-1 p-2 rounded-lg",
+              "mt-1 p-2 rounded-lg shrink-0",
               stealth ? "bg-primary/10" : "bg-primary/10"
             )}>
               {icon}
             </div>
           )}
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground break-words">
                 {displayTitle}
               </h1>
               {badge && !stealth && (
@@ -144,7 +147,7 @@ export function PageHeader({
               )}
             </div>
             {resolvedDescription && (
-              <p className="text-muted-foreground text-sm sm:text-base mt-1">
+              <p className="text-muted-foreground text-sm sm:text-base mt-1 break-words leading-relaxed">
                 {resolvedDescription}
               </p>
             )}
@@ -152,7 +155,10 @@ export function PageHeader({
         </div>
 
         {resolvedActions && (
-          <div className="flex gap-2 flex-shrink-0 flex-wrap sm:flex-nowrap">
+          <div
+            data-testid="page-header-actions"
+            className="flex w-full sm:w-auto gap-2 flex-shrink-0 flex-wrap justify-start sm:justify-end"
+          >
             {resolvedActions}
           </div>
         )}

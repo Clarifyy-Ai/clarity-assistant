@@ -16,7 +16,7 @@ describe("validateExtractQuestionPaperPayload", () => {
     const noContent = validateExtractQuestionPaperPayload({ examId: EXAM_ID });
     expect(noContent.ok).toBe(false);
     if (noContent.ok === false) {
-      expect(noContent.message).toMatch(/pdfBase64|storagePath|textPayload/);
+      expect(noContent.message).toMatch(/PDF|OCR|storage path|structured questions/i);
     }
   });
 

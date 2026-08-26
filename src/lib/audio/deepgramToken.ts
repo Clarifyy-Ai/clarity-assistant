@@ -117,9 +117,26 @@ export async function fetchDeepgramTokenBounded(options?: {
       }
 
       const msg = err instanceof Error ? err.message : String(err ?? "");
-      if (/503|502|unavailable|misconfigured|SERVICE_UNAVAILABLE|MISSING_PROJECT_ID/i.test(msg)) {
+      const code =
+        err && typeof err === "object" && "code" in err
+          ? String((err as { code?: unknown }).code ?? "")
+          : "";
+      if (
+        /AUTH_(REQUIRED|EXPIRED|INVALID)|unauthorized|401|invalid or expired token/i.test(
+          `${code} ${msg}`,
+        )
+      ) {
         throw new Error(
-          "Live transcription is unavailable. You can still type questions in Chat.",
+          "Your session expired. Sign in again, then recheck transcription.",
+        );
+      }
+      if (
+        /503|502|unavailable|misconfigured|SERVICE_UNAVAILABLE|MISSING_PROJECT_ID|NOT_CONFIGURED|Deepgram/i.test(
+          `${code} ${msg}`,
+        )
+      ) {
+        throw new Error(
+          "Transcription is not configured or temporarily unavailable. You can still type questions in Chat.",
         );
       }
       throw new Error(

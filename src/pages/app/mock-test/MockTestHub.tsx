@@ -286,7 +286,7 @@ export default function MockTestHub(): React.ReactElement {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="w-full min-w-0 space-y-4 sm:space-y-6">
       <PageHeader
         title={PRODUCT_NAMES.govExamPrep}
         description="Which government exam are you preparing for?"
@@ -295,41 +295,54 @@ export default function MockTestHub(): React.ReactElement {
           { label: PRODUCT_NAMES.govExams },
         ]}
         actions={
-          <div className="flex flex-wrap gap-2 shrink-0 justify-end max-w-full">
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto sm:justify-end">
             <Link
               to="/app/mock-test/generate"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-all hover:bg-secondary/60"
+              className="inline-flex items-center justify-center gap-1.5 min-h-11 rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-all hover:bg-secondary/60"
             >
               Generate paper
             </Link>
             <Link
               to="/app/mock-test/my-questions"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-all hover:bg-secondary/60"
+              className="inline-flex items-center justify-center gap-1.5 min-h-11 rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-all hover:bg-secondary/60"
             >
-              <BookOpen className="h-4 w-4" />
+              <BookOpen className="h-4 w-4 shrink-0" />
               My Questions
             </Link>
-            <Button size="sm" onClick={handleQuickDrill}>
-              <Zap className="h-4 w-4 mr-2" />
+            <Button size="sm" className="min-h-11" onClick={handleQuickDrill}>
+              <Zap className="h-4 w-4 mr-2 shrink-0" />
               Quick Drill
             </Button>
           </div>
         }
       />
 
-      <p className="text-xs text-muted-foreground -mt-2">
-        You are in {PRODUCT_NAMES.govExamPrep}.{" "}
-        <Link
-          to="/app/dashboard"
-          className="text-primary hover:underline underline-offset-2"
-        >
-          Switch to {PRODUCT_NAMES.interviewPractice}
-        </Link>
-      </p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+        <p className="text-xs text-muted-foreground min-w-0">
+          You are in {PRODUCT_NAMES.govExamPrep}.{" "}
+          <Link
+            to="/app/dashboard"
+            className="text-primary hover:underline underline-offset-2"
+          >
+            Switch to {PRODUCT_NAMES.interviewPractice}
+          </Link>
+        </p>
+      </div>
 
-      <p className="text-xs text-muted-foreground border border-border/50 rounded-lg px-3 py-2 bg-muted/20">
-        {GOV_EXAM_AFFILIATION_DISCLAIMER}
-      </p>
+      <details className="group rounded-lg border border-border/60 bg-muted/20 open:bg-muted/30">
+        <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-foreground flex items-center justify-between gap-2 min-h-11">
+          <span>About official affiliation</span>
+          <span className="text-muted-foreground group-open:hidden" aria-hidden>
+            Show
+          </span>
+          <span className="text-muted-foreground hidden group-open:inline" aria-hidden>
+            Hide
+          </span>
+        </summary>
+        <p className="px-3 pb-3 text-xs text-muted-foreground leading-relaxed break-words">
+          {GOV_EXAM_AFFILIATION_DISCLAIMER}
+        </p>
+      </details>
 
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-200">
       {loadError && (

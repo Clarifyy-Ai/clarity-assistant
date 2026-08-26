@@ -15,6 +15,7 @@ import { SessionTrustBanner } from "@/components/session/SessionTrustBanner";
 import { PreSessionSetupWizard } from "@/components/session/PreSessionSetupWizard";
 import type { QuestionDifficulty } from "@/lib/api/ai";
 import type { LiveSessionConfig } from "@/types/session.types";
+import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 
 const DIFFICULTY_LEVELS = [
   { value: "easy",   label: "Easy",   desc: "Warm-up, foundational" },
@@ -91,7 +92,10 @@ export default function MockInterview() {
   }
 
   return (
-    <div className="space-y-6 max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-200">
+    <div
+      data-testid="page-width-root"
+      className={cn(PAGE_SHELL, "space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-200")}
+    >
       <PageHeader
         title={PRODUCT_NAMES.mockInterview}
         description="Configure your practice session"
@@ -103,15 +107,19 @@ export default function MockInterview() {
 
       <SessionTrustBanner variant="mock" />
 
-      <div className="flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
-        <ClipboardList className="w-4 h-4 text-emerald-400 shrink-0" />
-        <p className="text-sm text-emerald-300">
+      <div
+        data-testid="mock-free-banner"
+        className="flex items-start gap-3 p-4 bg-emerald-100/80 dark:bg-emerald-500/15 border border-emerald-600/35 rounded-2xl min-w-0"
+      >
+        <ClipboardList className="w-4 h-4 text-emerald-800 dark:text-emerald-300 shrink-0 mt-0.5" />
+        <p className="text-sm text-emerald-950 dark:text-emerald-100 min-w-0 break-words leading-relaxed">
           Mock sessions are <strong>free</strong> within your daily plan allowance. Each session runs for 5 minutes.
         </p>
       </div>
 
+      <div data-testid="mock-session-options">
       <Card className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-sm font-semibold text-foreground">Mock session options</h3>
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Timer className="w-3.5 h-3.5" aria-hidden="true" />
@@ -121,7 +129,7 @@ export default function MockInterview() {
 
         <div>
           <p className="text-xs text-muted-foreground mb-2">Number of questions</p>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {QUESTION_COUNTS.map((n) => (
               <button
                 key={n}
@@ -130,7 +138,7 @@ export default function MockInterview() {
                 aria-pressed={numQ === n}
                 disabled={loading}
                 className={cn(
-                  "flex-1 py-2 rounded-lg border text-xs font-medium transition-all",
+                  "min-w-[2.75rem] flex-1 py-2 rounded-lg border text-xs font-medium transition-all",
                   numQ === n
                     ? "bg-primary/10 border-primary/30 text-primary"
                     : "bg-secondary border-border text-muted-foreground hover:text-foreground",
@@ -204,6 +212,7 @@ export default function MockInterview() {
           </button>
         </div>
       </Card>
+      </div>
 
       <PreSessionSetupWizard sessionType="mock" onStart={handleWizardStart} />
     </div>

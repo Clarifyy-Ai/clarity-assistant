@@ -1,5 +1,5 @@
 // Enabled OAuth providers for login/signup UI and auth hooks.
-// Controlled by VITE_OAUTH_PROVIDERS (comma-separated). Default: google.
+// Controlled by VITE_OAUTH_PROVIDERS (comma-separated). Unset = none (fail closed).
 
 export type OAuthProviderId =
   | "google"
@@ -14,16 +14,15 @@ const KNOWN_PROVIDERS = new Set<OAuthProviderId>([
   "azure",
 ]);
 
-const DEFAULT_PROVIDERS: OAuthProviderId[] = ["google"];
-
+// Fail closed: never show OAuth CTAs unless VITE_OAUTH_PROVIDERS explicitly
+// lists providers that are enabled in the Supabase Auth dashboard.
 function parseProviderList(raw: string | undefined): OAuthProviderId[] {
   if (raw === undefined) {
-    return [...DEFAULT_PROVIDERS];
+    return [];
   }
 
   const trimmed = raw.trim();
-  // Unset → default google. Explicit empty / "none" → no OAuth CTAs (never show
-  // an active Connect for providers that are not configured).
+  // Unset / empty / "none" → no OAuth CTAs (avoids "provider is not enabled").
   if (trimmed.length === 0 || trimmed.toLowerCase() === "none") {
     return [];
   }
@@ -38,7 +37,7 @@ function parseProviderList(raw: string | undefined): OAuthProviderId[] {
     result.push(id);
   }
 
-  return result.length > 0 ? result : [...DEFAULT_PROVIDERS];
+  return result;
 }
 
 /** Providers enabled for the current build (from VITE_OAUTH_PROVIDERS). */

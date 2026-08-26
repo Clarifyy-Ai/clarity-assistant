@@ -105,7 +105,7 @@ export function validateExtractQuestionPaperPayload(
       ok: false,
       code: "DOWNLOAD_DISABLED",
       message:
-        "Remote download is disabled. Provide pdfBase64, storagePath, textPayload, or questions[] from an authorized admin upload.",
+        "Remote download is disabled. Upload a PDF, paste OCR/plain text, enter a storage path, or provide structured questions from an authorized admin upload.",
     };
   }
 
@@ -115,13 +115,13 @@ export function validateExtractQuestionPaperPayload(
       ok: false,
       code: "SCRAPE_FORBIDDEN",
       message:
-        "extract-question-paper does not fetch URLs. Register the link via Sources, then upload PDF/text/storagePath here.",
+        "URL fetch is not supported here. Register the official link under Gov Sources, then upload the PDF, paste text, or enter a storage path on this page.",
     };
   }
 
   const examId = uuidOrNull(b.examId);
   if (!examId) {
-    return { ok: false, code: "VALIDATION_ERROR", message: "examId is required" };
+    return { ok: false, code: "VALIDATION_ERROR", message: "Select an exam before extracting." };
   }
 
   const licenseRaw = sanitizeText(b.licenseClass, 32) || "user_upload";
@@ -129,7 +129,7 @@ export function validateExtractQuestionPaperPayload(
     return {
       ok: false,
       code: "VALIDATION_ERROR",
-      message: `licenseClass must be one of: ${EXTRACT_LICENSE_CLASSES.join(", ")}`,
+      message: `License class must be one of: ${EXTRACT_LICENSE_CLASSES.join(", ")}`,
     };
   }
 
@@ -148,7 +148,7 @@ export function validateExtractQuestionPaperPayload(
     return {
       ok: false,
       code: "PDF_TOO_LARGE",
-      message: "PDF base64 exceeds ~15MB limit",
+      message: "PDF exceeds the ~15MB upload limit. Use a smaller file or paste OCR text instead.",
     };
   }
 
@@ -161,7 +161,7 @@ export function validateExtractQuestionPaperPayload(
     return {
       ok: false,
       code: "VALIDATION_ERROR",
-      message: "pdfBase64 must be valid base64",
+      message: "The uploaded PDF could not be encoded. Try re-selecting the file.",
     };
   }
 
@@ -170,7 +170,7 @@ export function validateExtractQuestionPaperPayload(
       ok: false,
       code: "VALIDATION_ERROR",
       message:
-        "Provide pdfBase64, storagePath, textPayload, and/or questions[] (admin-authorized; no scrape).",
+        "Provide at least one source: upload a PDF, paste OCR/plain text, enter a storage path, or supply structured questions. Scraping is not supported.",
     };
   }
 

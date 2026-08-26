@@ -22,6 +22,7 @@ import {
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { messageFromExportCaught } from "@/lib/export/exportUserFacingError";
+import { agentLog70dd4b } from "@/lib/debug/agentLog70dd4b";
 
 export default function SessionDetail() {
   const { id }   = useParams<{ id: string }>();
@@ -46,8 +47,21 @@ export default function SessionDetail() {
     try {
       const [sess, ans] = await Promise.all([
         sessionsDB.getByIdForUser(id, user.id),
-        sessionAnswersDB.listBySessionId(id),
+        sessionAnswersDB.listBySessionIdForUser(id, user.id),
       ]);
+
+      // #region agent log
+      agentLog70dd4b({
+        hypothesisId: "H-SES-002",
+        location: "SessionDetail.tsx:fetchSession",
+        message: "session detail loaded",
+        data: {
+          hasSession: !!sess,
+          answerCount: ans.length,
+          sessionIdPrefix: String(id).slice(0, 8),
+        },
+      });
+      // #endregion
 
       setSession(sess);
       setAnswers(
@@ -78,7 +92,24 @@ export default function SessionDetail() {
           })),
       );
     } catch (err) {
-      setFetchError(err instanceof Error ? err.message : "Failed to load session");
+      const raw = err instanceof Error ? err.message : String(err ?? "");
+      const authLike =
+        /jwt|unauthorized|401|not authenticated|invalid.*token|session.*expired/i.test(raw);
+      // #region agent log
+      agentLog70dd4b({
+        hypothesisId: "H-SES-002",
+        location: "SessionDetail.tsx:fetchSession:fail",
+        message: "session detail failed",
+        data: { authLike, errMsg: raw.slice(0, 160) },
+      });
+      // #endregion
+      setFetchError(
+        authLike
+          ? "Your session expired. Please sign in again to view session details."
+          : err instanceof Error
+            ? err.message
+            : "Failed to load session",
+      );
       setSession(null);
       setAnswers([]);
     } finally {

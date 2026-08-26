@@ -34,6 +34,7 @@ import { isElectronApp } from "@/lib/platform/isElectron";
 import { clearBYOKVault } from "@/lib/security/byokVault";
 import { logger, LogEvents } from "@/lib/logger";
 import { syncPrivacyPrefsFromProfile } from "@/lib/privacy/privacyPrefs";
+import { resetTransientOverlaySessionStores } from "@/lib/session/resetOverlaySessionStores";
 import {
   classifyUnexpectedSignedOut,
   hasRecentLogoutBroadcast,
@@ -1021,6 +1022,17 @@ export const useAuthStore = create<AuthStore>()(
             } catch {
               // Ignore local vault clearing failure.
             }
+            // Drop Live/Mock/audio session leftovers so the next account cannot
+            // inherit transcript, hints, or capture clients from this tab.
+            try {
+              resetTransientOverlaySessionStores({
+                hideOverlay: true,
+                stopTts: true,
+                releaseAuthority: true,
+              });
+            } catch {
+              // Best-effort — auth sign-out must continue.
+            }
             _explicitLogoutInProgress = true;
             _ignoreSignedOut = true;
             try {
@@ -1567,6 +1579,15 @@ export const useAuthStore = create<AuthStore>()(
 
           reset: () => {
             clearProfileLoadState();
+            try {
+              resetTransientOverlaySessionStores({
+                hideOverlay: true,
+                stopTts: true,
+                releaseAuthority: true,
+              });
+            } catch {
+              // Best-effort — auth reset must continue.
+            }
             // Never Object.assign(INITIAL_STATE): that snapshot may still hold a
             // boot-time cached session and would resurrect auth after sign-out.
             dset((state) => {

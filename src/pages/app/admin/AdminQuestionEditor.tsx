@@ -355,6 +355,7 @@ function makeEmpty(): EditorState {
 function EditorView({ id }: { id?: string }) {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const isAdmin = useAuthStore((s) => s.isAdmin);
   const isNew = id === "new";
 
   const [state, setState] = useState<EditorState>(makeEmpty());
@@ -415,87 +416,145 @@ function EditorView({ id }: { id?: string }) {
     })();
   }, [id, isNew, navigate]);
 
-  async function handleSave() {
-    if (!user?.id) return toast.error("Not authenticated");
-    if (!state.subject.trim() || !state.topic.trim()) {
-      return toast.error("Subject and topic are required.");
+  async function persistQuestion(
+    next: EditorState,
+    auditAction: "question_create" | "question_edit" | "verify" | "publish",
+  ) {
+    if (!user?.id) {
+      toast.error("Not authenticated");
+      return false;
     }
-    if (blocksToPlainText(state.qBlocks).length < 3) {
-      return toast.error("Question body cannot be empty.");
+    if (!next.subject.trim() || !next.topic.trim()) {
+      toast.error("Subject and topic are required.");
+      return false;
     }
-    if (!blocksToPlainText(state.explanationBlocks).trim()) {
-      return toast.error("Explanation is required.");
+    if (blocksToPlainText(next.qBlocks).length < 3) {
+      toast.error("Question body cannot be empty.");
+      return false;
+    }
+    if (!blocksToPlainText(next.explanationBlocks).trim()) {
+      toast.error("Explanation is required.");
+      return false;
     }
 
     setSaving(true);
     try {
       const optionsPlain: Array<{ label: string; text: string }> = [];
       for (const L of OPTION_LETTERS) {
-        const option = blocksToPlainText(state.optionBlocks[L]).trim();
-        if (!option) return toast.error(`Option ${L} is required.`);
+        const option = blocksToPlainText(next.optionBlocks[L]).trim();
+        if (!option) {
+          toast.error(`Option ${L} is required.`);
+          return false;
+        }
         optionsPlain.push({ label: L, text: option });
       }
 
-      const payload: any = {
-        question_text: blocksToPlainText(state.qBlocks),
-        question_blocks: state.qBlocks,
-        option_blocks: state.optionBlocks,
-        explanation_blocks: state.explanationBlocks,
+      const approved = next.reviewStatus === "approved";
+      const payload: Record<string, unknown> = {
+        question_text: blocksToPlainText(next.qBlocks),
+        question_blocks: next.qBlocks,
+        option_blocks: next.optionBlocks,
+        explanation_blocks: next.explanationBlocks,
         options: optionsPlain,
-        correct_answer: state.correct,
-        explanation: blocksToPlainText(state.explanationBlocks),
-        subject: state.subject.trim(),
-        topic: state.topic.trim(),
-        subtopic: state.subtopic.trim() || null,
-        difficulty: state.difficulty,
-        exam_type: state.examType,
-        source_year: Number(state.sourceYear) || null,
-        marks_positive: state.marksPositive,
-        marks_negative: state.marksNegative,
-        is_verified: state.reviewStatus === "approved" && state.isVerified,
-        is_public: state.reviewStatus === "approved" && state.isPublic,
-        publish_status: state.reviewStatus === "approved" && state.isPublic ? "published" : "draft",
+        correct_answer: next.correct,
+        explanation: blocksToPlainText(next.explanationBlocks),
+        subject: next.subject.trim(),
+        topic: next.topic.trim(),
+        subtopic: next.subtopic.trim() || null,
+        difficulty: next.difficulty,
+        exam_type: next.examType,
+        source_year: Number(next.sourceYear) || null,
+        marks_positive: next.marksPositive,
+        marks_negative: next.marksNegative,
+        is_verified: approved && next.isVerified,
+        is_public: approved && next.isPublic,
+        publish_status: approved && next.isPublic ? "published" : "draft",
         source: "USER_UPLOAD",
         source_type: "admin_uploaded",
         license_type: "INTERNAL",
         validation_status: "valid",
         question_type: "MCQ",
         uploaded_by: user.id,
-        category: state.category.trim() || state.subject.trim(),
-        eligible_roles: state.eligibleRoles,
-        cross_functional: state.crossFunctional,
-        review_status: state.reviewStatus,
+        category: next.category.trim() || next.subject.trim(),
+        eligible_roles: next.eligibleRoles,
+        cross_functional: next.crossFunctional,
+        review_status: next.reviewStatus,
       };
       const validationIssues = validateQuestionQuality(payload);
       if (validationIssues.length > 0) {
-        return toast.error(validationIssues[0].message);
+        toast.error(validationIssues[0].message);
+        return false;
       }
 
       if (isNew) {
-        const { id: newId } = await questionsDB.create(payload);
+        const { id: newId } = await questionsDB.create(payload as never);
         void writeAdminAudit({
-          action: "question_create",
+          action: auditAction === "question_create" ? "question_create" : auditAction,
           targetType: "question",
           targetId: newId,
           newValue: payload,
         });
-        toast.success("Question created");
+        toast.success(
+          auditAction === "publish"
+            ? "Question approved and published"
+            : auditAction === "verify"
+              ? "Question verified"
+              : "Question created",
+        );
         navigate(`/app/admin/questions/${newId}`);
       } else {
-        await questionsDB.update(id!, payload);
+        await questionsDB.update(id!, payload as never);
         void writeAdminAudit({
-          action: "question_edit",
+          action: auditAction === "question_edit" ? "question_edit" : auditAction,
           targetType: "question",
           targetId: id!,
-          newValue: payload,
+          newValue: {
+            is_verified: payload.is_verified,
+            is_public: payload.is_public,
+            review_status: payload.review_status,
+            publish_status: payload.publish_status,
+          },
         });
-        toast.success("Saved");
+        toast.success(
+          auditAction === "publish"
+            ? "Question approved and published"
+            : auditAction === "verify"
+              ? "Question verified"
+              : "Saved",
+        );
       }
-    } catch (err: any) {
-      toast.error(err.message ?? "Save failed");
+      return true;
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Save failed");
+      return false;
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleSave() {
+    await persistQuestion(state, isNew ? "question_create" : "question_edit");
+  }
+
+  async function handleVerify() {
+    const next: EditorState = {
+      ...state,
+      isVerified: true,
+      reviewStatus: "approved",
+    };
+    setState(next);
+    await persistQuestion(next, "verify");
+  }
+
+  async function handleApprovePublish() {
+    const next: EditorState = {
+      ...state,
+      isVerified: true,
+      isPublic: true,
+      reviewStatus: "approved",
+    };
+    setState(next);
+    await persistQuestion(next, "publish");
   }
 
   if (loading) {
@@ -518,15 +577,39 @@ function EditorView({ id }: { id?: string }) {
             description="Add text, images, and formulas anywhere in the question or its options."
           />
         </div>
-        <Button
-          onClick={handleSave}
-          disabled={saving}
-          loading={saving}
-          leftIcon={<Save className="w-4 h-4" />}
-          className="bg-primary hover:bg-primary/90 text-white"
-        >
-          Save question
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          {isAdmin && !state.isVerified && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={saving}
+              onClick={() => void handleVerify()}
+              leftIcon={<ShieldCheck className="w-4 h-4" />}
+            >
+              Verify
+            </Button>
+          )}
+          {isAdmin && !(state.isVerified && state.isPublic) && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={saving}
+              onClick={() => void handleApprovePublish()}
+              leftIcon={<CheckCircle2 className="w-4 h-4" />}
+            >
+              Approve &amp; Publish
+            </Button>
+          )}
+          <Button
+            onClick={() => void handleSave()}
+            disabled={saving}
+            loading={saving}
+            leftIcon={<Save className="w-4 h-4" />}
+            className="bg-primary hover:bg-primary/90 text-white"
+          >
+            Save question
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -673,6 +756,9 @@ function EditorView({ id }: { id?: string }) {
                 />
                 Public (visible to all students)
               </label>
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Use <strong>Verify</strong> or <strong>Approve &amp; Publish</strong> above to set review status and persist lifecycle flags. Publication requires verified + approved status.
+              </p>
               <Field label="Category">
                 <Input value={state.category} onChange={(e) => setState((s) => ({ ...s, category: e.target.value }))} placeholder="Backend" />
               </Field>

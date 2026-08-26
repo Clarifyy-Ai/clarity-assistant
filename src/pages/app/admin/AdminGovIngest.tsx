@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -12,7 +12,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { FileUp, Loader2, RefreshCw, AlertTriangle } from "lucide-react";
+import { FileUp, Loader2, RefreshCw, AlertTriangle, ArrowLeft } from "lucide-react";
 import { AdminGovDisclaimer } from "./AdminGovDisclaimer";
 import {
   EXTRACT_LICENSE_CLASSES,
@@ -48,6 +48,7 @@ function jobBadge(status: string): "gray" | "amber" | "emerald" | "red" | "blue"
 }
 
 export default function AdminGovIngest() {
+  const navigate = useNavigate();
   const fileRef = useRef<HTMLInputElement>(null);
   const [exams, setExams] = useState<Array<{ id: string; code: string; name: string }>>([]);
   const [stages, setStages] = useState<Array<{ id: string; code: string; name: string }>>([]);
@@ -152,11 +153,26 @@ export default function AdminGovIngest() {
 
   return (
     <div className="space-y-6 max-w-6xl">
-      <PageHeader
-        title="PDF / OCR ingest"
-        description="Admin-authorized previous-year PDF extract. Never scrapes; OCR stays private until Q Review approval."
-        icon={<FileUp className="w-5 h-5 text-red-400" />}
-      />
+      <div className="flex items-start gap-3 flex-wrap">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate("/app/admin/gov/exams")}
+          leftIcon={<ArrowLeft className="w-4 h-4" />}
+        >
+          Back
+        </Button>
+        <PageHeader
+          title="PDF / OCR ingest"
+          description="Admin-authorized previous-year PDF extract. Never scrapes; OCR stays private until Q Review approval."
+          icon={<FileUp className="w-5 h-5 text-red-400" />}
+          breadcrumbs={[
+            { label: "Admin", href: "/app/admin" },
+            { label: "Gov Exams", href: "/app/admin/gov/exams" },
+            { label: "PDF Ingest" },
+          ]}
+        />
+      </div>
       <AdminGovDisclaimer />
 
       <Card>

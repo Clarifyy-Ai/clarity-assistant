@@ -94,6 +94,8 @@ export interface ProfileRow {
   last_active_date?:  ISODate | null;
   response_style?:    string;
   domain?:            string | null;
+  industry?:          string | null;
+  interview_date?:    string | null;
   onboarding_step?:   number;
   is_actively_looking?: boolean | null;
   is_banned?:         boolean;

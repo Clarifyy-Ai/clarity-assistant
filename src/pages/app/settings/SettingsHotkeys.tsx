@@ -44,6 +44,27 @@ function findConflicts(overrides: Overrides): Map<string, HotkeyId[]> {
   return conflicts;
 }
 
+/** Combos the browser often intercepts before the app can handle them. */
+const BROWSER_RESERVED = new Set([
+  "ctrl+w",
+  "ctrl+shift+w",
+  "ctrl+t",
+  "ctrl+n",
+  "ctrl+shift+n",
+  "ctrl+tab",
+  "ctrl+shift+tab",
+  "alt+f4",
+  "⌘+w",
+  "⌘+shift+w",
+  "⌘+t",
+  "⌘+n",
+  "⌘+shift+n",
+]);
+
+function isBrowserReservedCombo(combo: string): boolean {
+  return BROWSER_RESERVED.has(combo.trim().toLowerCase());
+}
+
 function captureCombo(e: KeyboardEvent): string | null {
   if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) return null;
   const parts: string[] = [];
@@ -71,6 +92,13 @@ export default function SettingsHotkeys() {
       }
       const combo = captureCombo(e);
       if (!combo) return;
+      if (isBrowserReservedCombo(combo)) {
+        toast.warning(
+          `${combo} is reserved by the browser (e.g. closes a tab/window). Choose a different shortcut.`,
+        );
+        setRecordingId(null);
+        return;
+      }
       const next = { ...overrides, [recordingId]: combo };
       const conflict = (Object.keys(DEFAULT_HOTKEYS) as HotkeyId[]).find(
         (id) => id !== recordingId && getEffectiveCombo(id, next) === combo,

@@ -23,6 +23,7 @@ import { format, isToday, isFuture } from "date-fns";
 import { toast } from "sonner";
 import { useSwipeAction } from "@/hooks/useSwipeAction";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 
 // ─────────────────────────────────────────────────────────────────
 // Interviews — full scheduled interview list
@@ -83,7 +84,7 @@ export default function Interviews() {
   }, {});
 
   return (
-    <div className="space-y-5 max-w-4xl">
+    <div data-testid="page-width-root" className={cn(PAGE_SHELL, "space-y-5")}>
       <PageHeader
         title="Interviews"
         subtitle="Track and manage your scheduled interviews"

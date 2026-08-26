@@ -432,10 +432,42 @@ export default function ResetPassword(): JSX.Element {
   async function handleRequestReset(data: ResetPasswordInput): Promise<void> {
     setGeneralError(null);
 
+    const domain = data.email.includes("@")
+      ? data.email.trim().split("@")[1]?.toLowerCase() ?? ""
+      : "";
+    // Reserved / non-deliverable TLDs are rejected by Auth providers
+    // (email_address_invalid). Do not pretend a reset email was sent.
+    const nonDeliverable =
+      domain.endsWith(".test") ||
+      domain.endsWith(".invalid") ||
+      domain.endsWith(".localhost") ||
+      domain === "example.com" ||
+      domain === "example.org" ||
+      domain === "example.net";
+
+    if (nonDeliverable) {
+      setGeneralError(
+        "Use a real email inbox for password reset. Addresses on reserved domains (for example .test) cannot receive mail.",
+      );
+      return;
+    }
+
     try {
       await sendPasswordReset(data.email);
-    } catch {
-      // Neutral response: never reveal whether the address is registered.
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      const errCode = error && typeof error === 'object' && 'code' in error ? String((error as {code?:unknown}).code ?? '') : '';
+      const normalized = `${errCode} ${errMsg}`.toLowerCase();
+      if (
+        normalized.includes("email_address_invalid") ||
+        normalized.includes("invalid email")
+      ) {
+        setGeneralError(
+          "That email address cannot receive password reset mail. Use a deliverable inbox.",
+        );
+        return;
+      }
+      // Neutral response for other failures: never reveal whether registered.
     }
     setSubmittedEmail(data.email);
     setMode("success-request");
