@@ -222,8 +222,19 @@ export function buildShareUrl(token: string, path: string): string {
 
 export function isValidUrl(url: string): boolean {
   try {
-    new URL(url);
-    return true;
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+    const host = parsed.hostname.toLowerCase();
+    if (!host) return false;
+    if (host === "localhost") return true;
+    // Reject single-label nonsense like "uuojj" after https:// prefixing.
+    if (!host.includes(".")) return false;
+    if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) return true;
+    // Require a real TLD segment (letters, 2+ chars).
+    const parts = host.split(".");
+    const tld = parts[parts.length - 1];
+    if (!tld || tld.length < 2 || !/^[a-z]+$/i.test(tld)) return false;
+    return parts.every((p) => p.length > 0);
   } catch {
     return false;
   }

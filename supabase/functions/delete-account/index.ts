@@ -87,6 +87,8 @@ const WIPE_TABLES: WipeSpec[] = [
   { table: "saved_answers", column: "user_id" },
   { table: "company_research", column: "user_id" },
   { table: "calendar_integrations", column: "user_id" },
+  { table: "google_calendar_refresh_tokens", column: "user_id" },
+  { table: "interview_reminders", column: "user_id" },
   { table: "notifications", column: "user_id" },
   { table: "user_achievements", column: "user_id" },
   { table: "user_badges", column: "user_id" },

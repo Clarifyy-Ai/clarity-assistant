@@ -51,6 +51,7 @@ import {
   Shield,
   Zap,
 } from "lucide-react";
+import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   active: {
@@ -144,6 +145,7 @@ export default function SettingsBilling(): JSX.Element {
   const [creditsUsedThisPeriod, setCreditsUsedThisPeriod] = useState<number | null>(null);
   /** Sync lock so double-click before React re-render cannot start two checkouts. */
   const checkoutLockRef = useRef(false);
+
 
   const effectivePlanId = (planId as PlanId) || "free";
   const currentPlan = PLANS[effectivePlanId] ?? PLANS.free;
@@ -314,7 +316,7 @@ export default function SettingsBilling(): JSX.Element {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div data-testid="dd-layout-root" className={`${PAGE_SHELL} space-y-4`}>
       <PageHeader
         title="Billing"
         description="Manage your plan, credits, and one-time Razorpay purchases"
@@ -362,7 +364,7 @@ export default function SettingsBilling(): JSX.Element {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div data-testid="billing-kpi-grid" className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <div className="flex items-start justify-between mb-4">
             <div>

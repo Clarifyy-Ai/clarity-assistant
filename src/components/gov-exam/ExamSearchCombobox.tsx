@@ -160,7 +160,10 @@ export function ExamSearchCombobox({
       const trimmed = q.trim();
       const notify = onResultsChangeRef.current;
       if (trimmed.length === 1) {
+        setResults([]);
         setState("idle");
+        setError(null);
+        setActiveIndex(-1);
         notify?.([], { state: "idle", error: null, query: trimmed });
         return;
       }
@@ -171,23 +174,22 @@ export function ExamSearchCombobox({
         return;
       }
       const cacheKey = trimmed.length >= 2 ? trimmed : "";
-      const cached =
-        readSearchCache(cacheKey, familyRef.current) ??
-        (resultsRef.current.length > 0 ? resultsRef.current : null);
+      // Only soft-refresh from a cache entry for THIS query — never reuse
+      // resultsRef from a different search (that caused stuck spinners / stale cards).
+      const cached = readSearchCache(cacheKey, familyRef.current);
       const softRefresh = Boolean(cached && cached.length > 0);
       if (!softRefresh) {
         setState("loading");
         setError(null);
         notify?.([], { state: "loading", error: null, query: trimmed });
       } else {
-        // Keep prior hits visible while refreshing (remount / focus must not flash Searching…).
+        // Keep matching cached hits visible while refreshing (remount / focus).
         setError(null);
         if (resultsRef.current.length === 0 && cached) {
           setResults(cached);
           setState("idle");
         }
       }
-      const startedAt = Date.now();
       try {
         const data = await searchGovExams(
           {
@@ -224,6 +226,8 @@ export function ExamSearchCombobox({
         const superseded = reqId !== reqIdRef.current;
         const aborted = ac.signal.aborted;
         const cancelMsg = /cancelled|aborted/i.test(msg);
+        const errCode = String((err as { code?: string } | null)?.code ?? "");
+        const errStatus = (err as { status?: number } | null)?.status ?? null;
         // Newer request owns UI state — do not clear its loading spinner.
         if (superseded) return;
         // Abort/cancel of the *current* request must not leave Searching… (DEF-001).
@@ -372,10 +376,18 @@ export function ExamSearchCombobox({
           )}
           {state === "error" && error && (
             <div className="p-3">
-              <InlineErrorRetry
-                message={error}
-                onRetry={() => void runSearch(query)}
-              />
+              {/* When parent owns onResultsChange, it renders the primary banner —
+                  keep a compact message here to avoid stacked duplicate retries. */}
+              {onResultsChange ? (
+                <p className="text-sm text-destructive" role="alert">
+                  {error}
+                </p>
+              ) : (
+                <InlineErrorRetry
+                  message={error}
+                  onRetry={() => void runSearch(query)}
+                />
+              )}
             </div>
           )}
           {state === "empty" && (

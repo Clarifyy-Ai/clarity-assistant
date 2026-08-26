@@ -3,7 +3,6 @@ import { AlertTriangle, WifiOff, Wifi, RefreshCw, X, ExternalLink } from "lucide
 import { cn } from "@/lib/utils";
 import { NetworkErrorPage } from "@/components/common/NetworkErrorPage";
 import { useIsOffline } from "@/hooks/useIsOffline";
-import { agentLog70dd4b } from "@/lib/debug/agentLog70dd4b";
 
 type NetworkState = "online" | "reconnecting" | "offline";
 
@@ -265,18 +264,6 @@ export function NetworkBanner() {
                     if (conn?.effectiveType) setEffectiveType(conn.effectiveType);
                     if (typeof conn?.downlink === "number") setDownlink(conn.downlink);
                     if (typeof conn?.rtt === "number") setRtt(conn.rtt);
-                    // #region agent log
-                    agentLog70dd4b({
-                      hypothesisId: "H-DASH-005",
-                      location: "NetworkBanner.tsx:testConnection",
-                      message: "connection check done",
-                      data: {
-                        latencyMs: ms,
-                        effectiveType: conn?.effectiveType ?? null,
-                        downlink: conn?.downlink ?? null,
-                      },
-                    });
-                    // #endregion
                   })
                   .catch(() => {
                     setNetworkState("offline");

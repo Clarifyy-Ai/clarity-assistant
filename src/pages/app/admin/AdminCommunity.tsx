@@ -145,7 +145,7 @@ export default function AdminCommunityPage() {
       <div>
         <h1 className="text-xl font-semibold">Q&A moderation</h1>
         <p className="text-sm text-muted-foreground">
-          Deferred / Preview — admin-to-user Community journeys are out of launch scope. Tooling below is for staff rehearsal only.
+          Hide, restore, lock, or delete community posts. Resolve open user reports. Hidden posts are removed from the public Q&A feed.
         </p>
       </div>
 

@@ -9,6 +9,7 @@ import {
   escapeIlikePattern,
   GOV_EXAM_FAMILIES,
   MAX_PAGE_SIZE,
+  MAX_PAGE,
   normalizeSearchQuery,
   rankExamResults,
   resolveFamily,
@@ -51,6 +52,13 @@ describe("gov exam family allowlist", () => {
     expect(resolveFamily(42).ok).toBe(false);
     expect(resolveFamily({}).ok).toBe(false);
   });
+
+  it("accepts a family added by the dynamic registry", () => {
+    expect(resolveFamily("medical", ["ssc", "medical"])).toEqual({
+      ok: true,
+      family: "medical",
+    });
+  });
 });
 
 describe("search pagination bounds", () => {
@@ -74,6 +82,13 @@ describe("search pagination bounds", () => {
         pageSize: DEFAULT_PAGE_SIZE,
       });
     }
+  });
+
+  it("clamps unsafe and excessively large page numbers", () => {
+    expect(resolvePagination({ page: 1.5 }).page).toBe(DEFAULT_PAGE);
+    expect(resolvePagination({ page: Number.MAX_SAFE_INTEGER + 1 }).page).toBe(DEFAULT_PAGE);
+    expect(resolvePagination({ page: 999999999 }).page).toBe(MAX_PAGE);
+    expect(resolvePagination({ page: "1e100" }).page).toBe(DEFAULT_PAGE);
   });
 
   it("computes a contiguous range across pages", () => {
@@ -109,6 +124,14 @@ describe("pagination payload", () => {
   it("never returns a negative or fractional total", () => {
     expect(buildPagination({ page: 1, pageSize: 20 }, -5).total).toBe(0);
     expect(buildPagination({ page: 1, pageSize: 20 }, 20.7).total).toBe(20);
+  });
+
+  it("normalizes unsafe pagination values in the response builder", () => {
+    expect(buildPagination({ page: 0, pageSize: 0 }, 45)).toMatchObject({
+      page: DEFAULT_PAGE,
+      pageSize: DEFAULT_PAGE_SIZE,
+      hasMore: true,
+    });
   });
 });
 
@@ -210,7 +233,7 @@ describe("search-exams edge contract", () => {
   });
 
   it("rejects an unknown family with a validation error", () => {
-    expect(EDGE).toContain("resolveFamily(rawFamily)");
+    expect(EDGE).toContain("resolveFamily(rawFamily, allowedFamilies)");
     expect(EDGE).toContain('corsError(req, 422, "VALIDATION_ERROR", familyResult.message)');
   });
 
@@ -222,7 +245,7 @@ describe("search-exams edge contract", () => {
   });
 
   it("bounds pattern enrichment to the current page", () => {
-    expect(EDGE).toContain("results.map(async (r) =>");
+    expect(EDGE).toContain("results.map((r) =>");
     expect(EDGE).not.toContain("results.slice(0, 40)");
   });
 });

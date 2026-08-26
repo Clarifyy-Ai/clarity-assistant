@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -15,7 +15,8 @@ import {
   languageLabel,
   languageOptionLabel,
 } from "@/lib/coding/languages";
-import { PAGE_SHELL, SPLIT_STACK } from "@/lib/ui/responsivePage";
+import { PAGE_SHELL } from "@/lib/ui/responsivePage";
+import { cn } from "@/lib/utils";
 
 type Question = {
   id: string;
@@ -56,6 +57,18 @@ function formatExecutionStatus(status?: string, message?: string, blocked?: stri
   }
 }
 
+/** Immutable starter contract for javascript_solve assessments (TC-COD-004). */
+const IMMUTABLE_SOLVE_STARTER = "function solve(input) {\n  return input;\n}\n";
+
+function resolveStarterCode(raw: string | null | undefined): string {
+  const starter = typeof raw === "string" ? raw : "";
+  if (!starter.trim()) return IMMUTABLE_SOLVE_STARTER;
+  if (!/\bfunction\s+solve\b|\bconst\s+solve\b|\blet\s+solve\b|\bsolve\s*=/.test(starter)) {
+    return IMMUTABLE_SOLVE_STARTER;
+  }
+  return starter;
+}
+
 export default function CodingAssessmentPage() {
   const { questionId } = useParams<{ questionId: string }>();
   const user = useAuthStore((s) => s.user);
@@ -69,6 +82,7 @@ export default function CodingAssessmentPage() {
   const [seconds, setSeconds] = useState(0);
   const [busy, setBusy] = useState(false);
   const [sampleBusy, setSampleBusy] = useState(false);
+  const loadedQuestionRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     if (!questionId || !user?.id) return;
@@ -78,7 +92,12 @@ export default function CodingAssessmentPage() {
       .eq("id", questionId)
       .maybeSingle();
     setQuestion(data as Question | null);
-    setCode((data?.starter_code as string) ?? "");
+    // Refreshing history after a submit must not wipe the user's draft.
+    // Only initialize the editor when the question itself changes.
+    if (loadedQuestionRef.current !== questionId) {
+      setCode(resolveStarterCode(data?.starter_code as string | undefined));
+      loadedQuestionRef.current = questionId;
+    }
     const qLang = String(data?.language ?? "javascript").toLowerCase();
     setLanguage(
       (APPROVED_CODING_LANGUAGES as readonly string[]).includes(qLang) ? qLang : "javascript",
@@ -115,6 +134,7 @@ export default function CodingAssessmentPage() {
     const id = window.setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => window.clearInterval(id);
   }, []);
+
 
   const left = useMemo(
     () => remainingSubmissions(history.length, question?.max_submissions ?? 20),
@@ -170,8 +190,13 @@ export default function CodingAssessmentPage() {
   }
 
   async function submit() {
+    if (busy) return;
     if (!user?.id || !questionId || left <= 0) {
       toast.error("No submissions remaining.");
+      return;
+    }
+    if (!code.trim()) {
+      toast.error("Enter a solution before submitting.");
       return;
     }
     if (!(await ensureSession())) return;
@@ -203,11 +228,20 @@ export default function CodingAssessmentPage() {
           result.blocked_reason,
         ),
       );
-      void load();
+      // compile_error responses may not persist a submission — still refresh history when scored
+      if (result.status !== "compile_error") {
+        void load();
+      }
     } catch (error) {
       if (error instanceof ApiClientError && error.status === 401) {
         setServerResult("Unauthorized (401) — sign in again, then resubmit.");
         toast.error("Session expired. Please sign in again.");
+      } else if (
+        error instanceof ApiClientError &&
+        (error.status === 429 || error.code === "RATE_LIMITED")
+      ) {
+        setServerResult("Too many submissions. Wait a moment, then reset and resubmit.");
+        toast.error("Rate limited — try again shortly.");
       } else {
         setServerResult(error instanceof Error ? error.message : "Code execution service is temporarily unavailable.");
       }
@@ -216,85 +250,100 @@ export default function CodingAssessmentPage() {
     }
   }
 
+  function resetCode() {
+    setCode(resolveStarterCode(question?.starter_code));
+    setSampleOut("");
+    setServerResult("");
+  }
+
   return (
-    <div className={PAGE_SHELL}>
+    <div
+      data-testid="dd-layout-root"
+      className={cn(PAGE_SHELL, "flex flex-col gap-4 min-h-[calc(100vh-7.5rem)]")}
+    >
       <PageHeader
         title={question?.title ?? "Coding assessment"}
         description="Interview preparation only. JavaScript may be scored on the server; other languages are not executed and are stored for pending review. The browser never evaluates your solution. There is no multi-language sandbox."
         breadcrumbs={[{ label: "Coding", href: "/app/coding" }, { label: question?.title ?? "Problem" }]}
         actions={<span className="text-sm tabular-nums">Timer {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}</span>}
+        className="mb-0 shrink-0"
       />
-      <div className={SPLIT_STACK}>
-        <Card className="min-w-0 flex-1">
-          <h2 className="font-semibold">Problem</h2>
-          <p className="mt-2 whitespace-pre-wrap text-sm">{question?.description}</p>
-          <h3 className="mt-4 text-sm font-semibold">Examples</h3>
-          <p className="text-sm">Input: {question?.sample_input}</p>
-          <p className="text-sm">Output: {question?.sample_output}</p>
-          <h3 className="mt-4 text-sm font-semibold">Constraints</h3>
-          <p className="text-sm">{question?.constraints}</p>
-          {sample.length > 0 && (
-            <p className="mt-3 text-xs text-muted-foreground">
-              {sample.length} visible sample case{sample.length === 1 ? "" : "s"} (hidden cases stay on the server).
-            </p>
-          )}
-        </Card>
-        <Card className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <label className="text-sm font-semibold" htmlFor="code-editor">Code editor</label>
-            <div className="flex flex-col items-end gap-1">
-              <label className="text-xs text-muted-foreground" htmlFor="coding-language">
-                Language
-              </label>
-              <select
-                id="coding-language"
-                value={language}
-                onChange={(e) => setLanguage(e.target.value)}
-                className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs"
-              >
-                {APPROVED_CODING_LANGUAGES.map((lang) => (
-                  <option key={lang} value={lang}>
-                    {languageOptionLabel(lang)}
-                  </option>
-                ))}
-              </select>
+      <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:items-stretch">
+        <div data-testid="coding-problem-panel" className="min-w-0 flex-1 flex">
+          <Card className="min-w-0 w-full flex-1 overflow-y-auto">
+            <h2 className="font-semibold">Problem</h2>
+            <p className="mt-2 whitespace-pre-wrap text-sm">{question?.description}</p>
+            <h3 className="mt-4 text-sm font-semibold">Examples</h3>
+            <p className="text-sm">Input: {question?.sample_input}</p>
+            <p className="text-sm">Output: {question?.sample_output}</p>
+            <h3 className="mt-4 text-sm font-semibold">Constraints</h3>
+            <p className="text-sm">{question?.constraints}</p>
+            {sample.length > 0 && (
+              <p className="mt-3 text-xs text-muted-foreground">
+                {sample.length} visible sample case{sample.length === 1 ? "" : "s"} (hidden cases stay on the server).
+              </p>
+            )}
+          </Card>
+        </div>
+        <div data-testid="coding-editor-panel" className="min-w-0 flex-1 flex">
+          <Card className="min-w-0 w-full flex-1 flex flex-col">
+            <div className="flex flex-wrap items-end justify-between gap-3 shrink-0">
+              <label className="text-sm font-semibold" htmlFor="code-editor">Code editor</label>
+              <div className="flex flex-col items-end gap-1">
+                <label className="text-xs text-muted-foreground" htmlFor="coding-language">
+                  Language
+                </label>
+                <select
+                  id="coding-language"
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value)}
+                  className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs"
+                >
+                  {APPROVED_CODING_LANGUAGES.map((lang) => (
+                    <option key={lang} value={lang}>
+                      {languageOptionLabel(lang)}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {autoScore
-              ? "Automated scoring runs JavaScript solve(input) on the server."
-              : `${languageLabel(language)} is not executed — submission is stored for pending review. Only JavaScript is auto-scored.`}
-          </p>
-          <textarea
-            id="code-editor"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            className="mt-2 h-64 w-full min-w-0 rounded-xl border border-border bg-background p-3 font-mono text-xs"
-            spellCheck={false}
-          />
-          <div className="mt-3 flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => setCode(question?.starter_code ?? "")}>Reset code</Button>
-            <Button variant="outline" onClick={() => void runSample()} loading={sampleBusy} disabled={!autoScore}>
-              Run sample (server)
-            </Button>
-            <Button onClick={() => void submit()} loading={busy} disabled={left <= 0}>Submit assessment</Button>
-          </div>
-          <p className="mt-2 text-xs text-muted-foreground">{left} submissions remaining</p>
-          {sampleOut && (
-            <pre className="mt-3 whitespace-pre-wrap rounded-lg bg-secondary/50 p-3 text-xs">Sample results{"\n"}{sampleOut}</pre>
-          )}
-          {serverResult && (
-            <pre className="mt-3 whitespace-pre-wrap rounded-lg bg-secondary/50 p-3 text-xs">Test results{"\n"}{serverResult}</pre>
-          )}
-          <h3 className="mt-4 text-sm font-semibold">Submission history</h3>
-          <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
-            {history.map((row) => (
-              <li key={row.id}>
-                {new Date(row.submitted_at).toLocaleString()} · {row.status} · {row.score ?? "unscored"}
-              </li>
-            ))}
-          </ul>
-        </Card>
+            <p className="mt-1 text-xs text-muted-foreground shrink-0">
+              {autoScore
+                ? "Automated scoring runs JavaScript solve(input) on the server. Your solution must define function solve(input) { ... }. Use Reset code to restore the starter template."
+                : `${languageLabel(language)} is not executed — submission is stored for pending review. Only JavaScript is auto-scored.`}
+            </p>
+            <textarea
+              id="code-editor"
+              data-testid="coding-editor-textarea"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              className="mt-2 min-h-[min(52vh,28rem)] flex-1 w-full min-w-0 rounded-xl border border-border bg-background p-3 font-mono text-xs"
+              spellCheck={false}
+            />
+            <div className="mt-3 flex flex-wrap gap-2 shrink-0">
+              <Button variant="outline" onClick={resetCode}>Reset code</Button>
+              <Button variant="outline" onClick={() => void runSample()} loading={sampleBusy} disabled={!autoScore || busy || sampleBusy}>
+                Run sample (server)
+              </Button>
+              <Button onClick={() => void submit()} loading={busy} disabled={busy || sampleBusy || left <= 0 || !question}>Submit assessment</Button>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground shrink-0">{left} submissions remaining</p>
+            {sampleOut && (
+              <pre className="mt-3 whitespace-pre-wrap rounded-lg bg-secondary/50 p-3 text-xs shrink-0">Sample results{"\n"}{sampleOut}</pre>
+            )}
+            {serverResult && (
+              <pre className="mt-3 whitespace-pre-wrap rounded-lg bg-secondary/50 p-3 text-xs shrink-0">Test results{"\n"}{serverResult}</pre>
+            )}
+            <h3 className="mt-4 text-sm font-semibold shrink-0">Submission history</h3>
+            <ul className="mt-2 space-y-1 text-xs text-muted-foreground shrink-0">
+              {history.map((row) => (
+                <li key={row.id}>
+                  {new Date(row.submitted_at).toLocaleString()} · {row.status} · {row.score ?? "unscored"}
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </div>
       </div>
     </div>
   );

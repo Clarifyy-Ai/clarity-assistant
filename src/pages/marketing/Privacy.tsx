@@ -105,7 +105,9 @@ export default function Privacy() {
           For privacy-related questions, contact us at{" "}
           <a href={`mailto:${PRIVACY_EMAIL}`} className="text-primary hover:underline">
             {PRIVACY_EMAIL}
-          </a>.
+          </a>
+          . The address is shown in full so you can copy it if your browser does not open a mail app
+          (a canceled <code className="text-xs">mailto:</code> request in DevTools is normal).
         </p>
         </div>
       </article>

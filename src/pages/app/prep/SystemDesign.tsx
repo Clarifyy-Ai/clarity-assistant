@@ -33,6 +33,7 @@ import {
   type DiagramSpec,
 } from "@/lib/prep/systemDesignDiagram";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
+import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 
 type Difficulty = "easy" | "medium" | "hard";
 
@@ -157,6 +158,7 @@ export default function SystemDesign() {
     () => (breakdown ? splitMarkdownSections(breakdown) : []),
     [breakdown],
   );
+
 
   useEffect(() => {
     if (genPhase !== "COMPLETED" || !diagramSpec || useNotesOnly) return;
@@ -311,7 +313,7 @@ export default function SystemDesign() {
   }
 
   return (
-    <div className="space-y-5 max-w-5xl">
+    <div data-testid="dd-layout-root" className={`${PAGE_SHELL} space-y-4`}>
       <PageHeader
         title="System Design"
         description="Practice system design interviews with AI-guided breakdowns"
@@ -368,7 +370,7 @@ export default function SystemDesign() {
         </div>
       </Card>
 
-      <div className="flex flex-col lg:flex-row gap-5">
+      <div data-testid="system-design-split" className="flex flex-col lg:flex-row gap-5">
         <div className="w-full lg:w-80 lg:max-w-full space-y-2 flex-shrink-0 max-h-[600px] overflow-y-auto pr-1">
           {topics === null && (
             <div className="space-y-2">
@@ -550,11 +552,13 @@ export default function SystemDesign() {
               </div>
             </>
           ) : (
-            <Card className="text-center py-20">
-              <Server className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
-              <p className="text-muted-foreground text-sm">Select a system design topic</p>
-              <p className="text-muted-foreground text-xs mt-1">Get AI-powered component breakdowns and scaling strategies</p>
-            </Card>
+            <div data-testid="system-design-empty">
+              <Card className="text-center py-10">
+                <Server className="w-10 h-10 text-muted-foreground/40 mx-auto mb-2" />
+                <p className="text-muted-foreground text-sm">Select a system design topic</p>
+                <p className="text-muted-foreground text-xs mt-1">Get AI-powered component breakdowns and scaling strategies</p>
+              </Card>
+            </div>
           )}
         </div>
       </div>

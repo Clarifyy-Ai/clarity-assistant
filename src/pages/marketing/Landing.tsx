@@ -239,11 +239,7 @@ const FAQS = [
   },
   {
     q: "How much does Clarify AI cost?",
-    a: "Free includes 50 credits per month — enough to try Practice Coach and a mock session. Pro is a one-time purchase for 1,400 credits and the full feature set. Max is a one-time purchase for 4,000 credits and priority model access.",
-  },
-  {
-    q: "What is included in the free plan?",
-    a: "The free plan gives you 50 credits per month, access to the mock engine, prep lab tools, and basic analytics. Upgrade to Pro when you need more AI coaching volume.",
+    a: "Free includes 50 credits per month — enough to try Practice Coach and a mock session — plus prep lab tools and basic analytics. Pro is a one-time purchase for 1,400 credits and the full feature set. Max is a one-time purchase for 4,000 credits and priority model access.",
   },
   {
     q: "Does it work for all interview types?",

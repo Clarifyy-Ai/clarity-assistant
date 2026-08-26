@@ -133,6 +133,13 @@ describe("search error code mapping", () => {
     expect(isSearchUnavailableError(null)).toBe(false);
   });
 
+  it("maps RATE_LIMIT_BACKEND_UNAVAILABLE as unavailable, not throttle", () => {
+    expect(mapGovSearchError({ code: "RATE_LIMIT_BACKEND_UNAVAILABLE" }).code).toBe(
+      "SEARCH_UNAVAILABLE",
+    );
+    expect(mapGovSearchError({ code: "RATE_LIMITED" }).code).toBe("RATE_LIMITED");
+  });
+
   it("maps rate limiting and validation separately from unavailability", () => {
     expect(mapGovSearchError({ code: "RATE_LIMITED" }).code).toBe("RATE_LIMITED");
     expect(mapGovSearchError({ code: "VALIDATION_ERROR" }).code).toBe("INVALID_QUERY");

@@ -263,7 +263,7 @@ export default function AdminAiHub() {
 
   if (loading && !status) {
     return (
-      <div className="space-y-4 p-4">
+      <div data-testid="dd-layout-root" className="w-full min-w-0 space-y-4">
         <Skeleton className="h-10 w-64" />
         <Skeleton className="h-40 w-full" />
       </div>
@@ -272,14 +272,14 @@ export default function AdminAiHub() {
 
   if (loadError && !status) {
     return (
-      <div className="p-4">
+      <div data-testid="dd-layout-root" className="w-full min-w-0 space-y-4">
         <InlineErrorRetry message={loadError} onRetry={() => void loadStatus()} />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 max-w-6xl mx-auto">
+    <div data-testid="dd-layout-root" className="w-full min-w-0 space-y-4">
       <PageHeader
         title="AI Hub"
         description="Multi-provider lab, smart routing, free-tier metering, and ops cost controls. Keys stay on the edge — never in the browser."
@@ -287,10 +287,11 @@ export default function AdminAiHub() {
           { label: "Admin", href: "/app/admin" },
           { label: "AI Hub" },
         ]}
+        className="mb-0"
       />
 
       {status && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div data-testid="ai-hub-kpi-row" className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <StatCard
             label="Provider mode"
             value={status.providerMode}
@@ -310,7 +311,7 @@ export default function AdminAiHub() {
         </div>
       )}
 
-      <div className="flex flex-wrap gap-1.5 border-b border-border pb-2">
+      <div data-testid="ai-hub-tabs" className="flex flex-wrap gap-1.5 border-b border-border pb-2">
         {TABS.map((t) => {
           const Icon = t.icon;
           return (

@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogTitle,
 } from "./dialog";
 
@@ -16,6 +17,8 @@ interface ModalProps {
   open:       boolean;
   onClose:    () => void;
   title?:     string;
+  /** Optional accessible description; defaults to an sr-only label when omitted. */
+  description?: string;
   children:   ReactNode;
   size?:      "sm" | "md" | "lg" | "xl";
   className?: string;
@@ -29,7 +32,7 @@ const SIZES = {
 };
 
 export function Modal({
-  open, onClose, title, children, size = "md", className,
+  open, onClose, title, description, children, size = "md", className,
 }: ModalProps) {
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
@@ -57,16 +60,21 @@ export function Modal({
             </button>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close dialog"
-            className="absolute right-4 top-4 z-10 w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors duration-150"
-          >
-            <X className="w-4 h-4" aria-hidden="true" />
-          </button>
+          <>
+            <DialogTitle className="sr-only">Dialog</DialogTitle>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close dialog"
+              className="absolute right-4 top-4 z-10 w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors duration-150"
+            >
+              <X className="w-4 h-4" aria-hidden="true" />
+            </button>
+          </>
         )}
-
+        <DialogDescription className={description ? "px-6 pt-3 text-sm text-muted-foreground" : "sr-only"}>
+          {description ?? (title ? `${title} dialog` : "Dialog content")}
+        </DialogDescription>
         <div className="p-6">{children}</div>
       </DialogContent>
     </Dialog>

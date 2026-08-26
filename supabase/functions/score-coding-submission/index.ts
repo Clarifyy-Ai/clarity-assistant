@@ -1,7 +1,7 @@
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
-import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
+import { enforceSessionRateLimitAsync } from "../_shared/rateLimit.ts";
 
 function json(req: Request, payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -74,7 +74,8 @@ function runVisibleJavascriptTests(
       ok: false,
       results: [],
       execution_status: "compile_error",
-      blockedReason: "Define solve(input).",
+      blockedReason:
+        "Define solve(input). Example: function solve(input) { return input; }",
     };
   }
 
@@ -121,7 +122,13 @@ Deno.serve(async (req) => {
   const userId = auth.context.user.id;
 
   const dbForLimit = createServiceClient();
-  const rateLimited = await enforceAiRateLimitAsync(dbForLimit, "score-coding-submission", userId);
+  // Coding submit/sample/reset is not AI generation — use session limits (20/min)
+  // so reset→resubmit does not fail with 429/503 after a few attempts.
+  const rateLimited = await enforceSessionRateLimitAsync(
+    dbForLimit,
+    "score-coding-submission",
+    userId,
+  );
   if (rateLimited) return rateLimited;
 
   const body = await req.json().catch(() => ({})) as Record<string, unknown>;
@@ -224,7 +231,13 @@ Deno.serve(async (req) => {
       .select("id,name,input_json,expected_json,is_hidden")
       .eq("question_id", questionId)
       .eq("is_hidden", false);
-    if (cErr) return json(req, { error: "Code execution service is temporarily unavailable." }, 503);
+    if (cErr) {
+      return json(req, {
+        error: "Could not load visible test cases for this problem.",
+        code: "TEST_CASES_UNAVAILABLE",
+        execution_status: "service_error",
+      }, 503);
+    }
     mapped = ((cases ?? []) as Array<{
       id: string;
       name: string;
@@ -240,7 +253,13 @@ Deno.serve(async (req) => {
     const { data: cases, error: cErr } = await db.rpc("coding_hidden_cases_for_scoring", {
       p_question_id: questionId,
     });
-    if (cErr) return json(req, { error: "Code execution service is temporarily unavailable." }, 503);
+    if (cErr) {
+      return json(req, {
+        error: "Could not load scoring test cases for this problem.",
+        code: "HIDDEN_CASES_UNAVAILABLE",
+        execution_status: "service_error",
+      }, 503);
+    }
     mapped = ((cases ?? []) as Array<{
       id: string;
       name: string;
@@ -277,6 +296,20 @@ Deno.serve(async (req) => {
             : execution_status === "runtime_error"
               ? "Sample run hit a runtime error."
               : `Sample: ${passed} passed, ${failed} failed.`,
+    });
+  }
+
+  // Compile/blocked errors are guidance only — do not burn submission quota so
+  // Reset → fix → Submit remains usable (TC-COD-004).
+  if (execution_status === "compile_error" || execution_status === "blocked") {
+    return json(req, {
+      status: "compile_error",
+      score: null,
+      passed_tests: 0,
+      failed_tests: 0,
+      execution_status,
+      blocked_reason: outcome.blockedReason ?? undefined,
+      message: `Compile error: ${outcome.blockedReason ?? "could not compile"}`,
     });
   }
 

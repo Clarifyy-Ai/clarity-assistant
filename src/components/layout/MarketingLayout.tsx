@@ -49,6 +49,7 @@ const FOOTER_COLUMNS: Array<{
       { to: "/blog", label: "Blog" },
       { to: "/help", label: "Help Center" },
       { to: "/help/getting-started", label: "Getting started" },
+      { to: "/verify-certificate", label: "Verify certificate" },
       { to: "/shortcuts", label: "Keyboard shortcuts" },
     ],
   },
@@ -56,6 +57,7 @@ const FOOTER_COLUMNS: Array<{
     heading: "Company",
     links: [
       { href: `mailto:${SALES_EMAIL}`, label: "Contact Sales" },
+      { to: "/careers", label: "Careers" },
       { to: "/terms", label: "Terms of Service" },
       { to: "/privacy", label: "Privacy Policy" },
       { to: "/signup", label: "Sign up free" },

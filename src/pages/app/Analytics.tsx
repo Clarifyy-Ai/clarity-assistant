@@ -38,7 +38,6 @@ import type { AnalyticsPeriod } from "@/types/analytics.types";
 import { cn } from "@/lib/utils";
 import { format, subDays } from "date-fns";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
-import { agentLog70dd4b } from "@/lib/debug/agentLog70dd4b";
 import { formatAggregateScore, formatSessionScore } from "@/lib/analytics/scoreStatus";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 import {
@@ -58,7 +57,7 @@ export default function Analytics() {
 
   if (analytics.isLoading) {
     return (
-      <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-6`}>
+      <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-4`}>
         <PageHeader
           title={PRODUCT_NAMES.analytics}
           subtitle="Track your interview performance over time"
@@ -67,7 +66,7 @@ export default function Analytics() {
             { label: "Analytics" },
           ]}
         />
-        <div className="space-y-5">
+        <div className="space-y-4">
           <SkeletonCard />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
@@ -79,7 +78,7 @@ export default function Analytics() {
 
   if (analytics.error && !analytics.data) {
     return (
-      <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-6`}>
+      <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-4`}>
         <PageHeader
           title={PRODUCT_NAMES.analytics}
           subtitle="Track your interview performance over time"
@@ -102,7 +101,7 @@ export default function Analytics() {
 
   if (!hasSessions) {
     return (
-      <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-6`}>
+      <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-4`}>
         <PageHeader
           title={PRODUCT_NAMES.analytics}
           subtitle="Track your interview performance over time"
@@ -127,7 +126,7 @@ export default function Analytics() {
   }
 
   return (
-    <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-6`}>
+    <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-4`}>
       <PageHeader
         title={PRODUCT_NAMES.analytics}
         subtitle="Track your interview performance over time"
@@ -177,7 +176,7 @@ export default function Analytics() {
       )}
 
       {/* ── KPI row ───────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div data-testid="analytics-kpi-row" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <KPICard
           label={`Avg score (${analytics.filter.period})`}
           value={formatAggregateScore(analytics.avgScore30d)}
@@ -338,8 +337,8 @@ function dimensionRadarSummary(
 function ScoreTrendChart({ data }: { data: { date: string; score: number | null | undefined }[] }) {
   if (!data.length) {
     return (
-      <Card className="text-center py-10">
-        <BarChart2 className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+      <Card className="text-center py-6">
+        <BarChart2 className="w-7 h-7 text-muted-foreground/40 mx-auto mb-2" />
         <p className="text-muted-foreground text-sm">No session data yet.</p>
       </Card>
     );
@@ -398,18 +397,25 @@ function DimensionRadar({
     confidence:    0,
   };
   const summary = dimensionRadarSummary(dimensions);
+  const scoredEntries = Object.entries(dims).filter(([, val]) => isFiniteScore(val)) as [
+    string,
+    number,
+  ][];
 
   return (
+    <div data-testid="analytics-dimension-card">
     <Card>
-      <h3 className="text-sm font-semibold text-foreground mb-4">Average by dimension</h3>
+      <h3 className="text-sm font-semibold text-foreground mb-3">Average by dimension</h3>
       <p className="sr-only">{summary}</p>
+      {scoredEntries.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-2">No dimension scores yet.</p>
+      ) : (
       <div
         className="space-y-3"
         role="img"
         aria-label="Average scores by interview dimension"
       >
-        {Object.entries(dims).map(([key, val]) => {
-          if (!isFiniteScore(val)) return null;
+        {scoredEntries.map(([key, val]) => {
           const c =
             val >= 75 ? "emerald" :
             val >= 55 ? "amber"   : "red";
@@ -426,7 +432,9 @@ function DimensionRadar({
           );
         })}
       </div>
+      )}
     </Card>
+    </div>
   );
 }
 
@@ -442,8 +450,8 @@ function CategoryBreakdown({
   const navigate = useNavigate();
   if (!categories.length) {
     return (
-      <Card className="text-center py-10">
-        <Target className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+      <Card className="text-center py-6">
+        <Target className="w-7 h-7 text-muted-foreground/40 mx-auto mb-2" />
         <p className="text-muted-foreground text-sm">No category data yet.</p>
       </Card>
     );
@@ -498,14 +506,6 @@ function CategoryBreakdown({
                 size="sm"
                 className="mt-3"
                 onClick={() => {
-                  // #region agent log
-                  agentLog70dd4b({
-                    hypothesisId: "H-AN-003",
-                    location: "Analytics.tsx:weak-topic",
-                    message: "navigate prep lab from weak topic",
-                    data: { category: weakest.category, avg: weakest.avg_score },
-                  });
-                  // #endregion
                   navigate(`/app/prep?focus=${encodeURIComponent(weakest.category)}`);
                 }}
               >
@@ -699,8 +699,8 @@ function SessionComparePanel({ analytics }: { analytics: ReturnType<typeof useAn
 
   if (comparable.length < 2) {
     return (
-      <Card className="text-center py-10">
-        <GitCompare className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+      <Card className="text-center py-6">
+        <GitCompare className="w-7 h-7 text-muted-foreground/40 mx-auto mb-2" />
         <p className="text-muted-foreground text-sm">
           Complete another interview to compare sessions.
         </p>

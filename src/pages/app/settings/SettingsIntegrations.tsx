@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Card }   from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { cn }          from "@/lib/utils";
 import { useCalendarSync } from "@/hooks/useCalendarSync";
-import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { toast }       from "sonner";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 import { FeatureKillGate } from "@/components/layout/PlanGate";
@@ -152,44 +151,55 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
     connectGoogle,
     syncNow,
     disconnect,
+    persistRefreshToken,
+    checkConnection,
     isSyncing,
     isDisconnecting,
     isCheckingConnection,
+    isProbingSync,
     isConnected,
+    syncAvailable,
     lastSynced,
     importedCount,
     error,
   } = useCalendarSync();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // Sync import requires server-side Google OAuth creds; assume unavailable until probed.
-  const [syncAvailable, setSyncAvailable] = useState(false);
   const showSyncError =
     Boolean(error) && !isSyncing && !isCalendarNotConfiguredMessage(error ?? "");
 
   useEffect(() => {
     if (!integration.live) return;
+    if (searchParams.get("calendar") !== "connected") return;
+    if (isProbingSync) return;
 
     let cancelled = false;
     (async () => {
-      try {
-        await fetchEdgeJson("sync-calendar", { probe: true });
-        if (!cancelled) setSyncAvailable(true);
-      } catch (err) {
-        // Any probe failure → do not claim full sync works (501, auth, network).
-        const message = err instanceof Error ? err.message : "";
-        const notConfigured = isCalendarNotConfiguredMessage(message);
-        if (!cancelled) {
-          setSyncAvailable(false);
-          if (!notConfigured) {
-            // Non-501 failures still mean sync UI must not advertise readiness.
-            console.warn("[SettingsIntegrations] sync-calendar probe failed:", message);
-          }
-        }
+      if (!syncAvailable) {
+        toast.info(
+          "Google account linked, but calendar sync is not configured on the server yet.",
+        );
+        setSearchParams({}, { replace: true });
+        return;
       }
+      await persistRefreshToken();
+      if (cancelled) return;
+      await checkConnection();
+      toast.success("Google Calendar connected!");
+      setSearchParams({}, { replace: true });
     })();
-
-    return () => { cancelled = true; };
-  }, [integration.live]);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    integration.live,
+    searchParams,
+    setSearchParams,
+    persistRefreshToken,
+    checkConnection,
+    syncAvailable,
+    isProbingSync,
+  ]);
 
   async function handleConnect() {
     const result = await connectGoogle();
@@ -212,7 +222,6 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
     if (result.error) {
       if (isCalendarNotConfiguredMessage(result.error)) {
         // 501 / NOT_CONFIGURED — calm “coming soon” UI, never a scary error toast.
-        setSyncAvailable(false);
         toast.info(
           "Google Calendar sync isn't available yet — coming soon / not configured on the server.",
         );
@@ -333,15 +342,6 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
 // ─────────────────────────────────────────────────────────────────
 
 export default function SettingsIntegrations() {
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  useEffect(() => {
-    if (searchParams.get("calendar") === "connected") {
-      toast.success("Google Calendar connected!");
-      setSearchParams({}, { replace: true });
-    }
-  }, [searchParams, setSearchParams]);
-
   return (
     <SettingsPageShell title="Integrations">
 

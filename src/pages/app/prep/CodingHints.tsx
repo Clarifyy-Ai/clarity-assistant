@@ -24,6 +24,7 @@ import { CodeHighlight, renderTextWithCodeBlocks } from "@/components/prep/CodeH
 import { supabase } from "@/lib/supabase/client";
 import { splitCodingHints } from "@/lib/documents/gapAnalysisPersist";
 import type { LucideIcon } from "lucide-react";
+import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 
 const CATEGORIES: Array<{ id: string; label: string; icon: LucideIcon }> = [
   { id: "all",       label: "All",           icon: LayoutList },
@@ -86,6 +87,7 @@ export default function CodingHints() {
   const [depth, setDepth]           = useState<"surface" | "medium" | "near-complete" | "edge" | "implement">("surface");
   const hintKeyRef = useRef<string | null>(null);
   const solutionKeyRef = useRef<string | null>(null);
+
 
   useEffect(() => {
     let cancelled = false;
@@ -206,7 +208,7 @@ export default function CodingHints() {
   }
 
   return (
-    <div className="space-y-5 max-w-5xl">
+    <div data-testid="dd-layout-root" className={`${PAGE_SHELL} space-y-4`}>
       <PageHeader
         title="Coding Problems"
         description="Browse interview coding problems, get AI hints and solution explanations"
@@ -217,7 +219,7 @@ export default function CodingHints() {
         ]}
       />
 
-      <div className="flex flex-col lg:flex-row gap-5">
+      <div data-testid="coding-hints-split" className="flex flex-col lg:flex-row gap-5">
         <div className="w-full lg:w-80 lg:max-w-full space-y-4 flex-shrink-0">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -444,11 +446,13 @@ export default function CodingHints() {
               </div>
             </PrepToolShell>
           ) : (
-            <Card className="text-center py-20">
-              <Code2 className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
-              <p className="text-muted-foreground text-sm">Select a problem to view details</p>
-              <p className="text-muted-foreground text-xs mt-1">Get AI-powered hints and solution explanations</p>
-            </Card>
+            <div data-testid="coding-hints-empty">
+              <Card className="text-center py-10">
+                <Code2 className="w-10 h-10 text-muted-foreground/40 mx-auto mb-2" />
+                <p className="text-muted-foreground text-sm">Select a problem to view details</p>
+                <p className="text-muted-foreground text-xs mt-1">Get AI-powered hints and solution explanations</p>
+              </Card>
+            </div>
           )}
         </div>
       </div>

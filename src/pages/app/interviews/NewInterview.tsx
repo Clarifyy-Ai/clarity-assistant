@@ -69,11 +69,47 @@ function buildHalfHourSlots(): string[] {
   return slots;
 }
 
-function combineSchedule(date: string, time: string): Date | null {
+function combineSchedule(date: string, time: string, offset: string): Date | null {
   if (!date || !time) return null;
-  const parsed = new Date(`${date}T${time}:00`);
+  if (offset === "local") {
+    const parsed = new Date(`${date}T${time}:00`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  const parsed = new Date(`${date}T${time}:00${offset}`);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
+
+function looksLikePlaceholderName(value: string): boolean {
+  const t = value.trim();
+  if (t.length < 3) return true;
+  // Reject digit-only / letter-spam placeholders like "5555" or "TTTTTT"
+  if (/^\d+$/.test(t)) return true;
+  if (/^(.)\1{2,}$/i.test(t)) return true;
+  if (!/[a-zA-Z]/.test(t)) return true;
+  const stubs = new Set([
+    "test",
+    "testing",
+    "asdf",
+    "qwerty",
+    "xxx",
+    "xyz",
+    "abc",
+    "n/a",
+    "na",
+    "none",
+    "null",
+    "company",
+    "role",
+  ]);
+  if (stubs.has(t.toLowerCase())) return true;
+  return false;
+}
+
+const TIMEZONE_OPTIONS = [
+  { value: "local", label: "Local browser time", offset: "local" },
+  { value: "IST", label: "IST (India, UTC+05:30)", offset: "+05:30" },
+  { value: "GMT", label: "GMT / UTC", offset: "Z" },
+] as const;
 
 function getDefaultTimeSlot(date: string): string {
   const now = new Date();
@@ -174,6 +210,7 @@ export default function NewInterview() {
   const [platform,        setPlatform]         = useState("zoom");
   const [scheduleDate,    setScheduleDate]      = useState(todayDateString());
   const [scheduleTime,    setScheduleTime]      = useState(() => getDefaultTimeSlot(todayDateString()));
+  const [timeZoneKey,     setTimeZoneKey]       = useState<(typeof TIMEZONE_OPTIONS)[number]["value"]>("local");
   const [resumeId,        setResumeId]          = useState<string | null>(activeResumeId);
   const [jdId,            setJdId]              = useState<string | null>(activeJdId);
   const [duration,        setDuration]         = useState(45);
@@ -216,6 +253,15 @@ export default function NewInterview() {
       setInterviewerName(editingRound.interviewer_name ?? "");
       setMeetingLink(editingRound.meeting_link ?? "");
       setPlatform(editingRound.platform ?? "zoom");
+      // Restore timezone from stored ISO offset when possible.
+      try {
+        const iso = editingRound.scheduled_at ?? "";
+        if (iso.endsWith("Z") || /[+-]00:00$/.test(iso)) setTimeZoneKey("GMT");
+        else if (/[+-]05:30$/.test(iso)) setTimeZoneKey("IST");
+        else setTimeZoneKey("local");
+      } catch {
+        setTimeZoneKey("local");
+      }
       roundPrefilledRef.current = true;
     }
   }, [isEditMode, editingInterview, editingRound, editId]);
@@ -238,40 +284,90 @@ export default function NewInterview() {
     }
   }, [timeSlots, scheduleTime]);
 
+  const timeZoneOffset = useMemo(() => {
+    return TIMEZONE_OPTIONS.find((z) => z.value === timeZoneKey)?.offset ?? "local";
+  }, [timeZoneKey]);
+
   const scheduledAtIso = useMemo(() => {
-    const dt = combineSchedule(scheduleDate, scheduleTime);
+    const dt = combineSchedule(scheduleDate, scheduleTime, timeZoneOffset);
     return dt?.toISOString() ?? "";
-  }, [scheduleDate, scheduleTime]);
+  }, [scheduleDate, scheduleTime, timeZoneOffset]);
 
   const canSubmit = useMemo(
     () => {
-      const dt = combineSchedule(scheduleDate, scheduleTime);
-      const scheduleValid = isEditMode
-        ? Boolean(scheduleDate && scheduleTime && dt)
-        : Boolean(scheduleDate && scheduleTime && dt && dt.getTime() > Date.now());
-      return Boolean(company.trim() && roleTitle.trim() && scheduleValid);
+      const dt = combineSchedule(scheduleDate, scheduleTime, timeZoneOffset);
+      const originalIso = editingRound?.scheduled_at
+        ? new Date(editingRound.scheduled_at).toISOString()
+        : null;
+      const unchangedSchedule =
+        isEditMode &&
+        originalIso &&
+        scheduledAtIso &&
+        new Date(scheduledAtIso).getTime() === new Date(originalIso).getTime();
+      const scheduleValid = Boolean(
+        scheduleDate &&
+          scheduleTime &&
+          dt &&
+          (unchangedSchedule || dt.getTime() > Date.now()),
+      );
+      return Boolean(
+        company.trim() &&
+          roleTitle.trim() &&
+          !looksLikePlaceholderName(company) &&
+          !looksLikePlaceholderName(roleTitle) &&
+          scheduleValid,
+      );
     },
-    [company, roleTitle, scheduleDate, scheduleTime, isEditMode],
+    [
+      company,
+      roleTitle,
+      scheduleDate,
+      scheduleTime,
+      timeZoneOffset,
+      isEditMode,
+      editingRound?.scheduled_at,
+      scheduledAtIso,
+    ],
   );
 
   const validationMessage = useMemo(() => {
     if (!company.trim()) return "Company name is required.";
+    if (looksLikePlaceholderName(company)) {
+      return "Enter a real company name (not numbers or placeholders).";
+    }
     if (!roleTitle.trim()) return "Role or position is required.";
+    if (looksLikePlaceholderName(roleTitle)) {
+      return "Enter a real role or position title.";
+    }
     if (!scheduleDate || !scheduleTime) return "Choose an interview date and time.";
-    if (!isEditMode) {
-      if (scheduleDate < todayDateString()) {
-        return "Interview date is in the past — choose today or a future date.";
+    const originalIso = editingRound?.scheduled_at
+      ? new Date(editingRound.scheduled_at).toISOString()
+      : null;
+    const unchangedSchedule =
+      isEditMode &&
+      originalIso &&
+      scheduledAtIso &&
+      new Date(scheduledAtIso).getTime() === new Date(originalIso).getTime();
+    if (!unchangedSchedule && scheduleDate < todayDateString()) {
+      return "Interview date is in the past — choose today or a future date.";
+    }
+    if (!scheduledAtIso) return "Choose a valid interview date and time.";
+    if (!unchangedSchedule && new Date(scheduledAtIso).getTime() <= Date.now()) {
+      if (scheduleDate === todayDateString()) {
+        return "Interview time is in the past — choose a later time today.";
       }
-      if (!scheduledAtIso) return "Choose a valid interview date and time.";
-      if (new Date(scheduledAtIso).getTime() <= Date.now()) {
-        if (scheduleDate === todayDateString()) {
-          return "Interview time is in the past — choose a later time today.";
-        }
-        return "Choose a future interview time.";
-      }
+      return "Choose a future interview time.";
     }
     return null;
-  }, [company, roleTitle, scheduleDate, scheduleTime, isEditMode, scheduledAtIso]);
+  }, [
+    company,
+    roleTitle,
+    scheduleDate,
+    scheduleTime,
+    scheduledAtIso,
+    isEditMode,
+    editingRound?.scheduled_at,
+  ]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -671,6 +767,29 @@ export default function NewInterview() {
                 {timeSlots.map((slot) => (
                   <option key={slot} value={slot}>
                     {slot}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label
+                htmlFor="schedule-timezone"
+                className="text-xs font-medium text-foreground mb-1.5 block"
+              >
+                Timezone
+              </label>
+              <select
+                id="schedule-timezone"
+                value={timeZoneKey}
+                onChange={(e) =>
+                  setTimeZoneKey(e.target.value as (typeof TIMEZONE_OPTIONS)[number]["value"])
+                }
+                className="w-full bg-background border border-input text-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
+              >
+                {TIMEZONE_OPTIONS.map((z) => (
+                  <option key={z.value} value={z.value}>
+                    {z.label}
                   </option>
                 ))}
               </select>

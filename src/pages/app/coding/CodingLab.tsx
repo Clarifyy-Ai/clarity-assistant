@@ -92,11 +92,10 @@ export default function CodingLabPage() {
       <PageHeader
         title="Coding Assessment"
         breadcrumbs={[{ label: "Dashboard", href: "/app/dashboard" }, { label: "Coding Assessment" }]}
-        badge="Preview"
         description={
           isPreview
-            ? "Preview — JavaScript is auto-scored on the server. TypeScript, Python, and Java are stored for review and are not executed. There is no multi-language sandbox. Hidden tests are never shown."
-            : "JavaScript solve() is auto-scored on the server. Other languages are not executed — submissions are stored for pending review. There is no multi-language sandbox. Hidden tests stay server-side."
+            ? "JavaScript solve(input) is auto-scored on the server. TypeScript, Python, and Java are stored for review and are not executed. Hidden tests stay server-side."
+            : "JavaScript solve() is auto-scored on the server. Other languages are not executed — submissions are stored for pending review. Hidden tests stay server-side."
         }
       />
       {isPreview && !isAdmin ? (

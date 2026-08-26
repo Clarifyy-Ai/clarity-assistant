@@ -55,6 +55,12 @@ export function useSwipeAction(options: UseSwipeActionOptions = {}) {
 
   const onPointerDown = useCallback(
     (e: PointerEvent<HTMLElement>) => {
+      // Never capture when the gesture starts on a button/link — otherwise
+      // row swipe steals clicks (e.g. Session History "View Details").
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("button, a, input, select, textarea, [role='button']")) {
+        return;
+      }
       dragging.current = true;
       setIsDragging(true);
       startX.current = e.clientX;

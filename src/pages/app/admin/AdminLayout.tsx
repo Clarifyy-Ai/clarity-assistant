@@ -48,7 +48,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { to: "/app/admin/questions",      icon: FileText,       label: "Questions", staff: "staff" },
       { to: "/app/admin/bulk-upload",    icon: Upload,         label: "Bulk Upload"   },
       { to: "/app/admin/seed-questions", icon: Database,       label: "Seed / Import" },
-      { to: "/app/admin/community",      icon: MessageSquare,  label: "Q&A (Preview)", staff: "staff" },
+      { to: "/app/admin/community",      icon: MessageSquare,  label: "Q&A", staff: "staff" },
       { to: "/app/admin/learning",       icon: BookOpen,       label: "Learning Hub"  },
       { to: "/app/admin/blog",           icon: FileText,       label: "Blog"          },
       { to: "/app/admin/help-articles",  icon: BookOpen,       label: "Help Articles" },
@@ -254,7 +254,7 @@ export default function AdminLayout() {
         </div>
       </aside>
 
-      <main id="main-content" className="flex-1 overflow-auto p-4 md:p-6">
+      <main id="main-content" data-testid="admin-content-pad" className="flex-1 overflow-auto p-4 md:p-6">
         <Outlet />
       </main>
     </div>

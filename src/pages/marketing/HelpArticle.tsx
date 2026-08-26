@@ -9,6 +9,7 @@ import {
   getFallbackArticlesByCategory,
   HELP_ARTICLES_FALLBACK,
   resolveHelpArticleDisplay,
+  dedupeHelpArticlesByQuestion,
   type HelpArticleItem,
 } from "@/lib/constants/helpArticlesFallback";
 import { helpArticlesDB } from "@/lib/supabase/database";
@@ -112,19 +113,21 @@ export default function HelpArticle() {
 
         if (cancelled) return;
 
-        const catRows = allPublished
-          .filter((a) => a.category_slug === slug)
-          .map((a) =>
-            resolveHelpArticleDisplay({
-              slug: a.slug,
-              question: a.question,
-              answer: a.answer,
-              body_md: a.body_md,
-              category_slug: a.category_slug,
-              category_title: a.category_title,
-              sort_order: a.sort_order,
-            }),
-          );
+        const catRows = dedupeHelpArticlesByQuestion(
+          allPublished
+            .filter((a) => a.category_slug === slug)
+            .map((a) =>
+              resolveHelpArticleDisplay({
+                slug: a.slug,
+                question: a.question,
+                answer: a.answer,
+                body_md: a.body_md,
+                category_slug: a.category_slug,
+                category_title: a.category_title,
+                sort_order: a.sort_order,
+              }),
+            ),
+        );
         if (catRows.length > 0) {
           setCategoryArticles(catRows);
           setArticle(null);
@@ -150,12 +153,11 @@ export default function HelpArticle() {
             }),
           );
           setCategoryArticles(null);
-          setRelated(
+          const relatedDeduped = dedupeHelpArticlesByQuestion(
             allPublished
               .filter(
                 (a) => a.category_slug === data.category_slug && a.slug !== slug,
               )
-              .slice(0, 3)
               .map((a) =>
                 resolveHelpArticleDisplay({
                   slug: a.slug,
@@ -167,7 +169,8 @@ export default function HelpArticle() {
                   sort_order: a.sort_order,
                 }),
               ),
-          );
+          ).slice(0, 3);
+          setRelated(relatedDeduped);
           setLoading(false);
           return;
         }

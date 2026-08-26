@@ -71,7 +71,7 @@ export default function NotFound() {
   });
 
   useEffect(() => {
-    console.error("404 Error: User attempted to access non-existent route:", location.pathname);
+    console.debug("[404]", location.pathname);
   }, [location.pathname]);
 
   if (isAuthenticated) {

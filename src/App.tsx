@@ -27,7 +27,6 @@ import type { PlanId } from "@/lib/constants/pricing";
 import { useOverlayStore } from "@/store/overlayStore";
 import { toast } from "sonner";
 import { RETIRED_ROOMS_REDIRECT, RETIRED_ROOMS_TOAST } from "@/lib/routes/canonical";
-import { agentLog70dd4b } from "@/lib/debug/agentLog70dd4b";
 
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { FeatureKillGate } from "@/components/layout/PlanGate";
@@ -64,6 +63,7 @@ import Blog from "@/pages/marketing/Blog";
 import BlogPost from "@/pages/marketing/BlogPost";
 import Terms from "@/pages/marketing/Terms";
 import Privacy from "@/pages/marketing/Privacy";
+import Careers from "@/pages/marketing/Careers";
 import GovExams from "@/pages/marketing/GovExams";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -563,7 +563,9 @@ const routes = [
   { path: "/blog/:slug", element: <MarketingPage component={BlogPost} /> },
   { path: "/terms", element: <MarketingPage component={Terms} /> },
   { path: "/privacy", element: <MarketingPage component={Privacy} /> },
+  { path: "/careers", element: <MarketingPage component={Careers} /> },
   { path: "/share/:token", element: <Page component={SharedDebrief} /> },
+  { path: "/verify-certificate", element: <Page component={VerifyCertificate} /> },
   { path: "/verify-certificate/:certificateId", element: <Page component={VerifyCertificate} /> },
 
   { path: "/dashboard", element: <Navigate to="/app/dashboard" replace /> },
@@ -1018,20 +1020,6 @@ export default function App(): JSX.Element {
   const stealthMode = useUIStore((state) => state.stealth_mode);
 
   useFocusRecoveryCoordinator();
-
-  useEffect(() => {
-    // #region agent log
-    agentLog70dd4b({
-      hypothesisId: "H-BOOT",
-      location: "App.tsx:mount",
-      message: "instrumented app boot",
-      data: {
-        href: typeof location !== "undefined" ? location.href.slice(0, 120) : null,
-        host: typeof location !== "undefined" ? location.host : null,
-      },
-    });
-    // #endregion
-  }, []);
 
   useEffect(() => {
     void initialize();

@@ -241,6 +241,10 @@ export default function Login(): JSX.Element {
     setMfaPending(false);
     setMfaFactorId(null);
     setMfaCode("");
+    // Keep the redirect gate closed until the auth state reflects sign-out.
+    // Otherwise a failed AAL lookup can briefly redirect an aal1 session into
+    // the private app before Supabase finishes clearing the session.
+    setMfaGateResolved(false);
     setAuthError(MFA_AAL_START_FAILED_MESSAGE);
   }
 
@@ -284,11 +288,9 @@ export default function Login(): JSX.Element {
           return;
         }
         await failClosedMfaStart();
-        if (!cancelled) setMfaGateResolved(true);
       } catch {
         if (!cancelled) {
           await failClosedMfaStart();
-          setMfaGateResolved(true);
         }
       }
     })();
@@ -567,7 +569,7 @@ export default function Login(): JSX.Element {
                 autoComplete="one-time-code"
                 placeholder="123456"
                 value={mfaCode}
-                onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 required
               />
               {authError && (

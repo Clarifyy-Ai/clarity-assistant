@@ -58,6 +58,23 @@ import { toast } from "sonner";
 
 const STEPS = ["Exam", "Paper basis", "Customize", "Review"] as const;
 
+const QUESTION_COUNT_MIN = 5;
+const QUESTION_COUNT_ABS_MAX = 100;
+
+function clampQuestionCount(raw: unknown, max: number): number {
+  // Reject scientific notation / signed junk so typing "5e55" cannot overflow the UI.
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed || /[eE.+-]/.test(trimmed)) return QUESTION_COUNT_MIN;
+    const n = Number.parseInt(trimmed, 10);
+    if (!Number.isFinite(n)) return QUESTION_COUNT_MIN;
+    return Math.min(Math.max(QUESTION_COUNT_MIN, n), Math.max(QUESTION_COUNT_MIN, max));
+  }
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return QUESTION_COUNT_MIN;
+  return Math.min(Math.max(QUESTION_COUNT_MIN, Math.floor(n)), Math.max(QUESTION_COUNT_MIN, max));
+}
+
 const LANGUAGE_LABELS: Record<string, string> = {
   en: "English",
   hi: "Hindi",
@@ -154,10 +171,17 @@ export default function GenerateGovPaper(): React.ReactElement {
   const bankCoverageLabel = bank
     ? formatBankCoverage(bank.approvedPublicCount, bank.requiredQuestions)
     : null;
+  const questionCountMax =
+    basis === "topic"
+      ? QUESTION_COUNT_ABS_MAX
+      : Math.min(
+          QUESTION_COUNT_ABS_MAX,
+          selected?.pattern?.totalQuestions ?? QUESTION_COUNT_ABS_MAX,
+        );
   const requestedForConfig =
     basis === "full_sim"
       ? selected?.pattern?.totalQuestions ?? questionCount
-      : questionCount;
+      : clampQuestionCount(questionCount, questionCountMax);
   // AI generation of missing questions is a Pro-and-above capability (rank >= 2).
   // Short banks fail closed to Custom Practice — never unlock Full Mock via
   // fragile Python/hybrid heuristics (P0-02 inventory honesty).
@@ -318,9 +342,19 @@ export default function GenerateGovPaper(): React.ReactElement {
         if (cancelled) return;
 
         if (detailsResult.status === "fulfilled") {
-          applyExamSelection(mapDetailsToSearchResult(detailsResult.value));
-          if (linkedStageId) setStageId(linkedStageId);
-          return;
+          const details = detailsResult.value as {
+            exam?: { examId?: string };
+          } | null;
+          // Catch-all mocks / partial payloads can fulfill without an exam —
+          // do not throw; fall through to search hydration.
+          if (details?.exam?.examId) {
+            applyExamSelection(mapDetailsToSearchResult(detailsResult.value));
+            if (linkedStageId) setStageId(linkedStageId);
+            // #region agent log
+            fetch('http://127.0.0.1:7572/ingest/ea82b87b-41ef-4cec-a41d-f9c122e76fc2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'aecfaa'},body:JSON.stringify({sessionId:'aecfaa',runId:'post-fix',hypothesisId:'H-GOV-HYDRATE',location:'GenerateGovPaper.tsx:hydrate',message:'hydrated_from_details',data:{examId:details.exam.examId},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
+            return;
+          }
         }
 
         if (searchResult.status === "fulfilled") {
@@ -330,6 +364,9 @@ export default function GenerateGovPaper(): React.ReactElement {
           if (hit && hit.examId === linkedExamId) {
             applyExamSelection(hit);
             if (linkedStageId) setStageId(linkedStageId);
+            // #region agent log
+            fetch('http://127.0.0.1:7572/ingest/ea82b87b-41ef-4cec-a41d-f9c122e76fc2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'aecfaa'},body:JSON.stringify({sessionId:'aecfaa',runId:'post-fix',hypothesisId:'H-GOV-HYDRATE',location:'GenerateGovPaper.tsx:hydrate',message:'hydrated_from_search',data:{examId:hit.examId,bank:hit.bankReadiness?.approvedPublicCount??null},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
           }
         }
       });
@@ -471,60 +508,71 @@ export default function GenerateGovPaper(): React.ReactElement {
     let cancelled = false;
     const mode =
       basis === "full_sim" ? ("generated_mock" as const) : ("custom_mock" as const);
-    void checkExamPaperAvailability({
-      examId,
-      stageId,
-      mode,
-      language,
-      questionCount: requestedForConfig,
-      topics: basis === "topic" ? resolvedTopicsSafe() : [],
-      difficulty: difficulty || null,
-      generator: pickPaperGeneratorPreference({
+    const maxQ =
+      basis === "topic"
+        ? QUESTION_COUNT_ABS_MAX
+        : Math.min(
+            QUESTION_COUNT_ABS_MAX,
+            selected?.pattern?.totalQuestions ?? QUESTION_COUNT_ABS_MAX,
+          );
+    const safeRequested = clampQuestionCount(requestedForConfig, maxQ);
+    const timer = window.setTimeout(() => {
+      void checkExamPaperAvailability({
+        examId,
+        stageId,
         mode,
-        questionCount: requestedForConfig,
-        available: inventoryAvailable,
-        basis:
-          basis === "full_sim"
-            ? "full_sim"
-            : basis === "topic"
-              ? "topic"
-              : "custom",
-      }),
-    })
-      .then((avail) => {
-        if (cancelled) return;
-        setServerAvailability(avail);
-        // Mirror approved count into selection so coverage labels stay truthful.
-        setSelectedExam((prev) => {
-          if (!prev || prev.examId !== examId) return prev;
-          const required =
-            prev.bankReadiness?.requiredQuestions ??
-            prev.pattern?.totalQuestions ??
-            avail.requested;
-          const approved = avail.available;
-          const status =
-            approved <= 0
-              ? ("empty" as const)
-              : approved >= required
-                ? ("ready" as const)
-                : ("partial" as const);
-          return {
-            ...prev,
-            bankReadiness: {
-              approvedPublicCount: approved,
-              publicCount: approved,
-              requiredQuestions: required,
-              status,
-              fullSimulationAvailable: status === "ready",
-            },
-          };
-        });
+        language,
+        questionCount: safeRequested,
+        topics: basis === "topic" ? resolvedTopicsSafe() : [],
+        difficulty: difficulty || null,
+        generator: pickPaperGeneratorPreference({
+          mode,
+          questionCount: safeRequested,
+          available: inventoryAvailable,
+          basis:
+            basis === "full_sim"
+              ? "full_sim"
+              : basis === "topic"
+                ? "topic"
+                : "custom",
+        }),
       })
-      .catch(() => {
-        if (!cancelled) setServerAvailability(null);
-      });
+        .then((avail) => {
+          if (cancelled) return;
+          setServerAvailability(avail);
+          // Mirror approved count into selection so coverage labels stay truthful.
+          setSelectedExam((prev) => {
+            if (!prev || prev.examId !== examId) return prev;
+            const required =
+              prev.bankReadiness?.requiredQuestions ??
+              prev.pattern?.totalQuestions ??
+              avail.requested;
+            const approved = avail.available;
+            const status =
+              approved <= 0
+                ? ("empty" as const)
+                : approved >= required
+                  ? ("ready" as const)
+                  : ("partial" as const);
+            return {
+              ...prev,
+              bankReadiness: {
+                approvedPublicCount: approved,
+                publicCount: approved,
+                requiredQuestions: required,
+                status,
+                fullSimulationAvailable: status === "ready",
+              },
+            };
+          });
+        })
+        .catch(() => {
+          if (!cancelled) setServerAvailability(null);
+        });
+    }, 400);
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examId, stageId, basis, language, questionCount, difficulty, step]);
@@ -1064,12 +1112,33 @@ export default function GenerateGovPaper(): React.ReactElement {
                 <span className="font-medium">Questions</span>
                 <input
                   type="number"
-                  min={5}
-                  max={basis === "topic" ? 100 : (selected?.pattern?.totalQuestions ?? 200)}
+                  min={QUESTION_COUNT_MIN}
+                  max={
+                    basis === "topic"
+                      ? QUESTION_COUNT_ABS_MAX
+                      : Math.min(
+                          QUESTION_COUNT_ABS_MAX,
+                          selected?.pattern?.totalQuestions ?? QUESTION_COUNT_ABS_MAX,
+                        )
+                  }
                   disabled={basis === "full_sim"}
                   className="w-full rounded-lg border border-border bg-background px-3 py-2"
                   value={questionCount}
-                  onChange={(e) => setQuestionCount(Number(e.target.value))}
+                  onChange={(e) => {
+                    const max =
+                      basis === "topic"
+                        ? QUESTION_COUNT_ABS_MAX
+                        : Math.min(
+                            QUESTION_COUNT_ABS_MAX,
+                            selected?.pattern?.totalQuestions ?? QUESTION_COUNT_ABS_MAX,
+                          );
+                    const raw = e.target.value;
+                    if (raw === "") {
+                      setQuestionCount(QUESTION_COUNT_MIN);
+                      return;
+                    }
+                    setQuestionCount(clampQuestionCount(raw, max));
+                  }}
                 />
               </label>
               {basis !== "topic" && (

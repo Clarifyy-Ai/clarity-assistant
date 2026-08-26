@@ -61,6 +61,59 @@ test.describe("Government exam generation and submission UX", () => {
       });
     });
 
+    await page.route("**/functions/v1/get-exam-details", async (route) => {
+      if (route.request().method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({
+          exam: {
+            examId: EXAM_ID,
+            code: "SSC_CGL",
+            name: "SSC CGL",
+            family: "ssc",
+            description: null,
+            legacyExamType: "SSC Exams (CGL/CHSL)",
+            aliases: [],
+          },
+          body: { id: "b1", code: "SSC", name: "SSC", officialUrl: null },
+          stages: [{ id: STAGE_ID, code: "t1", name: "Tier 1", sort_order: 1 }],
+          primaryStage: { id: STAGE_ID, code: "t1", name: "Tier 1", sort_order: 1 },
+          activePatternSummary: {
+            id: "pat-1",
+            version: "2024",
+            totalQuestions: 100,
+            totalMarks: 200,
+            durationMinutes: 60,
+            negativeMark: 0.5,
+            sourceUrl: null,
+            effectiveDate: "2024-01-01",
+            stageId: STAGE_ID,
+          },
+          syllabusSummary: null,
+          languages: ["en"],
+          bankReadiness: {
+            approvedPublicCount: 23,
+            publicCount: 23,
+            requiredQuestions: 100,
+            status: "partial",
+            fullSimulationAvailable: false,
+          },
+          officialSources: [],
+          previousPaperCounts: { total: 0, byYear: {} },
+          disclaimers: {
+            affiliation: "practice",
+            aiGenerated: "practice",
+            customPractice: "practice",
+          },
+        }),
+      });
+    });
+
     let generateCalls = 0;
     await page.route("**/functions/v1/create-exam-paper", async (route) => {
       if (route.request().method() === "OPTIONS") {

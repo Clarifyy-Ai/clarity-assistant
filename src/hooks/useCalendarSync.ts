@@ -3,7 +3,6 @@ import { supabase } from "@/lib/supabase/client";
 import { fetchEdge, fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useAuthStore } from "@/store/userStore";
 import type { AuthChangeEvent } from "@supabase/supabase-js";
-import { agentLog70dd4b } from "@/lib/debug/agentLog70dd4b";
 
 async function parseEdgeJson<T>(res: Response): Promise<T> {
   const text = await res.text().catch(() => "");
@@ -62,20 +61,6 @@ async function probeSyncAvailabilityCached(): Promise<{ available: boolean; unav
         checkedAt: Date.now(),
         unavailable,
       };
-      // #region agent log
-      agentLog70dd4b({
-        hypothesisId: "H-INT-501",
-        location: "useCalendarSync.ts:probe",
-        message: "sync probe result",
-        data: {
-          syncAvailable: false,
-          status: e.status ?? null,
-          code: e.code ?? null,
-          unavailable,
-          cached: false,
-        },
-      });
-      // #endregion
       return { available: false, unavailable };
     } finally {
       syncProbeInflight = null;
@@ -130,27 +115,11 @@ export function useCalendarSync() {
         { method: "GET" }
       );
       setIsConnected(!!data?.connected);
-      // #region agent log
-      agentLog70dd4b({
-        hypothesisId: "H-SCH-001",
-        location: "useCalendarSync.ts:checkConnection",
-        message: "calendar connection status",
-        data: { connected: !!data?.connected },
-      });
-      // #endregion
     } catch (err) {
       const e = err as Error & { code?: string; status?: number };
       // Auth/session failures must not fake a "Connected" state from a stale provider_token.
       if (e.status === 401 || e.code === "AUTH_REQUIRED" || e.code === "AUTH_EXPIRED" || e.code === "AUTH_INVALID") {
         setIsConnected(false);
-        // #region agent log
-        agentLog70dd4b({
-          hypothesisId: "H-SCH-001",
-          location: "useCalendarSync.ts:checkConnection:401",
-          message: "calendar status auth failure",
-          data: { status: e.status ?? null, code: e.code ?? null },
-        });
-        // #endregion
       } else {
         const { data: sessionData } = await supabase.auth.getSession();
         setIsConnected(!!sessionData?.session?.provider_token);
@@ -168,18 +137,6 @@ export function useCalendarSync() {
       const result = await probeSyncAvailabilityCached();
       setSyncAvailable(result.available);
       if (result.unavailable) setError(CALENDAR_UNAVAILABLE_MSG);
-      // #region agent log
-      agentLog70dd4b({
-        hypothesisId: "H-INT-501",
-        location: "useCalendarSync.ts:probe:resolved",
-        message: "sync probe resolved",
-        data: {
-          syncAvailable: result.available,
-          unavailable: result.unavailable,
-          fromCache,
-        },
-      });
-      // #endregion
     } finally {
       setIsProbingSync(false);
     }
@@ -203,6 +160,33 @@ export function useCalendarSync() {
     return () => subscription.unsubscribe();
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Persist offline refresh token after OAuth connect ─────────
+  const persistRefreshToken = useCallback(async (): Promise<boolean> => {
+    if (!syncAvailable) return false;
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const refresh =
+        (sessionData?.session as { provider_refresh_token?: string } | null)
+          ?.provider_refresh_token ?? "";
+      if (!refresh) return false;
+
+      const data = await fetchEdgeJson<{ stored?: boolean; connected?: boolean }>(
+        "sync-calendar",
+        {
+          provider_refresh_token: refresh,
+          store_token_only: true,
+        },
+      );
+      if (data?.stored || data?.connected) {
+        setIsConnected(true);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }, [syncAvailable]);
+
   // ── Connect Google Calendar ───────────────────────────────────
   const connectGoogle = useCallback(async (): Promise<{ error: string | null }> => {
     if (!syncAvailable) {
@@ -216,6 +200,7 @@ export function useCalendarSync() {
       options: {
         scopes:      "https://www.googleapis.com/auth/calendar.readonly",
         redirectTo:  `${window.location.origin}/app/settings/integrations?calendar=connected`,
+        // offline + consent so Google returns a refresh_token we can persist server-side
         queryParams: { access_type: "offline", prompt: "consent" },
       },
     });
@@ -225,6 +210,9 @@ export function useCalendarSync() {
     }
     return { error: null };
   }, [syncAvailable]);
+
+  // After OAuth redirect, SettingsIntegrations calls persistRefreshToken
+  // before clearing ?calendar=connected.
 
   // ── Sync calendar events ──────────────────────────────────────
   const syncNow = useCallback(async (): Promise<{
@@ -242,9 +230,13 @@ export function useCalendarSync() {
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const providerToken = sessionData?.session?.provider_token;
+      const providerRefreshToken =
+        (sessionData?.session as { provider_refresh_token?: string } | null)
+          ?.provider_refresh_token;
 
       const body: Record<string, unknown> = {};
       if (providerToken) body.provider_token = providerToken;
+      if (providerRefreshToken) body.provider_refresh_token = providerRefreshToken;
 
       const res = await fetchEdge("sync-calendar", body);
       const data = await parseEdgeJson<{
@@ -272,6 +264,7 @@ export function useCalendarSync() {
       const count = data?.imported ?? 0;
       setLastSynced(new Date());
       setImportedCount(count);
+      setIsConnected(true);
       return { imported: count, error: null };
 
     } catch (err) {
@@ -338,6 +331,7 @@ export function useCalendarSync() {
     disconnect,
     checkConnection,
     probeSyncAvailability,
+    persistRefreshToken,
     isSyncing,
     isDisconnecting,
     isCheckingConnection,

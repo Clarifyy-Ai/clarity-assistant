@@ -96,6 +96,7 @@ export type EdgeFunctionName =
   | "save-answer"
   | "save-transcript"
   | "schedule-interview"
+  | "send-interview-reminders"
   | "score-coding-submission"
   | "search-exams"
   | "select-test-questions"

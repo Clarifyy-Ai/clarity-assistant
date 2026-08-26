@@ -137,6 +137,9 @@ const NO_NETWORK_RETRY_FNS = new Set([
   "razorpay-verify-payment",
   "moderate-content",
   "score-coding-submission",
+  // Typeahead / availability: retries amplify rate-limit and spinner storms.
+  "search-exams",
+  "check-exam-paper-availability",
 ]);
 
 function unreachableUserMessage(fnName: string): string {

@@ -217,7 +217,10 @@ export function sanitizeHelpText(text: string): string {
     .replace(/Â₹/g, "₹")
     .replace(/Â·/g, "·")
     .replace(/Â /g, " ")
-    .replace(/Â/g, "");
+    .replace(/Â/g, "")
+    // Replacement-char / stripped rupee before INR prices (TC-PUB-004)
+    .replace(/\?(?=\s*[\d,]{3,})/g, "₹")
+    .replace(/Settings\s*[\u0000-\u001f\u007f]\s*Billing/gi, "Settings → Billing");
 }
 
 /** Prefer clean fallback copy when a published row looks corrupted or mismatched. */
@@ -228,6 +231,8 @@ export function resolveHelpArticleDisplay(row: HelpArticleItem): HelpArticleItem
   const rawCombined = `${row.answer ?? ""}${row.body_md ?? ""}`;
   const looksCorrupt =
     /Ã.|â€|Â[₹· ]|Ã\u0080/.test(rawCombined) ||
+    // Stripped currency or control chars between Settings → Billing (DB encoding damage)
+    /\?(?=\s*[\d,]{3,})|Settings\s*[\u0000-\u001f\u007f]\s*Billing/i.test(rawCombined) ||
     (row.slug === "gs-3" &&
       /what happens after i sign up/i.test(row.question) &&
       /free plan/i.test(answer)) ||
@@ -263,6 +268,27 @@ export function groupHelpArticlesIntoCategories(
     byCat.get(row.category_slug)!.items.push(row);
   }
   return Array.from(byCat.values());
+}
+
+/** Collapse duplicate FAQ questions (e.g. gs-3 remapped + leftover gs-4). */
+export function dedupeHelpArticlesByQuestion(
+  rows: HelpArticleItem[],
+): HelpArticleItem[] {
+  const seen = new Map<string, HelpArticleItem>();
+  const sorted = [...rows].sort((a, b) => a.sort_order - b.sort_order);
+  for (const row of sorted) {
+    const key = `${row.category_slug}::${row.question.trim().toLowerCase()}`;
+    const existing = seen.get(key);
+    if (!existing) {
+      seen.set(key, row);
+      continue;
+    }
+    // Prefer canonical free-plan slug gs-3 over stale gs-4 duplicate.
+    if (row.slug === "gs-3" || (existing.slug === "gs-4" && row.slug !== "gs-4")) {
+      seen.set(key, row);
+    }
+  }
+  return Array.from(seen.values()).sort((a, b) => a.sort_order - b.sort_order);
 }
 
 export function getFallbackArticleBySlug(slug: string): HelpArticleItem | null {

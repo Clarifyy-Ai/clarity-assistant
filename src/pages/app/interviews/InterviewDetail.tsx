@@ -119,7 +119,12 @@ export default function InterviewDetail() {
   const d         = new Date(scheduledAt);
   const isNow     = isToday(d);
   const isPassed  = isPast(d) && !isNow;
-  const ivStatus  = round?.status ?? iv.status ?? "scheduled";
+  const ivStatus =
+    iv.status === "cancelled"
+      ? "cancelled"
+      : iv.status === "completed"
+        ? "completed"
+        : (round?.status ?? iv.status ?? "scheduled");
 
   async function handleDelete() {
     setDeleting(true);

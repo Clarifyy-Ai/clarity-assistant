@@ -52,6 +52,12 @@ export type RateLimitOptions = {
   key: string;
   limit: number;
   windowMs: number;
+  /**
+   * When the distributed rate-limit RPC times out / fails, allow the request
+   * instead of denying with 503. Use only for read-only browse/search paths —
+   * mutating / AI endpoints must stay fail-closed.
+   */
+  failOpenOnBackendFailure?: boolean;
 };
 
 type RateLimitEntry = {
@@ -263,10 +269,12 @@ export const RATE_LIMIT_PRESETS = {
     windowMs: 60_000,
   },
 
-  /** Typeahead / browse — higher than SESSION_ACTION so debounce storms don't 429. */
+  /** Typeahead / browse — higher than SESSION_ACTION so debounce storms don't 429.
+   * Fail-open on rate-limit RPC outage: a 503 here was misread as "Too many searches". */
   SEARCH_BROWSE: {
     limit: 60,
     windowMs: 60_000,
+    failOpenOnBackendFailure: true,
   },
 
   AUTH_SENSITIVE: {
@@ -440,7 +448,7 @@ export async function checkRateLimitAsync(
   },
   options: RateLimitOptions
 ): Promise<RateLimitResult> {
-  const { key, limit, windowMs } = options;
+  const { key, limit, windowMs, failOpenOnBackendFailure = false } = options;
 
   if (!key || key.trim().length === 0) {
     throw new Error("[rateLimit] key is required.");
@@ -461,6 +469,15 @@ export async function checkRateLimitAsync(
     backendFailure: true,
   };
 
+  const allowOnBackendFailure: RateLimitResult = {
+    allowed: true,
+    limit,
+    remaining: limit,
+    resetAt: Date.now() + windowMs,
+    retryAfterSeconds: 0,
+    backendFailure: true,
+  };
+
   try {
     const rpcPromise = adminClient.rpc("check_rate_limit", {
       p_key: key,
@@ -478,15 +495,21 @@ export async function checkRateLimitAsync(
     const { data, error } = await Promise.race([rpcPromise, timeoutPromise]);
 
     if (error) {
-      // Fail closed: do not fall open to per-isolate memory under RPC outage.
-      console.error("[rateLimit] RPC failed — denying request:", error.message);
-      return deny;
+      console.error(
+        "[rateLimit] RPC failed —",
+        failOpenOnBackendFailure ? "allowing (fail-open browse)" : "denying request:",
+        error.message,
+      );
+      return failOpenOnBackendFailure ? allowOnBackendFailure : deny;
     }
 
     const row = Array.isArray(data) ? data[0] : data;
     if (!row || typeof row !== "object") {
-      console.error("[rateLimit] RPC returned empty row — denying request");
-      return deny;
+      console.error(
+        "[rateLimit] RPC returned empty row —",
+        failOpenOnBackendFailure ? "allowing (fail-open browse)" : "denying request",
+      );
+      return failOpenOnBackendFailure ? allowOnBackendFailure : deny;
     }
 
     const r = row as {
@@ -506,10 +529,11 @@ export async function checkRateLimitAsync(
     };
   } catch (err) {
     console.error(
-      "[rateLimit] RPC exception — denying request:",
+      "[rateLimit] RPC exception —",
+      failOpenOnBackendFailure ? "allowing (fail-open browse)" : "denying request:",
       err instanceof Error ? err.message : err
     );
-    return deny;
+    return failOpenOnBackendFailure ? allowOnBackendFailure : deny;
   }
 }
 

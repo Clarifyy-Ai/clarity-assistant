@@ -109,10 +109,15 @@ export default function SharedDebrief() {
           title="Shared link unavailable"
           description={
             error ??
-            "This shared link is invalid, expired, or has been revoked. No private account data is shown."
+            "This shared link is invalid, expired, or has been revoked. No private session or account data is shown."
           }
           homeLabel="Go to Clarify AI"
         />
+        <p className="max-w-md mx-auto px-4 -mt-6 mb-10 text-center text-xs text-muted-foreground leading-relaxed">
+          Share links are created from your signed-in Debrief or Scorecard page
+          (Share button). Guests can only open a link someone already shared —
+          there is no create-share control on this public page.
+        </p>
       </SharedShell>
     );
   }

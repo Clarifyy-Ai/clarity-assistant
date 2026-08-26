@@ -467,7 +467,7 @@ export function BillingHistory({
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground" data-testid="billing-history-page">
             Page {currentPage} of {totalPages} • {filteredTransactions.length} total
           </p>
 
@@ -475,7 +475,11 @@ export function BillingHistory({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+              data-testid="billing-history-prev"
+              onClick={() => {
+                const next = Math.max(1, currentPage - 1);
+                setCurrentPage(next);
+              }}
               disabled={currentPage === 1}
             >
               ← Previous
@@ -483,7 +487,11 @@ export function BillingHistory({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+              data-testid="billing-history-next"
+              onClick={() => {
+                const next = Math.min(totalPages, currentPage + 1);
+                setCurrentPage(next);
+              }}
               disabled={currentPage === totalPages}
             >
               Next →

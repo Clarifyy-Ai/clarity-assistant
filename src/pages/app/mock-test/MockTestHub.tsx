@@ -171,7 +171,6 @@ export default function MockTestHub(): React.ReactElement {
   const [selectedExamId, setSelectedExamId] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchState, setSearchState] = useState<"idle" | "searching" | "success" | "empty" | "error">("idle");
-  const [searchError, setSearchError] = useState<string | null>(null);
   const [recentChips, setRecentChips] = useState<string[]>([]);
   const [hubReadiness, setHubReadiness] = useState<Awaited<
     ReturnType<typeof fetchLatestExamReadiness>
@@ -397,13 +396,10 @@ export default function MockTestHub(): React.ReactElement {
             if (meta.state === "loading") setSearchState("searching");
             else if (meta.state === "empty") {
               setSearchState("empty");
-              setSearchError(null);
             } else if (meta.state === "error") {
               setSearchState("error");
-              setSearchError(meta.error);
             } else {
               setSearchState(results.length ? "success" : "idle");
-              setSearchError(null);
             }
           }}
         />
@@ -443,12 +439,7 @@ export default function MockTestHub(): React.ReactElement {
           ))}
         </div>
         <div className="space-y-2" aria-busy={searching} data-testid="gov-exam-search-results">
-          {searchState === "error" && !searching && searchError && (
-            <InlineErrorRetry
-              message={searchError}
-              onRetry={() => void runGovSearch(searchQ.trim(), family)}
-            />
-          )}
+          {/* Error UI lives in ExamSearchCombobox to avoid duplicate throttle banners */}
           {searchState === "empty" && !searching && (
             <div className="space-y-2" data-testid="gov-exam-search-empty">
               <p className="text-sm text-muted-foreground">

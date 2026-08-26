@@ -193,10 +193,17 @@ export function mapGovSearchError(err: unknown): {
       "",
   ).toUpperCase();
   const status = (err as { status?: number } | null)?.status;
-  if (code === "RATE_LIMITED" || code === "RATE_LIMIT_BACKEND_UNAVAILABLE") {
+  if (code === "RATE_LIMITED" || status === 429) {
     return {
       code: "RATE_LIMITED",
       message: "Too many searches. Please wait a moment and try again.",
+    };
+  }
+  // Rate-limit RPC outage used to be mapped as "Too many searches" (false throttle).
+  if (code === "RATE_LIMIT_BACKEND_UNAVAILABLE") {
+    return {
+      code: "SEARCH_UNAVAILABLE",
+      message: "Exam search is temporarily unavailable. Please try again.",
     };
   }
   if (code === "INVALID_QUERY" || code === "VALIDATION_ERROR" || code === "BAD_REQUEST") {

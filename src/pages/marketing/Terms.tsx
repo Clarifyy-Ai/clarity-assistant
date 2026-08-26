@@ -109,7 +109,9 @@ export default function Terms() {
           For questions about these Terms, contact us at{" "}
           <a href={`mailto:${LEGAL_EMAIL}`} className="text-primary hover:underline">
             {LEGAL_EMAIL}
-          </a>.
+          </a>
+          . The address is shown in full so you can copy it if your browser does not open a mail app
+          (a canceled <code className="text-xs">mailto:</code> request in DevTools is normal).
         </p>
         </div>
       </article>

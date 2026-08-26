@@ -1126,6 +1126,29 @@ Deno.serve(async (req: Request) => {
       }
 
       const payload = hybrid.data;
+      if (tool_id === "rephrase" && payload.alternatives) {
+        try {
+          await db.from("prep_rephrase_history").upsert(
+            {
+              user_id: userId,
+              input_hash: requestHash,
+              original_text: sanitizedInput,
+              alternatives: payload.alternatives,
+              provider: String(payload.source ?? hybrid.source ?? "hybrid"),
+              model: null,
+              credit_op_id: idempotencyKey,
+              status: "completed",
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "user_id,input_hash" },
+          );
+        } catch (histErr) {
+          log(FN, "warn", "prep_rephrase_history upsert failed (hybrid)", {
+            userId,
+            error: histErr instanceof Error ? histErr.message : String(histErr),
+          });
+        }
+      }
       await storeIdempotentResponse(db, idempotencyKey, {
         success: true,
         payload: {
@@ -1258,6 +1281,27 @@ Deno.serve(async (req: Request) => {
       }
       alternatives = parsed.value;
       cleaned = JSON.stringify(alternatives);
+      try {
+        await db.from("prep_rephrase_history").upsert(
+          {
+            user_id: userId,
+            input_hash: requestHash,
+            original_text: sanitizedInput,
+            alternatives,
+            provider: "openai",
+            model: usedModel,
+            credit_op_id: creditResult.transactionId ?? idempotencyKey,
+            status: "completed",
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id,input_hash" },
+        );
+      } catch (histErr) {
+        log(FN, "warn", "prep_rephrase_history upsert failed", {
+          userId,
+          error: histErr instanceof Error ? histErr.message : String(histErr),
+        });
+      }
     }
 
     await storeIdempotentResponse(db, idempotencyKey, {

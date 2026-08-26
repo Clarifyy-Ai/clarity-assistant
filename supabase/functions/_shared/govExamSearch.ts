@@ -41,6 +41,8 @@ export const INVALID_QUERY_MESSAGE =
 export const DEFAULT_PAGE = 1;
 export const DEFAULT_PAGE_SIZE = 20;
 export const MAX_PAGE_SIZE = 40;
+/** Prevent unsafe PostgREST ranges / numeric overflow from untrusted input. */
+export const MAX_PAGE = 10_000;
 export const MIN_QUERY_LENGTH = 2;
 export const MAX_QUERY_LENGTH = 120;
 
@@ -49,14 +51,17 @@ export type FamilyResolution =
   | { ok: false; message: string };
 
 /** Empty / missing family means "all families", not an error. */
-export function resolveFamily(raw: unknown): FamilyResolution {
+export function resolveFamily(
+  raw: unknown,
+  allowedFamilies: readonly string[] = GOV_EXAM_FAMILIES,
+): FamilyResolution {
   if (raw === undefined || raw === null) return { ok: true, family: null };
   if (typeof raw !== "string") {
     return { ok: false, message: "Family must be a string." };
   }
   const value = raw.trim().toLowerCase();
   if (!value) return { ok: true, family: null };
-  if ((GOV_EXAM_FAMILIES as readonly string[]).includes(value)) {
+  if (allowedFamilies.includes(value)) {
     return { ok: true, family: value as GovExamFamily };
   }
   return { ok: false, message: "Unknown exam family." };
@@ -71,11 +76,10 @@ export type PageRequest = {
   to: number;
 };
 
-function positiveInt(raw: unknown, fallback: number): number {
+function positiveInt(raw: unknown, fallback: number, max = Number.MAX_SAFE_INTEGER): number {
   const n = Number(raw);
-  if (!Number.isFinite(n)) return fallback;
-  const floored = Math.floor(n);
-  return floored >= 1 ? floored : fallback;
+  if (!Number.isSafeInteger(n) || n < 1) return fallback;
+  return Math.min(n, max);
 }
 
 /** Clamps page/pageSize so a client cannot ask for the whole registry. */
@@ -83,10 +87,10 @@ export function resolvePagination(input: {
   page?: unknown;
   pageSize?: unknown;
 }): PageRequest {
-  const page = positiveInt(input.page, DEFAULT_PAGE);
+  const page = positiveInt(input.page, DEFAULT_PAGE, MAX_PAGE);
   const pageSize = Math.min(
     MAX_PAGE_SIZE,
-    positiveInt(input.pageSize, DEFAULT_PAGE_SIZE),
+    positiveInt(input.pageSize, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE),
   );
   const from = (page - 1) * pageSize;
   return { page, pageSize, from, to: from + pageSize - 1 };
@@ -103,7 +107,7 @@ export type PaginationPayload = {
 };
 
 export function encodeSearchCursor(page: number): string {
-  return `p${Math.max(1, Math.floor(page))}`;
+  return `p${Math.min(MAX_PAGE, positiveInt(page, DEFAULT_PAGE, MAX_PAGE))}`;
 }
 
 export function decodeSearchCursor(raw: unknown): number | null {
@@ -111,23 +115,27 @@ export function decodeSearchCursor(raw: unknown): number | null {
   const m = /^p(\d+)$/i.exec(raw.trim());
   if (!m) return null;
   const page = Number(m[1]);
-  return Number.isFinite(page) && page >= 1 ? Math.floor(page) : null;
+  return Number.isSafeInteger(page) && page >= 1
+    ? Math.min(page, MAX_PAGE)
+    : null;
 }
 
 export function buildPagination(
   request: Pick<PageRequest, "page" | "pageSize">,
   total: number,
 ): PaginationPayload {
+  const page = positiveInt(request.page, DEFAULT_PAGE, MAX_PAGE);
+  const pageSize = positiveInt(request.pageSize, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
   const safeTotal = Number.isFinite(total) && total > 0 ? Math.floor(total) : 0;
-  const totalPages = safeTotal === 0 ? 0 : Math.ceil(safeTotal / request.pageSize);
-  const hasMore = request.page < totalPages;
+  const totalPages = safeTotal === 0 ? 0 : Math.ceil(safeTotal / pageSize);
+  const hasMore = page < totalPages;
   return {
-    page: request.page,
-    pageSize: request.pageSize,
+    page,
+    pageSize,
     total: safeTotal,
     totalPages,
     hasMore,
-    nextCursor: hasMore ? encodeSearchCursor(request.page + 1) : null,
+    nextCursor: hasMore ? encodeSearchCursor(page + 1) : null,
   };
 }
 

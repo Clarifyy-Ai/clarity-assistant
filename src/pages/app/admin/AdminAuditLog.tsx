@@ -166,8 +166,8 @@ export default function AdminAuditLog() {
   const maxPage = Math.max(0, Math.ceil(total / PAGE_SIZE) - 1);
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div data-testid="dd-layout-root" className="space-y-4">
+      <div data-testid="audit-header" className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-foreground">Admin Audit Log</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
@@ -187,14 +187,15 @@ export default function AdminAuditLog() {
         />
       )}
 
-      <Card>
-        <CardHeader className="pb-3">
+      <div data-testid="audit-filters">
+      <Card padding="sm">
+        <CardHeader className="mb-2 flex flex-col items-start gap-0.5 pb-0">
           <CardTitle className="text-base">Filters</CardTitle>
-          <CardDescription>
-            Free-text search needs at least {SEARCH_MIN_LENGTH} characters (debounced). Date range must be valid.
+          <CardDescription className="text-xs">
+            Search needs ≥{SEARCH_MIN_LENGTH} characters. Date range must be valid.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-3">
+        <CardContent className="flex flex-wrap gap-2 pt-2">
           <div className="relative min-w-[180px] flex-1">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
@@ -250,9 +251,11 @@ export default function AdminAuditLog() {
           )}
         </CardContent>
       </Card>
+      </div>
 
-      <Card>
-        <CardContent className="pt-6">
+      <div data-testid="audit-table-card">
+      <Card padding="sm">
+        <CardContent className="pt-3">
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : rows.length === 0 ? (
@@ -349,6 +352,7 @@ export default function AdminAuditLog() {
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }

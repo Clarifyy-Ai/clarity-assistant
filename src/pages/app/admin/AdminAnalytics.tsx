@@ -28,7 +28,7 @@ export default function AdminAnalytics() {
   const [period, setPeriod] = useState<Period>(7);
 
   return (
-    <div className="space-y-5">
+    <div data-testid="dd-layout-root" className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
           <BarChart2 className="w-5 h-5 text-primary" /> Platform Analytics
@@ -128,7 +128,7 @@ function OverviewTab({ period }: { period: Period }) {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat label="DAU (today)" value={stats.dau.toLocaleString()} />
         <Stat label="Active users" value={stats.activeUsers.toLocaleString()} sub={`last ${period}d`} />

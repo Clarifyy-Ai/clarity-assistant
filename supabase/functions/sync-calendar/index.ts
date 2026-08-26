@@ -122,11 +122,35 @@ function extractRole(summary: string): string {
 // Google OAuth token refresh
 // ─────────────────────────────────────────────────────────────────
 
+async function upsertGoogleRefreshToken(
+  userId: string,
+  refreshToken: string,
+): Promise<boolean> {
+  const url = Deno.env.get("SUPABASE_URL")              ?? "";
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  if (!url || !key || !refreshToken) return false;
+
+  const rpcRes = await fetch(`${url}/rest/v1/rpc/upsert_google_refresh_token`, {
+    method:  "POST",
+    headers: {
+      apikey:         key,
+      Authorization:  `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      p_user_id:       userId,
+      p_refresh_token: refreshToken,
+    }),
+  }).catch(() => null);
+
+  return !!rpcRes?.ok;
+}
+
 async function refreshGoogleAccessToken(userId: string): Promise<string | null> {
   const url = Deno.env.get("SUPABASE_URL")              ?? "";
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-  // Prefer RPC for refresh token retrieval
+  // Prefer RPC for refresh token retrieval (secure table)
   const rpcRes = await fetch(`${url}/rest/v1/rpc/get_google_refresh_token`, {
     method:  "POST",
     headers: {
@@ -144,7 +168,7 @@ async function refreshGoogleAccessToken(userId: string): Promise<string | null> 
     refreshToken = data?.refresh_token;
   }
 
-  // Fallback: admin user endpoint
+  // Fallback: admin user endpoint (legacy / identity_data)
   if (!refreshToken) {
     const ures = await fetch(`${url}/auth/v1/admin/users/${userId}`, {
       headers: { apikey: key, Authorization: `Bearer ${key}` },
@@ -257,14 +281,48 @@ Deno.serve(async (req) => {
 
     // ── Body ─────────────────────────────────────────────────────
     const body = await parseBody<{
-      provider_token?: string;
-      days_ahead?:     number;
-      probe?:          boolean;
+      provider_token?:          string;
+      provider_refresh_token?:  string;
+      days_ahead?:              number;
+      probe?:                   boolean;
+      /** Persist refresh token only (connect callback); skip Calendar API. */
+      store_token_only?:        boolean;
     }>(req);
 
     // Availability probe — auth + plan/capability only; skip Google API.
     if (body?.probe === true) {
       return successResponse({ available: true, configured: true }, undefined, 200, req);
+    }
+
+    const refreshFromClient =
+      typeof body?.provider_refresh_token === "string"
+        ? body.provider_refresh_token.trim()
+        : "";
+
+    // Persist offline refresh token whenever the client sends one (connect / sync).
+    let tokenStored = false;
+    if (refreshFromClient) {
+      tokenStored = await upsertGoogleRefreshToken(userId, refreshFromClient);
+      if (!tokenStored) {
+        log(FN, "warn", "Failed to upsert Google refresh token");
+      }
+    }
+
+    if (body?.store_token_only === true) {
+      if (!refreshFromClient) {
+        return errorResponse(
+          "provider_refresh_token is required to store calendar grant.",
+          "NO_REFRESH_TOKEN",
+          400,
+          req,
+        );
+      }
+      return successResponse(
+        { stored: tokenStored, connected: tokenStored },
+        undefined,
+        tokenStored ? 200 : 502,
+        req,
+      );
     }
 
     let providerToken  = body?.provider_token;

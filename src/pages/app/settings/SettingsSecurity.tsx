@@ -4,13 +4,15 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Shield, Lock, Smartphone, Loader2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
-
-interface MfaFactor {
-  id: string;
-  friendly_name?: string;
-  factor_type: string;
-  status: string;
-}
+import {
+  MFA_TOTP_FRIENDLY_NAME,
+  collectMfaFactors,
+  findUnverifiedTotp,
+  findVerifiedTotp,
+  isFriendlyNameConflictError,
+  type ListedMfaFactor,
+} from "@/lib/auth/mfaFactors";
+import { getPasswordStrength, validatePassword } from "@/lib/validators/emailValidator";
 
 export default function SettingsSecurity() {
   const [currentPw, setCurrentPw] = useState("");
@@ -21,7 +23,7 @@ export default function SettingsSecurity() {
   const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const [factors, setFactors] = useState<MfaFactor[]>([]);
+  const [factors, setFactors] = useState<ListedMfaFactor[]>([]);
   const [mfaLoading, setMfaLoading] = useState(true);
   const [enrolling, setEnrolling] = useState(false);
   const [qrCode, setQrCode] = useState<string | null>(null);
@@ -29,16 +31,18 @@ export default function SettingsSecurity() {
   const [verifyCode, setVerifyCode] = useState("");
   const [verifying, setVerifying] = useState(false);
 
-  async function loadFactors() {
+  async function loadFactors(): Promise<ListedMfaFactor[]> {
     setMfaLoading(true);
     try {
       const { data, error } = await supabase.auth.mfa.listFactors();
       if (error) throw error;
-      const all = [...(data?.totp ?? []), ...(data?.phone ?? [])] as MfaFactor[];
+      const all = collectMfaFactors(data);
       setFactors(all);
+      return all;
     } catch (err) {
       console.warn("[SettingsSecurity] MFA list:", err);
       setFactors([]);
+      return [];
     } finally {
       setMfaLoading(false);
     }
@@ -48,15 +52,36 @@ export default function SettingsSecurity() {
     void loadFactors();
   }, []);
 
-  const verifiedTotp = factors.find((f) => f.factor_type === "totp" && f.status === "verified");
+  const verifiedTotp = findVerifiedTotp(factors);
+  const unverifiedTotp = findUnverifiedTotp(factors);
+
+  async function clearUnverifiedTotpFactors(list: ListedMfaFactor[]): Promise<number> {
+    const stale = findUnverifiedTotp(list);
+    let removed = 0;
+    for (const factor of stale) {
+      const { error } = await supabase.auth.mfa.unenroll({ factorId: factor.id });
+      if (!error) removed += 1;
+      else console.warn("[SettingsSecurity] Failed to clear unverified MFA factor:", error.message);
+    }
+    return removed;
+  }
 
   async function handleChangePassword() {
     if (!currentPw) {
       toast.error("Enter your current password.");
       return;
     }
-    if (!newPw || newPw.length < 8) {
-      toast.error("Password must be at least 8 characters.");
+    const basic = validatePassword(newPw);
+    if (!basic.valid) {
+      toast.error(basic.error ?? "Password is invalid.");
+      return;
+    }
+    const strength = getPasswordStrength(newPw);
+    if (!strength.isAcceptable || !/[0-9]/.test(newPw) || !/[^a-zA-Z0-9]/.test(newPw)) {
+      toast.error(
+        strength.feedback[0] ??
+          "Password must include a number and a special character.",
+      );
       return;
     }
     if (newPw !== confirmPw) {
@@ -88,16 +113,39 @@ export default function SettingsSecurity() {
     }
   }
 
+  async function enrollTotpFactor() {
+    const { data, error } = await supabase.auth.mfa.enroll({
+      factorType: "totp",
+      friendlyName: MFA_TOTP_FRIENDLY_NAME,
+    });
+    if (error) throw error;
+    return data;
+  }
+
   async function startMfaEnroll() {
     setEnrolling(true);
     setQrCode(null);
     setEnrollFactorId(null);
     try {
-      const { data, error } = await supabase.auth.mfa.enroll({
-        factorType: "totp",
-        friendlyName: "Authenticator app",
-      });
-      if (error) throw error;
+      // Stale unverified enrollments reserve the friendly name and block setup (422)
+      // while leaving login without an MFA challenge (only verified factors raise AAL2).
+      const latest = await loadFactors();
+      const cleared = await clearUnverifiedTotpFactors(latest);
+      if (cleared > 0) {
+        await loadFactors();
+      }
+
+      let data;
+      try {
+        data = await enrollTotpFactor();
+      } catch (firstErr) {
+        const msg = firstErr instanceof Error ? firstErr.message : String(firstErr);
+        if (!isFriendlyNameConflictError(msg)) throw firstErr;
+        const again = await loadFactors();
+        await clearUnverifiedTotpFactors(again);
+        data = await enrollTotpFactor();
+      }
+
       setQrCode(data.totp?.qr_code ?? null);
       setEnrollFactorId(data.id);
       toast.message("Scan the QR code with your authenticator app, then enter the code below.");
@@ -105,7 +153,7 @@ export default function SettingsSecurity() {
       toast.error(
         err instanceof Error
           ? err.message
-          : "Two-factor setup is unavailable. Enable MFA in your Supabase project settings."
+          : "Two-factor setup is unavailable. Enable MFA in your Supabase project settings.",
       );
     } finally {
       setEnrolling(false);
@@ -145,6 +193,8 @@ export default function SettingsSecurity() {
       const { error } = await supabase.auth.mfa.unenroll({ factorId });
       if (error) throw error;
       toast.success("Two-factor authentication removed.");
+      setQrCode(null);
+      setEnrollFactorId(null);
       await loadFactors();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to remove 2FA");
@@ -199,7 +249,7 @@ export default function SettingsSecurity() {
                 type={showNewPw ? "text" : "password"}
                 value={newPw}
                 onChange={(e) => setNewPw(e.target.value)}
-                placeholder="At least 8 characters"
+                placeholder="8+ chars, number, and special character"
                 className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 pr-10"
               />
               <button
@@ -268,6 +318,10 @@ export default function SettingsSecurity() {
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 font-medium">
               Enabled
             </span>
+          ) : unverifiedTotp.length > 0 ? (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 font-medium">
+              Setup incomplete
+            </span>
           ) : null}
         </div>
 
@@ -277,17 +331,17 @@ export default function SettingsSecurity() {
           </p>
         ) : verifiedTotp ? (
           <div className="mt-4 flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => unenrollMfa(verifiedTotp.id)}
-            >
+            <Button variant="outline" size="sm" onClick={() => void unenrollMfa(verifiedTotp.id)}>
               Disable 2FA
             </Button>
           </div>
         ) : enrollFactorId && qrCode ? (
           <div className="mt-4 space-y-3 max-w-sm">
-            <img src={qrCode} alt="Authenticator QR code" className="w-40 h-40 rounded-lg border border-border" />
+            <img
+              src={qrCode}
+              alt="Authenticator QR code"
+              className="w-40 h-40 rounded-lg border border-border"
+            />
             <input
               type="text"
               inputMode="numeric"
@@ -295,28 +349,36 @@ export default function SettingsSecurity() {
               onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
               placeholder="6-digit code"
               className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
+              aria-label="Authenticator verification code"
             />
             <Button
               variant="primary"
               size="sm"
               disabled={verifyCode.length < 6 || verifying}
-              onClick={verifyMfaEnroll}
+              onClick={() => void verifyMfaEnroll()}
               leftIcon={verifying ? <Loader2 className="w-4 h-4 animate-spin" /> : undefined}
             >
               Verify and enable
             </Button>
           </div>
         ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-4"
-            disabled={enrolling}
-            onClick={startMfaEnroll}
-            leftIcon={enrolling ? <Loader2 className="w-4 h-4 animate-spin" /> : undefined}
-          >
-            Set up authenticator app
-          </Button>
+          <div className="mt-4 space-y-2">
+            {unverifiedTotp.length > 0 ? (
+              <p className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
+                A previous authenticator setup was never finished. Continue to replace it with a new
+                QR code — login MFA starts only after you verify the code.
+              </p>
+            ) : null}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={enrolling}
+              onClick={() => void startMfaEnroll()}
+              leftIcon={enrolling ? <Loader2 className="w-4 h-4 animate-spin" /> : undefined}
+            >
+              {unverifiedTotp.length > 0 ? "Continue authenticator setup" : "Set up authenticator app"}
+            </Button>
+          </div>
         )}
       </Card>
 

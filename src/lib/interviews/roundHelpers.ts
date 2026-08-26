@@ -36,6 +36,9 @@ export function getCurrentRoundDate(interview: InterviewWithRounds): string {
 export function getCurrentRoundStatus(
   interview: InterviewWithRounds,
 ): RoundStatus | string {
+  // Parent interview cancel wins — do not resurface a stale round as active.
+  if (interview.status === "cancelled") return "cancelled";
+  if (interview.status === "completed") return "completed";
   const round = getCurrentRound(interview);
   return round?.status ?? interview.status ?? "scheduled";
 }

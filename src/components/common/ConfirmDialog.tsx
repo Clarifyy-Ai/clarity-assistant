@@ -110,9 +110,13 @@ export function ConfirmDialog({
 
           <AlertDialogTitle className="text-center">{title}</AlertDialogTitle>
 
-          {description && (
+          {description ? (
             <AlertDialogDescription className="text-center">
               {description}
+            </AlertDialogDescription>
+          ) : (
+            <AlertDialogDescription className="sr-only">
+              {title}
             </AlertDialogDescription>
           )}
         </AlertDialogHeader>

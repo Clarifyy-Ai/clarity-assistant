@@ -13,7 +13,7 @@ import {
   type RephraseAlternatives,
 } from "@/lib/ai/structuredParse";
 import { refreshCredits } from "@/lib/billing/creditsManager";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { useAuthStore } from "@/store/userStore";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -28,6 +28,15 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { answerBankDB } from "@/lib/supabase/database";
+import {
+  readPersistedRephraserState,
+  writePersistedRephraserState,
+} from "@/lib/prep/rephraserPersistence";
+import {
+  listPrepRephraseHistory,
+  upsertPrepRephraseHistory,
+  type PrepRephraseHistoryRow,
+} from "@/lib/prep/rephraserHistory";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -41,28 +50,6 @@ interface Alternatives {
 
 const OFFLINE_FALLBACK_LABEL = "Offline fallback — not AI-generated";
 
-const REPHRASE_IDEMPOTENCY_STORAGE_KEY = "clarify-prep-rephrase-idempotency";
-
-function readStoredRephraseKey(): string | null {
-  try {
-    return sessionStorage.getItem(REPHRASE_IDEMPOTENCY_STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredRephraseKey(key: string | null): void {
-  try {
-    if (key) {
-      sessionStorage.setItem(REPHRASE_IDEMPOTENCY_STORAGE_KEY, key);
-    } else {
-      sessionStorage.removeItem(REPHRASE_IDEMPOTENCY_STORAGE_KEY);
-    }
-  } catch {
-    // Ignore storage failures.
-  }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Rephraser — generates 3 style alternatives in one click
 // ─────────────────────────────────────────────────────────────────────────────
@@ -70,7 +57,9 @@ function writeStoredRephraseKey(key: string | null): void {
 export default function Rephraser() {
   const credits = useCredits();
   const { user } = useAuthStore();
-  const inflightKeyRef = useRef<string | null>(readStoredRephraseKey());
+  const inflightKeyRef = useRef<string | null>(null);
+  const hydratedUserRef = useRef<string | null>(null);
+  const skipNextPersistRef = useRef(true);
 
   const [original,     setOriginal]     = useState("");
   const [alternatives, setAlternatives] = useState<Alternatives | null>(null);
@@ -79,8 +68,56 @@ export default function Rephraser() {
   const [savedAnswerId, setSavedAnswerId] = useState<string | null>(null);
   const [error,        setError]        = useState<string | null>(null);
   const [offlineFallback, setOfflineFallback] = useState(false);
+  const [history, setHistory] = useState<PrepRephraseHistoryRow[]>([]);
 
   const wordCount = original.trim().split(/\s+/).filter(Boolean).length;
+
+  useEffect(() => {
+    const userId = user?.id ?? null;
+    if (hydratedUserRef.current === userId) return;
+    hydratedUserRef.current = userId;
+    const stored = readPersistedRephraserState(user?.id);
+    inflightKeyRef.current = stored?.idempotencyKey ?? null;
+    setOriginal(stored?.original ?? "");
+    setAlternatives(stored?.alternatives ?? null);
+    setError(stored?.error ?? null);
+    setOfflineFallback(stored?.offlineFallback ?? false);
+    // Skip the write effect that runs with empty pre-hydrate state (wipes history).
+    skipNextPersistRef.current = true;
+    if (userId) {
+      void listPrepRephraseHistory(userId)
+        .then((rows) => {
+          setHistory(rows);
+          // Prefer durable DB row when local cache is empty after refresh.
+          if (!stored?.alternatives && rows[0]) {
+            setOriginal(rows[0].original_text);
+            setAlternatives(rows[0].alternatives);
+          }
+        })
+        .catch(() => {
+          /* history is enhancement; generation still works */
+        });
+    } else {
+      setHistory([]);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!hydratedUserRef.current || hydratedUserRef.current !== (user?.id ?? null)) {
+      return;
+    }
+    if (skipNextPersistRef.current) {
+      skipNextPersistRef.current = false;
+      return;
+    }
+    writePersistedRephraserState(user?.id, {
+      original,
+      alternatives,
+      error,
+      offlineFallback,
+      idempotencyKey: inflightKeyRef.current,
+    });
+  }, [user?.id, original, alternatives, error, offlineFallback]);
 
   // ── Generate 3 alternatives ──────────────────────────────────────────────
 
@@ -96,7 +133,6 @@ export default function Rephraser() {
     const contentHash = await sha256(original.trim());
     const idempotencyKey = prepToolContentIdempotencyKey("rephrase", contentHash);
     inflightKeyRef.current = idempotencyKey;
-    writeStoredRephraseKey(idempotencyKey);
 
     try {
       const data = await fetchEdgeJson<{
@@ -118,6 +154,22 @@ export default function Rephraser() {
       }
       setAlternatives(fromServer);
       await refreshCredits();
+      if (user?.id) {
+        try {
+          await upsertPrepRephraseHistory({
+            userId: user.id,
+            inputHash: contentHash,
+            originalText: original.trim(),
+            alternatives: fromServer,
+            status: "completed",
+            creditOpId: idempotencyKey,
+          });
+          const rows = await listPrepRephraseHistory(user.id);
+          setHistory(rows);
+        } catch {
+          /* durable history is best-effort; local cache still written */
+        }
+      }
     } catch (err) {
       openUpgradeIfInsufficientCredits(err);
       if (isInsufficientCreditsError(err)) {
@@ -316,6 +368,38 @@ export default function Rephraser() {
             <Wand2 className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
             <p className="text-sm text-muted-foreground">Your three improved versions will appear here</p>
             <p className="text-xs text-muted-foreground mt-1">Formal · Confident · Concise</p>
+          </Card>
+        )}
+
+        {history.length > 0 && (
+          <Card className="mt-4" data-testid="rephraser-history">
+            <p className="text-xs font-semibold text-foreground uppercase tracking-widest mb-3">
+              Recent rephrases
+            </p>
+            <ul className="space-y-2">
+              {history.slice(0, 8).map((row) => (
+                <li key={row.id}>
+                  <button
+                    type="button"
+                    className="w-full text-left rounded-lg border border-border px-3 py-2 hover:bg-secondary/50 transition-colors"
+                    onClick={() => {
+                      setOriginal(row.original_text);
+                      setAlternatives(row.alternatives);
+                      setOfflineFallback(row.status === "offline_fallback");
+                      setError(null);
+                    }}
+                  >
+                    <p className="text-sm text-foreground line-clamp-2">{row.original_text}</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      {row.created_at
+                        ? new Date(row.created_at).toLocaleString()
+                        : "Saved"}
+                      {row.status !== "completed" ? ` · ${row.status}` : ""}
+                    </p>
+                  </button>
+                </li>
+              ))}
+            </ul>
           </Card>
         )}
       </PrepToolShell>

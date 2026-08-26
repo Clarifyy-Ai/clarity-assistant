@@ -403,6 +403,8 @@ function SwipeSessionRow({
         <div className="flex items-center gap-1">
           <button
             type="button"
+            onPointerDown={(e) => {
+            }}
             onClick={(e) => {
               e.stopPropagation();
               navigate(`/app/sessions/${s.id}`);

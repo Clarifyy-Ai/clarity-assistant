@@ -2280,7 +2280,13 @@ export default function MockSession() {
           </ErrorBoundary>
         )}
 
-      <Modal open={skipConfirm} onClose={() => setSkipConfirm(false)} title="Skip question?" size="sm">
+      <Modal
+        open={skipConfirm}
+        onClose={() => setSkipConfirm(false)}
+        title="Skip question?"
+        description="This question will be marked as skipped. No AI answer will be created."
+        size="sm"
+      >
         <p className="text-sm text-muted-foreground mb-5">
           This question will be marked as skipped. No AI answer will be created.
         </p>
@@ -2304,7 +2310,13 @@ export default function MockSession() {
         </div>
       </Modal>
 
-      <Modal open={endConfirm} onClose={() => setEndConfirm(false)} title="End session early?" size="sm">
+      <Modal
+        open={endConfirm}
+        onClose={() => setEndConfirm(false)}
+        title="End session early?"
+        description="Your progress will be saved."
+        size="sm"
+      >
         <p className="text-sm text-muted-foreground mb-5">Your progress will be saved.</p>
         <div className="flex gap-3">
           <Button variant="secondary" size="sm" fullWidth onClick={() => setEndConfirm(false)}>

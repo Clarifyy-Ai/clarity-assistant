@@ -27,6 +27,7 @@ import {
   resolveFamily,
   resolvePagination,
   validateSearchQuery,
+  GOV_EXAM_FAMILIES,
   MAX_PAGE_SIZE,
   SERVICE_UNAVAILABLE,
   SERVICE_UNAVAILABLE_MESSAGE,
@@ -205,7 +206,20 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
       return corsError(req, 405, "BAD_REQUEST", "Method not allowed.");
     }
 
-    const familyResult = resolveFamily(rawFamily);
+    // The registry is extensible: prefer active family rows over the legacy
+    // built-in list so new families do not require an edge-function deploy.
+    const { data: familyRows, error: familyError } = await db
+      .from("exam_families")
+      .select("code")
+      .eq("is_active", true);
+    const dynamicFamilies = (familyRows ?? [])
+      .map((row) => String((row as { code?: unknown }).code ?? "").trim().toLowerCase())
+      .filter(Boolean);
+    const allowedFamilies =
+      familyError || dynamicFamilies.length === 0
+        ? GOV_EXAM_FAMILIES
+        : dynamicFamilies;
+    const familyResult = resolveFamily(rawFamily, allowedFamilies);
     if (!familyResult.ok) {
       return corsError(req, 422, "VALIDATION_ERROR", familyResult.message);
     }
@@ -286,16 +300,19 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
             .limit(200),
         ]);
 
+      // Soft-fail: alias index is enrichment; name/body hits must still succeed.
       if (aliasRes.error) {
-        return searchUnavailable(req, `aliases: ${aliasRes.error.message}`);
+        console.warn("[search-exams] aliases lookup:", aliasRes.error.message);
+        aliasExamIds = [];
+      } else {
+        aliasExamIds = [
+          ...new Set(
+            (aliasRes.data ?? [])
+              .map((row) => String((row as { exam_id?: string }).exam_id ?? ""))
+              .filter(Boolean),
+          ),
+        ];
       }
-      aliasExamIds = [
-        ...new Set(
-          (aliasRes.data ?? [])
-            .map((row) => String((row as { exam_id?: string }).exam_id ?? ""))
-            .filter(Boolean),
-        ),
-      ];
 
       if (bodyRes.error) {
         console.warn("[search-exams] recruiting_bodies lookup:", bodyRes.error.message);
@@ -429,7 +446,10 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
         success: true,
         query: q,
         family: family ?? null,
-        count: 0,
+        // Preserve the registry total for an out-of-range page. A valid
+        // search with no matches has total=0; a deep page can be empty while
+        // earlier pages still contain results.
+        count: pagination.total,
         results: [],
         pagination,
         isIndiaUser,

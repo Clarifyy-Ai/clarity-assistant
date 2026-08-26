@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { answerBankDB, sessionsDB, sessionAnswersDB } from "@/lib/supabase/database";
 import { exportSessionPdf } from "@/lib/export/sessionPdf";
@@ -22,7 +22,6 @@ import {
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { messageFromExportCaught } from "@/lib/export/exportUserFacingError";
-import { agentLog70dd4b } from "@/lib/debug/agentLog70dd4b";
 
 export default function SessionDetail() {
   const { id }   = useParams<{ id: string }>();
@@ -36,11 +35,13 @@ export default function SessionDetail() {
   const [expanded,    setExpanded]    = useState<Record<string, boolean>>({});
   const [chatOpen,    setChatOpen]    = useState(false);
   const [shareOpen,   setShareOpen]   = useState(false);
+  const fetchRequestRef = useRef(0);
 
   // ── Fetch session + answers ───────────────────────────────────
 
   const fetchSession = useCallback(async () => {
     if (!id || !user?.id) return;
+    const requestId = ++fetchRequestRef.current;
     setLoading(true);
     setFetchError(null);
 
@@ -49,19 +50,8 @@ export default function SessionDetail() {
         sessionsDB.getByIdForUser(id, user.id),
         sessionAnswersDB.listBySessionIdForUser(id, user.id),
       ]);
+      if (requestId !== fetchRequestRef.current) return;
 
-      // #region agent log
-      agentLog70dd4b({
-        hypothesisId: "H-SES-002",
-        location: "SessionDetail.tsx:fetchSession",
-        message: "session detail loaded",
-        data: {
-          hasSession: !!sess,
-          answerCount: ans.length,
-          sessionIdPrefix: String(id).slice(0, 8),
-        },
-      });
-      // #endregion
 
       setSession(sess);
       setAnswers(
@@ -92,17 +82,10 @@ export default function SessionDetail() {
           })),
       );
     } catch (err) {
+      if (requestId !== fetchRequestRef.current) return;
       const raw = err instanceof Error ? err.message : String(err ?? "");
       const authLike =
         /jwt|unauthorized|401|not authenticated|invalid.*token|session.*expired/i.test(raw);
-      // #region agent log
-      agentLog70dd4b({
-        hypothesisId: "H-SES-002",
-        location: "SessionDetail.tsx:fetchSession:fail",
-        message: "session detail failed",
-        data: { authLike, errMsg: raw.slice(0, 160) },
-      });
-      // #endregion
       setFetchError(
         authLike
           ? "Your session expired. Please sign in again to view session details."
@@ -113,7 +96,7 @@ export default function SessionDetail() {
       setSession(null);
       setAnswers([]);
     } finally {
-      setLoading(false);
+      if (requestId === fetchRequestRef.current) setLoading(false);
     }
   }, [id, user?.id]);
 
@@ -194,10 +177,12 @@ export default function SessionDetail() {
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <button
+            type="button"
+            aria-label="Back to sessions"
             onClick={() => navigate("/app/sessions")}
             className="p-2 rounded-xl bg-accent/5 hover:bg-accent/10 text-muted-foreground hover:text-foreground transition-all shrink-0"
           >
-            <ChevronLeft className="w-4 h-4" />
+            <ChevronLeft className="w-4 h-4" aria-hidden="true" />
           </button>
           <div className="min-w-0">
             <h1 className="text-lg sm:text-xl font-bold text-foreground capitalize truncate">
@@ -408,6 +393,10 @@ export default function SessionDetail() {
             return (
               <Card key={ans.id} padding="sm">
                 <button
+                  type="button"
+                  id={`session-answer-trigger-${ans.id}`}
+                  aria-expanded={isOpen}
+                  aria-controls={`session-answer-panel-${ans.id}`}
                   className="w-full flex items-start gap-3 text-left"
                   onClick={() => setExpanded((p) => ({ ...p, [ans.id]: !p[ans.id] }))}
                 >
@@ -446,7 +435,12 @@ export default function SessionDetail() {
                 </button>
 
                 {isOpen && (
-                  <div className="mt-4 space-y-4 pt-4 border-t border-border">
+                  <div
+                    id={`session-answer-panel-${ans.id}`}
+                    role="region"
+                    aria-labelledby={`session-answer-trigger-${ans.id}`}
+                    className="mt-4 space-y-4 pt-4 border-t border-border"
+                  >
                     {ans.transcript && (
                       <div>
                         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-1.5">

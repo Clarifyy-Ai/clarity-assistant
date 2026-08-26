@@ -14,6 +14,7 @@ import {
   HELP_ARTICLES_FALLBACK,
   groupHelpArticlesIntoCategories,
   resolveHelpArticleDisplay,
+  dedupeHelpArticlesByQuestion,
   type HelpFaqCategory,
   type HelpArticleItem,
 } from "@/lib/constants/helpArticlesFallback";
@@ -56,7 +57,8 @@ function mapDbRowsToCategories(
       if (fb) cleaned.push(fb);
     }
   }
-  return groupHelpArticlesIntoCategories(cleaned);
+  const deduped = dedupeHelpArticlesByQuestion(cleaned);
+  return groupHelpArticlesIntoCategories(deduped);
 }
 
 export default function Help() {

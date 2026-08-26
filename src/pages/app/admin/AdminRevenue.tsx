@@ -365,9 +365,9 @@ export default function AdminRevenue() {
   };
 
   return (
-    <div className="space-y-6">
+    <div data-testid="dd-layout-root" className="space-y-4">
 
-      <div className="flex items-center justify-between">
+      <div data-testid="revenue-header" className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-foreground">Revenue</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
@@ -417,7 +417,7 @@ export default function AdminRevenue() {
       ) : (
       <>
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div data-testid="revenue-kpi-row" className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard
           title={mrrIsEstimated ? "Catalog — Estimated" : "Catalog value"}
           value={metrics ? formatCents(metrics.mrr) : "—"}
@@ -449,7 +449,7 @@ export default function AdminRevenue() {
         />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div data-testid="revenue-secondary-row" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <MetricCard
           title="Actual collected (period)"
           value={metrics ? formatInrPaise(metrics.inrRevenuePaise) : "—"}
@@ -473,7 +473,7 @@ export default function AdminRevenue() {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div data-testid="revenue-detail-grid" className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
         {/* Plan Distribution */}
         <Card className="lg:col-span-1">

@@ -907,8 +907,9 @@ export function DebriefShareButton({
         onClick={() => setPreviewOpen(true)}
         disabled={copying}
         leftIcon={<Share2 className="w-3.5 h-3.5" />}
+        aria-label="Create or copy public share link for this debrief"
       >
-        {report?.is_shared ? "Copy share link" : "Share session"}
+        {report?.is_shared ? "Copy share link" : "Share link"}
       </Button>
 
       <Modal
