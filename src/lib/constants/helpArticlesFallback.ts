@@ -184,7 +184,64 @@ Credits refresh monthly based on your plan tier. Credit packs are one-time top-u
     body_md: `Pro is **₹2,499 one-time** for 1,400 credits and unlocks the full feature set. Max is **₹6,799 one-time** for 4,000 credits and priority model access. Pay in INR with Razorpay — checkout does not auto-renew. Upgrade anytime from **Settings → Billing**.`,
     sort_order: 20,
   },
+  {
+    slug: "bi-5",
+    category_slug: "billing",
+    category_title: "Billing & Credits",
+    question: "Can I buy extra credits?",
+    answer:
+      "A la carte credit packs are not available at launch. Upgrade your plan to increase your monthly allowance.",
+    body_md: `A la carte credit packs are not available at launch. To increase your monthly allowance, upgrade to **Pro** (₹2,499 one-time, 1,400 credits) or **Max** (₹6,799 one-time, 4,000 credits) from **Settings → Billing**.`,
+    sort_order: 50,
+  },
 ];
+
+/** Fix common UTF-8 mojibake (e.g. Ã / Â sequences, corrupted À la carte). */
+export function sanitizeHelpText(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(/\u00C0\s*la carte/gi, "A la carte")
+    .replace(/Ã\u0080\s*la carte/gi, "A la carte")
+    .replace(/Ã€\s*la carte/gi, "A la carte")
+    .replace(/Ã¡/g, "á")
+    .replace(/Ã©/g, "é")
+    .replace(/Ã­/g, "í")
+    .replace(/Ã³/g, "ó")
+    .replace(/Ãº/g, "ú")
+    .replace(/Ã±/g, "ñ")
+    .replace(/â€™/g, "'")
+    .replace(/â€œ/g, '"')
+    .replace(/â€/g, '"')
+    .replace(/â€“/g, "–")
+    .replace(/â€”/g, "—")
+    .replace(/Â₹/g, "₹")
+    .replace(/Â·/g, "·")
+    .replace(/Â /g, " ")
+    .replace(/Â/g, "");
+}
+
+/** Prefer clean fallback copy when a published row looks corrupted or mismatched. */
+export function resolveHelpArticleDisplay(row: HelpArticleItem): HelpArticleItem {
+  const fallback = getFallbackArticleBySlug(row.slug);
+  const answer = sanitizeHelpText(row.answer ?? "");
+  const body = sanitizeHelpText(row.body_md ?? "");
+  const looksCorrupt =
+    /Ã.|â€|Â[₹· ]|Ã\u0080/.test(`${row.answer ?? ""}${row.body_md ?? ""}`) ||
+    (row.slug === "gs-3" &&
+      /what happens after i sign up/i.test(row.question) &&
+      /free plan/i.test(answer));
+
+  if (looksCorrupt && fallback) {
+    return fallback;
+  }
+
+  return {
+    ...row,
+    answer,
+    body_md: body || null,
+    question: sanitizeHelpText(row.question),
+  };
+}
 
 export function groupHelpArticlesIntoCategories(
   rows: HelpArticleItem[],

@@ -6,9 +6,15 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { supabase } from "@/lib/supabase/client";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { ApiClientError } from "@/lib/api/apiClient";
 import { useAuthStore } from "@/store/authStore";
-import { runVisibleJavascriptTests } from "@/lib/interview/jsVisibleRunner";
 import { remainingSubmissions, stripHiddenTestCases } from "@/lib/coding/assessment";
+import {
+  APPROVED_CODING_LANGUAGES,
+  isAutoExecutedLanguage,
+  languageLabel,
+  languageOptionLabel,
+} from "@/lib/coding/languages";
 import { PAGE_SHELL, SPLIT_STACK } from "@/lib/ui/responsivePage";
 
 type Question = {
@@ -28,17 +34,41 @@ type Question = {
 type SampleCase = { id: string; name: string; input: unknown; expected: unknown };
 type HistoryRow = { id: string; submitted_at: string; status: string; score: number | null };
 
+function formatExecutionStatus(status?: string, message?: string, blocked?: string): string {
+  const detail = blocked || message;
+  switch (status) {
+    case "compile_error":
+      return `Compile error${detail ? `: ${detail}` : "."}`;
+    case "runtime_error":
+      return `Runtime error${detail ? `: ${detail}` : "."}`;
+    case "timeout":
+      return "Timed out.";
+    case "unsupported":
+      return detail ?? "Language not supported for automated scoring.";
+    case "blocked":
+      return detail ?? "Execution blocked.";
+    case "passed":
+      return detail ?? "All tests passed.";
+    case "failed":
+      return detail ?? "Some tests failed.";
+    default:
+      return detail ?? (status ? `Status: ${status}` : "No result.");
+  }
+}
+
 export default function CodingAssessmentPage() {
   const { questionId } = useParams<{ questionId: string }>();
   const user = useAuthStore((s) => s.user);
   const [question, setQuestion] = useState<Question | null>(null);
   const [code, setCode] = useState("");
+  const [language, setLanguage] = useState("javascript");
   const [sample, setSample] = useState<SampleCase[]>([]);
   const [sampleOut, setSampleOut] = useState<string>("");
   const [serverResult, setServerResult] = useState<string>("");
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [seconds, setSeconds] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [sampleBusy, setSampleBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!questionId || !user?.id) return;
@@ -49,6 +79,10 @@ export default function CodingAssessmentPage() {
       .maybeSingle();
     setQuestion(data as Question | null);
     setCode((data?.starter_code as string) ?? "");
+    const qLang = String(data?.language ?? "javascript").toLowerCase();
+    setLanguage(
+      (APPROVED_CODING_LANGUAGES as readonly string[]).includes(qLang) ? qLang : "javascript",
+    );
     const { data: cases } = await supabase
       .from("coding_test_cases")
       .select("id,name,input_json,expected_json,is_hidden")
@@ -87,18 +121,62 @@ export default function CodingAssessmentPage() {
     [history.length, question?.max_submissions],
   );
 
-  function runSample() {
-    const outcome = runVisibleJavascriptTests(code, sample, question?.time_limit_ms ?? 800);
-    setSampleOut(
-      outcome.blockedReason
-        ? outcome.blockedReason
-        : outcome.results.map((r) => `${r.name}: ${r.passed ? "pass" : "fail"}${r.error ? ` (${r.error})` : ""}`).join("\n"),
-    );
+  const autoScore =
+    isAutoExecutedLanguage(language) && question?.evaluation_mode === "javascript_solve";
+
+  async function ensureSession(): Promise<boolean> {
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.access_token) return true;
+    toast.error("Your session expired. Please sign in again to submit.");
+    return false;
+  }
+
+  async function runSample() {
+    if (!user?.id || !questionId) return;
+    if (!(await ensureSession())) return;
+    if (language !== String(question?.language ?? "javascript").toLowerCase()) {
+      toast.error(`This problem requires ${question?.language ?? "javascript"}.`);
+      return;
+    }
+    setSampleBusy(true);
+    setSampleOut("");
+    try {
+      const result = await fetchEdgeJson<{
+        status: string;
+        score: number | null;
+        passed_tests?: number;
+        failed_tests?: number;
+        execution_status?: string;
+        message?: string;
+        blocked_reason?: string;
+      }>("score-coding-submission", {
+        question_id: questionId,
+        code,
+        language,
+        sample_only: true,
+      });
+      setSampleOut(
+        formatExecutionStatus(result.execution_status, result.message, result.blocked_reason),
+      );
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 401) {
+        setSampleOut("Unauthorized — sign in again, then retry the sample run.");
+      } else {
+        setSampleOut(error instanceof Error ? error.message : "Sample run unavailable.");
+      }
+    } finally {
+      setSampleBusy(false);
+    }
   }
 
   async function submit() {
     if (!user?.id || !questionId || left <= 0) {
       toast.error("No submissions remaining.");
+      return;
+    }
+    if (!(await ensureSession())) return;
+    if (language !== String(question?.language ?? "javascript").toLowerCase()) {
+      toast.error(`This problem requires ${question?.language ?? "javascript"}.`);
       return;
     }
     setBusy(true);
@@ -111,18 +189,28 @@ export default function CodingAssessmentPage() {
         failed_tests?: number;
         execution_status?: string;
         message?: string;
+        blocked_reason?: string;
       }>("score-coding-submission", {
         question_id: questionId,
         code,
-        language: question?.language ?? "javascript",
+        language,
       });
       setServerResult(
-        result.message
-          ?? `Status ${result.status}. Score ${result.score ?? "pending"}. Passed ${result.passed_tests ?? "—"}. Failed ${result.failed_tests ?? "—"}.`,
+        formatExecutionStatus(
+          result.execution_status,
+          result.message ??
+            `Status ${result.status}. Score ${result.score ?? "pending"}. Passed ${result.passed_tests ?? "—"}. Failed ${result.failed_tests ?? "—"}.`,
+          result.blocked_reason,
+        ),
       );
       void load();
     } catch (error) {
-      setServerResult(error instanceof Error ? error.message : "Code execution service is temporarily unavailable.");
+      if (error instanceof ApiClientError && error.status === 401) {
+        setServerResult("Unauthorized (401) — sign in again, then resubmit.");
+        toast.error("Session expired. Please sign in again.");
+      } else {
+        setServerResult(error instanceof Error ? error.message : "Code execution service is temporarily unavailable.");
+      }
     } finally {
       setBusy(false);
     }
@@ -132,7 +220,7 @@ export default function CodingAssessmentPage() {
     <div className={PAGE_SHELL}>
       <PageHeader
         title={question?.title ?? "Coding assessment"}
-        description="Interview preparation only. Hidden tests stay on the server."
+        description="Interview preparation only. JavaScript may be scored on the server; other languages are not executed and are stored for pending review. The browser never evaluates your solution. There is no multi-language sandbox."
         breadcrumbs={[{ label: "Coding", href: "/app/coding" }, { label: question?.title ?? "Problem" }]}
         actions={<span className="text-sm tabular-nums">Timer {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}</span>}
       />
@@ -145,9 +233,38 @@ export default function CodingAssessmentPage() {
           <p className="text-sm">Output: {question?.sample_output}</p>
           <h3 className="mt-4 text-sm font-semibold">Constraints</h3>
           <p className="text-sm">{question?.constraints}</p>
+          {sample.length > 0 && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              {sample.length} visible sample case{sample.length === 1 ? "" : "s"} (hidden cases stay on the server).
+            </p>
+          )}
         </Card>
         <Card className="min-w-0 flex-1">
-          <label className="text-sm font-semibold" htmlFor="code-editor">Code editor</label>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <label className="text-sm font-semibold" htmlFor="code-editor">Code editor</label>
+            <div className="flex flex-col items-end gap-1">
+              <label className="text-xs text-muted-foreground" htmlFor="coding-language">
+                Language
+              </label>
+              <select
+                id="coding-language"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+                className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs"
+              >
+                {APPROVED_CODING_LANGUAGES.map((lang) => (
+                  <option key={lang} value={lang}>
+                    {languageOptionLabel(lang)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {autoScore
+              ? "Automated scoring runs JavaScript solve(input) on the server."
+              : `${languageLabel(language)} is not executed — submission is stored for pending review. Only JavaScript is auto-scored.`}
+          </p>
           <textarea
             id="code-editor"
             value={code}
@@ -157,7 +274,9 @@ export default function CodingAssessmentPage() {
           />
           <div className="mt-3 flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => setCode(question?.starter_code ?? "")}>Reset code</Button>
-            <Button variant="outline" onClick={runSample}>Run sample</Button>
+            <Button variant="outline" onClick={() => void runSample()} loading={sampleBusy} disabled={!autoScore}>
+              Run sample (server)
+            </Button>
             <Button onClick={() => void submit()} loading={busy} disabled={left <= 0}>Submit assessment</Button>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">{left} submissions remaining</p>

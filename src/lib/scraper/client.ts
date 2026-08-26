@@ -1,10 +1,16 @@
 /**
- * FastAPI scraper client.
+ * FastAPI scraper client (admin JWT → Render).
  *
  * Targets the self-hosted scraper service whose URL is configured via
- * VITE_SCRAPER_URL. All requests carry the current Supabase user JWT;
+ * `VITE_SCRAPER_URL`. All requests carry the current Supabase user JWT;
  * the scraper verifies the JWT against the project JWKS and enforces the
- * `admin` role server-side.
+ * `admin` role server-side (`scraper/app/core/security.py`).
+ *
+ * Auth separation (do not mix):
+ * - **This client** — Bearer JWT (browser admin → FastAPI `/scrape/*`, `/paper-factory/*`).
+ * - **Edge → Python hybrid** — HMAC via `DOCUMENT_INTELLIGENCE_AUTH_SECRET`
+ *   (`supabase/functions/_shared/pythonClient.ts`); never sent to the browser.
+ * - **bulk-import-questions** — `x-ingest-key` / `INGEST_API_KEY` (server worker only).
  */
 import { supabase } from "@/lib/supabase/client";
 
@@ -39,6 +45,20 @@ export interface StartScrapeBody {
   exam_type: string;
   year_from?: number | null;
   year_to?: number | null;
+}
+
+export interface PaperFactoryExamRow {
+  id?: string;
+  code?: string;
+  name?: string;
+  prompt_label?: string;
+  [key: string]: unknown;
+}
+
+export interface PaperFactoryExamsResponse {
+  success: boolean;
+  count: number;
+  exams: PaperFactoryExamRow[];
 }
 
 const BASE = (import.meta.env.VITE_SCRAPER_URL as string | undefined)?.replace(/\/$/, "") ?? "";
@@ -93,4 +113,6 @@ export const scraperApi = {
   cancel: (jobId: string) =>
     request<{ status: string }>(`/scrape/${jobId}/cancel`, { method: "POST" }),
   sources: () => request<{ supported: string[] }>("/scrape/sources"),
+  paperFactoryExams: () =>
+    request<PaperFactoryExamsResponse>("/paper-factory/exams"),
 };

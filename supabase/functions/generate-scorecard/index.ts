@@ -5,18 +5,20 @@
 
 import { handleCors, getCorsHeaders, withCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest, resolveUserPlanId } from "../_shared/auth.ts";
-import { createServiceClient, deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
+import { createServiceClient } from "../_shared/supabase.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 import { parseJsonBody } from "../_shared/errors.ts";
 import {
   generateWithFallback,
   logAICost,
   moderateOutput,
-  type AIProviderResult,
 } from "../_shared/aiProvider.ts";
 import { resolveModel } from "../_shared/resolveModel.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
+import { executeHybridOperation } from "../_shared/hybridExecute.ts";
+import { pythonExecuteOperation } from "../_shared/pythonClient.ts";
+import { DomainError, httpStatusForDomainCode } from "../_shared/domainErrors.ts";
 
 const FUNCTION_NAME = "generate-scorecard";
 const RUBRIC_VERSION = "scorecard_v2";
@@ -787,6 +789,77 @@ function responseBody(
   };
 }
 
+function scorecardFromPython(
+  raw: unknown,
+  baseline: ScorePayload,
+): ScorePayload | null {
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  const dims = (obj.dimensions && typeof obj.dimensions === "object"
+    ? obj.dimensions
+    : {}) as Record<string, unknown>;
+  const overall = clampScore(obj.overall_score ?? obj.overall);
+  if (overall === null) return null;
+  const clarity = clampScore(dims.clarity) ?? baseline.dimensions.clarity;
+  const structure = clampScore(dims.structure) ?? baseline.dimensions.structure;
+  const completion = clampScore(dims.completion);
+  const confidence = completion ?? baseline.dimensions.confidence;
+  const notes = Array.isArray(obj.notes)
+    ? obj.notes.map((n) => sanitizeText(n, 240)).filter(Boolean)
+    : [];
+  return {
+    ...baseline,
+    overall,
+    dimensions: {
+      confidence,
+      clarity,
+      structure,
+      relevance: baseline.dimensions.relevance,
+    },
+    coach_note: notes[0] ?? baseline.coach_note,
+    improvements: notes.length > 1 ? notes.slice(1) : baseline.improvements,
+    model_version: `${RUBRIC_VERSION}_python`,
+    scoring_source: "deterministic",
+  };
+}
+
+async function persistScorecard(
+  db: ReturnType<typeof createServiceClient>,
+  userId: string,
+  sessionId: string,
+  payload: ScorePayload,
+  existingId?: string,
+): Promise<Record<string, unknown>> {
+  const row = scorecardRow(userId, sessionId, payload);
+  if (existingId) {
+    const { data, error } = await db
+      .from("scorecards")
+      .update(row)
+      .eq("id", existingId)
+      .eq("user_id", userId)
+      .select("*")
+      .maybeSingle();
+    if (!error && data) return data as Record<string, unknown>;
+  } else {
+    const { data, error } = await db
+      .from("scorecards")
+      .insert(row)
+      .select("*")
+      .maybeSingle();
+    if (!error && data) return data as Record<string, unknown>;
+    if (error && /duplicate|unique/i.test(error.message)) {
+      const { data: raced } = await db
+        .from("scorecards")
+        .select("*")
+        .eq("session_id", sessionId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (raced) return raced as Record<string, unknown>;
+    }
+  }
+  throw new Error("Failed to save scorecard");
+}
+
 Deno.serve(async (req: Request) => {
   const corsResponse = handleCors(req);
   if (corsResponse) return corsResponse;
@@ -853,7 +926,6 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  let creditsHeld = false;
   try {
     const { data: sessionData, error: sessionError } = await db
       .from("sessions")
@@ -928,137 +1000,176 @@ Deno.serve(async (req: Request) => {
     const idempotencyKey =
       req.headers.get("Idempotency-Key") ??
       req.headers.get("idempotency-key") ??
-      crypto.randomUUID();
+      null;
 
-    const creditResult = await deductCreditsAtomic({
-      userId,
-      action: "scorecard_generate",
-      cost: CREDIT_COST,
-      sessionId,
+    type ScorecardHybridData = {
+      success: true;
+      request_id: string;
+      idempotent: boolean;
+      recalculated: boolean;
+      scorecard: Record<string, unknown>;
+      scoring: ReturnType<typeof responseBody>["scoring"];
+    };
+
+    const hybrid = await executeHybridOperation<ScorecardHybridData>({
+      req,
+      auth: { userId, planId },
+      operation: "session_scorecard",
       idempotencyKey,
+      creditCost: CREDIT_COST,
+      creditAction: "scorecard_generate",
+      body: {
+        session_id: sessionId,
+        answered: answers.length,
+        total: answers.length,
+      },
+      runDeterministic: async () => {
+        let payload = deterministicScore({ answers, transcripts, session });
+        payload = applyAnswerQualityGuard(payload, answers);
+        const saved = await persistScorecard(
+          db,
+          userId,
+          sessionId,
+          payload,
+          existing?.id,
+        );
+        return responseBody(requestId, saved, {
+          idempotent: false,
+          recalculated: Boolean(existing),
+        }) as ScorecardHybridData;
+      },
+      runPython: async (ctx) => {
+        const baseline = applyAnswerQualityGuard(
+          deterministicScore({ answers, transcripts, session }),
+          answers,
+        );
+        const py = await pythonExecuteOperation(
+          {
+            operation: "session_scorecard",
+            operation_id: ctx.operationId,
+            correlation_id: ctx.correlationId,
+            user_id: userId,
+            payload: {
+              answered: answers.length,
+              total: answers.length,
+              clarity_score: baseline.dimensions.clarity / 100,
+              structure_score: baseline.dimensions.structure / 100,
+            },
+          },
+          { requestId: ctx.correlationId },
+        );
+        if (!py.ok) return null;
+        const envelope = py.json as { data?: unknown } | unknown;
+        const raw =
+          envelope &&
+            typeof envelope === "object" &&
+            "data" in (envelope as Record<string, unknown>)
+            ? (envelope as { data: unknown }).data
+            : envelope;
+        const mapped = scorecardFromPython(raw, baseline) ?? baseline;
+        const guarded = applyAnswerQualityGuard(mapped, answers);
+        const saved = await persistScorecard(
+          db,
+          userId,
+          sessionId,
+          guarded,
+          existing?.id,
+        );
+        return responseBody(requestId, saved, {
+          idempotent: false,
+          recalculated: Boolean(existing),
+        }) as ScorecardHybridData;
+      },
+      runAi: async () => {
+        const baseline = applyAnswerQualityGuard(
+          deterministicScore({ answers, transcripts, session }),
+          answers,
+        );
+        const model = await resolveModel(db, userId, undefined);
+        const generated = await generateWithFallback({
+          prompt: buildPrompt({ session, answers, transcripts }),
+          systemPrompt: SYSTEM_PROMPT,
+          temperature: 0.3,
+          maxTokens: 2500,
+          userId,
+          action: "generate_scorecard",
+          model,
+          jsonMode: true,
+        });
+        const moderated = moderateOutput(generated.text);
+        const parsed = parseAiScorecard(moderated.filtered, generated.model);
+        if (!parsed) {
+          throw new DomainError(
+            "AI_INVALID_OUTPUT",
+            "Scorecard AI returned invalid JSON.",
+          );
+        }
+        void logAICost(db, {
+          userId,
+          action: "generate_scorecard",
+          model: generated.model,
+          inputTokens: generated.inputTokens,
+          outputTokens: generated.outputTokens,
+          latencyMs: generated.latencyMs,
+          wasFallback: generated.wasFallback,
+        });
+        const payload = applyAnswerQualityGuard(
+          {
+            ...parsed,
+            filler_count: parsed.filler_count || baseline.filler_count,
+            filler_rate: parsed.filler_rate || baseline.filler_rate,
+            top_filler_words: parsed.top_filler_words.length > 0
+              ? parsed.top_filler_words
+              : baseline.top_filler_words,
+            wpm_avg: parsed.wpm_avg || baseline.wpm_avg,
+            question_scores: parsed.question_scores.length > 0
+              ? parsed.question_scores
+              : baseline.question_scores,
+            strengths: parsed.strengths.length > 0
+              ? parsed.strengths
+              : baseline.strengths,
+            improvements: parsed.improvements.length > 0
+              ? parsed.improvements
+              : baseline.improvements,
+          },
+          answers,
+        );
+        const saved = await persistScorecard(
+          db,
+          userId,
+          sessionId,
+          payload,
+          existing?.id,
+        );
+        return responseBody(requestId, saved, {
+          idempotent: false,
+          recalculated: Boolean(existing),
+        }) as ScorecardHybridData;
+      },
     });
 
-    if (!creditResult.success) {
-      const isInsufficient = (creditResult.error ?? "").toLowerCase().includes("insufficient");
-      return json(corsHeaders, isInsufficient ? 402 : 500, {
-        error: isInsufficient ? "Insufficient credits." : "Credit deduction failed.",
-        code: isInsufficient ? "PAYMENT_REQUIRED" : "CREDIT_DEDUCTION_FAILED",
+    if (!hybrid.ok) {
+      if (
+        hybrid.code === "INSUFFICIENT_CREDITS" ||
+        hybrid.code === "CAPABILITY_REQUIRED"
+      ) {
+        return hybrid.response;
+      }
+      const status = httpStatusForDomainCode(
+        String(hybrid.code || "AI_PROVIDER_UNAVAILABLE"),
+      );
+      const invalidAi = hybrid.code === "AI_INVALID_OUTPUT";
+      return json(corsHeaders, status, {
+        error: invalidAi
+          ? "Scorecard AI output was invalid. Credits refunded."
+          : "Scorecard generation failed. Credits refunded.",
+        code: hybrid.code,
         request_id: requestId,
       });
     }
 
-    creditsHeld = true;
-
-    let payload = deterministicScore({ answers, transcripts, session });
-    let aiResult: AIProviderResult | null = null;
-
-    try {
-      const model = await resolveModel(db, userId, undefined);
-      const generated = await generateWithFallback({
-        prompt: buildPrompt({ session, answers, transcripts }),
-        systemPrompt: SYSTEM_PROMPT,
-        temperature: 0.3,
-        maxTokens: 2500,
-        userId,
-        action: "generate_scorecard",
-        model,
-        jsonMode: true,
-      });
-      const moderated = moderateOutput(generated.text);
-      const parsed = parseAiScorecard(moderated.filtered, generated.model);
-      if (parsed) {
-        aiResult = generated;
-        payload = {
-          ...parsed,
-          filler_count: parsed.filler_count || payload.filler_count,
-          filler_rate: parsed.filler_rate || payload.filler_rate,
-          top_filler_words: parsed.top_filler_words.length > 0
-            ? parsed.top_filler_words
-            : payload.top_filler_words,
-          wpm_avg: parsed.wpm_avg || payload.wpm_avg,
-          question_scores: parsed.question_scores.length > 0
-            ? parsed.question_scores
-            : payload.question_scores,
-          strengths: parsed.strengths.length > 0 ? parsed.strengths : payload.strengths,
-          improvements: parsed.improvements.length > 0 ? parsed.improvements : payload.improvements,
-        };
-      }
-    } catch (error) {
-      console.error("[generate-scorecard] AI scoring failed, using deterministic rubric:",
-        error instanceof Error ? error.message : "unknown");
-    }
-
-    if (aiResult) {
-      void logAICost(db, {
-        userId,
-        action: "generate_scorecard",
-        model: aiResult.model,
-        inputTokens: aiResult.inputTokens,
-        outputTokens: aiResult.outputTokens,
-        latencyMs: aiResult.latencyMs,
-        wasFallback: aiResult.wasFallback,
-      });
-    }
-
-    payload = applyAnswerQualityGuard(payload, answers);
-    const row = scorecardRow(userId, sessionId, payload);
-    let saved: Record<string, unknown> | null = null;
-
-    if (existing?.id) {
-      const { data, error } = await db
-        .from("scorecards")
-        .update(row)
-        .eq("id", existing.id)
-        .eq("user_id", userId)
-        .select("*")
-        .maybeSingle();
-      if (!error && data) saved = data as Record<string, unknown>;
-    } else {
-      const { data, error } = await db
-        .from("scorecards")
-        .insert(row)
-        .select("*")
-        .maybeSingle();
-      if (!error && data) saved = data as Record<string, unknown>;
-      if (error && /duplicate|unique/i.test(error.message)) {
-        const { data: raced } = await db
-          .from("scorecards")
-          .select("*")
-          .eq("session_id", sessionId)
-          .eq("user_id", userId)
-          .maybeSingle();
-        if (raced) saved = raced as Record<string, unknown>;
-      }
-    }
-
-    if (!saved) {
-      creditsHeld = false;
-      await refundCredits({
-        userId,
-        cost: CREDIT_COST,
-        reason: "generate_scorecard DB save failure",
-        sessionId,
-      });
-      return json(corsHeaders, 500, {
-        error: "Failed to save scorecard.",
-        code: "SCORECARD_SAVE_FAILED",
-        request_id: requestId,
-      });
-    }
-
-    return json(corsHeaders, 200, responseBody(requestId, saved, {
-      idempotent: false,
-      recalculated: Boolean(existing),
-    }));
+    return hybrid.response;
   } catch (error) {
-    if (creditsHeld) {
-      await refundCredits({
-        userId,
-        cost: CREDIT_COST,
-        reason: "generate_scorecard unexpected error",
-        sessionId,
-      }).catch(() => undefined);
-    }
     console.error(
       "[generate-scorecard] Error:",
       error instanceof Error ? error.message : "unknown",

@@ -1,6 +1,11 @@
 /**
  * process-paper-generation-job — claim a leased job and run assembly.
  *
+ * Hybrid routing is plan-driven (MATRIX `gov_exam_assemble` via
+ * `decideGenerationPlan` + `govPaperAssembly`), not request-scoped
+ * `executeHybridOperation`. AI gap-fill failure falls back to Python/bank
+ * inside the assembler (`pythonFallbackOnAiFailure`).
+ *
  * Auth (any one):
  *  - x-internal-secret / Bearer matching PAPER_JOB_WORKER_SECRET or INTERNAL_WORKER_SECRET
  *  - Bearer service role key
@@ -25,6 +30,7 @@ import {
   claimPaperGenerationJob,
   newWorkerId,
   reclaimExpiredPaperJobs,
+  releasePaperJobForPythonFactory,
 } from "../_shared/govPaperJobLease.ts";
 
 function json(req: Request, payload: unknown, status = 200) {
@@ -122,6 +128,14 @@ Deno.serve(async (req) => {
     });
 
     if (!claimed.ok) {
+      if (claimed.message === "PYTHON_FACTORY_OWNED" && jobId) {
+        return json(req, {
+          jobId,
+          status: "queued",
+          code: "PYTHON_FACTORY_OWNED",
+          error: "This job is owned by the Python paper-factory worker.",
+        }, 202);
+      }
       if (claimed.reason === "max_attempts") {
         return json(req, {
           status: "failed",
@@ -185,17 +199,13 @@ Deno.serve(async (req) => {
       (claimed.job.request_json as Record<string, unknown> | null | undefined)?.generator ?? "",
     );
     if (isPythonPaperFactoryGenerator(claimedGenerator)) {
-      // Release the lease so the Python worker can reclaim.
-      await db
-        .from("gov_paper_generation_jobs")
-        .update({
-          status: "queued",
-          worker_id: null,
-          lease_expires_at: null,
-          progress_stage: "queued",
-        })
-        .eq("id", claimed.job.id)
-        .eq("worker_id", claimed.workerId);
+      // Safety net: restore attempt_count if Edge claimed before routing was visible.
+      await releasePaperJobForPythonFactory(
+        db,
+        String(claimed.job.id),
+        claimed.workerId,
+        Math.max(0, claimed.attemptCount - 1),
+      );
       return json(req, {
         jobId: claimed.job.id,
         status: "queued",

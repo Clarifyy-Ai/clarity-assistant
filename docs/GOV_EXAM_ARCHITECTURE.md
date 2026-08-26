@@ -114,6 +114,8 @@ availability → eligibility → cost → reservation → generation → validat
 
 One logical charge; AI failure + Python fallback = same operation; compensate on failure before valid publication.
 
+**Durable jobs note:** `gov_paper_generation_jobs` are hybrid-by-plan (MATRIX `gov_exam_assemble` via `decideGenerationPlan` / assembler), not request-scoped `executeHybridOperation`.
+
 ## Labels / honesty
 
 - Affiliation disclaimer on discovery and exam surfaces

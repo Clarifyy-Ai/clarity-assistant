@@ -93,6 +93,7 @@ export default function SettingsAudio() {
   const [vadSensitivity, setVadSensitivity] = useState(noiseFloorToVadSensitivity(savedVadFloor));
   const [saving,      setSaving]      = useState(false);
   const [saved,       setSaved]       = useState(false);
+  const [saveFailed,  setSaveFailed]  = useState(false);
 
   const animRef = useRef<number | null>(null);
   const analRef = useRef<AnalyserNode | null>(null);
@@ -291,6 +292,8 @@ export default function SettingsAudio() {
   async function handleSave() {
     if (!user) return;
     setSaving(true);
+    setSaved(false);
+    setSaveFailed(false);
     const noiseFloor = vadSensitivityToNoiseFloor(vadSensitivity);
     const mergedUiPrefs = {
       ...(typeof profile?.ui_preferences === "object" && profile?.ui_preferences
@@ -322,6 +325,7 @@ export default function SettingsAudio() {
       toast.success("Audio settings saved");
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
+      setSaveFailed(true);
       toast.error(err?.message ?? "Failed to save audio settings.");
     } finally {
       setSaving(false);
@@ -534,13 +538,13 @@ export default function SettingsAudio() {
       </Accordion>
 
       <Button
-        variant={saved ? "success" : "primary"}
+        variant={saved ? "success" : saveFailed ? "danger" : "primary"}
         size="md"
         loading={saving}
         onClick={handleSave}
         leftIcon={saved ? <CheckCircle className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
       >
-        {saved ? "Saved!" : "Save audio settings"}
+        {saving ? "Saving…" : saved ? "Saved!" : saveFailed ? "Failed — retry" : "Save audio settings"}
       </Button>
     </SettingsPageShell>
   );

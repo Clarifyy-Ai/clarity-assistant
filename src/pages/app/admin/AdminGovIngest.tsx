@@ -163,10 +163,9 @@ export default function AdminGovIngest() {
         <CardContent className="p-4 space-y-3">
           <h3 className="text-sm font-semibold">Register PDF &amp; extract</h3>
           <p className="text-xs text-muted-foreground">
-            Upload a PDF (base64), paste OCR text, or point at a storage path
-            (<code className="mx-1">bucket/object.pdf</code>. Respect
-            <code className="mx-1">license_class</code>. Output is always
-            <code className="mx-1">is_public=false</code> until review.
+            Provide one source: upload a PDF, paste OCR/plain text, or enter a storage path
+            (e.g. <code className="mx-1">documents/pyq/ssc.pdf</code>). Set the license class
+            correctly. Extracted questions stay private until Q Review approval.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <Select value={examId || "none"} onValueChange={(v) => setExamId(v === "none" ? "" : v)}>
@@ -205,32 +204,48 @@ export default function AdminGovIngest() {
                 ))}
               </SelectContent>
             </Select>
-            <Input
-              placeholder="storage path (optional) e.g. documents/pyq/ssc.pdf"
-              value={storagePath}
-              onChange={(e) => setStoragePath(e.target.value)}
-            />
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+                Storage path (optional)
+              </label>
+              <Input
+                placeholder="e.g. documents/pyq/ssc.pdf"
+                value={storagePath}
+                onChange={(e) => setStoragePath(e.target.value)}
+                aria-label="Storage path"
+              />
+            </div>
           </div>
-          <div>
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+              PDF file (optional)
+            </label>
             <input
               ref={fileRef}
               type="file"
               accept="application/pdf,.pdf"
-              className="text-sm"
+              className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-foreground"
               onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)}
+              aria-label="Choose PDF file"
             />
-            {pdfFile && (
-              <p className="text-xs text-muted-foreground mt-1">
-                {pdfFile.name} ({Math.round(pdfFile.size / 1024)} KB)
-              </p>
-            )}
+            <p className="text-xs text-muted-foreground">
+              {pdfFile
+                ? `Selected: ${pdfFile.name} (${Math.round(pdfFile.size / 1024)} KB)`
+                : "No PDF selected — upload a file, or use text / storage path instead."}
+            </p>
           </div>
-          <textarea
-            className="w-full min-h-[100px] rounded-md border bg-background px-3 py-2 text-sm"
-            placeholder="Optional pasted OCR / plain text (instead of PDF)"
-            value={textPayload}
-            onChange={(e) => setTextPayload(e.target.value)}
-          />
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+              Pasted OCR / plain text (optional)
+            </label>
+            <textarea
+              className="w-full min-h-[100px] rounded-md border bg-background px-3 py-2 text-sm"
+              placeholder="Paste OCR or plain-text paper content if you are not uploading a PDF"
+              value={textPayload}
+              onChange={(e) => setTextPayload(e.target.value)}
+              aria-label="Pasted OCR or plain text"
+            />
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button
               onClick={() => void handleExtract()}

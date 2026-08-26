@@ -49,6 +49,7 @@ export default function Notifications() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<"all" | "unread" | "read">("all");
 
   const loadNotifications = useCallback(async (mode: "initial" | "background" = "initial") => {
     if (!user?.id) return;
@@ -121,6 +122,11 @@ export default function Notifications() {
   }
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;
+  const filtered = notifications.filter((n) => {
+    if (filter === "unread") return !n.is_read;
+    if (filter === "read") return Boolean(n.is_read);
+    return true;
+  });
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-2 duration-200">
@@ -132,11 +138,36 @@ export default function Notifications() {
           { label: "Notifications" },
         ]}
         actions={
-          unreadCount > 0 ? (
-            <Button variant="secondary" size="sm" onClick={markAllRead} leftIcon={<CheckCheck className="w-4 h-4" />}>
-              Mark all read
-            </Button>
-          ) : undefined
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="inline-flex rounded-lg border border-border p-0.5" role="tablist" aria-label="Filter notifications">
+              {([
+                { id: "all", label: "All" },
+                { id: "unread", label: "Unread" },
+                { id: "read", label: "Read" },
+              ] as const).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={filter === tab.id}
+                  onClick={() => setFilter(tab.id)}
+                  className={cn(
+                    "px-2.5 py-1 text-xs rounded-md transition-colors",
+                    filter === tab.id
+                      ? "bg-primary/15 text-foreground font-medium"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            {unreadCount > 0 ? (
+              <Button variant="secondary" size="sm" onClick={markAllRead} leftIcon={<CheckCheck className="w-4 h-4" />}>
+                Mark all read
+              </Button>
+            ) : null}
+          </div>
         }
       />
 
@@ -155,12 +186,23 @@ export default function Notifications() {
           <EmptyState
             icon={Bell}
             title="No notifications yet"
-            description="You'll see session reminders, credit alerts, and updates here."
+            description="You'll see session reminders, credit alerts, and updates here. Manage email preferences in Settings → Notifications."
+          />
+        </Card>
+      ) : filtered.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon={Bell}
+            title={filter === "unread" ? "No unread notifications" : "No read notifications"}
+            description="Try another filter, or update preferences in Settings → Notifications."
+            actionLabel="Show all"
+            onAction={() => setFilter("all")}
+            compact
           />
         </Card>
       ) : (
         <div className="space-y-2">
-          {notifications.map((n) => {
+          {filtered.map((n) => {
             const Icon = TYPE_ICONS[n.type ?? ""] ?? Bell;
             return (
               <Card

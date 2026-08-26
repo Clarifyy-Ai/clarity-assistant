@@ -506,14 +506,15 @@ export default function AdminUsers() {
 
               <TableRow>
 
-                {["Name", "Email", "Plan", "Credits", "Admin", "Joined", ""].map((h) => (
+                {["Name", "Email", "Plan", "Credits", "Admin", "Joined", "Actions"].map((h) => (
 
                   <TableHead
 
-                    key={h}
+                    key={h || "actions"}
 
                     className="text-[10px] text-muted-foreground uppercase tracking-widest"
 
+                    scope="col"
                   >
 
                     {h}

@@ -1,4 +1,4 @@
-// supabase/functions/deduct-credits/index.ts// supabase/functions/deduct-credits AI/session actions.
+// supabase/functions/deduct-credits/index.ts — AI/session credit deductions.
 //
 // Production hardening included:
 // - CORS handling

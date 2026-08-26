@@ -263,6 +263,12 @@ export const RATE_LIMIT_PRESETS = {
     windowMs: 60_000,
   },
 
+  /** Typeahead / browse — higher than SESSION_ACTION so debounce storms don't 429. */
+  SEARCH_BROWSE: {
+    limit: 60,
+    windowMs: 60_000,
+  },
+
   AUTH_SENSITIVE: {
     limit: 5,
     windowMs: 60_000,

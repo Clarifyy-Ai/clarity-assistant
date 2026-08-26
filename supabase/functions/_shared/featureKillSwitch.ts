@@ -47,6 +47,7 @@ export const FUNCTION_KILL_FLAG: Record<string, string> = {
   "assemble-assessment": "mock_sessions",
   "analyze-test-performance": "mock_sessions",
   "parse-question-pdf": "mock_sessions",
+  "process-sprint-transcript": "session_debrief",
 };
 
 function serviceClient() {

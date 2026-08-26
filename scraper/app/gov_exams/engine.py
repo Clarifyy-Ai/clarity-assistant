@@ -12,7 +12,8 @@ from app.gov_exams.deterministic_generate import (
     generate_practice_variants,
 )
 from app.gov_exams.observability import gov_exam_log
-from app.gov_exams.schemas import ProcessJobResponse
+from app.gov_exams.schemas import ProcessJobResponse, QuestionPayload, ValidateQuestionsRequest
+from app.gov_exams.validator import validate_question_payloads
 from app.gov_exams.selection import seeded_shuffle
 from app.gov_exams.source_priority import (
     allowed_for_mode,
@@ -141,6 +142,7 @@ async def process_gov_exam_job(
             use_bank=payload.get("useBank") is not False,
             publish=True,
             make_questions_public=False,
+            allow_deterministic_fill=allow_det,
         )
 
         blueprint = await factory.plan(request)
@@ -473,6 +475,46 @@ async def process_gov_exam_job(
             correlation_id=correlation,
             question_count=len(questions),
         )
+
+        # Canonical validate-questions gate before hard-constraint assembly check.
+        if questions:
+            payloads = [
+                QuestionPayload(
+                    id=q.question_id,
+                    question_text=q.question_text,
+                    options=q.options,
+                    correct_index=q.correct_index,
+                    explanation=q.explanation or None,
+                    subject=q.subject or None,
+                    topic=q.topic or None,
+                    difficulty=q.difficulty or None,
+                    language=q.language or language,
+                    source=q.source_type or None,
+                    metadata={"generated_by": q.source_class},
+                )
+                for q in questions
+            ]
+            val = validate_question_payloads(
+                ValidateQuestionsRequest(
+                    questions=payloads,
+                    correlation_id=correlation,
+                    job_id=job_id,
+                    language=language,
+                    reject_near_duplicates=True,
+                ),
+                operation_id=operation_id,
+            )
+            if val.rejected_count > 0:
+                reject_reasons = "; ".join(
+                    f"#{r.index}:{','.join(r.reasons[:2])}"
+                    for r in val.rejected[:5]
+                )
+                raise PaperFactoryError(
+                    "PAPER_VALIDATION_FAILED",
+                    f"Question validation rejected {val.rejected_count} item(s): {reject_reasons}",
+                    retryable=False,
+                )
+
         balance_answer_keys(questions, blueprint.random_seed)
         errors = validate_assembled_paper(blueprint, questions)
         if errors:
@@ -627,7 +669,7 @@ async def process_gov_exam_job(
             message=exc.message,
             retryable=exc.retryable,
         )
-        await _compensate(job, repo)
+        await _compensate(job, repo, permanent=not exc.retryable)
         gov_exam_log(
             "completed",
             operation_id=operation_id,
@@ -653,7 +695,7 @@ async def process_gov_exam_job(
             message=str(exc),
             retryable=True,
         )
-        await _compensate(job, repo)
+        # Retryable crash: re-queue only — never refund (matches Edge failJob).
         gov_exam_log(
             "completed",
             operation_id=operation_id,
@@ -673,14 +715,24 @@ async def process_gov_exam_job(
         )
 
 
-async def _compensate(job: dict[str, Any], repo: PaperRepository) -> None:
-    charged = int(job.get("credits_charged") or 0)
-    user_id = job.get("user_id")
-    if charged <= 0 or not user_id:
+async def _compensate(
+    job: dict[str, Any], repo: PaperRepository, *, permanent: bool
+) -> None:
+    """Refund only on permanent failure after atomically claiming credits_charged."""
+    if not permanent:
         return
+    user_id = job.get("user_id")
+    job_id = str(job.get("id") or "")
+    if not user_id or not job_id:
+        return
+    claimed = await asyncio.to_thread(repo.claim_credits_for_refund, job_id)
+    if claimed <= 0:
+        return
+    idem_key = f"refund_paper_job:{job_id}"
     await asyncio.to_thread(
         repo.refund_credits,
         str(user_id),
-        charged,
-        f"refund_gov_exam_job_{job.get('id')}",
+        claimed,
+        idem_key,
+        idempotency_key=idem_key,
     )

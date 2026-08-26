@@ -125,6 +125,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     reload: reloadDocuments,
     allAnswers,
     isLoading: documentsLoading,
+    retryJobDescriptionParse,
   } = useDocuments();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
@@ -660,10 +661,17 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const resumeRequired =
     setupFieldRequirement(sessionCallType, "resume") === "REQUIRED";
   const hasSelectedJd = Boolean(jdId);
+  const jdParseBusy =
+    hasSelectedJd &&
+    Boolean(jdParseStatus) &&
+    !["ready", "completed", ""].includes(jdParseStatus);
+  const jdParseFailed = jdParseBusy && jdParseStatus === "error";
+  const jdParsePending = jdParseBusy && !jdParseFailed;
+  // JD is OPTIONAL — never hard-block Start/Next on JD parse. Resume still gates.
   const documentBlocker =
     documentsLoadError && (resumeRequired || hasSelectedJd)
       ? "Documents could not be loaded. Retry before continuing."
-      : documentsLoading && (resumeRequired || hasSelectedJd)
+      : documentsLoading && resumeRequired
         ? "Loading your documents…"
         : resumeRequired && !resumeId
           ? "Resume is required"
@@ -671,11 +679,16 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
             ? "Select a resume you own before continuing."
             : resumeRequired && resumeParseStatus && !["ready", "completed", ""].includes(resumeParseStatus)
               ? "Resume is still processing"
-              : hasSelectedJd && !selectedJd && documentsHydrated.current
-                ? "Select a job description you own before continuing."
-                : hasSelectedJd && jdParseStatus && !["ready", "completed", ""].includes(jdParseStatus)
-                  ? "Job description is still processing"
-                  : null;
+              : null;
+  const jdRecoveryNotice = !hasSelectedJd
+    ? null
+    : !selectedJd && documentsHydrated.current
+      ? "Selected job description is missing. Remove it or pick another."
+      : jdParseFailed
+        ? "Job description parsing failed. Retry, replace, or continue without a JD."
+        : jdParsePending
+          ? "Job description is still processing. You can wait, replace it, or continue without a JD."
+          : null;
   const modelLock = smartRouting ? null : getModelLockReason(model, typedProfile?.plan_id);
   const modelBlocker =
     modelLock === "provider"
@@ -1328,6 +1341,52 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                     </option>
                   ))}
                 </select>
+                {jdRecoveryNotice && (
+                  <div
+                    role="status"
+                    className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100 space-y-2"
+                  >
+                    <p>{jdRecoveryNotice}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {jdParseBusy && selectedJd && (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            void retryJobDescriptionParse(selectedJd.id).then((res) => {
+                              if (res.error) toast.error(res.error);
+                              else toast.message("Retrying job description parse…");
+                              void reloadDocuments();
+                            });
+                          }}
+                        >
+                          Retry
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setJdId(null);
+                          useDocumentStore.getState().setActiveJDId(null);
+                          toast.message("Continuing without a job description.");
+                        }}
+                      >
+                        Continue without JD
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => navigate("/app/documents")}
+                      >
+                        Replace in Documents
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {documentsLoadError && (
@@ -1782,6 +1841,52 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 <p className="rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs text-blue-200">
                   Text-only fallback is selected. Microphone, speaker, and speech-to-text checks are not required.
                 </p>
+              )}
+              {jdRecoveryNotice && (
+                <div
+                  role="status"
+                  className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100 space-y-2"
+                >
+                  <p>{jdRecoveryNotice}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {jdParseBusy && selectedJd && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          void retryJobDescriptionParse(selectedJd.id).then((res) => {
+                            if (res.error) toast.error(res.error);
+                            else toast.message("Retrying job description parse…");
+                            void reloadDocuments();
+                          });
+                        }}
+                      >
+                        Retry
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setJdId(null);
+                        useDocumentStore.getState().setActiveJDId(null);
+                        toast.message("Continuing without a job description.");
+                      }}
+                    >
+                      Continue without JD
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setStep(PRACTICE_COACH_WIZARD_STEPS.context)}
+                    >
+                      Replace JD
+                    </Button>
+                  </div>
+                </div>
               )}
               <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 text-xs text-muted-foreground space-y-1.5">
                 <p className="font-semibold text-foreground">Privacy and session controls</p>

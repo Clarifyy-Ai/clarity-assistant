@@ -20,14 +20,8 @@ export type PaymentOrderRow = {
   promo_code: string | null;
 };
 
-async function creditTxnExists(db: Db, paymentId: string): Promise<boolean> {
-  const { data } = await db
-    .from("credit_transactions")
-    .select("id")
-    .eq("stripe_payment_id", paymentId)
-    .maybeSingle();
-  return !!data;
-}
+const WEBHOOK_EVENT_TTL_MS = 365 * 24 * 60 * 60 * 1000;
+const PAYMENT_CLAIM_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 async function grantCreditsOnce(
   db: Db,
@@ -38,9 +32,15 @@ async function grantCreditsOnce(
     description: string;
     paymentId: string;
   },
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (opts.amount <= 0) return { ok: true };
-  if (await creditTxnExists(db, opts.paymentId)) return { ok: true };
+): Promise<{ ok: true; duplicate: boolean } | { ok: false; error: string }> {
+  if (opts.amount <= 0) return { ok: true, duplicate: false };
+
+  const { data: existing } = await db
+    .from("credit_transactions")
+    .select("id")
+    .eq("stripe_payment_id", opts.paymentId)
+    .maybeSingle();
+  if (existing) return { ok: true, duplicate: true };
 
   const { error } = await db.rpc("add_credits", {
     p_user_id: opts.userId,
@@ -49,8 +49,13 @@ async function grantCreditsOnce(
     p_description: opts.description,
     p_payment_id: opts.paymentId,
   });
-  if (error) return { ok: false, error: error.message };
-  return { ok: true };
+  if (error) {
+    if ((error as { code?: string }).code === "23505") {
+      return { ok: true, duplicate: true };
+    }
+    return { ok: false, error: error.message };
+  }
+  return { ok: true, duplicate: false };
 }
 
 export async function claimPaymentIdempotency(
@@ -62,6 +67,8 @@ export async function claimPaymentIdempotency(
     .insert({
       key: `razorpay_payment_${paymentId}`,
       created_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + PAYMENT_CLAIM_TTL_MS).toISOString(),
+      metadata: { provider: "razorpay", kind: "payment_fulfill" },
     })
     .select("key")
     .single();
@@ -74,6 +81,27 @@ export async function releasePaymentIdempotency(db: Db, paymentId: string): Prom
   await db.from("idempotency_log").delete().eq("key", `razorpay_payment_${paymentId}`);
 }
 
+/** Replay-safe webhook dedupe by Razorpay event id (refunds + captures). */
+export async function claimRazorpayWebhookEvent(
+  db: Db,
+  eventId: string,
+): Promise<boolean> {
+  const key = `razorpay_webhook_${eventId}`;
+  const { error } = await db
+    .from("idempotency_log")
+    .insert({
+      key,
+      created_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + WEBHOOK_EVENT_TTL_MS).toISOString(),
+      metadata: { provider: "razorpay", kind: "webhook_event" },
+    })
+    .select("key")
+    .single();
+  if (error?.code === "23505") return false;
+  if (error) throw error;
+  return true;
+}
+
 export async function fulfillCapturedRazorpayOrder(
   db: Db,
   opts: { order: PaymentOrderRow; paymentId: string },
@@ -83,6 +111,8 @@ export async function fulfillCapturedRazorpayOrder(
 
   const isNew = await claimPaymentIdempotency(db, paymentId);
   if (!isNew) return { duplicate: true };
+
+  let grantCompleted = false;
 
   try {
     const userId = order.user_id;
@@ -120,6 +150,7 @@ export async function fulfillCapturedRazorpayOrder(
         paymentId,
       });
       if (!grant.ok) throw new Error(`credit_grant_failed: ${grant.error}`);
+      grantCompleted = grantCompleted || !grant.duplicate;
     } else if (catalogCredits > 0) {
       const grant = await grantCreditsOnce(db, {
         userId,
@@ -129,6 +160,7 @@ export async function fulfillCapturedRazorpayOrder(
         paymentId,
       });
       if (!grant.ok) throw new Error(`credit_grant_failed: ${grant.error}`);
+      grantCompleted = grantCompleted || !grant.duplicate;
     }
 
     if (order.promo_code_id) {
@@ -149,12 +181,18 @@ export async function fulfillCapturedRazorpayOrder(
             paymentId: `${paymentId}_promo`,
           });
           if (!bonusGrant.ok) throw new Error(`promo_credit_grant_failed: ${bonusGrant.error}`);
+          grantCompleted = grantCompleted || !bonusGrant.duplicate;
         }
 
         const redeemKey = `razorpay_promo_redeem_${paymentId}`;
         const { error: redeemClaimErr } = await db
           .from("idempotency_log")
-          .insert({ key: redeemKey, created_at: new Date().toISOString() })
+          .insert({
+            key: redeemKey,
+            created_at: new Date().toISOString(),
+            expires_at: new Date(Date.now() + PAYMENT_CLAIM_TTL_MS).toISOString(),
+            metadata: { provider: "razorpay", kind: "promo_redeem" },
+          })
           .select("key")
           .single();
 
@@ -181,7 +219,7 @@ export async function fulfillCapturedRazorpayOrder(
         .eq("id", userId);
     }
 
-    const { error: paidErr } = await db
+    const { data: marked, error: paidErr } = await db
       .from("payment_orders")
       .update({
         status: "fulfilled",
@@ -191,12 +229,27 @@ export async function fulfillCapturedRazorpayOrder(
         credits_granted: catalogCredits,
       })
       .eq("id", order.id)
-      .not("status", "in", "(paid,fulfilled)");
+      .not("status", "in", "(paid,fulfilled)")
+      .select("id")
+      .maybeSingle();
     if (paidErr) throw new Error(`mark_paid_failed: ${paidErr.message}`);
+    if (!marked?.id) return { duplicate: true };
 
     return { duplicate: false };
   } catch (error) {
-    await releasePaymentIdempotency(db, paymentId);
+    const { data: ledgerRow } = await db
+      .from("credit_transactions")
+      .select("id")
+      .eq("stripe_payment_id", paymentId)
+      .maybeSingle();
+    const promoLedger = await db
+      .from("credit_transactions")
+      .select("id")
+      .eq("stripe_payment_id", `${paymentId}_promo`)
+      .maybeSingle();
+    if (!ledgerRow?.id && !promoLedger.data?.id && !grantCompleted) {
+      await releasePaymentIdempotency(db, paymentId);
+    }
     throw error;
   }
 }

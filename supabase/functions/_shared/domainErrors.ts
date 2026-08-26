@@ -70,6 +70,7 @@ export function httpStatusForDomainCode(code: DomainErrorCode | string): number 
       return 422;
     case "AI_TIMEOUT":
     case "AI_PROVIDER_UNAVAILABLE":
+    case "PROVIDER_UNAVAILABLE": // legacy Edge envelope alias
     case "PYTHON_SERVICE_UNAVAILABLE":
     case "DATABASE_FAILURE":
       return 503;
@@ -82,6 +83,7 @@ export function isRetryable(code: DomainErrorCode | string): boolean {
   switch (code) {
     case "AI_TIMEOUT":
     case "AI_PROVIDER_UNAVAILABLE":
+    case "PROVIDER_UNAVAILABLE": // legacy Edge envelope alias
     case "PYTHON_SERVICE_UNAVAILABLE":
     case "DATABASE_FAILURE":
       return true;
@@ -153,6 +155,9 @@ export function classifyAiFailure(err: unknown): DomainErrorCode {
 
 /**
  * Classify Python service failures from thrown errors and/or HTTP status.
+ *
+ * Structured Python codes (REQUEST_VALIDATION_FAILED, UNSUPPORTED_OPERATION, …)
+ * are normalized at the pythonClient envelope layer via normalizePythonDomainCode.
  */
 export function classifyPythonFailure(
   errOrStatus?: unknown,

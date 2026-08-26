@@ -161,7 +161,7 @@ export default function AdminRevenue() {
 
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("plan_id, credits, stripe_subscription_id, subscription_status");
+        .select("plan_id, credits, subscription_id, subscription_status");
 
       if (profileData) {
         const planCounts: Record<string, number> = {};

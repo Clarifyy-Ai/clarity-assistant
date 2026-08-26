@@ -32,6 +32,7 @@ export const EDGE_FUNCTIONS = {
 
   // Audio / Transcription
   DEEPGRAM_TOKEN:         "deepgram-token",
+  PROCESS_SPRINT_TRANSCRIPT: "process-sprint-transcript",
 
   // Billing
   CREATE_CHECKOUT:        "create-checkout",

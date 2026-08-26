@@ -557,6 +557,11 @@ export function useDocuments(options?: UseDocumentsOptions) {
 
   async function parseJobDescription(jdId: string, rawText: string): Promise<void> {
     try {
+      await jobDescriptionsDB.update(jdId, {
+        parse_status: "parsing",
+        parse_error: null,
+      });
+
       const prompt = `Extract structured data from this job description.
 Return ONLY valid JSON matching this schema:
 {
@@ -594,8 +599,33 @@ ${rawText.slice(0, 4000)}`;
         parse_status: "error",
         parse_error: String(err),
       });
+      if (mountedRef.current) await loadDocuments();
     }
   }
+
+  const retryJobDescriptionParse = useCallback(
+    async (jdId: string): Promise<{ error: string | null }> => {
+      if (!user) return { error: "Not authenticated" };
+      const fromStore = docStore.jds.find((j) => j.id === jdId);
+      const fromDb = fromStore
+        ? null
+        : await jobDescriptionsDB.getByIdMaybe(jdId).catch(() => null);
+      const raw =
+        (fromStore?.raw_text ?? "").trim() ||
+        (typeof (fromDb as { content?: string } | null)?.content === "string"
+          ? String((fromDb as { content: string }).content)
+          : "");
+      if (!raw.trim() || raw.startsWith("[Uploaded file:")) {
+        return {
+          error:
+            "No parseable text on this job description. Replace it with pasted text, or continue without a JD.",
+        };
+      }
+      await parseJobDescription(jdId, raw);
+      return { error: null };
+    },
+    [user, docStore.jds],
+  );
 
   // ── Gap analysis ──────────────────────────────────────────────
 
@@ -722,6 +752,7 @@ ${rawText.slice(0, 4000)}`;
 
     addJobDescription,
     addJobDescriptionFromFile,
+    retryJobDescriptionParse,
     setActiveJD:     docStore.setActiveJDId,
     runGapAnalysis,
 

@@ -45,6 +45,17 @@ class DocumentJobRequest(BaseModel):
     parser_version: str = Field("1", min_length=1, max_length=32)
 
 
+class DurableDocumentJobNotifyRequest(BaseModel):
+    """Edge dispatch envelope for an already-persisted document_processing_jobs row."""
+
+    job_id: str = Field(..., min_length=36, max_length=36)
+    document_id: str = Field(..., min_length=1, max_length=128)
+    owner_id: str = Field(..., min_length=1, max_length=128)
+    operation: str = Field(default="parse", min_length=1, max_length=64)
+    correlation_id: str | None = Field(default=None, min_length=8, max_length=128)
+    storage_reference: dict[str, Any] = Field(default_factory=dict)
+
+
 class ExamSourceJobRequest(BaseModel):
     source_id: str = Field(..., min_length=1, max_length=128)
     exam_type: str = Field(..., min_length=2, max_length=64)

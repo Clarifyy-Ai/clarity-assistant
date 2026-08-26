@@ -137,6 +137,19 @@ export function escapeIlikePattern(query: string): string {
 }
 
 /**
+ * Double-quotes a PostgREST filter value so spaces / commas inside ilike
+ * patterns do not split the `or=` grammar (e.g. `%SSC CGL%`).
+ */
+export function quotePostgrestValue(value: string): string {
+  return `"${value.replace(/"/g, '\\"')}"`;
+}
+
+/** `%escaped%` ready for embedding in a PostgREST `.or()` / `.ilike.` clause. */
+export function ilikeFilterValue(query: string): string {
+  return quotePostgrestValue(`%${escapeIlikePattern(query)}%`);
+}
+
+/**
  * Unicode NFC, trim, collapse whitespace. Empty string means "browse all".
  */
 export function normalizeSearchQuery(raw: unknown): string {
@@ -187,7 +200,7 @@ export function validateSearchQuery(raw: unknown): QueryValidation {
 
 /** PostgREST `or` filter for searchable gov_exams columns (+ recruiting body via filter). */
 export function buildExamOrFilter(query: string): string {
-  const pattern = `%${escapeIlikePattern(query)}%`;
+  const pattern = ilikeFilterValue(query);
   return [
     `short_name.ilike.${pattern}`,
     `name.ilike.${pattern}`,

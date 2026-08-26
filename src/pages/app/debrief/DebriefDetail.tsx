@@ -27,6 +27,8 @@ import {
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { HybridSourceLine } from "@/components/hybrid/HybridSourceLine";
+import { getAiUserFacingError } from "@/lib/network/aiErrorUx";
 import { DebriefExtras } from "@/components/session/DebriefExtras";
 import { DebriefLoadingSteps } from "@/components/debrief/DebriefLoadingSteps";
 import {
@@ -56,6 +58,7 @@ export default function DebriefDetail() {
   const [answers, setAnswers] = useState<any[]>([]);
   const [scorecard, setScorecard] = useState<any>(null);
   const [transcriptSegments, setTranscriptSegments] = useState<any[]>([]);
+  const [debriefSource, setDebriefSource] = useState<string | null>(null);
 
   // ── Generate debrief from edge function ──────────────────────
   // FIX 1: fetchEdge returns parsed data directly — no .ok / .json()
@@ -64,17 +67,23 @@ export default function DebriefDetail() {
     setGenning(true);
     setLoadStep(2);
     try {
-      const data = await fetchEdgeJson<{ debrief?: unknown; session?: unknown }>(
+      const data = await fetchEdgeJson<{
+        debrief?: unknown;
+        session?: unknown;
+        source?: string;
+        meta?: { source?: string };
+      }>(
         "generate-debrief",
         { session_id: sessionId }
       );
       setLoadStep(3);
       if (data?.debrief) setDebrief(data.debrief);
       if (data?.session) setSession(data.session);
+      setDebriefSource(data?.source ?? data?.meta?.source ?? null);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to generate debrief";
+      const msg = getAiUserFacingError(err);
       console.error("[DebriefDetail] generateDebrief error:", err);
-      toast.error(msg + ". Please try again.");
+      toast.error(msg);
       setFetchError(msg);
     } finally {
       setGenning(false);
@@ -128,7 +137,7 @@ export default function DebriefDetail() {
         await generateDebrief(id);
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to load debrief";
+      const msg = getAiUserFacingError(err);
       console.error("[DebriefDetail] fetchDebrief error:", err);
       setFetchError(msg);
     } finally {
@@ -276,6 +285,7 @@ export default function DebriefDetail() {
         description={debriefSubtitle || undefined}
         breadcrumbs={debriefBreadcrumbs}
       />
+      <HybridSourceLine source={debriefSource} />
 
       <nav
         aria-label="Debrief sections"

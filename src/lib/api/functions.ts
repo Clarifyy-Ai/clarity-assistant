@@ -8,39 +8,104 @@
 // - Provide SSE streaming helper for generate-answer
 // - Avoid direct fetch() usage across app
 
-import { EDGE_BASE } from "@/lib/env";
+import { EDGE_BASE, SUPABASE_PUBLISHABLE_KEY } from "@/lib/env";
+import { isTabLocalLogout } from "@/lib/auth/tabLocalLogout";
 import { getCSRFHeaders } from "@/lib/security";
 import {
   apiClient,
   ApiClientError,
   type ApiClientOptions,
 } from "@/lib/api/apiClient";
+import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 
+/**
+ * Active Supabase Edge function names (folder names under supabase/functions/).
+ * Retired stubs may remain typed if still deployed.
+ */
 export type EdgeFunctionName =
-  | "start-session"
-  | "end-session"
-  | "finalize-session"
-  | "generate-answer"
-  | "generate-questions"
-  | "generate-hint"
-  | "generate-debrief"
-  | "generate-scorecard"
-  | "schedule-interview"
-  | "collect-exam-papers"
-  | "parse-document"
-  | "create-document-processing-job"
-  | "get-document-processing-job"
-  | "cancel-document-processing-job"
-  | "retry-document-processing-job"
   | "ai-coach-chat"
-  | "issue-course-certificate"
-  | "deduct-credits"
-  | "create-checkout"
-  | "create-billing-portal"
+  | "ai-feedback"
+  | "ai-hub-router"
+  | "ai-key-check"
+  | "analyze-paper-trends"
+  | "analyze-test-performance"
+  | "analytics-dashboard"
+  | "assemble-assessment"
+  | "billing-status"
+  | "bulk-import-questions"
+  | "cancel-document-processing-job"
+  | "cancel-paper-generation-job"
   | "cancel-subscription"
+  | "check-exam-paper-availability"
+  | "collect-exam-papers"
+  | "company-research"
+  | "compare-sessions"
+  | "create-billing-portal"
+  | "create-checkout"
+  | "create-document-processing-job"
+  | "create-exam-paper"
+  | "create-test"
+  | "deduct-credits"
+  | "deepgram-token"
+  | "delete-account"
+  | "disconnect-calendar"
+  | "end-session"
+  | "export-user-data"
+  | "extract-question-paper"
+  | "finalize-session"
+  | "gap-analysis"
+  | "generate-answer"
+  | "generate-debrief"
+  | "generate-hint"
+  | "generate-practice-questions"
+  | "generate-questions"
+  | "generate-scorecard"
+  | "generate-star-answer"
+  | "generate-topic-practice"
+  | "get-document-processing-job"
+  | "get-exam-details"
+  | "get-exam-pattern"
+  | "get-exam-syllabus"
+  | "get-paper-generation-job"
+  | "health"
+  | "hybrid-health"
+  | "hybrid-ping"
+  | "ingest-source-document"
+  | "issue-course-certificate"
+  | "list-previous-papers"
+  | "moderate-content"
+  | "parse-document"
+  | "parse-question-pdf"
+  | "parse-resume"
+  | "ping"
+  | "polish-star-section"
+  | "prep-tool"
+  | "process-paper-generation-job"
+  | "process-sprint-transcript"
+  | "razorpay-create-order"
+  | "razorpay-verify-payment"
+  | "razorpay-webhook"
+  | "recompute-topic-mastery"
+  | "reconcile-paper-quality"
+  | "record-referral"
+  | "report-question"
   | "resume-subscription"
-  | "record-referral";
+  | "retry-document-processing-job"
+  | "run-daily-exam-scrape"
+  | "save-answer"
+  | "save-transcript"
+  | "schedule-interview"
+  | "score-coding-submission"
+  | "search-exams"
+  | "select-test-questions"
+  | "send-email"
+  | "start-session"
+  | "stripe-webhook"
+  | "submit-test"
+  | "support-chat"
+  | "sync-calendar"
+  | "validate-api-key";
 
 export type IdempotencyOptions = {
   idempotencyKey?: string;
@@ -79,11 +144,21 @@ export function withIdempotencyHeaders(
   };
 }
 
-export function getAccessToken(): string | null {
-  const token = useAuthStore.getState().session?.access_token;
+/** Prefer fresh supabase session JWT; fall back to auth store (fetchEdge-aligned). */
+export async function getAccessToken(): Promise<string | null> {
+  if (isTabLocalLogout()) {
+    return null;
+  }
 
-  if (typeof token === "string" && token.trim().length > 0) {
-    return token.trim();
+  const { data } = await supabase.auth.getSession();
+  const fresh = data?.session?.access_token;
+  if (typeof fresh === "string" && fresh.trim().length > 0) {
+    return fresh.trim();
+  }
+
+  const storeToken = useAuthStore.getState().session?.access_token;
+  if (typeof storeToken === "string" && storeToken.trim().length > 0) {
+    return storeToken.trim();
   }
 
   return null;
@@ -162,11 +237,13 @@ export async function streamFunction<TBody = unknown>(
   body: TBody,
   options: StreamFunctionOptions
 ): Promise<void> {
-  const accessToken = getAccessToken();
+  const accessToken = await getAccessToken();
   const headers = new Headers();
 
   headers.set("Accept", "text/event-stream");
   headers.set("Content-Type", "application/json");
+  headers.set("apikey", SUPABASE_PUBLISHABLE_KEY);
+  headers.set("x-client-info", "clarify-web");
 
   if (accessToken) {
     headers.set("Authorization", `Bearer ${accessToken}`);
@@ -188,39 +265,92 @@ export async function streamFunction<TBody = unknown>(
     headers.set(key, value);
   }
 
-  const response = await fetch(buildFunctionUrl(functionName), {
+  const url = buildFunctionUrl(functionName);
+  const signal = createAbortSignal(
+    options.timeoutMs ?? DEFAULT_STREAM_TIMEOUT_MS,
+    options.signal
+  );
+  const payload = JSON.stringify(body);
+
+  let response = await fetch(url, {
     method: "POST",
     headers,
     credentials: "omit",
-    signal: createAbortSignal(
-      options.timeoutMs ?? DEFAULT_STREAM_TIMEOUT_MS,
-      options.signal
-    ),
-    body: JSON.stringify(body),
+    signal,
+    body: payload,
   });
 
+  // One refresh + retry on expired/invalid JWT (fetchEdge parity); do not loop.
+  if (response.status === 401 && !isTabLocalLogout()) {
+    let authPayload: unknown = null;
+    try {
+      authPayload = await response.clone().json();
+    } catch {
+      authPayload = null;
+    }
+    const code =
+      typeof authPayload === "object" &&
+      authPayload !== null &&
+      "code" in authPayload
+        ? String((authPayload as { code?: unknown }).code)
+        : "";
+    const errMsg =
+      typeof authPayload === "object" &&
+      authPayload !== null &&
+      "error" in authPayload
+        ? String((authPayload as { error?: unknown }).error)
+        : typeof authPayload === "object" &&
+            authPayload !== null &&
+            "message" in authPayload
+          ? String((authPayload as { message?: unknown }).message)
+          : "";
+    const normalized = `${code} ${errMsg}`.toUpperCase();
+    const isAuthRetryable =
+      normalized.includes("AUTH_EXPIRED") ||
+      normalized.includes("AUTH_INVALID") ||
+      normalized.includes("AUTH_REQUIRED") ||
+      normalized.includes("UNAUTHORIZED") ||
+      normalized.includes("EXPIRED") ||
+      normalized.includes("INVALID OR EXPIRED");
+
+    if (isAuthRetryable) {
+      const { data, error } = await supabase.auth.refreshSession();
+      const nextToken = data.session?.access_token;
+      if (!error && nextToken) {
+        headers.set("Authorization", `Bearer ${nextToken}`);
+        response = await fetch(url, {
+          method: "POST",
+          headers,
+          credentials: "omit",
+          signal,
+          body: payload,
+        });
+      }
+    }
+  }
+
   if (!response.ok) {
-    let payload: unknown = null;
+    let errBody: unknown = null;
 
     try {
-      payload = await response.json();
+      errBody = await response.json();
     } catch {
-      payload = await response.text().catch(() => null);
+      errBody = await response.text().catch(() => null);
     }
 
     const message =
-      typeof payload === "object" && payload !== null && "error" in payload
-        ? String((payload as { error?: unknown }).error)
+      typeof errBody === "object" && errBody !== null && "error" in errBody
+        ? String((errBody as { error?: unknown }).error)
         : "Streaming request failed.";
 
     throw new ApiClientError({
       message,
       status: response.status,
       code:
-        typeof payload === "object" && payload !== null && "code" in payload
-          ? String((payload as { code?: unknown }).code)
+        typeof errBody === "object" && errBody !== null && "code" in errBody
+          ? String((errBody as { code?: unknown }).code)
           : "STREAM_REQUEST_FAILED",
-      details: payload,
+      details: errBody,
     });
   }
 

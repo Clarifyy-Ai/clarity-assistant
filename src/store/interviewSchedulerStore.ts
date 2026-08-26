@@ -67,6 +67,7 @@ function computeTodayInterviewsFromList(
   for (const interview of interviews) {
     for (const round of interview.rounds) {
       if (!round.scheduled_at) continue;
+      if (round.status === "cancelled") continue;
       const scheduledDate = parseISO(round.scheduled_at);
       if (!isToday(scheduledDate)) continue;
 

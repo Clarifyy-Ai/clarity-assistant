@@ -13,6 +13,14 @@ SUPPORTED_OPERATIONS: tuple[str, ...] = (
     "practice_coach_hint",
     "practice_coach",
     "document_extract",
+    "gap_analysis",
+    "session_debrief",
+    "session_scorecard",
+    "analyze_test",
+    "speech_process",
+    "prep_rephrase",
+    "prep_coding",
+    "prep_project",
     "ping",
 )
 

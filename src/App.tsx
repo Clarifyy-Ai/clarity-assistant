@@ -912,7 +912,7 @@ const routes = [
       {
         path: "admin",
         element: (
-          <ProtectedRoute requireStaff>
+          <ProtectedRoute requireStaff requireOnboarded requireEmailVerification>
             <Suspense fallback={<PageLoader />}>
               <AdminLayout />
             </Suspense>

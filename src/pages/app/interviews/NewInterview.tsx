@@ -253,8 +253,18 @@ export default function NewInterview() {
     if (!company.trim()) return "Company name is required.";
     if (!roleTitle.trim()) return "Role or position is required.";
     if (!scheduleDate || !scheduleTime) return "Choose an interview date and time.";
-    if (!isEditMode && !scheduledAtIso) return "Choose a valid future interview time.";
-    if (!isEditMode && new Date(scheduledAtIso).getTime() <= Date.now()) return "Choose a future interview time.";
+    if (!isEditMode) {
+      if (scheduleDate < todayDateString()) {
+        return "Interview date is in the past — choose today or a future date.";
+      }
+      if (!scheduledAtIso) return "Choose a valid interview date and time.";
+      if (new Date(scheduledAtIso).getTime() <= Date.now()) {
+        if (scheduleDate === todayDateString()) {
+          return "Interview time is in the past — choose a later time today.";
+        }
+        return "Choose a future interview time.";
+      }
+    }
     return null;
   }, [company, roleTitle, scheduleDate, scheduleTime, isEditMode, scheduledAtIso]);
 
@@ -374,7 +384,7 @@ export default function NewInterview() {
     // when we call toast. Previously syncNow() was called after navigate(),
     // which unmounted the component, causing React's "setState on unmounted
     // component" warning and silently dropping the sync result toast.
-    if (calendar.isConnected) {
+    if (calendar.syncAvailable && calendar.isConnected) {
       try {
         const { imported, error: syncError } = await calendar.syncNow();
         // Component is still mounted here — safe to toast
@@ -391,6 +401,9 @@ export default function NewInterview() {
       }
     }
 
+    // Refresh store before leave so /app/interviews isn't stale.
+    await scheduler.reload();
+
     // ── Navigate (component unmounts after this) ──────────────────────────
     navigate("/app/interviews");
     // No state updates after this line — component is unmounted
@@ -398,15 +411,24 @@ export default function NewInterview() {
 
   /* ── Calendar banner ─────────────────────────────────────────────────── */
 
-  // ✅ FIX: Full-visibility not-connected banner replaces the ghost "Connect"
-  // button that was easy to miss. Shows only once until dismissed or connected.
+  // Honest UX: when sync isn't configured (501), never show a live Connect CTA.
+  const showCalendarComingSoon =
+    !calendar.isCheckingConnection &&
+    !calendar.isProbingSync &&
+    !calendar.syncAvailable &&
+    !calendarBannerDismissed;
+
   const showCalendarBanner =
     !calendar.isCheckingConnection &&
+    !calendar.isProbingSync &&
+    calendar.syncAvailable &&
     !calendar.isConnected &&
     !calendarBannerDismissed;
 
   const showCalendarConnected =
-    !calendar.isCheckingConnection && calendar.isConnected;
+    !calendar.isCheckingConnection &&
+    calendar.syncAvailable &&
+    calendar.isConnected;
 
   /* ── Render ──────────────────────────────────────────────────────────── */
 
@@ -428,6 +450,33 @@ export default function NewInterview() {
           className="mb-0"
         />
       </div>
+
+      {/* Calendar not configured — honest coming-soon, not a broken Connect */}
+      {showCalendarComingSoon && (
+        <Card className="border-border bg-secondary/40">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" aria-hidden="true" />
+              <div>
+                <p className="text-xs font-semibold text-foreground">
+                  Google Calendar — Coming soon
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Calendar sync is not configured on this environment yet. You can still schedule interviews in Clarify.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCalendarBannerDismissed(true)}
+              className="p-1 rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Dismiss calendar banner"
+            >
+              <X className="w-3.5 h-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        </Card>
+      )}
 
       {/* ✅ FIX: Calendar not-connected banner — more visible than a ghost button */}
       {showCalendarBanner && (

@@ -1,6 +1,10 @@
 /**
  * Server-authoritative decision for HOW a government exam paper gets built.
  *
+ * Aligns with MATRIX `gov_exam_assemble` (operationRouter): durable jobs are
+ * hybrid-by-plan here — NOT request-scoped `executeHybridOperation`. Callers
+ * should gate `canUseAi` / `pythonWorkerEnabled` via `decideRoute('gov_exam_assemble')`.
+ *
  * Priority when inventory is short (mock modes only):
  *   1. approved bank
  *   2. Python deterministic practice fill (no AI required)

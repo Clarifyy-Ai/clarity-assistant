@@ -164,7 +164,17 @@ export async function requireAuth(req: Request): Promise<AuthContext> {
   const accessToken = extractBearerToken(req);
 
   if (!accessToken) {
-    throw new Error("Missing or invalid Authorization header.");
+    const authError = new Error("AUTH_REQUIRED");
+    authError.name = "AuthRequiredError";
+    throw authError;
+  }
+
+  // Never treat the anon/publishable key as a user JWT (client fallback when logged out).
+  // Align with utils.ts: anon key → AUTH_REQUIRED (not a valid user session).
+  if (accessToken === SUPABASE_ANON_KEY) {
+    const authError = new Error("AUTH_REQUIRED");
+    authError.name = "AuthRequiredError";
+    throw authError;
   }
 
   const supabase = createUserScopedClient(accessToken);
@@ -172,7 +182,14 @@ export async function requireAuth(req: Request): Promise<AuthContext> {
   const { data, error } = await supabase.auth.getUser(accessToken);
 
   if (error || !data.user) {
-    throw new Error("Invalid or expired access token.");
+    const msg = `${error?.message ?? ""} ${error?.status ?? ""}`.toLowerCase();
+    const expired =
+      msg.includes("expired") ||
+      msg.includes("session_not_found") ||
+      error?.name === "AuthSessionMissingError";
+    const authError = new Error(expired ? "AUTH_EXPIRED" : "AUTH_INVALID");
+    authError.name = expired ? "AuthExpiredError" : "AuthInvalidError";
+    throw authError;
   }
 
   const admin = createServiceRoleClient();
@@ -252,6 +269,54 @@ export async function getAuthContext(
       return {
         context: null,
         error: bannedResponse(getCorsHeaders(req)),
+      };
+    }
+    if (
+      err instanceof Error &&
+      (err.name === "AuthExpiredError" || err.message === "AUTH_EXPIRED")
+    ) {
+      return {
+        context: null,
+        error: jsonResponse(
+          {
+            error: "Session expired. Please sign in again.",
+            code: "AUTH_EXPIRED",
+          },
+          401,
+          getCorsHeaders(req),
+        ),
+      };
+    }
+    if (
+      err instanceof Error &&
+      (err.name === "AuthInvalidError" || err.message === "AUTH_INVALID")
+    ) {
+      return {
+        context: null,
+        error: jsonResponse(
+          {
+            error: "Invalid or expired token",
+            code: "AUTH_INVALID",
+          },
+          401,
+          getCorsHeaders(req),
+        ),
+      };
+    }
+    if (
+      err instanceof Error &&
+      (err.name === "AuthRequiredError" || err.message === "AUTH_REQUIRED")
+    ) {
+      return {
+        context: null,
+        error: jsonResponse(
+          {
+            error: "Missing or invalid Authorization header",
+            code: "AUTH_REQUIRED",
+          },
+          401,
+          getCorsHeaders(req),
+        ),
       };
     }
     if (

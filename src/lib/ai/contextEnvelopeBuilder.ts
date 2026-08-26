@@ -5,8 +5,8 @@
 
 import type { CoachingContext } from "@/types/ai.types";
 import { useAuthStore } from "@/store/userStore";
-import { EDGE_BASE } from "@/lib/env";
 import { createIdempotencyKey } from "@/lib/api/functions";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { retry } from "@/lib/utils";
 import { useNetworkStore } from "@/store/networkStore";
 
@@ -161,28 +161,23 @@ async function loadResumeContext(userId: string | null): Promise<ResumeContext> 
 
   // Fallback – call prep-tool EF with tool_id="resume_summary" if it exists.
   try {
-    const res = await retry(
+    const data = await retry(
       () =>
-        fetch(`${EDGE_BASE}/prep-tool`, {
-          method: "POST",
+        fetchEdgeJson<Record<string, unknown>>("prep-tool", {
+          tool_id: "resume_context",
+          input: { user_id: userId },
+        }, {
           headers: {
-            "Content-Type": "application/json",
             "Idempotency-Key": createIdempotencyKey("prep-tool"),
           },
-          body: JSON.stringify({
-            tool_id: "resume_context",
-            input: { user_id: userId },
-          }),
         }),
       2,
       300,
     );
 
-    if (!res.ok) return emptyResume();
-    const data = await res.json();
     return {
-      raw_text: data.resume_raw ?? null,
-      summary:  data.resume_summary ?? null,
+      raw_text: (data.resume_raw as string | null | undefined) ?? null,
+      summary: (data.resume_summary as string | null | undefined) ?? null,
     };
   } catch {
     return emptyResume();
@@ -204,32 +199,26 @@ async function loadJDContext(
   if (!userId) return emptyJD(null);
 
   try {
-    const res = await retry(
+    const data = await retry(
       () =>
-        fetch(`${EDGE_BASE}/prep-tool`, {
-          method: "POST",
+        fetchEdgeJson<Record<string, unknown>>("prep-tool", {
+          tool_id: "job_description_context",
+          input: { user_id: userId, job_id: jobId },
+        }, {
           headers: {
-            "Content-Type": "application/json",
             "Idempotency-Key": createIdempotencyKey("prep-tool"),
           },
-          body: JSON.stringify({
-            tool_id: "job_description_context",
-            input: { user_id: userId, job_id: jobId },
-          }),
         }),
       2,
       300,
     );
 
-    if (!res.ok) return emptyJD(null);
-    const data = await res.json();
-
     return {
-      id:         data.job_id ?? jobId ?? null,
-      title:      data.title ?? null,
-      company:    data.company ?? null,
-      raw_text:   data.text ?? null,
-      highlights: data.highlights ?? [],
+      id: (data.job_id as string | null | undefined) ?? jobId ?? null,
+      title: (data.title as string | null | undefined) ?? null,
+      company: (data.company as string | null | undefined) ?? null,
+      raw_text: (data.text as string | null | undefined) ?? null,
+      highlights: (data.highlights as string[] | undefined) ?? [],
     };
   } catch {
     return emptyJD(null);
@@ -258,30 +247,24 @@ async function loadAnswerBankContext(
   if (!userId) return emptyAnswerBank();
 
   try {
-    const res = await retry(
+    const data = await retry(
       () =>
-        fetch(`${EDGE_BASE}/prep-tool`, {
-          method: "POST",
+        fetchEdgeJson<{ entries?: any[] }>("prep-tool", {
+          tool_id: "answer_bank_context",
+          input: {
+            user_id: userId,
+            question,
+            session_type: sessionType,
+            limit: 5,
+          },
+        }, {
           headers: {
-            "Content-Type": "application/json",
             "Idempotency-Key": createIdempotencyKey("prep-tool"),
           },
-          body: JSON.stringify({
-            tool_id: "answer_bank_context",
-            input: {
-              user_id: userId,
-              question,
-              session_type: sessionType,
-              limit: 5,
-            },
-          }),
         }),
       2,
       300,
     );
-
-    if (!res.ok) return emptyAnswerBank();
-    const data = await res.json();
 
     const entries: AnswerBankEntry[] = (data.entries ?? []).map(
       (e: any): AnswerBankEntry => ({
@@ -313,33 +296,27 @@ async function loadCompanyResearch(
   if (!company) return emptyCompanyResearch(null);
 
   try {
-    const res = await retry(
+    const data = await retry(
       () =>
-        fetch(`${EDGE_BASE}/prep-tool`, {
-          method: "POST",
+        fetchEdgeJson<Record<string, unknown>>("prep-tool", {
+          tool_id: "company_research_context",
+          input: { company },
+        }, {
           headers: {
-            "Content-Type": "application/json",
             "Idempotency-Key": createIdempotencyKey("prep-tool"),
           },
-          body: JSON.stringify({
-            tool_id: "company_research_context",
-            input: { company },
-          }),
         }),
       2,
       300,
     );
 
-    if (!res.ok) return emptyCompanyResearch(company);
-    const data = await res.json();
-
     return {
       company,
-      summary:         data.summary ?? null,
-      recent_news:     data.recent_news ?? [],
-      culture_signals: data.culture ?? [],
-      interview_format: data.interview_format ?? null,
-      tech_stack:      data.tech_stack ?? null,
+      summary: (data.summary as string | null | undefined) ?? null,
+      recent_news: (data.recent_news as string[] | undefined) ?? [],
+      culture_signals: (data.culture as string[] | undefined) ?? [],
+      interview_format: (data.interview_format as string | null | undefined) ?? null,
+      tech_stack: (data.tech_stack as string | null | undefined) ?? null,
     };
   } catch {
     return emptyCompanyResearch(company);

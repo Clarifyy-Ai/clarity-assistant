@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { scorecardsDB, sessionAnswersDB } from "@/lib/supabase/database";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { ApiClientError } from "@/lib/api/apiClient";
+import { getAiUserFacingError } from "@/lib/network/aiErrorUx";
 import { useAuthStore } from "@/store/userStore";
 import { canShareScorecard } from "@/lib/privacy/privacyPrefs";
 import type { Scorecard } from "@/types/scorecard.types";
@@ -117,14 +118,14 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
       } catch (err) {
         const isNotScored =
           err instanceof ApiClientError && err.code === "NOT_SCORED";
+        const message = getAiUserFacingError(err);
         setState((s) => ({
           ...s,
           scorecard: null,
           status: isNotScored ? "not_scored" : "failed",
           isLoading: false,
           isGenerating: false,
-          error:
-            err instanceof Error ? err.message : "Failed to generate scorecard",
+          error: message,
         }));
       }
     } catch {

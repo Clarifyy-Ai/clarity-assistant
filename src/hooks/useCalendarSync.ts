@@ -55,6 +55,8 @@ export function useCalendarSync() {
   const [importedCount,        setImportedCount]        = useState<number | null>(null);
   const [error,                setError]                = useState<string | null>(null);
   const [isConnected,          setIsConnected]          = useState(false);
+  const [syncAvailable,        setSyncAvailable]        = useState(false);
+  const [isProbingSync,        setIsProbingSync]        = useState(true);
 
   // ── Check connection status ───────────────────────────────────
   // Uses GET on disconnect-calendar which returns { connected: boolean }.
@@ -80,9 +82,26 @@ export function useCalendarSync() {
     }
   }, [user]);
 
+  const probeSyncAvailability = useCallback(async (): Promise<void> => {
+    setIsProbingSync(true);
+    try {
+      await fetchEdgeJson("sync-calendar", { probe: true });
+      setSyncAvailable(true);
+    } catch (err) {
+      const e = err as Error & { code?: string; status?: number };
+      setSyncAvailable(false);
+      if (isCalendarUnavailableError(e)) {
+        setError(CALENDAR_UNAVAILABLE_MSG);
+      }
+    } finally {
+      setIsProbingSync(false);
+    }
+  }, []);
+
   // ── Mount + auth state listener ───────────────────────────────
   useEffect(() => {
     checkConnection();
+    void probeSyncAvailability();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event) => {
@@ -99,6 +118,11 @@ export function useCalendarSync() {
 
   // ── Connect Google Calendar ───────────────────────────────────
   const connectGoogle = useCallback(async (): Promise<{ error: string | null }> => {
+    if (!syncAvailable) {
+      const msg = CALENDAR_UNAVAILABLE_MSG;
+      setError(msg);
+      return { error: msg };
+    }
     setError(null);
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -113,7 +137,7 @@ export function useCalendarSync() {
       return { error: oauthError.message };
     }
     return { error: null };
-  }, []);
+  }, [syncAvailable]);
 
   // ── Sync calendar events ──────────────────────────────────────
   const syncNow = useCallback(async (): Promise<{
@@ -121,6 +145,10 @@ export function useCalendarSync() {
     error: string | null;
   }> => {
     if (!user) return { imported: 0, error: "Not authenticated" };
+    if (!syncAvailable) {
+      setError(CALENDAR_UNAVAILABLE_MSG);
+      return { imported: 0, error: CALENDAR_UNAVAILABLE_MSG };
+    }
     setIsSyncing(true);
     setError(null);
 
@@ -172,6 +200,7 @@ export function useCalendarSync() {
       }
       // 501 / NOT_CONFIGURED — do not claim full Google Calendar sync works
       if (isCalendarUnavailableError(e)) {
+        setSyncAvailable(false);
         setError(CALENDAR_UNAVAILABLE_MSG);
         return { imported: 0, error: CALENDAR_UNAVAILABLE_MSG };
       }
@@ -181,7 +210,7 @@ export function useCalendarSync() {
     } finally {
       setIsSyncing(false);
     }
-  }, [user]);
+  }, [user, syncAvailable]);
 
   // ── Disconnect Google Calendar ────────────────────────────────
   const disconnect = useCallback(async (): Promise<{ error: string | null }> => {
@@ -221,10 +250,13 @@ export function useCalendarSync() {
     syncNow,
     disconnect,
     checkConnection,
+    probeSyncAvailability,
     isSyncing,
     isDisconnecting,
     isCheckingConnection,
+    isProbingSync,
     isConnected,
+    syncAvailable,
     lastSynced,
     importedCount,
     error,

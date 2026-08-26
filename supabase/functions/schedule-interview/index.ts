@@ -169,10 +169,13 @@ Deno.serve(async (req) => {
       { headers }
     );
   } catch (err) {
+    if (err instanceof Response) {
+      return withCorsHeaders(req, err);
+    }
     console.error("[schedule-interview]", err);
     return new Response(JSON.stringify({ error: "Internal error" }), {
       status: 500,
-      headers: getCorsHeaders(req),
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });
   }
 });

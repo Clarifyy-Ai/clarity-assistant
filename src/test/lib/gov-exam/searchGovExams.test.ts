@@ -114,8 +114,8 @@ describe("searchGovExams", () => {
 
     expect(fetchEdgeJson).toHaveBeenCalledWith(
       "search-exams",
-      { q: "  ", family: "banking", page: 3, pageSize: 40 },
-      { signal },
+      { q: "  ", family: "banking", page: 3, pageSize: 40, cursor: undefined },
+      { signal, timeoutMs: 45_000 },
     );
   });
 });

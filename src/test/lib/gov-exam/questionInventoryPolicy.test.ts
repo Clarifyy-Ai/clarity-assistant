@@ -91,7 +91,7 @@ describe("AI-assisted generation", () => {
     expect(decision.customPracticeMax).toBe(21);
   });
 
-  it("allows hybrid deterministic fill when Python is available without AI", () => {
+  it("fails closed to Custom Practice when Python fill is advertised without AI", () => {
     const decision = decideQuestionInventory({
       available: 21,
       requested: 100,
@@ -99,9 +99,11 @@ describe("AI-assisted generation", () => {
       pythonFillAvailable: true,
     });
 
-    expect(decision.canGenerateRequested).toBe(true);
-    expect(decision.mode).toBe("hybrid_deterministic");
-    expect(decision.deterministicQuestions).toBe(79);
-    expect(generateButtonLabel(decision)).toContain("Realistic Mock");
+    expect(decision.canGenerateRequested).toBe(false);
+    expect(decision.mode).toBe("blocked");
+    expect(decision.customPracticeMax).toBe(21);
+    expect(generateButtonLabel(decision)).toBe(
+      "Generate Custom Practice Set — up to 21 questions",
+    );
   });
 });

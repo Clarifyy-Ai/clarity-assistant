@@ -33,7 +33,7 @@ export type StorageBucket =
 const ALLOWED_BUCKETS = new Set<string>(Object.values(STORAGE_BUCKETS));
 
 const MAX_STORAGE_PATH_LENGTH = 500;
-const MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB safety cap
+const MAX_UPLOAD_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB — aligned with Edge DOCUMENT_MAX_BYTES
 
 function isAllowedBucket(bucketName: string): bucketName is StorageBucket {
   return ALLOWED_BUCKETS.has(bucketName);
@@ -92,7 +92,9 @@ function assertSafeFile(file: File): void {
   }
 
   if (file.size > MAX_UPLOAD_SIZE_BYTES) {
-    throw new Error("[supabase] File is too large.");
+    throw new Error(
+      `[supabase] File is too large. Maximum size is ${Math.floor(MAX_UPLOAD_SIZE_BYTES / (1024 * 1024))} MB.`,
+    );
   }
 }
 

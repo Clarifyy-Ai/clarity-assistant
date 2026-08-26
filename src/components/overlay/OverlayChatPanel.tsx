@@ -4,6 +4,7 @@ import { useOverlayStore } from "@/store/overlayStore";
 import type { ChatMessage } from "@/store/overlayStore";
 import { OverlayChatInput } from "./OverlayChatInput";
 import { cn } from "@/lib/utils";
+import { hybridSourceLabel } from "@/lib/hybrid/hybridSourceMeta";
 import { ChevronDown, StickyNote, MessageSquare } from "lucide-react";
 
 interface OverlayChatPanelProps {
@@ -128,6 +129,9 @@ function ChatBubble({ message }: { message: ChatMessage }) {
         </p>
         <p className={cn("text-[10px] mt-1.5", isUser ? "text-indigo-300/35 text-right" : "text-white/20")}>
           {timeStr}
+          {!isUser && !message.pending && hybridSourceLabel(message.source) ? (
+            <span className="ml-1.5 opacity-80">· {hybridSourceLabel(message.source)}</span>
+          ) : null}
         </p>
       </div>
     </div>

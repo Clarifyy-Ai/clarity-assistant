@@ -808,30 +808,142 @@ class PaperRepository:
     def fail_job(
         self, job_id: str, *, code: str, message: str, retryable: bool
     ) -> None:
+        """Mark a job failed. Retryable keeps it reclaimable; permanent is terminal."""
         now = datetime.now(timezone.utc).isoformat()
-        status = "failed_retryable" if retryable else "failed_permanent"
-        self.db.table("gov_paper_generation_jobs").update(
-            {
-                "status": status,
-                "progress_stage": status,
+        if retryable:
+            # Match Edge: clear lease so claim_next_job can reclaim; no completed_at.
+            # failed_retryable stays outside TERMINAL_JOB_STATUSES until max attempts.
+            payload: dict[str, Any] = {
+                "status": "failed_retryable",
+                "progress_stage": "failed_retryable",
                 "error_code": code,
                 "error_message": message[:500],
-                "retryable": retryable,
-                "completed_at": now,
+                "retryable": True,
+                "completed_at": None,
                 "updated_at": now,
+                "worker_id": None,
                 "lease_expires_at": None,
             }
-        ).eq("id", job_id).execute()
+        else:
+            payload = {
+                "status": "failed_permanent",
+                "progress_stage": "failed_permanent",
+                "error_code": code,
+                "error_message": message[:500],
+                "retryable": False,
+                "completed_at": now,
+                "updated_at": now,
+                "worker_id": None,
+                "lease_expires_at": None,
+            }
+        self.db.table("gov_paper_generation_jobs").update(payload).eq(
+            "id", job_id
+        ).execute()
 
-    def refund_credits(self, user_id: str, amount: int, reason: str) -> bool:
-        """Compensate a charged-but-failed generation via the canonical credit RPC."""
+    def claim_credits_for_refund(self, job_id: str) -> int:
+        """Atomically claim credits_charged so only one path can refund this job.
+
+        Mirrors Edge `claimJobCreditsForRefund`: read amount, then update to 0 only
+        when credits_charged still equals that amount. Returns 0 if already claimed.
+        """
+        result = (
+            self.db.table("gov_paper_generation_jobs")
+            .select("credits_charged")
+            .eq("id", job_id)
+            .limit(1)
+            .execute()
+        )
+        row = (result.data or [None])[0]
+        if not row:
+            return 0
+        amount = max(0, int(row.get("credits_charged") or 0))
+        if amount <= 0:
+            return 0
+
+        claimed = (
+            self.db.table("gov_paper_generation_jobs")
+            .update(
+                {
+                    "credits_charged": 0,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+            .eq("id", job_id)
+            .eq("credits_charged", amount)
+            .execute()
+        )
+        if not (claimed.data or []):
+            return 0
+        return amount
+
+    def refund_credits(
+        self,
+        user_id: str,
+        amount: int,
+        reason: str,
+        *,
+        idempotency_key: str | None = None,
+    ) -> bool:
+        """Compensate a charged-but-failed generation via the canonical credit RPC.
+
+        Callers must claim via ``claim_credits_for_refund`` first. Optional
+        ``idempotency_key`` best-effort-dedupes against ``idempotency_log`` (Edge parity).
+        """
         if amount <= 0:
             return True
+
+        if idempotency_key:
+            try:
+                prior = (
+                    self.db.table("idempotency_log")
+                    .select("response, expires_at")
+                    .eq("key", idempotency_key)
+                    .limit(1)
+                    .execute()
+                )
+                prior_row = (prior.data or [None])[0]
+                if prior_row:
+                    expires = prior_row.get("expires_at")
+                    response = prior_row.get("response") or {}
+                    still_valid = True
+                    if expires:
+                        try:
+                            still_valid = (
+                                datetime.fromisoformat(
+                                    str(expires).replace("Z", "+00:00")
+                                )
+                                > datetime.now(timezone.utc)
+                            )
+                        except ValueError:
+                            still_valid = False
+                    if still_valid and isinstance(response, dict) and response.get("success") is True:
+                        return True
+            except Exception:  # noqa: BLE001 - idempotency is best-effort
+                pass
+
         try:
             self.db.rpc(
                 "refund_credits",
                 {"p_user_id": user_id, "p_cost": amount, "p_reason": reason},
             ).execute()
+            if idempotency_key:
+                try:
+                    self.db.table("idempotency_log").upsert(
+                        {
+                            "key": idempotency_key,
+                            "response": {"success": True, "credits": amount},
+                            "expires_at": (
+                                datetime.now(timezone.utc) + timedelta(hours=24)
+                            ).isoformat(),
+                            "metadata": {
+                                "user_id": user_id,
+                                "action": f"refund:{reason}",
+                            },
+                        },
+                        on_conflict="key",
+                    ).execute()
+                except Exception:  # noqa: BLE001 - idempotency store is best-effort
+                    pass
             return True
         except Exception as exc:  # noqa: BLE001 - refund failure must not mask the original error
             log.error("paper_factory_refund_failed", user_id=user_id, error=str(exc))

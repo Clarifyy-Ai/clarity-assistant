@@ -240,18 +240,18 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-sm font-semibold text-foreground">{integration.label}</p>
             {isConnected && <Badge variant="emerald" size="sm" dot>Connected</Badge>}
-            {!syncAvailable && integration.live && (
-              <Badge variant="amber" size="sm">Sync coming soon</Badge>
+            {!syncAvailable && (
+              <Badge variant="amber" size="sm">Coming Soon / Not configured</Badge>
             )}
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
             {isConnected
               ? syncAvailable
                 ? "Your calendar is linked. Use Sync to import upcoming interview events."
-                : "Your Google account is linked. Event import will be available once sync is enabled on the server."
+                : "Your Google account may be linked, but event import is not configured on the server yet."
               : syncAvailable
                 ? integration.desc
-                : "Google Calendar sync isn't available yet. Interview import will appear here once the server is configured."}
+                : "Google Calendar sync is Coming Soon / Not configured. Connect will appear here only when the server is ready."}
           </p>
           {lastSynced && (
             <p className="text-[10px] text-muted-foreground mt-0.5">
@@ -276,11 +276,21 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
               Sync now
             </Button>
           )}
-          {/* When sync isn't live, don't present Connect as the primary CTA */}
-          {!syncAvailable && !isConnected ? (
-            <Button variant="ghost" size="sm" disabled>
-              Sync unavailable
-            </Button>
+          {!syncAvailable ? (
+            isConnected ? (
+              <Button
+                variant="danger"
+                size="sm"
+                loading={isDisconnecting || isCheckingConnection}
+                onClick={handleDisconnect}
+              >
+                Disconnect
+              </Button>
+            ) : (
+              <Button variant="ghost" size="sm" disabled title="Calendar sync is not configured">
+                Coming Soon
+              </Button>
+            )
           ) : (
             <Button
               variant={isConnected ? "danger" : "secondary"}
@@ -298,7 +308,7 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
       <div className="mt-3 pt-3 border-t border-border">
         {!syncAvailable ? (
           <p className="text-[10px] text-muted-foreground leading-relaxed">
-            Calendar event import isn&apos;t enabled on the server yet. You can still schedule interviews manually in Clarify — Google sync will appear here once it&apos;s available.
+            Calendar event import is Coming Soon / Not configured on the server. There is no active Connect until sync is enabled — schedule interviews manually in Clarify for now.
           </p>
         ) : isConnected ? (
           <>

@@ -43,6 +43,10 @@ export default function Interviews() {
   useEffect(() => { scheduler.reload(); }, []);
 
   async function handleCalendarAction() {
+    if (!calendar.syncAvailable) {
+      toast.info("Google Calendar sync isn't configured yet — coming soon.");
+      return;
+    }
     if (!calendar.isConnected) {
       await calendar.connectGoogle();
       return;
@@ -52,7 +56,7 @@ export default function Interviews() {
       toast.error(error);
     } else {
       toast.success(`Synced ${imported} interview${imported === 1 ? "" : "s"} from Google Calendar`);
-      scheduler.reload();
+      void scheduler.reload();
     }
   }
 
@@ -60,8 +64,10 @@ export default function Interviews() {
     const scheduledAt = getCurrentRoundDate(iv);
     const status = getCurrentRoundStatus(iv);
     const d = new Date(scheduledAt);
+    // Active lists hide cancelled; history remains under the Cancelled tab.
+    if (filter === "all")       return status !== "cancelled";
     if (filter === "upcoming")  return isFuture(d) && !isToday(d) && status !== "cancelled";
-    if (filter === "today")     return isToday(d);
+    if (filter === "today")     return isToday(d) && status !== "cancelled";
     if (filter === "completed") return status === "completed";
     if (filter === "cancelled") return status === "cancelled";
     return true;
@@ -91,20 +97,26 @@ export default function Interviews() {
               variant="ghost"
               size="sm"
               onClick={handleCalendarAction}
-              loading={calendar.isSyncing}
-              disabled={calendar.isCheckingConnection}
+              loading={calendar.isSyncing || calendar.isProbingSync}
+              disabled={calendar.isCheckingConnection || calendar.isProbingSync}
               leftIcon={
-                calendar.isConnected
+                calendar.isConnected && calendar.syncAvailable
                   ? <RefreshCw className="w-3.5 h-3.5" />
                   : <CalendarDays className="w-3.5 h-3.5" />
               }
               title={
-                calendar.lastSynced
-                  ? `Last synced ${format(calendar.lastSynced, "MMM d, h:mm a")}`
-                  : undefined
+                !calendar.syncAvailable
+                  ? "Calendar sync not configured"
+                  : calendar.lastSynced
+                    ? `Last synced ${format(calendar.lastSynced, "MMM d, h:mm a")}`
+                    : undefined
               }
             >
-              {calendar.isConnected ? "Sync calendar" : "Connect calendar"}
+              {!calendar.syncAvailable
+                ? "Calendar: Coming soon"
+                : calendar.isConnected
+                  ? "Sync calendar"
+                  : "Connect calendar"}
             </Button>
             <Button
               variant="primary"
@@ -144,7 +156,9 @@ export default function Interviews() {
           >
             {f}
             {f === "today" && store.interviews.some(
-              (iv) => isToday(new Date(getCurrentRoundDate(iv)))
+              (iv) =>
+                isToday(new Date(getCurrentRoundDate(iv))) &&
+                getCurrentRoundStatus(iv) !== "cancelled",
             ) && (
               <span className="ml-1.5 w-1.5 h-1.5 bg-primary rounded-full inline-block" />
             )}

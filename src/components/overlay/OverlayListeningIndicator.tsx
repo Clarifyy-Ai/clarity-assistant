@@ -44,10 +44,26 @@ export const OverlayListeningIndicator = memo(function OverlayListeningIndicator
     state = "idle";
     label = "Text mode";
     detail = "Voice input is unavailable.";
+  } else if (audioPipeline === "ended") {
+    state = "idle";
+    label = "Session ended";
+    detail = undefined;
   } else if (audioPipeline === "microphone_only") {
     state = "idle";
     label = "Mic only";
-    detail = "Live transcription is unavailable.";
+    detail = "Live transcription is unavailable — type questions in Chat.";
+  } else if (audioPipeline === "connecting") {
+    state = "busy";
+    label = "Connecting transcription…";
+    detail = undefined;
+  } else if (audioPipeline === "reconnecting") {
+    state = "busy";
+    label = "Reconnecting transcription…";
+    detail = undefined;
+  } else if (audioPipeline === "receiving_audio" || audioPipeline === "transcribing") {
+    state = "listening";
+    label = audioPipeline === "transcribing" ? "Transcribing" : "Receiving audio";
+    detail = undefined;
   } else if (streamError?.message) {
     state = "error";
     label = "Error";

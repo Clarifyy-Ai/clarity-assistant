@@ -130,6 +130,11 @@ export default function AdminGovSources() {
         title="Official sources"
         description="Register and review official exam links (metadata only — no scraping)."
         icon={<Link2 className="w-5 h-5 text-red-400" />}
+        breadcrumbs={[
+          { label: "Admin", href: "/app/admin" },
+          { label: "Gov Exams", href: "/app/admin/gov/exams" },
+          { label: "Sources" },
+        ]}
       />
       <AdminGovDisclaimer />
 

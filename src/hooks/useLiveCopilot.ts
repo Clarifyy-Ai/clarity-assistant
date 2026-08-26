@@ -977,9 +977,23 @@ export function useLiveCopilot({
 
     useOverlayStore.getState().setSessionPipelineState("session_ending");
     markOverlayProductSessionTerminal(gen, "USER_ENDED");
-    audio.stop();
+    // STT / mic teardown must never block session history persistence.
+    try {
+      audio.stop();
+    } catch (stopErr) {
+      console.warn("[useLiveCopilot] audio stop during end (non-fatal):", stopErr);
+    }
+    try {
+      useAudioStore.getState().setPipelineStatus("ended");
+    } catch {
+      /* non-fatal */
+    }
     if (session.session_id) {
-      clearLiveSessionCheckpoint(session.session_id);
+      try {
+        clearLiveSessionCheckpoint(session.session_id);
+      } catch {
+        /* non-fatal */
+      }
     }
 
     if (userId && session.session_id && !getPrivateMode()) {
@@ -1003,7 +1017,7 @@ export function useLiveCopilot({
             .eq("session_id", session.session_id)
             .eq("user_id", userId);
         } catch {
-          /* non-fatal */
+          /* non-fatal — finalization below is the source of truth for history */
         }
 
         const result = await finalizeSessionApi({

@@ -1,18 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Input } from "@/components/ui/Input";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { COMMUNITY_CATEGORIES } from "@/lib/community/moderation";
@@ -31,56 +21,24 @@ type Post = {
 };
 
 export default function CommunityPage() {
-  const user = useAuthStore((s) => s.user);
   const isAdmin = useAuthStore((s) => s.isAdmin);
   const navigate = useNavigate();
   const [posts, setPosts] = useState<Post[]>([]);
   const [category, setCategory] = useState("all");
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [tags, setTags] = useState("");
-  const [postCategory, setPostCategory] = useState("Interview");
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
 
   async function load() {
     setError(null);
     let q = supabase.from("community_posts").select("*").order("created_at", { ascending: false }).limit(50);
     if (category !== "all") q = q.eq("category", category);
-    const { data, error } = await q;
-    if (error) { setError("Community could not be loaded."); setPosts([]); setLoaded(true); return; }
+    const { data, error: loadError } = await q;
+    if (loadError) { setError("Community could not be loaded."); setPosts([]); setLoaded(true); return; }
     setPosts((data as Post[]) ?? []);
     setLoaded(true);
   }
 
   useEffect(() => { void load(); }, [category]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function ask() {
-    if (!user?.id || !title.trim() || !body.trim() || title.trim().length > 200 || body.trim().length > 10000) {
-      toast.error("Enter a title and body within the allowed limits."); return;
-    }
-    if (saving) return;
-    setSaving(true);
-    const { error } = await supabase.from("community_posts").insert({
-      user_id: user.id,
-      title: title.trim(),
-      body: body.trim(),
-      tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
-      category: postCategory,
-      status: "PUBLISHED",
-    });
-    if (error) toast.error("Your question could not be posted.");
-    else {
-      setTitle("");
-      setBody("");
-      setTags("");
-      void load();
-    }
-    setSaving(false);
-  }
-
-  const isPreview = loaded && posts.length === 0;
 
   return (
     <div className={PAGE_SHELL}>
@@ -88,37 +46,25 @@ export default function CommunityPage() {
         title="Questions & Answers"
         breadcrumbs={[{ label: "Dashboard", href: "/app/dashboard" }, { label: "Questions & Answers" }]}
         badge="Preview"
-        description={
-          isPreview
-            ? "Preview — Clarify’s own community for interview questions. This is not a third-party forum."
-            : "Ask interview and career questions. This is Clarify’s own community, not a third-party forum."
-        }
+        description="Preview / Deferred for launch — browse-only. Create posts, replies, and reports are not in launch scope."
       />
       {error ? (
         <EmptyState title="Community unavailable" description={error} actionLabel="Retry" onAction={() => void load()} />
-      ) : isPreview && (
+      ) : loaded && posts.length === 0 && (
         <EmptyState
           icon={MessageSquare}
           title="No published questions yet"
-          description="Content is unpublished. You can still ask the first question below."
-          actionLabel={isAdmin ? "Open Admin Community" : undefined}
+          description="Community posting is deferred for launch. Staff can review moderation tooling separately."
+          actionLabel={isAdmin ? "Open Admin Community (Deferred)" : undefined}
           onAction={isAdmin ? () => navigate("/app/admin/community") : undefined}
           compact
         />
       )}
-      <Card className="mb-4 space-y-3">
-        <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ask a question" />
-        <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Add a description" />
-        <Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="Tags (comma separated)" />
-        <Select value={postCategory} onValueChange={setPostCategory}>
-          <SelectTrigger className="w-full sm:w-48"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {COMMUNITY_CATEGORIES.map((c) => (
-              <SelectItem key={c} value={c}>{c}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button loading={saving} disabled={saving} onClick={() => void ask()}>Post question</Button>
+      <Card className="mb-4 space-y-2 border-dashed">
+        <p className="text-sm font-medium">Posting unavailable in Preview</p>
+        <p className="text-sm text-muted-foreground">
+          Asking questions, answering, and reporting are deferred until Community ships. There is no create-post action in this build.
+        </p>
       </Card>
       <div className="mb-3 flex flex-wrap gap-2">
         <Button size="sm" variant={category === "all" ? "primary" : "outline"} onClick={() => setCategory("all")}>All</Button>

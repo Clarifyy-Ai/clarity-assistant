@@ -47,11 +47,22 @@ type HybridHealthPayload = {
   required?: "ok" | "service-unavailable";
   db?: { ok: boolean; status: string };
   storage?: { ok: boolean; status: string };
+  supported_operations?: string[];
+  operations_count?: number;
+  edge_operation_wrappers?: Record<string, string>;
+  chaos?: {
+    force_ai_unavailable?: boolean;
+    force_python_unavailable?: boolean;
+  };
   python?: {
     configured?: boolean;
+    hmac_ok?: boolean;
+    up?: boolean;
+    down?: boolean;
     status?: string;
     health?: { ok: boolean; latency_ms?: number } | null;
     ready?: { ok: boolean; latency_ms?: number } | null;
+    signed_internal?: { ok: boolean; latency_ms?: number; code?: string } | null;
   };
   ai?: {
     gemini?: HybridPresence;
@@ -286,6 +297,25 @@ export async function runAdminHealthChecks(): Promise<HealthCheck[]> {
     });
 
     const pyOk = hybrid.python?.health?.ok && hybrid.python?.ready?.ok;
+    const hmacOk = hybrid.python?.hmac_ok === true;
+    checks.push({
+      id: "python_hmac",
+      label: "Python HMAC (Edge→Render)",
+      status: !hybrid.python?.configured
+        ? "NOT_CONFIGURED"
+        : hmacOk
+          ? "PASS"
+          : pyOk
+            ? "WARNING"
+            : "FAIL",
+      detail: !hybrid.python?.configured
+        ? "Integration not configured"
+        : hmacOk
+          ? "Signed internal route ok (secret not exposed)"
+          : pyOk
+            ? "Public /health ok but signed internal auth failed — check HMAC secret sync"
+            : hybrid.python?.signed_internal?.code ?? "HMAC probe failed",
+    });
     checks.push({
       id: "python_edge",
       label: "Python via Edge",
@@ -325,6 +355,23 @@ export async function runAdminHealthChecks(): Promise<HealthCheck[]> {
     checks.push(presenceCheck("calendar", "Google Calendar", hybrid.integrations?.calendar));
     checks.push(presenceCheck("sentry", "Sentry", hybrid.integrations?.sentry));
     checks.push(presenceCheck("posthog", "PostHog", hybrid.integrations?.posthog));
+
+    const opCount = hybrid.operations_count ?? hybrid.supported_operations?.length ?? 0;
+    checks.push({
+      id: "hybrid_operations",
+      label: "Hybrid operations matrix",
+      status: opCount > 0 ? "PASS" : "WARNING",
+      detail: `${opCount} operations; ${Object.keys(hybrid.edge_operation_wrappers ?? {}).length} Edge wrappers`,
+    });
+
+    if (hybrid.chaos?.force_ai_unavailable || hybrid.chaos?.force_python_unavailable) {
+      checks.push({
+        id: "hybrid_chaos",
+        label: "Hybrid chaos flags",
+        status: "WARNING",
+        detail: `force_ai=${Boolean(hybrid.chaos.force_ai_unavailable)} force_python=${Boolean(hybrid.chaos.force_python_unavailable)}`,
+      });
+    }
   } catch (e) {
     checks.push({
       id: "hybrid_health",
@@ -334,7 +381,7 @@ export async function runAdminHealthChecks(): Promise<HealthCheck[]> {
     });
   }
 
-  // Scraper
+  // Scraper (JWT admin paths — separate from Edge HMAC)
   if (!scraperApi.isConfigured()) {
     checks.push({
       id: "scraper",
@@ -348,6 +395,86 @@ export async function runAdminHealthChecks(): Promise<HealthCheck[]> {
       label: "FastAPI scraper",
       status: "PASS",
       detail: "VITE_SCRAPER_URL is set (JWT-verified admin calls)",
+    });
+    try {
+      const sources = await withTimeout(scraperApi.sources(), 10_000, "scrape/sources");
+      checks.push({
+        id: "scraper_sources",
+        label: "Scraper sources",
+        status: sources.supported?.length ? "PASS" : "WARNING",
+        detail: sources.supported?.length
+          ? `${sources.supported.length} exam types: ${sources.supported.slice(0, 5).join(", ")}${sources.supported.length > 5 ? "…" : ""}`
+          : "No supported exam types returned",
+      });
+    } catch (e) {
+      checks.push({
+        id: "scraper_sources",
+        label: "Scraper sources",
+        status: "WARNING",
+        detail: toAdminUserMessage(e, undefined, "diagnostics.scraper_sources"),
+      });
+    }
+    try {
+      const exams = await withTimeout(scraperApi.paperFactoryExams(), 12_000, "paper-factory/exams");
+      checks.push({
+        id: "paper_factory_exams",
+        label: "Paper factory exams",
+        status: exams.success && exams.count > 0 ? "PASS" : exams.success ? "WARNING" : "FAIL",
+        detail: exams.success
+          ? `${exams.count} gov exam(s) visible to factory`
+          : "paper-factory/exams did not return success",
+      });
+    } catch (e) {
+      checks.push({
+        id: "paper_factory_exams",
+        label: "Paper factory exams",
+        status: "WARNING",
+        detail: toAdminUserMessage(e, undefined, "diagnostics.paper_factory"),
+      });
+    }
+  }
+
+  // Edge hybrid ping (HMAC smoke — no secrets in response)
+  try {
+    await withTimeout(fetchEdgeJson("hybrid-ping", {}), 12_000, "hybrid-ping");
+    checks.push({
+      id: "hybrid_ping",
+      label: "Hybrid ping",
+      status: "PASS",
+      detail: "Edge → Python ping via HMAC ok",
+    });
+  } catch (e) {
+    checks.push({
+      id: "hybrid_ping",
+      label: "Hybrid ping",
+      status: "WARNING",
+      detail: toAdminUserMessage(e, undefined, "diagnostics.hybrid_ping"),
+    });
+  }
+
+  // Admin provider key presence (no secret values)
+  try {
+    const keys = await withTimeout(
+      fetchEdgeJson<{ providers?: Record<string, boolean> }>("ai-key-check", {}),
+      8_000,
+      "ai-key-check",
+    );
+    const configured = Object.values(keys.providers ?? {}).filter(Boolean).length;
+    checks.push({
+      id: "ai_key_check",
+      label: "Provider keys (presence)",
+      status: configured > 0 ? "PASS" : "NOT_CONFIGURED",
+      detail:
+        configured > 0
+          ? `${configured} provider integration(s) configured (values never returned)`
+          : "No provider keys configured on Edge",
+    });
+  } catch (e) {
+    checks.push({
+      id: "ai_key_check",
+      label: "Provider keys (presence)",
+      status: "WARNING",
+      detail: toAdminUserMessage(e, undefined, "diagnostics.ai_key_check"),
     });
   }
 

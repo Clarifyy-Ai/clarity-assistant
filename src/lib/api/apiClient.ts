@@ -14,8 +14,12 @@
 // Prefer this module (or `@/lib/network/fetchEdge`) for Edge/API calls.
 // `src/lib/network/apiClient.ts` is a deprecated no-op shim — do not use it.
 
-import { EDGE_BASE } from "@/lib/env";
+import { EDGE_BASE, SUPABASE_PUBLISHABLE_KEY } from "@/lib/env";
+import { isTabLocalLogout } from "@/lib/auth/tabLocalLogout";
+import { ensureAuthSession } from "@/lib/focusRecovery/sessionRefresh";
+import { logger } from "@/lib/logger";
 import { getCSRFHeaders } from "@/lib/security";
+import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -149,15 +153,62 @@ function createAbortSignal(
   return controller.signal;
 }
 
-function getAccessToken(): string | null {
-  const session = useAuthStore.getState().session;
-  const token = session?.access_token;
+/**
+ * Prefer a live (refreshed-if-near-expiry) access token — same as fetchEdge readToken.
+ * Respect tab-local logout so soft sign-out never attaches a shared-session token.
+ */
+async function getAccessToken(options?: {
+  forceRefresh?: boolean;
+}): Promise<string | null> {
+  if (isTabLocalLogout()) {
+    return null;
+  }
 
-  if (typeof token === "string" && token.trim().length > 0) {
-    return token.trim();
+  try {
+    const ensured = await ensureAuthSession({
+      forceRefresh: options?.forceRefresh === true,
+    });
+    const ensuredToken = ensured.session?.access_token;
+    if (typeof ensuredToken === "string" && ensuredToken.trim()) {
+      return ensuredToken.trim();
+    }
+  } catch (error) {
+    logger.warn("auth.session.recovery.failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    logger.warn("auth.session.recovery.failed", { error: error.message });
+  }
+  const fresh = data?.session?.access_token;
+  if (typeof fresh === "string" && fresh.trim().length > 0) {
+    return fresh.trim();
+  }
+
+  const storeToken = useAuthStore.getState().session?.access_token;
+  if (typeof storeToken === "string" && storeToken.trim().length > 0) {
+    return storeToken.trim();
   }
 
   return null;
+}
+
+/** Match fetchEdge isAuthRetryableStatus — one safe 401 refresh/retry. */
+function isAuthRetryableError(error: ApiClientError): boolean {
+  if (error.status !== 401) {
+    return false;
+  }
+  const normalized = `${error.code ?? ""} ${error.message ?? ""}`.toUpperCase();
+  return (
+    normalized.includes("AUTH_EXPIRED") ||
+    normalized.includes("AUTH_INVALID") ||
+    normalized.includes("AUTH_REQUIRED") ||
+    normalized.includes("UNAUTHORIZED") ||
+    normalized.includes("EXPIRED") ||
+    normalized.includes("INVALID OR EXPIRED")
+  );
 }
 
 /** BYOK product disabled — never forward client API keys. */
@@ -165,23 +216,25 @@ function getByokHeaders(): Record<string, string> {
   return {};
 }
 
-function buildHeaders(
+async function buildHeaders(
   options: Required<Pick<ApiClientOptions, "auth" | "csrf" | "byok">> & {
     method: HttpMethod;
     customHeaders?: Record<string, string>;
     hasBody: boolean;
   }
-): Headers {
+): Promise<Headers> {
   const headers = new Headers();
 
   headers.set("Accept", "application/json");
+  headers.set("apikey", SUPABASE_PUBLISHABLE_KEY);
+  headers.set("x-client-info", "clarify-web");
 
   if (options.hasBody) {
     headers.set("Content-Type", "application/json");
   }
 
   if (options.auth) {
-    const accessToken = getAccessToken();
+    const accessToken = await getAccessToken();
 
     if (accessToken) {
       headers.set("Authorization", `Bearer ${accessToken}`);
@@ -325,7 +378,8 @@ function calculateRetryDelay(baseDelayMs: number, attempt: number): number {
 
 async function executeRequest<T>(
   url: string,
-  options: ApiClientOptions
+  options: ApiClientOptions,
+  allowAuthRefresh = true,
 ): Promise<T> {
   const method = options.method ?? "GET";
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -334,7 +388,7 @@ async function executeRequest<T>(
 
   const signal = createAbortSignal(timeoutMs, options.signal);
 
-  const headers = buildHeaders({
+  const headers = await buildHeaders({
     method,
     auth: options.auth ?? true,
     csrf: options.csrf ?? true,
@@ -362,7 +416,7 @@ async function executeRequest<T>(
   if (!response.ok) {
     const errorPayload = normalizeErrorPayload(parsedBody);
 
-    throw new ApiClientError({
+    const clientError = new ApiClientError({
       message:
         errorPayload.error ??
         errorPayload.message ??
@@ -372,6 +426,21 @@ async function executeRequest<T>(
       errorId: errorPayload.errorId,
       details: errorPayload.details ?? parsedBody,
     });
+
+    // One safe refresh/retry for expired/invalid JWTs — never loop (fetchEdge parity).
+    if (
+      allowAuthRefresh &&
+      (options.auth ?? true) &&
+      !isTabLocalLogout() &&
+      isAuthRetryableError(clientError)
+    ) {
+      const refreshedToken = await getAccessToken({ forceRefresh: true });
+      if (refreshedToken) {
+        return executeRequest<T>(url, options, false);
+      }
+    }
+
+    throw clientError;
   }
 
   /**

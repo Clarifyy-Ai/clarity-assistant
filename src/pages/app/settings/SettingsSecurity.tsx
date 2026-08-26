@@ -16,7 +16,9 @@ export default function SettingsSecurity() {
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
-  const [showPw, setShowPw] = useState(false);
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [factors, setFactors] = useState<MfaFactor[]>([]);
@@ -160,20 +162,41 @@ export default function SettingsSecurity() {
         </h3>
         <div className="space-y-3 max-w-md">
           <div>
-            <label className="block text-xs text-muted-foreground mb-1">Current Password</label>
-            <input
-              type={showPw ? "text" : "password"}
-              value={currentPw}
-              onChange={(e) => setCurrentPw(e.target.value)}
-              placeholder="Enter current password"
-              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-muted-foreground mb-1">New Password</label>
+            <label className="block text-xs text-muted-foreground mb-1" htmlFor="security-current-pw">
+              Current Password
+            </label>
             <div className="relative">
               <input
-                type={showPw ? "text" : "password"}
+                id="security-current-pw"
+                name="current-password"
+                autoComplete="current-password"
+                type={showCurrentPw ? "text" : "password"}
+                value={currentPw}
+                onChange={(e) => setCurrentPw(e.target.value)}
+                placeholder="Enter current password"
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPw((v) => !v)}
+                aria-label={showCurrentPw ? "Hide current password" : "Show current password"}
+                aria-pressed={showCurrentPw}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                {showCurrentPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs text-muted-foreground mb-1" htmlFor="security-new-pw">
+              New Password
+            </label>
+            <div className="relative">
+              <input
+                id="security-new-pw"
+                name="new-password"
+                autoComplete="new-password"
+                type={showNewPw ? "text" : "password"}
                 value={newPw}
                 onChange={(e) => setNewPw(e.target.value)}
                 placeholder="At least 8 characters"
@@ -181,20 +204,25 @@ export default function SettingsSecurity() {
               />
               <button
                 type="button"
-                  onClick={() => setShowPw((visible) => !visible)}
-                  aria-label={showPw ? "Hide new password" : "Show new password"}
-                  aria-pressed={showPw}
+                onClick={() => setShowNewPw((v) => !v)}
+                aria-label={showNewPw ? "Hide new password" : "Show new password"}
+                aria-pressed={showNewPw}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
-                {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
           </div>
           <div>
-            <label className="block text-xs text-muted-foreground mb-1">Confirm New Password</label>
+            <label className="block text-xs text-muted-foreground mb-1" htmlFor="security-confirm-pw">
+              Confirm New Password
+            </label>
             <div className="relative">
               <input
-                type={showPw ? "text" : "password"}
+                id="security-confirm-pw"
+                name="confirm-password"
+                autoComplete="new-password"
+                type={showConfirmPw ? "text" : "password"}
                 value={confirmPw}
                 onChange={(e) => setConfirmPw(e.target.value)}
                 placeholder="Re-enter new password"
@@ -202,12 +230,12 @@ export default function SettingsSecurity() {
               />
               <button
                 type="button"
-                onClick={() => setShowPw((visible) => !visible)}
-                aria-label={showPw ? "Hide confirm password" : "Show confirm password"}
-                aria-pressed={showPw}
+                onClick={() => setShowConfirmPw((v) => !v)}
+                aria-label={showConfirmPw ? "Hide confirm password" : "Show confirm password"}
+                aria-pressed={showConfirmPw}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
-                {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {showConfirmPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
           </div>

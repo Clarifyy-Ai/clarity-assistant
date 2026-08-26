@@ -2,9 +2,11 @@
  * Client-side policy helper for paper generation vs approved inventory.
  * The server remains the authority; this only decides what the UI may offer.
  *
- * Short bank is not a dead end when:
- *   - AI fill capability is available, OR
- *   - Python deterministic / hybrid fill is available (realistic mock)
+ * Honesty rules (P0-02):
+ *   - Bank covers request → Full Mock / bank_only.
+ *   - Short bank + AI fill capability → AI-assisted Full Mock.
+ *   - Otherwise fail closed → Custom Practice (never invent hybrid /
+ *     "Realistic Mock" from fragile Python-fill heuristics).
  */
 
 export type InventoryMode =
@@ -32,14 +34,17 @@ export function decideQuestionInventory(input: {
   minQuestions?: number;
   /** True when the signed-in plan may generate missing questions with AI. */
   aiFillAvailable?: boolean;
-  /** True when Edge can reach the Python paper factory (deterministic fill). */
+  /**
+   * @deprecated Ignored for client honesty. Short banks fail closed to
+   * Custom Practice unless AI fill is available — do not unlock Full Mock
+   * from Python/hybrid heuristics.
+   */
   pythonFillAvailable?: boolean;
 }): InventoryDecision {
   const available = Math.max(0, Math.floor(Number(input.available) || 0));
   const requested = Math.max(0, Math.floor(Number(input.requested) || 0));
   const minQuestions = Math.max(1, Math.floor(Number(input.minQuestions) || 5));
   const aiFillAvailable = input.aiFillAvailable === true;
-  const pythonFillAvailable = input.pythonFillAvailable === true;
   const customPracticeMax = available;
   const shortfall = Math.max(0, requested - available);
 
@@ -56,18 +61,8 @@ export function decideQuestionInventory(input: {
     };
   }
 
-  if (pythonFillAvailable && shortfall > 0) {
-    return {
-      canGenerateRequested: true,
-      mode: "hybrid_deterministic",
-      available,
-      requested,
-      aiQuestions: 0,
-      deterministicQuestions: shortfall,
-      customPracticeMax,
-      reason: "hybrid_fill",
-    };
-  }
+  // Intentionally ignore pythonFillAvailable: hybrid/realistic-mock unlock
+  // from env/heuristic flags misled QA. Fail closed to Custom Practice.
 
   if (available < minQuestions) {
     return {

@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { Input } from "@/components/ui/Input";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -10,7 +11,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { BookOpen, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { BookOpen, ChevronDown, ChevronRight, Loader2, Search } from "lucide-react";
 import { AdminGovDisclaimer } from "./AdminGovDisclaimer";
 import {
   REGISTRY_REVIEW_STATES,
@@ -68,6 +69,7 @@ export default function AdminGovExamRegistry() {
   const [loading, setLoading] = useState(true);
   const [reviewFilter, setReviewFilter] = useState("all");
   const [familyFilter, setFamilyFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [stages, setStages] = useState<StageRow[]>([]);
@@ -165,6 +167,14 @@ export default function AdminGovExamRegistry() {
       toast.success(`Syllabus → ${next}`);
     }
   }
+
+  const q = searchQuery.trim().toLowerCase();
+  const filteredRows = q
+    ? rows.filter((r) => {
+        const hay = `${r.code} ${r.name} ${r.family ?? ""}`.toLowerCase();
+        return hay.includes(q);
+      })
+    : rows;
 
   return (
     <div className="space-y-6 max-w-6xl">
@@ -273,6 +283,16 @@ export default function AdminGovExamRegistry() {
       </Card>
 
       <div className="flex flex-wrap gap-2">
+        <div className="relative min-w-[200px] flex-1 max-w-sm">
+          <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            className="pl-8 h-8 text-sm"
+            placeholder="Search exams by code or name…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            aria-label="Search exams"
+          />
+        </div>
         <Select value={reviewFilter} onValueChange={setReviewFilter}>
           <SelectTrigger className="w-[160px] h-8 text-sm"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -319,8 +339,14 @@ export default function AdminGovExamRegistry() {
                   No exams visible. Non-approved rows require the admin RLS migration.
                 </TableCell>
               </TableRow>
+            ) : filteredRows.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="text-muted-foreground">
+                  No exams match this search.
+                </TableCell>
+              </TableRow>
             ) : (
-              rows.map((exam) => (
+              filteredRows.map((exam) => (
                 <Fragment key={exam.id}>
                   <TableRow className="cursor-pointer" onClick={() => void expand(exam)}>
                     <TableCell>

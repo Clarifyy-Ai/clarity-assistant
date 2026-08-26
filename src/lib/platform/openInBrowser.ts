@@ -1,15 +1,31 @@
 import { ENV } from "@/lib/env";
+import {
+  PRODUCTION_APP_URL,
+  isLocalhostUrl,
+} from "@/lib/auth/redirectUrl";
 import { isElectronApp } from "@/lib/platform/isElectron";
 
 type ElectronOpenExternal = {
   openExternal?: (url: string) => void | Promise<void>;
 };
 
-/** Canonical web-app origin for deep links from the desktop shell. */
+/**
+ * Canonical web-app origin for deep links from the desktop shell.
+ * Never honor a localhost VITE_APP_URL in production (billing "open in browser"
+ * must not hand users a dead localhost resource URL).
+ */
 export function getWebAppUrl(path = ""): string {
-  const base =
-    ENV.APP_URL?.replace(/\/$/, "") ||
-    (typeof window !== "undefined" ? window.location.origin : "");
+  const configured = (ENV.APP_URL ?? "").replace(/\/$/, "");
+  const isProduction = (ENV.APP_ENV ?? "").toLowerCase() === "production";
+  const windowOrigin =
+    typeof window !== "undefined" ? window.location.origin.replace(/\/$/, "") : "";
+
+  let base = configured;
+  if (!base || (isProduction && isLocalhostUrl(base))) {
+    base = isProduction
+      ? PRODUCTION_APP_URL
+      : windowOrigin || PRODUCTION_APP_URL;
+  }
 
   if (!path) return base;
 

@@ -93,9 +93,13 @@ export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
             : transcriptionState === TranscriptionState.CONNECTING ||
                 transcriptionState === TranscriptionState.RECONNECTING
               ? "text-amber-300/80 bg-amber-500/10 border-amber-500/20"
-              : "text-sky-300/80 bg-sky-500/10 border-sky-500/20",
+              : transcriptionState === TranscriptionState.TEXT_ONLY ||
+                  transcriptionState === TranscriptionState.ENDED
+                ? "text-sky-300/80 bg-sky-500/10 border-sky-500/20"
+                : "text-amber-300/80 bg-amber-500/10 border-amber-500/20",
         )}
         title={`Transcription: ${transcriptionLabel}`}
+        data-transcription-state={transcriptionState}
       >
         {dgOk ? <Wifi className="w-2.5 h-2.5" /> : <WifiOff className="w-2.5 h-2.5" />}
         {transcriptionLabel}

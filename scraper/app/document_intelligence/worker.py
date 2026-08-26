@@ -17,10 +17,12 @@ from typing import Any, Callable
 from supabase import Client, create_client
 
 from app.document_intelligence.parsers.errors import ParseError
-from app.document_intelligence.parsers.service import parse_document_bytes
 from app.document_intelligence.schemas import JobState
 
 logger = logging.getLogger(__name__)
+
+# Aligned with Edge DOCUMENT_MAX_BYTES / client DOCUMENT_MAX_BYTES (fail-closed).
+DOCUMENT_MAX_BYTES = 20 * 1024 * 1024
 
 
 def document_worker_id() -> str:
@@ -207,6 +209,15 @@ class DocumentJobWorker:
             if downloader:
                 raw_bytes = downloader(job)
 
+            if len(raw_bytes) > DOCUMENT_MAX_BYTES:
+                max_mb = DOCUMENT_MAX_BYTES // (1024 * 1024)
+                raise ParseError(
+                    "DOCUMENT_SIZE_INVALID",
+                    f"File is too large. Maximum size is {max_mb} MB.",
+                    retryable=False,
+                    stage="downloading",
+                )
+
             self.heartbeat(job_id)
 
             # Stage 2: extracting
@@ -349,10 +360,20 @@ def _download_document(db: Client, job: dict[str, Any]) -> bytes:
         raise ValueError("Job storage_reference.path is missing")
     response = db.storage.from_(bucket).download(path)
     if isinstance(response, bytes):
-        return response
-    if hasattr(response, "read"):
-        return response.read()
-    raise ValueError("Storage download returned unexpected payload")
+        raw = response
+    elif hasattr(response, "read"):
+        raw = response.read()
+    else:
+        raise ValueError("Storage download returned unexpected payload")
+    if len(raw) > DOCUMENT_MAX_BYTES:
+        max_mb = DOCUMENT_MAX_BYTES // (1024 * 1024)
+        raise ParseError(
+            "DOCUMENT_SIZE_INVALID",
+            f"File is too large. Maximum size is {max_mb} MB.",
+            retryable=False,
+            stage="downloading",
+        )
+    return raw
 
 
 def _needs_ocr(extracted: Any) -> bool:
@@ -405,18 +426,69 @@ def _ocr_document(raw_bytes: bytes, job: dict[str, Any], extracted: Any = None) 
 
 
 def _extract_document(raw_bytes: bytes, job: dict[str, Any]) -> tuple[Any, Any]:
-    document_id = str(job.get("document_id") or "document.pdf")
-    filename = document_id if "." in document_id else f"{document_id}.pdf"
+    """Extract and classify via the hybrid ``document_extract`` engine (python → ai at Edge)."""
+    import base64
+
+    from app.document_intelligence.parsers.models import PageResult, ParseWarning, ParsedDocument
+    from app.engines.document_extract import run_document_extract
+
     storage_ref = job.get("storage_reference") or {}
+    filename = "document.pdf"
     if isinstance(storage_ref, dict):
         path = str(storage_ref.get("path") or "")
         if path:
             filename = path.rsplit("/", 1)[-1] or filename
-    category = str(job.get("category") or job.get("file_category") or "").lower()
-    if category in {"resume_pdf", "job_description"}:
-        return parse_document_bytes(raw_bytes, filename, category)
-    from app.document_intelligence.parsers.document import parse_bytes
-    return parse_bytes(raw_bytes, filename), None
+
+    category = str(
+        job.get("category")
+        or job.get("file_category")
+        or (storage_ref.get("file_category") if isinstance(storage_ref, dict) else "")
+        or ""
+    ).lower()
+    mime = str(storage_ref.get("mime_type") if isinstance(storage_ref, dict) else "") or "application/octet-stream"
+    operation_id = str(job.get("id") or "document-extract")
+    correlation_id = str(job.get("correlation_id") or operation_id)
+
+    result = run_document_extract(
+        {
+            "content_base64": base64.b64encode(raw_bytes).decode("ascii"),
+            "filename": filename,
+            "mime": mime,
+            "mime_type": mime,
+            "document_kind": category or None,
+            "category_hint": category or None,
+        },
+        operation_id=operation_id,
+        correlation_id=correlation_id,
+    )
+
+    warnings = [
+        ParseWarning(code=str(code), message=str(code))
+        if isinstance(code, str)
+        else ParseWarning(code="warning", message=str(code))
+        for code in result.get("warnings") or []
+    ]
+    review_required = (
+        result.get("detected_document_type") == "UNKNOWN_REVIEW"
+        or "review_required" in (result.get("warnings") or [])
+    )
+    parsed = ParsedDocument(
+        parser_version="document_extract",
+        filename=filename,
+        media_type=mime,
+        pages=[
+            PageResult(
+                page_number=max(1, int(result.get("page_count") or 1)),
+                text=str(result.get("extracted_text") or ""),
+                extraction_method="text",
+            )
+        ],
+        text=str(result.get("extracted_text") or ""),
+        warnings=warnings,
+        confidence=float(result.get("confidence") or 0.0),
+        review_required=review_required,
+    )
+    return parsed, result.get("structured")
 
 
 def _validate_extraction(extracted: Any, _job: dict[str, Any]) -> bool:

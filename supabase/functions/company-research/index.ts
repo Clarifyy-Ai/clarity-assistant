@@ -207,6 +207,39 @@ async function persistCompanyResearchWithRetry(
   return null;
 }
 
+async function persistBriefResult(
+  admin: ReturnType<typeof getAdminClient>,
+  userId: string,
+  company: string,
+  normalized: string,
+  role: string,
+  brief: ResearchBrief,
+  source: string,
+): Promise<CompanyResearchClientData | null> {
+  const saved = await persistCompanyResearchWithRetry(
+    admin,
+    userId,
+    company,
+    normalized,
+    role,
+    brief,
+  );
+  if (!saved?.id) {
+    throw new DomainError(
+      "DATABASE_FAILURE",
+      "Research was generated, but we could not save it after conflict recovery.",
+    );
+  }
+  return {
+    persisted: true,
+    cached: false,
+    id: saved.id,
+    data: brief,
+    brief,
+    source,
+  };
+}
+
 function briefFromPythonCompany(data: unknown, company: string, role: string): ResearchBrief | null {
   if (!data || typeof data !== "object") return null;
   const profile = (data as Record<string, unknown>).profile;
@@ -418,9 +451,8 @@ Deno.serve(async (req) => {
         };
       },
       runPython: async (ctx) => {
-        // Deterministic normalize first; optional AI enrichment in-path.
+        // MATRIX: database → python (normalize only) → ai
         let pyData: unknown = null;
-        let source = "deterministic";
         try {
           const py = await callPythonProcess({
             operation: "company_normalize",
@@ -434,63 +466,24 @@ Deno.serve(async (req) => {
               normalized,
             },
           });
-          if (py.ok) {
-            pyData = py.data;
-            source = "python";
-          }
+          if (py.ok) pyData = py.data;
         } catch (err) {
-          log(FN, "warn", "Python normalization unavailable; using deterministic brief", {
+          log(FN, "warn", "Python normalization unavailable", {
             requestId,
             error: String(err),
           });
         }
 
-        let brief = briefFromPythonCompany(pyData, company, role);
-        if (!brief) {
-          brief = briefFromPythonCompany(
-            { profile: { company_name: company, company_name_normalized: normalized } },
-            company,
-            role,
-          );
-        }
-
-        try {
-          const aiBrief = await generateBriefWithAi(company, role, userId);
-          brief = aiBrief;
-          source = source === "python" ? "python+ai" : "ai";
-        } catch (err) {
-          log(FN, "warn", "AI enrichment failed; keeping python brief if present", {
-            requestId,
-            error: String(err),
-            hasPython: Boolean(brief),
-          });
-        }
-
-        if (!brief) return null;
-
-        const saved = await persistCompanyResearchWithRetry(
-          admin,
-          userId,
-          company,
-          normalized,
-          role,
-          brief,
+        const brief = briefFromPythonCompany(pyData, company, role);
+        const isScaffold = Boolean(
+          brief?.overview.includes("being researched for") ||
+            brief?.watch_outs.some((w) => w.includes("unverified assumptions")),
         );
-        if (!saved?.id) {
-          throw new DomainError(
-            "DATABASE_FAILURE",
-            "Research was generated, but we could not save it after conflict recovery.",
-          );
+        if (!brief || !isMeaningfulBrief(brief) || isScaffold) {
+          return null;
         }
 
-        return {
-          persisted: true,
-          cached: false,
-          id: saved.id,
-          data: brief,
-          brief,
-          source,
-        };
+        return persistBriefResult(admin, userId, company, normalized, role, brief, "python");
       },
       runDeterministic: async () => {
         const brief = briefFromPythonCompany(
@@ -499,54 +492,19 @@ Deno.serve(async (req) => {
           role,
         );
         if (!brief) return null;
-        const saved = await persistCompanyResearchWithRetry(
+        return persistBriefResult(
           admin,
           userId,
           company,
           normalized,
           role,
           brief,
+          "deterministic",
         );
-        if (!saved?.id) {
-          throw new DomainError(
-            "DATABASE_FAILURE",
-            "Research was generated, but we could not save it after conflict recovery.",
-          );
-        }
-        return {
-          persisted: true,
-          cached: false,
-          id: saved.id,
-          data: brief,
-          brief,
-          source: "deterministic",
-        };
       },
       runAi: async () => {
-        // Fallback when Python path unavailable.
         const brief = await generateBriefWithAi(company, role, userId);
-        const saved = await persistCompanyResearchWithRetry(
-          admin,
-          userId,
-          company,
-          normalized,
-          role,
-          brief,
-        );
-        if (!saved?.id) {
-          throw new DomainError(
-            "DATABASE_FAILURE",
-            "Research was generated, but we could not save it after conflict recovery.",
-          );
-        }
-        return {
-          persisted: true,
-          cached: false,
-          id: saved.id,
-          data: brief,
-          brief,
-          source: "ai",
-        };
+        return persistBriefResult(admin, userId, company, normalized, role, brief, "ai");
       },
     });
 

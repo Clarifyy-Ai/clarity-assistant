@@ -1,19 +1,17 @@
-// polish-star-section/index.ts — SECURE, FIXED PRODUCTION VERSION
+// polish-star-section/index.ts — hybrid-backed STAR section polish
 
 
 import {
   handleCors, parseBody, requireAuth,
-  successResponse, errorResponse,
+  errorResponse,
   requireFields, log, getAdminClient
 } from "../_shared/utils.ts";
-import { deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
 import { generateWithFallback } from "../_shared/aiProvider.ts";
 import type { ModelId } from "../_shared/types.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
-import { creditDenialResponse } from "../_shared/creditAuthority.ts";
 import {
   assessStarFactualIntegrity,
   FACTUAL_INTEGRITY_SYSTEM_RULE,
@@ -23,6 +21,7 @@ import {
   AI_RESPONSE_INVALID_MESSAGE,
 } from "../_shared/structuredParse.ts";
 import { callPythonProcess } from "../_shared/pythonClient.ts";
+import { executeHybridOperation } from "../_shared/hybridExecute.ts";
 
 type STARKey = "situation" | "task" | "action" | "result";
 
@@ -35,6 +34,14 @@ const SECTION_GUIDANCE: Record<STARKey, string> = {
 
 const POLISH_STYLES = ["concise", "detailed", "impactful", "natural"] as const;
 type PolishStyle = (typeof POLISH_STYLES)[number];
+
+type PolishHybridData = {
+  section: STARKey;
+  polished: string;
+  original: string;
+  source?: string;
+  draft_kind?: string;
+};
 
 /* -----------------------------------------------
    SANITIZATION HELPERS
@@ -54,6 +61,26 @@ function sanitizeAIOutput(text: string): string {
     .replace(/```json/gi, "")
     .replace(/```/g, "")
     .trim();
+}
+
+function extractPythonSectionText(
+  data: unknown,
+  section: STARKey,
+  fallback: string,
+): string {
+  if (!data || typeof data !== "object") return fallback;
+  const obj = data as Record<string, unknown>;
+  const starDraft =
+    obj.star_draft && typeof obj.star_draft === "object"
+      ? (obj.star_draft as Record<string, unknown>)
+      : obj;
+  const candidate =
+    (typeof starDraft[section] === "string" && starDraft[section]) ||
+    (typeof obj[section] === "string" && obj[section]) ||
+    (typeof obj.polished === "string" && obj.polished) ||
+    (typeof obj.draft === "string" && obj.draft) ||
+    "";
+  return candidate.trim() ? String(candidate).trim() : fallback;
 }
 
 /* -----------------------------------------------
@@ -89,7 +116,7 @@ Deno.serve(async (req: Request) => {
       currentText: string;
       questionText?: string;
       style?: PolishStyle;
-      instruction?: string;  
+      instruction?: string;
       model?: ModelId;
     }>(req);
 
@@ -131,15 +158,6 @@ Deno.serve(async (req: Request) => {
       req.headers.get("x-idempotency-key") ??
       req.headers.get("Idempotency-Key") ??
       null;
-    const creditResult = await deductCreditsAtomic({
-      userId: auth.userId,
-      action: "polish_star",
-      cost: polishCost,
-      idempotencyKey,
-    });
-    if (!creditResult.success) {
-      return creditDenialResponse(req, creditResult, polishCost);
-    }
 
     // Prompt construction — never invite invented metrics
     const styleInstruction = instruction ?? {
@@ -158,11 +176,82 @@ Follow guidance strictly:
 ${SECTION_GUIDANCE[sectionLabel.toLowerCase() as STARKey]}
 `.trim();
 
-    const userPrompt = `
+    const sourceBaseline = [questionText, currentText].filter(Boolean).join("\n");
+
+    /** Python section draft staged for AI polish (runPython skips success per matrix). */
+    let pythonSectionDraft: string | null = null;
+
+    const hybridResult = await executeHybridOperation<PolishHybridData>({
+      req,
+      auth,
+      operation: "star_builder",
+      idempotencyKey,
+      creditCost: polishCost,
+      creditAction: "polish_star",
+      body: {
+        section,
+        currentText,
+        questionText,
+        style,
+        model,
+      },
+      runDeterministic: async () => {
+        if (pythonSectionDraft?.trim()) {
+          return {
+            section,
+            polished: pythonSectionDraft,
+            original: currentText,
+            source: "python",
+            draft_kind: "input_based",
+          };
+        }
+        const cleaned = sanitizeAIOutput(currentText);
+        if (!cleaned.trim()) return null;
+        return {
+          section,
+          polished: cleaned,
+          original: currentText,
+          source: "deterministic",
+          draft_kind: "input_based",
+        };
+      },
+      runPython: async (ctx) => {
+        const starPayload: Record<string, string> = {
+          situation: "",
+          task: "",
+          action: "",
+          result: "",
+        };
+        starPayload[section] = currentText;
+        const pythonStar = await callPythonProcess({
+          operation: "star_evidence",
+          operationId: ctx.operationId,
+          correlationId: ctx.correlationId,
+          payload: {
+            ...starPayload,
+            question: questionText ?? "",
+            section,
+            current_text: currentText,
+          },
+        });
+        if (!pythonStar.ok) return null;
+        const pythonText = extractPythonSectionText(
+          pythonStar.data,
+          section,
+          currentText,
+        );
+        if (!pythonText.trim()) return null;
+        pythonSectionDraft = pythonText;
+        // Defer success to runAi — matrix order is python → ai → deterministic.
+        return null;
+      },
+      runAi: async () => {
+        const textToPolish = pythonSectionDraft ?? currentText;
+        const polishUserPrompt = `
 ${questionText ? `Interview Question: "${questionText}"\n` : ""}
 
 Current ${sectionLabel} Section:
-"${currentText}"
+"${textToPolish}"
 
 Instruction:
 ${styleInstruction}
@@ -170,131 +259,65 @@ ${styleInstruction}
 Return ONLY the rewritten ${sectionLabel} text:
 `.trim();
 
-    // AI CALL — on failure return Python input-based draft (no refund)
-    let aiResult;
-    try {
-      aiResult = await generateWithFallback({
-        prompt: userPrompt,
-        systemPrompt,
-        maxTokens: 400,
-        temperature: 0.65,
-        model: String(model),
-        userId: auth.userId,
-        action: "polish_star_section",
-      });
-    } catch (aiErr) {
-      const correlationId = crypto.randomUUID();
-      const starPayload: Record<string, string> = {
-        situation: "",
-        task: "",
-        action: "",
-        result: "",
-      };
-      starPayload[section] = currentText;
-      const pythonStar = await callPythonProcess({
-        operation: "star_evidence",
-        operationId: `polish_star:${correlationId}`,
-        correlationId,
-        payload: {
-          ...starPayload,
-          question: questionText ?? "",
-          section,
-          current_text: currentText,
-        },
-      });
-      let pythonText = currentText;
-      if (pythonStar.ok && pythonStar.data && typeof pythonStar.data === "object") {
-        const data = pythonStar.data as Record<string, unknown>;
-        const starDraft =
-          data.star_draft && typeof data.star_draft === "object"
-            ? (data.star_draft as Record<string, unknown>)
-            : data;
-        const candidate =
-          (typeof starDraft[section] === "string" && starDraft[section]) ||
-          (typeof data[section] === "string" && data[section]) ||
-          (typeof data.polished === "string" && data.polished) ||
-          (typeof data.draft === "string" && data.draft) ||
-          "";
-        if (candidate.trim()) pythonText = String(candidate).trim();
-      }
-      if (pythonText.trim()) {
-        log(FN, "info", "STAR polish from python draft (AI unavailable)", {
+        const aiResult = await generateWithFallback({
+          prompt: polishUserPrompt,
+          systemPrompt,
+          maxTokens: 400,
+          temperature: 0.65,
+          model: String(model),
           userId: auth.userId,
-          section,
+          action: "polish_star_section",
         });
-        return successResponse(
-          {
-            section,
-            polished: pythonText,
-            original: currentText,
-            source: "python",
-            draft_kind: "input_based",
-          },
-          {
-            model: "python",
-            tokensUsed: 0,
-            creditsCharged: polishCost,
-            latencyMs: 0,
-          },
-          200,
+        const polished = sanitizeAIOutput(aiResult.text);
+        if (!polished.trim()) {
+          throw new Error("AI returned empty polish output.");
+        }
+        return {
+          section,
+          polished,
+          original: currentText,
+          source: "ai",
+          draft_kind: "polished",
+        };
+      },
+      validate: async (data) => {
+        const factual = assessStarFactualIntegrity(sourceBaseline, data.polished);
+        if (!factual.ok) {
+          throw new Error(AI_RESPONSE_INVALID_MESSAGE);
+        }
+        if (!data.polished.trim()) {
+          throw new Error(AI_RESPONSE_INVALID_MESSAGE);
+        }
+        return data;
+      },
+      aiMeta: { provider: "openai", modelVersion: String(model) },
+    });
+
+    if (!hybridResult.ok) {
+      if (
+        hybridResult.code === AI_RESPONSE_INVALID ||
+        hybridResult.code === "AI_INVALID_OUTPUT"
+      ) {
+        return errorResponse(
+          AI_RESPONSE_INVALID_MESSAGE,
+          AI_RESPONSE_INVALID,
+          422,
           req,
         );
       }
-      try {
-        await refundCredits({
-          userId: auth.userId,
-          cost: polishCost,
-          reason: "polish-star-section AI and python failure",
-        });
-      } catch (refundErr) {
-        log(FN, "error", "Refund failed", refundErr);
-      }
-      log(FN, "error", "AI provider failed", aiErr);
-      return errorResponse(
-        "AI improvement is temporarily unavailable.",
-        "PROVIDER_UNAVAILABLE",
-        502,
-        req
-      );
+      return hybridResult.response;
     }
 
-    const polished = sanitizeAIOutput(aiResult.text);
-    const sourceBaseline = [questionText, currentText].filter(Boolean).join("\n");
-    const factual = assessStarFactualIntegrity(sourceBaseline, polished);
-    if (!factual.ok) {
-      await refundCredits({
-        userId: auth.userId,
-        cost: polishCost,
-        reason: "polish-star-section factual integrity failed",
-      });
-      return errorResponse(
-        AI_RESPONSE_INVALID_MESSAGE,
-        AI_RESPONSE_INVALID,
-        422,
-        req,
-      );
-    }
-
-    // LOG
     log(FN, "info", "STAR section polished", {
       userId: auth.userId,
       section,
       style,
       model,
-      tokens: aiResult.totalTokens,
+      hybrid_source: hybridResult.source,
+      operation_id: hybridResult.operationId,
     });
 
-    return successResponse(
-      { section, polished, original: currentText },
-      {
-        model,
-        tokensUsed: aiResult.totalTokens,
-        creditsCharged: polishCost,
-        latencyMs: aiResult.latencyMs,
-      },
-      200,
-      req
-    );
+    return hybridResult.response;
 
   } catch (err) {
     if (err instanceof Response) return err;

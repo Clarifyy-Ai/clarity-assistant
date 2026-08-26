@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { httpStatusForCreditCode } from "@/lib/billing/creditErrorCodes";
+import { httpStatusForDomainCode } from "../../../../supabase/functions/_shared/domainErrors";
 
 type Envelope = {
   error?: string;
@@ -16,6 +21,8 @@ function assertSafeEnvelope(body: Envelope) {
   expect(JSON.stringify(body)).not.toMatch(/service_role|SUPABASE_SERVICE|sk_live|whsec_/i);
 }
 
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
+
 describe("edge function error envelope contracts", () => {
   it("prep-tool provider failure does not leak internals", () => {
     const body: Envelope = {
@@ -26,6 +33,34 @@ describe("edge function error envelope contracts", () => {
     };
     assertSafeEnvelope(body);
     expect(body.success).toBe(false);
+  });
+
+  it("prep-tool maps provider unavailable to 503 (never 502)", () => {
+    expect(httpStatusForDomainCode("AI_PROVIDER_UNAVAILABLE")).toBe(503);
+    expect(httpStatusForDomainCode("PROVIDER_UNAVAILABLE")).toBe(503);
+    expect(httpStatusForDomainCode("AI_TIMEOUT")).toBe(503);
+    expect(httpStatusForDomainCode("AI_INVALID_OUTPUT")).toBe(422);
+    expect(httpStatusForDomainCode("AI_PROVIDER_UNAVAILABLE")).not.toBe(502);
+    expect(httpStatusForCreditCode("PROVIDER_UNAVAILABLE")).toBe(503);
+    expect(httpStatusForCreditCode("PROVIDER_UNAVAILABLE")).not.toBe(502);
+
+    const domain = fs.readFileSync(
+      path.join(root, "supabase/functions/_shared/domainErrors.ts"),
+      "utf8",
+    );
+    const statusFn = domain.slice(domain.indexOf("httpStatusForDomainCode"));
+    expect(statusFn).toMatch(/AI_PROVIDER_UNAVAILABLE[\s\S]{0,160}return 503/);
+    expect(statusFn).not.toMatch(/AI_PROVIDER_UNAVAILABLE[\s\S]{0,80}return 502/);
+
+    const src = fs.readFileSync(
+      path.join(root, "supabase/functions/prep-tool/index.ts"),
+      "utf8",
+    );
+    expect(src).toContain("httpStatusForDomainCode");
+    expect(src).toContain("classifyAiFailure");
+    // Provider-unavailable paths must not hardcode Bad Gateway.
+    expect(src).not.toMatch(/PROVIDER_UNAVAILABLE[\s\S]{0,80},\s*502\b/);
+    expect(src).not.toMatch(/,\s*502,\s*\n\s*correlationId/);
   });
 
   it("send-email uses structured code + correlation id", () => {

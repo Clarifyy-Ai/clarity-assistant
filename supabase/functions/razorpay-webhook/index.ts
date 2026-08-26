@@ -21,6 +21,7 @@ import {
 } from "../_shared/billingCatalog.ts";
 import {
   fulfillCapturedRazorpayOrder,
+  claimRazorpayWebhookEvent,
   hmacSha256Hex,
   timingSafeEqual,
   type PaymentOrderRow,
@@ -188,6 +189,16 @@ Deno.serve(async (req: Request) => {
 
   try {
     const eventName = event.event as string;
+    const eventId = typeof event.id === "string" ? event.id.trim() : "";
+    if (eventId) {
+      const isNewEvent = await claimRazorpayWebhookEvent(db, eventId);
+      if (!isNewEvent) {
+        return new Response(
+          JSON.stringify({ received: true, duplicate: true, event_id: eventId }),
+          { status: 200, headers: { ...headers, "Content-Type": "application/json" } },
+        );
+      }
+    }
 
     // P4-2: refund events — mark payment_orders refunded + conditional clawback
     if (

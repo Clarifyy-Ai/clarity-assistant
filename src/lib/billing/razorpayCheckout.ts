@@ -33,6 +33,17 @@ const CHECKOUT_PREPARE_ERROR = "Checkout could not be prepared. Please try again
 export const PAYMENT_UNAVAILABLE =
   "Payment service is temporarily unavailable.";
 
+/** Short QA copy for Razorpay test-mode sandboxes (never Stripe 4242). */
+export const RAZORPAY_QA_SANDBOX_HINT =
+  "QA (Razorpay test mode): use Razorpay test payment methods — success/failure cards or UPI test. Do not use Stripe 4242.";
+
+/** Show sandbox hints outside production builds. */
+export function showRazorpayQaSandboxHint(): boolean {
+  if (import.meta.env.DEV) return true;
+  const env = String(import.meta.env.VITE_APP_ENV ?? "").toLowerCase();
+  return env === "development" || env === "test" || env === "staging";
+}
+
 /** Require a non-empty internal payment order id before opening Razorpay. */
 export function assertInternalOrderId(id: string | null | undefined): string {
   if (typeof id !== "string" || id.trim() === "") {

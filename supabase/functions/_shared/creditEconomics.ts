@@ -91,6 +91,8 @@ const ACTION_TO_CANONICAL: Record<string, AICreditCostKey> = {
   generate_feedback: "live_feedback",
   debrief_generation: "session_debrief",
   generate_debrief: "session_debrief",
+  generate_scorecard: "session_debrief",
+  generate_rephrase: "rephraser",
   generate_questions: "generate_questions",
   coach_message: "ai_coach_message",
   parse_question_pdf: "parse_question_pdf",

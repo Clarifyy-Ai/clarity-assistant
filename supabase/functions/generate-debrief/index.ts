@@ -51,11 +51,7 @@ import {
   logValidationFailure,
 } from "../_shared/audit.ts";
 
-import {
-  createServiceClient,
-  deductCreditsAtomic,
-  refundCredits,
-} from "../_shared/supabase.ts";
+import { createServiceClient } from "../_shared/supabase.ts";
 
 import { parseJSON } from "../_shared/gemini.ts";
 import {
@@ -67,9 +63,12 @@ import {
 import { resolveModel } from "../_shared/resolveModel.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { extractBYOK } from "../_shared/utils.ts";
+import { executeHybridOperation } from "../_shared/hybridExecute.ts";
+import { pythonExecuteOperation } from "../_shared/pythonClient.ts";
+import { DomainError, httpStatusForDomainCode } from "../_shared/domainErrors.ts";
+import { creditCost } from "../_shared/creditEconomics.ts";
 
 const FUNCTION_NAME = "generate-debrief";
-import { creditCost } from "../_shared/creditEconomics.ts";
 
 const CREDIT_COST = creditCost("session_debrief");
 
@@ -247,20 +246,6 @@ function normalizeDimensions(raw: unknown): ScoredDimension[] {
     };
   });
 }
-
-const DEFAULT_DEBRIEF: DebriefPayload = {
-  overall_grade: "C",
-  summary: "Unable to generate a detailed debrief.",
-  insight: "",
-  priority_focus: "",
-  strengths: [],
-  improvements: [],
-  skill_gaps: [],
-  action_plan: [],
-  resources: [],
-  next_session_goals: [],
-  scored_dimensions: [],
-};
 
 function json(
   corsHeaders: HeadersInit,
@@ -441,8 +426,8 @@ function normalizeDebrief(raw: unknown): DebriefPayload {
     : [];
 
   return {
-    overall_grade: sanitizeText(input.overall_grade, 10) || DEFAULT_DEBRIEF.overall_grade,
-    summary: sanitizeText(input.summary, 3_000) || DEFAULT_DEBRIEF.summary,
+    overall_grade: sanitizeText(input.overall_grade, 10) || "C",
+    summary: sanitizeText(input.summary, 3_000),
     insight: sanitizeText(input.insight, 2_000),
     priority_focus: sanitizeText(input.priority_focus, 1_000),
     strengths: safeStringArray(input.strengths, 20),
@@ -600,6 +585,14 @@ Return ONLY valid JSON in this exact schema:
 `.trim();
 }
 
+function parseDebriefFromAi(raw: string): DebriefPayload | null {
+  const parsed = parseJSON<DebriefPayload | null>(raw, null);
+  if (!parsed || typeof parsed !== "object") return null;
+  const normalized = normalizeDebrief(parsed);
+  if (!normalized.summary.trim()) return null;
+  return normalized;
+}
+
 async function generateDebriefText(options: {
   prompt: string;
   userId: string;
@@ -623,6 +616,136 @@ async function generateDebriefText(options: {
   } catch {
     return null;
   }
+}
+
+function gradeFromScore(score: number | null | undefined): string {
+  if (typeof score !== "number" || !Number.isFinite(score)) return "C";
+  if (score >= 90) return "A+";
+  if (score >= 85) return "A";
+  if (score >= 80) return "B+";
+  if (score >= 70) return "B";
+  if (score >= 60) return "C+";
+  if (score >= 50) return "C";
+  return "D";
+}
+
+/** Heuristic debrief from session metrics only — no invented skills/scores. */
+function deterministicDebrief(input: {
+  session: SessionRow;
+  answers: AnswerRow[];
+  durationSeconds?: number;
+}): DebriefPayload {
+  const scoreVals = input.answers
+    .map((a) => a.score)
+    .filter((n): n is number => typeof n === "number" && Number.isFinite(n));
+  const avgAnswer =
+    scoreVals.length > 0
+      ? scoreVals.reduce((a, b) => a + b, 0) / scoreVals.length
+      : null;
+  const overall =
+    typeof input.session.overall_score === "number" &&
+      Number.isFinite(input.session.overall_score)
+      ? input.session.overall_score
+      : avgAnswer;
+
+  const strengths: string[] = [];
+  const improvements: string[] = [];
+
+  if (input.answers.length > 0) {
+    strengths.push("Stayed engaged through the practice session");
+    strengths.push(`Attempted ${input.answers.length} question(s) under timed conditions`);
+  } else {
+    strengths.push("Session recorded — continue practicing with full answers");
+  }
+
+  if (
+    typeof input.session.total_filler_words === "number" &&
+    input.session.total_filler_words > 8
+  ) {
+    improvements.push(
+      `Reduce filler words (session recorded ${input.session.total_filler_words})`,
+    );
+  }
+  if (
+    typeof input.session.avg_wpm === "number" &&
+    input.session.avg_wpm > 0 &&
+    (input.session.avg_wpm < 90 || input.session.avg_wpm > 170)
+  ) {
+    improvements.push(
+      `Adjust speaking pace (avg WPM ${Math.round(input.session.avg_wpm)})`,
+    );
+  }
+  improvements.push("Add more measurable outcomes in answers");
+  improvements.push("Tighten openings — lead with the situation in one sentence");
+
+  const mins =
+    input.durationSeconds && input.durationSeconds > 0
+      ? Math.max(1, Math.floor(input.durationSeconds / 60))
+      : 0;
+  const qCount = input.answers.length;
+
+  return normalizeDebrief({
+    overall_grade: gradeFromScore(overall),
+    summary:
+      `You practiced for about ${mins || "several"} minute(s) across ${qCount || "several"} question(s). ` +
+      "This debrief is based on session metrics (AI polish optional).",
+    insight:
+      overall != null
+        ? `Session overall score signal: ${Math.round(overall)}.`
+        : "Insufficient scored answers for a numeric insight.",
+    priority_focus: improvements[0] ?? "Practice one weak question with a STAR outline",
+    strengths: strengths.slice(0, 5),
+    improvements: improvements.slice(0, 5),
+    skill_gaps: [],
+    action_plan: [
+      {
+        day: 1,
+        title: "Re-run one weak question with a STAR outline",
+        description: "Pick the lowest-scoring answer and rebuild Situation → Result.",
+        time_estimate: "20 min",
+      },
+      {
+        day: 2,
+        title: "Record a 60-second answer and compare clarity",
+        description: "Use only facts from your resume; avoid inventing metrics.",
+        time_estimate: "15 min",
+      },
+    ],
+    resources: [],
+    next_session_goals: [
+      "Re-run one weak question with a STAR outline",
+      "Record a 60-second answer and compare clarity",
+    ],
+    scored_dimensions: [],
+  });
+}
+
+function debriefFromPython(raw: unknown, fallback: DebriefPayload): DebriefPayload {
+  if (!raw || typeof raw !== "object") return fallback;
+  const obj = raw as Record<string, unknown>;
+  return normalizeDebrief({
+    overall_grade: String(obj.overall_grade ?? fallback.overall_grade),
+    summary: String(obj.summary ?? fallback.summary),
+    insight: String(obj.insight ?? fallback.insight),
+    priority_focus: String(obj.priority_focus ?? fallback.priority_focus),
+    strengths: Array.isArray(obj.strengths) ? obj.strengths : fallback.strengths,
+    improvements: Array.isArray(obj.improvements)
+      ? obj.improvements
+      : Array.isArray(obj.weaknesses)
+      ? obj.weaknesses
+      : fallback.improvements,
+    skill_gaps: Array.isArray(obj.skill_gaps) ? obj.skill_gaps : [],
+    action_plan: Array.isArray(obj.action_plan) ? obj.action_plan : fallback.action_plan,
+    resources: Array.isArray(obj.resources) ? obj.resources : [],
+    next_session_goals: Array.isArray(obj.next_session_goals)
+      ? obj.next_session_goals
+      : Array.isArray(obj.next_steps)
+      ? obj.next_steps
+      : fallback.next_session_goals,
+    scored_dimensions: Array.isArray(obj.scored_dimensions)
+      ? obj.scored_dimensions
+      : [],
+  });
 }
 
 Deno.serve(async (req: Request) => {
@@ -787,42 +910,11 @@ Deno.serve(async (req: Request) => {
       return unsafeResponse;
     }
 
-    const creditResult = await deductCreditsAtomic({
-      userId: user.id,
-      action: "debrief_generation",
-      cost: CREDIT_COST,
-      sessionId: session_id,
-      idempotencyKey,
-    });
-
-    if (!creditResult.success) {
-      const isInsufficient = (creditResult.error ?? "")
-        .toLowerCase()
-        .includes("insufficient");
-
-      await logAiAudit({
-        req,
-        userId: user.id,
-        action: "GENERATE_DEBRIEF",
-        sessionId: session_id,
-        status: "failure",
-        metadata: {
-          reason: creditResult.error ?? "Credit deduction failed.",
-          cost: CREDIT_COST,
-          requestId,
-        },
-      });
-
-      return json(corsHeaders, isInsufficient ? 402 : 500, {
-        error: isInsufficient
-          ? "Insufficient credits."
-          : "Credit deduction failed.",
-        code: isInsufficient
-          ? "PAYMENT_REQUIRED"
-          : "CREDIT_DEDUCTION_FAILED",
-        request_id: requestId,
-      });
-    }
+    const durationSeconds = Number(
+      (session as Record<string, unknown>).duration_seconds ??
+        (session as Record<string, unknown>).duration ??
+        0,
+    ) || 0;
 
     const resolvedModel = await resolveModel(db, user.id, sanitizeModelInput(model));
 
@@ -832,76 +924,161 @@ Deno.serve(async (req: Request) => {
       answerCount: answers.length,
     });
 
-    const debriefAi = await generateDebriefText({
-      prompt,
-      userId: user.id,
-      model: resolvedModel,
-      byok,
-    });
+    type DebriefHybridData = {
+      request_id: string;
+      debrief: Record<string, unknown>;
+      session: SessionRow;
+      success: true;
+    };
 
-    if (!debriefAi) {
-      await refundCredits({
-        userId: user.id,
-        cost: CREDIT_COST,
-        reason: "generate_debrief AI failure",
-        sessionId: session_id,
-      });
-
-      await logAiAudit({
-        req,
-        userId: user.id,
-        action: "GENERATE_DEBRIEF",
-        sessionId: session_id,
-        status: "failure",
-        metadata: {
-          reason: "AI service failed. Credits refunded.",
-          requestId,
-        },
-      });
-
-      return json(corsHeaders, 502, {
-        error: "AI service failed. Credits refunded.",
-        code: "AI_UNAVAILABLE",
-        request_id: requestId,
-      });
-    }
-
-    void logAICost(db, {
-      userId: user.id,
-      action: "generate_debrief",
-      model: debriefAi.aiResult.model,
-      inputTokens: debriefAi.aiResult.inputTokens,
-      outputTokens: debriefAi.aiResult.outputTokens,
-      latencyMs: debriefAi.aiResult.latencyMs,
-      wasFallback: debriefAi.aiResult.wasFallback,
-    });
-
-    const parsed = parseJSON<DebriefPayload>(debriefAi.text, DEFAULT_DEBRIEF);
-    const debriefPayload = normalizeDebrief(parsed);
-
-    const { data: debrief, error: debriefError } = await db
-      .from("session_debriefs")
-      .insert({
+    const hybrid = await executeHybridOperation<DebriefHybridData>({
+      req,
+      auth: { userId: user.id, planId },
+      operation: "session_debrief",
+      idempotencyKey,
+      creditCost: CREDIT_COST,
+      creditAction: "debrief_generation",
+      body: {
         session_id,
-        user_id: user.id,
-        ...debriefPayload,
-      })
-      .select()
-      .single();
+        duration_seconds: durationSeconds,
+        questions_asked: answers.length,
+        highlights: [],
+        improvements: [],
+      },
+      runDeterministic: async () => {
+        const payload = deterministicDebrief({
+          session,
+          answers,
+          durationSeconds,
+        });
+        const { data: debrief, error: debriefError } = await db
+          .from("session_debriefs")
+          .insert({
+            session_id,
+            user_id: user.id,
+            ...payload,
+          })
+          .select()
+          .single();
+        if (debriefError || !debrief) {
+          throw new Error(debriefError?.message ?? "Failed to save debrief");
+        }
+        return {
+          success: true as const,
+          request_id: requestId,
+          debrief,
+          session,
+        };
+      },
+      runPython: async (ctx) => {
+        const baseline = deterministicDebrief({
+          session,
+          answers,
+          durationSeconds,
+        });
+        const py = await pythonExecuteOperation(
+          {
+            operation: "session_debrief",
+            operation_id: ctx.operationId,
+            correlation_id: ctx.correlationId,
+            user_id: user.id,
+            payload: {
+              duration_seconds: durationSeconds,
+              questions_asked: answers.length,
+              highlights: baseline.strengths,
+              improvements: baseline.improvements,
+            },
+          },
+          { requestId: ctx.correlationId },
+        );
+        if (!py.ok) return null;
+        const envelope = py.json as { data?: unknown } | unknown;
+        const raw =
+          envelope &&
+            typeof envelope === "object" &&
+            "data" in (envelope as Record<string, unknown>)
+            ? (envelope as { data: unknown }).data
+            : envelope;
+        const payload = debriefFromPython(raw, baseline);
+        const { data: debrief, error: debriefError } = await db
+          .from("session_debriefs")
+          .insert({
+            session_id,
+            user_id: user.id,
+            ...payload,
+          })
+          .select()
+          .single();
+        if (debriefError || !debrief) {
+          throw new Error(debriefError?.message ?? "Failed to save debrief");
+        }
+        return {
+          success: true as const,
+          request_id: requestId,
+          debrief,
+          session,
+        };
+      },
+      runAi: async () => {
+        const debriefAi = await generateDebriefText({
+          prompt,
+          userId: user.id,
+          model: resolvedModel,
+          byok,
+        });
+        if (!debriefAi) {
+          throw new Error("AI service failed");
+        }
+        void logAICost(db, {
+          userId: user.id,
+          action: "generate_debrief",
+          model: debriefAi.aiResult.model,
+          inputTokens: debriefAi.aiResult.inputTokens,
+          outputTokens: debriefAi.aiResult.outputTokens,
+          latencyMs: debriefAi.aiResult.latencyMs,
+          wasFallback: debriefAi.aiResult.wasFallback,
+        });
+        const debriefPayload = parseDebriefFromAi(debriefAi.text);
+        if (!debriefPayload) {
+          throw new DomainError(
+            "AI_INVALID_OUTPUT",
+            "Debrief AI returned invalid or empty JSON.",
+          );
+        }
+        const { data: debrief, error: debriefError } = await db
+          .from("session_debriefs")
+          .insert({
+            session_id,
+            user_id: user.id,
+            ...debriefPayload,
+          })
+          .select()
+          .single();
+        if (debriefError || !debrief) {
+          throw new Error(debriefError?.message ?? "Failed to save debrief");
+        }
+        return {
+          success: true as const,
+          request_id: requestId,
+          debrief,
+          session,
+        };
+      },
+      validate: (data, source) => {
+        if (source !== "ai") return data;
+        const row = data.debrief as Record<string, unknown> | undefined;
+        const summary = sanitizeText(row?.summary, 3_000);
+        if (!summary) {
+          throw new DomainError(
+            "AI_INVALID_OUTPUT",
+            "Debrief AI returned an empty summary.",
+          );
+        }
+        return data;
+      },
+    });
 
-    if (debriefError || !debrief) {
-      await refundCredits({
-        userId: user.id,
-        cost: CREDIT_COST,
-        reason: "generate_debrief DB save failure",
-        sessionId: session_id,
-      });
-
-      console.error(
-        "[generate-debrief] DB save error:",
-        debriefError?.message
-      );
-
+    if (!hybrid.ok) {
       await logAiAudit({
         req,
         userId: user.id,
@@ -909,14 +1086,25 @@ Deno.serve(async (req: Request) => {
         sessionId: session_id,
         status: "failure",
         metadata: {
-          reason: "Failed to save debrief. Credits refunded.",
+          reason: String(hybrid.code),
           requestId,
         },
       });
-
-      return json(corsHeaders, 500, {
-        error: "Failed to save debrief. Credits refunded.",
-        code: "DEBRIEF_SAVE_FAILED",
+      if (
+        hybrid.code === "INSUFFICIENT_CREDITS" ||
+        hybrid.code === "CAPABILITY_REQUIRED"
+      ) {
+        return hybrid.response;
+      }
+      const status = httpStatusForDomainCode(
+        String(hybrid.code || "AI_PROVIDER_UNAVAILABLE"),
+      );
+      const invalidAi = hybrid.code === "AI_INVALID_OUTPUT";
+      return json(corsHeaders, status, {
+        error: invalidAi
+          ? "Debrief AI output was invalid. Credits refunded."
+          : "Debrief generation failed. Credits refunded.",
+        code: hybrid.code,
         request_id: requestId,
       });
     }
@@ -930,18 +1118,13 @@ Deno.serve(async (req: Request) => {
       metadata: {
         requestId,
         cost: CREDIT_COST,
-        balanceAfter: creditResult.balanceAfter ?? null,
-        transactionId: creditResult.transactionId ?? null,
         answerCount: answers.length,
+        source: hybrid.source,
       },
     });
 
-    return json(corsHeaders, 200, {
-      success: true,
-      request_id: requestId,
-      debrief,
-      session,
-    });
+    // Prefer hybrid envelope; client unwraps `data` to { success, debrief, session }.
+    return hybrid.response;
   } catch (error) {
     const message =
       error instanceof Error

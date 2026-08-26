@@ -26,6 +26,10 @@ import {
   toPaymentUserFacingError,
   type RazorpayProductType,
 } from "@/lib/api/payments";
+import {
+  RAZORPAY_QA_SANDBOX_HINT,
+  showRazorpayQaSandboxHint,
+} from "@/lib/billing/razorpayCheckout";
 
 import { PricingCard } from "@/components/billing/PricingCard";
 import { Card } from "@/components/ui/Card";
@@ -552,6 +556,11 @@ export default function SettingsBilling(): JSX.Element {
             Razorpay checkout is a one-time payment for Pro/Max access or credit packs.
             It does not auto-renew. Re-purchase when credits or plan access expire.
           </p>
+          {showRazorpayQaSandboxHint() ? (
+            <p className="text-xs text-sky-800 dark:text-sky-300 bg-sky-500/10 border border-sky-500/20 rounded-lg px-3 py-2">
+              {RAZORPAY_QA_SANDBOX_HINT}
+            </p>
+          ) : null}
           <input
             className="w-full max-w-xs rounded-lg border border-border bg-background px-3 py-2 text-sm"
             placeholder="Promo / referral code"

@@ -302,17 +302,15 @@ export default function OnboardingStep2OptionalSetup({
     const okExt =
       name.endsWith(".pdf") ||
       name.endsWith(".docx") ||
-      name.endsWith(".doc") ||
       name.endsWith(".txt");
     const okMime =
       f.type === "application/pdf" ||
-      f.type === "application/msword" ||
       f.type ===
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
       f.type === "text/plain" ||
       !f.type;
     if (!okExt || !okMime) {
-      setResumeError("Please upload a PDF, DOCX, DOC, or TXT file.");
+      setResumeError("Please upload a PDF, DOCX, or TXT file.");
       return;
     }
     if (f.size > 5 * 1024 * 1024) {
@@ -726,7 +724,7 @@ export default function OnboardingStep2OptionalSetup({
                     </>
                   )}
                 </div>
-                <input ref={inputRef} type="file" accept=".pdf,.docx,.doc,.txt" className="hidden" onChange={(e) => {
+                <input ref={inputRef} type="file" accept=".pdf,.docx,.txt" className="hidden" onChange={(e) => {
                   const f = e.target.files?.[0];
                   if (f) onFileChange(f);
                 }} />

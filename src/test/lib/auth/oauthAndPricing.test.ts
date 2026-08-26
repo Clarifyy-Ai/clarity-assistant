@@ -12,6 +12,17 @@ describe("oauthProviders allowlist", () => {
     expect(getEnabledOAuthProviders()).toEqual(["google"]);
   });
 
+  it("hides all OAuth CTAs when env is empty or none", async () => {
+    vi.stubEnv("VITE_OAUTH_PROVIDERS", "");
+    const empty = await import("@/lib/auth/oauthProviders");
+    expect(empty.getEnabledOAuthProviders()).toEqual([]);
+    vi.resetModules();
+    vi.stubEnv("VITE_OAUTH_PROVIDERS", "none");
+    const none = await import("@/lib/auth/oauthProviders");
+    expect(none.getEnabledOAuthProviders()).toEqual([]);
+    expect(none.isOAuthProviderEnabled("google")).toBe(false);
+  });
+
   it("parses comma list and ignores unknown ids", async () => {
     vi.stubEnv("VITE_OAUTH_PROVIDERS", "google, github, not-a-provider");
     const { getEnabledOAuthProviders, isOAuthProviderEnabled } = await import(

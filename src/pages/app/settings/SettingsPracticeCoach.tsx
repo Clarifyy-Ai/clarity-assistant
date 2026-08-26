@@ -63,6 +63,8 @@ export default function SettingsPracticeCoach() {
   const [hintStyle, setHintStyle] = useState<HintStyle>((profile?.hint_style as HintStyle) ?? "short_hints");
   const [coachTone, setCoachTone] = useState<CoachTone>((profile?.coach_tone as CoachTone) ?? "encouraging");
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -74,13 +76,18 @@ export default function SettingsPracticeCoach() {
   async function handleSave() {
     if (!profile?.id) return;
     setSaving(true);
+    setSaved(false);
+    setSaveFailed(false);
     try {
       await updateProfile({
-          hint_style: hintStyle as any,
-          coach_tone: coachTone as any,
-        })
+        hint_style: hintStyle as any,
+        coach_tone: coachTone as any,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
       toast.success("Practice Coach preferences saved successfully.");
     } catch (err) {
+      setSaveFailed(true);
       toast.error(err instanceof Error ? err.message : "Failed to save coach preferences.");
     } finally {
       setSaving(false);
@@ -164,15 +171,21 @@ export default function SettingsPracticeCoach() {
 
         <div className="flex items-center justify-between gap-4 pt-2">
           <Button
-            variant="primary"
+            variant={saved ? "success" : saveFailed ? "danger" : "primary"}
             size="md"
             onClick={() => void handleSave()}
-            disabled={saving || isUnchanged}
+            disabled={saving || (isUnchanged && !saveFailed)}
             leftIcon={
               saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />
             }
           >
-            {saving ? "Saving preferences…" : "Save preferences"}
+            {saving
+              ? "Saving…"
+              : saved
+                ? "Saved!"
+                : saveFailed
+                  ? "Failed — retry"
+                  : "Save preferences"}
           </Button>
         </div>
 

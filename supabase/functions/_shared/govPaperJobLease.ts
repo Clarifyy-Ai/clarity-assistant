@@ -5,6 +5,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { refundCredits } from "./supabase.ts";
 import { claimJobCreditsForRefund } from "./claimJobCredits.ts";
+import { isPythonPaperFactoryGenerator } from "./govGeneratorRouting.ts";
 
 export const PAPER_JOB_LEASE_MS = 180_000;
 export const PAPER_JOB_MAX_ATTEMPTS = 3;
@@ -141,7 +142,7 @@ export async function claimPaperGenerationJob(
     .eq("retryable", true)
     .or(`lease_expires_at.is.null,lease_expires_at.lt.${nowIso}`)
     .order("created_at", { ascending: true })
-    .limit(1);
+    .limit(opts.jobId ? 1 : 20);
 
   if (opts.jobId) pick = pick.eq("id", opts.jobId);
   if (opts.userId) pick = pick.eq("user_id", opts.userId);
@@ -150,8 +151,23 @@ export async function claimPaperGenerationJob(
   if (pickErr) {
     return { ok: false, reason: "error", message: pickErr.message };
   }
-  const candidate = Array.isArray(candidates) ? candidates[0] : candidates;
+  const rows = Array.isArray(candidates) ? candidates : candidates ? [candidates] : [];
+  // Edge assembler must never claim jobs routed to the Python paper factory.
+  const candidate = rows.find((row) => {
+    const generator = String(
+      (row.request_json as Record<string, unknown> | null)?.generator ?? "",
+    );
+    return !isPythonPaperFactoryGenerator(generator);
+  });
   if (!candidate?.id) {
+    if (opts.jobId && rows.length > 0) {
+      const generator = String(
+        (rows[0].request_json as Record<string, unknown> | null)?.generator ?? "",
+      );
+      if (isPythonPaperFactoryGenerator(generator)) {
+        return { ok: false, reason: "not_claimable", message: "PYTHON_FACTORY_OWNED" };
+      }
+    }
     return { ok: false, reason: opts.jobId ? "not_found" : "not_claimable" };
   }
 
@@ -230,6 +246,40 @@ export async function claimPaperGenerationJob(
     workerId,
     attemptCount: nextAttempt,
   };
+}
+
+/**
+ * Release a job accidentally claimed by Edge back to the Python factory queue.
+ * Restores attempt_count so split-brain claims do not burn retries.
+ */
+export async function releasePaperJobForPythonFactory(
+  db: ServiceDb,
+  jobId: string,
+  workerId: string,
+  priorAttemptCount: number,
+): Promise<boolean> {
+  const now = new Date().toISOString();
+  const { data, error } = await db
+    .from("gov_paper_generation_jobs")
+    .update({
+      status: "queued",
+      progress_stage: "queued",
+      worker_id: null,
+      lease_expires_at: null,
+      attempt_count: Math.max(0, priorAttemptCount),
+      updated_at: now,
+    })
+    .eq("id", jobId)
+    .eq("worker_id", workerId)
+    .filter("status", "not.in", "(completed,cancelled,failed_permanent,expired)")
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    console.error("[govPaperJobLease] releasePythonFactory:", error.message);
+    return false;
+  }
+  return Boolean(data?.id);
 }
 
 /** Clear lease fields on terminal cancel / complete. */

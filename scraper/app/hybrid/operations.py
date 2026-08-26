@@ -542,12 +542,29 @@ def practice_coach_hint(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def document_extract(payload: dict[str, Any]) -> dict[str, Any]:
+    """Hybrid internal op — prefer engine for bytes/base64; text-only scaffold otherwise."""
+    raw_b64 = payload.get("content_base64") or payload.get("base64")
+    has_bytes = isinstance(raw_b64, str) and bool(raw_b64.strip())
+    if has_bytes or payload.get("filename") or payload.get("mime_type") or payload.get("mime"):
+        from app.engines.document_extract import run_document_extract
+
+        operation_id = str(payload.get("operation_id") or payload.get("operationId") or "hybrid_document_extract")
+        correlation_id = str(
+            payload.get("correlation_id") or payload.get("correlationId") or "hybrid_document_extract"
+        )
+        return run_document_extract(
+            payload,
+            operation_id=operation_id,
+            correlation_id=correlation_id,
+        )
+
     text = _str(payload, "text", "content", "body")
-    category = _str(payload, "category", "doc_type", "docType", default="resume").lower()
+    category = _str(payload, "category", "doc_type", "docType", "document_kind", "category_hint", default="resume").lower()
     if not text:
         return {
             "category": category,
             "extracted": None,
+            "extracted_text": "",
             "source": "python_template",
             "needs_ai_polish": True,
             "error": "empty_text",
@@ -564,9 +581,285 @@ def document_extract(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "category": category,
         "extracted": extracted,
+        "extracted_text": text,
+        "structured": extracted,
         "parser": parser,
         "source": "document_intelligence.parsers.structured",
         "needs_ai_polish": float(extracted.get("confidence") or 0) < 0.5,
+    }
+
+
+# ── Gap analysis (deterministic skill overlap) ───────────────────────────────
+
+_TOKEN = re.compile(r"[a-zA-Z][a-zA-Z0-9+.#-]{1,}")
+
+
+def _tokens(text: str) -> set[str]:
+    return {m.group(0).lower() for m in _TOKEN.finditer(text or "")}
+
+
+def gap_analysis(payload: dict[str, Any]) -> dict[str, Any]:
+    resume = _str(payload, "resume_text", "resumeText", "resume", "text")
+    jd = _str(payload, "jd_text", "jdText", "job_description", "jd")
+    resume_skills = _list(payload, "resume_skills", "resumeSkills")
+    jd_skills = _list(payload, "jd_skills", "jdSkills", "required_skills")
+
+    if not resume_skills:
+        resume_skills = sorted(_regex_contact_skills(resume).get("skills") or [])
+    if not jd_skills:
+        jd_tok = _tokens(jd)
+        known = {
+            "python", "java", "javascript", "typescript", "react", "sql", "aws",
+            "docker", "kubernetes", "fastapi", "node.js", "go", "rust", "kotlin",
+            "swift", "leadership", "communication", "machine learning",
+        }
+        jd_skills = sorted(
+            s for s in known if s in jd_tok or s.replace(".", "") in jd_tok
+        )
+
+    resume_set = {s.lower() for s in resume_skills}
+    jd_set = {s.lower() for s in jd_skills}
+    matched = sorted(resume_set & jd_set)
+    missing = sorted(jd_set - resume_set)
+    coverage = (len(matched) / len(jd_set)) if jd_set else (1.0 if resume_set else 0.0)
+
+    return {
+        "matched_skills": matched,
+        "missing_skills": missing,
+        "coverage_score": round(coverage, 3),
+        "summary": (
+            f"Matched {len(matched)} of {len(jd_set) or len(matched)} required skills "
+            f"({int(coverage * 100)}% coverage). "
+            + (
+                f"Gaps: {', '.join(missing[:8])}."
+                if missing
+                else "No major skill gaps detected."
+            )
+        ),
+        "recommendations": [
+            f"Add evidence for: {skill}" for skill in missing[:5]
+        ]
+        or ["Keep quantifying impact with metrics from your resume."],
+        "source": "python_deterministic",
+        "needs_ai_polish": True,
+        "invented_facts": False,
+    }
+
+
+def session_debrief(payload: dict[str, Any]) -> dict[str, Any]:
+    duration = payload.get("duration_seconds") or payload.get("durationSeconds") or 0
+    try:
+        duration = int(duration)
+    except (TypeError, ValueError):
+        duration = 0
+    questions = payload.get("questions_asked") or payload.get("questionsAsked") or 0
+    try:
+        questions = int(questions)
+    except (TypeError, ValueError):
+        questions = 0
+    highlights = _list(payload, "highlights", "strengths")
+    improvements = _list(payload, "improvements", "weaknesses")
+
+    strengths = highlights or [
+        "Stayed engaged through the practice session",
+        "Attempted questions under timed conditions",
+    ]
+    weak = improvements or [
+        "Add more measurable outcomes in answers",
+        "Tighten openings — lead with the situation in one sentence",
+    ]
+    mins = max(1, duration // 60) if duration else 0
+    return {
+        "title": "Practice session debrief",
+        "summary": (
+            f"You practiced for about {mins} minute(s) across {questions or 'several'} question(s). "
+            "This debrief is based on session metrics (AI polish optional)."
+        ),
+        "strengths": strengths[:5],
+        "improvements": weak[:5],
+        "next_steps": [
+            "Re-run one weak question with a STAR outline",
+            "Record a 60-second answer and compare clarity",
+        ],
+        "source": "python_deterministic",
+        "needs_ai_polish": True,
+        "invented_facts": False,
+    }
+
+
+def session_scorecard(payload: dict[str, Any]) -> dict[str, Any]:
+    answered = payload.get("answered") or payload.get("answers_count") or 0
+    total = payload.get("total") or payload.get("question_count") or answered or 1
+    try:
+        answered = int(answered)
+        total = max(1, int(total))
+    except (TypeError, ValueError):
+        answered, total = 0, 1
+    completion = min(1.0, answered / total)
+    clarity = float(
+        payload.get("clarity_score")
+        or payload.get("clarityScore")
+        or (0.55 + 0.35 * completion)
+    )
+    structure = float(
+        payload.get("structure_score")
+        or payload.get("structureScore")
+        or (0.5 + 0.4 * completion)
+    )
+    overall = round((clarity + structure + completion) / 3 * 100)
+
+    return {
+        "overall_score": overall,
+        "dimensions": {
+            "completion": round(completion * 100),
+            "clarity": round(min(1.0, clarity) * 100),
+            "structure": round(min(1.0, structure) * 100),
+        },
+        "grade": (
+            "A"
+            if overall >= 85
+            else "B"
+            if overall >= 70
+            else "C"
+            if overall >= 55
+            else "D"
+        ),
+        "notes": [
+            "Scores derived from session metrics; AI enrichment optional.",
+            f"Answered {answered}/{total} prompts.",
+        ],
+        "source": "python_deterministic",
+        "needs_ai_polish": True,
+        "invented_facts": False,
+    }
+
+
+def analyze_test(payload: dict[str, Any]) -> dict[str, Any]:
+    correct = payload.get("correct") or payload.get("correct_count") or 0
+    total = payload.get("total") or payload.get("question_count") or 0
+    try:
+        correct = int(correct)
+        total = int(total)
+    except (TypeError, ValueError):
+        correct, total = 0, 0
+    score_pct = (
+        round((correct / total) * 100)
+        if total
+        else int(payload.get("score_percent") or 0)
+    )
+    weak_topics = _list(payload, "weak_topics", "weakTopics", "topics")
+    return {
+        "score_percent": score_pct,
+        "correct": correct,
+        "total": total,
+        "summary": (
+            f"You scored {score_pct}% ({correct}/{total}). "
+            + (
+                f"Focus next on: {', '.join(weak_topics[:5])}."
+                if weak_topics
+                else "Review incorrect items and retry a short mixed set."
+            )
+        ),
+        "weak_topics": weak_topics[:10],
+        "recommendations": [
+            "Drill weak topics with a 10-question custom practice set",
+            "Revisit explanations for every incorrect answer",
+        ],
+        "source": "python_deterministic",
+        "needs_ai_polish": True,
+        "invented_facts": False,
+    }
+
+
+def speech_process(payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize transcript text; delegates to engines.speech_process when rich."""
+    from app.engines.speech_process import run_speech_process
+
+    text = _str(payload, "transcript", "text", "content")
+    if text and not payload.get("segments") and not payload.get("audio_url"):
+        cleaned = re.sub(r"\s+", " ", text).strip()
+        sentences = [
+            s.strip() for s in re.split(r"(?<=[.!?])\s+", cleaned) if s.strip()
+        ]
+        return {
+            "transcript": cleaned,
+            "normalized": cleaned,
+            "sentence_count": len(sentences),
+            "word_count": len(cleaned.split()),
+            "summary": " ".join(sentences[:2]) if sentences else cleaned[:240],
+            "source": "python_deterministic",
+            "needs_ai_polish": len(cleaned) > 400,
+            "invented_facts": False,
+        }
+    return run_speech_process(
+        payload or {},
+        operation_id=str(payload.get("operation_id") or "hybrid_speech"),
+        correlation_id=str(payload.get("correlation_id") or "hybrid_speech"),
+    )
+
+
+def prep_rephrase(payload: dict[str, Any]) -> dict[str, Any]:
+    text = _str(payload, "text", "input", "answer", "content")
+    if not text:
+        return {
+            "rephrased": "",
+            "source": "python_deterministic",
+            "needs_ai_polish": True,
+            "invented_facts": False,
+            "error": "empty_input",
+        }
+    cleaned = re.sub(r"\b(um+|uh+|like|you know)\b", "", text, flags=re.I)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return {
+        "rephrased": cleaned,
+        "original": text,
+        "notes": ["Deterministic cleanup only — AI polish optional for tone/style."],
+        "source": "python_deterministic",
+        "needs_ai_polish": True,
+        "invented_facts": False,
+    }
+
+
+def prep_coding(payload: dict[str, Any]) -> dict[str, Any]:
+    prompt = _str(payload, "prompt", "question", "problem", "text")
+    mode = _str(payload, "mode", "tool", default="hint").lower()
+    hints = [
+        "Clarify inputs, outputs, and edge cases before coding",
+        "State time/space complexity targets",
+        "Start with a brute-force approach, then optimize",
+    ]
+    if "hint" in mode:
+        body = "• " + "\n• ".join(hints)
+    else:
+        body = (
+            f"Problem: {prompt[:400] or '(describe the problem)'}\n\n"
+            "Approach outline:\n"
+            "1. Parse constraints and examples\n"
+            "2. Choose a data structure that matches access patterns\n"
+            "3. Implement, then test edge cases (empty, single, large)\n"
+        )
+    return {
+        "content": body,
+        "hints": hints,
+        "source": "python_deterministic",
+        "needs_ai_polish": True,
+        "invented_facts": False,
+    }
+
+
+def prep_project(payload: dict[str, Any]) -> dict[str, Any]:
+    topic = _str(payload, "topic", "prompt", "project", "text", default="portfolio project")
+    return {
+        "title": f"Project outline: {topic[:80]}",
+        "sections": {
+            "problem": f"Define the user problem for: {topic}",
+            "scope": ["MVP features (3–5)", "Out of scope list", "Success metrics"],
+            "architecture": ["Client", "API", "Data store", "Auth"],
+            "milestones": ["Spike", "MVP", "Polish", "Demo"],
+        },
+        "source": "python_deterministic",
+        "needs_ai_polish": True,
+        "invented_facts": False,
     }
 
 
@@ -593,6 +886,14 @@ _HANDLERS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "practice_coach_hint": practice_coach_hint,
     "practice_coach": practice_coach_hint,
     "document_extract": document_extract,
+    "gap_analysis": gap_analysis,
+    "session_debrief": session_debrief,
+    "session_scorecard": session_scorecard,
+    "analyze_test": analyze_test,
+    "speech_process": speech_process,
+    "prep_rephrase": prep_rephrase,
+    "prep_coding": prep_coding,
+    "prep_project": prep_project,
     "ping": ping,
 }
 

@@ -1,6 +1,6 @@
 // supabase/functions/generate-answer/index.ts
 //
-// STAR-format answer generator with SSE streaming via Gemini.
+// STAR-format answer generator — hybrid-backed with SSE of the final result.
 //
 // Production hardening included:
 // - CORS handling
@@ -9,12 +9,9 @@
 // - prompt-injection guard
 // - rate limiting
 // - optional session ownership check
-// - atomic credit deduction
-// - refund on pre-stream failures
-// - BYOK Gemini key support
+// - single credit via executeHybridOperation
 // - audit logging
-// - safe error handling
-// - SSE streaming proxy
+// - SSE streaming of hybrid result (AI / python / deterministic)
 
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
@@ -33,7 +30,6 @@ import {
   RATE_LIMIT_PRESETS,
 } from "../_shared/rateLimit.ts";
 import {
-  badRequestResponse,
   errorResponse,
   parseJsonBody,
 } from "../_shared/errors.ts";
@@ -46,15 +42,17 @@ import {
 } from "../_shared/audit.ts";
 import {
   createServiceClient,
-  deductCreditsAtomic,
 } from "../_shared/supabase.ts";
-import { creditDenialResponse } from "../_shared/creditAuthority.ts";
 import { callAI } from "../_shared/utils.ts";
 import { logAICost } from "../_shared/aiProvider.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
 import { requireCapabilityAsync } from "../_shared/requireCapability.ts";
 import { resolveModel, isGeminiModel } from "../_shared/resolveModel.ts";
 import type { ModelId } from "../_shared/types.ts";
+import { creditCost } from "../_shared/creditEconomics.ts";
+import { callPythonProcess } from "../_shared/pythonClient.ts";
+import { normalizePythonCoachData } from "../_shared/practiceCoachContract.ts";
+import { executeHybridOperation } from "../_shared/hybridExecute.ts";
 
 const SERVER_GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const GEMINI_API_VERSION = Deno.env.get("GEMINI_API_VERSION") ?? "v1beta";
@@ -63,11 +61,13 @@ const DEFAULT_MODEL =
   Deno.env.get("GEMINI_MODEL_DEFAULT") ?? "gemini-2.5-flash";
 
 const FUNCTION_NAME = "generate-answer";
-import { creditCost } from "../_shared/creditEconomics.ts";
-import { callPythonProcess } from "../_shared/pythonClient.ts";
-import { normalizePythonCoachData } from "../_shared/practiceCoachContract.ts";
 
 const COST = creditCost("live_answer");
+
+const FALLBACK_ANSWER =
+  "Open with a brief situation from your real experience. " +
+  "State your specific role and the actions you took using I-statements. " +
+  "Close with a result you can substantiate — never invent metrics or employers.";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -82,16 +82,6 @@ async function retryTransient<T>(operation: () => Promise<T>, attempts = 3): Pro
     }
   }
   throw lastError instanceof Error ? lastError : new Error("AI request failed");
-}
-
-async function fetchGeminiWithRetry(url: string, init: RequestInit): Promise<Response> {
-  let response: Response | null = null;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    response = await fetch(url, init);
-    if (response.ok || (response.status < 500 && response.status !== 429)) return response;
-    if (attempt < 2) await sleep(250 * 2 ** attempt);
-  }
-  return response!;
 }
 
 const SYSTEM_PROMPT_BEHAVIORAL = `You are an expert interview coach helping a candidate answer live interview questions.
@@ -236,14 +226,10 @@ const requestSchema = z.object({
 
 type GenerateAnswerRequest = z.infer<typeof requestSchema>;
 
-type GeminiStreamChunk = {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{
-        text?: string;
-      }>;
-    };
-  }>;
+type AnswerHybridData = {
+  text: string;
+  source: string;
+  model: string;
 };
 
 function hasSuspiciousHtml(value: string): boolean {
@@ -282,10 +268,6 @@ function validateUntrustedText(value: string, fieldName: string): Response | nul
 function sanitizeModelInput(input: string, fallback: string): string {
   const model = input.trim();
   return model.length > 0 ? model : fallback;
-}
-
-function getGeminiApiKey(_req: Request): string {
-  return SERVER_GEMINI_API_KEY;
 }
 
 function json(
@@ -350,65 +332,22 @@ function buildPrompt(input: {
   ].filter(Boolean).join("\n");
 }
 
-async function refundCreditsSafely(options: {
-  db: ReturnType<typeof createServiceClient>;
-  userId: string;
-  reason: string;
-}): Promise<void> {
-  try {
-    const refundResult = await options.db.rpc("refund_credits", {
-      p_user_id: options.userId,
-      p_cost: COST,
-      p_reason: options.reason,
-    } as Record<string, unknown>);
-
-    if (!refundResult.error) {
-      return;
-    }
-
-    console.error(
-      "[generate-answer] Refund RPC failed:",
-      refundResult.error.message
-    );
-  } catch (error) {
-    console.error("[generate-answer] Refund failed:", error);
-  }
-}
-
-async function tryPythonStructuredAnswer(opts: {
-  requestId: string;
-  question: string;
-  transcript: string;
-  interviewType: string;
-  resumeContext?: string;
-  corsHeaders: HeadersInit;
-}): Promise<Response | null> {
-  const pythonCoach = await callPythonProcess({
-    operation: "practice_coach",
-    operationId: `answer:${opts.requestId}`,
-    correlationId: opts.requestId,
-    payload: {
-      operation_type: "answer",
-      question: opts.question,
-      transcript: opts.transcript,
-      interview_type: opts.interviewType,
-      resume_context: opts.resumeContext ?? "",
-    },
-  });
-  if (!pythonCoach.ok) return null;
-  const normalized = normalizePythonCoachData(pythonCoach.data);
-  const text = (normalized?.reply ?? "").trim();
-  if (!text) return null;
-
+function sseFromText(
+  text: string,
+  corsHeaders: HeadersInit,
+  source: string,
+): Response {
   const encoder = new TextEncoder();
   const chunkSize = 24;
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      controller.enqueue(
-        encoder.encode(
-          `data: ${JSON.stringify({ source: "python_structured" })}\n\n`,
-        ),
-      );
+      if (source === "python" || source === "python_structured" || source === "fallback") {
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ source: source === "python" ? "python_structured" : source })}\n\n`,
+          ),
+        );
+      }
       for (let i = 0; i < text.length; i += chunkSize) {
         const slice = text.slice(i, i + chunkSize);
         controller.enqueue(
@@ -420,12 +359,15 @@ async function tryPythonStructuredAnswer(opts: {
       controller.close();
     },
   });
-  const responseHeaders = new Headers(opts.corsHeaders);
+  const responseHeaders = new Headers(corsHeaders);
   responseHeaders.set("Content-Type", "text/event-stream");
-  responseHeaders.set("Cache-Control", "no-cache");
+  responseHeaders.set("Cache-Control", "no-cache, no-transform");
   responseHeaders.set("Connection", "keep-alive");
-  responseHeaders.set("X-Clarify-Source", "python_structured");
-  return new Response(stream, { headers: responseHeaders });
+  responseHeaders.set("X-Accel-Buffering", "no");
+  if (source === "python" || source === "python_structured") {
+    responseHeaders.set("X-Clarify-Source", "python_structured");
+  }
+  return new Response(stream, { status: 200, headers: responseHeaders });
 }
 
 async function parseAndValidateRequest(
@@ -495,17 +437,104 @@ async function parseAndValidateRequest(
   };
 }
 
-function extractGeminiText(chunk: GeminiStreamChunk): string {
-  const parts = chunk.candidates?.[0]?.content?.parts ?? [];
-
-  return parts
-    .map((part) => part.text ?? "")
-    .filter(Boolean)
-    .join("");
-}
-
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
+}
+
+async function runGeminiNonStream(opts: {
+  model: string;
+  systemPrompt: string;
+  userPrompt: string;
+  screenshotBase64?: string | null;
+}): Promise<string> {
+  if (!SERVER_GEMINI_API_KEY.trim()) {
+    throw new Error("Gemini API key missing");
+  }
+
+  if (opts.screenshotBase64?.trim()) {
+    const pdfLike = opts.screenshotBase64.replace(/^data:image\/\w+;base64,/, "");
+    // Prefer multimodal generateContent via shared helper when image present.
+    const geminiUrl = `${GEMINI_BASE}/models/${opts.model}:generateContent`;
+    const res = await fetch(geminiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": SERVER_GEMINI_API_KEY,
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: "user",
+            parts: [
+              { text: opts.userPrompt },
+              {
+                inline_data: {
+                  mime_type: "image/png",
+                  data: pdfLike,
+                },
+              },
+            ],
+          },
+        ],
+        systemInstruction: {
+          parts: [{ text: opts.systemPrompt }],
+        },
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 1024,
+          topP: 0.95,
+        },
+      }),
+    });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Gemini HTTP ${res.status}: ${errText.slice(0, 200)}`);
+    }
+    const jsonBody = await res.json();
+    const text =
+      jsonBody?.candidates?.[0]?.content?.parts
+        ?.map((p: { text?: string }) => p.text ?? "")
+        .join("") ?? "";
+    if (!text.trim()) throw new Error("Gemini returned empty answer");
+    return text;
+  }
+
+  // Text-only path: reuse stream URL helper pattern with generateContent.
+  const geminiUrl = `${GEMINI_BASE}/models/${opts.model}:generateContent`;
+  const res = await fetch(geminiUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-goog-api-key": SERVER_GEMINI_API_KEY,
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: opts.userPrompt }],
+        },
+      ],
+      systemInstruction: {
+        parts: [{ text: opts.systemPrompt }],
+      },
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 1024,
+        topP: 0.95,
+      },
+    }),
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Gemini HTTP ${res.status}: ${errText.slice(0, 200)}`);
+  }
+  const jsonBody = await res.json();
+  const text =
+    jsonBody?.candidates?.[0]?.content?.parts
+      ?.map((p: { text?: string }) => p.text ?? "")
+      .join("") ?? "";
+  if (!text.trim()) throw new Error("Gemini returned empty answer");
+  return text;
 }
 
 Deno.serve(async (req: Request) => {
@@ -648,30 +677,6 @@ Deno.serve(async (req: Request) => {
     req.headers.get("x-idempotency-key")?.trim() ||
     null;
 
-  const deduction = await deductCreditsAtomic({
-    userId: user.id,
-    action: "liveanswerlong",
-    cost: COST,
-    sessionId: body.session_id ?? null,
-    idempotencyKey,
-  });
-
-  if (!deduction.success) {
-    await logAiAudit({
-      req,
-      userId: user.id,
-      action: "GENERATE_ANSWER",
-      sessionId: body.session_id ?? null,
-      status: "failure",
-      metadata: {
-        reason: deduction.error ?? "Credit deduction failed.",
-        code: deduction.code,
-      },
-    });
-
-    return creditDenialResponse(req, deduction, COST);
-  }
-
   const model = await resolveModel(
     db,
     user.id,
@@ -689,99 +694,113 @@ Deno.serve(async (req: Request) => {
     hasScreenshot,
   });
 
-  // Non-Gemini models: non-stream callAI with chunked SSE proxy
-  if (!isGeminiModel(model)) {
-    const aiStartMs = Date.now();
-    try {
-      const result = await retryTransient(() => callAI(
-        {
-          model: model as ModelId,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-          maxTokens: 1024,
-          temperature: 0.7,
-        },
-      ));
+  const aiStartMs = Date.now();
 
+  const hybridResult = await executeHybridOperation<AnswerHybridData>({
+    req,
+    auth: { userId: user.id, planId },
+    operation: "live_answer",
+    idempotencyKey,
+    creditCost: COST,
+    creditAction: "liveanswerlong",
+    body: {
+      question: body.question,
+      transcript: body.transcript,
+      resume_context: body.resume_context,
+      interview_type: body.interview_type,
+      target_company: body.target_company,
+      session_id: body.session_id,
+      mode: body.mode,
+      has_screenshot: hasScreenshot,
+    },
+    runAi: async () => {
+      if (!isGeminiModel(model)) {
+        const result = await retryTransient(() =>
+          callAI({
+            model: model as ModelId,
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt },
+            ],
+            maxTokens: 1024,
+            temperature: 0.7,
+          }),
+        );
+        void logAICost(db, {
+          userId: user.id,
+          action: "generate_answer",
+          model: result.model,
+          inputTokens: result.tokensIn,
+          outputTokens: result.tokensOut,
+          latencyMs: Date.now() - aiStartMs,
+          wasFallback: false,
+        });
+        if (!result.text?.trim()) throw new Error("AI returned empty answer");
+        return {
+          text: result.text,
+          source: "ai",
+          model: result.model,
+        };
+      }
+
+      const text = await retryTransient(() =>
+        runGeminiNonStream({
+          model,
+          systemPrompt,
+          userPrompt,
+          screenshotBase64: body.screenshot_base64,
+        }),
+      );
       void logAICost(db, {
         userId: user.id,
         action: "generate_answer",
-        model: result.model,
-        inputTokens: result.tokensIn,
-        outputTokens: result.tokensOut,
+        model,
+        inputTokens: estimateTokens(`${systemPrompt}\n${userPrompt}`),
+        outputTokens: estimateTokens(text),
         latencyMs: Date.now() - aiStartMs,
         wasFallback: false,
       });
-
-      await logAiAudit({
-        req,
-        userId: user.id,
-        action: "GENERATE_ANSWER",
-        sessionId: body.session_id ?? null,
-        status: "success",
-        metadata: { model, streamStarted: true, cost: COST },
-      });
-
-      const encoder = new TextEncoder();
-      const text = result.text;
-      const chunkSize = 24;
-      const stream = new ReadableStream<Uint8Array>({
-        async start(controller) {
-          for (let i = 0; i < text.length; i += chunkSize) {
-            const slice = text.slice(i, i + chunkSize);
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ text: slice })}\n\n`),
-            );
-            await new Promise((r) => setTimeout(r, 0));
-          }
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          controller.close();
+      return { text, source: "ai", model };
+    },
+    runPython: async (ctx) => {
+      const pythonCoach = await callPythonProcess({
+        operation: "practice_coach",
+        operationId: ctx.operationId,
+        correlationId: ctx.correlationId,
+        payload: {
+          operation_type: "answer",
+          question: body.question,
+          transcript: body.transcript,
+          interview_type: body.interview_type,
+          resume_context: body.resume_context,
         },
       });
+      if (!pythonCoach.ok) return null;
+      const normalized = normalizePythonCoachData(pythonCoach.data);
+      const text = (normalized?.reply ?? "").trim();
+      if (!text) return null;
+      return {
+        text,
+        source: "python_structured",
+        model: "python",
+      };
+    },
+    runDeterministic: async () => ({
+      text: FALLBACK_ANSWER,
+      source: "deterministic",
+      model: "deterministic",
+    }),
+    validate: async (data) => {
+      if (!data.text?.trim()) throw new Error("Empty answer");
+      return data;
+    },
+    aiMeta: {
+      provider: isGeminiModel(model) ? "gemini" : "openai",
+      modelVersion: model,
+    },
+  });
 
-      const responseHeaders = new Headers(corsHeaders);
-      responseHeaders.set("Content-Type", "text/event-stream");
-      responseHeaders.set("Cache-Control", "no-cache");
-      responseHeaders.set("Connection", "keep-alive");
-      return new Response(stream, { headers: responseHeaders });
-    } catch (error) {
-      console.error("[generate-answer] Multi-model call failed:", error);
-      const pythonStream = await tryPythonStructuredAnswer({
-        requestId: crypto.randomUUID(),
-        question: body.question,
-        transcript: body.transcript,
-        interviewType: body.interview_type,
-        resumeContext: body.resume_context,
-        corsHeaders,
-      });
-      if (pythonStream) return pythonStream;
-      await refundCreditsSafely({ db, userId: user.id, reason: "AI call failure" });
-      return json(corsHeaders, 502, {
-        error: "AI Help is temporarily unavailable. Please try again.",
-        code: "AI_UNAVAILABLE",
-      });
-    }
-  }
-
-  const geminiApiKey = SERVER_GEMINI_API_KEY;
-
-  if (!geminiApiKey) {
-    const pythonStream = await tryPythonStructuredAnswer({
-      requestId: crypto.randomUUID(),
-      question: body.question,
-      transcript: body.transcript,
-      interviewType: body.interview_type,
-      resumeContext: body.resume_context,
-      corsHeaders,
-    });
-    if (pythonStream) return pythonStream;
-    await refundCreditsSafely({
-      db,
-      userId: user.id,
-      reason: "Gemini API key missing",
-    });
+  if (!hybridResult.ok) {
     await logAiAudit({
       req,
       userId: user.id,
@@ -789,166 +808,11 @@ Deno.serve(async (req: Request) => {
       sessionId: body.session_id ?? null,
       status: "failure",
       metadata: {
-        reason: "Gemini API key missing.",
+        reason: String(hybridResult.code),
+        operation_id: hybridResult.correlationId,
       },
     });
-
-    return json(corsHeaders, 503, {
-      error: "AI Help is temporarily unavailable. Please try again.",
-      code: "AI_UNAVAILABLE",
-    });
-  }
-
-  const geminiUrl = `${GEMINI_BASE}/models/${model}:streamGenerateContent?alt=sse`;
-
-  let geminiResponse: Response;
-
-  try {
-    geminiResponse = await fetchGeminiWithRetry(geminiUrl, {
-      method: "POST",
-      signal: req.signal,
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": geminiApiKey,
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [
-              { text: userPrompt },
-              ...(hasScreenshot && body.screenshot_base64
-                ? [{
-                    inline_data: {
-                      mime_type: "image/png",
-                      data: body.screenshot_base64.replace(/^data:image\/\w+;base64,/, ""),
-                    },
-                  }]
-                : []),
-            ],
-          },
-        ],
-        systemInstruction: {
-          parts: [{ text: systemPrompt }],
-        },
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 1024,
-          topP: 0.95,
-        },
-      }),
-    });
-  } catch (error) {
-    console.error("[generate-answer] Gemini network error:", error);
-
-    const pythonStream = await tryPythonStructuredAnswer({
-      requestId: crypto.randomUUID(),
-      question: body.question,
-      transcript: body.transcript,
-      interviewType: body.interview_type,
-      resumeContext: body.resume_context,
-      corsHeaders,
-    });
-    if (pythonStream) return pythonStream;
-
-    await refundCreditsSafely({
-      db,
-      userId: user.id,
-      reason: "Gemini network error",
-    });
-
-    await logAiAudit({
-      req,
-      userId: user.id,
-      action: "GENERATE_ANSWER",
-      sessionId: body.session_id ?? null,
-      status: "failure",
-      metadata: {
-        reason: "Gemini network error.",
-      },
-    });
-
-    return json(corsHeaders, 502, {
-      error: "AI Help is temporarily unavailable. Please try again.",
-      code: "AI_UNAVAILABLE",
-    });
-  }
-
-  if (!geminiResponse.ok) {
-    const errorText = await geminiResponse.text().catch(() => "Unknown Gemini error");
-
-    console.error(
-      "[generate-answer] Gemini API error:",
-      geminiResponse.status,
-      errorText.slice(0, 1_000)
-    );
-
-    const pythonStream = await tryPythonStructuredAnswer({
-      requestId: crypto.randomUUID(),
-      question: body.question,
-      transcript: body.transcript,
-      interviewType: body.interview_type,
-      resumeContext: body.resume_context,
-      corsHeaders,
-    });
-    if (pythonStream) return pythonStream;
-
-    await refundCreditsSafely({
-      db,
-      userId: user.id,
-      reason: `Gemini HTTP ${geminiResponse.status}`,
-    });
-
-    await logAiAudit({
-      req,
-      userId: user.id,
-      action: "GENERATE_ANSWER",
-      sessionId: body.session_id ?? null,
-      status: "failure",
-      metadata: {
-        reason: "Gemini API error.",
-        status: geminiResponse.status,
-      },
-    });
-
-    return json(corsHeaders, 502, {
-      error: "AI Help is temporarily unavailable. Please try again.",
-      code: "AI_UNAVAILABLE",
-    });
-  }
-
-  if (!geminiResponse.body) {
-    const pythonStream = await tryPythonStructuredAnswer({
-      requestId: crypto.randomUUID(),
-      question: body.question,
-      transcript: body.transcript,
-      interviewType: body.interview_type,
-      resumeContext: body.resume_context,
-      corsHeaders,
-    });
-    if (pythonStream) return pythonStream;
-
-    await refundCreditsSafely({
-      db,
-      userId: user.id,
-      reason: "Empty Gemini stream",
-    });
-
-    await logAiAudit({
-      req,
-      userId: user.id,
-      action: "GENERATE_ANSWER",
-      sessionId: body.session_id ?? null,
-      status: "failure",
-      metadata: {
-        reason: "Empty Gemini response body.",
-      },
-    });
-
-    return json(corsHeaders, 502, {
-      error: "AI Help is temporarily unavailable. Please try again.",
-      code: "AI_UNAVAILABLE",
-    });
+    return hybridResult.response;
   }
 
   await logAiAudit({
@@ -958,115 +822,19 @@ Deno.serve(async (req: Request) => {
     sessionId: body.session_id ?? null,
     status: "success",
     metadata: {
-      model,
+      model: hybridResult.data.model,
       streamStarted: true,
       cost: COST,
       questionId: body.question_id ?? null,
+      hybrid_source: hybridResult.source,
+      operation_id: hybridResult.operationId,
+      source: hybridResult.data.source,
     },
   });
 
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
-  const reader = geminiResponse.body.getReader();
-
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      let buffer = "";
-      let contentSent = false;
-      let outputText = "";
-      const streamStartMs = Date.now();
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-
-          if (done) {
-            break;
-          }
-
-          buffer += decoder.decode(value, {
-            stream: true,
-          });
-
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-
-          for (const line of lines) {
-            if (!line.startsWith("data: ")) {
-              continue;
-            }
-
-            const jsonString = line.slice(6).trim();
-
-            if (!jsonString || jsonString === "[DONE]") {
-              continue;
-            }
-
-            try {
-              const parsed = JSON.parse(jsonString) as GeminiStreamChunk;
-              const text = extractGeminiText(parsed);
-
-              if (text) {
-                contentSent = true;
-                outputText += text;
-                controller.enqueue(
-                  encoder.encode(`data: ${JSON.stringify({ text })}\n\n`)
-                );
-              }
-            } catch {
-              // Skip malformed Gemini chunks.
-            }
-          }
-        }
-
-        void logAICost(db, {
-          userId: user.id,
-          action: "generate_answer",
-          model,
-          inputTokens: estimateTokens(`${systemPrompt}\n${userPrompt}`),
-          outputTokens: estimateTokens(outputText),
-          latencyMs: Date.now() - streamStartMs,
-          wasFallback: false,
-        });
-
-        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-        controller.close();
-      } catch (error) {
-        console.error("[generate-answer] Stream read error:", error);
-        // Mid-stream failure policy: refund only if no content was sent to the client.
-        // Partial responses are kept — the user received value, so credits are not refunded.
-        if (!contentSent) {
-          await refundCreditsSafely({
-            db,
-            userId: user.id,
-            reason: "Gemini stream error before first chunk",
-          });
-        } else {
-          console.warn(
-            "[generate-answer] Stream failed after partial content; credits not refunded.",
-          );
-        }
-        controller.error(error);
-      }
-    },
-
-    cancel() {
-      try {
-        void reader.cancel();
-      } catch {
-        // Ignore stream cancel errors.
-      }
-    },
-  });
-
-  const responseHeaders = new Headers(corsHeaders);
-  responseHeaders.set("Content-Type", "text/event-stream");
-  responseHeaders.set("Cache-Control", "no-cache, no-transform");
-  responseHeaders.set("Connection", "keep-alive");
-  responseHeaders.set("X-Accel-Buffering", "no");
-
-  return new Response(stream, {
-    status: 200,
-    headers: responseHeaders,
-  });
+  return sseFromText(
+    hybridResult.data.text,
+    corsHeaders,
+    hybridResult.data.source,
+  );
 });

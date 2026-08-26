@@ -551,15 +551,14 @@ Deno.serve(async (req: Request) => {
         wasFallback: aiResult.wasFallback,
       });
 
-      const hints =
-        rawHints && rawHints.trim().length > 0
-          ? normalizeHints(rawHints)
-          : FALLBACK_HINTS;
+      if (!rawHints || !rawHints.trim()) {
+        throw new Error("AI returned empty hints");
+      }
 
       return {
         request_id: requestId,
-        hints,
-        source: rawHints ? "ai" : "fallback",
+        hints: normalizeHints(rawHints),
+        source: "ai",
         model: aiResult.model,
       };
     },

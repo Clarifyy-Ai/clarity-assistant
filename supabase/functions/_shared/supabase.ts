@@ -381,33 +381,25 @@ export async function deductCredits(
 /**
  * High-level helper used by AI/session/payment functions.
  *
- * Adds optional:
- * - session_id attachment
- * - idempotency lookup/storage
- *
- * The service-role RPC owns the balance lock, ledger insert, and optional
- * idempotency record in one database transaction.
+ * The service-role RPC owns balance lock, ledger insert, session attachment,
+ * and idempotency record in one database transaction.
  */
 export async function deductCreditsAtomic(
   input: DeductCreditsAtomicInput
 ): Promise<DeductCreditsAtomicResult> {
   const db = createServiceClient();
 
-  const idempotentResponse = await getIdempotentResponse(db, input.idempotencyKey, {
-    userId: input.userId,
-    action: input.action,
-    requestHash: input.requestHash,
-  });
+  assertValidCreditInput(input.userId, input.action, input.cost);
 
-  if (idempotentResponse) {
-    return idempotentResponse;
-  }
+  const normalizedAction = normalizeAction(input.action);
+  const sessionId =
+    input.sessionId && isValidUuid(input.sessionId) ? input.sessionId : null;
 
   const rpcResult = await db.rpc("deduct_credits_service", {
     p_user_id: input.userId,
-    p_action: normalizeAction(input.action),
+    p_action: normalizedAction,
     p_cost: input.cost,
-    p_session_id: input.sessionId && isValidUuid(input.sessionId) ? input.sessionId : null,
+    p_session_id: sessionId,
     p_idempotency_key: input.idempotencyKey ?? null,
     p_request_hash: input.requestHash ?? null,
   });
@@ -435,91 +427,28 @@ export async function deductCreditsAtomic(
 
   const parsedBalance = Number(rpcData?.new_balance ?? rpcData?.balance);
   const balanceOk = Number.isFinite(parsedBalance);
-  const result = {
-    success: Boolean(rpcData?.success) && balanceOk,
-    error: rpcData?.error,
-    code: rpcData?.code,
-    newBalance: parsedBalance,
-    transactionId: rpcData?.transaction_id,
-    remaining: Number.isFinite(Number(rpcData?.balance))
-      ? Number(rpcData?.balance)
-      : parsedBalance,
-  };
 
-  if (!result.success) {
-    // Do not persist failed deductions — retries with the same Idempotency-Key
-    // must be allowed (getIdempotentResponse also skips stored failures).
-    const code = classifyCreditFailure(result.error, result.code);
+  if (!rpcData?.success || !balanceOk) {
+    const code = classifyCreditFailure(rpcData?.error, rpcData?.code);
+    const remaining = Number(rpcData?.balance ?? rpcData?.new_balance);
     return {
       success: false,
-      error: result.error ?? "Credit deduction failed.",
+      error: rpcData?.error ?? "Credit deduction failed.",
       code,
-      balance: Number.isFinite(result.remaining) ? Math.max(0, Math.floor(result.remaining)) : undefined,
+      balance: Number.isFinite(remaining)
+        ? Math.max(0, Math.floor(remaining))
+        : undefined,
     };
   }
 
-  let transactionId = result.transactionId;
-
-  if (input.sessionId && !isValidUuid(input.sessionId)) {
-    console.error("[credits] Invalid sessionId provided for credit transaction.");
-  }
-
-  if (input.sessionId && isValidUuid(input.sessionId)) {
-    try {
-      if (transactionId) {
-        await db
-          .from("credit_transactions")
-          .update({
-            session_id: input.sessionId,
-          })
-          .eq("id", transactionId);
-      } else {
-        const { data: lastTransaction } = await db
-          .from("credit_transactions")
-          .select("id")
-          .eq("user_id", input.userId)
-          .eq("action", "usage")
-          .eq("balance_after", result.newBalance)
-          .order("created_at", {
-            ascending: false,
-          })
-          .limit(1)
-          .maybeSingle();
-
-        if (lastTransaction && typeof lastTransaction.id === "string") {
-          transactionId = lastTransaction.id;
-
-          await db
-            .from("credit_transactions")
-            .update({
-              session_id: input.sessionId,
-            })
-            .eq("id", lastTransaction.id);
-        }
-      }
-    } catch (error) {
-      console.error(
-        "[credits] Failed to attach session_id:",
-        error instanceof Error ? error.message : String(error)
-      );
-    }
-  }
-
-  const success: DeductCreditsAtomicResult = {
+  return {
     success: true,
-    balanceAfter: result.newBalance,
-    balance: result.newBalance,
-    transactionId,
-    code: "OK",
+    balanceAfter: parsedBalance,
+    balance: parsedBalance,
+    transactionId:
+      typeof rpcData.transaction_id === "string" ? rpcData.transaction_id : undefined,
+    code: rpcData.code ?? "OK",
   };
-
-  await storeIdempotentResponse(db, input.idempotencyKey, success, {
-    userId: input.userId,
-    action: input.action,
-    requestHash: input.requestHash,
-  });
-
-  return success;
 }
 
 /* -------------------------------------------------------------------------- */

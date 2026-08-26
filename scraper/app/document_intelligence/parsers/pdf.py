@@ -79,7 +79,21 @@ def parse_pdf(data: bytes) -> tuple[list[PageResult], list[ParseWarning]]:
                 image_references=image_refs, table_references=table_refs,
             ))
             continue
-        ocr_text, ocr_confidence, low_regions = _ocr_page(data, index)
+        try:
+            ocr_text, ocr_confidence, low_regions = _ocr_page(data, index)
+        except ParseError as exc:
+            # Soft-fail when OCR deps are missing so Edge Gemini/AI can still try.
+            if getattr(exc, "code", None) == "OCR_UNAVAILABLE":
+                pages.append(PageResult(
+                    page_number=index, text="", extraction_method="none",
+                ))
+                warnings.append(ParseWarning(
+                    "OCR_UNAVAILABLE",
+                    "OCR is not available on this worker; page left for AI fallback.",
+                    [index],
+                ))
+                continue
+            raise
         page_result = PageResult(
             page_number=index,
             text=ocr_text,

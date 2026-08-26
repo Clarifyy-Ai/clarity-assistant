@@ -37,9 +37,18 @@ import {
   isPythonGovExamConfigured,
   pythonGovAvailability,
   pythonGovProcessJob,
+  wantsPythonPaperFactoryGenerator,
 } from "../_shared/pythonGovExamClient.ts";
+import { decideRoute } from "../_shared/operationRouter.ts";
+import { isPythonForceUnavailable } from "../_shared/pythonClient.ts";
 
 const COST = creditCost("create_mock_test");
+
+/**
+ * Durable paper jobs are hybrid-by-plan (MATRIX `gov_exam_assemble`), not
+ * request-scoped `executeHybridOperation`. We consult `decideRoute` for live
+ * capability flags (AI/Python force-unavailable) before `decideGenerationPlan`.
+ */
 
 function json(req: Request, payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -290,25 +299,56 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
     }
 
     const pythonConfigured = isPythonGovExamConfigured();
+    const paperFactoryWorkerEnabled = Deno.env.get("PAPER_FACTORY_WORKER") === "1";
+    const generatorPreference = parseGeneratorPreference(body);
+    // MATRIX gov_exam_assemble: preferredOrder database → python → ai (AI optional).
+    // Durable path is hybrid-by-plan — consult decideRoute for force-unavailable flags.
+    const assembleRoute = decideRoute({ operation: "gov_exam_assemble" });
     // Decide bank-only vs AI-assisted before charging anything.
     const plan = decideGenerationPlan({
       requested: requestedCount,
       available,
       mode,
-      canUseAi: hasCapability(profile?.plan_id, "gov_exam_ai_fill"),
-      generatorPreference: parseGeneratorPreference(body),
+      canUseAi:
+        hasCapability(profile?.plan_id, "gov_exam_ai_fill") &&
+        assembleRoute.canUseAI,
+      generatorPreference,
+      // Use gov-exam client config (may differ from PYTHON_SERVICE_URL).
+      // Honor HYBRID_FORCE_PYTHON_UNAVAILABLE without requiring generic hybrid URL.
       pythonWorkerEnabled:
-        pythonConfigured || Deno.env.get("PAPER_FACTORY_WORKER") === "1",
+        !isPythonForceUnavailable() &&
+        (pythonConfigured || paperFactoryWorkerEnabled),
     });
 
-    if (plan.kind === "blocked") {
-      const payload = blockedPlanPayload(plan);
+    // P0-02: Full Mock credit fail-closed — never charge for hybrid_deterministic
+    // fill when the approved bank is short and AI fill is not allowed.
+    const fullMockShortWithoutAi =
+      (mode === "generated_mock" || mode === "official_previous") &&
+      available < requestedCount &&
+      plan.kind === "hybrid_deterministic";
+
+    if (plan.kind === "blocked" || fullMockShortWithoutAi) {
+      const payload = blockedPlanPayload(
+        fullMockShortWithoutAi
+          ? {
+            ...plan,
+            kind: "blocked",
+            reasonCode: "CONTENT_INSUFFICIENT",
+            skipAiFill: true,
+            allowDeterministicFill: false,
+            deterministicContribution: 0,
+            aiContribution: 0,
+            maxCustomSetSize: available,
+          }
+          : plan,
+      );
       console.log(JSON.stringify({
         tag: "[GOV_EXAM] create_blocked",
         correlation_id: correlationId,
         code: payload.code,
         available,
         requested: requestedCount,
+        hybrid_fail_closed: fullMockShortWithoutAi,
       }));
       return json(req, { ...payload, correlationId }, payload.code === "CAPABILITY_REQUIRED" ? 403 : 409);
     }
@@ -332,10 +372,18 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
       return creditDenialResponse(req, creditResult, COST);
     }
 
-    const dispatchPython =
-      plan.generator === "python_paper_factory" ||
-      plan.kind === "hybrid_deterministic" ||
-      (plan.kind === "bank_only" && pythonConfigured);
+    // Tag for Python poller whenever preferred/configured — even if HTTP dispatch
+    // is unavailable (PAPER_FACTORY_WORKER DB claim path).
+    const usePythonFactory = wantsPythonPaperFactoryGenerator({
+      planGenerator: plan.generator,
+      planKind: plan.kind,
+      generatorPreference,
+      pythonHttpConfigured: pythonConfigured,
+      paperFactoryWorkerEnabled,
+    });
+    const taggedGenerator = usePythonFactory
+      ? "python_paper_factory"
+      : plan.generator;
 
     const { data: job, error: jobErr } = await db
       .from("gov_paper_generation_jobs")
@@ -352,10 +400,11 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
           skipAiFill: plan.skipAiFill,
           allowAiFill: !plan.skipAiFill,
           allowDeterministicFill: plan.allowDeterministicFill,
-          generator: dispatchPython && pythonConfigured
-            ? "python_paper_factory"
-            : plan.generator,
-          generationPlan: planSummary(plan),
+          generator: taggedGenerator,
+          generationPlan: planSummary({
+            ...plan,
+            generator: taggedGenerator,
+          }),
           correlationId,
         },
         source_mix: {
@@ -406,9 +455,11 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
         userId: user.id,
         cost: COST,
         reason: "refund_create_exam_paper_job",
+        idempotencyKey: `refund_create_exam_paper_job:${idempotencyKey}`,
       }).catch(() => {});
       return json(req, {
-        error: "Failed to create job",
+        success: false,
+        error: "Failed to create paper generation job. Your credits were refunded — please try again.",
         code: "PAPER_GENERATION_FAILED",
         correlationId,
       }, 500);
@@ -421,14 +472,12 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
       tag: "[GOV_EXAM] job_enqueued",
       correlation_id: correlationId,
       job_id: jobId,
-      generator: dispatchPython && pythonConfigured
-        ? "python_paper_factory"
-        : plan.generator,
+      generator: taggedGenerator,
       plan_kind: plan.kind,
     }));
 
     // Invoke Render FastAPI so jobs are not left only for DB polling.
-    if (dispatchPython && pythonConfigured) {
+    if (usePythonFactory && pythonConfigured) {
       const dispatch = pythonGovProcessJob({
         job_id: jobId,
         correlation_id: correlationId,
@@ -471,15 +520,18 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
       }, 202);
     }
 
-    // Python preferred by plan but HTTP not configured — leave queued for DB worker.
-    if (plan.generator === "python_paper_factory") {
+    // Python tagged but HTTP not configured — leave queued for DB worker.
+    if (usePythonFactory) {
       return json(req, {
         jobId,
         status: "queued",
         progressStage: "queued",
         creditsCharged: COST,
         balanceAfter: creditResult.balanceAfter,
-        generationPlan: planSummary(plan),
+        generationPlan: planSummary({
+          ...plan,
+          generator: taggedGenerator,
+        }),
         async: true,
         correlationId,
         code: "JOB_QUEUED",

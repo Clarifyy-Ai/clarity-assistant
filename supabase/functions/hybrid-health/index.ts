@@ -24,6 +24,7 @@ import {
 import { isPythonConfigured, pythonFetch, pythonHealth, pythonReady } from "../_shared/pythonClient.ts";
 import { isPythonGovExamConfigured } from "../_shared/pythonGovExamClient.ts";
 import { validateBillingConfig } from "../_shared/billingConfig.ts";
+import { listHybridOperations } from "../_shared/operationRouter.ts";
 
 function present(name: string): boolean {
   return Boolean(Deno.env.get(name)?.trim());
@@ -37,6 +38,11 @@ function classifyOptional(configured: boolean): {
     configured,
     status: configured ? "ok" : "not_configured",
   };
+}
+
+function chaosFlagEnabled(name: string): boolean {
+  const v = (Deno.env.get(name) ?? "").trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes" || v === "on";
 }
 
 Deno.serve(async (req) => {
@@ -125,6 +131,8 @@ Deno.serve(async (req) => {
 
   const publicOk = Boolean(health?.ok && ready?.ok);
   const hmacOk = Boolean(signedInternal?.ok);
+  const pythonUp = configured && hmacOk;
+  const pythonDown = configured && !publicOk;
   const pythonStatus = !configured
     ? "not_configured"
     : hmacOk
@@ -152,10 +160,21 @@ Deno.serve(async (req) => {
     required: requiredOk ? "ok" : "service-unavailable",
     db,
     storage,
+    /** MATRIX hybrid operations + Edge wrappers that expose them. */
+    supported_operations: listHybridOperations(),
+    operations_count: listHybridOperations().length,
+    edge_operation_wrappers: {
+      sprint_review_transcript: "process-sprint-transcript",
+      document_process: "create-document-processing-job",
+      gov_exam_assemble: "create-exam-paper",
+    },
     python: {
       configured,
       /** True only when signed internal auth succeeds — not merely /health. */
       hmac_ok: hmacOk,
+      /** Explicit up/down for chaos probes (signed route is authoritative). */
+      up: pythonUp,
+      down: pythonDown,
       gov_exam_client_configured: isPythonGovExamConfigured(),
       status: pythonStatus,
       health,
@@ -166,6 +185,11 @@ Deno.serve(async (req) => {
       gemini: classifyOptional(present("GEMINI_API_KEY") || present("GOOGLE_AI_API_KEY")),
       openai: classifyOptional(present("OPENAI_API_KEY")),
       anthropic: classifyOptional(present("ANTHROPIC_API_KEY")),
+    },
+    /** Chaos / failure-simulation flags (presence only — never echo values). */
+    chaos: {
+      force_ai_unavailable: chaosFlagEnabled("HYBRID_FORCE_AI_UNAVAILABLE"),
+      force_python_unavailable: chaosFlagEnabled("HYBRID_FORCE_PYTHON_UNAVAILABLE"),
     },
     razorpay: {
       configured: razorpayConfigured,

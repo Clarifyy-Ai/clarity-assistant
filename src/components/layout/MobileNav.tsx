@@ -81,7 +81,7 @@ const MORE_LINKS: MoreLink[] = [
   { to: "/app/assessments", icon: Brain, label: "Assessments" },
   { to: "/app/learn", icon: BookOpen, label: "Learning Hub" },
   { to: "/app/question-bank", icon: FileText, label: "Question bank" },
-  { to: "/app/community", icon: MessageSquare, label: "Q&A" },
+  { to: "/app/community", icon: MessageSquare, label: "Q&A (Preview)" },
   { to: "/app/coding", icon: FlaskConical, label: "Coding lab", featureFlag: "coding_hints" },
   { to: "/app/library", icon: FileText, label: "Document library" },
   { to: "/app/practice-workspace", icon: ClipboardList, label: "Practice workspace" },

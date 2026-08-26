@@ -33,4 +33,17 @@ describe("document upload validation", () => {
       ),
     ).toBeNull();
   });
+
+  it("rejects exam_document and library files over the 20 MB Edge ceiling", () => {
+    const oversize = 20 * 1024 * 1024 + 1;
+    expect(
+      validateDocumentFile(file("exam.pdf", "application/pdf", oversize), "exam_document"),
+    ).toMatch(/Maximum size is 20 MB/i);
+    expect(
+      validateDocumentFile(file("lib.pdf", "application/pdf", oversize), "library"),
+    ).toMatch(/Maximum size is 20 MB/i);
+    expect(
+      validateDocumentFile(file("ok.pdf", "application/pdf", 20 * 1024 * 1024), "exam_document"),
+    ).toBeNull();
+  });
 });

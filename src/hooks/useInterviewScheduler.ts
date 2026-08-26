@@ -225,19 +225,13 @@ export function useInterviewScheduler() {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to add round";
       console.warn(
-        "[useInterviewScheduler] addRound failed — rolling back parent interview",
+        "[useInterviewScheduler] addRound failed for interview",
         interviewId,
+        message,
       );
-      try {
-        await scheduledInterviewsDB.delete(interviewId);
-      } catch (rollbackErr) {
-        console.error(
-          "[useInterviewScheduler] Rollback also failed:",
-          rollbackErr,
-          "— orphaned interview ID:",
-          interviewId,
-        );
-      }
+      // Do not delete the parent interview — NewInterview treats round failure as
+      // non-fatal and the user can edit/add the round later. Deleting here caused
+      // successful schedules to vanish from the list after a round insert error.
       return { error: message };
     }
   }, [loadInterviews]);
@@ -246,7 +240,7 @@ export function useInterviewScheduler() {
 
   const updateRound = useCallback(async (
     roundId: string,
-    values: Partial<RoundFormValues>,
+    values: Partial<RoundFormValues> & { status?: InterviewRound["status"] },
   ): Promise<{ error: string | null }> => {
     try {
       await interviewRoundsDB.update(roundId, {

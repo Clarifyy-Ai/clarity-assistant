@@ -429,3 +429,38 @@ def test_credit_finalization_isolation() -> None:
 
     # Worker never called any direct credit table updates
     assert len(db.credit_mutations) == 0
+
+
+def test_oversized_download_rejected_before_ocr(monkeypatch: pytest.MonkeyPatch) -> None:
+    """TC-DOC-005 / P0-05: files above max bytes fail permanently without OCR."""
+    import app.document_intelligence.worker as worker_mod
+
+    monkeypatch.setattr(worker_mod, "DOCUMENT_MAX_BYTES", 64)
+
+    db = MockDatabase()
+    db.add_job("job-oversize", status="queued", max_attempts=3, credits_reserved=5)
+    worker = DocumentJobWorker(db, "worker-node-1", lease_seconds=60)
+    claimed = worker.claim()
+    assert claimed is not None
+
+    ocr_called = {"count": 0}
+
+    def oversized_downloader(_job: dict[str, Any]) -> bytes:
+        return b"x" * 65
+
+    def ocr_processor(_raw: bytes, _job: dict[str, Any], _extracted: Any = None) -> Any:
+        ocr_called["count"] += 1
+        return {"text": "should-not-run"}
+
+    ok = worker.execute_pipeline(
+        claimed,
+        downloader=oversized_downloader,
+        extractor=lambda *_a, **_k: ({"text": "ok", "confidence": 1.0}, None),
+        ocr_processor=ocr_processor,
+    )
+    assert ok is False
+    job = db.jobs["job-oversize"]
+    assert job["status"] == "failed_permanent"
+    assert job["error_code"] == "DOCUMENT_SIZE_INVALID"
+    assert "Maximum size is" in (job["error_message"] or "")
+    assert ocr_called["count"] == 0

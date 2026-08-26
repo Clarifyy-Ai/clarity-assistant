@@ -65,6 +65,7 @@ class GenerationRequest:
     publish: bool = True
     make_questions_public: bool = False
     title: str | None = None
+    allow_deterministic_fill: bool = False
 
 
 def _normalize(text: str) -> str:
@@ -298,38 +299,61 @@ class PaperFactory:
                         )
                 except Exception as exc:
                     log.warning(
-                        "paper_factory_ai_unavailable_using_deterministic_fallback",
+                        "paper_factory_ai_unavailable",
                         exam=exam.code,
                         error=str(exc),
                     )
                     report = None
 
                 if report is None or report.shortfalls:
-                    # Provider failures/shortfalls must not make the product AI-only.
-                    # Fill only the unresolved blueprint slots with deterministic,
-                    # practice-labelled templates before declaring the paper incomplete.
-                    report = await self._fill_deterministic_slots(
-                        blueprint,
-                        bank_selected,
-                        report,
-                        seed=request.random_seed or request.job_id or "gov-paper",
-                    )
+                    if request.allow_deterministic_fill:
+                        log.info(
+                            "paper_factory_ai_shortfall_deterministic_fill",
+                            exam=exam.code,
+                        )
+                        report = await self._fill_deterministic_slots(
+                            blueprint,
+                            bank_selected,
+                            report,
+                            seed=request.random_seed or request.job_id or "gov-paper",
+                        )
+                    else:
+                        generated_so_far = (
+                            0
+                            if report is None
+                            else sum(len(v) for v in report.accepted.values())
+                        )
+                        have = (blueprint.total_questions - needed) + generated_so_far
+                        raise PaperFactoryError(
+                            "CONTENT_INSUFFICIENT",
+                            f"Only {have} of {blueprint.total_questions} questions "
+                            "could be assembled; deterministic fill is not permitted.",
+                            retryable=False,
+                        )
             else:
-                # Deterministic practice is the no-provider fallback. Official
-                # previous-year mode remains exact and never fabricates content.
+                # No AI provider — fail closed unless deterministic practice is allowed.
                 if request.mode == "official_previous":
                     raise PaperFactoryError(
                         "CONTENT_INSUFFICIENT",
                         f"{needed} official questions are missing and cannot be fabricated.",
                         retryable=False,
                     )
-                await self._fill_deterministic_slots(
-                    blueprint,
-                    bank_selected,
-                    None,
-                    seed=request.random_seed or request.job_id or "gov-paper",
-                )
-                blueprint.paper_class = "custom_practice"
+                if request.allow_deterministic_fill:
+                    await self._fill_deterministic_slots(
+                        blueprint,
+                        bank_selected,
+                        None,
+                        seed=request.random_seed or request.job_id or "gov-paper",
+                    )
+                    blueprint.paper_class = "custom_practice"
+                else:
+                    have = blueprint.total_questions - needed
+                    raise PaperFactoryError(
+                        "CONTENT_INSUFFICIENT",
+                        f"Only {have} of {blueprint.total_questions} bank questions "
+                        "are available; no AI provider and deterministic fill disabled.",
+                        retryable=False,
+                    )
 
         # ── Assemble in section order ─────────────────────────────────────────
         await self._stage(on_stage, "validating_questions")

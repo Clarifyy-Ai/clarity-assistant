@@ -136,10 +136,33 @@ export default function InterviewDetail() {
 
   async function handleComplete() {
     try {
+      if (round?.id) {
+        await scheduler.updateRound(round.id, {
+          status: "completed",
+        } as any);
+      }
       await scheduler.updateInterview(iv.id, { status: "completed" } as any);
+      toast.success("Interview marked completed.");
+      await scheduler.reload();
     } catch (err) {
       console.error("handleComplete failed:", err);
       toast.error("Failed to mark interview as completed. Please try again.");
+    }
+  }
+
+  async function handleCancel() {
+    try {
+      if (round?.id) {
+        await scheduler.updateRound(round.id, {
+          status: "cancelled",
+        } as any);
+      }
+      await scheduler.updateInterview(iv.id, { status: "cancelled" } as any);
+      toast.success("Interview cancelled. It remains in your history.");
+      await scheduler.reload();
+    } catch (err) {
+      console.error("handleCancel failed:", err);
+      toast.error("Failed to cancel interview. Please try again.");
     }
   }
 
@@ -158,10 +181,19 @@ export default function InterviewDetail() {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={handleComplete}
+                onClick={() => void handleComplete()}
                 leftIcon={<CheckCircle className="w-3.5 h-3.5" />}
               >
                 Mark completed
+              </Button>
+            )}
+            {ivStatus === "scheduled" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void handleCancel()}
+              >
+                Cancel interview
               </Button>
             )}
             <Button

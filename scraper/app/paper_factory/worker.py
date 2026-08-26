@@ -46,6 +46,7 @@ def request_from_job(job: dict[str, Any]) -> GenerationRequest:
         use_bank=payload.get("useBank") is not False,
         publish=True,
         make_questions_public=False,
+        allow_deterministic_fill=payload.get("allowDeterministicFill") is True,
     )
 
 
@@ -134,7 +135,7 @@ async def process_job(
             message=exc.message,
             retryable=exc.retryable,
         )
-        await _compensate(job, repo)
+        await _compensate(job, repo, permanent=not exc.retryable)
         gov_exam_log(
             "completed",
             operation_id=operation_id,
@@ -153,7 +154,7 @@ async def process_job(
             message=str(exc),
             retryable=True,
         )
-        await _compensate(job, repo)
+        # Retryable crash: re-queue only — never refund (matches Edge failJob).
         gov_exam_log(
             "completed",
             operation_id=operation_id,
@@ -184,17 +185,26 @@ async def process_job(
     return result
 
 
-async def _compensate(job: dict[str, Any], repo: PaperRepository) -> None:
-    """Refund credits that were charged for a generation that never delivered."""
-    charged = int(job.get("credits_charged") or 0)
-    user_id = job.get("user_id")
-    if charged <= 0 or not user_id:
+async def _compensate(
+    job: dict[str, Any], repo: PaperRepository, *, permanent: bool
+) -> None:
+    """Refund only on permanent failure after atomically claiming credits_charged."""
+    if not permanent:
         return
+    user_id = job.get("user_id")
+    job_id = str(job.get("id") or "")
+    if not user_id or not job_id:
+        return
+    claimed = await asyncio.to_thread(repo.claim_credits_for_refund, job_id)
+    if claimed <= 0:
+        return
+    idem_key = f"refund_paper_job:{job_id}"
     await asyncio.to_thread(
         repo.refund_credits,
         str(user_id),
-        charged,
-        f"refund_paper_factory_job_{job.get('id')}",
+        claimed,
+        idem_key,
+        idempotency_key=idem_key,
     )
 
 

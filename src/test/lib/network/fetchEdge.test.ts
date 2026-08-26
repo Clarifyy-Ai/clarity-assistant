@@ -96,6 +96,28 @@ describe("fetchEdge — private-mode blocking", () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("allows hybrid-health while private mode is enabled (admin diagnostics)", async () => {
+    mockGetPrivateMode.mockReturnValue(true);
+    (global.fetch as any).mockResolvedValueOnce(
+      new Response(JSON.stringify({ edge: "ok" }), { status: 200 }),
+    );
+    const { fetchEdge } = await import("@/lib/network/fetchEdge");
+
+    const res = await fetchEdge("hybrid-health", {});
+    expect(res.ok).toBe(true);
+  });
+
+  it("allows collect-exam-papers while private mode is enabled", async () => {
+    mockGetPrivateMode.mockReturnValue(true);
+    (global.fetch as any).mockResolvedValueOnce(
+      new Response(JSON.stringify({ collected: 0 }), { status: 200 }),
+    );
+    const { fetchEdge } = await import("@/lib/network/fetchEdge");
+
+    const res = await fetchEdge("collect-exam-papers", { exam_type: "UPSC" });
+    expect(res.ok).toBe(true);
+  });
+
   it("does not block calls when private mode is disabled", async () => {
     mockGetPrivateMode.mockReturnValue(false);
     (global.fetch as any).mockResolvedValueOnce(

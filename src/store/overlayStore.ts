@@ -83,6 +83,8 @@ export interface ChatMessage {
   timestamp: number;
   id?: string;
   pending?: boolean;
+  /** Hybrid route for coach replies (ai | python | deterministic). */
+  source?: string;
 }
 
 export interface CaptureAnswerRecord {

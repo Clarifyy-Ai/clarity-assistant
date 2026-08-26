@@ -14,7 +14,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import {
-  Plus, Save, Eye, ListChecks, Loader2, Trash2, Search, ArrowLeft,
+  Plus, Save, Eye, ListChecks, Loader2, Trash2, Search, ArrowLeft, CheckCircle2, ShieldCheck,
 } from "lucide-react";
 import BlockEditor from "@/components/admin/BlockEditor";
 import BlockRenderer from "@/components/admin/BlockRenderer";
@@ -75,6 +75,7 @@ function ListView() {
   const [examFilter, setExamFilter] = useState<string>("all");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [actionBusyId, setActionBusyId] = useState<string | null>(null);
 
   useEffect(() => { void load(); }, [search, examFilter]);
 
@@ -111,6 +112,57 @@ function ListView() {
     } finally {
       setDeleting(false);
       setDeleteId(null);
+    }
+  }
+
+  async function verifyQuestion(row: QuestionRow) {
+    setActionBusyId(row.id);
+    try {
+      await questionsDB.update(row.id, {
+        is_verified: true,
+        review_status: "approved",
+      });
+      void writeAdminAudit({
+        action: "verify",
+        targetType: "question",
+        targetId: row.id,
+        newValue: { is_verified: true, review_status: "approved" },
+      });
+      toast.success("Question verified");
+      void load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Verify failed");
+    } finally {
+      setActionBusyId(null);
+    }
+  }
+
+  async function approvePublish(row: QuestionRow) {
+    setActionBusyId(row.id);
+    try {
+      await questionsDB.update(row.id, {
+        is_verified: true,
+        is_public: true,
+        review_status: "approved",
+        publish_status: "published",
+      });
+      void writeAdminAudit({
+        action: "publish",
+        targetType: "question",
+        targetId: row.id,
+        newValue: {
+          is_verified: true,
+          is_public: true,
+          review_status: "approved",
+          publish_status: "published",
+        },
+      });
+      toast.success("Question approved and published");
+      void load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Approve failed");
+    } finally {
+      setActionBusyId(null);
     }
   }
 
@@ -168,8 +220,8 @@ function ListView() {
             <div className="overflow-x-auto"><table className="w-full text-sm min-w-[640px]">
               <thead className="border-b border-border bg-muted/30">
                 <tr>
-                  {["Question", "Exam", "Subject", "Difficulty", "Status", ""].map((h) => (
-                    <th key={h} className="text-left text-[10px] uppercase tracking-widest text-muted-foreground px-4 py-2">
+                  {["Question", "Exam", "Subject", "Difficulty", "Status", "Actions"].map((h) => (
+                    <th key={h} scope="col" className="text-left text-[10px] uppercase tracking-widest text-muted-foreground px-4 py-2">
                       {h}
                     </th>
                   ))}
@@ -196,12 +248,38 @@ function ListView() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       {isAdmin && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setDeleteId(r.id); }}
-                        className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="inline-flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                        {!r.is_verified && (
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            disabled={actionBusyId === r.id}
+                            onClick={() => void verifyQuestion(r)}
+                            leftIcon={<ShieldCheck className="w-3 h-3" />}
+                          >
+                            Verify
+                          </Button>
+                        )}
+                        {!(r.is_verified && r.is_public) && (
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            disabled={actionBusyId === r.id}
+                            onClick={() => void approvePublish(r)}
+                            leftIcon={<CheckCircle2 className="w-3 h-3" />}
+                          >
+                            Approve
+                          </Button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setDeleteId(r.id)}
+                          className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10"
+                          aria-label="Delete question"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                       )}
                     </td>
                   </tr>

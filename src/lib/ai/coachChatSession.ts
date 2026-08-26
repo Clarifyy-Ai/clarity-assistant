@@ -134,6 +134,7 @@ export async function submitCoachChatMessage(
           text: chatBuffer || "No response received. Please try again.",
           pending: false,
           id: result.message_id || assistantId,
+          source: result.source || undefined,
         });
         if (result.conversation_id) {
           useOverlayStore

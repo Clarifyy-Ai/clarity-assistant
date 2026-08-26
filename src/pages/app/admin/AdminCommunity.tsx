@@ -144,7 +144,9 @@ export default function AdminCommunityPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-semibold">Q&A moderation</h1>
-        <p className="text-sm text-muted-foreground">Review reports and moderate community posts.</p>
+        <p className="text-sm text-muted-foreground">
+          Deferred / Preview — admin-to-user Community journeys are out of launch scope. Tooling below is for staff rehearsal only.
+        </p>
       </div>
 
       {error && <InlineErrorRetry message={error} onRetry={() => void load()} />}

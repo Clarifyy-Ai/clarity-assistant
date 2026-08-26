@@ -94,16 +94,36 @@ export async function requireAuth(req: Request): Promise<AuthContext> {
     throw errorResponse("Missing or invalid Authorization header", "AUTH_REQUIRED", 401, req);
   }
 
-  const token = header.slice(7);
+  const token = header.slice(7).trim();
+  if (!token) {
+    throw errorResponse("Missing or invalid Authorization header", "AUTH_REQUIRED", 401, req);
+  }
+
+  // Never treat the anon/publishable key as a user JWT.
+  if (token === ENV.SUPABASE_ANON_KEY) {
+    throw errorResponse("Missing or invalid Authorization header", "AUTH_REQUIRED", 401, req);
+  }
 
   const client = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { persistSession: false }
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
 
-  const { data: { user }, error } = await client.auth.getUser();
+  // Pass JWT explicitly — getUser() without a token does not reliably use global headers
+  // when persistSession is false (common AUTH_INVALID regression for signed-in users).
+  const { data: { user }, error } = await client.auth.getUser(token);
   if (error || !user) {
-    throw errorResponse("Invalid or expired token", "AUTH_INVALID", 401, req);
+    const msg = `${error?.message ?? ""} ${error?.status ?? ""}`.toLowerCase();
+    const expired =
+      msg.includes("expired") ||
+      msg.includes("session_not_found") ||
+      error?.name === "AuthSessionMissingError";
+    throw errorResponse(
+      expired ? "Session expired. Please sign in again." : "Invalid or expired token",
+      expired ? "AUTH_EXPIRED" : "AUTH_INVALID",
+      401,
+      req,
+    );
   }
 
   const admin = getAdminClient();

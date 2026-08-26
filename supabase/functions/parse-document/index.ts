@@ -1,7 +1,7 @@
 // parse-document — PDF/text extraction for documents table (cover letter, etc.)
 
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
-import { createServiceClient, deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
+import { createServiceClient } from "../_shared/supabase.ts";
 import { parseJSON } from "../_shared/gemini.ts";
 import { requireAuth } from "../_shared/utils.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
@@ -10,8 +10,8 @@ import {
 } from "../_shared/rateLimit.ts";
 import { resolveUploadMime, validateUploadMime } from "../_shared/uploadValidation.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
-import { creditDenialResponse } from "../_shared/creditAuthority.ts";
 import { callPythonProcess } from "../_shared/pythonClient.ts";
+import { executeHybridOperation } from "../_shared/hybridExecute.ts";
 import JSZip from "https://esm.sh/jszip@3.10.1";
 
 const PARSE_DOCUMENT_COST = creditCost("parse_document");
@@ -153,11 +153,12 @@ async function tryPythonDocumentExtract(opts: {
   mimeType: string;
   documentKind: string;
   operationId: string;
+  correlationId?: string;
 }): Promise<{ full_text: string; summary: string } | null> {
   const result = await callPythonProcess({
     operation: "document_extract",
     operationId: opts.operationId,
-    correlationId: crypto.randomUUID(),
+    correlationId: opts.correlationId ?? crypto.randomUUID(),
     payload: {
       base64: opts.base64,
       filename: opts.filename,
@@ -174,6 +175,108 @@ async function tryPythonDocumentExtract(opts: {
     return null;
   }
   return extractPythonDocument(result.data);
+}
+
+type DocumentExtractPayload = {
+  full_text: string;
+  summary: string;
+};
+
+async function hybridDocumentExtract(opts: {
+  req: Request;
+  userId: string;
+  creditCost: number;
+  idempotencyKey: string | null;
+  base64: string;
+  bytes: Uint8Array;
+  filename: string;
+  mimeType: string;
+  documentKind: string;
+}): Promise<
+  | { ok: true; data: DocumentExtractPayload; response: Response; source: string }
+  | { ok: false; response: Response }
+> {
+  const hybrid = await executeHybridOperation<DocumentExtractPayload>({
+    req: opts.req,
+    auth: { userId: opts.userId },
+    operation: "document_process",
+    idempotencyKey: opts.idempotencyKey,
+    creditCost: opts.creditCost,
+    creditAction: "parse_document",
+    body: {
+      filename: opts.filename,
+      mime_type: opts.mimeType,
+      document_kind: opts.documentKind,
+    },
+    runPython: async (ctx) => {
+      return await tryPythonDocumentExtract({
+        base64: opts.base64,
+        filename: opts.filename,
+        mimeType: opts.mimeType,
+        documentKind: opts.documentKind,
+        operationId: ctx.operationId,
+        correlationId: ctx.correlationId,
+      });
+    },
+    runAi: async () => {
+      // Prefer local text/zip extract when possible; otherwise Gemini.
+      if (
+        opts.mimeType === "text/plain" ||
+        opts.mimeType === "text/csv" ||
+        opts.mimeType === "application/csv" ||
+        opts.mimeType === "application/vnd.ms-excel"
+      ) {
+        if (looksBinary(opts.bytes)) {
+          throw new Error("This file is not valid text.");
+        }
+        const text = bytesToUtf8(opts.bytes).replace(/^\uFEFF/, "").trim();
+        if (text.length < 1) throw new Error("Empty text document");
+        return {
+          full_text: text.slice(0, 50000),
+          summary: text.slice(0, 400),
+        };
+      }
+      if (
+        opts.mimeType ===
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      ) {
+        const text = await extractZipText(opts.bytes, false);
+        if (!text) throw new Error("DOCX extract failed");
+        return { full_text: text, summary: text.slice(0, 400) };
+      }
+      if (
+        opts.mimeType ===
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      ) {
+        const text = await extractZipText(opts.bytes, true);
+        if (!text) throw new Error("XLSX extract failed");
+        return { full_text: text, summary: text.slice(0, 400) };
+      }
+      const gemini = await extractWithGemini(
+        opts.base64,
+        opts.mimeType,
+        opts.documentKind,
+      );
+      if (!gemini) throw new Error("Gemini document extract failed");
+      return gemini;
+    },
+    validate: async (data) => {
+      if (!data.full_text || data.full_text.trim().length < 1) {
+        throw new Error("Extracted document text is empty");
+      }
+      return data;
+    },
+  });
+
+  if (!hybrid.ok) {
+    return { ok: false, response: hybrid.response };
+  }
+  return {
+    ok: true,
+    data: hybrid.data,
+    response: hybrid.response,
+    source: hybrid.source,
+  };
 }
 
 Deno.serve(async (req) => {
@@ -272,43 +375,29 @@ Deno.serve(async (req) => {
         return response(req, { error: "Stored file fingerprint does not match the document record.", code: "VALIDATION_ERROR" }, 422);
       }
       const bytes = new Uint8Array(buf);
-      let extracted: { full_text: string; summary: string } | null = null;
-      // Prefer Python document_extract; fall back to local/AI extract.
-      extracted = await tryPythonDocumentExtract({
+      const hybrid = await hybridDocumentExtract({
+        req,
+        userId,
+        creditCost: 0,
+        idempotencyKey: `library:${libraryDocumentId}`.slice(0, 150),
         base64: safeBase64(bytes),
+        bytes,
         filename: libraryDoc.storage_path.split("/").pop() || "document",
         mimeType: mimeCheck.mimeType,
         documentKind: "library",
-        operationId: `library:${libraryDocumentId}`,
       });
-      if (!extracted) {
-        if (mimeCheck.mimeType === "text/plain" || mimeCheck.mimeType === "text/csv" || mimeCheck.mimeType === "application/csv" || mimeCheck.mimeType === "application/vnd.ms-excel") {
-          if (looksBinary(bytes)) return response(req, { error: "This file is not valid text.", code: "UNSUPPORTED_ENCODING" }, 400);
-          const text = bytesToUtf8(bytes).replace(/^\uFEFF/, "").trim();
-          if (text.length < 1) {
-            await db.from("personal_library_documents").update({
-              processing_status: "rejected", processing_error: "The document contains no readable text.",
-            }).eq("id", libraryDocumentId).eq("owner_id", userId);
-            return response(req, { error: "The document contains no readable text.", code: "PARSER_FAILED" }, 422);
-          }
-          extracted = { full_text: text.slice(0, 50000), summary: text.slice(0, 400) };
-        } else if (mimeCheck.mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-          const text = await extractZipText(bytes, false);
-          if (text) extracted = { full_text: text, summary: text.slice(0, 400) };
-        } else if (mimeCheck.mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
-          const text = await extractZipText(bytes, true);
-          if (text) extracted = { full_text: text, summary: text.slice(0, 400) };
-        } else {
-          extracted = await extractWithGemini(safeBase64(bytes), mimeCheck.mimeType, "library");
-        }
-      }
-      if (!extracted) {
+      if (!hybrid.ok) {
         await db.from("personal_library_documents").update({
-          processing_status: "failed_permanent", processing_error: "Could not extract readable text from this document.",
+          processing_status: "failed_permanent",
+          processing_error: "Could not extract readable text from this document.",
           content_hash: hash,
         }).eq("id", libraryDocumentId);
-        return response(req, { error: "Could not extract readable text from this document.", code: "PARSER_FAILED" }, 422);
+        return response(req, {
+          error: "Could not extract readable text from this document.",
+          code: "PARSER_FAILED",
+        }, 422);
       }
+      const extracted = hybrid.data;
       await db.from("personal_library_documents").update({
         content_hash: hash, parsed_content: extracted.full_text, parsed_metadata: { summary: extracted.summary },
         processing_status: "completed", processing_error: null, parser_version: PARSER_VERSION,
@@ -374,66 +463,29 @@ Deno.serve(async (req) => {
         );
       }
 
-      const creditResult = await deductCreditsAtomic({
-        userId,
-        action: "parse_document",
-        cost: PARSE_DOCUMENT_COST,
-        idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
-      });
-      if (!creditResult.success) {
-        return creditDenialResponse(req, creditResult, PARSE_DOCUMENT_COST);
-      }
+      const creditIdempotencyKey =
+        req.headers.get("x-idempotency-key") ||
+        req.headers.get("Idempotency-Key") ||
+        `jd:${jdId}`.slice(0, 150);
 
       const fileBytes = new Uint8Array(buf);
-      let extracted: { full_text: string; summary: string } | null =
-        await tryPythonDocumentExtract({
-          base64: safeBase64(fileBytes),
-          filename: match.name,
-          mimeType: mimeCheck.mimeType,
-          documentKind: "job_description",
-          operationId: `jd:${jdId}`,
-        });
-      if (!extracted) {
-        if (mimeCheck.mimeType === "text/plain") {
-          if (looksBinary(fileBytes)) {
-            await refundCredits({
-              userId,
-              cost: PARSE_DOCUMENT_COST,
-              reason: "refund_parse_document_failed",
-            });
-            return new Response(
-              JSON.stringify({
-                error: "This file is not valid UTF-8 text.",
-                code: "UNSUPPORTED_ENCODING",
-              }),
-              { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
-            );
-          }
-          const text = bytesToUtf8(fileBytes).replace(/^\uFEFF/, "").trim();
-          extracted = {
-            full_text: text.slice(0, 50000),
-            summary: text.slice(0, 400),
-          };
-        } else {
-          extracted = await extractWithGemini(
-            safeBase64(fileBytes),
-            mimeCheck.mimeType,
-            "job_description",
-          );
-        }
+      const hybrid = await hybridDocumentExtract({
+        req,
+        userId,
+        creditCost: PARSE_DOCUMENT_COST,
+        idempotencyKey: creditIdempotencyKey,
+        base64: safeBase64(fileBytes),
+        bytes: fileBytes,
+        filename: match.name,
+        mimeType: mimeCheck.mimeType,
+        documentKind: "job_description",
+      });
+
+      if (!hybrid.ok) {
+        return hybrid.response;
       }
 
-      if (!extracted) {
-        await refundCredits({
-          userId,
-          cost: PARSE_DOCUMENT_COST,
-          reason: "refund_parse_document_failed",
-        });
-        return new Response(
-          JSON.stringify({ error: "Could not extract text from document", code: "INTERNAL_ERROR" }),
-          { status: 500, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
-        );
-      }
+      const extracted = hybrid.data;
 
       await db
         .from("job_descriptions")
@@ -529,87 +581,74 @@ Deno.serve(async (req) => {
       );
     }
 
-    const creditResult = await deductCreditsAtomic({
-      userId,
-      action: "parse_document",
-      cost: PARSE_DOCUMENT_COST,
-      idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
-    });
-    if (!creditResult.success) {
-      return creditDenialResponse(req, creditResult, PARSE_DOCUMENT_COST);
-    }
-
     const fileBytes = new Uint8Array(buf);
-    let extracted: { full_text: string; summary: string } | null =
-      await tryPythonDocumentExtract({
-        base64: safeBase64(fileBytes),
-        filename: match.name,
-        mimeType: mimeCheck.mimeType,
-        documentKind: doc.type ?? "other",
-        operationId: `document:${documentId}`,
-      });
+    const hashBuf = await crypto.subtle.digest("SHA-256", buf);
+    const contentHash = Array.from(new Uint8Array(hashBuf))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
 
-    if (!extracted) {
-      if (mimeCheck.mimeType === "text/plain") {
-        if (looksBinary(fileBytes)) {
-          await refundCredits({
-            userId,
-            cost: PARSE_DOCUMENT_COST,
-            reason: "refund_parse_document_failed",
-          });
-          return new Response(
-            JSON.stringify({
-              error: "This file is not valid UTF-8 text.",
-              code: "UNSUPPORTED_ENCODING",
-            }),
-            { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
-          );
-        }
-        const text = bytesToUtf8(fileBytes).replace(/^\uFEFF/, "").trim();
-        if (text.length < 20) {
-          await refundCredits({
-            userId,
-            cost: PARSE_DOCUMENT_COST,
-            reason: "refund_parse_document_failed",
-          });
-          return new Response(
-            JSON.stringify({
-              error: "Text file is empty or too short to parse.",
-              code: "BAD_REQUEST",
-            }),
-            { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
-          );
-        }
-        extracted = {
-          full_text: text.slice(0, 50000),
-          summary: text.slice(0, 400),
-        };
-      } else {
-        extracted = await extractWithGemini(
-          safeBase64(fileBytes),
-          mimeCheck.mimeType,
-          doc.type ?? "other",
-        );
+    // Same user + same bytes already extracted → reuse without re-charge
+    const { data: dupDoc } = await db
+      .from("documents")
+      .select("id, content, parsed_summary")
+      .eq("user_id", userId)
+      .eq("content_hash", contentHash)
+      .not("content", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (dupDoc?.content && String(dupDoc.content).trim().length >= 20) {
+      if (dupDoc.id !== documentId) {
+        await db.from("documents").update({
+          content: dupDoc.content,
+          parsed_summary: dupDoc.parsed_summary,
+          content_hash: contentHash,
+          updated_at: new Date().toISOString(),
+        }).eq("id", documentId);
       }
-    }
-
-    if (!extracted) {
-      await refundCredits({
-        userId,
-        cost: PARSE_DOCUMENT_COST,
-        reason: "refund_parse_document_failed",
-      });
       return new Response(
-        JSON.stringify({ error: "Could not extract text from document", code: "INTERNAL_ERROR" }),
-        { status: 500, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
+        JSON.stringify({
+          success: true,
+          duplicate: true,
+          code: "DUPLICATE_DOCUMENT",
+          content: dupDoc.content,
+          parsed_summary: dupDoc.parsed_summary,
+          content_length: String(dupDoc.content).length,
+          message: "Identical document already parsed — no additional credit charged.",
+        }),
+        { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
       );
     }
+
+    const creditIdempotencyKey =
+      req.headers.get("x-idempotency-key") ||
+      req.headers.get("Idempotency-Key") ||
+      `document:${documentId}`.slice(0, 150);
+
+    const hybrid = await hybridDocumentExtract({
+      req,
+      userId,
+      creditCost: PARSE_DOCUMENT_COST,
+      idempotencyKey: creditIdempotencyKey,
+      base64: safeBase64(fileBytes),
+      bytes: fileBytes,
+      filename: match.name,
+      mimeType: mimeCheck.mimeType,
+      documentKind: doc.type ?? "other",
+    });
+
+    if (!hybrid.ok) {
+      return hybrid.response;
+    }
+
+    const extracted = hybrid.data;
 
     await db
       .from("documents")
       .update({
         content: extracted.full_text,
         parsed_summary: extracted.summary,
+        content_hash: contentHash,
         updated_at: new Date().toISOString(),
       })
       .eq("id", documentId);

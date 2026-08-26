@@ -66,7 +66,8 @@ const FOOTER_COLUMNS: Array<{
     heading: "Support",
     links: [
       { href: `mailto:${SUPPORT_EMAIL}`, label: "Email support" },
-      { to: "/help", label: "Help & status" },
+      { to: "/help", label: "Help Center" },
+      { href: `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Clarify AI system status")}`, label: "Report an outage" },
       { href: GITHUB_ORG_URL, label: "GitHub", external: true },
     ],
   },

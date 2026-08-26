@@ -52,7 +52,7 @@ import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { selectApprovedFallbackQuestions } from "../_shared/mockQuestionBank.ts";
 import { executeHybridOperation } from "../_shared/hybridExecute.ts";
 import { isAiForceUnavailable } from "../_shared/operationRouter.ts";
-import { callPythonProcess } from "../_shared/pythonClient.ts";
+import { callPythonProcess, pythonExecuteOperation } from "../_shared/pythonClient.ts";
 
 const FUNCTION_NAME = "generate-questions";
 const CREDIT_COST = creditCost("generate_questions");
@@ -886,14 +886,47 @@ Deno.serve(async (req: Request) => {
       return buildQuestionsHybridData(cleaned, requestId, "ai");
     },
     runPython: async (ctx) => {
-      const bank = body.allow_fallback
-        ? fallbackToCleanQuestions(
+      let questions: CleanQuestion[] = [];
+
+      const pyBank = await pythonExecuteOperation(
+        {
+          operation: "mock_question_generation",
+          operation_id: ctx.operationId,
+          correlation_id: ctx.correlationId,
+          user_id: user.id,
+          payload: {
+            type: body.interviewType,
+            interview_type: body.interviewType,
+            count: body.questionCount,
+            difficulty: body.difficulty,
+            excludeTexts: body.exclude_questions,
+            exclude_texts: body.exclude_questions,
+          },
+        },
+        { requestId: ctx.correlationId },
+      );
+
+      if (pyBank.ok) {
+        const envelope = pyBank.json as { data?: unknown } | unknown;
+        const raw =
+          envelope &&
+            typeof envelope === "object" &&
+            "data" in (envelope as Record<string, unknown>)
+            ? (envelope as { data: unknown }).data
+            : envelope;
+        questions = extractQuestionsFromPythonJson(raw);
+      }
+
+      if (questions.length === 0 && body.allow_fallback) {
+        questions = fallbackToCleanQuestions(
           body.interviewType,
           body.questionCount,
           body.exclude_questions,
           body.difficulty,
-        )
-        : [];
+        );
+      }
+
+      if (questions.length === 0) return null;
 
       const py = await callPythonProcess({
         operation: "mock_question_validate",
@@ -906,7 +939,7 @@ Deno.serve(async (req: Request) => {
           company: body.company,
           role: body.role,
           exclude_questions: body.exclude_questions,
-          questions: bank.map((q) => ({
+          questions: questions.map((q) => ({
             question: q.question_text,
             difficulty: q.difficulty,
             type: q.type,
@@ -926,8 +959,13 @@ Deno.serve(async (req: Request) => {
           return buildQuestionsHybridData(fromPy, requestId, "python");
         }
       }
-      if (bank.length === 0) return null;
-      return buildQuestionsHybridData(bank, requestId, "fallback");
+
+      if (questions.length === 0) return null;
+      return buildQuestionsHybridData(
+        questions.slice(0, body.questionCount),
+        requestId,
+        pyBank.ok ? "python" : "fallback",
+      );
     },
   });
 

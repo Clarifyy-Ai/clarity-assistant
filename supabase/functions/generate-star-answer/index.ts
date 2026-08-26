@@ -197,6 +197,9 @@ Return ONLY this JSON:
       .filter(Boolean)
       .join("\n");
 
+    /** Python draft staged for AI polish (runPython skips success per python → ai matrix). */
+    let pythonStarDraft: (STARAnswer & { draft_kind?: string }) | null = null;
+
     const hybridResult = await executeHybridOperation<STARAnswer & {
       source?: string;
       draft_kind?: string;
@@ -215,8 +218,16 @@ Return ONLY this JSON:
         role,
         model,
       },
-      runDeterministic: async () =>
-        buildDeterministicStar(questionText, resumeText),
+      runDeterministic: async () => {
+        if (pythonStarDraft) {
+          return {
+            ...pythonStarDraft,
+            source: "python",
+            draft_kind: "input_based",
+          };
+        }
+        return buildDeterministicStar(questionText, resumeText);
+      },
       runPython: async (ctx) => {
         const pythonStar = await callPythonProcess({
           operation: "star_evidence",
@@ -259,68 +270,22 @@ Return ONLY this JSON:
             })
           : null;
 
-        // Optional AI polish — keep python draft if AI fails (same credit lifecycle).
-        try {
-          const aiResult = await generateWithFallback({
-            prompt: userPrompt,
-            systemPrompt,
-            maxTokens: 1200,
-            temperature: 0.72,
-            jsonMode: true,
-            model: String(model),
-            userId,
-            action: "generate_star_answer",
-          });
-          if (aiResult?.text) {
-            let parsed = parseStructuredJson(aiResult.text, isStarStructuredAnswer);
-            if (!parsed.ok) {
-              const repaired = await generateWithFallback({
-                prompt: `${REPAIR_JSON_PROMPT}\n\nBroken output:\n${aiResult.text.slice(0, 4000)}`,
-                systemPrompt,
-                maxTokens: 1200,
-                temperature: 0.2,
-                jsonMode: true,
-                model: String(model),
-                userId,
-                action: "generate_star_answer_repair",
-              });
-              parsed = parseStructuredJson(repaired.text, isStarStructuredAnswer);
-            }
-            const normalized = parsed.ok ? normalizeStarAnswer(parsed.value) : null;
-            if (normalized) {
-              const outputText = [
-                normalized.situation,
-                normalized.task,
-                normalized.action,
-                normalized.result,
-                normalized.fullAnswer,
-              ].join("\n");
-              const factual = assessStarFactualIntegrity(sourceBaseline, outputText);
-              if (factual.ok) {
-                return { ...normalized, source: "ai", draft_kind: "polished" };
-              }
-            }
-          }
-        } catch (err) {
-          log(FN, "warn", "STAR AI polish failed; using python draft", {
-            userId,
-            err: err instanceof Error ? err.message : String(err),
-          });
-        }
-
         if (!pythonNormalized) return null;
-        return {
-          ...pythonNormalized,
-          source: "python",
-          draft_kind: "input_based",
-        };
+        pythonStarDraft = { ...pythonNormalized, draft_kind: "input_based" };
+        // Defer success to runAi — matrix order is python → ai → deterministic.
+        return null;
       },
       runAi: async () => {
+        const draftAddon = pythonStarDraft
+          ? `\n\n## Python STAR draft (preserve all facts; polish structure only):\n${JSON.stringify(pythonStarDraft, null, 2)}`
+          : "";
+        const polishSystemPrompt = `${systemPrompt}${draftAddon}`;
+
         let aiResult;
         try {
           aiResult = await generateWithFallback({
             prompt: userPrompt,
-            systemPrompt,
+            systemPrompt: polishSystemPrompt,
             maxTokens: 1200,
             temperature: 0.72,
             jsonMode: true,
@@ -345,7 +310,7 @@ Return ONLY this JSON:
           });
           const repaired = await generateWithFallback({
             prompt: `${REPAIR_JSON_PROMPT}\n\nBroken output:\n${aiResult.text.slice(0, 4000)}`,
-            systemPrompt,
+            systemPrompt: polishSystemPrompt,
             maxTokens: 1200,
             temperature: 0.2,
             jsonMode: true,
@@ -377,6 +342,7 @@ Return ONLY this JSON:
           userId,
           model,
           tokens: aiResult.totalTokens,
+          hadPythonDraft: Boolean(pythonStarDraft),
         });
 
         return { ...normalized, source: "ai", draft_kind: "polished" };

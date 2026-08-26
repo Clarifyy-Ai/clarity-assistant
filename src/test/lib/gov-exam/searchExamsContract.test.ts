@@ -122,13 +122,13 @@ describe("query filter escaping", () => {
 
   it("searches short_name, name, code, jurisdiction, and related columns", () => {
     const filter = buildExamOrFilter("ssc cgl");
-    expect(filter).toContain("short_name.ilike.%ssc cgl%");
-    expect(filter).toContain("name.ilike.%ssc cgl%");
-    expect(filter).toContain("code.ilike.%ssc cgl%");
-    expect(filter).toContain("description.ilike.%ssc cgl%");
-    expect(filter).toContain("legacy_exam_type.ilike.%ssc cgl%");
-    expect(filter).toContain("jurisdiction.ilike.%ssc cgl%");
-    expect(filter).toContain("state_code.ilike.%ssc cgl%");
+    expect(filter).toContain('short_name.ilike."%ssc cgl%"');
+    expect(filter).toContain('name.ilike."%ssc cgl%"');
+    expect(filter).toContain('code.ilike."%ssc cgl%"');
+    expect(filter).toContain('description.ilike."%ssc cgl%"');
+    expect(filter).toContain('legacy_exam_type.ilike."%ssc cgl%"');
+    expect(filter).toContain('jurisdiction.ilike."%ssc cgl%"');
+    expect(filter).toContain('state_code.ilike."%ssc cgl%"');
   });
 });
 
@@ -263,6 +263,7 @@ describe("MockTestHub search states", () => {
   it("guards against out-of-order responses via ExamSearchCombobox", () => {
     expect(COMBO).toContain("new AbortController()");
     expect(COMBO).toContain("abortRef.current?.abort()");
-    expect(COMBO).toContain("if (reqId !== reqIdRef.current) return;");
+    expect(COMBO).toContain("reqId !== reqIdRef.current");
+    expect(COMBO).toContain("onResultsChangeRef");
   });
 });

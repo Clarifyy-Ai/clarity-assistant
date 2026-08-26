@@ -31,6 +31,7 @@ import {
   openUpgradeIfCapabilityRequired,
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
+import { HybridSourceLine } from "@/components/hybrid/HybridSourceLine";
 
 interface ResumeOption {
   id: string;
@@ -508,6 +509,7 @@ export default function JDDetail() {
 
           {gapResult && (
             <div className="mt-4 space-y-3 border-t border-border pt-4">
+              <HybridSourceLine data={gapResult} />
               <div className="flex flex-wrap items-center gap-2">
                 {gapUpdatedAt && (
                   <p className="text-[11px] text-muted-foreground">

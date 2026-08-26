@@ -302,20 +302,27 @@ export default function Signup(): JSX.Element {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-2">
-            {isOAuthProviderEnabled("google") ? <GoogleOAuthButton /> : null}
-            {isOAuthProviderEnabled("github") ? <GithubOAuthButton /> : null}
-            {isOAuthProviderEnabled("linkedin_oidc") ? <LinkedInOAuthButton /> : null}
-            {isOAuthProviderEnabled("azure") ? <AzureOAuthButton /> : null}
-          </div>
+          {(isOAuthProviderEnabled("google") ||
+            isOAuthProviderEnabled("github") ||
+            isOAuthProviderEnabled("linkedin_oidc") ||
+            isOAuthProviderEnabled("azure")) && (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                {isOAuthProviderEnabled("google") ? <GoogleOAuthButton /> : null}
+                {isOAuthProviderEnabled("github") ? <GithubOAuthButton /> : null}
+                {isOAuthProviderEnabled("linkedin_oidc") ? <LinkedInOAuthButton /> : null}
+                {isOAuthProviderEnabled("azure") ? <AzureOAuthButton /> : null}
+              </div>
 
-          <div className="flex items-center gap-3 my-5">
-            <div className="flex-1 h-px bg-border" />
-            <span className="text-xs text-muted-foreground">
-              or sign up with email
-            </span>
-            <div className="flex-1 h-px bg-border" />
-          </div>
+              <div className="flex items-center gap-3 my-5">
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-xs text-muted-foreground">
+                  or sign up with email
+                </span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+            </>
+          )}
 
           <form
             className="space-y-4"

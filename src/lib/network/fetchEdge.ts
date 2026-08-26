@@ -7,6 +7,15 @@ import { EDGE_BASE, SUPABASE_PUBLISHABLE_KEY } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { isTabLocalLogout } from "@/lib/auth/tabLocalLogout";
 import { ApiClientError } from "@/lib/api/apiClient";
+import { ensureAuthSession } from "@/lib/focusRecovery/sessionRefresh";
+
+/** Functions that may run without a user JWT (gateway still gets apikey + anon Bearer). */
+const ANON_OK_EDGE_FNS = new Set([
+  "ping",
+  "hybrid-health",
+  "hybrid-ping",
+  "ai-key-check",
+]);
 
 /** Edge calls blocked while private mode is on (no cloud AI / analysis). */
 const PRIVATE_MODE_ALLOWLIST = new Set([
@@ -19,6 +28,17 @@ const PRIVATE_MODE_ALLOWLIST = new Set([
   // GDPR data export is a data-rights operation, not cloud AI.
   "export-user-data",
   "moderate-content",
+  // Admin ingest / diagnostics (no cloud AI generation).
+  "hybrid-health",
+  "hybrid-ping",
+  "ai-key-check",
+  "collect-exam-papers",
+  "extract-question-paper",
+  "run-daily-exam-scrape",
+  // Learning Hub certificate / free course quiz start (no cloud AI).
+  "issue-course-certificate",
+  "create-test",
+  "submit-test",
 ]);
 
 /** Edge functions that do not deduct credits — skip balance refresh. */
@@ -37,7 +57,23 @@ const CREDIT_REFRESH_SKIP = new Set([
   "start-session",
   "end-session",
   "hybrid-health",
+  "hybrid-ping",
+  "ai-key-check",
+  "collect-exam-papers",
+  "extract-question-paper",
+  "run-daily-exam-scrape",
   "moderate-content",
+  "process-sprint-transcript",
+  // Read-only gov registry — never burns credits; avoid refresh storms on typeahead.
+  "search-exams",
+  "get-exam-details",
+  "get-exam-pattern",
+  "get-exam-syllabus",
+  "list-previous-papers",
+  "check-exam-paper-availability",
+  "score-coding-submission",
+  "issue-course-certificate",
+  "submit-test",
 ]);
 
 /** Non-AI functions should not blame an "AI request" on CORS / network failure. */
@@ -63,8 +99,15 @@ const OPERATIONAL_EDGE_FNS = new Set([
   "start-session",
   "end-session",
   "export-user-data",
+  "score-coding-submission",
   "hybrid-health",
+  "hybrid-ping",
+  "ai-key-check",
+  "collect-exam-papers",
+  "extract-question-paper",
+  "run-daily-exam-scrape",
   "moderate-content",
+  "issue-course-certificate",
 ]);
 
 /** Mutating calls that must not be retried by the browser after a network/CORS glitch. */
@@ -74,6 +117,7 @@ const NO_NETWORK_RETRY_FNS = new Set([
   "generate-topic-practice",
   "create-test",
   "assemble-assessment",
+  "issue-course-certificate",
   "start-session",
   "end-session",
   // Question generation is idempotent server-side; client retries can still
@@ -92,6 +136,7 @@ const NO_NETWORK_RETRY_FNS = new Set([
   "razorpay-create-order",
   "razorpay-verify-payment",
   "moderate-content",
+  "score-coding-submission",
 ]);
 
 function unreachableUserMessage(fnName: string): string {
@@ -107,43 +152,91 @@ function unreachableUserMessage(fnName: string): string {
 const NETWORK_RETRY_DELAYS_MS =
   import.meta.env.MODE === "test" ? [0, 0] : [300, 800];
 
+function safeJsonParse(text: string): any {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 /**
- * ✅ FIX P7-C: Always read a fresh JWT at call time (session may have refreshed).
+ * Prefer a live (refreshed-if-near-expiry) access token. Never attach a shared
+ * JWT after tab-local logout. Do not fall back to the publishable key as a
+ * fake user Bearer — that is the AUTH_INVALID regression for signed-in UI.
  */
-async function readToken(): Promise<string | undefined> {
-  // This tab logged out independently — never attach the shared-session JWT.
+async function readToken(options?: {
+  forceRefresh?: boolean;
+}): Promise<string | undefined> {
   if (isTabLocalLogout()) {
     return undefined;
   }
+
+  try {
+    const ensured = await ensureAuthSession({
+      forceRefresh: options?.forceRefresh === true,
+    });
+    const ensuredToken = ensured.session?.access_token;
+    if (typeof ensuredToken === "string" && ensuredToken.trim()) {
+      return ensuredToken.trim();
+    }
+  } catch (error) {
+    logger.warn("auth.session.recovery.failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+
   const { data, error } = await supabase.auth.getSession();
   if (error) {
     logger.warn("auth.session.recovery.failed", { error: error.message });
   }
   const fresh = data?.session?.access_token;
-  if (fresh) return fresh;
-  return useAuthStore.getState().session?.access_token;
+  if (typeof fresh === "string" && fresh.trim()) return fresh.trim();
+
+  const storeToken = useAuthStore.getState().session?.access_token;
+  if (typeof storeToken === "string" && storeToken.trim()) {
+    return storeToken.trim();
+  }
+  return undefined;
+}
+
+function isAuthRetryableStatus(status: number, code?: string, message?: string): boolean {
+  if (status !== 401) return false;
+  const normalized = `${code ?? ""} ${message ?? ""}`.toUpperCase();
+  return (
+    normalized.includes("AUTH_EXPIRED") ||
+    normalized.includes("AUTH_INVALID") ||
+    normalized.includes("AUTH_REQUIRED") ||
+    normalized.includes("UNAUTHORIZED") ||
+    normalized.includes("EXPIRED") ||
+    normalized.includes("INVALID OR EXPIRED")
+  );
 }
 
 export async function getAuthHeaders(
-  extraHeaders?: Record<string, string>
+  extraHeaders?: Record<string, string>,
+  options?: { forceRefresh?: boolean; allowAnonBearer?: boolean },
 ): Promise<Record<string, string>> {
-  const token = await readToken();
+  const token = await readToken({ forceRefresh: options?.forceRefresh });
   const trainingConsent = allowsAiTraining(
     useAuthStore.getState().profile?.privacy_prefs,
   );
 
-  // NOTE: We preserve your behavior:
-  // - If user token exists -> use it
-  // - Else -> use anon key as Bearer for Supabase gateway compatibility
-  return {
-    ...(token
-      ? { Authorization: `Bearer ${token}` }
-      : { Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}` }),
+  const headers: Record<string, string> = {
     apikey: SUPABASE_PUBLISHABLE_KEY,
     "x-client-info": "clarify-web",
     "x-ai-training-consent": trainingConsent ? "true" : "false",
     ...extraHeaders,
   };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  } else if (options?.allowAnonBearer) {
+    // Gateway still requires an Authorization JWT for some public probes.
+    headers.Authorization = `Bearer ${SUPABASE_PUBLISHABLE_KEY}`;
+  }
+
+  return headers;
 }
 
 /**
@@ -185,6 +278,7 @@ export async function fetchEdge(
   const method = options?.method ?? "POST";
   const timeoutMs = options?.timeoutMs ?? 30_000;
   const isFormData = body instanceof FormData;
+  const allowAnonBearer = ANON_OK_EDGE_FNS.has(fnName);
 
   const timeoutController = new AbortController();
   const timeout =
@@ -207,11 +301,26 @@ export async function fetchEdge(
       ? crypto.randomUUID()
       : `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`);
 
-  const headers = await getAuthHeaders({
-    ...(isFormData ? {} : { "Content-Type": "application/json" }),
-    "x-request-id": requestId,
-    ...(options?.headers ?? {}),
-  });
+  const buildHeaders = async (forceRefresh = false) =>
+    getAuthHeaders(
+      {
+        ...(isFormData ? {} : { "Content-Type": "application/json" }),
+        "x-request-id": requestId,
+        ...(options?.headers ?? {}),
+      },
+      { forceRefresh, allowAnonBearer },
+    );
+
+  let headers = await buildHeaders(false);
+
+  if (!headers.Authorization && !allowAnonBearer) {
+    if (timeout) clearTimeout(timeout);
+    throw new ApiClientError({
+      message: "Sign in to continue.",
+      status: 401,
+      code: "AUTH_REQUIRED",
+    });
+  }
 
   try {
     const url = buildEdgeUrl(fnName);
@@ -222,8 +331,18 @@ export async function fetchEdge(
           ? body
           : JSON.stringify(body);
 
+    const doFetch = (hdrs: Record<string, string>) =>
+      fetch(url, {
+        method,
+        headers: hdrs,
+        body: payload,
+        signal,
+      });
+
     let lastErr: unknown;
     const maxAttempts = NO_NETWORK_RETRY_FNS.has(fnName) ? 0 : NETWORK_RETRY_DELAYS_MS.length;
+    let authRetried = false;
+
     for (let attempt = 0; attempt <= maxAttempts; attempt++) {
       if (attempt > 0) {
         if (signal.aborted) break;
@@ -231,12 +350,39 @@ export async function fetchEdge(
         if (signal.aborted) break;
       }
       try {
-        return await fetch(url, {
-          method,
-          headers,
-          body: payload,
-          signal,
-        });
+        let response = await doFetch(headers);
+
+        // One safe refresh/retry for expired/invalid JWTs — never loop.
+        if (
+          !authRetried &&
+          !allowAnonBearer &&
+          !isTabLocalLogout() &&
+          response.status === 401
+        ) {
+          const peekText = await response.clone().text().catch(() => "");
+          const peek = peekText ? safeJsonParse(peekText) : null;
+          const code =
+            typeof peek?.code === "string"
+              ? peek.code
+              : typeof peek?.error?.code === "string"
+                ? peek.error.code
+                : undefined;
+          const message =
+            typeof peek?.error === "string"
+              ? peek.error
+              : typeof peek?.message === "string"
+                ? peek.message
+                : undefined;
+          if (isAuthRetryableStatus(401, code, message)) {
+            authRetried = true;
+            headers = await buildHeaders(true);
+            if (headers.Authorization) {
+              response = await doFetch(headers);
+            }
+          }
+        }
+
+        return response;
       } catch (err: unknown) {
         lastErr = err;
         const retryable =
@@ -285,12 +431,29 @@ export async function fetchEdge(
   }
 }
 
-function safeJsonParse(text: string): any {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
+/** Preserve hybrid envelope `source` / `meta` when unwrapping `data`. */
+function unwrapHybridPayload(payload: unknown): unknown {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return payload;
   }
+  const envelope = payload as Record<string, unknown>;
+  if (envelope.success !== true || envelope.data === undefined) {
+    return envelope.data ?? payload;
+  }
+
+  const data = envelope.data;
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    return data;
+  }
+
+  const merged = { ...(data as Record<string, unknown>) };
+  if (merged.source === undefined && typeof envelope.source === "string") {
+    merged.source = envelope.source;
+  }
+  if (merged.meta === undefined && envelope.meta && typeof envelope.meta === "object") {
+    merged.meta = envelope.meta;
+  }
+  return merged;
 }
 
 export async function fetchEdgeJson<T>(
@@ -360,5 +523,5 @@ export async function fetchEdgeJson<T>(
     void refreshCredits();
   }
 
-  return (payload?.data ?? payload) as T;
+  return unwrapHybridPayload(payload) as T;
 }

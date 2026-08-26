@@ -226,15 +226,24 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
     });
 
     const missing = Math.max(0, requested - available);
+    // P0-02: Full Mock fail-closed — bank coverage or explicit AI fill only.
+    // Never unlock via pythonConfigured / hybrid_deterministic heuristics.
+    const fullMockInventoryOk =
+      available >= requested || aiFillAllowed;
     const fullMockAllowed = plan.kind !== "blocked" &&
       (mode === "generated_mock" || mode === "official_previous"
-        ? available >= requested || aiFillAllowed || pythonConfigured
+        ? fullMockInventoryOk && plan.kind !== "hybrid_deterministic"
         : true);
     const canCustomPractice = available >= 5;
     const customPracticeMax = Math.min(available, 200);
-    const blocked = plan.kind === "blocked";
+    // Treat hybrid-only Full Mock as blocked for honest Custom Practice UX.
+    const hybridFullMockBlocked =
+      (mode === "generated_mock" || mode === "official_previous") &&
+      plan.kind === "hybrid_deterministic" &&
+      !fullMockInventoryOk;
+    const blocked = plan.kind === "blocked" || hybridFullMockBlocked;
     const blockCode = blocked
-      ? (plan.reasonCode === "CAPABILITY_REQUIRED"
+      ? (plan.kind === "blocked" && plan.reasonCode === "CAPABILITY_REQUIRED" && !hybridFullMockBlocked
         ? "CAPABILITY_REQUIRED"
         : "CONTENT_INSUFFICIENT")
       : null;
@@ -245,7 +254,7 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
           `Full mock needs a plan that includes generation, or choose custom practice (max ${customPracticeMax}).`
         : `Available: ${available}. Requested: ${requested}. Missing: ${missing}. ` +
           `Not enough approved questions for a full mock. Custom practice is limited to ${customPracticeMax}.`
-      : missing > 0 && (aiFillAllowed || pythonConfigured)
+      : missing > 0 && aiFillAllowed
       ? `Available: ${available}. Requested: ${requested}. Missing: ${missing} will be filled during generation.`
       : `Available: ${available}. Requested: ${requested}.`;
 
@@ -284,7 +293,19 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
       customPracticeMax,
       custom_practice_max: customPracticeMax,
       aiFillAllowed,
-      generationPlan: planSummary(plan),
+      generationPlan: planSummary(
+        hybridFullMockBlocked
+          ? {
+            ...plan,
+            kind: "blocked",
+            reasonCode: "CONTENT_INSUFFICIENT",
+            skipAiFill: true,
+            allowDeterministicFill: false,
+            deterministicContribution: 0,
+            aiContribution: 0,
+          }
+          : plan,
+      ),
       blocked,
       blockCode,
       code: blockCode,

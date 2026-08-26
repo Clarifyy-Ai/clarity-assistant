@@ -11,6 +11,17 @@ export type { GeminiStreamOptions, GeminiModel } from "./geminiClient";
 export { routeHint, selectModel } from "./modelRouter";
 export type { RouteHintOptions } from "./modelRouter";
 
+// ─── AI Hub fallback walk (mirrors Edge ai-hub-router) ───────────────────────
+export {
+  buildHubTryModels,
+  walkHubFallbackChain,
+} from "./aiHubFallbackWalk";
+export type {
+  HubFallbackWalkResult,
+  HubGenerateAttempt,
+  HubModelSelection,
+} from "./aiHubFallbackWalk";
+
 // ─── Prompt Templates ─────────────────────────────────────────────────────────
 export {
   buildPrompt,

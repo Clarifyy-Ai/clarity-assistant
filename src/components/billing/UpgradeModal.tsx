@@ -17,6 +17,8 @@ import { Check, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   openRazorpayCheckout,
+  RAZORPAY_QA_SANDBOX_HINT,
+  showRazorpayQaSandboxHint,
   toPaymentUserFacingError,
   type RazorpayProductType,
 } from "@/lib/billing/razorpayCheckout"
@@ -99,6 +101,11 @@ export function UpgradeModal() {
       <p className="mb-4 text-xs text-muted-foreground">
         One-time Pro or Max access and credit packs. Razorpay does not auto-renew.
       </p>
+      {showRazorpayQaSandboxHint() ? (
+        <p className="mb-4 text-xs text-sky-800 dark:text-sky-300 bg-sky-500/10 border border-sky-500/20 rounded-lg px-3 py-2">
+          {RAZORPAY_QA_SANDBOX_HINT}
+        </p>
+      ) : null}
       <div
         className={cn(
           "grid gap-4",

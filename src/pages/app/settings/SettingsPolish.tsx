@@ -1,11 +1,10 @@
 // Sprint E: Settings polish — per-feature retention, notification channels (email/push/in-app),
-// test-notification button, CSV export of session history. Stored in profiles.metadata jsonb.
+// test-notification button, CSV export of session history. Stored in profiles.ui_preferences.polish.
 import { useEffect, useRef, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { toast } from "sonner";
 import {
-  Bell, Mail, Smartphone, MonitorSmartphone, Send, Download, Clock, Save,
+  Bell, Mail, Smartphone, MonitorSmartphone, Send, Download, Clock, Save, CheckCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { userFacingDbError } from "@/lib/errors/userFacingDbError";
@@ -24,7 +23,7 @@ const RETENTION_FEATURES: { key: RetentionKey; label: string; desc: string }[] =
 
 const RETENTION_CHOICES = [7, 30, 90, 180, 365, 0]; // 0 = forever
 
-const CHANNELS: { key: ChannelKey; label: string; icon: any; desc: string }[] = [
+const CHANNELS: { key: ChannelKey; label: string; icon: typeof Mail; desc: string }[] = [
   { key: "email", label: "Email", icon: Mail, desc: "Important updates to your inbox" },
   { key: "push", label: "Push", icon: Smartphone, desc: "Mobile/desktop push notifications" },
   { key: "in_app", label: "In-app", icon: MonitorSmartphone, desc: "Bell icon in the top bar" },
@@ -40,47 +39,72 @@ const DEFAULTS: ExtendedPrefs = {
   channels: { email: true, push: false, in_app: true },
 };
 
+function readPolishPrefs(uiPreferences: unknown): ExtendedPrefs {
+  const ui =
+    uiPreferences && typeof uiPreferences === "object"
+      ? (uiPreferences as Record<string, unknown>)
+      : {};
+  const polish =
+    ui.polish && typeof ui.polish === "object"
+      ? (ui.polish as Partial<ExtendedPrefs>)
+      : {};
+  return {
+    retention: { ...DEFAULTS.retention, ...(polish.retention ?? {}) },
+    channels: { ...DEFAULTS.channels, ...(polish.channels ?? {}) },
+  };
+}
+
 export default function SettingsPolish() {
-  const { user, profile } = useAuthStore();
-  const [prefs, setPrefs] = useState<ExtendedPrefs>(DEFAULTS);
+  const { user, profile, updateProfile } = useAuthStore();
+  const [prefs, setPrefs] = useState<ExtendedPrefs>(() =>
+    readPolishPrefs(profile?.ui_preferences),
+  );
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [testing, setTesting] = useState(false);
   const exportRetryKey = useRef<string | null>(null);
 
   useEffect(() => {
-    const meta: any = (profile as any)?.metadata ?? {};
-    setPrefs({
-      retention: { ...DEFAULTS.retention, ...(meta.retention ?? {}) },
-      channels: { ...DEFAULTS.channels, ...(meta.channels ?? {}) },
-    });
-  }, [profile]);
+    setPrefs(readPolishPrefs(profile?.ui_preferences));
+  }, [profile?.id, profile?.ui_preferences]);
 
   async function save() {
     if (!user) return;
     setSaving(true);
+    setSaved(false);
+    setSaveFailed(false);
     try {
-      const meta: any = (profile as any)?.metadata ?? {};
-      const next = { ...meta, retention: prefs.retention, channels: prefs.channels };
-      const { error } = await (supabase as any)
-        .from("profiles")
-        .update({ metadata: next, updated_at: new Date().toISOString() })
-        .eq("id", user.id);
-      if (error) throw error;
+      const base =
+        profile?.ui_preferences && typeof profile.ui_preferences === "object"
+          ? (profile.ui_preferences as Record<string, unknown>)
+          : {};
+      await updateProfile({
+        ui_preferences: {
+          ...base,
+          polish: {
+            retention: prefs.retention,
+            channels: prefs.channels,
+          },
+        },
+      } as any);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
       toast.success("Preferences saved");
-    } catch (e: any) {
+    } catch (e: unknown) {
+      setSaveFailed(true);
       toast.error(userFacingDbError(e, "save"));
     } finally {
       setSaving(false);
     }
   }
 
-  async function sendTest() {
+  async function previewToast() {
     setTesting(true);
     try {
-      // In-app toast is the universal fallback — works without server.
-      toast.success("Test notification — looks good!", {
-        description: "If you enabled email/push, those will arrive separately.",
+      toast.success("Preview toast — local only", {
+        description: "This does not send email or push. Channel delivery is not wired from this button.",
       });
     } finally {
       setTimeout(() => setTesting(false), 600);
@@ -148,16 +172,18 @@ export default function SettingsPolish() {
       <div>
         <h1 className="text-xl font-bold">Polish & advanced preferences</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Per-feature data retention, notification channels, and quick CSV export.
+          Preference-only retention (not yet enforced), notification channel prefs, and CSV export.
         </p>
       </div>
 
-      {/* Per-feature retention */}
       <section className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-center gap-2 mb-3">
           <Clock className="w-4 h-4 text-blue-400" />
           <h2 className="text-sm font-semibold">Data retention (per feature)</h2>
         </div>
+        <p className="text-xs text-muted-foreground mb-3">
+          Preference only — not yet enforced. No automatic purge job runs against these values yet.
+        </p>
         <ul className="space-y-3">
           {RETENTION_FEATURES.map((f) => (
             <li key={f.key} className="flex items-center justify-between gap-3">
@@ -186,7 +212,6 @@ export default function SettingsPolish() {
         </ul>
       </section>
 
-      {/* Notification channels */}
       <section className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-center gap-2 mb-3">
           <Bell className="w-4 h-4 text-primary" />
@@ -208,6 +233,7 @@ export default function SettingsPolish() {
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() =>
                     setPrefs((p) => ({
                       ...p,
@@ -231,19 +257,22 @@ export default function SettingsPolish() {
             );
           })}
         </ul>
-        <div className="mt-3 flex items-center gap-2">
+        <div className="mt-3 flex flex-col gap-1.5">
           <button
-            onClick={sendTest}
+            type="button"
+            onClick={previewToast}
             disabled={testing}
-            className="px-3 py-1.5 text-xs rounded-md border border-border hover:bg-secondary flex items-center gap-1.5"
+            className="px-3 py-1.5 text-xs rounded-md border border-border hover:bg-secondary flex items-center gap-1.5 w-fit"
           >
             <Send className="w-3.5 h-3.5" />
-            {testing ? "Sending…" : "Send test notification"}
+            {testing ? "Showing…" : "Preview toast"}
           </button>
+          <p className="text-xs text-muted-foreground">
+            Local toast preview only — does not send a real notification.
+          </p>
         </div>
       </section>
 
-      {/* Quick CSV export */}
       <section className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-center gap-2 mb-2">
           <Download className="w-4 h-4 text-emerald-400" />
@@ -253,6 +282,7 @@ export default function SettingsPolish() {
           Download your last 1,000 sessions as CSV (includes scores, timestamps, and metadata).
         </p>
         <button
+          type="button"
           onClick={exportSessionsCsv}
           disabled={exporting}
           className="px-3 py-1.5 text-xs rounded-md border border-border hover:bg-secondary flex items-center gap-1.5"
@@ -264,12 +294,20 @@ export default function SettingsPolish() {
 
       <div className="sticky bottom-4 flex justify-end">
         <button
-          onClick={save}
+          type="button"
+          onClick={() => void save()}
           disabled={saving}
-          className="px-4 py-2 text-sm rounded-md bg-primary hover:bg-primary text-white flex items-center gap-2 shadow-lg"
+          className={cn(
+            "px-4 py-2 text-sm rounded-md text-white flex items-center gap-2 shadow-lg",
+            saved
+              ? "bg-emerald-600 hover:bg-emerald-600"
+              : saveFailed
+                ? "bg-destructive hover:bg-destructive"
+                : "bg-primary hover:bg-primary",
+          )}
         >
-          <Save className="w-4 h-4" />
-          {saving ? "Saving…" : "Save preferences"}
+          {saved ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+          {saving ? "Saving…" : saved ? "Saved!" : saveFailed ? "Failed — retry" : "Save preferences"}
         </button>
       </div>
     </div>

@@ -10,6 +10,8 @@ export type GapAnalysisResult = {
   stale?: boolean;
   updated_at?: string;
   status?: "pending" | "completed" | "failed" | "stale";
+  /** Hybrid route that produced this analysis (when available). */
+  source?: "ai" | "python" | "deterministic" | "database" | "fallback";
 };
 
 const UNKNOWN_VALUES = new Set([

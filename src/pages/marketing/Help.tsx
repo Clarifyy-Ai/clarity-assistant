@@ -13,7 +13,9 @@ import {
   HELP_FAQ_CATEGORIES_FALLBACK,
   HELP_ARTICLES_FALLBACK,
   groupHelpArticlesIntoCategories,
+  resolveHelpArticleDisplay,
   type HelpFaqCategory,
+  type HelpArticleItem,
 } from "@/lib/constants/helpArticlesFallback";
 import { helpArticlesDB } from "@/lib/supabase/database";
 
@@ -23,6 +25,39 @@ const SEARCH_DEBOUNCE_MS = 300;
 const POPULAR_ARTICLES = [...HELP_ARTICLES_FALLBACK]
   .sort((a, b) => a.sort_order - b.sort_order)
   .slice(0, 5);
+
+function mapDbRowsToCategories(
+  rows: Array<{
+    slug: string;
+    question: string;
+    answer: string;
+    body_md: string | null;
+    category_slug: string;
+    category_title: string;
+    sort_order: number;
+  }>,
+): HelpFaqCategory[] {
+  const cleaned: HelpArticleItem[] = rows.map((r) =>
+    resolveHelpArticleDisplay({
+      slug: r.slug,
+      question: r.question,
+      answer: r.answer,
+      body_md: r.body_md,
+      category_slug: r.category_slug,
+      category_title: r.category_title,
+      sort_order: r.sort_order,
+    }),
+  );
+  // Ensure critical billing/free-plan answers exist even if DB omit them.
+  const have = new Set(cleaned.map((a) => a.slug));
+  for (const slug of ["gs-3", "bi-5"] as const) {
+    if (!have.has(slug)) {
+      const fb = HELP_ARTICLES_FALLBACK.find((a) => a.slug === slug);
+      if (fb) cleaned.push(fb);
+    }
+  }
+  return groupHelpArticlesIntoCategories(cleaned);
+}
 
 export default function Help() {
   usePageMeta({
@@ -46,7 +81,7 @@ export default function Help() {
       const rows = await helpArticlesDB.listPublished();
       setCategories(
         rows.length > 0
-          ? groupHelpArticlesIntoCategories(rows)
+          ? mapDbRowsToCategories(rows)
           : HELP_FAQ_CATEGORIES_FALLBACK,
       );
     } catch {
@@ -258,12 +293,16 @@ export default function Help() {
                 View status page
               </a>
             ) : (
-              <a
-                href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Clarify AI system status")}`}
-                className="text-primary hover:underline"
-              >
-                Email {SUPPORT_EMAIL} for outages (no public status page configured)
-              </a>
+              <span>
+                No public status page configured —{" "}
+                <a
+                  href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Clarify AI system status")}`}
+                  className="text-primary hover:underline"
+                >
+                  email {SUPPORT_EMAIL}
+                </a>{" "}
+                for outages.
+              </span>
             )}
           </p>
         </div>

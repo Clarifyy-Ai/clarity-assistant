@@ -30,6 +30,7 @@ export interface ScorecardDetails {
   coach_note?: string;
   star_adherence?: number;
   pdf_url?: string | null;
+  scoring_source?: "ai" | "python" | "deterministic" | "database" | "fallback";
 }
 
 /** Application-level scorecard used by hooks and UI. */
@@ -56,6 +57,7 @@ export interface Scorecard {
   share_token: string | null;
   pdf_url: string | null;
   generated_at: string;
+  scoring_source?: "ai" | "python" | "deterministic" | "database" | "fallback";
 }
 
 /** Row shape from public.scorecards (includes migration columns). */
@@ -111,6 +113,7 @@ export function mapRowToScorecard(row: ScorecardRow): Scorecard {
     share_token: row.share_token ?? null,
     pdf_url: details.pdf_url ?? null,
     generated_at: row.generated_at ?? row.created_at,
+    scoring_source: details.scoring_source,
   };
 }
 

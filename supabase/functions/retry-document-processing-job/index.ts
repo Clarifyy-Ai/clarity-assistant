@@ -3,6 +3,7 @@ import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { isUserBanned, bannedResponse } from "../_shared/banCheck.ts";
 import { isUuid, safeError } from "../_shared/documentProcessing.ts";
+import { isPythonConfigured, pythonFetch } from "../_shared/pythonClient.ts";
 
 function json(req: Request, body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -25,7 +26,7 @@ Deno.serve(async (req) => {
     const jobId = typeof body?.jobId === "string" ? body.jobId.trim() : "";
     if (!isUuid(jobId)) return json(req, { success: false, error: safeError("VALIDATION_ERROR", "A valid jobId is required.", "validation", correlationId) }, 400);
     const { data: existing } = await db.from("document_processing_jobs")
-      .select("id, status, attempt_count, max_attempts, document_id")
+      .select("id, status, attempt_count, max_attempts, document_id, owner_id, storage_reference")
       .eq("id", jobId).eq("owner_id", user.id).maybeSingle();
     if (!existing) return json(req, { success: false, error: safeError("JOB_NOT_FOUND", "Processing job not found.", "ownership", correlationId) }, 404);
     if (existing.status === "completed") return json(req, { success: true, idempotent: true, jobId, state: existing.status });
@@ -57,6 +58,30 @@ Deno.serve(async (req) => {
         processing_status: "queued",
         processing_error: null,
       }).eq("id", documentId).eq("owner_id", user.id);
+    }
+
+    // Best-effort wake Python worker; credits stay reserved from original create.
+    if (isPythonConfigured()) {
+      void pythonFetch("/internal/jobs/document", {
+        method: "POST",
+        body: {
+          job_id: job.id,
+          document_id: documentId ?? existing.document_id,
+          owner_id: user.id,
+          operation: "parse",
+          correlation_id: correlationId,
+          storage_reference: existing.storage_reference ?? {},
+        },
+        requestId: correlationId,
+        safeRetry: false,
+      }).catch((notifyErr) => {
+        console.warn(JSON.stringify({
+          phase: "PYTHON_RETRY_DISPATCH",
+          correlationId,
+          jobId: job.id,
+          error: notifyErr instanceof Error ? notifyErr.message : String(notifyErr),
+        }));
+      });
     }
 
     return json(req, { success: true, jobId: job.id, state: job.status, attemptCount: job.attempt_count, correlationId }, 202);

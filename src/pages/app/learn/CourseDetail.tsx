@@ -123,6 +123,36 @@ export default function CourseDetailPage() {
   const views = moduleProgressViews(moduleRefs, completed, course?.unlock_mode ?? "sequential");
   const percent = coursePercentage(moduleRefs, completed);
 
+  async function startQuiz(quiz: {
+    id: string;
+    title: string;
+    question_ids: string[];
+    passing_percentage: number;
+    is_final: boolean;
+  }) {
+    if (!user?.id || !courseId) return;
+    try {
+      const data = await fetchEdgeJson<{ test_id?: string; test?: { id?: string } }>("create-test", {
+        test_name: quiz.title,
+        question_ids: quiz.question_ids,
+        time_limit_minutes: 15,
+        source: "learning_quiz",
+        config: {
+          source: "learning_quiz",
+          course_id: courseId,
+          quiz_id: quiz.id,
+          is_final: quiz.is_final,
+          passing_percentage: quiz.passing_percentage,
+        },
+      });
+      const testId = data?.test_id ?? data?.test?.id;
+      if (!testId) throw new Error("Assessment could not start.");
+      void navigate(`/app/assessments/session/${testId}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Quiz could not start.");
+    }
+  }
+
   async function issueCert() {
     if (!courseId) return;
     try {
@@ -133,19 +163,24 @@ export default function CourseDetailPage() {
       if (code) {
         setCertCode(code);
         toast.success(`${certificateKindLabel()} issued.`);
+      } else {
+        toast.error("Certificate could not be issued.");
       }
-
-      if (error) {
-        return (
-          <div className={PAGE_SHELL}>
-            <PageHeader title="Course unavailable" breadcrumbs={[{ label: "Learning Hub", href: "/app/learn" }, { label: "Course" }]} />
-            <Card><p className="text-sm text-destructive">{error}</p><Button className="mt-3" variant="outline" onClick={() => void load()}>Retry</Button></Card>
-          </div>
-        );
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Certificate could not be issued.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Certificate could not be issued.");
     }
+  }
+
+  if (error) {
+    return (
+      <div className={PAGE_SHELL}>
+        <PageHeader title="Course unavailable" breadcrumbs={[{ label: "Learning Hub", href: "/app/learn" }, { label: "Course" }]} />
+        <Card>
+          <p className="text-sm text-destructive">{error}</p>
+          <Button className="mt-3" variant="outline" onClick={() => void load()}>Retry</Button>
+        </Card>
+      </div>
+    );
   }
 
   return (
@@ -171,28 +206,7 @@ export default function CourseDetailPage() {
             key={quiz.id}
             className="mt-3 mr-2"
             variant="outline"
-            onClick={() => {
-              if (!user?.id) return;
-              void supabase
-                .from("mock_tests")
-                .insert({
-                  user_id: user.id,
-                  test_name: quiz.title,
-                  config: {
-                    source: "exam_template",
-                    passing_percentage: quiz.passing_percentage,
-                  },
-                  question_ids: quiz.question_ids,
-                  status: "DRAFT",
-                  time_limit_minutes: 15,
-                })
-                .select("id")
-                .maybeSingle()
-                .then(({ data, error }) => {
-                  if (error || !data) toast.error(error?.message ?? "Quiz could not start.");
-                  else void navigate(`/app/assessments/session/${data.id}`);
-                });
-            }}
+            onClick={() => void startQuiz(quiz)}
           >
             {quiz.is_final ? "Final assessment" : "Quiz"}: {quiz.title}
           </Button>

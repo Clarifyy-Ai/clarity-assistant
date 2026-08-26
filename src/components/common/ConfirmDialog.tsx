@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -70,12 +71,25 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const { icon: Icon, iconClass, wrapperClass, confirmClass } =
     variantConfig[variant];
+  const confirmLockRef = useRef(false);
 
-  const handleConfirm = async () => {
-    await onConfirm();
+  useEffect(() => {
+    if (!open || !isLoading) confirmLockRef.current = false;
+  }, [open, isLoading]);
+
+  const handleConfirm = async (event?: { preventDefault?: () => void }) => {
+    event?.preventDefault?.();
+    if (isLoading || confirmLockRef.current) return;
+    confirmLockRef.current = true;
+    try {
+      await onConfirm();
+    } catch {
+      confirmLockRef.current = false;
+    }
   };
 
   const handleCancel = () => {
+    if (isLoading || confirmLockRef.current) return;
     onCancel?.();
     onOpenChange(false);
   };

@@ -236,7 +236,7 @@ const NAV_SECTIONS: NavSection[] = [
         to: "/app/community",
         icon: Inbox,
         stealthIcon: Inbox,
-        label: "Q&A",
+        label: "Q&A (Preview)",
       },
       {
         to: "/app/coding",

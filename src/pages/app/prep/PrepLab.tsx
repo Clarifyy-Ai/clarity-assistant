@@ -31,6 +31,7 @@ import {
 } from "@/lib/network/aiErrorUx";
 import { Link, useSearchParams } from "react-router-dom";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
+import { HybridSourceLine } from "@/components/hybrid/HybridSourceLine";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import {
   StarBuilderForm,
@@ -752,18 +753,21 @@ function CompanyPrep() {
   const [role,     setRole]     = useState("");
   const [loading,  setLoading]  = useState(false);
   const [brief,    setBrief]    = useState<any>(null);
+  const [briefSource, setBriefSource] = useState<string | null>(null);
 
   async function generate() {
     if (!company.trim() || !role.trim()) return;
     if (loading) return;
     setLoading(true);
     setBrief(null);
+    setBriefSource(null);
     try {
       const result = await fetchEdgeJson<{
         success?: boolean;
         id?: string;
         persisted?: boolean;
         brief?: Record<string, unknown>;
+        source?: string;
       }>(
         "company-research",
         { company: company.trim(), role: role.trim(), force: true },
@@ -777,9 +781,11 @@ function CompanyPrep() {
       }
 
       setBrief(result.brief);
+      setBriefSource(result.source ?? null);
       await refreshCredits();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load company brief.");
+      openUpgradeIfInsufficientCredits(err);
+      toast.error(getAiUserFacingError(err));
     } finally {
       setLoading(false);
     }
@@ -825,6 +831,7 @@ function CompanyPrep() {
 
       {brief && (
         <div className="space-y-4">
+          <HybridSourceLine source={briefSource} />
           {/* Overview */}
           {brief.overview && (
             <Card>

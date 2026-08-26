@@ -127,7 +127,8 @@ export class DeepgramStreamClient {
     this.callbacks.onStatusChange("connecting");
 
     try {
-      await this.ensureFreshToken();
+      // Remints via fetchEdge; force on reconnect so a stale scoped token is replaced.
+      await this.ensureFreshToken({ force: this.reconnectAttempts > 0 });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.callbacks.onError(new Error(`Deepgram token error: ${msg}`));
@@ -249,14 +250,15 @@ export class DeepgramStreamClient {
     });
   }
 
-  private async ensureFreshToken(): Promise<void> {
-    if (isDeepgramTokenBlocked()) {
+  private async ensureFreshToken(opts?: { force?: boolean }): Promise<void> {
+    if (isDeepgramTokenBlocked() && !opts?.force) {
       throw new Error(
         "Live transcription is unavailable. You can still type questions in Chat.",
       );
     }
 
-    const tokenData = await fetchDeepgramTokenBounded();
+    // Mint via fetchEdge (attaches a fresh JWT at call time).
+    const tokenData = await fetchDeepgramTokenBounded({ force: opts?.force === true });
     this.currentToken = tokenData.token;
     this.tokenExpiresAt = tokenData.expires_at_ms;
     this.tokenExpiresInSec = tokenData.expires_in;
@@ -289,12 +291,28 @@ export class DeepgramStreamClient {
       return;
     }
 
-    // ✅ FIX: Permanent Deepgram auth/policy failure codes — skip retry entirely.
-    // Retrying on 4001/4008 would just loop until MAX_RECONNECT_ATTEMPTS with no chance
-    // of success (the token itself is invalid; a new token is needed via ensureFreshToken,
-    // which restart() handles, but an unexpected 4001 means the token was already bad).
+    // Auth/policy closes: one remint via fetchEdge (cache cleared), then stop.
+    // 4001 = invalid credentials, 4008 = token expired, 1008 = policy.
     if (PERMANENT_CLOSE_CODES.has(event.code)) {
       const reason = event.reason || `Deepgram auth failure (code ${event.code})`;
+      if (this.reconnectAttempts < 1) {
+        this.reconnectAttempts = 1;
+        resetDeepgramTokenClient();
+        this.callbacks.onStatusChange("reconnecting");
+        setTimeout(() => {
+          if (this.destroyed) return;
+          void this.connect().catch((error) => {
+            this.callbacks.onError(
+              error instanceof Error
+                ? error
+                : new Error(`Deepgram WS closed permanently: ${reason}`),
+            );
+            this.callbacks.onStatusChange("error");
+            this.destroyed = true;
+          });
+        }, RECONNECT_BASE_DELAY_MS);
+        return;
+      }
       this.callbacks.onError(new Error(`Deepgram WS closed permanently: ${reason}`));
       this.callbacks.onStatusChange("error");
       this.destroyed = true;

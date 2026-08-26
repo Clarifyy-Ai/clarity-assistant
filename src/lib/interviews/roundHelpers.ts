@@ -16,7 +16,10 @@ export type InterviewWithRounds = Pick<ScheduledInterview, "created_at"> & {
 export function getCurrentRound(
   interview: InterviewWithRounds,
 ): InterviewRound | null {
-  return interview.next_round ?? interview.rounds?.[0] ?? null;
+  if (interview.next_round) return interview.next_round;
+  const rounds = interview.rounds ?? [];
+  const active = rounds.find((r) => r.status !== "cancelled");
+  return active ?? rounds[0] ?? null;
 }
 
 /** ISO datetime for the current/next round (falls back to created_at). */

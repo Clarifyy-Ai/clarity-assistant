@@ -145,7 +145,8 @@ Deno.serve(async (req: Request) => {
 
   const auth = await authenticateRequest(req);
   if (auth.error || !auth.context) {
-    return auth.error ?? json(req, { error: "Unauthorized" }, 401);
+    // authenticateRequest → auth.requireAuth(getUser(accessToken)) — JWT required.
+    return auth.error ?? json(req, { error: "Unauthorized", code: "AUTH_INVALID" }, 401);
   }
 
   const userId = auth.context.user.id;

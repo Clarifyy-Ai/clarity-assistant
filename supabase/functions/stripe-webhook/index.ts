@@ -154,8 +154,10 @@ Deno.serve(async (req) => {
       JSON.stringify({
         received: true,
         ignored: true,
+        code: "FUNCTION_RETIRED",
         status: "retired",
         reason: "stripe_unused_razorpay_only",
+        replacement: "razorpay-create-order",
       }),
       { status: 200, headers: { ...headers, "Content-Type": "application/json" } },
     );

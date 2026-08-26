@@ -116,15 +116,22 @@ Deno.serve(async (req) => {
     const marksPositive = clampNumber(config.marks_positive ?? 4, 0, 100, 4);
     const marksNegative = clampNumber(config.marks_negative ?? 1, 0, 100, 1);
 
-    const creditResult = await deductCreditsAtomic({
-      userId: user.id,
-      action: "create_mock_test",
-      cost: CREATE_TEST_CREDIT_COST,
-      idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
-    });
+    // Learning Hub course quizzes are included with enrollment — no credit burn.
+    const isLearningQuiz =
+      sanitizeString(body.source ?? config.source ?? "", 40) === "learning_quiz";
 
-    if (!creditResult?.success) {
-      return creditDenialResponse(req, creditResult, CREATE_TEST_CREDIT_COST);
+    let creditResult: { success?: boolean } | null = null;
+    if (!isLearningQuiz) {
+      creditResult = await deductCreditsAtomic({
+        userId: user.id,
+        action: "create_mock_test",
+        cost: CREATE_TEST_CREDIT_COST,
+        idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+      });
+
+      if (!creditResult?.success) {
+        return creditDenialResponse(req, creditResult, CREATE_TEST_CREDIT_COST);
+      }
     }
 
     const finalConfig = {
@@ -137,6 +144,7 @@ Deno.serve(async (req) => {
       marks_positive: marksPositive,
       marks_negative: marksNegative,
       duration_minutes: timeLimitMinutes,
+      ...(isLearningQuiz ? { source: "learning_quiz" } : {}),
     };
 
     const { data: test, error: insertErr } = await db
@@ -154,12 +162,13 @@ Deno.serve(async (req) => {
 
     if (insertErr || !test) {
       console.error("[create-test] Insert error:", insertErr);
-      // Refund credits — test was never created
-      await refundCredits({
-        userId: user.id,
-        cost: CREATE_TEST_CREDIT_COST,
-        reason: "refund_create_mock_test",
-      }).catch((e) => console.error("[create-test] Refund failed:", e));
+      if (!isLearningQuiz) {
+        await refundCredits({
+          userId: user.id,
+          cost: CREATE_TEST_CREDIT_COST,
+          reason: "refund_create_mock_test",
+        }).catch((e) => console.error("[create-test] Refund failed:", e));
+      }
       return jsonResponse(req, { error: "Failed to create test" }, 500);
     }
 

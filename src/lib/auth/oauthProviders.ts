@@ -22,10 +22,10 @@ function parseProviderList(raw: string | undefined): OAuthProviderId[] {
   }
 
   const trimmed = raw.trim();
-  // Unset → default google. Explicit empty → also default google (hide broken
-  // providers rather than advertising ones that are not configured).
-  if (trimmed.length === 0) {
-    return [...DEFAULT_PROVIDERS];
+  // Unset → default google. Explicit empty / "none" → no OAuth CTAs (never show
+  // an active Connect for providers that are not configured).
+  if (trimmed.length === 0 || trimmed.toLowerCase() === "none") {
+    return [];
   }
 
   const seen = new Set<OAuthProviderId>();

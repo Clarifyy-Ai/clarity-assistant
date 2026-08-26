@@ -24,6 +24,7 @@ import {
   buildPagination,
   decodeSearchCursor,
   escapeIlikePattern,
+  ilikeFilterValue,
   rankExamResults,
   resolveFamily,
   resolvePagination,
@@ -167,7 +168,7 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
 
     const rateLimitResult = await checkRateLimitAsync(db, {
       key: createRateLimitKey("search-exams", user.id),
-      ...RATE_LIMIT_PRESETS.SESSION_ACTION,
+      ...RATE_LIMIT_PRESETS.SEARCH_BROWSE,
     });
     if (!rateLimitResult.allowed) {
       return rateLimitResponse(rateLimitResult, req);
@@ -239,6 +240,7 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
     let paperExamIds: string[] = [];
     if (q) {
       const like = `%${escapeIlikePattern(q)}%`;
+      const likeOr = ilikeFilterValue(q);
       const { data: aliasRows, error: aliasError } = await db
         .from("gov_exam_aliases")
         .select("exam_id")
@@ -258,7 +260,7 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
       const { data: bodyRows, error: bodyError } = await db
         .from("recruiting_bodies")
         .select("id")
-        .or(`name.ilike.${like},code.ilike.${like}`)
+        .or(`name.ilike.${likeOr},code.ilike.${likeOr}`)
         .limit(50);
       if (bodyError) {
         console.warn("[search-exams] recruiting_bodies lookup:", bodyError.message);
@@ -288,7 +290,7 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
       const { data: stageRows, error: stageErr } = await db
         .from("gov_exam_stages")
         .select("exam_id")
-        .or(`name.ilike.${like},code.ilike.${like}`)
+        .or(`name.ilike.${likeOr},code.ilike.${likeOr}`)
         .limit(200);
       if (stageErr) {
         console.warn("[search-exams] stages lookup:", stageErr.message);
@@ -331,40 +333,44 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
         .eq("review_state", "approved")
         .limit(200);
       if (languageErr) {
-        return searchUnavailable(req, `languages: ${languageErr.message}`);
+        // Soft-fail: language index is optional enrichment, not required for name/alias hits.
+        console.warn("[search-exams] languages lookup:", languageErr.message);
+      } else {
+        languageExamIds = [
+          ...new Set(
+            (languageRows ?? [])
+              .map((row) => String((row as { exam_id?: string }).exam_id ?? ""))
+              .filter(Boolean),
+          ),
+        ];
       }
-      languageExamIds = [
-        ...new Set(
-          (languageRows ?? [])
-            .map((row) => String((row as { exam_id?: string }).exam_id ?? ""))
-            .filter(Boolean),
-        ),
-      ];
 
       const { data: paperRows, error: paperErr } = await db
         .from("previous_year_papers")
         .select("exam_id")
         .or(
           [
-            `title.ilike.${like}`,
-            `cycle.ilike.${like}`,
-            `tier.ilike.${like}`,
-            `shift.ilike.${like}`,
-            `language.ilike.${like}`,
+            `title.ilike.${likeOr}`,
+            `cycle.ilike.${likeOr}`,
+            `tier.ilike.${likeOr}`,
+            `shift.ilike.${likeOr}`,
+            `language.ilike.${likeOr}`,
           ].join(","),
         )
         .in("review_status", ["approved", "in_review"])
         .limit(200);
       if (paperErr) {
-        return searchUnavailable(req, `papers: ${paperErr.message}`);
+        // Soft-fail: paper title search must not 503 the whole registry browse.
+        console.warn("[search-exams] papers lookup:", paperErr.message);
+      } else {
+        paperExamIds = [
+          ...new Set(
+            (paperRows ?? [])
+              .map((row) => String((row as { exam_id?: string }).exam_id ?? ""))
+              .filter(Boolean),
+          ),
+        ];
       }
-      paperExamIds = [
-        ...new Set(
-          (paperRows ?? [])
-            .map((row) => String((row as { exam_id?: string }).exam_id ?? ""))
-            .filter(Boolean),
-        ),
-      ];
     }
 
     let query = db
@@ -446,105 +452,116 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
       }
     }
 
+    // One pattern query for the current page — avoid N+1 that blows the client timeout.
+    type PatternRow = {
+      exam_id: string;
+      stage_id: string;
+      version: string;
+      total_questions: number;
+      total_marks: number;
+      duration_minutes: number;
+      negative_mark: number;
+      languages: string[] | null;
+      effective_date: string | null;
+      source_url: string | null;
+    };
+    const patternByExamStage = new Map<string, PatternRow>();
+    const pageExamIds = [...new Set(results.map((r) => r.examId).filter(Boolean))];
+    if (pageExamIds.length > 0) {
+      const { data: patternRows, error: patternErr } = await db
+        .from("gov_exam_pattern_versions")
+        .select(
+          "exam_id, stage_id, version, total_questions, total_marks, duration_minutes, negative_mark, languages, effective_date, source_url",
+        )
+        .in("exam_id", pageExamIds)
+        .eq("review_state", "approved")
+        .order("effective_date", { ascending: false });
+      if (patternErr) {
+        console.warn("[search-exams] pattern batch lookup:", patternErr.message);
+      } else {
+        for (const row of (patternRows ?? []) as PatternRow[]) {
+          const key = `${row.exam_id}:${row.stage_id}`;
+          if (!patternByExamStage.has(key)) {
+            patternByExamStage.set(key, row);
+          }
+        }
+      }
+    }
+
     const enriched = await Promise.all(
       results.map(async (r) => {
-        const stage = r.stages[0];
-        const registryLanguages = r.languages ?? [];
-        if (!stage) {
-          const emptyBank = readinessByExam.get(r.examId) ?? {
-            approvedPublicCount: 0,
-            publicCount: 0,
-            requiredQuestions: 0,
-            status: "empty" as const,
-            fullSimulationAvailable: false,
-          };
-          return {
-            ...r,
-            pattern: null,
-            languages: registryLanguages,
-            lastVerified: r.verifiedAt,
-            verifiedAt: r.verifiedAt,
-            bankReadiness: emptyBank,
-            approvedQuestionCount: emptyBank.approvedPublicCount,
-          };
-        }
-        const { data: pat } = await db
-          .from("gov_exam_pattern_versions")
-          .select(
-            "id, version, total_questions, total_marks, duration_minutes, negative_mark, languages, effective_date, source_url",
-          )
-          .eq("exam_id", r.examId)
-          .eq("stage_id", stage.id)
-          .eq("review_state", "approved")
-          .order("effective_date", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        const fromRpc = readinessByExam.get(r.examId);
-        const requiredQuestions = pat?.total_questions ?? fromRpc?.requiredQuestions ?? 0;
-        let bankReadiness: BankReadinessPayload;
-        if (fromRpc) {
-          const resolvedRequired = requiredQuestions || fromRpc.requiredQuestions;
-          const status = computeBankReadinessStatus(
-            fromRpc.approvedPublicCount,
-            resolvedRequired,
-          );
-          bankReadiness = {
-            ...fromRpc,
-            requiredQuestions: resolvedRequired,
-            status,
-            fullSimulationAvailable: status === "ready",
-          };
-        } else if (r.legacyExamType) {
-          const { count: bankCount } = await db
-            .from("questions")
-            .select("id", { count: "exact", head: true })
-            .eq("exam_type", r.legacyExamType)
-            .eq("is_public", true)
-            .eq("is_verified", true);
-          const approvedPublicCount = bankCount ?? 0;
-          const status = computeBankReadinessStatus(approvedPublicCount, requiredQuestions);
-          bankReadiness = {
-            approvedPublicCount,
-            publicCount: approvedPublicCount,
-            requiredQuestions,
-            status,
-            fullSimulationAvailable: status === "ready",
-          };
-        } else {
-          bankReadiness = {
-            approvedPublicCount: 0,
-            publicCount: 0,
-            requiredQuestions,
-            status: "empty",
-            fullSimulationAvailable: false,
-          };
-        }
-
-        const patternLanguages = (pat?.languages as string[] | null) ?? [];
-        const languages = [
-          ...new Set([...registryLanguages, ...patternLanguages].filter(Boolean)),
-        ];
-
+      const stage = r.stages[0];
+      const registryLanguages = r.languages ?? [];
+      if (!stage) {
+        const emptyBank = readinessByExam.get(r.examId) ?? {
+          approvedPublicCount: 0,
+          publicCount: 0,
+          requiredQuestions: 0,
+          status: "empty" as const,
+          fullSimulationAvailable: false,
+        };
         return {
           ...r,
-          pattern: pat
-            ? {
-              version: pat.version,
-              totalQuestions: pat.total_questions,
-              totalMarks: Number(pat.total_marks),
-              durationMinutes: pat.duration_minutes,
-              negativeMark: Number(pat.negative_mark),
-              sourceUrl: pat.source_url,
-            }
-            : null,
-          languages,
-          lastVerified: r.verifiedAt ?? pat?.effective_date ?? null,
-          verifiedAt: r.verifiedAt ?? pat?.effective_date ?? null,
-          stage,
-          bankReadiness,
-          approvedQuestionCount: bankReadiness.approvedPublicCount,
+          pattern: null,
+          languages: registryLanguages,
+          lastVerified: r.verifiedAt,
+          verifiedAt: r.verifiedAt,
+          bankReadiness: emptyBank,
+          approvedQuestionCount: emptyBank.approvedPublicCount,
         };
+      }
+
+      const pat = patternByExamStage.get(`${r.examId}:${stage.id}`);
+      const fromRpc = readinessByExam.get(r.examId);
+      const requiredQuestions = pat?.total_questions ?? fromRpc?.requiredQuestions ?? 0;
+      let bankReadiness: BankReadinessPayload;
+      if (fromRpc) {
+        const resolvedRequired = requiredQuestions || fromRpc.requiredQuestions;
+        const status = computeBankReadinessStatus(
+          fromRpc.approvedPublicCount,
+          resolvedRequired,
+        );
+        bankReadiness = {
+          ...fromRpc,
+          requiredQuestions: resolvedRequired,
+          status,
+          fullSimulationAvailable: status === "ready",
+        };
+      } else {
+        // Prefer RPC counts; skip per-row questions table probes (latency).
+        bankReadiness = {
+          approvedPublicCount: 0,
+          publicCount: 0,
+          requiredQuestions,
+          status: "empty",
+          fullSimulationAvailable: false,
+        };
+      }
+
+      const patternLanguages = (pat?.languages as string[] | null) ?? [];
+      const languages = [
+        ...new Set([...registryLanguages, ...patternLanguages].filter(Boolean)),
+      ];
+
+      return {
+        ...r,
+        pattern: pat
+          ? {
+            version: pat.version,
+            totalQuestions: pat.total_questions,
+            totalMarks: Number(pat.total_marks),
+            durationMinutes: pat.duration_minutes,
+            negativeMark: Number(pat.negative_mark),
+            sourceUrl: pat.source_url,
+          }
+          : null,
+        languages,
+        lastVerified: r.verifiedAt ?? pat?.effective_date ?? null,
+        verifiedAt: r.verifiedAt ?? pat?.effective_date ?? null,
+        stage,
+        bankReadiness,
+        approvedQuestionCount: bankReadiness.approvedPublicCount,
+      };
       }),
     );
 

@@ -126,7 +126,12 @@ export function getCheckoutUrls(): {
   success_url: string;
   cancel_url: string;
 } {
-  const origin = window.location.origin;
+  // Prefer the live page origin so a leaked localhost VITE_APP_URL never
+  // becomes a billing redirect / resource URL in production UIs.
+  const origin =
+    typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "";
 
   return {
     success_url: `${origin}/app/settings/billing?checkout=success`,
@@ -135,7 +140,11 @@ export function getCheckoutUrls(): {
 }
 
 export function getBillingReturnUrl(path = "/app/settings/billing"): string {
-  return `${window.location.origin}${path}`;
+  const origin =
+    typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "";
+  return `${origin}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
 export async function redirectToCheckout(

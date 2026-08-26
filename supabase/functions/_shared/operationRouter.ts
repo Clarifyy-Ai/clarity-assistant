@@ -20,9 +20,17 @@ export type HybridOperation =
   | "star_builder"
   | "system_design"
   | "practice_coach_help"
+  | "live_answer"
   | "company_research"
   | "mock_question_generation"
-  | "sprint_review_transcript";
+  | "sprint_review_transcript"
+  | "gap_analysis"
+  | "session_debrief"
+  | "session_scorecard"
+  | "analyze_test"
+  | "prep_rephrase"
+  | "prep_coding"
+  | "prep_project";
 
 export type RouteDecision = {
   operation: HybridOperation;
@@ -119,6 +127,18 @@ const MATRIX: Record<HybridOperation, Omit<RouteDecision, "operation" | "canUseP
     creditCostKey: "ai_coach_chat",
     durableJob: false,
   },
+  // Live overlay full answers — same coach fallback chain
+  live_answer: {
+    canCompleteDeterministically: true,
+    canCompleteWithDatabase: false,
+    isAiOptional: false,
+    isAiRequired: true,
+    preferredOrder: ["ai", "python", "deterministic"],
+    pythonFallbackOnAiFailure: true,
+    aiFallbackOnPythonFailure: false,
+    creditCostKey: "live_answer",
+    durableJob: false,
+  },
   // database cache → Python normalize → optional AI enrichment
   company_research: {
     canCompleteDeterministically: true,
@@ -143,16 +163,98 @@ const MATRIX: Record<HybridOperation, Omit<RouteDecision, "operation" | "canUseP
     creditCostKey: "generate_questions",
     durableJob: false,
   },
-  // mostly passthrough/deterministic; AI optional summary
+  // normalize transcript: deterministic → python speech → optional AI summary
   sprint_review_transcript: {
     canCompleteDeterministically: true,
     canCompleteWithDatabase: false,
     isAiOptional: true,
     isAiRequired: false,
-    preferredOrder: ["deterministic", "ai"],
-    pythonFallbackOnAiFailure: false,
+    preferredOrder: ["deterministic", "python", "ai"],
+    pythonFallbackOnAiFailure: true,
     aiFallbackOnPythonFailure: false,
     creditCostKey: "sprint_review",
+    durableJob: false,
+  },
+  // resume↔JD gap: deterministic overlap → python → optional AI
+  gap_analysis: {
+    canCompleteDeterministically: true,
+    canCompleteWithDatabase: true,
+    isAiOptional: true,
+    isAiRequired: false,
+    preferredOrder: ["deterministic", "python", "ai"],
+    pythonFallbackOnAiFailure: true,
+    aiFallbackOnPythonFailure: false,
+    creditCostKey: "gap_analysis",
+    durableJob: false,
+  },
+  // session debrief from metrics → optional AI polish
+  session_debrief: {
+    canCompleteDeterministically: true,
+    canCompleteWithDatabase: true,
+    isAiOptional: true,
+    isAiRequired: false,
+    preferredOrder: ["deterministic", "python", "ai"],
+    pythonFallbackOnAiFailure: true,
+    aiFallbackOnPythonFailure: false,
+    creditCostKey: "session_debrief",
+    durableJob: false,
+  },
+  // rule-based scorecard → optional AI enrich
+  session_scorecard: {
+    canCompleteDeterministically: true,
+    canCompleteWithDatabase: true,
+    isAiOptional: true,
+    isAiRequired: false,
+    preferredOrder: ["deterministic", "python", "ai"],
+    pythonFallbackOnAiFailure: true,
+    aiFallbackOnPythonFailure: false,
+    creditCostKey: "generate_scorecard",
+    durableJob: false,
+  },
+  // mock-test analytics narrative from aggregates → optional AI
+  analyze_test: {
+    canCompleteDeterministically: true,
+    canCompleteWithDatabase: true,
+    isAiOptional: true,
+    isAiRequired: false,
+    preferredOrder: ["database", "deterministic", "python", "ai"],
+    pythonFallbackOnAiFailure: true,
+    aiFallbackOnPythonFailure: false,
+    creditCostKey: "analyze_test_performance",
+    durableJob: false,
+  },
+  // prep rephrase — AI preferred, deterministic/python when AI down
+  prep_rephrase: {
+    canCompleteDeterministically: true,
+    canCompleteWithDatabase: false,
+    isAiOptional: true,
+    isAiRequired: false,
+    preferredOrder: ["ai", "python", "deterministic"],
+    pythonFallbackOnAiFailure: true,
+    aiFallbackOnPythonFailure: false,
+    creditCostKey: "rephraser",
+    durableJob: false,
+  },
+  prep_coding: {
+    canCompleteDeterministically: true,
+    canCompleteWithDatabase: false,
+    isAiOptional: true,
+    isAiRequired: false,
+    preferredOrder: ["ai", "python", "deterministic"],
+    pythonFallbackOnAiFailure: true,
+    aiFallbackOnPythonFailure: false,
+    creditCostKey: "coding_hint",
+    durableJob: false,
+  },
+  prep_project: {
+    canCompleteDeterministically: true,
+    canCompleteWithDatabase: false,
+    isAiOptional: true,
+    isAiRequired: false,
+    preferredOrder: ["ai", "python", "deterministic"],
+    pythonFallbackOnAiFailure: true,
+    aiFallbackOnPythonFailure: false,
+    creditCostKey: "project_builder",
     durableJob: false,
   },
 };

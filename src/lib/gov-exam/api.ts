@@ -117,7 +117,7 @@ export async function searchGovExams(
       pageSize: params.pageSize ?? 20,
       cursor: params.cursor ?? undefined,
     },
-    { signal: options?.signal },
+    { signal: options?.signal, timeoutMs: 45_000 },
   );
 
   if (payload?.success === false) {
@@ -212,6 +212,13 @@ export function mapGovSearchError(err: unknown): {
     code === "SERVICE_UNAVAILABLE" ||
     code === "SEARCH_SERVICE_UNAVAILABLE"
   ) {
+    return {
+      code: "SEARCH_UNAVAILABLE",
+      message: "Exam search is temporarily unavailable. Please try again.",
+    };
+  }
+  const msg = err instanceof Error ? err.message : "";
+  if (/timed out|timeout/i.test(msg)) {
     return {
       code: "SEARCH_UNAVAILABLE",
       message: "Exam search is temporarily unavailable. Please try again.",

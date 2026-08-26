@@ -24,7 +24,7 @@ import {
 const DEFAULT_TIMEOUT_MS = 25_000;
 const DEFAULT_MAX_RETRIES = 1;
 
-/** Legacy alias union — all map through mapPythonOperationType → /internal/operations. */
+/** Legacy alias union — routes via V1_PROCESS_OPERATION or mapPythonOperationType. */
 export type PythonOperation =
   | "document_extract"
   | "document_classify"
@@ -525,23 +525,39 @@ async function pythonPublicGet(
   );
 }
 
-/** Map Edge hybrid operation ids → Python /internal/operations operation_type. */
-/** Edge hybrid ids -> /internal/operations types.
- * Coach chat/hint/answer MUST NOT map to scaffold-only practice_coach_hint -
- * those go through callPythonProcess (/v1/process, practice_coach).
- * speech_process / sprint_review_transcript / gov_exam_assemble are not coach aliases.
+/**
+ * Engine-backed ops — POST /v1/process only (scraper/app/routes/process.py).
+ * Never route these through /internal/operations scaffold handlers.
+ */
+const V1_PROCESS_OPERATION: Record<string, PythonOperation> = {
+  practice_coach: "practice_coach",
+  practice_coach_help: "practice_coach",
+  live_answer: "practice_coach",
+  speech_process: "speech_process",
+  sprint_review_transcript: "speech_process",
+  document_extract: "document_extract",
+  document_classify: "document_classify",
+  star_evidence: "star_evidence",
+  system_design: "system_design",
+  company_normalize: "company_normalize",
+  mock_question_validate: "mock_question_validate",
+};
+
+/**
+ * Edge hybrid ids → /internal/operations operation_type
+ * (must stay aligned with scraper/app/hybrid/__init__.py SUPPORTED_OPERATIONS).
+ *
+ * Coach chat/hint/answer MUST NOT map to scaffold-only practice_coach_hint —
+ * user-facing coach uses V1_PROCESS_OPERATION → /v1/process practice_coach.
+ * speech_process / sprint_review_transcript are V1-only (not internal aliases).
  */
 const OPERATION_TYPE_MAP: Record<string, string> = {
   star_builder: "star_format",
-  star_evidence: "star_format",
   system_design: "system_design_outline",
   resume_parse: "resume_structure",
   document_process: "document_extract",
-  document_classify: "document_extract",
   company_research: "company_research_skeleton",
-  company_normalize: "company_research_skeleton",
   mock_question_generation: "mock_question_bank",
-  mock_question_validate: "mock_question_bank",
   ping: "ping",
   star_format: "star_format",
   system_design_outline: "system_design_outline",
@@ -549,14 +565,96 @@ const OPERATION_TYPE_MAP: Record<string, string> = {
   document_extract: "document_extract",
   company_research_skeleton: "company_research_skeleton",
   mock_question_bank: "mock_question_bank",
-  // Legacy scaffold op only - not for user-facing coach chat.
+  // Diagnostic scaffold only — hybrid-ping / internal smoke; not user coach success.
   practice_coach_hint: "practice_coach_hint",
-  speech_process: "speech_process",
+  gap_analysis: "gap_analysis",
+  session_debrief: "session_debrief",
+  session_scorecard: "session_scorecard",
+  analyze_test: "analyze_test",
+  prep_rephrase: "prep_rephrase",
+  prep_coding: "prep_coding",
+  prep_project: "prep_project",
 };
+
+function isUserFacingCoachPayload(payload: Record<string, unknown>): boolean {
+  return Boolean(
+    payload.operation_type ||
+      payload.question ||
+      payload.message ||
+      payload.transcript ||
+      payload.questionText,
+  );
+}
+
+function resolveV1ProcessOperation(rawOperation: string): PythonOperation | null {
+  const key = String(rawOperation ?? "").trim();
+  return V1_PROCESS_OPERATION[key] ?? null;
+}
 
 export function mapPythonOperationType(operation: string): string {
   const key = String(operation ?? "").trim();
+  if (resolveV1ProcessOperation(key)) {
+    return key;
+  }
   return OPERATION_TYPE_MAP[key] ?? key;
+}
+
+async function dispatchV1ProcessOperation(
+  rawOperation: string,
+  operationId: string,
+  correlationId: string,
+  payload: Record<string, unknown>,
+  timeoutMs?: number,
+): Promise<PythonFetchResult> {
+  const processOp = resolveV1ProcessOperation(rawOperation);
+  if (!processOp) {
+    return {
+      ok: false,
+      status: 422,
+      json: {
+        success: false,
+        code: "UNSUPPORTED_OPERATION",
+        message: `Operation ${rawOperation} is not routed to /v1/process.`,
+      },
+      latencyMs: 0,
+      requestId: correlationId,
+      errorCode: "PYTHON_PROCESSING_FAILED",
+      errorMessage: `Operation ${rawOperation} is not routed to /v1/process.`,
+    };
+  }
+
+  const processResult = await callPythonProcess({
+    operation: processOp,
+    operationId,
+    correlationId,
+    payload,
+    timeoutMs,
+  });
+
+  if (processResult.ok) {
+    return {
+      ok: true,
+      status: 200,
+      json: { success: true, data: processResult.data, source: "python" },
+      latencyMs: 0,
+      requestId: correlationId,
+    };
+  }
+
+  return {
+    ok: false,
+    status: processResult.retryable ? 503 : 422,
+    json: {
+      success: false,
+      code: processResult.code,
+      message: processResult.message,
+      retryable: processResult.retryable,
+    },
+    latencyMs: 0,
+    requestId: correlationId,
+    errorCode: normalizePythonDomainCode(processResult.code),
+    errorMessage: processResult.message,
+  };
 }
 
 export type PythonOperationPayload = {
@@ -601,41 +699,32 @@ export async function pythonExecuteOperation(
     (payload.input && typeof payload.input === "object" ? payload.input : {}) ??
     {};
 
-  // User-facing coach -> /v1/process practice_coach ({ reply, hints }).
-  // Never route practice_coach / practice_coach_help through scaffold practice_coach_hint.
+  const typedPayload = bodyPayload as Record<string, unknown>;
+
+  // Never accept scaffold-only practice_coach_hint for user coach payloads.
   if (
-    rawOperation === "practice_coach" ||
-    rawOperation === "practice_coach_help"
+    rawOperation === "practice_coach_hint" &&
+    isUserFacingCoachPayload(typedPayload)
   ) {
-    const processResult = await callPythonProcess({
-      operation: "practice_coach",
+    return dispatchV1ProcessOperation(
+      "practice_coach",
       operationId,
       correlationId,
-      payload: bodyPayload as Record<string, unknown>,
-      timeoutMs: options?.timeoutMs,
-    });
-    if (processResult.ok) {
-      return {
-        ok: true,
-        status: 200,
-        json: { success: true, data: processResult.data },
-        latencyMs: 0,
-        requestId: correlationId,
-      };
-    }
-    return {
-      ok: false,
-      status: 503,
-      json: {
-        success: false,
-        code: processResult.code,
-        message: processResult.message,
-      },
-      latencyMs: 0,
-      requestId: correlationId,
-      errorCode: processResult.code as DomainErrorCode,
-      errorMessage: processResult.message,
-    };
+      typedPayload,
+      options?.timeoutMs,
+    );
+  }
+
+  // Engine-backed ops — /v1/process (coach, speech, star_evidence, etc.).
+  const v1Op = resolveV1ProcessOperation(rawOperation);
+  if (v1Op) {
+    return dispatchV1ProcessOperation(
+      rawOperation,
+      operationId,
+      correlationId,
+      typedPayload,
+      options?.timeoutMs,
+    );
   }
 
   const operationType = mapPythonOperationType(rawOperation);
@@ -669,15 +758,54 @@ export async function pythonExecuteOperation(
   // Surface Python structured failure codes when HTTP failed with JSON body.
   if (!result.ok && result.json && typeof result.json === "object") {
     const env = result.json as Record<string, unknown>;
-    if (typeof env.code === "string" && env.code) {
-      result.errorCode = env.code as DomainErrorCode;
+    const nestedError =
+      env.error && typeof env.error === "object"
+        ? (env.error as Record<string, unknown>)
+        : null;
+    const rawCode =
+      (typeof env.code === "string" && env.code) ||
+      (nestedError && typeof nestedError.code === "string" && nestedError.code) ||
+      "";
+    if (rawCode) {
+      result.errorCode = normalizePythonDomainCode(rawCode);
     }
-    if (typeof env.message === "string" && env.message) {
-      result.errorMessage = env.message;
+    const rawMessage =
+      (typeof env.message === "string" && env.message) ||
+      (nestedError && typeof nestedError.message === "string" && nestedError.message) ||
+      "";
+    if (rawMessage) {
+      result.errorMessage = rawMessage;
     }
   }
 
   return result;
+}
+
+/** Map Python structured codes into stable Edge domain codes. */
+export function normalizePythonDomainCode(code: string): DomainErrorCode {
+  const normalized = String(code ?? "").trim().toUpperCase();
+  if (
+    normalized === "PYTHON_SERVICE_UNAVAILABLE" ||
+    normalized === "PYTHON_PROCESSING_FAILED"
+  ) {
+    return normalized as DomainErrorCode;
+  }
+  if (
+    normalized === "REQUEST_VALIDATION_FAILED" ||
+    normalized === "UNSUPPORTED_OPERATION" ||
+    normalized === "VALIDATION_ERROR" ||
+    normalized === "BAD_REQUEST"
+  ) {
+    return "PYTHON_PROCESSING_FAILED";
+  }
+  if (
+    normalized.includes("UNAVAILABLE") ||
+    normalized.includes("TIMEOUT") ||
+    normalized === "INTERNAL_PROCESSING_ERROR"
+  ) {
+    return "PYTHON_SERVICE_UNAVAILABLE";
+  }
+  return "PYTHON_PROCESSING_FAILED";
 }
 
 function extractProcessData(json: unknown): unknown {

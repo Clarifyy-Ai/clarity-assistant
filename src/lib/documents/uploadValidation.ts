@@ -7,13 +7,16 @@ export type DocumentCategory =
   | "exam_document"
   | "spreadsheet";
 
+/** Hard ceiling aligned with Edge DOCUMENT_MAX_BYTES (fail-closed). */
+export const DOCUMENT_MAX_BYTES = 20 * 1024 * 1024;
+
 export const DOCUMENT_UPLOAD_LIMITS: Record<DocumentCategory, number> = {
   resume: 10 * 1024 * 1024,
-  scanned_pdf: 20 * 1024 * 1024,
+  scanned_pdf: DOCUMENT_MAX_BYTES,
   job_description: 10 * 1024 * 1024,
   cover_letter: 10 * 1024 * 1024,
-  library: 20 * 1024 * 1024,
-  exam_document: 25 * 1024 * 1024,
+  library: DOCUMENT_MAX_BYTES,
+  exam_document: DOCUMENT_MAX_BYTES,
   spreadsheet: 10 * 1024 * 1024,
 };
 

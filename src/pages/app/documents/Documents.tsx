@@ -31,8 +31,15 @@ import {
   LayoutGrid, Table2, ArrowUpDown, X,
 } from "lucide-react";
 import { cn, generateId } from "@/lib/utils";
+import {
+  DOCUMENT_MAX_BYTES,
+  RESUME_ACCEPT,
+  RESUME_ACCEPT_LABEL,
+  validateDocumentFile,
+} from "@/lib/documents/uploadValidation";
 
 const MAX_UPLOAD_QUEUE = 5;
+const DOCUMENT_MAX_MB = Math.floor(DOCUMENT_MAX_BYTES / (1024 * 1024));
 
 type UploadQueueItem = {
   id: string;
@@ -58,29 +65,36 @@ import {
 } from "@/lib/documents/resumeParse";
 import type { ParsedResume } from "@/types/ai.types";
 
-// ─── File validation ─────────────────────────────────────────────────────────
+// ─── File validation (category caps ≤ DOCUMENT_MAX_BYTES / Edge) ─────────────
 
 const FILE_LIMITS = {
-  resume: { maxMB: 10, types: [".pdf", ".docx", ".doc", ".txt"] },
-  jd: { maxMB: 5, types: [".pdf", ".docx", ".doc", ".txt"] },
-  cover_letter: { maxMB: 5, types: [".pdf", ".docx", ".doc", ".txt"] },
-  portfolio: { maxMB: 15, types: [".pdf", ".docx", ".doc", ".txt", ".html"] },
+  resume: { maxMB: 10, types: [".pdf", ".docx", ".txt"] as const },
+  jd: { maxMB: 10, types: [".pdf", ".docx", ".txt"] as const },
+  cover_letter: { maxMB: 10, types: [".pdf", ".docx", ".txt"] as const },
+  portfolio: { maxMB: DOCUMENT_MAX_MB, types: [".pdf", ".docx", ".txt"] as const },
 } as const;
 
 function validateFile(
   file: File,
   category: keyof typeof FILE_LIMITS
 ): string | null {
+  // Hard fail-closed ceiling shared with Edge / Python (TC-DOC-005).
+  if (file.size > DOCUMENT_MAX_BYTES) {
+    return `File is too large. Maximum size is ${DOCUMENT_MAX_MB} MB.`;
+  }
+  if (category === "resume") {
+    return validateDocumentFile(file, "resume");
+  }
   const { maxMB, types } = FILE_LIMITS[category];
   if (file.size > maxMB * 1024 * 1024) {
-    return `File too large. Maximum size is ${maxMB} MB.`;
+    return `File is too large. Maximum size is ${maxMB} MB.`;
   }
   const safeName = sanitizeFileName(file.name);
   if (!safeName || safeName.length === 0) {
     return "Invalid file name.";
   }
   const ext = `.${safeName.split(".").pop()?.toLowerCase()}`;
-  if (!types.includes(ext as never) && !(types as readonly string[]).includes(ext)) {
+  if (!(types as readonly string[]).includes(ext)) {
     return `Unsupported file type. Allowed: ${types.join(", ")}`;
   }
   return null;
@@ -442,8 +456,8 @@ function ResumeManager() {
     <div className="space-y-4">
       <UploadZone
         title="Drop resume here or browse"
-        description={`PDF, DOCX, or TXT · Max 10 MB · Up to ${MAX_UPLOAD_QUEUE} files at once`}
-        accept=".pdf,.docx,.doc,.txt,text/plain,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        description={`${RESUME_ACCEPT_LABEL} · Up to ${MAX_UPLOAD_QUEUE} files at once`}
+        accept={RESUME_ACCEPT}
         multiple
         loading={uploading}
         loadingContent={
@@ -1247,8 +1261,8 @@ function JDManager() {
               <div className="space-y-2">
                 <UploadZone
                   title="Drop JD file here or browse"
-                  description={`PDF, DOCX, or TXT · Max ${FILE_LIMITS.jd.maxMB} MB`}
-                  accept=".pdf,.docx,.doc,.txt,text/plain,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  description={RESUME_ACCEPT_LABEL}
+                  accept={RESUME_ACCEPT}
                   onFileSelect={(files) => {
                     const f = files[0];
                     if (f) void handleJdFile(f);
@@ -1319,7 +1333,7 @@ function JDManager() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CoverLetterManager — PDF/DOCX, 5 MB limit
+// CoverLetterManager — PDF/DOCX, 10 MB limit
 // ─────────────────────────────────────────────────────────────────────────────
 
 function CoverLetterManager() {
@@ -1364,8 +1378,8 @@ function CoverLetterManager() {
     <div className="space-y-4">
       <UploadZone
         title="Drop cover letter here or browse"
-        description="PDF, DOCX, or TXT · Max 5 MB"
-        accept=".pdf,.docx,.doc,.txt,text/plain,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        description={RESUME_ACCEPT_LABEL}
+        accept={RESUME_ACCEPT}
         loading={uploading}
         loadingContent={
           <div className="flex flex-col items-center gap-2">
@@ -1416,7 +1430,7 @@ function CoverLetterManager() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PortfolioManager — PDF/TXT file OR URL, 15 MB limit
+// PortfolioManager — preview only (no API persistence yet)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function PortfolioManager() {
@@ -1431,11 +1445,14 @@ function PortfolioManager() {
       return;
     }
     setFile(f);
-    toast.success("Portfolio file selected.");
+    toast.info("File preview only — portfolio upload is not saved yet.");
   }
 
   return (
     <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">
+        Portfolio linking is Coming soon / Not configured — selections stay on this page only and are not saved to your account.
+      </p>
       {/* Mode toggle */}
       <div className="flex gap-2">
         {(["file", "url"] as const).map((m) => (
@@ -1457,9 +1474,9 @@ function PortfolioManager() {
       {mode === "file" ? (
         <>
           <UploadZone
-            title="Drop portfolio PDF/TXT/HTML or browse"
-            description="PDF, DOCX, TXT or HTML · Max 15 MB"
-            accept=".pdf,.docx,.doc,.txt,.html"
+            title="Drop portfolio PDF/DOCX/TXT or browse"
+            description={`PDF, DOCX, or TXT · Max ${DOCUMENT_MAX_MB} MB · Preview only`}
+            accept={RESUME_ACCEPT}
             onFileSelect={(files) => {
               const f = files[0];
               if (f) handleFile(f);
@@ -1473,9 +1490,9 @@ function PortfolioManager() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-foreground truncate">{file.name}</p>
-                  <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB</p>
+                  <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB · not saved</p>
                 </div>
-                <Badge variant="emerald" size="sm">Selected</Badge>
+                <Badge variant="amber" size="sm">Preview only</Badge>
                 <button
                   onClick={() => setFile(null)}
                   className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-accent/5 transition-all"
@@ -1488,7 +1505,7 @@ function PortfolioManager() {
         </>
       ) : (
         <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">Portfolio URL</p>
+          <p className="text-xs text-muted-foreground">Portfolio URL (not saved)</p>
           <div className="flex gap-2">
             <div className="flex-1 relative">
               <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1507,7 +1524,7 @@ function PortfolioManager() {
             <p className="text-xs text-red-400">Please enter a valid URL (including https://)</p>
           )}
           {portfolioUrl && isValidUrl(portfolioUrl) && (
-            <p className="text-xs text-emerald-400">✓ Valid URL saved</p>
+            <p className="text-xs text-amber-400">Valid format — not saved (Coming soon / Not configured)</p>
           )}
         </div>
       )}

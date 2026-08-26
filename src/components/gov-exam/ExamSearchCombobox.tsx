@@ -89,6 +89,13 @@ export function ExamSearchCombobox({
   const [picked, setPicked] = useState<GovExamSearchResult | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const reqIdRef = useRef(0);
+  // Keep parent callbacks / family out of runSearch deps — inline onResultsChange
+  // (e.g. MockTestHub setState) would otherwise recreate runSearch every render,
+  // re-debounce, abort the in-flight request, and spin forever.
+  const onResultsChangeRef = useRef(onResultsChange);
+  onResultsChangeRef.current = onResultsChange;
+  const familyRef = useRef(family);
+  familyRef.current = family;
 
   const selected =
     (value && picked?.examId === value ? picked : null) ??
@@ -110,51 +117,57 @@ export function ExamSearchCombobox({
       abortRef.current = ac;
       const reqId = ++reqIdRef.current;
       const trimmed = q.trim();
+      const notify = onResultsChangeRef.current;
       if (trimmed.length === 1) {
         setState("idle");
-        onResultsChange?.([], { state: "idle", error: null, query: trimmed });
+        notify?.([], { state: "idle", error: null, query: trimmed });
         return;
       }
       if (!browseWhenEmpty && !trimmed) {
         setResults([]);
         setState("idle");
-        onResultsChange?.([], { state: "idle", error: null, query: "" });
+        notify?.([], { state: "idle", error: null, query: "" });
         return;
       }
       setState("loading");
       setError(null);
-      onResultsChange?.([], { state: "loading", error: null, query: trimmed });
+      notify?.([], { state: "loading", error: null, query: trimmed });
       try {
         const data = await searchGovExams(
-          { q: trimmed.length >= 2 ? trimmed : "", family: family || undefined },
+          {
+            q: trimmed.length >= 2 ? trimmed : "",
+            family: familyRef.current || undefined,
+          },
           { signal: ac.signal },
         );
-        if (reqId !== reqIdRef.current) return;
+        if (reqId !== reqIdRef.current || ac.signal.aborted) return;
         setResults(data.results);
         const nextState = data.results.length === 0 ? "empty" : "idle";
         setState(nextState);
         setActiveIndex(data.results.length > 0 ? 0 : -1);
-        onResultsChange?.(data.results, {
+        notify?.(data.results, {
           state: nextState,
           error: null,
           query: trimmed,
         });
       } catch (err) {
-        if (ac.signal.aborted) return;
-        if (reqId !== reqIdRef.current) return;
+        if (ac.signal.aborted || reqId !== reqIdRef.current) return;
+        const msg = err instanceof Error ? err.message : String(err ?? "");
+        // fetchEdge maps AbortError → "Request was cancelled…" — stay silent.
+        if (/cancelled|aborted/i.test(msg)) return;
         // Never keep a stale / fake list after a search failure (e.g. 503).
         setResults([]);
         const mapped = mapGovSearchError(err);
         setState("error");
         setError(mapped.message);
-        onResultsChange?.([], {
+        notify?.([], {
           state: "error",
           error: mapped.message,
           query: trimmed,
         });
       }
     },
-    [browseWhenEmpty, family, onResultsChange],
+    [browseWhenEmpty],
   );
 
   useEffect(() => {
@@ -162,7 +175,7 @@ export function ExamSearchCombobox({
       void runSearch(query);
     }, DEBOUNCE_MS);
     return () => window.clearTimeout(t);
-  }, [query, runSearch]);
+  }, [query, family, runSearch]);
 
   useEffect(() => {
     return () => abortRef.current?.abort();

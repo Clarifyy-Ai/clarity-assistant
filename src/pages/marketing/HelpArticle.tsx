@@ -8,11 +8,12 @@ import {
   getFallbackArticleBySlug,
   getFallbackArticlesByCategory,
   HELP_ARTICLES_FALLBACK,
+  resolveHelpArticleDisplay,
   type HelpArticleItem,
 } from "@/lib/constants/helpArticlesFallback";
-import { helpArticlesDB, type HelpArticlePublic } from "@/lib/supabase/database";
+import { helpArticlesDB } from "@/lib/supabase/database";
 
-type Article = HelpArticlePublic | HelpArticleItem;
+type Article = HelpArticleItem;
 
 const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
 
@@ -111,7 +112,19 @@ export default function HelpArticle() {
 
         if (cancelled) return;
 
-        const catRows = allPublished.filter((a) => a.category_slug === slug);
+        const catRows = allPublished
+          .filter((a) => a.category_slug === slug)
+          .map((a) =>
+            resolveHelpArticleDisplay({
+              slug: a.slug,
+              question: a.question,
+              answer: a.answer,
+              body_md: a.body_md,
+              category_slug: a.category_slug,
+              category_title: a.category_title,
+              sort_order: a.sort_order,
+            }),
+          );
         if (catRows.length > 0) {
           setCategoryArticles(catRows);
           setArticle(null);
@@ -125,14 +138,35 @@ export default function HelpArticle() {
         if (cancelled) return;
 
         if (data) {
-          setArticle(data);
+          setArticle(
+            resolveHelpArticleDisplay({
+              slug: data.slug,
+              question: data.question,
+              answer: data.answer,
+              body_md: data.body_md,
+              category_slug: data.category_slug,
+              category_title: data.category_title,
+              sort_order: data.sort_order,
+            }),
+          );
           setCategoryArticles(null);
           setRelated(
             allPublished
               .filter(
                 (a) => a.category_slug === data.category_slug && a.slug !== slug,
               )
-              .slice(0, 3),
+              .slice(0, 3)
+              .map((a) =>
+                resolveHelpArticleDisplay({
+                  slug: a.slug,
+                  question: a.question,
+                  answer: a.answer,
+                  body_md: a.body_md,
+                  category_slug: a.category_slug,
+                  category_title: a.category_title,
+                  sort_order: a.sort_order,
+                }),
+              ),
           );
           setLoading(false);
           return;

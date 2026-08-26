@@ -1,6 +1,7 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useScorecard } from "@/hooks/useScorecard";
 import { EmptyState } from "@/components/common/EmptyState";
+import { HybridSourceLine } from "@/components/hybrid/HybridSourceLine";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { scorecardStatusLabel } from "@/lib/analytics/scoreStatus";
@@ -165,6 +166,7 @@ export default function Scorecard() {
                 weekday: "long", year: "numeric", month: "long", day: "numeric",
               })}
             </p>
+            <HybridSourceLine source={scorecard.scoring_source} className="mt-1" />
           </div>
           <div className="flex items-center gap-2">
             {shareAllowed ? (

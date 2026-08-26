@@ -50,6 +50,7 @@ export default function SettingsNotifications() {
   );
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
 
   useEffect(() => {
     if (!profile) return;
@@ -85,6 +86,8 @@ export default function SettingsNotifications() {
   async function handleSave() {
     if (!user) return;
     setSaving(true);
+    setSaved(false);
+    setSaveFailed(false);
     try {
       await updateProfile({
         email_notifications: emailNotifications,
@@ -96,6 +99,7 @@ export default function SettingsNotifications() {
       setTimeout(() => setSaved(false), 2000);
       toast.success("Notification preferences saved");
     } catch (err) {
+      setSaveFailed(true);
       toast.error(err?.message ?? "Failed to save notification preferences.");
     } finally {
       setSaving(false);
@@ -173,13 +177,13 @@ export default function SettingsNotifications() {
 
       <div className="flex flex-wrap gap-2">
         <Button
-          variant={saved ? "success" : "primary"}
+          variant={saved ? "success" : saveFailed ? "danger" : "primary"}
           size="md"
           loading={saving}
           onClick={handleSave}
           leftIcon={saved ? <CheckCircle className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
         >
-          {saved ? "Saved!" : "Save preferences"}
+          {saving ? "Saving…" : saved ? "Saved!" : saveFailed ? "Failed — retry" : "Save preferences"}
         </Button>
         <Button
           variant="secondary"

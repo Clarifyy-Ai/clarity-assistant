@@ -95,6 +95,15 @@ function isAiTemporarilyUnavailableError(err: unknown): boolean {
   if (status === 502 || status === 503) return true;
 
   const code = errorCode(err).toUpperCase();
+  // AUTH failures must never be treated as provider outages.
+  if (
+    code === "AUTH_EXPIRED" ||
+    code === "AUTH_REQUIRED" ||
+    code === "AUTH_INVALID" ||
+    code === "UNAUTHORIZED"
+  ) {
+    return false;
+  }
   if (
     code === "AI_ERROR" ||
     code === "PROVIDER_UNAVAILABLE" ||
@@ -105,6 +114,13 @@ function isAiTemporarilyUnavailableError(err: unknown): boolean {
   }
 
   const msg = errorText(err).toLowerCase();
+  if (
+    msg.includes("auth_expired") ||
+    msg.includes("session expired") ||
+    msg.includes("sign in again")
+  ) {
+    return false;
+  }
   return (
     msg.includes("temporarily unavailable") ||
     msg.includes("credits refunded") ||
@@ -151,6 +167,18 @@ export function getAiUserFacingError(err: unknown): string {
       return `You need ${cost} credits, but only ${balance} are available.`;
     }
     return CREDITS_NEEDED_MESSAGE;
+  }
+
+  if (code === "AUTH_EXPIRED" || code === "AUTH_REQUIRED" || code === "AUTH_INVALID") {
+    return "Your session expired. Sign in again to continue.";
+  }
+
+  if (code === "RATE_LIMITED") {
+    return "Too many AI requests right now. Please wait a moment and try again.";
+  }
+
+  if (code === "INVALID_RESPONSE" || code === "AI_RESPONSE_INVALID") {
+    return AI_RESPONSE_INVALID_MESSAGE;
   }
 
   if (isInsufficientCreditsError(err) && code !== "PAYMENT_REQUIRED") {

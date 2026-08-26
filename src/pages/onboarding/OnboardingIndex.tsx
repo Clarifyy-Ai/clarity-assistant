@@ -119,12 +119,49 @@ export default function OnboardingIndex() {
     ...(restored?.data ?? {}),
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [hydratedFromProfile, setHydratedFromProfile] = useState(Boolean(restored));
 
   useEffect(() => {
     if (isProfileLoaded && isOnboarded && !isRerun) {
       navigate(ONBOARDING_COMPLETION_PATH, { replace: true });
     }
   }, [isProfileLoaded, isOnboarded, isRerun, navigate]);
+
+  // Restore step + known profile fields when localStorage draft is missing
+  // (new device / cleared storage) so users do not drop back to empty step 1.
+  useEffect(() => {
+    if (isRerun || !isProfileLoaded || !profile || hydratedFromProfile) return;
+    const stepRaw = Number((profile as { onboarding_step?: number }).onboarding_step ?? 1);
+    const step = stepRaw >= 2 ? 2 : 1;
+    setCurrentStep(step);
+    setData((prev) => {
+      const next: OnboardingData = {
+        ...prev,
+        targetRole: profile.target_role ?? prev.targetRole,
+        yearsOfExperience:
+          profile.years_of_exp ?? profile.experience_years ?? prev.yearsOfExperience,
+        preferredModel: profile.preferred_model ?? prev.preferredModel,
+        preferredLanguage:
+          profile.preferred_language ?? profile.stt_language ?? prev.preferredLanguage,
+        selectedMicId: profile.audio_input_device ?? prev.selectedMicId,
+        emailNotifications: profile.email_notifications ?? prev.emailNotifications,
+        industry: profile.industry ?? prev.industry,
+        interviewDate: profile.interview_date ?? prev.interviewDate,
+      };
+      const prefs =
+        profile.notification_prefs &&
+        typeof profile.notification_prefs === "object" &&
+        !Array.isArray(profile.notification_prefs)
+          ? (profile.notification_prefs as Record<string, unknown>)
+          : {};
+      if (typeof prefs.experience_level === "string" && prefs.experience_level) {
+        next.currentLevel = prefs.experience_level;
+      }
+      saveOnboardingDraft(step, next);
+      return next;
+    });
+    setHydratedFromProfile(true);
+  }, [isRerun, isProfileLoaded, profile, hydratedFromProfile]);
 
   useEffect(() => {
     if (!isRerun || !profile) return;
@@ -181,6 +218,7 @@ export default function OnboardingIndex() {
 
       await updateProfile({
         onboarding_completed: true,
+        onboarding_step: 99,
         target_role:          role,
         preferred_model:      toDbPreferredModel(finalData.preferredModel),
         experience_years:
@@ -214,18 +252,18 @@ export default function OnboardingIndex() {
           : {}),
       } as Record<string, unknown>);
 
+      // Best-effort welcome mail — never block or roll back completion
+      // (RESEND_API_KEY missing → 503 PROVIDER_UNAVAILABLE).
       if (user?.email) {
-        try {
-          await fetchEdgeJson("send-email", {
-            to: user.email,
-            type: "welcome",
-            data: {
-              name: profile?.full_name?.split(" ")[0] ?? "there",
-            },
-          });
-        } catch (emailErr) {
+        void fetchEdgeJson("send-email", {
+          to: user.email,
+          type: "welcome",
+          data: {
+            name: profile?.full_name?.split(" ")[0] ?? "there",
+          },
+        }).catch((emailErr) => {
           console.warn("[OnboardingIndex] welcome email failed:", emailErr);
-        }
+        });
       }
 
       await loadProfile();

@@ -159,38 +159,47 @@ export default function GenerateGovPaper(): React.ReactElement {
       ? selected?.pattern?.totalQuestions ?? questionCount
       : questionCount;
   // AI generation of missing questions is a Pro-and-above capability (rank >= 2).
-  // Python deterministic fill does not require Pro when the factory is reachable.
+  // Short banks fail closed to Custom Practice — never unlock Full Mock via
+  // fragile Python/hybrid heuristics (P0-02 inventory honesty).
   const aiFillAvailable = planRank(profile?.plan_id) >= 2;
-  const pythonFillAvailable =
-    serverAvailability?.generationPlan?.kind === "hybrid_deterministic" ||
-    serverAvailability?.generationPlan?.generator === "python_paper_factory" ||
-    serverAvailability?.fullMockAllowed === true;
   const inventoryAvailable =
     serverAvailability?.available ?? bank?.approvedPublicCount ?? 0;
+  const effectiveAiFill =
+    serverAvailability?.aiFillAllowed ?? aiFillAvailable;
   const inventory = decideQuestionInventory({
     available: inventoryAvailable,
     requested: requestedForConfig,
-    aiFillAvailable: serverAvailability?.aiFillAllowed ?? aiFillAvailable,
-    pythonFillAvailable:
-      Boolean(serverAvailability) &&
-      (pythonFillAvailable ||
-        serverAvailability?.generationPlan?.kind === "hybrid_deterministic"),
+    aiFillAvailable: effectiveAiFill,
   });
   const customPracticeMax =
     serverAvailability?.customPracticeMax ?? inventory.customPracticeMax;
+  // Full Mock only when bank covers OR AI fill is explicitly allowed.
+  // Do not trust generationPlan.kind === hybrid_deterministic alone.
   const fullMockAllowedByServer =
     serverAvailability == null
-      ? true
-      : serverAvailability.fullMockAllowed && !serverAvailability.blocked;
+      ? fullSimAvailable || aiFillAvailable
+      : !serverAvailability.blocked &&
+        (serverAvailability.available >= serverAvailability.requested ||
+          serverAvailability.aiFillAllowed === true);
   const canGenerateRequested =
     inventory.canGenerateRequested &&
     (basis !== "full_sim" || fullMockAllowedByServer);
+  const fullSimSelectable =
+    fullSimAvailable || effectiveAiFill || fullMockAllowedByServer;
+
+  // Deep-link / stale selection: never keep Full Mock selected when inventory blocks it.
+  useEffect(() => {
+    if (basis === "full_sim" && !fullSimSelectable) {
+      setBasis("latest_pattern");
+    }
+  }, [basis, fullSimSelectable]);
+
   const showInventoryShortage =
     inventory.reason === "short" ||
     inventory.reason === "empty" ||
     (serverAvailability != null &&
       serverAvailability.available < serverAvailability.requested &&
-      !serverAvailability.fullMockAllowed);
+      !serverAvailability.aiFillAllowed);
   const languageOptions =
     (serverAvailability?.pattern?.languages?.length
       ? serverAvailability.pattern.languages
@@ -238,81 +247,93 @@ export default function GenerateGovPaper(): React.ReactElement {
     setDifficulty("");
   }
 
-  // Hydrate selection from deep-link query params without auto-picking search hits.
+  // Hydrate selection from deep-link: prefer getExamDetails for truthful bankReadiness.
   useEffect(() => {
     const linkedExamId = params.get("examId");
     const linkedStageId = params.get("stageId");
     if (!linkedExamId || selectedExam) return;
     let cancelled = false;
-    void import("@/lib/gov-exam/api").then(({ getExamDetails, searchGovExams }) =>
-      searchGovExams({ q: params.get("code") ?? "" })
-        .then(async (d) => {
-          if (cancelled) return;
-          const hit = d.results.find((r) => r.examId === linkedExamId) ?? d.results[0];
+
+    function mapDetailsToSearchResult(
+      details: Awaited<ReturnType<typeof import("@/lib/gov-exam/api").getExamDetails>>,
+    ): GovExamSearchResult {
+      return {
+        resultType: "official_exam",
+        examId: details.exam.examId,
+        code: details.exam.code,
+        name: details.exam.name,
+        shortName: details.exam.shortName ?? null,
+        family: details.exam.family,
+        stateCode: details.exam.stateCode ?? null,
+        jurisdiction: details.exam.jurisdiction ?? null,
+        description: details.exam.description,
+        legacyExamType: details.exam.legacyExamType,
+        recruitingBody: details.body
+          ? {
+              id: details.body.id,
+              code: details.body.code,
+              name: details.body.name,
+              officialUrl: details.body.officialUrl,
+            }
+          : null,
+        aliases: details.exam.aliases ?? [],
+        stages: (details.stages ?? []).map((s) => ({
+          id: s.id,
+          code: s.code,
+          name: s.name,
+          sort_order: s.sort_order ?? 0,
+        })),
+        stage: details.primaryStage
+          ? {
+              id: details.primaryStage.id,
+              code: details.primaryStage.code,
+              name: details.primaryStage.name,
+              sort_order: details.primaryStage.sort_order ?? 0,
+            }
+          : details.stages?.[0],
+        pattern: details.activePatternSummary
+          ? {
+              version: details.activePatternSummary.version,
+              totalQuestions: details.activePatternSummary.totalQuestions,
+              totalMarks: details.activePatternSummary.totalMarks,
+              durationMinutes: details.activePatternSummary.durationMinutes,
+              negativeMark: details.activePatternSummary.negativeMark,
+              sourceUrl: details.activePatternSummary.sourceUrl,
+            }
+          : null,
+        languages: details.languages?.length ? details.languages : ["en"],
+        lastVerified: details.activePatternSummary?.effectiveDate ?? null,
+        verifiedAt:
+          details.exam.verifiedAt ?? details.activePatternSummary?.effectiveDate ?? null,
+        bankReadiness: details.bankReadiness ?? null,
+        primaryActions: ["view_exam", "generate_mock", "start_preparation"],
+      };
+    }
+
+    void import("@/lib/gov-exam/api").then(({ getExamDetails, searchGovExams }) => {
+      const detailsPromise = getExamDetails({ examId: linkedExamId });
+      const searchPromise = searchGovExams({ q: params.get("code") ?? "" });
+
+      void Promise.allSettled([detailsPromise, searchPromise]).then(([detailsResult, searchResult]) => {
+        if (cancelled) return;
+
+        if (detailsResult.status === "fulfilled") {
+          applyExamSelection(mapDetailsToSearchResult(detailsResult.value));
+          if (linkedStageId) setStageId(linkedStageId);
+          return;
+        }
+
+        if (searchResult.status === "fulfilled") {
+          const hit =
+            searchResult.value.results.find((r) => r.examId === linkedExamId) ??
+            searchResult.value.results[0];
           if (hit && hit.examId === linkedExamId) {
             applyExamSelection(hit);
             if (linkedStageId) setStageId(linkedStageId);
-            return;
           }
-          const details = await getExamDetails({ examId: linkedExamId });
-          if (cancelled) return;
-          const mapped: GovExamSearchResult = {
-            resultType: "official_exam",
-            examId: details.exam.examId,
-            code: details.exam.code,
-            name: details.exam.name,
-            shortName: details.exam.shortName ?? null,
-            family: details.exam.family,
-            stateCode: details.exam.stateCode ?? null,
-            jurisdiction: details.exam.jurisdiction ?? null,
-            description: details.exam.description,
-            legacyExamType: details.exam.legacyExamType,
-            recruitingBody: details.body
-              ? {
-                  id: details.body.id,
-                  code: details.body.code,
-                  name: details.body.name,
-                  officialUrl: details.body.officialUrl,
-                }
-              : null,
-            aliases: details.exam.aliases ?? [],
-            stages: (details.stages ?? []).map((s) => ({
-              id: s.id,
-              code: s.code,
-              name: s.name,
-              sort_order: s.sort_order ?? 0,
-            })),
-            stage: details.primaryStage
-              ? {
-                  id: details.primaryStage.id,
-                  code: details.primaryStage.code,
-                  name: details.primaryStage.name,
-                  sort_order: details.primaryStage.sort_order ?? 0,
-                }
-              : details.stages?.[0],
-            pattern: details.activePatternSummary
-              ? {
-                  version: details.activePatternSummary.version,
-                  totalQuestions: details.activePatternSummary.totalQuestions,
-                  totalMarks: details.activePatternSummary.totalMarks,
-                  durationMinutes: details.activePatternSummary.durationMinutes,
-                  negativeMark: details.activePatternSummary.negativeMark,
-                  sourceUrl: details.activePatternSummary.sourceUrl,
-                }
-              : null,
-            languages: details.languages?.length ? details.languages : ["en"],
-            lastVerified: details.activePatternSummary?.effectiveDate ?? null,
-            verifiedAt: details.exam.verifiedAt ?? details.activePatternSummary?.effectiveDate ?? null,
-            bankReadiness: details.bankReadiness ?? null,
-            primaryActions: ["view_exam", "generate_mock", "start_preparation"],
-          };
-          applyExamSelection(mapped);
-          if (linkedStageId) setStageId(linkedStageId);
-        })
-        .catch(() => {
-          /* leave combobox empty; user can search */
-        }),
-    );
+        }
+      });
+    });
     return () => {
       cancelled = true;
     };
@@ -444,7 +465,7 @@ export default function GenerateGovPaper(): React.ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examId, stageId]);
 
-  // Server-authoritative availability before charge.
+  // Server-authoritative availability before charge — also keep bank counts honest.
   useEffect(() => {
     if (!examId || !stageId || step < 2) return;
     let cancelled = false;
@@ -471,7 +492,33 @@ export default function GenerateGovPaper(): React.ReactElement {
       }),
     })
       .then((avail) => {
-        if (!cancelled) setServerAvailability(avail);
+        if (cancelled) return;
+        setServerAvailability(avail);
+        // Mirror approved count into selection so coverage labels stay truthful.
+        setSelectedExam((prev) => {
+          if (!prev || prev.examId !== examId) return prev;
+          const required =
+            prev.bankReadiness?.requiredQuestions ??
+            prev.pattern?.totalQuestions ??
+            avail.requested;
+          const approved = avail.available;
+          const status =
+            approved <= 0
+              ? ("empty" as const)
+              : approved >= required
+                ? ("ready" as const)
+                : ("partial" as const);
+          return {
+            ...prev,
+            bankReadiness: {
+              approvedPublicCount: approved,
+              publicCount: approved,
+              requiredQuestions: required,
+              status,
+              fullSimulationAvailable: status === "ready",
+            },
+          };
+        });
       })
       .catch(() => {
         if (!cancelled) setServerAvailability(null);
@@ -599,7 +646,23 @@ export default function GenerateGovPaper(): React.ReactElement {
       if (
         overrideCount == null &&
         mode === "generated_mock" &&
-        !avail.fullMockAllowed
+        (!avail.fullMockAllowed || avail.blocked)
+      ) {
+        toast.error(
+          inventoryAvailabilityMessage(avail.available) +
+            " Try Custom Practice Set.",
+        );
+        generatingRef.current = false;
+        setBusy(false);
+        return;
+      }
+      // Credit fail-closed: never charge Full Mock when bank is short unless AI fill
+      // is explicitly allowed. Ignore hybrid_deterministic heuristics.
+      if (
+        overrideCount == null &&
+        mode === "generated_mock" &&
+        avail.available < requested &&
+        !avail.aiFillAllowed
       ) {
         toast.error(
           inventoryAvailabilityMessage(avail.available) +
@@ -613,10 +676,20 @@ export default function GenerateGovPaper(): React.ReactElement {
         available: avail.available,
         requested,
         aiFillAvailable: avail.aiFillAllowed,
-        pythonFillAvailable:
-          avail.generationPlan?.kind === "hybrid_deterministic" ||
-          avail.fullMockAllowed,
       });
+      if (
+        overrideCount == null &&
+        mode === "generated_mock" &&
+        !liveInventory.canGenerateRequested
+      ) {
+        toast.error(
+          inventoryAvailabilityMessage(liveInventory.available) +
+            " Try Custom Practice Set.",
+        );
+        generatingRef.current = false;
+        setBusy(false);
+        return;
+      }
       if (!liveInventory.canGenerateRequested) {
         toast.error(inventoryAvailabilityMessage(liveInventory.available));
         generatingRef.current = false;
@@ -880,28 +953,42 @@ export default function GenerateGovPaper(): React.ReactElement {
                   id: "latest_pattern" as const,
                   label: "Custom Practice Set (approved bank)",
                   hint: "Honest bank-only practice sized to available inventory.",
+                  disabled: false,
                 },
-                { id: "quick" as const, label: "Quick practice (25 Q)", hint: null },
+                {
+                  id: "quick" as const,
+                  label: "Quick practice (25 Q)",
+                  hint: null,
+                  disabled: false,
+                },
                 {
                   id: "topic" as const,
                   label: "Topic-focused Custom Practice Set",
                   hint: "Verified bank topics only — never invents missing questions.",
+                  disabled: false,
                 },
                 {
                   id: "full_sim" as const,
-                  label: "Realistic Mock Exam (exact pattern)",
-                  hint: "Blueprint-accurate mock from approved bank + safe practice fill. Not an Official Previous Year Paper.",
+                  label: "Full Mock (exact pattern)",
+                  hint: "Only when the approved bank covers the full pattern, or AI fill is available on your plan. Otherwise choose Custom Practice.",
+                  disabled: !fullSimSelectable,
                 },
               ].map((opt) => (
                 <label
                   key={opt.id}
-                  className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm cursor-pointer hover:bg-muted/30"
+                  className={`flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm ${
+                    opt.disabled
+                      ? "opacity-60 cursor-not-allowed"
+                      : "cursor-pointer hover:bg-muted/30"
+                  }`}
                 >
                   <input
                     type="radio"
                     name="basis"
                     checked={basis === opt.id}
+                    disabled={opt.disabled}
                     onChange={() => {
+                      if (opt.disabled) return;
                       setBasis(opt.id);
                       if (opt.id === "quick") {
                         setQuestionCount(25);
@@ -926,11 +1013,9 @@ export default function GenerateGovPaper(): React.ReactElement {
                       <span className="block text-xs text-muted-foreground">
                         {bankCoverageLabel}
                         {!fullSimAvailable
-                          ? aiFillAvailable
+                          ? effectiveAiFill
                             ? " — bank shortfall filled by AI practice questions to the official blueprint"
-                            : inventory.mode === "hybrid_deterministic" || pythonFillAvailable
-                              ? " — bank shortfall filled by Python practice variants (never labeled official)"
-                              : " — bank is short; choose Custom Practice or enable practice fill"
+                            : " — bank is short; choose Custom Practice Set"
                           : ""}
                       </span>
                     )}
@@ -945,15 +1030,15 @@ export default function GenerateGovPaper(): React.ReactElement {
               )}
               {basis === "full_sim" && (
                 <p className="text-xs text-muted-foreground">
-                  Mode B — Realistic Mock Exam: approved bank first, then deterministic practice
-                  fill, then optional AI. Never presented as an Official Previous Year Paper.
+                  Full Mock uses the approved bank for the exact pattern
+                  {effectiveAiFill ? ", with optional AI fill for shortfall" : ""}.
+                  Never presented as an Official Previous Year Paper.
                 </p>
               )}
-              {!fullSimAvailable && !aiFillAvailable && inventory.mode === "blocked" && (
+              {!fullSimAvailable && !effectiveAiFill && inventory.mode === "blocked" && (
                 <p className="text-xs text-amber-700 dark:text-amber-400">
-                  Approved bank coverage is {bankCoverageLabel ?? "unknown"}. Full official-mode
-                  papers are not fabricated. Choose a Custom Practice Set from the approved bank,
-                  or Realistic Mock when practice fill is available.
+                  Approved bank coverage is {bankCoverageLabel ?? "unknown"}. Full Mock is not
+                  available. Choose a Custom Practice Set from the approved bank.
                 </p>
               )}
             </fieldset>
@@ -1089,8 +1174,8 @@ export default function GenerateGovPaper(): React.ReactElement {
                   {basis === "topic"
                     ? "Topic-focused Custom Practice Set"
                     : mode === "generated_mock"
-                      ? "Full pattern simulation"
-                      : "Custom practice"}
+                      ? "Full Mock"
+                      : "Custom Practice Set"}
                 </dd>
                 <dt className="text-muted-foreground">Questions</dt>
                 <dd>{requestedForConfig}</dd>

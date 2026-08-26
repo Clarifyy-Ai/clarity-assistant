@@ -131,6 +131,7 @@ export const AI_FUNCTION_CAPABILITY: Record<string, Capability> = {
   "create-exam-paper": "gov_exam_ai_fill",
   "parse-question-pdf": "mock_test",
   "sync-calendar": "calendar_sync",
+  "process-sprint-transcript": "detailed_debrief",
 };
 
 export function capabilityForFunction(functionName: string): Capability | null {

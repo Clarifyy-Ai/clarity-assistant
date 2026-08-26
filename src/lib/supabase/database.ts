@@ -112,6 +112,9 @@ const PROFILE_BOOT_COLUMNS = [
   "email",
   "full_name",
   "avatar_url",
+  "bio",
+  "website_url",
+  "experience_years",
   "credits",
   "plan_id",
   "subscription_status",
@@ -1046,6 +1049,9 @@ export const resumesDB = {
       .select("*")
       .eq("user_id", userId)
       .eq("content_hash", contentHash)
+      .not("content", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
     if (error) {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {

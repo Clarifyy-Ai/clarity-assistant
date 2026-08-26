@@ -27,7 +27,7 @@ export {
   unblockDeepgramTokenClient,
   isDeepgramTokenBlocked,
 } from "./deepgramToken";
-export { TranscriptionState, TRANSCRIPTION_STATUS_COPY } from "./transcriptionStates";
+export { TranscriptionState, TRANSCRIPTION_STATUS_COPY, deepgramStatusToTranscription, sttHealthToTranscription } from "./transcriptionStates";
 export type { DeepgramStreamOptions } from "./deepgramStream";
 
 // ─── Speech Analysis ──────────────────────────────────────────────────────────

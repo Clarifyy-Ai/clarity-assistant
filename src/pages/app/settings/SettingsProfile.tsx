@@ -12,10 +12,20 @@ import {
   User, Camera, Save, CheckCircle,
   Briefcase, MapPin, Globe, RotateCcw, Mail, Lock, Eye, EyeOff,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, isValidUrl } from "@/lib/utils";
 import { toast } from "sonner";
 import { getPasswordStrength } from "@/lib/validators/emailValidator";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
+
+function normalizeWebsiteUrl(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  if (!isValidUrl(candidate)) {
+    throw new Error("Enter a valid website URL (e.g. https://example.com).");
+  }
+  return candidate;
+}
 
 const AVATAR_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
 const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
@@ -59,6 +69,7 @@ export default function SettingsProfile() {
   const [targetRole, setTargetRole] = useState(profile?.target_role ?? "");
   const [saving,     setSaving]     = useState(false);
   const [saved,      setSaved]      = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [avatarUrl,  setAvatarUrl]  = useState(profile?.avatar_url ?? "");
   const [uploading,  setUploading]  = useState(false);
 
@@ -207,13 +218,26 @@ export default function SettingsProfile() {
   async function handleSave() {
     if (!user) return;
     setSaving(true);
+    setSaved(false);
+    setSaveFailed(false);
+
+    let websiteUrl: string | null;
+    try {
+      websiteUrl = normalizeWebsiteUrl(website);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Invalid website URL.";
+      toast.error(message);
+      setSaveFailed(true);
+      setSaving(false);
+      return;
+    }
 
     const yearsNum = EXPERIENCE_LEVELS.find((l) => l.label === experience)?.years ?? null;
     const updates: Record<string, unknown> = {
       full_name:        name.trim(),
       bio:              bio.trim(),
       timezone:         location.trim() || "UTC",
-      website_url:      website.trim() || null,
+      website_url:      websiteUrl,
       experience_years: yearsNum,
       target_role:      targetRole || null,
       avatar_url:       avatarUrl,
@@ -221,10 +245,12 @@ export default function SettingsProfile() {
 
     try {
       await updateProfile(updates as any);
+      if (websiteUrl) setWebsite(websiteUrl);
       setSaved(true);
       toast.success("Profile saved");
       setTimeout(() => setSaved(false), 2000);
     } catch (err: any) {
+      setSaveFailed(true);
       toast.error(err?.message ?? "Failed to save profile. Please try again.");
     } finally {
       setSaving(false);
@@ -504,7 +530,7 @@ export default function SettingsProfile() {
       </Card>
 
       <Button
-        variant={saved ? "success" : "primary"}
+        variant={saved ? "success" : saveFailed ? "danger" : "primary"}
         size="md"
         loading={saving}
         onClick={handleSave}
@@ -513,7 +539,7 @@ export default function SettingsProfile() {
           : <Save className="w-4 h-4" />
         }
       >
-        {saved ? "Saved!" : "Save changes"}
+        {saving ? "Saving…" : saved ? "Saved!" : saveFailed ? "Failed — retry" : "Save changes"}
       </Button>
     </SettingsPageShell>
   );

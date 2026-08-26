@@ -8,6 +8,12 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
+import {
+  APPROVED_CODING_LANGUAGES,
+  evaluationModeLabel,
+  languageLabel,
+  languageOptionLabel,
+} from "@/lib/coding/languages";
 import { PAGE_SHELL, STACK_GRID } from "@/lib/ui/responsivePage";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Code2 } from "lucide-react";
@@ -27,6 +33,7 @@ export default function CodingLabPage() {
   const [title, setTitle] = useState("Two number sum");
   const [description, setDescription] = useState("Return the sum of a two-element array via solve(input).");
   const [starter, setStarter] = useState("function solve(input) {\n  return 0;\n}\n");
+  const [language, setLanguage] = useState("javascript");
   const [loaded, setLoaded] = useState(false);
 
   async function load() {
@@ -48,10 +55,11 @@ export default function CodingLabPage() {
         title,
         description,
         difficulty: "EASY",
-        language: "javascript",
+        language,
         starter_code: starter,
         sample_input: "[2, 3]",
         sample_output: "5",
+        evaluation_mode: language === "javascript" ? "javascript_solve" : "stored_review",
         created_by: user.id,
         content_owner: user.id,
         source: "ORIGINAL",
@@ -87,8 +95,8 @@ export default function CodingLabPage() {
         badge="Preview"
         description={
           isPreview
-            ? "Preview — controlled JavaScript assessments with server-side scoring. Hidden tests are never shown."
-            : "Controlled JavaScript assessments with server-side scoring. Hidden tests are never shown. This is not unrestricted cloud execution."
+            ? "Preview — JavaScript is auto-scored on the server. TypeScript, Python, and Java are stored for review and are not executed. There is no multi-language sandbox. Hidden tests are never shown."
+            : "JavaScript solve() is auto-scored on the server. Other languages are not executed — submissions are stored for pending review. There is no multi-language sandbox. Hidden tests stay server-side."
         }
       />
       {isPreview && !isAdmin ? (
@@ -104,9 +112,24 @@ export default function CodingLabPage() {
         <h2 className="text-sm font-semibold">Create coding question</h2>
         <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title" />
         <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Problem statement" />
+        <div>
+          <label className="text-xs text-muted-foreground" htmlFor="admin-coding-lang">Language</label>
+          <select
+            id="admin-coding-lang"
+            value={language}
+            onChange={(e) => setLanguage(e.target.value)}
+            className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
+          >
+            {APPROVED_CODING_LANGUAGES.map((lang) => (
+              <option key={lang} value={lang}>
+                {languageOptionLabel(lang)}
+              </option>
+            ))}
+          </select>
+        </div>
         <Textarea className="font-mono text-xs" value={starter} onChange={(e) => setStarter(e.target.value)} />
         <Button onClick={() => void createQuestion()}>Create question</Button>
-        <p className="text-xs text-muted-foreground">Admin authoring enabled.</p>
+        <p className="text-xs text-muted-foreground">Admin authoring enabled. Only JavaScript is executed for scoring; other languages are not executed.</p>
       </Card>
       )}
       {isPreview ? (
@@ -122,7 +145,7 @@ export default function CodingLabPage() {
             <Card hover className="min-w-0">
               <h2 className="font-semibold">{q.title}</h2>
               <p className="text-sm text-muted-foreground">
-                {q.difficulty} · {q.language} · {q.evaluation_mode === "javascript_solve" ? "JS solve()" : "Stored for review"}
+                {q.difficulty} · {languageLabel(q.language)} · {evaluationModeLabel(q.evaluation_mode)}
               </p>
             </Card>
           </Link>

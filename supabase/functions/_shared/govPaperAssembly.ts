@@ -1,6 +1,12 @@
 /**
  * Bank-first paper assembly pipeline for gov_paper_generation_jobs.
  * Shared by create-exam-paper (waitUntil/inline) and process-paper-generation-job.
+ *
+ * Hybrid model: MATRIX `gov_exam_assemble` (database → python → optional AI).
+ * Durable / plan-driven — not request-scoped `executeHybridOperation`.
+ * On AI gap-fill failure or shortfall, always attempt Python select + bank
+ * reassembly when the plan allows (`pythonFallbackOnAiFailure` /
+ * `allowDeterministicFill`).
  */
 
 import { createServiceClient, refundCredits } from "./supabase.ts";
@@ -45,7 +51,10 @@ import {
 import {
   isPythonGovExamConfigured,
   pythonGovSelect,
+  pythonGovValidateQuestions,
 } from "./pythonGovExamClient.ts";
+import { decideRoute } from "./operationRouter.ts";
+import { recordOperationSource } from "./operationSource.ts";
 
 /**
  * Flattens `gov_exam_syllabus_versions.topics_json` (`[{ section, topics[] }]`) into a
@@ -741,13 +750,21 @@ export async function assembleClaimedPaperJob(
 
     const requestJson = (jobInput.request_json ?? {}) as Record<string, unknown>;
     const skipAiFill = requestJson.skipAiFill === true || requestJson.allowAiFill === false;
+    const allowDeterministicFill = requestJson.allowDeterministicFill === true;
     const userCanAiFill = hasCapability(userProfile?.plan_id, "gov_exam_ai_fill");
-    const allowAiFill = mode !== "official_previous" && userCanAiFill && !skipAiFill;
+    const assembleRoute = decideRoute({ operation: "gov_exam_assemble" });
+    const allowAiFill =
+      mode !== "official_previous" &&
+      userCanAiFill &&
+      !skipAiFill &&
+      assembleRoute.canUseAI;
     let aiFilledCount = 0;
     let aiFillError: string | undefined;
+    let usedPythonFallback = false;
     const correlationId = String(
       requestJson.correlationId ?? requestJson.correlation_id ?? job.id,
     );
+    const assemblyStartedAt = Date.now();
 
     if (allowAiFill && selected.length < blueprint.total_questions) {
       st = await stage(db, job.id, workerId, "generating_missing_slots");
@@ -801,7 +818,6 @@ export async function assembleClaimedPaperJob(
       }
       aiFilledCount = fill.added.length;
 
-      // AI shortfall → never leave the job spinning; fall back to Python select or bank.
       if (selected.length < blueprint.total_questions) {
         console.error(JSON.stringify({
           tag: "[GOV_EXAM] ai_generation_failed",
@@ -811,74 +827,91 @@ export async function assembleClaimedPaperJob(
           required: blueprint.total_questions,
           error: (aiFillError ?? "short_fill").slice(0, 240),
         }));
+      }
+    }
 
-        const need = blueprint.total_questions - selected.length;
-        const selectedIds = new Set(selected.map((r) => String(r.id)));
+    // MATRIX pythonFallbackOnAiFailure / allowDeterministicFill: AI shortfall OR
+    // AI skipped (hybrid_deterministic) → Python select + local bank reassembly.
+    // Previously this lived only inside the AI block, so deterministic plans never
+    // reached Python/bank fallback after a short bank select.
+    const shouldPythonBankFallback =
+      selected.length < blueprint.total_questions &&
+      mode !== "official_previous" &&
+      (
+        (allowAiFill && assembleRoute.pythonFallbackOnAiFailure) ||
+        allowDeterministicFill
+      );
 
-        if (isPythonGovExamConfigured() && job.stage_id) {
-          console.log(JSON.stringify({
-            tag: "[GOV_EXAM] python_fallback_started",
-            correlation_id: correlationId,
-            job_id: job.id,
-            need,
-          }));
-          const pySel = await pythonGovSelect({
-            exam_id: job.exam_id,
-            stage_id: job.stage_id,
-            language: job.language,
-            question_count: need,
-            seed: randomSeed,
-            correlation_id: correlationId,
-            job_id: job.id,
-            exclude_ids: [...selectedIds],
-          });
-          if (pySel.ok && pySel.data.question_ids.length > 0) {
-            const { data: pyRows } = await db
-              .from("questions")
-              .select(
-                "id, question_text, options, correct_answer, subject, topic, difficulty, source, source_type, source_year, is_public, is_verified",
-              )
-              .in("id", pySel.data.question_ids)
-              .eq("is_public", true)
-              .eq("publish_status", "published")
-              .eq("review_status", "approved");
-            for (const row of (pyRows ?? []) as GapFillRow[]) {
-              if (selected.length >= blueprint.total_questions) break;
-              const id = String(row.id);
-              if (selectedIds.has(id)) continue;
-              const sourceType = canonicalSourceType(row as unknown as Record<string, unknown>, aiQuestionIds);
-              if (!allowedSourceForMode(mode, sourceType)) continue;
-              selectedIds.add(id);
-              selected.push(row);
-            }
-          } else if (!pySel.ok) {
-            console.warn(JSON.stringify({
-              tag: "[GOV_EXAM] python_fallback_select_failed",
-              correlation_id: correlationId,
-              job_id: job.id,
-              code: pySel.error.code,
-            }));
-          }
-        }
+    if (shouldPythonBankFallback) {
+      const need = blueprint.total_questions - selected.length;
+      const selectedIds = new Set(selected.map((r) => String(r.id)));
 
-        // Local bank re-selection from already-fetched candidates.
-        if (selected.length < blueprint.total_questions) {
-          for (const row of candidates) {
+      if (isPythonGovExamConfigured() && job.stage_id) {
+        console.log(JSON.stringify({
+          tag: "[GOV_EXAM] python_fallback_started",
+          correlation_id: correlationId,
+          job_id: job.id,
+          need,
+          after_ai: allowAiFill,
+          allow_deterministic: allowDeterministicFill,
+        }));
+        const pySel = await pythonGovSelect({
+          exam_id: job.exam_id,
+          stage_id: job.stage_id,
+          language: job.language,
+          question_count: need,
+          seed: randomSeed,
+          correlation_id: correlationId,
+          job_id: job.id,
+          exclude_ids: [...selectedIds],
+        });
+        if (pySel.ok && pySel.data.question_ids.length > 0) {
+          usedPythonFallback = true;
+          const { data: pyRows } = await db
+            .from("questions")
+            .select(
+              "id, question_text, options, correct_answer, subject, topic, difficulty, source, source_type, source_year, is_public, is_verified",
+            )
+            .in("id", pySel.data.question_ids)
+            .eq("is_public", true)
+            .eq("publish_status", "published")
+            .eq("review_status", "approved");
+          for (const row of (pyRows ?? []) as GapFillRow[]) {
             if (selected.length >= blueprint.total_questions) break;
             const id = String(row.id);
             if (selectedIds.has(id)) continue;
             const sourceType = canonicalSourceType(row as unknown as Record<string, unknown>, aiQuestionIds);
             if (!allowedSourceForMode(mode, sourceType)) continue;
-            const text = String(row.question_text ?? "");
-            const options = normalizeMcqOptions(row.options);
-            const correctIndex = resolveCorrectIndex(row.correct_answer, options.length);
-            if (correctIndex == null) continue;
-            const fp = questionFingerprint(text, options);
-            if (seenFp.has(fp)) continue;
-            seenFp.add(fp);
             selectedIds.add(id);
             selected.push(row);
           }
+        } else if (!pySel.ok) {
+          console.warn(JSON.stringify({
+            tag: "[GOV_EXAM] python_fallback_select_failed",
+            correlation_id: correlationId,
+            job_id: job.id,
+            code: pySel.error.code,
+          }));
+        }
+      }
+
+      // Local bank re-selection from already-fetched candidates.
+      if (selected.length < blueprint.total_questions) {
+        for (const row of candidates) {
+          if (selected.length >= blueprint.total_questions) break;
+          const id = String(row.id);
+          if (selectedIds.has(id)) continue;
+          const sourceType = canonicalSourceType(row as unknown as Record<string, unknown>, aiQuestionIds);
+          if (!allowedSourceForMode(mode, sourceType)) continue;
+          const text = String(row.question_text ?? "");
+          const options = normalizeMcqOptions(row.options);
+          const correctIndex = resolveCorrectIndex(row.correct_answer, options.length);
+          if (correctIndex == null) continue;
+          const fp = questionFingerprint(text, options);
+          if (seenFp.has(fp)) continue;
+          seenFp.add(fp);
+          selectedIds.add(id);
+          selected.push(row);
         }
       }
     }
@@ -889,6 +922,54 @@ export async function assembleClaimedPaperJob(
     }
     if (st === "lost_lease") {
       return { ok: false, status: "failed", errorCode: "LEASE_LOST", error: "Lost job lease", httpStatus: 409 };
+    }
+
+    // Python canonical validation gate (wired product path for validate-questions).
+    if (isPythonGovExamConfigured() && selected.length > 0) {
+      const payloads = selected.map((row) => {
+        const options = normalizeMcqOptions(row.options);
+        const correctIndex = resolveCorrectIndex(row.correct_answer, options.length);
+        return {
+          id: String(row.id ?? ""),
+          question_text: String(row.question_text ?? ""),
+          options,
+          correct_index: correctIndex,
+          correct_answer: correctIndex != null ? String.fromCharCode(65 + correctIndex) : null,
+          subject: row.subject != null ? String(row.subject) : null,
+          topic: row.topic != null ? String(row.topic) : null,
+          difficulty: row.difficulty != null ? String(row.difficulty) : null,
+          language: job.language,
+          source: row.source != null ? String(row.source) : null,
+        };
+      });
+      const pyVal = await pythonGovValidateQuestions({
+        questions: payloads,
+        correlation_id: correlationId,
+        job_id: job.id,
+        language: job.language,
+        reject_near_duplicates: true,
+      });
+      if (pyVal.ok && pyVal.data.rejected_indices.length > 0) {
+        const drop = new Set(pyVal.data.rejected_indices);
+        const filtered = selected.filter((_, idx) => !drop.has(idx));
+        for (const idx of pyVal.data.rejected_indices) {
+          const reasons = pyVal.data.rejected_reasons[idx] ?? ["PYTHON_VALIDATION_REJECT"];
+          rejectedQuality.push({
+            id: String(selected[idx]?.id ?? idx),
+            reason: reasons[0] ?? "PYTHON_VALIDATION_REJECT",
+            score: 0,
+          });
+        }
+        selected.length = 0;
+        selected.push(...filtered);
+      } else if (!pyVal.ok) {
+        console.warn(JSON.stringify({
+          tag: "[GOV_EXAM] python_validate_questions_failed",
+          correlation_id: correlationId,
+          job_id: job.id,
+          code: pyVal.error.code,
+        }));
+      }
     }
 
     const requireExact = mode === "official_previous" || mode === "generated_mock";
@@ -1184,6 +1265,27 @@ export async function assembleClaimedPaperJob(
       },
       { workerId },
     );
+
+    const opSource =
+      usedPythonFallback || (aiFillError && aiFilledCount === 0)
+        ? "fallback"
+        : aiFilledCount > 0
+        ? "ai"
+        : "database";
+    await recordOperationSource({
+      operationId: job.id,
+      userId: job.user_id,
+      operationType: "gov_exam_assemble",
+      source: opSource,
+      fallbackReason: aiFillError
+        ? "ai_gap_fill_shortfall"
+        : usedPythonFallback
+        ? "python_bank_fallback"
+        : null,
+      executionMs: Date.now() - assemblyStartedAt,
+      status: "success",
+      correlationId,
+    });
 
     return {
       ok: true,

@@ -934,10 +934,12 @@ export default function TestSession() {
   }
 
   async function handleSubmit(autoSubmit = false) {
-    if (!testId || submittingRef.current) return;
-
+    if (!testId) return;
+    // Compare-and-set: block concurrent manual + timer auto-submit races.
+    if (submittingRef.current) return;
     submittingRef.current = true;
     setSubmitting(true);
+    setShowSubmitModal(false);
 
     try {
       await saveResponses({ throwOnError: true });
@@ -951,16 +953,14 @@ export default function TestSession() {
       toast.success(autoSubmit ? "Time's up! Test submitted." : "Test submitted.", {
         position: "top-center",
       });
-      setShowSubmitModal(false);
       navigate(resultsPathForTest(testId, test?.config));
     } catch (error) {
       submittingRef.current = false;
+      setSubmitting(false);
       console.error("[TestSession] submit failed:", error);
       toast.error(formatGovExamOperationError(error), {
         position: "top-center",
       });
-    } finally {
-      setSubmitting(false);
     }
   }
 
@@ -1157,7 +1157,11 @@ export default function TestSession() {
             variant="outline"
             size="sm"
             className="h-8 gap-1.5 px-2"
-            onClick={() => setShowSubmitModal(true)}
+            disabled={submitting}
+            onClick={() => {
+              if (submittingRef.current || submitting) return;
+              setShowSubmitModal(true);
+            }}
             aria-label="Submit test"
           >
             <Send className="h-4 w-4" aria-hidden />
@@ -1294,7 +1298,11 @@ export default function TestSession() {
               <Button
                 size="sm"
                 className="lg:hidden"
-                onClick={() => setShowSubmitModal(true)}
+                disabled={submitting}
+                onClick={() => {
+                  if (submittingRef.current || submitting) return;
+                  setShowSubmitModal(true);
+                }}
                 leftIcon={<Send className="h-4 w-4" />}
               >
                 Submit Test
@@ -1427,7 +1435,11 @@ export default function TestSession() {
                 {currentIndex >= questions.length - 1 ? (
                   <Button
                     className="shrink-0 bg-green-600 text-white shadow-md shadow-green-600/20 hover:bg-green-700"
-                    onClick={() => setShowSubmitModal(true)}
+                    disabled={submitting}
+                    onClick={() => {
+                      if (submittingRef.current || submitting) return;
+                      setShowSubmitModal(true);
+                    }}
                     leftIcon={<Send className="h-4 w-4" />}
                   >
                     Submit Test
@@ -1557,7 +1569,11 @@ export default function TestSession() {
             <Button
               size="lg"
               className="w-full text-base font-bold"
-              onClick={() => setShowSubmitModal(true)}
+              disabled={submitting}
+              onClick={() => {
+                if (submittingRef.current || submitting) return;
+                setShowSubmitModal(true);
+              }}
             >
               <Send className="mr-2 h-4 w-4" />
               Submit Test
@@ -1596,7 +1612,7 @@ export default function TestSession() {
         cancelLabel="Go back"
         variant="info"
         isLoading={submitting}
-        onConfirm={() => void handleSubmit(false)}
+        onConfirm={() => handleSubmit(false)}
       />
     </div>
   );

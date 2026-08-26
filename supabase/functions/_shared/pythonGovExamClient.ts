@@ -74,6 +74,36 @@ export type PythonProcessJobResult = {
   accepted?: boolean;
 };
 
+export type PythonValidateQuestionPayload = {
+  question_text: string;
+  options: unknown[];
+  correct_answer?: string | number | null;
+  correct_index?: number | null;
+  explanation?: string | null;
+  subject?: string | null;
+  topic?: string | null;
+  difficulty?: string | null;
+  language?: string | null;
+  source?: string | null;
+  metadata?: Record<string, unknown> | null;
+  id?: string | null;
+};
+
+export type PythonValidateQuestionsRequest = {
+  questions: PythonValidateQuestionPayload[];
+  correlation_id: string;
+  job_id?: string | null;
+  language?: string;
+  reject_near_duplicates?: boolean;
+};
+
+export type PythonValidateQuestionsResult = {
+  accepted_count: number;
+  rejected_count: number;
+  rejected_indices: number[];
+  rejected_reasons: Record<number, string[]>;
+};
+
 function env(name: string): string {
   return (Deno.env.get(name) ?? "").trim();
 }
@@ -118,6 +148,37 @@ export function resolvePythonGovExamSecret(): string | null {
 /** True when Edge can HMAC-call Python (URL + secret present). */
 export function isPythonGovExamConfigured(): boolean {
   return Boolean(resolvePythonGovExamBaseUrl() && resolvePythonGovExamSecret());
+}
+
+/**
+ * Whether a durable gov paper job should be tagged `python_paper_factory`
+ * so the Python poller (or HTTP process-job) owns it — not Edge assembler.
+ *
+ * Tag when the plan already chose Python, hybrid fill needs the factory,
+ * the caller prefers Python and a worker is available, or bank-only work
+ * should run on the configured Python path (PAPER_FACTORY_WORKER / HTTP).
+ */
+export function wantsPythonPaperFactoryGenerator(input: {
+  planGenerator: string;
+  planKind: string;
+  generatorPreference?: string | null;
+  pythonHttpConfigured: boolean;
+  paperFactoryWorkerEnabled?: boolean;
+}): boolean {
+  const pref = String(input.generatorPreference ?? "").trim().toLowerCase();
+  const preferPython =
+    pref === "python" ||
+    pref === "python_paper_factory" ||
+    pref === "factory" ||
+    pref === "py";
+  const pythonAvailable =
+    input.pythonHttpConfigured || input.paperFactoryWorkerEnabled === true;
+
+  if (input.planGenerator === "python_paper_factory") return true;
+  if (input.planKind === "hybrid_deterministic") return true;
+  if (preferPython && pythonAvailable) return true;
+  if (input.planKind === "bank_only" && pythonAvailable) return true;
+  return false;
 }
 
 function bytesToHex(buf: ArrayBuffer): string {
@@ -403,6 +464,57 @@ export async function pythonGovProcessJob(
       paper_id: (result.json.paper_id as string | null | undefined) ?? null,
       mock_test_id: (result.json.mock_test_id as string | null | undefined) ?? null,
       accepted: true,
+    },
+  };
+}
+
+/** Canonical Python validation gate — rejects invalid MCQs before publication. */
+export async function pythonGovValidateQuestions(
+  input: PythonValidateQuestionsRequest,
+): Promise<{ ok: true; data: PythonValidateQuestionsResult } | { ok: false; error: PythonGovExamError }> {
+  const correlationId = input.correlation_id || crypto.randomUUID();
+  const result = await signedFetch(
+    "POST",
+    "/internal/gov-exams/validate-questions",
+    {
+      questions: input.questions,
+      correlation_id: correlationId,
+      job_id: input.job_id ?? null,
+      language: input.language ?? "en",
+      reject_near_duplicates: input.reject_near_duplicates !== false,
+    },
+    {
+      timeoutMs: DEFAULT_TIMEOUT_MS,
+      correlationId,
+      operation: "validate-questions",
+    },
+  );
+
+  if (!result.ok) return result;
+
+  const j = result.json;
+  const rejectedRaw = (j.rejected ?? []) as Array<{
+    index?: number;
+    reasons?: string[];
+  }>;
+  const rejectedIndices: number[] = [];
+  const rejectedReasons: Record<number, string[]> = {};
+  for (const row of rejectedRaw) {
+    const index = Number(row.index);
+    if (!Number.isFinite(index)) continue;
+    rejectedIndices.push(index);
+    rejectedReasons[index] = Array.isArray(row.reasons)
+      ? row.reasons.map((r) => String(r))
+      : ["rejected"];
+  }
+
+  return {
+    ok: true,
+    data: {
+      accepted_count: asInt(j.accepted_count, input.questions.length - rejectedIndices.length),
+      rejected_count: asInt(j.rejected_count, rejectedIndices.length),
+      rejected_indices: rejectedIndices,
+      rejected_reasons: rejectedReasons,
     },
   };
 }

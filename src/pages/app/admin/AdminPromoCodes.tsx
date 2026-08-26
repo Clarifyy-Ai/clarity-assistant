@@ -12,13 +12,23 @@ import { adminActionFailedMessage, toAdminUserMessage } from "@/lib/admin/adminE
 
 type PromoRow = Tables<"promo_codes">;
 
+function parseBonusCredits(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return 0;
+  // Base-10 only so values like "0100" become 100, never octal / NaN → 0.
+  if (!/^\d+$/.test(trimmed)) return null;
+  const n = Number.parseInt(trimmed, 10);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return n;
+}
+
 export default function AdminPromoCodes() {
   const [rows, setRows] = useState<PromoRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [code, setCode] = useState("");
-  const [discount, setDiscount] = useState(10);
-  const [bonus, setBonus] = useState(0);
+  const [discount, setDiscount] = useState("10");
+  const [bonus, setBonus] = useState("0");
   const [maxRedemptions, setMaxRedemptions] = useState<string>("");
   const [validUntil, setValidUntil] = useState("");
 
@@ -46,16 +56,22 @@ export default function AdminPromoCodes() {
       toast.error("Code must be at least 4 characters");
       return;
     }
-    if (discount < 0 || discount > 100) {
+    const discountNum = Number.parseInt(discount.trim(), 10);
+    if (!Number.isFinite(discountNum) || discountNum < 0 || discountNum > 100) {
       toast.error("Discount must be 0–100");
+      return;
+    }
+    const bonusNum = parseBonusCredits(bonus);
+    if (bonusNum === null) {
+      toast.error("Bonus credits must be a whole number (e.g. 100 or 0100)");
       return;
     }
     const { data, error } = await supabase
       .from("promo_codes")
       .insert({
         code: trimmed,
-        discount_percent: discount,
-        bonus_credits: bonus,
+        discount_percent: discountNum,
+        bonus_credits: bonusNum,
         applies_to: "all",
         is_active: true,
         max_redemptions: maxRedemptions.trim() ? Number(maxRedemptions) : null,
@@ -70,11 +86,16 @@ export default function AdminPromoCodes() {
           action: "create",
           targetType: "promo_code",
           targetId: data.id,
-          newValue: { code: trimmed, discount_percent: discount },
+          newValue: {
+            code: trimmed,
+            discount_percent: discountNum,
+            bonus_credits: bonusNum,
+          },
         });
       }
-      toast.success("Promo code created");
+      toast.success(`Promo code created${bonusNum > 0 ? ` (+${bonusNum} bonus credits)` : ""}`);
       setCode("");
+      setBonus("0");
       setMaxRedemptions("");
       setValidUntil("");
       void load();
@@ -120,18 +141,21 @@ export default function AdminPromoCodes() {
             onChange={(e) => setCode(e.target.value)}
           />
           <input
-            type="number"
+            type="text"
+            inputMode="numeric"
             className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
             placeholder="% off"
             value={discount}
-            onChange={(e) => setDiscount(Number(e.target.value))}
+            onChange={(e) => setDiscount(e.target.value)}
           />
           <input
-            type="number"
+            type="text"
+            inputMode="numeric"
             className="rounded-lg border border-border bg-background px-3 py-2 text-sm"
-            placeholder="Bonus credits"
+            placeholder="Bonus credits (e.g. 100)"
             value={bonus}
-            onChange={(e) => setBonus(Number(e.target.value))}
+            onChange={(e) => setBonus(e.target.value)}
+            aria-label="Bonus credits"
           />
           <input
             type="number"
@@ -158,7 +182,7 @@ export default function AdminPromoCodes() {
             <tr>
               <th className="text-left p-3">Code</th>
               <th className="text-right p-3">% off</th>
-              <th className="text-right p-3">Bonus cr</th>
+              <th className="text-right p-3">Bonus credits</th>
               <th className="text-right p-3">Used</th>
               <th className="text-right p-3">Expires</th>
               <th className="text-right p-3">Status</th>
@@ -174,7 +198,9 @@ export default function AdminPromoCodes() {
                 <tr key={row.id} className="border-t border-border/60">
                   <td className="p-3 font-mono font-medium">{row.code}</td>
                   <td className="p-3 text-right">{row.discount_percent}%</td>
-                  <td className="p-3 text-right">{row.bonus_credits}</td>
+                  <td className="p-3 text-right font-mono">
+                    {Number(row.bonus_credits ?? 0).toLocaleString()}
+                  </td>
                   <td className="p-3 text-right">
                     {row.redemption_count}
                     {row.max_redemptions != null ? ` / ${row.max_redemptions}` : ""}

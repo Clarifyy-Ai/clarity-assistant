@@ -23,7 +23,6 @@ const MAX_TAG_LENGTH         = 30;
 
 const SUPPORTED_RESUME_TYPES: Record<string, string> = {
   "application/pdf":         "PDF",
-  "application/msword":      "DOC",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "DOCX",
   "text/plain":              "TXT",
 };
@@ -100,13 +99,13 @@ export function validateResumeFile(file: File): ResumeValidationResult {
     // Try extension fallback for browsers that don't report MIME correctly
     const ext = file.name.split(".").pop()?.toLowerCase();
     const extMap: Record<string, string> = {
-      pdf: "PDF", doc: "DOC", docx: "DOCX", txt: "TXT",
+      pdf: "PDF", docx: "DOCX", txt: "TXT",
     };
 
     if (!ext || !extMap[ext]) {
       return {
         valid: false,
-        error: "Unsupported file type. Please upload a PDF, DOCX, or DOC file.",
+        error: "Unsupported file type. Please upload a PDF, DOCX, or TXT file.",
       };
     }
 

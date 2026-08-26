@@ -8,7 +8,11 @@ from app.document_intelligence.schemas import JobRecord, JobResponse, JobState
 
 
 class JobRegistry:
-    """Small bounded in-process registry; durable queues are intentionally out of scope."""
+    """Bounded in-process registry for admin/ingest jobs only (exam-source, validate-paper).
+
+    Product document user flows use PostgreSQL ``document_processing_jobs`` via
+    ``durable_jobs`` — never this registry.
+    """
 
     def __init__(self, max_jobs: int = 2000) -> None:
         self._jobs: dict[str, JobRecord] = {}

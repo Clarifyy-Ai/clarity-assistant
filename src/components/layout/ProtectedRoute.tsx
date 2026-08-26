@@ -403,12 +403,21 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     );
   }
 
-  // 5) Onboarding check — wait for profile before allowing /app
+  // 5) Onboarding check — wait for profile before allowing /app (incl. Live).
+  // Source of truth is profiles.onboarding_completed (not persisted isOnboarded alone),
+  // so a stale local true cannot bypass the gate for incomplete accounts.
   if (requireOnboarded || requireOnboarding) {
     if (!isProfileLoaded) {
       return <AppLoadingFallback />;
     }
-    if (!isOnboarded) {
+    const completed = profile?.onboarding_completed === true;
+    if (!completed) {
+      logger.info(LogEvents.ROUTE_GUARD_DECISION, {
+        route: location.pathname,
+        authState: "onboarding_required",
+        outcome: "succeeded",
+        recoveryAction: "redirect_onboarding",
+      });
       return <Navigate to="/onboarding" state={{ from: location }} replace />;
     }
   }

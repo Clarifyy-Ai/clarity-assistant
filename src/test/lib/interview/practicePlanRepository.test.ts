@@ -74,6 +74,16 @@ describe("STAR rewrite credit and error mapping", () => {
     expect(isInsufficientCreditsError(err)).toBe(false);
   });
 
+  it("treats 503 provider unavailable the same as 502 on the client", () => {
+    const err = new ApiClientError({
+      message: "AI service temporarily unavailable. Credits refunded.",
+      status: 503,
+      code: "PROVIDER_UNAVAILABLE",
+    });
+    expect(isAiProviderUnavailableError(err)).toBe(true);
+    expect(isInsufficientCreditsError(err)).toBe(false);
+  });
+
   it("keeps 402 as insufficient credits", () => {
     const err = new ApiClientError({
       message: "Need credits",

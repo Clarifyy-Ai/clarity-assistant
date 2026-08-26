@@ -37,14 +37,13 @@ import {
 
 import {
   createServiceClient,
-  deductCreditsAtomic,
-  refundCredits,
 } from "../_shared/supabase.ts";
 
 import { logAICost } from "../_shared/aiProvider.ts";
-import { buildGeminiStreamUrl, type GeminiMessage } from "../_shared/gemini.ts";
+import { geminiChat, type GeminiMessage } from "../_shared/gemini.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { callPythonProcess } from "../_shared/pythonClient.ts";
+import { executeHybridOperation } from "../_shared/hybridExecute.ts";
 import {
   buildToneStyleSystemAddon,
   deterministicCoachChatReply,
@@ -566,82 +565,12 @@ Deno.serve(async (req: Request) => {
   }
 
   const idempotencyKey = getIdempotencyKey(req);
-  const creditResult = await deductCreditsAtomic({
-    userId: user.id,
-    action: "coach_message",
-    cost: CREDIT_COST,
-    sessionId: body.session_id,
-    idempotencyKey,
-  });
 
-  if (!creditResult.success) {
-    const isInsufficient = (creditResult.error ?? "")
-      .toLowerCase()
-      .includes("insufficient");
-
-    await logAiAudit({
-      req,
-      userId: user.id,
-      action: "AI_COACH_CHAT",
-      sessionId: body.session_id,
-      status: "failure",
-      metadata: {
-        reason: creditResult.error ?? "Credit deduction failed.",
-        cost: CREDIT_COST,
-        correlationId,
-        operationId,
-      },
-    });
-
-    return json(corsHeaders, isInsufficient ? 402 : 500, {
-      success: false,
-      error: isInsufficient
-        ? "Insufficient credits."
-        : "Credit deduction failed.",
-      code: isInsufficient ? "PAYMENT_REQUIRED" : "CREDIT_DEDUCTION_FAILED",
-      correlation_id: correlationId,
-    });
-  }
-
-  // Persist user message only after the credit reservation succeeds.
-  const { data: userMsg, error: userMsgErr } = await db
-    .from("coach_messages")
-    .insert({
-      conversation_id: conversationId,
-      session_id: body.session_id,
-      user_id: user.id,
-      role: "user",
-      content: body.message,
-      operation_id: operationId,
-      source: null,
-      status: "complete",
-    })
-    .select("id")
-    .single();
-
-  if (userMsgErr || !userMsg?.id) {
-    console.error("[ai-coach-chat] insert user message failed", userMsgErr);
-    await refundCredits({
-      userId: user.id,
-      cost: CREDIT_COST,
-      reason: "ai_coach_chat user message persistence failed",
-      sessionId: body.session_id,
-    });
-    return json(corsHeaders, 500, {
-      success: false,
-      error: "Could not save message.",
-      code: "DB_ERROR",
-      correlation_id: correlationId,
-    });
-  }
-
-  // Load history excluding the message we just inserted (or include prior only)
+  // Load prior history (newest window → chronological) before hybrid.
   const { data: historyRows } = await db
     .from("coach_messages")
     .select("id, role, content")
     .eq("conversation_id", conversationId)
-    .neq("id", userMsg.id)
-    // Fetch the newest bounded window, then restore chronological order for the model.
     .order("created_at", { ascending: false })
     .limit(HISTORY_LIMIT);
 
@@ -653,11 +582,148 @@ Deno.serve(async (req: Request) => {
     hintStyle,
   )}`;
   const messages = buildGeminiMessages(body, history);
+  const aiStartMs = Date.now();
 
-  const encoder = new TextEncoder();
+  type CoachHybridData = {
+    reply: string;
+    source: "ai" | "python" | "deterministic";
+    provider: string;
+    model: string;
+  };
+
+  const hybridResult = await executeHybridOperation<CoachHybridData>({
+    req,
+    auth: { userId: user.id, planId },
+    operation: "practice_coach_help",
+    idempotencyKey,
+    creditCost: CREDIT_COST,
+    creditAction: "coach_message",
+    body: {
+      session_id: body.session_id,
+      conversation_id: conversationId,
+      message: body.message,
+      context: body.context,
+      coach_tone: coachTone,
+      hint_style: hintStyle,
+    },
+    runAi: async () => {
+      if (!SERVER_GEMINI_API_KEY.trim()) {
+        throw new Error("Gemini API key missing");
+      }
+      const text = await geminiChat(
+        messages,
+        systemPrompt,
+        0.6,
+        512,
+        model,
+      );
+      const reply = sanitizeText(text, 4_000);
+      if (!reply.trim()) {
+        throw new Error("AI returned empty coach reply");
+      }
+      return {
+        reply,
+        source: "ai" as const,
+        provider: "gemini",
+        model,
+      };
+    },
+    runPython: async (ctx) => {
+      const recentHistory = history
+        .map((item) =>
+          `${item.role === "coach" ? "Coach" : "Candidate"}: ${item.content}`
+        )
+        .join("\n");
+      const pythonCoach = await callPythonProcess({
+        operation: "practice_coach",
+        operationId: ctx.operationId,
+        correlationId: ctx.correlationId,
+        payload: {
+          operation_type: "coach_chat",
+          question: body.context.current_question,
+          message: body.message,
+          transcript: [body.context.recent_transcript, recentHistory]
+            .filter(Boolean)
+            .join("\n"),
+          resume_context: body.context.resume_context,
+        },
+      });
+      if (!pythonCoach.ok) return null;
+      const normalized = normalizePythonCoachData(pythonCoach.data);
+      if (!normalized?.reply?.trim()) return null;
+      return {
+        reply: sanitizeText(normalized.reply, 4_000),
+        source: "python" as const,
+        provider: "python",
+        model: "python",
+      };
+    },
+    runDeterministic: async () => {
+      const det = deterministicCoachChatReply({
+        question: body.context.current_question,
+        message: body.message,
+      });
+      return {
+        reply: sanitizeText(det, 4_000),
+        source: "deterministic" as const,
+        provider: "deterministic",
+        model: "deterministic",
+      };
+    },
+    validate: async (data) => {
+      if (!data.reply?.trim()) {
+        throw new Error("Empty coach reply");
+      }
+      return data;
+    },
+    aiMeta: { provider: "gemini", modelVersion: model },
+  });
+
+  if (!hybridResult.ok) {
+    await logAiAudit({
+      req,
+      userId: user.id,
+      action: "AI_COACH_CHAT",
+      sessionId: body.session_id,
+      status: "failure",
+      metadata: {
+        reason: String(hybridResult.code),
+        correlationId: hybridResult.correlationId,
+        operationId,
+      },
+    });
+    // Structured hybridFailure / AI_PROVIDER_UNAVAILABLE — no stuck Generating.
+    return hybridResult.response;
+  }
+
+  const hybridOpId = hybridResult.operationId;
+  const reply = hybridResult.data.reply;
+  const source = hybridResult.data.source;
+  const provider = hybridResult.data.provider;
+  const replyModel = hybridResult.data.model;
+
+  // Persist messages only after hybrid success (single credit already finalized).
+  const { data: userMsg, error: userMsgErr } = await db
+    .from("coach_messages")
+    .insert({
+      conversation_id: conversationId,
+      session_id: body.session_id,
+      user_id: user.id,
+      role: "user",
+      content: body.message,
+      operation_id: hybridOpId,
+      source: null,
+      status: "complete",
+    })
+    .select("id")
+    .single();
+
+  if (userMsgErr || !userMsg?.id) {
+    console.error("[ai-coach-chat] insert user message failed", userMsgErr);
+    // Credits already spent for successful generation — still return SSE reply.
+  }
+
   let coachMessageId = crypto.randomUUID();
-
-  // Pre-create pending coach message row
   const { data: coachMsgRow } = await db
     .from("coach_messages")
     .insert({
@@ -666,10 +732,10 @@ Deno.serve(async (req: Request) => {
       session_id: body.session_id,
       user_id: user.id,
       role: "coach",
-      content: "",
-      operation_id: operationId,
-      source: "ai",
-      status: "pending",
+      content: reply,
+      operation_id: hybridOpId,
+      source,
+      status: "complete",
     })
     .select("id")
     .single();
@@ -678,11 +744,45 @@ Deno.serve(async (req: Request) => {
     coachMessageId = coachMsgRow.id as string;
   }
 
+  await db
+    .from("coach_conversations")
+    .update({ updated_at: new Date().toISOString() })
+    .eq("id", conversationId);
+
+  void logAICost(db, {
+    userId: user.id,
+    action: "coach_message",
+    model: source === "ai" ? model : source,
+    inputTokens: Math.ceil((systemPrompt + body.message).length / 4),
+    outputTokens: Math.ceil(reply.length / 4),
+    latencyMs: Date.now() - aiStartMs,
+    wasFallback: source !== "ai",
+  });
+
+  await logAiAudit({
+    req,
+    userId: user.id,
+    action: "AI_COACH_CHAT",
+    sessionId: body.session_id,
+    status: "success",
+    metadata: {
+      correlationId: hybridResult.correlationId,
+      operationId: hybridOpId,
+      conversationId,
+      cost: CREDIT_COST,
+      source,
+      provider,
+      model: replyModel,
+      hybrid_source: hybridResult.source,
+    },
+  });
+
+  const encoder = new TextEncoder();
   const responseHeaders = new Headers(corsHeaders);
   responseHeaders.set("Content-Type", "text/event-stream");
   responseHeaders.set("Cache-Control", "no-store");
   responseHeaders.set("Connection", "keep-alive");
-  responseHeaders.set("X-Correlation-Id", correlationId);
+  responseHeaders.set("X-Correlation-Id", hybridResult.correlationId);
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -700,280 +800,29 @@ Deno.serve(async (req: Request) => {
             type: "meta",
             conversation_id: conversationId,
             message_id: coachMessageId,
-            correlation_id: correlationId,
+            correlation_id: hybridResult.correlationId,
           }),
         ),
       );
 
-      let fullReply = "";
-      let source: "ai" | "python" | "deterministic" = "ai";
-      let provider = "gemini";
-      let sentAnyChunk = false;
-      const aiStartMs = Date.now();
+      await streamTextChunks(reply, enqueue, encoder);
 
-      const finalizeSuccess = async () => {
-        const reply = sanitizeText(fullReply, 4_000) ||
-          "Sorry, I’m having trouble responding right now. Please try again.";
-        fullReply = reply;
-
-        await db
-          .from("coach_messages")
-          .update({
-            content: reply,
+      enqueue(
+        encoder.encode(
+          sseEncode({
+            type: "done",
+            success: true,
+            conversation_id: conversationId,
+            message_id: coachMessageId,
+            reply,
             source,
-            status: "complete",
-          })
-          .eq("id", coachMessageId);
-
-        await db
-          .from("coach_conversations")
-          .update({ updated_at: new Date().toISOString() })
-          .eq("id", conversationId);
-
-        void logAICost(db, {
-          userId: user.id,
-          action: "coach_message",
-          model: source === "ai" ? model : source,
-          inputTokens: Math.ceil(
-            (systemPrompt + body.message).length / 4,
-          ),
-          outputTokens: Math.ceil(reply.length / 4),
-          latencyMs: Date.now() - aiStartMs,
-          wasFallback: source !== "ai",
-        });
-
-        await logAiAudit({
-          req,
-          userId: user.id,
-          action: "AI_COACH_CHAT",
-          sessionId: body.session_id,
-          status: "success",
-          metadata: {
-            correlationId,
-            operationId,
-            conversationId,
-            cost: CREDIT_COST,
-            balanceAfter: creditResult.balanceAfter ?? null,
-            source,
+            correlation_id: hybridResult.correlationId,
             provider,
-            model,
-          },
-        });
-
-        enqueue(
-          encoder.encode(
-            sseEncode({
-              type: "done",
-              success: true,
-              conversation_id: conversationId,
-              message_id: coachMessageId,
-              reply,
-              source,
-              correlation_id: correlationId,
-              provider,
-              model: source === "ai" ? model : source,
-            }),
-          ),
-        );
-        controller.close();
-      };
-
-      const failAll = async (reason: string) => {
-        await refundCredits({
-          userId: user.id,
-          cost: CREDIT_COST,
-          reason: `ai_coach_chat failure: ${reason}`,
-          sessionId: body.session_id,
-        });
-
-        await db
-          .from("coach_messages")
-          .update({ status: "failed", content: "" })
-          .eq("id", coachMessageId);
-
-        await logAiAudit({
-          req,
-          userId: user.id,
-          action: "AI_COACH_CHAT",
-          sessionId: body.session_id,
-          status: "failure",
-          metadata: { reason, correlationId, operationId },
-        });
-
-        enqueue(
-          encoder.encode(
-            sseEncode({
-              type: "error",
-              success: false,
-              error: "Your coach is temporarily unavailable. Please retry.",
-              code: "AI_UNAVAILABLE",
-              correlation_id: correlationId,
-            }),
-          ),
-        );
-        controller.close();
-      };
-
-      const runFallbackChain = async (): Promise<boolean> => {
-        const recentHistory = history
-          .map((item) => `${item.role === "coach" ? "Coach" : "Candidate"}: ${item.content}`)
-          .join("\n");
-        const pythonCoach = await callPythonProcess({
-          operation: "practice_coach",
-          operationId: `coach:${operationId}`,
-          correlationId,
-          payload: {
-            operation_type: "coach_chat",
-            question: body.context.current_question,
-            message: body.message,
-            transcript: [body.context.recent_transcript, recentHistory]
-              .filter(Boolean)
-              .join("\n"),
-            resume_context: body.context.resume_context,
-          },
-        });
-
-        if (pythonCoach.ok) {
-          const normalized = normalizePythonCoachData(pythonCoach.data);
-          if (normalized?.reply) {
-            source = "python";
-            provider = "python";
-            fullReply = normalized.reply;
-            await streamTextChunks(fullReply, enqueue, encoder);
-            sentAnyChunk = true;
-            return true;
-          }
-        }
-
-        const det = deterministicCoachChatReply({
-          question: body.context.current_question,
-          message: body.message,
-        });
-        source = "deterministic";
-        provider = "deterministic";
-        fullReply = det;
-        await streamTextChunks(fullReply, enqueue, encoder);
-        sentAnyChunk = true;
-        return true;
-      };
-
-      try {
-        if (!SERVER_GEMINI_API_KEY.trim()) {
-          const ok = await runFallbackChain();
-          if (ok) await finalizeSuccess();
-          else await failAll("No Gemini key and fallback failed");
-          return;
-        }
-
-        const geminiUrl = buildGeminiStreamUrl(model);
-        const geminiPayload = {
-          contents: messages,
-          systemInstruction: {
-            parts: [{ text: systemPrompt }],
-          },
-          generationConfig: {
-            temperature: 0.6,
-            maxOutputTokens: 512,
-          },
-        };
-
-        let geminiResponse: Response;
-        try {
-          geminiResponse = await fetch(geminiUrl, {
-            method: "POST",
-            signal: req.signal,
-            headers: {
-              "Content-Type": "application/json",
-              "x-goog-api-key": SERVER_GEMINI_API_KEY,
-            },
-            body: JSON.stringify(geminiPayload),
-          });
-        } catch (netErr) {
-          console.error("[ai-coach-chat] Gemini network error", netErr);
-          const ok = await runFallbackChain();
-          if (ok) await finalizeSuccess();
-          else await failAll("Gemini network + fallback failed");
-          return;
-        }
-
-        if (!geminiResponse.ok || !geminiResponse.body) {
-          const errText = await geminiResponse.text().catch(() => "");
-          console.error(
-            "[ai-coach-chat] Gemini HTTP error",
-            geminiResponse.status,
-            errText.slice(0, 400),
-          );
-          const ok = await runFallbackChain();
-          if (ok) await finalizeSuccess();
-          else await failAll("Gemini HTTP + fallback failed");
-          return;
-        }
-
-        const reader = geminiResponse.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true }).replace(/\r/g, "");
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-
-          for (const line of lines) {
-            if (!line.startsWith("data:")) continue;
-            const data = line.slice(5).trim();
-            if (!data || data === "[DONE]") continue;
-            try {
-              const parsed = JSON.parse(data) as {
-                candidates?: Array<{
-                  content?: { parts?: Array<{ text?: string }> };
-                }>;
-              };
-              const chunk = parsed.candidates?.[0]?.content?.parts
-                ?.map((p) => p.text ?? "")
-                .join("") ?? "";
-              if (chunk) {
-                fullReply += chunk;
-                sentAnyChunk = true;
-                enqueue(encoder.encode(sseEncode({ text: chunk })));
-              }
-            } catch {
-              /* ignore malformed SSE */
-            }
-          }
-        }
-
-        if (!fullReply.trim()) {
-          // Empty AI → fallback (still one credit)
-          const ok = await runFallbackChain();
-          if (ok) await finalizeSuccess();
-          else await failAll("Empty Gemini + fallback failed");
-          return;
-        }
-
-        source = "ai";
-        provider = "gemini";
-        await finalizeSuccess();
-      } catch (err) {
-        console.error("[ai-coach-chat] stream error", err);
-        if (!sentAnyChunk) {
-          try {
-            const ok = await runFallbackChain();
-            if (ok) {
-              await finalizeSuccess();
-              return;
-            }
-          } catch {
-            /* fall through */
-          }
-          await failAll(err instanceof Error ? err.message : "stream error");
-        } else {
-          // Partial content delivered — keep credits, finalize what we have
-          source = "ai";
-          await finalizeSuccess();
-        }
-      }
+            model: replyModel,
+          }),
+        ),
+      );
+      controller.close();
     },
   });
 

@@ -17,7 +17,9 @@ import {
   RATE_LIMIT_PRESETS,
 } from "../_shared/rateLimit.ts";
 import { isPythonConfigured, pythonFetch } from "../_shared/pythonClient.ts";
+import { decideRoute } from "../_shared/operationRouter.ts";
 
+// MATRIX document_process.creditCostKey → parse_document
 const COST = creditCost("parse_document");
 
 function json(req: Request, body: unknown, status = 200) {
@@ -59,6 +61,11 @@ Deno.serve(async (req) => {
     const capability = await requireCapabilityForFunction(profile?.plan_id, "parse-document", req);
     if (capability) return capability;
 
+    // MATRIX document_process: preferredOrder python → ai; durableJob true.
+    // Gate messaging/ordering from decideRoute; still enqueue a durable job when Python is up.
+    const route = decideRoute({ operation: "document_process" });
+    const pythonConfigured = route.canUsePython && isPythonConfigured();
+
     const { data: existing } = await db
       .from("document_processing_jobs")
       .select("id, status, result_reference, warnings, error_code, error_message, attempt_count, credits_reserved")
@@ -86,16 +93,15 @@ Deno.serve(async (req) => {
     const validation = validateDocumentRecord(document, user.id);
     if (!validation.ok) return json(req, { success: false, error: safeError(validation.code, validation.message, "validation", correlationId) }, 422);
 
-    // The library parser endpoint is the safe synchronous fallback. Do not
-    // reserve credits or create a durable job when no Python worker exists.
-    // This prevents an orphaned reservation and lets the client invoke the
-    // non-AI deterministic parser path.
-    if (!isPythonConfigured()) {
+    // Honest sync-fallback signal: no Python worker → do not reserve credits or
+    // enqueue a durable job. Client must call the non-AI parse-document path.
+    if (!pythonConfigured) {
       return json(req, {
         success: true,
         jobId: null,
         state: "uploaded",
         pythonConfigured: false,
+        preferredOrder: route.preferredOrder,
         correlationId,
       }, 202);
     }
@@ -141,7 +147,7 @@ Deno.serve(async (req) => {
       if (winnerByKey) return json(req, { success: true, idempotent: true, jobId: winnerByKey.id, ...winnerByKey }, 200);
 
       // Also reuse any still-active job for this document (refresh / double-submit).
-      const { data: activeForDoc } = await db.from("document_processing_jobs")
+      const { data: activeForDocRace } = await db.from("document_processing_jobs")
         .select("id, status, attempt_count, created_at")
         .eq("owner_id", user.id)
         .eq("document_id", documentId)
@@ -149,8 +155,8 @@ Deno.serve(async (req) => {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (activeForDoc) {
-        return json(req, { success: true, idempotent: true, jobId: activeForDoc.id, ...activeForDoc }, 200);
+      if (activeForDocRace) {
+        return json(req, { success: true, idempotent: true, jobId: activeForDocRace.id, ...activeForDocRace }, 200);
       }
 
       await refundCredits({ userId: user.id, cost: COST, reason: `refund_document_job_create:${documentId}` });
@@ -158,51 +164,50 @@ Deno.serve(async (req) => {
     }
 
     // Best-effort notify Python worker. Durable job status remains authoritative in DB.
-    if (isPythonConfigured()) {
-      void pythonFetch("/internal/jobs/document", {
-        method: "POST",
-        body: {
-          job_id: job.id,
-          document_id: documentId,
-          owner_id: user.id,
-          operation: "parse",
-          correlation_id: correlationId,
-          storage_reference: {
-            bucket: "documents",
-            path: document.storage_path,
-            content_hash: document.content_hash,
-            file_category: document.file_category,
-            mime_type: document.mime_type,
-          },
+    void pythonFetch("/internal/jobs/document", {
+      method: "POST",
+      body: {
+        job_id: job.id,
+        document_id: documentId,
+        owner_id: user.id,
+        operation: "parse",
+        correlation_id: correlationId,
+        storage_reference: {
+          bucket: "documents",
+          path: document.storage_path,
+          content_hash: document.content_hash,
+          file_category: document.file_category,
+          mime_type: document.mime_type,
         },
-        requestId: correlationId,
-        safeRetry: false,
-      }).then((res) => {
-        console.log(JSON.stringify({
-          phase: "PYTHON_DISPATCH",
-          correlationId,
-          jobId: job.id,
-          documentId,
-          ok: res.ok,
-          status: res.status,
-        }));
-      }).catch((notifyErr) => {
-        console.warn(JSON.stringify({
-          phase: "PYTHON_DISPATCH",
-          correlationId,
-          jobId: job.id,
-          documentId,
-          error: notifyErr instanceof Error ? notifyErr.message : String(notifyErr),
-        }));
-      });
-    }
+      },
+      requestId: correlationId,
+      safeRetry: false,
+    }).then((res) => {
+      console.log(JSON.stringify({
+        phase: "PYTHON_DISPATCH",
+        correlationId,
+        jobId: job.id,
+        documentId,
+        ok: res.ok,
+        status: res.status,
+      }));
+    }).catch((notifyErr) => {
+      console.warn(JSON.stringify({
+        phase: "PYTHON_DISPATCH",
+        correlationId,
+        jobId: job.id,
+        documentId,
+        error: notifyErr instanceof Error ? notifyErr.message : String(notifyErr),
+      }));
+    });
 
     return json(req, {
       success: true,
       jobId: job.id,
       state: job.status,
       attemptCount: job.attempt_count,
-      pythonConfigured: isPythonConfigured(),
+      pythonConfigured: true,
+      preferredOrder: route.preferredOrder,
       correlationId,
     }, 202);
   } catch (error) {

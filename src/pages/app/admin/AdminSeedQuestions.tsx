@@ -31,6 +31,18 @@ interface BankStat {
 
 const TARGET_EXAMS = ["JEE_MAIN", "JEE_ADVANCED", "NEET", "UPSC", "SSC_CGL", "IBPS_PO", "NDA"];
 
+function mergeExamTypes(fallback: string[], fromScraper?: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of [...(fromScraper ?? []), ...fallback]) {
+    const key = id.trim().toUpperCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  return out;
+}
+
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="rounded-md bg-muted/40 px-3 py-2">
@@ -57,10 +69,22 @@ export default function AdminSeedQuestions() {
   const [scraperJobId, setScraperJobId] = useState<string | null>(null);
   const [scraperStarting, setScraperStarting] = useState(false);
   const [yearTo, setYearTo] = useState<string>(new Date().getFullYear().toString());
+  const [examTypes, setExamTypes] = useState<string[]>(TARGET_EXAMS);
   const { state: scrapeState, error: scrapeError } = useScrapeJob(scraperJobId);
   const scraperConfigured = scraperApi.isConfigured();
 
   useEffect(() => { void loadStats(); }, []);
+
+  useEffect(() => {
+    if (!scraperConfigured) {
+      setExamTypes(TARGET_EXAMS);
+      return;
+    }
+    void scraperApi
+      .sources()
+      .then((res) => setExamTypes(mergeExamTypes(TARGET_EXAMS, res.supported)))
+      .catch(() => setExamTypes(TARGET_EXAMS));
+  }, [scraperConfigured]);
 
   async function startScrapeJob() {
     setScraperStarting(true);
@@ -254,7 +278,7 @@ export default function AdminSeedQuestions() {
                 <Select value={examType} onValueChange={setExamType}>
                   <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {TARGET_EXAMS.map(e => <SelectItem key={e} value={e}>{e.replace('_', ' ')}</SelectItem>)}
+                    {examTypes.map(e => <SelectItem key={e} value={e}>{e.replace('_', ' ')}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>

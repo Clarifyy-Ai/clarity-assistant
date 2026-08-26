@@ -31,6 +31,8 @@ interface AuditRow {
 }
 
 const PAGE_SIZE = 50;
+const SEARCH_MIN_LENGTH = 2;
+const SEARCH_DEBOUNCE_MS = 350;
 
 /** Deterministic filter values — not derived from the current page. */
 const AUDIT_TARGET_TYPES = [
@@ -67,6 +69,14 @@ const AUDIT_ACTIONS = [
   "delete",
 ] as const;
 
+function isValidDateRange(from: string, to: string): boolean {
+  if (!from || !to) return true;
+  const fromMs = new Date(from).getTime();
+  const toMs = new Date(`${to}T23:59:59`).getTime();
+  if (Number.isNaN(fromMs) || Number.isNaN(toMs)) return false;
+  return fromMs <= toMs;
+}
+
 export default function AdminAuditLog() {
   const [rows, setRows] = useState<AuditRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -76,14 +86,32 @@ export default function AdminAuditLog() {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   const [actionQuery, setActionQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [actionPreset, setActionPreset] = useState<string>("all");
   const [targetType, setTargetType] = useState<string>("all");
   const [from, setFrom] = useState<string>("");
   const [to, setTo] = useState<string>("");
+  const [dateRangeError, setDateRangeError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setDebouncedQuery(actionQuery.trim());
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(handle);
+  }, [actionQuery]);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
+      if (!isValidDateRange(from, to)) {
+        setDateRangeError("From date must be on or before To date.");
+        setLoading(false);
+        setRows([]);
+        setTotal(0);
+        return;
+      }
+      setDateRangeError(null);
+
       setLoading(true);
       setLoadError(null);
       try {
@@ -93,7 +121,12 @@ export default function AdminAuditLog() {
           .order("created_at", { ascending: false })
           .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
 
-        const actionFilter = actionPreset !== "all" ? actionPreset : actionQuery.trim();
+        const actionFilter =
+          actionPreset !== "all"
+            ? actionPreset
+            : debouncedQuery.length >= SEARCH_MIN_LENGTH
+              ? debouncedQuery
+              : "";
         if (actionFilter) q = q.ilike("action", `%${actionFilter}%`);
         if (targetType !== "all") q = q.eq("target_type", targetType);
         if (from) q = q.gte("created_at", new Date(from).toISOString());
@@ -117,14 +150,16 @@ export default function AdminAuditLog() {
     }
     void load();
     return () => { cancelled = true; };
-  }, [page, actionQuery, actionPreset, targetType, from, to]);
+  }, [page, debouncedQuery, actionPreset, targetType, from, to]);
 
   const resetFilters = () => {
     setActionQuery("");
+    setDebouncedQuery("");
     setActionPreset("all");
     setTargetType("all");
     setFrom("");
     setTo("");
+    setDateRangeError(null);
     setPage(0);
   };
 
@@ -155,17 +190,23 @@ export default function AdminAuditLog() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Filters</CardTitle>
-          <CardDescription>Target types and actions are fixed enums, not page-local.</CardDescription>
+          <CardDescription>
+            Free-text search needs at least {SEARCH_MIN_LENGTH} characters (debounced). Date range must be valid.
+          </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
           <div className="relative min-w-[180px] flex-1">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               className="pl-8"
-              placeholder="Search action…"
+              placeholder="Search action (min 2 chars)…"
               value={actionQuery}
               onChange={(e) => { setActionQuery(e.target.value); setActionPreset("all"); setPage(0); }}
+              aria-describedby="audit-search-hint"
             />
+            <p id="audit-search-hint" className="sr-only">
+              Enter at least two characters to search. Search runs after a short pause.
+            </p>
           </div>
           <Select value={actionPreset} onValueChange={(v) => { setActionPreset(v); setActionQuery(""); setPage(0); }}>
             <SelectTrigger className="w-[180px]"><SelectValue placeholder="Action" /></SelectTrigger>
@@ -185,11 +226,28 @@ export default function AdminAuditLog() {
               ))}
             </SelectContent>
           </Select>
-          <Input type="date" className="w-[150px]" value={from} onChange={(e) => { setFrom(e.target.value); setPage(0); }} />
-          <Input type="date" className="w-[150px]" value={to} onChange={(e) => { setTo(e.target.value); setPage(0); }} />
+          <Input
+            type="date"
+            className="w-[150px]"
+            value={from}
+            max={to || undefined}
+            onChange={(e) => { setFrom(e.target.value); setPage(0); }}
+            aria-label="From date"
+          />
+          <Input
+            type="date"
+            className="w-[150px]"
+            value={to}
+            min={from || undefined}
+            onChange={(e) => { setTo(e.target.value); setPage(0); }}
+            aria-label="To date"
+          />
           <Button type="button" variant="outline" size="sm" onClick={resetFilters}>
             <RotateCcw className="mr-1 h-3.5 w-3.5" /> Reset
           </Button>
+          {dateRangeError && (
+            <p className="w-full text-xs text-red-400" role="alert">{dateRangeError}</p>
+          )}
         </CardContent>
       </Card>
 
@@ -198,57 +256,97 @@ export default function AdminAuditLog() {
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : rows.length === 0 ? (
-            <EmptyState title="No audit events" description="No rows match these filters." />
+            <EmptyState
+              icon={Search}
+              title="No audit events"
+              description="Try adjusting filters or clearing the date range."
+              compact
+            />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>When</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Target</TableHead>
-                  <TableHead>Admin</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((r) => (
-                  <Fragment key={r.id}>
-                    <TableRow className="cursor-pointer" onClick={() => setExpanded(expanded === r.id ? null : r.id)}>
-                      <TableCell className="whitespace-nowrap text-xs">
-                        {format(new Date(r.created_at), "yyyy-MM-dd HH:mm")}
-                      </TableCell>
-                      <TableCell><Badge variant="secondary">{r.action}</Badge></TableCell>
-                      <TableCell className="text-xs">
-                        {r.target_type ?? "—"}{r.target_id ? ` · ${r.target_id.slice(0, 8)}…` : ""}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{r.admin_id.slice(0, 8)}…</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {expanded === r.id ? "Hide" : "Details"}
-                      </TableCell>
-                    </TableRow>
-                    {expanded === r.id && (
-                      <TableRow>
-                        <TableCell colSpan={5}>
-                          <pre className="max-h-48 overflow-auto rounded bg-muted/40 p-3 text-[11px]">
-                            {JSON.stringify({ old: r.old_value, new: r.new_value, ip: r.ip_address }, null, 2)}
-                          </pre>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>When</TableHead>
+                    <TableHead>Action</TableHead>
+                    <TableHead>Target</TableHead>
+                    <TableHead>Admin</TableHead>
+                    <TableHead className="text-right">Details</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((row) => (
+                    <Fragment key={row.id}>
+                      <TableRow
+                        className="cursor-pointer"
+                        onClick={() => setExpanded((id) => (id === row.id ? null : row.id))}
+                      >
+                        <TableCell className="text-xs whitespace-nowrap">
+                          {format(new Date(row.created_at), "MMM d, yyyy HH:mm")}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary" size="sm">{row.action}</Badge>
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {row.target_type ?? "—"}
+                          {row.target_id ? (
+                            <span className="text-muted-foreground ml-1 font-mono text-[10px]">
+                              {row.target_id.slice(0, 8)}…
+                            </span>
+                          ) : null}
+                        </TableCell>
+                        <TableCell className="text-xs font-mono text-muted-foreground">
+                          {row.admin_id?.slice(0, 8) ?? "—"}…
+                        </TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground">
+                          {expanded === row.id ? "Hide" : "Show"}
                         </TableCell>
                       </TableRow>
-                    )}
-                  </Fragment>
-                ))}
-              </TableBody>
-            </Table>
+                      {expanded === row.id && (
+                        <TableRow>
+                          <TableCell colSpan={5} className="bg-muted/20">
+                            <pre className="text-[11px] overflow-x-auto max-h-48 p-2">
+                              {JSON.stringify(
+                                { old_value: row.old_value, new_value: row.new_value, ip: row.ip_address },
+                                null,
+                                2,
+                              )}
+                            </pre>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </Fragment>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
-          <div className="mt-4 flex items-center justify-between">
-            <Button type="button" variant="outline" size="sm" disabled={page <= 0} onClick={() => setPage((p) => p - 1)}>
-              <ChevronLeft className="h-4 w-4" /> Prev
-            </Button>
-            <span className="text-xs text-muted-foreground">Page {page + 1} / {maxPage + 1}</span>
-            <Button type="button" variant="outline" size="sm" disabled={page >= maxPage} onClick={() => setPage((p) => p + 1)}>
-              Next <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
+
+          {maxPage > 0 && (
+            <div className="flex items-center justify-end gap-2 mt-4">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={page <= 0}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                Page {page + 1} / {maxPage + 1}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={page >= maxPage}
+                onClick={() => setPage((p) => Math.min(maxPage, p + 1))}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
