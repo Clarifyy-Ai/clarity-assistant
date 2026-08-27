@@ -75,6 +75,22 @@ function clampQuestionCount(raw: unknown, max: number): number {
   return Math.min(Math.max(QUESTION_COUNT_MIN, Math.floor(n)), Math.max(QUESTION_COUNT_MIN, max));
 }
 
+const DURATION_MIN = 5;
+const DURATION_MAX = 360;
+
+function clampDurationMinutes(raw: unknown): number {
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed || /[eE.+-]/.test(trimmed)) return DURATION_MIN;
+    const n = Number.parseInt(trimmed, 10);
+    if (!Number.isFinite(n)) return DURATION_MIN;
+    return Math.min(Math.max(DURATION_MIN, n), DURATION_MAX);
+  }
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return DURATION_MIN;
+  return Math.min(Math.max(DURATION_MIN, Math.floor(n)), DURATION_MAX);
+}
+
 const LANGUAGE_LABELS: Record<string, string> = {
   en: "English",
   hi: "Hindi",
@@ -350,9 +366,6 @@ export default function GenerateGovPaper(): React.ReactElement {
           if (details?.exam?.examId) {
             applyExamSelection(mapDetailsToSearchResult(detailsResult.value));
             if (linkedStageId) setStageId(linkedStageId);
-            // #region agent log
-            fetch('http://127.0.0.1:7572/ingest/ea82b87b-41ef-4cec-a41d-f9c122e76fc2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'aecfaa'},body:JSON.stringify({sessionId:'aecfaa',runId:'post-fix',hypothesisId:'H-GOV-HYDRATE',location:'GenerateGovPaper.tsx:hydrate',message:'hydrated_from_details',data:{examId:details.exam.examId},timestamp:Date.now()})}).catch(()=>{});
-            // #endregion
             return;
           }
         }
@@ -360,13 +373,10 @@ export default function GenerateGovPaper(): React.ReactElement {
         if (searchResult.status === "fulfilled") {
           const hit =
             searchResult.value.results.find((r) => r.examId === linkedExamId) ??
-            searchResult.value.results[0];
+            null;
           if (hit && hit.examId === linkedExamId) {
             applyExamSelection(hit);
             if (linkedStageId) setStageId(linkedStageId);
-            // #region agent log
-            fetch('http://127.0.0.1:7572/ingest/ea82b87b-41ef-4cec-a41d-f9c122e76fc2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'aecfaa'},body:JSON.stringify({sessionId:'aecfaa',runId:'post-fix',hypothesisId:'H-GOV-HYDRATE',location:'GenerateGovPaper.tsx:hydrate',message:'hydrated_from_search',data:{examId:hit.examId,bank:hit.bankReadiness?.approvedPublicCount??null},timestamp:Date.now()})}).catch(()=>{});
-            // #endregion
           }
         }
       });
@@ -1151,7 +1161,7 @@ export default function GenerateGovPaper(): React.ReactElement {
                     disabled={basis === "full_sim"}
                     className="w-full rounded-lg border border-border bg-background px-3 py-2"
                     value={durationMinutes}
-                    onChange={(e) => setDurationMinutes(Number(e.target.value))}
+                    onChange={(e) => setDurationMinutes(clampDurationMinutes(e.target.value))}
                   />
                 </label>
               )}

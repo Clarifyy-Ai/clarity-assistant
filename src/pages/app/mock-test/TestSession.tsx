@@ -955,6 +955,22 @@ export default function TestSession() {
       });
       navigate(resultsPathForTest(testId, test?.config));
     } catch (error) {
+      // Timeout / network after Edge may have completed — poll before unlocking.
+      try {
+        const { data: row } = await supabase
+          .from("mock_tests")
+          .select("id, status")
+          .eq("id", testId)
+          .maybeSingle();
+        if (row && String((row as { status?: string }).status ?? "").toUpperCase() === "COMPLETED") {
+          if (user?.id) clearAttemptRecovery(testId, user.id);
+          toast.success("Test already submitted.", { position: "top-center" });
+          navigate(resultsPathForTest(testId, test?.config));
+          return;
+        }
+      } catch {
+        /* fall through to error UX */
+      }
       submittingRef.current = false;
       setSubmitting(false);
       console.error("[TestSession] submit failed:", error);

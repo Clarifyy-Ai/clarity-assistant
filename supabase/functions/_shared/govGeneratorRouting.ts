@@ -31,7 +31,15 @@ export function parseGeneratorPreference(body: unknown): GeneratorPreference {
   if (!body || typeof body !== "object") return "auto";
   const record = body as Record<string, unknown>;
 
-  const raw = String(record.generator ?? record.worker ?? "").trim().toLowerCase();
+  const raw = String(
+    record.generatorPreference ??
+      record.generator_preference ??
+      record.generator ??
+      record.worker ??
+      "",
+  )
+    .trim()
+    .toLowerCase();
   if (raw && PYTHON_ALIASES.has(raw)) return "python";
   if (raw && EDGE_ALIASES.has(raw)) return "edge";
   if (raw === "auto" || raw === "") {

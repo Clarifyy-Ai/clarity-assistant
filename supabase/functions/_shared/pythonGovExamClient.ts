@@ -177,6 +177,8 @@ export function wantsPythonPaperFactoryGenerator(input: {
   if (input.planGenerator === "python_paper_factory") return true;
   if (input.planKind === "hybrid_deterministic") return true;
   if (preferPython && pythonAvailable) return true;
+  // Honor explicit Edge preference for bank-only (client pickPaperGeneratorPreference).
+  if (pref === "edge") return false;
   if (input.planKind === "bank_only" && pythonAvailable) return true;
   return false;
 }

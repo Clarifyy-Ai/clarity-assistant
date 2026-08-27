@@ -24,6 +24,10 @@ import {
   isPythonGovExamConfigured,
   pythonGovAvailability,
 } from "../_shared/pythonGovExamClient.ts";
+import {
+  clampGovQuestionCount,
+  GOV_QUESTION_COUNT_ABS_MAX,
+} from "../_shared/govQuestionCount.ts";
 
 function json(req: Request, payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -130,10 +134,10 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
       }, 400);
     }
 
-    const requestedCountRaw = Number((body as Record<string, unknown>).questionCount);
+    const requestedCountRaw = (body as Record<string, unknown>).questionCount;
     const requested =
-      mode === "custom_mock" && Number.isFinite(requestedCountRaw)
-        ? Math.min(200, Math.max(5, Math.floor(requestedCountRaw)))
+      mode === "custom_mock"
+        ? clampGovQuestionCount(requestedCountRaw, GOV_QUESTION_COUNT_ABS_MAX)
         : Number(pattern.total_questions) || 0;
 
     const topics = Array.isArray((body as Record<string, unknown>).topics)

@@ -27,6 +27,7 @@ import {
   bufferToBase64,
   buildOcrConfidenceFlags,
   normalizePdfExtractedQuestions,
+  parsePlainTextMcqs,
   validateExtractQuestionPaperPayload,
   type ExtractPayloadOk,
 } from "../_shared/pdfQuestionExtract.ts";
@@ -299,19 +300,32 @@ Deno.serve(async (req) => {
 
         if (payload.textPayload && !payload.pdfBase64 && !payload.storagePath) {
           rawOcrText = payload.textPayload;
-          const textPrompt =
-            `${PDF_QUESTION_EXTRACT_PROMPT}\n\n--- DOCUMENT TEXT ---\n${payload.textPayload.slice(0, 120_000)}`;
-          const rawText = await geminiGenerate(
-            textPrompt,
-            undefined,
-            0.2,
-            8192,
-          );
-          rawOcrText = rawText;
-          const parsed = parseJSON<{ questions?: unknown[] }>(rawText, {
-            questions: [],
-          });
-          rawQuestions = Array.isArray(parsed.questions) ? parsed.questions : [];
+          const deterministic = parsePlainTextMcqs(payload.textPayload);
+          if (deterministic.length > 0) {
+            rawQuestions = deterministic;
+          } else {
+            try {
+              const textPrompt =
+                `${PDF_QUESTION_EXTRACT_PROMPT}\n\n--- DOCUMENT TEXT ---\n${payload.textPayload.slice(0, 120_000)}`;
+              const rawText = await geminiGenerate(
+                textPrompt,
+                undefined,
+                0.2,
+                8192,
+              );
+              rawOcrText = rawText;
+              const parsed = parseJSON<{ questions?: unknown[] }>(rawText, {
+                questions: [],
+              });
+              rawQuestions = Array.isArray(parsed.questions) ? parsed.questions : [];
+            } catch (aiErr) {
+              const aiMsg = aiErr instanceof Error ? aiErr.message : String(aiErr);
+              console.error("[extract-question-paper] AI text parse failed:", aiMsg);
+              throw new Error(
+                "AI text extraction is unavailable. Paste clearer MCQ text (Q1/A)/B)/C)/D)/Answer) or fix the AI provider key.",
+              );
+            }
+          }
         } else {
           const pdf = await resolvePdfBase64(db, payload);
           if (!pdf.base64) {
@@ -557,14 +571,25 @@ Deno.serve(async (req) => {
       console.error("[extract-question-paper] process:", procErr);
       await setJob(db, jobId, {
         status: "failed",
-        error: msg,
+        error: msg.slice(0, 500),
         completed_at: new Date().toISOString(),
         metadata: {
           kind: "extract_question_paper",
           raw_ocr_preview: rawOcrText ? rawOcrText.slice(0, 4000) : null,
         },
       });
-      return errorResponse(msg, "INTERNAL", 500, req);
+      const parserish =
+        /timeout|gemini|openai|provider|api key|INVALID_ARGUMENT|fetch failed|AbortError|timed out|AI text extraction/i.test(
+          msg,
+        );
+      return errorResponse(
+        parserish
+          ? "PDF/text parsing failed. Use clearer pasted MCQ text, a smaller PDF, or check AI provider configuration."
+          : "Ingestion failed. Please retry or contact support.",
+        parserish ? "PARSER_FAILED" : "INTERNAL",
+        parserish ? 502 : 500,
+        req,
+      );
     }
   } catch (err) {
     console.error("[extract-question-paper]", err);

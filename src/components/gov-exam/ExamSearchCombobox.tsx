@@ -11,6 +11,9 @@ import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 
 const DEBOUNCE_MS = 280;
 const SEARCH_CACHE_TTL_MS = 60_000;
+const MAX_QUERY_LENGTH = 120;
+const IDENTICAL_INFLIGHT_WINDOW_MS = 800;
+const RATE_LIMIT_COOLDOWN_MS = 8_000;
 
 type SearchCacheEntry = {
   q: string;
@@ -19,8 +22,16 @@ type SearchCacheEntry = {
   at: number;
 };
 
+type InFlightEntry = {
+  promise: Promise<{ results: GovExamSearchResult[] }>;
+  at: number;
+};
+
 /** Survives remounts so browse/search does not flash Searching… after a good hit. */
 let searchResultCache: SearchCacheEntry | null = null;
+/** Coalesce identical q+family requests so Abort storms do not burn rate-limit quota. */
+const inFlightSearches = new Map<string, InFlightEntry>();
+let rateLimitUntil = 0;
 
 function readSearchCache(q: string, family: string | undefined): GovExamSearchResult[] | null {
   const entry = searchResultCache;
@@ -157,7 +168,7 @@ export function ExamSearchCombobox({
       const ac = new AbortController();
       abortRef.current = ac;
       const reqId = ++reqIdRef.current;
-      const trimmed = q.trim();
+      const trimmed = q.trim().slice(0, MAX_QUERY_LENGTH);
       const notify = onResultsChangeRef.current;
       if (trimmed.length === 1) {
         setResults([]);
@@ -174,6 +185,8 @@ export function ExamSearchCombobox({
         return;
       }
       const cacheKey = trimmed.length >= 2 ? trimmed : "";
+      const familyKey = familyRef.current || "";
+      const inflightKey = `${cacheKey}::${familyKey}`;
       // Only soft-refresh from a cache entry for THIS query — never reuse
       // resultsRef from a different search (that caused stuck spinners / stale cards).
       const cached = readSearchCache(cacheKey, familyRef.current);
@@ -190,14 +203,35 @@ export function ExamSearchCombobox({
           setState("idle");
         }
       }
+
+      if (Date.now() < rateLimitUntil) {
+        const mapped = mapGovSearchError({ code: "RATE_LIMITED", status: 429 });
+        setResults([]);
+        setState("error");
+        setError(mapped.message);
+        notify?.([], { state: "error", error: mapped.message, query: trimmed });
+        return;
+      }
+
       try {
-        const data = await searchGovExams(
-          {
-            q: trimmed.length >= 2 ? trimmed : "",
-            family: familyRef.current || undefined,
-          },
-          { signal: ac.signal },
-        );
+        let data: { results: GovExamSearchResult[] };
+        const existing = inFlightSearches.get(inflightKey);
+        if (existing && Date.now() - existing.at < IDENTICAL_INFLIGHT_WINDOW_MS) {
+          data = await existing.promise;
+        } else {
+          const promise = searchGovExams(
+            {
+              q: trimmed.length >= 2 ? trimmed : "",
+              family: familyRef.current || undefined,
+            },
+            { signal: ac.signal },
+          ).finally(() => {
+            const cur = inFlightSearches.get(inflightKey);
+            if (cur?.promise === promise) inFlightSearches.delete(inflightKey);
+          });
+          inFlightSearches.set(inflightKey, { promise, at: Date.now() });
+          data = await promise;
+        }
         if (reqId !== reqIdRef.current) {
           return;
         }
@@ -226,8 +260,6 @@ export function ExamSearchCombobox({
         const superseded = reqId !== reqIdRef.current;
         const aborted = ac.signal.aborted;
         const cancelMsg = /cancelled|aborted/i.test(msg);
-        const errCode = String((err as { code?: string } | null)?.code ?? "");
-        const errStatus = (err as { status?: number } | null)?.status ?? null;
         // Newer request owns UI state — do not clear its loading spinner.
         if (superseded) return;
         // Abort/cancel of the *current* request must not leave Searching… (DEF-001).
@@ -244,6 +276,9 @@ export function ExamSearchCombobox({
         // Never keep a stale / fake list after a search failure (e.g. 503).
         setResults([]);
         const mapped = mapGovSearchError(err);
+        if (mapped.code === "RATE_LIMITED") {
+          rateLimitUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
+        }
         setState("error");
         setError(mapped.message);
         notify?.([], {
@@ -333,10 +368,11 @@ export function ExamSearchCombobox({
           aria-label="Search government exams"
           disabled={disabled}
           value={query}
+          maxLength={MAX_QUERY_LENGTH}
           placeholder={placeholder}
           className="w-full rounded-xl border border-border bg-background pl-10 pr-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onChange={(e) => {
-            setQuery(e.target.value);
+            setQuery(e.target.value.slice(0, MAX_QUERY_LENGTH));
             setOpen(true);
             if (value && onClear) {
               setPicked(null);

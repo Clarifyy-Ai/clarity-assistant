@@ -32,6 +32,7 @@ import {
   scorePaperQuality,
   scoreQuestionQuality,
 } from "./govQualityScore.ts";
+import { clampGovQuestionCount, GOV_QUESTION_COUNT_ABS_MAX } from "./govQuestionCount.ts";
 import { DEDUP_ALGORITHM_VERSION } from "./algorithmCatalog.ts";
 import {
   runBankMultiAgentValidation,
@@ -350,10 +351,11 @@ export async function assembleClaimedPaperJob(
       .slice(0, 20)
     : [2024, 2023, 2022];
 
-  const questionCountRaw = Number(req.questionCount);
-  const questionCount = Number.isFinite(questionCountRaw)
-    ? Math.min(200, Math.max(5, Math.floor(questionCountRaw)))
-    : null;
+  const questionCountRaw = req.questionCount;
+  const questionCount =
+    questionCountRaw === undefined || questionCountRaw === null
+      ? null
+      : clampGovQuestionCount(questionCountRaw, GOV_QUESTION_COUNT_ABS_MAX);
 
   const durationRaw = Number(req.durationMinutes);
   const durationMinutes = Number.isFinite(durationRaw)

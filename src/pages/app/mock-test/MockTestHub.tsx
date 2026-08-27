@@ -171,6 +171,7 @@ export default function MockTestHub(): React.ReactElement {
   const [selectedExamId, setSelectedExamId] = useState("");
   const [searching, setSearching] = useState(false);
   const [searchState, setSearchState] = useState<"idle" | "searching" | "success" | "empty" | "error">("idle");
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [recentChips, setRecentChips] = useState<string[]>([]);
   const [hubReadiness, setHubReadiness] = useState<Awaited<
     ReturnType<typeof fetchLatestExamReadiness>
@@ -393,13 +394,18 @@ export default function MockTestHub(): React.ReactElement {
             setGovResults(meta.state === "error" ? [] : results);
             setSearchQ(meta.query);
             setSearching(meta.state === "loading");
-            if (meta.state === "loading") setSearchState("searching");
-            else if (meta.state === "empty") {
+            if (meta.state === "loading") {
+              setSearchState("searching");
+              setSearchError(null);
+            } else if (meta.state === "empty") {
               setSearchState("empty");
+              setSearchError(null);
             } else if (meta.state === "error") {
               setSearchState("error");
+              setSearchError(meta.error);
             } else {
               setSearchState(results.length ? "success" : "idle");
+              setSearchError(null);
             }
           }}
         />
@@ -439,7 +445,13 @@ export default function MockTestHub(): React.ReactElement {
           ))}
         </div>
         <div className="space-y-2" aria-busy={searching} data-testid="gov-exam-search-results">
-          {/* Error UI lives in ExamSearchCombobox to avoid duplicate throttle banners */}
+          {/* Single outside banner — Combobox suppresses InlineErrorRetry when onResultsChange is set */}
+          {searchState === "error" && !searching && (
+            <InlineErrorRetry
+              message={searchError || "Exam search failed. Please try again."}
+              onRetry={() => void runGovSearch(searchQ || syncQuery || "SSC CGL")}
+            />
+          )}
           {searchState === "empty" && !searching && (
             <div className="space-y-2" data-testid="gov-exam-search-empty">
               <p className="text-sm text-muted-foreground">

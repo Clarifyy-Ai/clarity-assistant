@@ -41,6 +41,10 @@ import {
 } from "../_shared/pythonGovExamClient.ts";
 import { decideRoute } from "../_shared/operationRouter.ts";
 import { isPythonForceUnavailable } from "../_shared/pythonClient.ts";
+import {
+  clampGovQuestionCount,
+  GOV_QUESTION_COUNT_ABS_MAX,
+} from "../_shared/govQuestionCount.ts";
 
 const COST = creditCost("create_mock_test");
 
@@ -236,10 +240,10 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
       return json(req, attemptLimitPayload(attemptLimit), 429);
     }
 
-    const requestedCountRaw = Number((body as Record<string, unknown>).questionCount);
+    const requestedCountRaw = (body as Record<string, unknown>).questionCount;
     const requestedCount =
-      mode === "custom_mock" && Number.isFinite(requestedCountRaw)
-        ? Math.min(200, Math.max(5, Math.floor(requestedCountRaw)))
+      mode === "custom_mock"
+        ? clampGovQuestionCount(requestedCountRaw, GOV_QUESTION_COUNT_ABS_MAX)
         : Number(pattern.total_questions) || 0;
 
     const topics = Array.isArray((body as Record<string, unknown>).topics)

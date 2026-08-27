@@ -13,10 +13,15 @@ export const PAPER_JOB_MAX_ATTEMPTS = 3;
 export const PAPER_JOB_TERMINAL = new Set([
   "completed",
   "failed",
-  "failed_retryable",
   "failed_permanent",
   "cancelled",
   "expired",
+]);
+
+/** Statuses that should never be auto-claimed as fresh work. */
+export const PAPER_JOB_HARD_TERMINAL = new Set([
+  ...PAPER_JOB_TERMINAL,
+  "failed_retryable",
 ]);
 
 export const PAPER_JOB_IN_FLIGHT = new Set([
@@ -55,7 +60,7 @@ export async function setJobIfActive(
     .from("gov_paper_generation_jobs")
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq("id", jobId)
-    .filter("status", "not.in", `(${[...PAPER_JOB_TERMINAL].join(",")})`);
+    .filter("status", "not.in", `(${[...PAPER_JOB_HARD_TERMINAL].join(",")})`);
 
   if (opts?.workerId) {
     q = q.eq("worker_id", opts.workerId);
@@ -85,7 +90,7 @@ export async function heartbeatJobLease(
     })
     .eq("id", jobId)
     .eq("worker_id", workerId)
-    .filter("status", "not.in", `(${[...PAPER_JOB_TERMINAL].join(",")})`)
+    .filter("status", "not.in", `(${[...PAPER_JOB_HARD_TERMINAL].join(",")})`)
     .select("id, status")
     .maybeSingle();
 
@@ -128,10 +133,11 @@ export async function claimPaperGenerationJob(
   const maxAttempts = opts.maxAttempts ?? PAPER_JOB_MAX_ATTEMPTS;
   const nowIso = new Date().toISOString();
 
-  // Auto-claim: in-flight only. Explicit jobId also allows retryable failed rows.
+  // Auto-claim: in-flight + retryable failures (lease expired / requeued).
+  // Explicit jobId also allows legacy "failed" rows.
   const claimableStatuses = opts.jobId
     ? [...PAPER_JOB_IN_FLIGHT, "failed", "failed_retryable"]
-    : [...PAPER_JOB_IN_FLIGHT];
+    : [...PAPER_JOB_IN_FLIGHT, "failed_retryable"];
 
   let pick = db
     .from("gov_paper_generation_jobs")

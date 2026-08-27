@@ -31,6 +31,8 @@ import {
   MAX_PAGE_SIZE,
   SERVICE_UNAVAILABLE,
   SERVICE_UNAVAILABLE_MESSAGE,
+  SEARCH_SERVICE_UNAVAILABLE,
+  SEARCH_SERVICE_UNAVAILABLE_MESSAGE,
   SEARCH_FAILED,
   SEARCH_FAILED_MESSAGE,
   INVALID_QUERY,
@@ -87,11 +89,12 @@ function json(req: Request, payload: unknown, status = 200) {
 
 function searchUnavailable(req: Request, detail: string) {
   console.error("[search-exams]", detail);
+  // Prefer SEARCH_SERVICE_UNAVAILABLE for the public contract; keep message stable.
   return corsError(
     req,
     503,
-    SERVICE_UNAVAILABLE,
-    SERVICE_UNAVAILABLE_MESSAGE,
+    SEARCH_SERVICE_UNAVAILABLE,
+    SEARCH_SERVICE_UNAVAILABLE_MESSAGE,
   );
 }
 

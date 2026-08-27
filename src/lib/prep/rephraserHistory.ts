@@ -16,6 +16,10 @@ export type PrepRephraseHistoryRow = {
   created_at: string;
 };
 
+/** Table exists via migration; generated Database types may lag. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const prepDb = supabase as any;
+
 function asAlternatives(value: unknown): RephraserAlternatives | null {
   if (!value || typeof value !== "object") return null;
   const candidate = value as Record<string, unknown>;
@@ -37,7 +41,7 @@ export async function listPrepRephraseHistory(
   userId: string,
   limit = 20,
 ): Promise<PrepRephraseHistoryRow[]> {
-  const { data, error } = await supabase
+  const { data, error } = await prepDb
     .from("prep_rephrase_history")
     .select(
       "id,input_hash,original_text,alternatives,provider,model,credit_op_id,status,created_at",
@@ -51,7 +55,7 @@ export async function listPrepRephraseHistory(
       const alternatives = asAlternatives(row.alternatives);
       if (!alternatives) return null;
       return {
-        id: String(row.id),
+        id: String(row.id ?? ""),
         input_hash: String(row.input_hash ?? ""),
         original_text: String(row.original_text ?? ""),
         alternatives,
@@ -75,7 +79,7 @@ export async function upsertPrepRephraseHistory(params: {
   creditOpId?: string | null;
   status?: "completed" | "failed" | "offline_fallback";
 }): Promise<void> {
-  const { error } = await supabase.from("prep_rephrase_history").upsert(
+  const { error } = await prepDb.from("prep_rephrase_history").upsert(
     {
       user_id: params.userId,
       input_hash: params.inputHash,

@@ -107,6 +107,17 @@ export default function AdminGovIngest() {
   }, [examId]);
 
   async function handleExtract() {
+    if (!examId) {
+      toast.error("Select an exam before extracting.");
+      return;
+    }
+    const hasSource =
+      Boolean(pdfFile) || Boolean(storagePath.trim()) || Boolean(textPayload.trim());
+    if (!hasSource) {
+      toast.error("Add a PDF, pasted text, or storage path before extracting.");
+      return;
+    }
+
     let pdfBase64: string | undefined;
     if (pdfFile) {
       if (pdfFile.size > 15 * 1024 * 1024) {
@@ -139,7 +150,19 @@ export default function AdminGovIngest() {
     setSubmitting(false);
 
     if (error) {
-      toast.error(error);
+      const msg = String(error);
+      if (/504|timeout|gateway/i.test(msg)) {
+        toast.error(
+          "PDF parsing timed out. Check Recent jobs below — extraction may still finish in the background.",
+        );
+        void loadJobs();
+        return;
+      }
+      if (/PARSER_FAILED|PARSER_UNAVAILABLE|AI_PROVIDER|Gemini/i.test(msg)) {
+        toast.error("PDF parsing failed. Try pasted text or a smaller PDF.");
+        return;
+      }
+      toast.error(msg);
       return;
     }
 
@@ -179,9 +202,9 @@ export default function AdminGovIngest() {
         <CardContent className="p-4 space-y-3">
           <h3 className="text-sm font-semibold">Register PDF &amp; extract</h3>
           <p className="text-xs text-muted-foreground">
-            Provide one source: upload a PDF, paste OCR/plain text, or enter a storage path
-            (e.g. <code className="mx-1">documents/pyq/ssc.pdf</code>). Set the license class
-            correctly. Extracted questions stay private until Q Review approval.
+            Provide <strong>one required source</strong>: upload a PDF, paste OCR/plain text,
+            or enter a storage path (e.g. <code className="mx-1">documents/pyq/ssc.pdf</code>).
+            Set the license class correctly. Extracted questions stay private until Q Review approval.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <Select value={examId || "none"} onValueChange={(v) => setExamId(v === "none" ? "" : v)}>
@@ -222,7 +245,7 @@ export default function AdminGovIngest() {
             </Select>
             <div className="space-y-1">
               <label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
-                Storage path (optional)
+                Storage path (one of: path / PDF / text)
               </label>
               <Input
                 placeholder="e.g. documents/pyq/ssc.pdf"
@@ -234,7 +257,7 @@ export default function AdminGovIngest() {
           </div>
           <div className="space-y-1">
             <label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
-              PDF file (optional)
+              PDF file (one of: path / PDF / text)
             </label>
             <input
               ref={fileRef}
@@ -252,7 +275,7 @@ export default function AdminGovIngest() {
           </div>
           <div className="space-y-1">
             <label className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
-              Pasted OCR / plain text (optional)
+              Pasted OCR / plain text (one of: path / PDF / text)
             </label>
             <textarea
               className="w-full min-h-[100px] rounded-md border bg-background px-3 py-2 text-sm"
@@ -265,7 +288,11 @@ export default function AdminGovIngest() {
           <div className="flex flex-wrap gap-2">
             <Button
               onClick={() => void handleExtract()}
-              disabled={submitting || !examId}
+              disabled={
+                submitting ||
+                !examId ||
+                (!pdfFile && !storagePath.trim() && !textPayload.trim())
+              }
               leftIcon={submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileUp className="w-4 h-4" />}
             >
               Extract &amp; queue for review
