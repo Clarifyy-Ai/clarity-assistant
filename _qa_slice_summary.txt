@@ -1,0 +1,208 @@
+﻿ANUSHKA 3
+{"Defect ID": "DEF-001", "Title": "Infinite search spinner & profile load timeout on /app/mock-test", "Module": "Gov Exams hub (/app/mock-test)", "Test Case ID": "TC-MOD-003", "Severity (P0-P4)": "P1", "Business Impact": null, "Reproducibility": "Always", "Environment": "Production(web/chrome)", "Account ID": "Pro_USER_01", "Steps to Reproduce": "1. Login as PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/mock-test.\n3. Observe the search bar and DevTools Console.\n4. Type any search keyword (e.g., \"ssc\") into the search box.", "Expected": "Profile data loads cleanly without errors, the search bar finishes initializing, and entering a keyword filters/returns relevant exam test papers.", "Actual": "Search bar shows an infinite loading spinner and gets stuck displaying \"Searching...\". DevTools Console throws multiple errors: \"[clarify:auth:profile:load_timed_out]\" and \"[authStore] Failed to load profile\".", "Evidence Links": "#VALUE!", "Status": "New"}
+---
+{"Defect ID": "DEF-002", "Title": "Missing DialogTitle accessibility prop in Quick Search modal throws repeated console errors on click", "Module": "Global Navigation (/app/guide/practice-coach)", "Test Case ID": "TC-MOD-022", "Severity (P0-P4)": "P3", "Business Impact": null, "Reproducibility": "Always", "Environment": "Production(web/chrome)", "Account ID": "Pro_USER_01", "Steps to Reproduce": "1. Login as PRO_USER_01.\n2. Navigate to any page (e.g., https://clarify.ai.sltfinanceindia.com/app/guide/practice-coach).\n3. Open DevTools Console panel.\n4. Click on the global search input bar (\"Search pages, actions, settings...\").\n5. Observe the DevTools Console.", "Expected": "Global search modal overlay opens cleanly with full screen reader accessibility support and zero console errors.", "Actual": "Search modal opens, but DevTools console immediately logs repeated Radix UI runtime errors: \"`DialogContent` requires a `DialogTitle` for the component to be accessible for screen reader users\" along with missing `aria-describedby` warnings.", "Evidence Links": "#VALUE!", "Status": null}
+---
+{"Defect ID": "DEF-003", "Title": "Razorpay risk detection script blocked by Content Security Policy (CSP) on checkout modal", "Module": "Billing & Plan (/app/settings/billing)", "Test Case ID": "TC-A11Y-002", "Severity (P0-P4)": "p2", "Business Impact": null, "Reproducibility": "Always", "Environment": "Production(web/chrome)", "Account ID": "Pro_USER_01", "Steps to Reproduce": "1. Login as PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/settings/billing.\n3. Open DevTools Console panel.\n4. Click on 'Buy Max (one-time)' button to trigger checkout.\n5. Observe DevTools Console.", "Expected": "Payment modal opens and all third-party vendor dependencies (Razorpay scripts) load cleanly without CSP or header access violations.", "Actual": "Console throws CSP violation error: Loading script 'https://cdn.razorpay.com/static/cx/razorpay-risk-detection/bundle.js' violates directive 'script-src'. Action blocked along with unsafe header errors.", "Evidence Links": "#VALUE!", "Status": null}
+---
+CASES 49
+=== TC-BILL-001 | Pass ===
+ACTUAL: Billing page loaded successfully, and the plan, credits, and purchase CTAs were visible. However, multiple CORS/connection errors were observed in DevTools from loader.min.js while loading localhost image resources.
+NOTES: Billing page is functional; unrelated loader.min.js CORS/localhost errors observed in console.
+URLS: [{'col': 'Exact Steps', 'url': 'https://clarify.ai.sltfinanceindia.com/app/settings/billing.'}]
+
+=== TC-BILL-002 | Fail ===
+ACTUAL: Razorpay test checkout opened successfully in test mode, but payment failed with HTTP 400 because the test card was treated as an unsupported international card. The checkout displayed an error and did not complete the payment.
+NOTES: Razorpay sandbox checkout opens, but the provided test-card payment fails with international_transaction_not_allowed (400).
+
+=== TC-BILL-003 | Fail ===
+ACTUAL: Razorpay payments/validate/account returns HTTP 500 with SERVER_ERROR, preventing the payment flow from completing and credits from being granted.
+NOTES: Payment attempt ΓåÆ Razorpay validation API 500 ΓåÆ payment flow fails ΓåÆ credit grant cannot be tested
+
+=== TC-BILL-004 | Pass ===
+ACTUAL: Failed payment displayed correctly and no credits were granted.
+NOTES: Negative payment flow works as expected; credit balance remained unchanged.
+
+=== TC-BILL-005 | Blocked ===
+ACTUAL: Payment could not be completed due to the payment api failure, so duplicate payment handling and credit grant could not be verified.
+
+=== TC-BILL-006 | Not Run ===
+
+=== TC-BILL-007 | Not Run ===
+
+=== TC-BILL-008 | Not Run ===
+URLS: [{'col': 'Exact Steps', 'url': 'https://clarify.ai.sltfinanceindia.com/pricing.'}]
+
+=== TC-CR-001 | Not Run ===
+URLS: [{'col': 'Exact Steps', 'url': 'https://clarify.ai.sltfinanceindia.com/app/usage'}]
+
+=== TC-CR-002 | Not Run ===
+
+=== TC-CR-003 | Not Run ===
+
+=== TC-CR-004 | Not Run ===
+
+=== TC-CR-005 | Not Run ===
+
+=== TC-CR-006 | Not Run ===
+
+=== TC-FB-005 | Pass ===
+ACTUAL: With sufficient credits, the AI provider request returned 502 Bad Gateway. The system displayed an AI service unavailable message and refunded the credits instead of reporting insufficient credits.
+NOTES: Provider failure was correctly distinguished from credit failure.
+
+=== TC-INT-001 | Fail ===
+ACTUAL: user can see the integration LIST but not be sync-API 501 (Not Implemented)
+NOTES: where as the calendar can status the 501 Calendar sync is not available yet. which is not implemented.
+URLS: [{'col': 'Exact Steps', 'url': 'https://clarify.ai.sltfinanceindia.com/app/settings/integrations.'}]
+
+=== TC-INT-002 | Partial ===
+ACTUAL: Presently there is no any integration feature is available to connect
+NOTES: if feature is implenented give the connection option
+
+=== TC-INT-003 | Partial ===
+ACTUAL: Presently there is no any for failure to connect or deny
+NOTES: If feature is implenented give the failure option or denty  options are insert
+
+=== TC-INT-004 | Partial ===
+ACTUAL: presently there is no disconnect feature in the inegration module
+NOTES: if the feature implenented please insert the disconnect feature
+
+=== TC-INT-005 | Partial ===
+ACTUAL: presently there is connect and there failed features are the not available
+NOTES: how the approach the if connection get the fails and insert the how it fails discription.
+
+=== TC-JRN-004 | Blocked ===
+ACTUAL: Credit purchase and consumption could not be completed because the razorpay-create-order API returned 401 Unauthorized, and the UI displayed ΓÇ£Payment service temporarily unavailable.ΓÇ¥
+NOTES: End-to-end credit purchase and consumption could not be verified due to the payment API authentication failure.
+
+=== TC-NTF-001 | Pass ===
+ACTUAL: Notifications can be marked as read successfully, and the read status is retained after refreshing the page.
+NOTES: Notification read-status functionality works as expected.
+URLS: [{'col': 'Exact Steps', 'url': 'https://clarify.ai.sltfinanceindia.com/app/notifications.'}, {'col': 'Screenshot / Evidence Requirement', 'url': 'https://drive.google.com/file/d/1ueQzjbpkpmW9NxNaMMJMtkUGY35JFIcU/view?usp=drive_linkhttps://drive.google.com/file/d/18cRDd4lrGx3Q_U8oLBEFv440gfU3zYPE/view?usp=drive_link'}]
+
+=== TC-NTF-002 | Blocked ===
+ACTUAL: Unread/All notification filters are not available, so the notification list cannot be filtered by read status.
+NOTES: The filter functionality could not be verified because the required controls are missing.
+URLS: [{'col': 'Screenshot / Evidence Requirement', 'url': 'https://drive.google.com/file/d/1o_0zbw87o2Y3Lfo3XpdsFjKli2UUvw1V/view?usp=drive_link'}, {'col': 'Screenshot / Evidence Requirement__hyperlink', 'url': 'https://drive.google.com/file/d/1o_0zbw87o2Y3Lfo3XpdsFjKli2UUvw1V/view?usp=drive_link'}]
+
+=== TC-NTF-003 | Pass ===
+ACTUAL: The application remains usable without any delay or UI instability when handling browser notification permissions.
+NOTES: No usability issues were observed.
+URLS: [{'col': 'Screenshot / Evidence Requirement', 'url': 'https://drive.google.com/file/d/1o_0zbw87o2Y3Lfo3XpdsFjKli2UUvw1V/view?usp=drive_link'}, {'col': 'Screenshot / Evidence Requirement__hyperlink', 'url': 'https://drive.google.com/file/d/1o_0zbw87o2Y3Lfo3XpdsFjKli2UUvw1V/view?usp=drive_link'}]
+
+=== TC-NTF-004 | Fail ===
+ACTUAL: After disabling a notification type and saving the preference, the setting becomes enabled again after persistence. The notification preference is not being retained correctly.
+NOTES: Notification settings are not persisting after save.
+URLS: [{'col': 'Screenshot / Evidence Requirement', 'url': 'https://drive.google.com/file/d/1tZDZLCcwPKYJhN32sqsEeM47nToYYKZp/view?usp=drive_linkhttps://drive.google.com/file/d/1TNzU2vpYUboBwJ002tMUbOIX3LjjvYry/view?usp=drive_link'}]
+
+=== TC-PREP-007 | Pass ===
+ACTUAL: During the AI-down window, STAR generation falls back correctly, and the system accurately deducts 10 credits as indicated.
+NOTES: Credit deduction messaging is consistent and truthful even when the AI generation falls back.
+URLS: [{'col': 'Screenshot / Evidence Requirement', 'url': 'https://drive.google.com/file/d/184QUQrAqmpGRmHmGz1dLPHxB88VMflo_/view?usp=drive_linkhttps://drive.google.com/file/d/1rPryvSnzAlWVpfie5jKtzMXygKA5jHQC/view?usp=drive_link'}]
+
+=== TC-REG-005 | Fail ===
+ACTUAL: prep-tool returned 401 Unauthorized with AUTH_INVALID (Invalid or expired token) while the user was authenticated.
+NOTES: Authenticated Prep request was rejected due to an invalid/expired token.
+
+=== TC-REG-006 | Blocked ===
+ACTUAL: Payment initiation was blocked because the razorpay-create-order API returned 401 Unauthorized. The UI displayed ΓÇ£Payment service temporarily unavailable.ΓÇ¥
+NOTES: Duplicate-charge behavior could not be verified because the payment service could not create the payment order due to the authentication error.
+
+=== TC-REG-013 | Blocked ===
+ACTUAL: Billing sandbox payment could not be completed because the razorpay-create-order API returned 401 Unauthorized, and the UI displayed ΓÇ£Payment service temporarily unavailable.
+NOTES: Billing sandbox regression could not be verified due to the payment API authentication failure.
+
+=== TC-SCH-001 | Fail ===
+ACTUAL: user land the page which give the 401 (Unauthorized) disconnect calendar
+NOTES: where as the user can enter the 01-01-2025 it gives the choose a future time in the issue give valid date and valid time.
+URLS: [{'col': 'Exact Steps', 'url': 'https://clarify.ai.sltfinanceindia.com/app/interviews/new'}]
+
+=== TC-SCH-002 | Fail ===
+ACTUAL: Edit option is not working user perspective where as without opean the dev tools and also cancelled option is  created the interview
+NOTES: user can opean the dev tools after edit option is working and also cancelled interview can created the interview  .User should not see the cancelled interviews
+
+=== TC-SCH-003 | Fail ===
+ACTUAL: It successfully working where the future time if your can see the message is verify the date or verity the time
+NOTES: User can enter the invalid date and time it gives the fututre time where as the give the change the date or change the time
+
+=== TC-SCH-004 | Fail ===
+ACTUAL: User can navigated to the Inegration it give the 501 Calendar sync is not available yet.(Not Implemented)
+NOTES: Button opening dialog Γëá working integration.
+
+=== TC-SCH-005 | Partial ===
+ACTUAL: Email is not configured in the interview module
+NOTES: Where as the user can enter the mail which is the get notification on interview day get personal mailnotification
+
+=== TC-SET-001 | Fail ===
+ACTUAL: In Profile there is no data retrive after the refresh losing the data after refresh
+NOTES: in profile where user can enter the bio, website link is not retrieve the data where as the website link is no validation
+URLS: [{'col': 'Exact Steps', 'url': 'https://clarify.ai.sltfinanceindia.com/app/settings/profile.'}]
+
+=== TC-SET-002 | Pass ===
+ACTUAL: In the section apply changes working to save the user instructions and without persistence the after refresh  and also editable.
+NOTES: where as the user perspective change the appearance and hold the
+URLS: [{'col': 'Exact Steps', 'url': 'https://clarify.ai.sltfinanceindia.com/app/settings/appearance.'}]
+
+=== TC-SET-003 | Fail ===
+ACTUAL: In  this section save preferences is not persistence(not hold the information) after refresh
+NOTES: Where as the notifications enable and disable option of the feature the click on save preferences can hold the information after refresh the page .
+URLS: [{'col': 'Exact Steps', 'url': 'https://clarify.ai.sltfinanceindia.com/app/settings/notifications.'}]
+
+=== TC-SET-004 | Fail ===
+ACTUAL: Can't save the information after refresh the page .
+NOTES: Where as the save audio settings can't hold the information after refresh.it be come again normal mode.
+URLS: [{'col': 'Exact Steps', 'url': 'https://clarify.ai.sltfinanceindia.com/app/settings/audio.'}]
+
+=== TC-SET-005 | Fail ===
+ACTUAL: where as the practice -coach is save preferences can't hold the instructions when page can refresh
+NOTES: In this save persistence  can't hold the information it remains same features.
+URLS: [{'col': 'Exact Steps', 'url': 'https://clarify.ai.sltfinanceindia.com/app/settings/practice-coach.'}]
+
+=== TC-SET-006 | Fail ===
+ACTUAL: Here mainly hotkeys after refresh it hold custom and successfully reset all the option where as pressing keys its not be give the proper result
+NOTES: where as the mainly some keys are not working properly which ctrl+shift+w it not moving the custom section .
+URLS: [{'col': 'Exact Steps', 'url': 'https://clarify.ai.sltfinanceindia.com/app/settings/hotkeys.'}]
+
+=== TC-SET-007 | Pass ===
+ACTUAL: Here mainly save privacy setting can hold the information give the user can enable and disable option clearly
+NOTES: user can clearly save the options and after refresh it will give the persistence
+URLS: [{'col': 'Exact Steps', 'url': 'https://clarify.ai.sltfinanceindia.com/app/settings/privacy.'}]
+
+=== TC-SET-008 | Fail ===
+ACTUAL: User can't find the save option and update password section click hide/show functionlity
+NOTES: user can click show/hide option both new and confirm both can operation doing same felid
+URLS: [{'col': 'Exact Steps', 'url': 'https://clarify.ai.sltfinanceindia.com/app/settings/security.'}]
+
+=== TC-SET-009 | Pass ===
+ACTUAL: user can change the there related model and save preference which leads the same model after refresh.
+NOTES: in this mainly font issues is there were as the save preference other wise it give the persistence.
+URLS: [{'col': 'Exact Steps', 'url': 'https://clarify.ai.sltfinanceindia.com/app/settings/models.'}]
+
+=== TC-SET-010 | Fail ===
+ACTUAL: user can see the integration models in that calendar can give API 501 (Not Implemented)
+NOTES: User can't see the save option ,where as list of integration models it can be the calendar can "Calendar sync is not available yet." 501
+URLS: [{'col': 'Exact Steps', 'url': 'https://clarify.ai.sltfinanceindia.com/app/settings/integrations.'}]
+
+=== TC-SET-011 | Pass ===
+ACTUAL: User can export the data there is no any save options.
+NOTES: where as the export data json which get limited rate to download please verity .
+URLS: [{'col': 'Exact Steps', 'url': 'https://clarify.ai.sltfinanceindia.com/app/settings/data.'}]
+
+=== TC-SET-012 | Fail ===
+ACTUAL: User can't find the save option and Export your data should be the limited rate
+NOTES: There is no option to save where as the Export Your data have the limited user can download n times using pro account .which 429 to many request.
+URLS: [{'col': 'Exact Steps', 'url': 'https://clarify.ai.sltfinanceindia.com/app/settings/danger.'}]
+
+=== TC-SET-013 | Fail ===
+ACTUAL: User change the modification and click on the save preference it will not be persistence
+NOTES: In the module mainly UI issues there save preference option also scrolling please be verify
+URLS: [{'col': 'Exact Steps', 'url': 'https://clarify.ai.sltfinanceindia.com/app/settings/polish.'}]
+
+=== TC-SET-014 | Fail ===
+ACTUAL: In billing section there is no  modify and save option where as the apply the promo /referral code check there functionality
+NOTES: In this referral and promo code is available after enter how to apply or verify the code verify the feature and validation
+URLS: [{'col': 'Exact Steps', 'url': 'https://clarify.ai.sltfinanceindia.com/app/settings/billing.'}]
+
+=== TC-SET-015 | Not Run ===
+NOTES: Skip if not authorized this cycle ΓÇö mark Blocked.
+

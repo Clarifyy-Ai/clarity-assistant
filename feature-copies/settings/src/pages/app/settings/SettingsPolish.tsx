@@ -1,0 +1,315 @@
+// Sprint E: Settings polish — per-feature retention, notification channels (email/push/in-app),
+// test-notification button, CSV export of session history. Stored in profiles.ui_preferences.polish.
+import { useEffect, useRef, useState } from "react";
+import { useAuthStore } from "@/store/authStore";
+import { toast } from "sonner";
+import {
+  Bell, Mail, Smartphone, MonitorSmartphone, Send, Download, Clock, Save, CheckCircle,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { userFacingDbError } from "@/lib/errors/userFacingDbError";
+import { fetchEdge } from "@/lib/network/fetchEdge";
+import { createExportIdempotencyKey, messageFromExportCaught } from "@/lib/export/exportUserFacingError";
+
+type RetentionKey = "transcripts" | "ai_answers" | "debriefs" | "documents";
+type ChannelKey = "email" | "push" | "in_app";
+
+const RETENTION_FEATURES: { key: RetentionKey; label: string; desc: string }[] = [
+  { key: "transcripts", label: "Session transcripts", desc: "Raw audio-to-text records" },
+  { key: "ai_answers", label: "AI answer history", desc: "Generated STAR responses" },
+  { key: "debriefs", label: "Debriefs", desc: "Post-session AI analysis" },
+  { key: "documents", label: "Uploaded documents", desc: "Resumes, JDs, notes" },
+];
+
+const RETENTION_CHOICES = [7, 30, 90, 180, 365, 0]; // 0 = forever
+
+const CHANNELS: { key: ChannelKey; label: string; icon: typeof Mail; desc: string }[] = [
+  { key: "email", label: "Email", icon: Mail, desc: "Important updates to your inbox" },
+  { key: "push", label: "Push", icon: Smartphone, desc: "Mobile/desktop push notifications" },
+  { key: "in_app", label: "In-app", icon: MonitorSmartphone, desc: "Bell icon in the top bar" },
+];
+
+interface ExtendedPrefs {
+  retention: Partial<Record<RetentionKey, number>>;
+  channels: Partial<Record<ChannelKey, boolean>>;
+}
+
+const DEFAULTS: ExtendedPrefs = {
+  retention: { transcripts: 90, ai_answers: 180, debriefs: 365, documents: 0 },
+  channels: { email: true, push: false, in_app: true },
+};
+
+function readPolishPrefs(uiPreferences: unknown): ExtendedPrefs {
+  const ui =
+    uiPreferences && typeof uiPreferences === "object"
+      ? (uiPreferences as Record<string, unknown>)
+      : {};
+  const polish =
+    ui.polish && typeof ui.polish === "object"
+      ? (ui.polish as Partial<ExtendedPrefs>)
+      : {};
+  return {
+    retention: { ...DEFAULTS.retention, ...(polish.retention ?? {}) },
+    channels: { ...DEFAULTS.channels, ...(polish.channels ?? {}) },
+  };
+}
+
+export default function SettingsPolish() {
+  const { user, profile, updateProfile } = useAuthStore();
+  const [prefs, setPrefs] = useState<ExtendedPrefs>(() =>
+    readPolishPrefs(profile?.ui_preferences),
+  );
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const exportRetryKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    setPrefs(readPolishPrefs(profile?.ui_preferences));
+  }, [profile?.id, profile?.ui_preferences]);
+
+  async function save() {
+    if (!user) return;
+    setSaving(true);
+    setSaved(false);
+    setSaveFailed(false);
+    try {
+      const base =
+        profile?.ui_preferences && typeof profile.ui_preferences === "object"
+          ? (profile.ui_preferences as Record<string, unknown>)
+          : {};
+      await updateProfile({
+        ui_preferences: {
+          ...base,
+          polish: {
+            retention: prefs.retention,
+            channels: prefs.channels,
+          },
+        },
+      } as any);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      toast.success("Preferences saved");
+    } catch (e: unknown) {
+      setSaveFailed(true);
+      toast.error(userFacingDbError(e, "save"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function previewToast() {
+    setTesting(true);
+    try {
+      toast.success("Preview toast — local only", {
+        description: "This does not send email or push. Channel delivery is not wired from this button.",
+      });
+    } finally {
+      setTimeout(() => setTesting(false), 600);
+    }
+  }
+
+  async function exportSessionsCsv() {
+    if (!user || exporting) return;
+    setExporting(true);
+    const idempotencyKey =
+      exportRetryKey.current ?? createExportIdempotencyKey("sessions-csv");
+    exportRetryKey.current = idempotencyKey;
+    try {
+      const res = await fetchEdge(
+        "export-user-data",
+        { type: "sessions", idempotencyKey },
+        {
+          headers: {
+            "Idempotency-Key": idempotencyKey,
+            "x-idempotency-key": idempotencyKey,
+          },
+        },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw Object.assign(new Error(messageFromExportCaught(body)), { status: res.status, code: body?.code });
+      }
+      const payload = await res.json();
+      const rows: Record<string, unknown>[] = Array.isArray(payload?.sessions)
+        ? payload.sessions
+        : [];
+      if (rows.length === 0) {
+        toast.info("No sessions to export");
+        exportRetryKey.current = null;
+        return;
+      }
+      const cols = Object.keys(rows[0] ?? {});
+      const escape = (v: unknown) => {
+        if (v === null || v === undefined) return "";
+        const s = typeof v === "object" ? JSON.stringify(v) : String(v);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const csv = [
+        cols.join(","),
+        ...rows.map((r) => cols.map((c) => escape(r[c])).join(",")),
+      ].join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `clarify-sessions-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      exportRetryKey.current = null;
+      toast.success(`Exported ${rows.length} sessions`);
+    } catch (e: unknown) {
+      toast.error(messageFromExportCaught(e));
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  return (
+    <div className="max-w-3xl space-y-5">
+      <div>
+        <h1 className="text-xl font-bold">Polish & advanced preferences</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Preference-only retention (not yet enforced), notification channel prefs, and CSV export.
+        </p>
+      </div>
+
+      <section className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Clock className="w-4 h-4 text-blue-400" />
+          <h2 className="text-sm font-semibold">Data retention (per feature)</h2>
+        </div>
+        <p className="text-xs text-muted-foreground mb-3">
+          Preference only — not yet enforced. No automatic purge job runs against these values yet.
+        </p>
+        <ul className="space-y-3">
+          {RETENTION_FEATURES.map((f) => (
+            <li key={f.key} className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm">{f.label}</p>
+                <p className="text-xs text-muted-foreground">{f.desc}</p>
+              </div>
+              <select
+                value={prefs.retention[f.key] ?? 0}
+                onChange={(e) =>
+                  setPrefs((p) => ({
+                    ...p,
+                    retention: { ...p.retention, [f.key]: Number(e.target.value) },
+                  }))
+                }
+                className="bg-background border border-border rounded-md text-xs px-2 py-1.5"
+              >
+                {RETENTION_CHOICES.map((d) => (
+                  <option key={d} value={d}>
+                    {d === 0 ? "Forever" : `${d} days`}
+                  </option>
+                ))}
+              </select>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Bell className="w-4 h-4 text-primary" />
+          <h2 className="text-sm font-semibold">Notification channels</h2>
+        </div>
+        <ul className="space-y-2">
+          {CHANNELS.map(({ key, label, icon: Icon, desc }) => {
+            const on = !!prefs.channels[key];
+            return (
+              <li
+                key={key}
+                className="flex items-center justify-between gap-3 py-1.5"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <Icon className="w-4 h-4 text-muted-foreground" />
+                  <div>
+                    <p className="text-sm">{label}</p>
+                    <p className="text-xs text-muted-foreground">{desc}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPrefs((p) => ({
+                      ...p,
+                      channels: { ...p.channels, [key]: !on },
+                    }))
+                  }
+                  aria-pressed={on}
+                  className={cn(
+                    "relative w-10 h-6 rounded-full transition-colors",
+                    on ? "bg-primary" : "bg-secondary"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-background transition-transform",
+                      on && "translate-x-4"
+                    )}
+                  />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="mt-3 flex flex-col gap-1.5">
+          <button
+            type="button"
+            onClick={previewToast}
+            disabled={testing}
+            className="px-3 py-1.5 text-xs rounded-md border border-border hover:bg-secondary flex items-center gap-1.5 w-fit"
+          >
+            <Send className="w-3.5 h-3.5" />
+            {testing ? "Showing…" : "Preview toast"}
+          </button>
+          <p className="text-xs text-muted-foreground">
+            Local toast preview only — does not send a real notification.
+          </p>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <Download className="w-4 h-4 text-emerald-400" />
+          <h2 className="text-sm font-semibold">Quick export</h2>
+        </div>
+        <p className="text-xs text-muted-foreground mb-3">
+          Download your last 1,000 sessions as CSV (includes scores, timestamps, and metadata).
+        </p>
+        <button
+          type="button"
+          onClick={exportSessionsCsv}
+          disabled={exporting}
+          className="px-3 py-1.5 text-xs rounded-md border border-border hover:bg-secondary flex items-center gap-1.5"
+        >
+          <Download className="w-3.5 h-3.5" />
+          {exporting ? "Exporting…" : "Export sessions as CSV"}
+        </button>
+      </section>
+
+      <div className="sticky bottom-4 flex justify-end">
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={saving}
+          className={cn(
+            "px-4 py-2 text-sm rounded-md text-white flex items-center gap-2 shadow-lg",
+            saved
+              ? "bg-emerald-600 hover:bg-emerald-600"
+              : saveFailed
+                ? "bg-destructive hover:bg-destructive"
+                : "bg-primary hover:bg-primary",
+          )}
+        >
+          {saved ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+          {saving ? "Saving…" : saved ? "Saved!" : saveFailed ? "Failed — retry" : "Save preferences"}
+        </button>
+      </div>
+    </div>
+  );
+}

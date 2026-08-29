@@ -65,15 +65,33 @@ function isBrowserReservedCombo(combo: string): boolean {
   return BROWSER_RESERVED.has(combo.trim().toLowerCase());
 }
 
+function isAllowedHotkeyKey(key: string): boolean {
+  if (!key || key.length === 0) return false;
+  if (["Tab", "CapsLock", "Escape", "Enter", "Backspace", "Delete", "Insert", "Home", "End",
+    "PageUp", "PageDown", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "ContextMenu",
+    "PrintScreen", "Pause", "ScrollLock", "NumLock", "Space", "Spacebar"].includes(key)) {
+    return false;
+  }
+  if (/^F\d{1,2}$/.test(key)) return false;
+  return key.length === 1 || /^[A-Za-z0-9!@#$%^&*()_+\-=\[\]{};':",./<>?\\|`~]$/.test(key);
+}
+
 function captureCombo(e: KeyboardEvent): string | null {
-  if (["Control", "Shift", "Alt", "Meta"].includes(e.key)) return null;
+  const rawKey = e.key;
+  if (["Control", "Shift", "Alt", "Meta", "Dead"].includes(rawKey)) return null;
+  if (!isAllowedHotkeyKey(rawKey)) return null;
+
   const parts: string[] = [];
   if (e.ctrlKey) parts.push("Ctrl");
   if (e.metaKey) parts.push(isMac() ? "⌘" : "Meta");
   if (e.altKey) parts.push("Alt");
   if (e.shiftKey) parts.push("Shift");
-  parts.push(e.key.length === 1 ? e.key.toUpperCase() : e.key);
-  return parts.join("+");
+
+  const key = rawKey.length === 1 ? rawKey.toUpperCase() : rawKey;
+  parts.push(key);
+
+  const combo = parts.join("+");
+  return combo.trim() && combo.length <= 32 ? combo : null;
 }
 
 export default function SettingsHotkeys() {

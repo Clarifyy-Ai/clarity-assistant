@@ -231,6 +231,10 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
         </div>
+      ) : error ? (
+        <div className="rounded-xl border border-border bg-card p-6 text-center">
+          <p className="text-muted-foreground">Dashboard metrics unavailable. Please try again.</p>
+        </div>
       ) : (
         <>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

@@ -11,6 +11,7 @@ import {
 // ─────────────────────────────────────────────────────────────────
 // Modal
 // Accessible modal dialog — Radix Dialog with app styling.
+// Ensures all modals have both DialogTitle and DialogDescription for WCAG compliance.
 // ─────────────────────────────────────────────────────────────────
 
 interface ModalProps {
@@ -34,6 +35,11 @@ const SIZES = {
 export function Modal({
   open, onClose, title, description, children, size = "md", className,
 }: ModalProps) {
+  // Ensure we always have a title for accessibility
+  const modalTitle = title || "Dialog";
+  // Ensure we always have a description for accessibility
+  const modalDescription = description || (title ? `${title} dialog` : "Dialog content");
+
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent
@@ -61,7 +67,7 @@ export function Modal({
           </div>
         ) : (
           <>
-            <DialogTitle className="sr-only">Dialog</DialogTitle>
+            <DialogTitle className="sr-only">{modalTitle}</DialogTitle>
             <button
               type="button"
               onClick={onClose}
@@ -73,7 +79,7 @@ export function Modal({
           </>
         )}
         <DialogDescription className="sr-only">
-          {description ?? (title ? `${title} dialog` : "Dialog content")}
+          {modalDescription}
         </DialogDescription>
         <div className="p-6">
           {description && (

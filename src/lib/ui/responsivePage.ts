@@ -2,7 +2,8 @@
 
 /**
  * Hub / list / dashboard pages — fill the AppShell content column
- * (shell already caps at max-w-7xl). Do not nest a narrower left-aligned max-width.
+ * (AppShell uses responsive padding, not a max-width constraint).
+ * Pages may use their own max-width if needed for readability.
  */
 export const PAGE_SHELL =
   "w-full min-w-0 overflow-x-hidden";

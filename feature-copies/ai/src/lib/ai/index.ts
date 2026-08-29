@@ -1,0 +1,58 @@
+// ─── AI Clients ───────────────────────────────────────────────────────────────
+export { streamClaudeHint } from "./anthropicClient";
+export type { ClaudeStreamOptions } from "./anthropicClient";
+export { streamOpenAIHint, streamCoachChat } from "./openaiClient";
+export type { OpenAIStreamOptions, CoachChatStreamOptions } from "./openaiClient";
+export { submitCoachChatMessage, loadCoachChatHistory } from "./coachChatSession";
+export { streamGeminiHint, consumeSSEStream } from "./geminiClient";
+export type { GeminiStreamOptions, GeminiModel } from "./geminiClient";
+
+// ─── Model Router ─────────────────────────────────────────────────────────────
+export { routeHint, selectModel } from "./modelRouter";
+export type { RouteHintOptions } from "./modelRouter";
+
+// ─── AI Hub fallback walk (mirrors Edge ai-hub-router) ───────────────────────
+export {
+  buildHubTryModels,
+  walkHubFallbackChain,
+} from "./aiHubFallbackWalk";
+export type {
+  HubFallbackWalkResult,
+  HubGenerateAttempt,
+  HubModelSelection,
+} from "./aiHubFallbackWalk";
+
+// ─── Prompt Templates ─────────────────────────────────────────────────────────
+export {
+  buildPrompt,
+  PROMPT_TEMPLATES,
+  LIVE_ANSWER,
+  LIVE_HINT,
+  LIVE_FEEDBACK,
+  STAR_BUILDER,
+  REPHRASER,
+  COMPANY_RESEARCH,
+  CODING_HINT,
+  SYSTEM_DESIGN,
+  SESSION_DEBRIEF,
+  AI_COACH_CHAT,
+  EMAIL_CONTENT,
+} from "./promptTemplates";
+
+export type {
+  PromptContext,
+  PromptTemplate,
+  PromptTemplateKey,
+} from "./promptTemplates";
+
+// ─── Context Envelope Builder ─────────────────────────────────────────────────
+export { buildContextEnvelope } from "./contextEnvelopeBuilder";
+
+export {
+  parseStructuredJson,
+  AI_RESPONSE_INVALID,
+  AI_RESPONSE_INVALID_MESSAGE,
+} from "./structuredParse";
+
+// ─── Offline Templates ────────────────────────────────────────────────────────
+export { getOfflineTemplate, getAllOfflineTemplates, getPanicResponse, OFFLINE_PANIC } from "./offlineTemplates";

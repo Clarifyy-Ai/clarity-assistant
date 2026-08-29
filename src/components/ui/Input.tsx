@@ -61,6 +61,15 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             className="text-xs font-medium text-muted-foreground"
           >
             {label}
+            {props.required && (
+              <span
+                className="ml-1 text-red-500"
+                aria-label="required field"
+                title="This field is required"
+              >
+                *
+              </span>
+            )}
           </label>
         )}
 
@@ -171,6 +180,15 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
             className="text-xs font-medium text-muted-foreground"
           >
             {label}
+            {props.required && (
+              <span
+                className="ml-1 text-red-500"
+                aria-label="required field"
+                title="This field is required"
+              >
+                *
+              </span>
+            )}
           </label>
         )}
 

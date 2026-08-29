@@ -1,0 +1,169 @@
+import { useState, useEffect } from "react";
+import { useAuthStore } from "@/store/authStore";
+import { useOverlayStore } from "@/store/overlayStore";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import { Cpu, Check, Loader2, Lock } from "lucide-react";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import type { PreferredAIModel } from "@/types/user.types";
+import {
+  MODEL_OPTIONS,
+  normalizePreferredModel,
+  servedModelForPreference,
+  toDbPreferredModel,
+} from "@/lib/ai/modelOptions";
+import {
+  getModelLockReason,
+  providerForModel,
+  providerUnavailableReason,
+  refreshProviderAvailability,
+  hasLoadedProviderFlags,
+  useProviderFlags,
+} from "@/lib/ai/providerAvailability";
+import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
+
+export default function SettingsModels() {
+  const profile = useAuthStore((s) => s.profile);
+  const planId = useAuthStore((s) => s.planId);
+  const updateProfile = useAuthStore((s) => s.updateProfile);
+
+  const [selected, setSelected] = useState<PreferredAIModel>(
+    normalizePreferredModel(profile?.preferred_model)
+  );
+  const [saving, setSaving] = useState(false);
+
+  const providerFlags = useProviderFlags();
+  const providersLoaded = hasLoadedProviderFlags();
+  useEffect(() => {
+    void refreshProviderAvailability();
+  }, []);
+  const fallbackToGemini =
+    providersLoaded && (providerFlags.openai === false || providerFlags.anthropic === false);
+
+  useEffect(() => {
+    if (profile?.preferred_model) {
+      setSelected(normalizePreferredModel(profile.preferred_model));
+    }
+  }, [profile?.preferred_model]);
+
+  async function handleSave() {
+    if (!profile?.id) return;
+    if (getModelLockReason(selected, planId) === "plan") {
+      toast.error("Upgrade to Pro to use GPT-4o and Claude.");
+      return;
+    }
+    if (getModelLockReason(selected, planId) === "provider") {
+      toast.error(providerUnavailableReason(providerForModel(selected)));
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateProfile({
+        preferred_model: toDbPreferredModel(selected) as any,
+      });
+      useOverlayStore.getState().setActiveModel(normalizePreferredModel(selected));
+
+      toast.success("AI model preference saved.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save model");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <SettingsPageShell title="AI Models">
+      <Card>
+        <div className="flex items-start gap-3 mb-4">
+          <Cpu className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">Default model</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Preference is saved to your profile. The server validates the
+              selection against your plan and routes to the served model below.
+              If a provider is unavailable, requests fall back to Gemini.
+            </p>
+            {fallbackToGemini && (
+              <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                Provider unavailable, using Gemini.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          {MODEL_OPTIONS.map((m) => {
+            const lock = getModelLockReason(m.value, planId);
+            const locked = lock !== null;
+            return (
+              <button
+                key={m.value}
+                type="button"
+                disabled={locked}
+                onClick={() => {
+                  if (lock === "plan") {
+                    toast.error("Upgrade to Pro to use GPT-4o and Claude.");
+                    return;
+                  }
+                  if (lock === "provider") {
+                    toast.error(providerUnavailableReason(providerForModel(m.value)));
+                    return;
+                  }
+                  setSelected(m.value);
+                }}
+                className={cn(
+                  "w-full text-left rounded-xl border p-3 transition-all",
+                  selected === m.value && !locked
+                    ? "border-primary/50 bg-primary/10"
+                    : "border-border hover:border-primary/30",
+                  locked && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-foreground">{m.label}</span>
+                  <Badge variant="secondary" size="sm" className="gap-1">
+                    {lock === "provider" ? (
+                      "Unavailable"
+                    ) : lock === "plan" ? (
+                      <>
+                        <Lock className="w-3 h-3" /> Pro
+                      </>
+                    ) : (
+                      m.badge
+                    )}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">{m.desc}</p>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Served as {servedModelForPreference(m.value)}
+                </p>
+              </button>
+            );
+          })}
+        </div>
+
+        <Button
+          variant="primary"
+          size="sm"
+          className="mt-4"
+          onClick={handleSave}
+          disabled={
+            saving ||
+            selected === normalizePreferredModel(profile?.preferred_model ?? null)
+          }
+          leftIcon={
+            saving ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Check className="w-4 h-4" />
+            )
+          }
+        >
+          {saving ? "Saving…" : "Save preference"}
+        </Button>
+      </Card>
+    </SettingsPageShell>
+  );
+}

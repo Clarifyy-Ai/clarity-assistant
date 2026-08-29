@@ -16,6 +16,7 @@ import { cn, isValidUrl } from "@/lib/utils";
 import { toast } from "sonner";
 import { getPasswordStrength } from "@/lib/validators/emailValidator";
 import { changePasswordSchema } from "@/lib/validators/authSchemas";
+import { profileUpdateSchema } from "@/lib/validators/profileSchemas";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 
 function normalizeWebsiteUrl(raw: string): string | null {
@@ -247,37 +248,40 @@ export default function SettingsProfile() {
     setSaved(false);
     setSaveFailed(false);
 
-    let websiteUrl: string | null;
-    try {
-      websiteUrl = normalizeWebsiteUrl(website);
-      setWebsiteError(null);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Invalid website URL.";
-      setWebsiteError(message);
-      toast.error(message);
-      setSaveFailed(true);
-      setSaving(false);
-      return;
-    }
-
+    // ✅ FIX: Validate using profileUpdateSchema
+    // - Full Name is required and min 2 chars
+    // - Website URL must be valid
+    // - All fields are validated before sending to server
+    const trimmedName = name.trim();
     const yearsNum = EXPERIENCE_LEVELS.find((l) => l.label === experience)?.years ?? null;
     const tz =
       PROFILE_TIMEZONES.includes(timezone as (typeof PROFILE_TIMEZONES)[number])
         ? timezone
         : "UTC";
-    const updates: Record<string, unknown> = {
-      full_name:        name.trim(),
-      bio:              bio.trim(),
-      timezone:         tz,
-      website_url:      websiteUrl,
+
+    const payload = {
+      full_name: trimmedName,
+      bio: bio.trim(),
+      timezone: tz,
+      website_url: website.trim() || null,
       experience_years: yearsNum,
-      target_role:      targetRole || null,
-      avatar_url:       avatarUrl,
+      target_role: targetRole || null,
+      avatar_url: avatarUrl,
     };
 
+    // Validate payload with schema
+    const validation = profileUpdateSchema.safeParse(payload);
+    if (!validation.success) {
+      const firstError = validation.error.issues[0]?.message ?? "Invalid profile data.";
+      toast.error(firstError);
+      setSaveFailed(true);
+      setSaving(false);
+      return;
+    }
+
     try {
-      await updateProfile(updates as any);
-      if (websiteUrl) setWebsite(websiteUrl);
+      await updateProfile(validation.data as any);
+      if (website.trim()) setWebsite(website.trim());
       setSaved(true);
       toast.success("Profile saved");
       setTimeout(() => setSaved(false), 2000);
@@ -346,12 +350,28 @@ export default function SettingsProfile() {
       <Card>
         <h3 className="text-sm font-semibold text-foreground mb-4">Basic info</h3>
         <div className="space-y-4">
-          <Input
-            label="Full name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Your name"
-          />
+          <div>
+            <Input
+              label="Full name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Your name"
+              aria-invalid={name.trim().length > 0 && name.trim().length < 2}
+            />
+            {name.trim().length > 0 && name.trim().length < 2 && (
+              <p className="mt-1 text-xs text-destructive" role="alert">
+                Full name must be at least 2 characters long.
+              </p>
+            )}
+            {name.trim().length > 200 && (
+              <p className="mt-1 text-xs text-destructive" role="alert">
+                Full name must be 200 characters or less.
+              </p>
+            )}
+            {name.trim().length > 0 && name.trim().length >= 2 && name.trim().length <= 200 && (
+              <p className="mt-1 text-xs text-emerald-500">✓ Full name looks good</p>
+            )}
+          </div>
           <div>
             <p className="text-xs font-medium text-foreground mb-1.5">Bio</p>
             <textarea

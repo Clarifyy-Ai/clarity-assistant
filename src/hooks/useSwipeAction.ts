@@ -22,6 +22,11 @@ export interface SwipeActionBind {
 /**
  * Touch-friendly swipe-left reveal for list rows (e.g. delete affordance).
  * Keeps a visible button fallback — swipe is additive, not exclusive.
+ * 
+ * CRITICAL: Never capture pointer events on interactive elements (buttons, links).
+ * The check in onPointerDown prevents swipe initialization from buttons, but the
+ * setPointerCapture call must happen AFTER this check to ensure interactive
+ * elements retain full control of their pointer event stream.
  */
 export function useSwipeAction(options: UseSwipeActionOptions = {}) {
   const { threshold = 60, maxReveal = 72, onReveal, onReset } = options;
@@ -55,16 +60,19 @@ export function useSwipeAction(options: UseSwipeActionOptions = {}) {
 
   const onPointerDown = useCallback(
     (e: PointerEvent<HTMLElement>) => {
-      // Never capture when the gesture starts on a button/link — otherwise
-      // row swipe steals clicks (e.g. Session History "View Details").
+      // CRITICAL: Never capture when the gesture starts on a button/link/interactive element.
+      // This ensures buttons like "View Details" retain full control of the pointer stream.
       const target = e.target as HTMLElement | null;
       if (target?.closest("button, a, input, select, textarea, [role='button']")) {
-        return;
+        return;  // Return WITHOUT capturing pointer — let the interactive element handle the event
       }
+      
+      // Only proceed with swipe if the target is NOT interactive
       dragging.current = true;
       setIsDragging(true);
       startX.current = e.clientX;
       startOffset.current = offsetRef.current;
+      // Only capture pointer for non-interactive elements to avoid stealing focus/clicks
       e.currentTarget.setPointerCapture(e.pointerId);
     },
     [],

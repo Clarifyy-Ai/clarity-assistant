@@ -1,0 +1,131 @@
+{
+  "questionKeys": [
+    "id",
+    "question_text",
+    "question_html",
+    "question_type",
+    "options",
+    "correct_answer",
+    "explanation",
+    "explanation_html",
+    "subject",
+    "topic",
+    "subtopic",
+    "difficulty",
+    "exam_type",
+    "source",
+    "source_year",
+    "source_paper",
+    "marks_positive",
+    "marks_negative",
+    "has_image",
+    "image_url",
+    "latex_present",
+    "uploaded_by",
+    "is_verified",
+    "is_public",
+    "upvotes",
+    "downvotes",
+    "created_at",
+    "updated_at",
+    "question_blocks",
+    "option_blocks",
+    "explanation_blocks",
+    "metadata",
+    "category",
+    "tags",
+    "time_limit_seconds",
+    "license_type",
+    "content_owner",
+    "created_by",
+    "license_url",
+    "copyright_status",
+    "publish_status",
+    "bank_id",
+    "eligible_roles",
+    "cross_functional",
+    "review_status",
+    "is_current_affairs",
+    "ca_applicable_date",
+    "ca_source_date",
+    "ca_cutoff_date",
+    "ca_primary_source",
+    "ca_expiry_date",
+    "ca_is_stale",
+    "ca_stale_flagged_at",
+    "validation_status",
+    "validation_errors",
+    "source_type",
+    "quality_algorithm_version",
+    "duplicate_algorithm_version",
+    "generator_version",
+    "generation_method",
+    "source_template",
+    "source_question_id"
+  ],
+  "translationKeys": [],
+  "helpFocus": [
+    {
+      "slug": "gs-4",
+      "published": false,
+      "q": "Is there a free plan?",
+      "answer": "Yes. The Free plan includes 200 credits per month, full access to practice sessions, the STAR builder, and the answer bank. No credit card required.",
+      "body": "Yes. The Free plan includes:\n\n- **200 credits** per month\n- Practice sessions with the live AI coach\n- STAR builder and answer bank\n- Resume + JD gap analysis\n\nNo credit card required. Upgrade to **Pr",
+      "hasWeird": false
+    },
+    {
+      "slug": "bi-5",
+      "published": true,
+      "q": "Can I buy extra credits?",
+      "answer": "A la carte credit packs are not available at launch. Upgrade your plan to increase your monthly allowance.",
+      "body": "A la carte credit packs are not available at launch. To increase your monthly allowance, upgrade to **Pro** (INR 2,499 one-time, 1,400 credits) or **Max** (INR 6,799 one-time, 4,000 credits) from **Se",
+      "hasWeird": false
+    },
+    {
+      "slug": "gs-3",
+      "published": true,
+      "q": "Is there a free plan?",
+      "answer": "Yes. The Free plan includes 50 credits per month - enough to try Practice Coach and a mock session. Pro is INR 2,499 one-time. Max is INR 6,799 one-time.",
+      "body": "Yes. The Free plan includes:\n\n- **50 credits** per month\n- Practice sessions with the live AI coach (limited)\n- STAR builder and answer bank (limited)\n\nNo credit card required. Upgrade to **Pro** (INR",
+      "hasWeird": false
+    }
+  ],
+  "freeBillingSelect": {
+    "rows": []
+  },
+  "freeBillingUpdate": {
+    "blocked": false,
+    "data": []
+  },
+  "questionsWithoutQuality": {
+    "count": 0
+  },
+  "col_quality_score": "column questions.quality_score does not exist",
+  "col_quality_algorithm_version": "ok",
+  "col_source_type": "ok",
+  "col_is_verified": "ok",
+  "col_is_public": "ok",
+  "col_metadata": "ok",
+  "edges": {
+    "hybrid-orchestrate": {
+      "status": 404,
+      "body": "{\"code\":\"NOT_FOUND\",\"message\":\"Requested function was not found\"}"
+    },
+    "hybrid-health": {
+      "status": 200,
+      "body": "{\"edge\":\"ok\",\"configured\":true,\"required\":\"ok\",\"db\":{\"ok\":true,\"status\":\"ok\"},\"storage\":{\"ok\":true,\"status\":\"ok\"},\"supported_operations\":[\"gov_exam_assemble\",\"resume_parse\",\"document_process\",\"star_builder\",\"system_design\",\"practice_coach_help\",\"live_answer\",\"company_research\",\"mock_question_generation\",\"sprint_review_transcript\",\"gap_analysis\",\"session_debrief\",\"session_scorecard\",\"analyze_test\","
+    },
+    "ai-health": {
+      "status": 404,
+      "body": "{\"code\":\"NOT_FOUND\",\"message\":\"Requested function was not found\"}"
+    },
+    "gov-exam-health": {
+      "status": 404,
+      "body": "{\"code\":\"NOT_FOUND\",\"message\":\"Requested function was not found\"}"
+    },
+    "process-paper": {
+      "status": 404,
+      "body": "{\"code\":\"NOT_FOUND\",\"message\":\"Requested function was not found\"}"
+    }
+  }
+}

@@ -1,0 +1,281 @@
+{
+  "stamp": "mtaxo464",
+  "adminId": "487ebbad",
+  "gov_official_sources": {
+    "count": 5,
+    "sample": [
+      {
+        "id": "af1cd212-f01c-4870-9a68-7ccca6c859df",
+        "title": "SSC official website / notifications",
+        "review_state": "approved",
+        "source_url": "https://ssc.gov.in/"
+      },
+      {
+        "id": "fdee3aa7-5618-436a-a86d-b1a27f371fb4",
+        "title": "SSC CGL syllabus (verify current notice)",
+        "review_state": "approved",
+        "source_url": "https://ssc.gov.in/"
+      },
+      {
+        "id": "23ee17b8-d4f4-466a-8f76-3222855fbf6c",
+        "title": "IBPS notifications",
+        "review_state": "approved",
+        "source_url": "https://www.ibps.in/"
+      },
+      {
+        "id": "b7e9afea-9ede-4055-87ec-f69a5855473b",
+        "title": "RRB CEN notices & mock links",
+        "review_state": "approved",
+        "source_url": "https://www.rrbcdg.gov.in/"
+      },
+      {
+        "id": "53d1668a-1db6-4609-aa2d-71ffac4f8c4f",
+        "title": "UPSC previous question papers archive",
+        "review_state": "approved",
+        "source_url": "https://upsc.gov.in/examinations/previous-question-papers"
+      }
+    ]
+  },
+  "source_ingestion_jobs": {
+    "keys": [],
+    "n": 0
+  },
+  "get_gov_exam_bank_readiness": {
+    "rows": 5
+  },
+  "listQuestionsLikeUI": {
+    "error": "column questions.quality_score does not exist",
+    "code": "42703",
+    "details": null
+  },
+  "questionFilterWithSourceMissing": {
+    "source_is_null": {
+      "count": 0
+    },
+    "source_empty": {
+      "count": 0
+    },
+    "exam_type_UPSC_id": {
+      "count": 0
+    },
+    "exam_type_UPSC_label": {
+      "count": 5
+    }
+  },
+  "createPromo0100": {
+    "inserted": {
+      "id": "f5c05638-32cb-4c6f-9c4c-2d42995f779f",
+      "code": "QA0100MTAXO464",
+      "bonus_credits": 100,
+      "discount_percent": 10
+    },
+    "reread": {
+      "id": "f5c05638-32cb-4c6f-9c4c-2d42995f779f",
+      "code": "QA0100MTAXO464",
+      "bonus_credits": 100
+    },
+    "parsedBonus": 100,
+    "match": true
+  },
+  "blogCrud": {
+    "created": {
+      "id": "25d6e99f-b654-4732-a20c-b5638d2aab89",
+      "slug": "qa-admin-blog-mtaxo464",
+      "published": false
+    },
+    "published": {
+      "id": "25d6e99f-b654-4732-a20c-b5638d2aab89",
+      "published": true
+    },
+    "publicRead": {
+      "id": "25d6e99f-b654-4732-a20c-b5638d2aab89",
+      "slug": "qa-admin-blog-mtaxo464",
+      "title": "QA Admin Blog mtaxo464",
+      "published": true
+    },
+    "unpublished": {
+      "published": false
+    },
+    "duplicateSlug": {
+      "rejected": true,
+      "message": "duplicate key value violates unique constraint \"blog_posts_slug_key\""
+    }
+  },
+  "helpDuplicatePublishGuard": {
+    "existing": [
+      {
+        "id": "3960946c-dda8-4612-b760-d9745e2a9583",
+        "slug": "gs-4",
+        "question": "Is there a free plan?",
+        "published": false
+      },
+      {
+        "id": "50222978-02db-4210-81b9-923bbe353f19",
+        "slug": "gs-3",
+        "question": "Is there a free plan?",
+        "published": true
+      }
+    ],
+    "publishDraft": {
+      "published": {
+        "id": "3960946c-dda8-4612-b760-d9745e2a9583",
+        "published": true
+      },
+      "note": "NO uniqueness guard — draft published"
+    },
+    "created": {
+      "id": "4da76ccf-fb3f-49c0-b358-fb70abf48d34",
+      "slug": "qa-help-mtaxo464",
+      "published": false
+    },
+    "publishedOk": {
+      "id": "4da76ccf-fb3f-49c0-b358-fb70abf48d34",
+      "published": true
+    }
+  },
+  "supportReply": {
+    "threads": [
+      {
+        "id": "ce223039-a35d-4742-a5d7-9ea78216946a",
+        "subject": "hi",
+        "status": "resolved",
+        "priority": "normal"
+      },
+      {
+        "id": "a50e004d-998a-4172-bad6-ae17ec6fcf51",
+        "subject": "Hello",
+        "status": "open",
+        "priority": "normal"
+      },
+      {
+        "id": "8f1445e6-5988-4b39-98d8-ec0072ad6588",
+        "subject": "hi",
+        "status": "open",
+        "priority": "normal"
+      }
+    ],
+    "tables": {
+      "support_messages": {
+        "keys": [
+          "id",
+          "thread_id",
+          "sender_id",
+          "sender_role",
+          "body",
+          "attachments",
+          "created_at"
+        ],
+        "n": 1
+      },
+      "support_thread_messages": "Could not find the table 'public.support_thread_messages' in the schema cache",
+      "support_replies": "Could not find the table 'public.support_replies' in the schema cache"
+    }
+  },
+  "billing_settings_update": {
+    "before": 50,
+    "afterWrite": {
+      "id": 1,
+      "referral_discount_percent": 10
+    },
+    "revertedTo": 50
+  },
+  "gov_generated_papers": {
+    "keys": [
+      "id",
+      "exam_id",
+      "stage_id",
+      "pattern_version_id",
+      "syllabus_version_id",
+      "job_id",
+      "created_by",
+      "title",
+      "paper_class",
+      "language",
+      "question_count",
+      "total_marks",
+      "duration_minutes",
+      "negative_mark",
+      "blueprint_json",
+      "provenance_json",
+      "quality_score",
+      "review_state",
+      "disclaimer",
+      "mock_test_id"
+    ],
+    "n": 2
+  },
+  "question_translations": {
+    "error": "column question_translations.is_published does not exist"
+  },
+  "hybrid_health_edge": {
+    "hybrid-health": {
+      "error": "The operation was aborted due to timeout"
+    },
+    "admin-diagnostics": {
+      "status": 404,
+      "body": "{\"code\":\"NOT_FOUND\",\"message\":\"Requested function was not found\"}"
+    },
+    "system-health": {
+      "status": 404,
+      "body": "{\"code\":\"NOT_FOUND\",\"message\":\"Requested function was not found\"}"
+    },
+    "health-check": {
+      "status": 404,
+      "body": "{\"code\":\"NOT_FOUND\",\"message\":\"Requested function was not found\"}"
+    }
+  },
+  "anon_public_help": [
+    {
+      "slug": "gs-3",
+      "question": "Is there a free plan?",
+      "published": true
+    }
+  ],
+  "anon_public_blog": [
+    {
+      "slug": "ai-interview-prep-2026",
+      "title": "How AI Is Changing Interview Preparation in 2026",
+      "published": true
+    },
+    {
+      "slug": "system-design-interview-guide",
+      "title": "System Design Interviews: What Top Companies Actually Look For",
+      "published": true
+    },
+    {
+      "slug": "overcoming-interview-anxiety",
+      "title": "5 Proven Strategies for Overcoming Interview Anxiety",
+      "published": true
+    },
+    {
+      "slug": "behavioral-questions-product-managers",
+      "title": "Top 20 Behavioral Questions for Product Managers",
+      "published": true
+    },
+    {
+      "slug": "mock-interview-benefits",
+      "title": "Why Mock Interviews Are the Most Underrated Prep Tool",
+      "published": true
+    }
+  ],
+  "freeSignin": {
+    "ok": true,
+    "id": "d17262d4"
+  },
+  "free_cannot_make_admin": {
+    "blocked": true,
+    "message": "new row violates row-level security policy for table \"user_roles\""
+  },
+  "free_cannot_create_promo": {
+    "blocked": true,
+    "message": "new row violates row-level security policy for table \"promo_codes\""
+  },
+  "free_cannot_update_billing": {
+    "blocked": true,
+    "message": "invalid input syntax for type smallint: \"00000000-0000-0000-0000-000000000000\""
+  },
+  "free_cannot_publish_help": {
+    "blocked": false,
+    "data": null
+  }
+}

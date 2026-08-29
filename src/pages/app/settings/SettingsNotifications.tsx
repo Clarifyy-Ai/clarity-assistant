@@ -71,6 +71,10 @@ export default function SettingsNotifications() {
   }
 
   function unsubscribeAll() {
+    const confirmed = window.confirm(
+      "Turn off all email and reminder notifications? You can re-enable them later from this page.",
+    );
+    if (!confirmed) return;
     setEmailNotifications(false);
     setSessionReminders(false);
     setMarketingEmails(false);

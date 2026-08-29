@@ -1,0 +1,114 @@
+{
+  "stamp": "mtaxvzrv",
+  "paperReview": {
+    "id": "9871ab56",
+    "approved": {
+      "id": "9871ab56-3969-49e6-b580-cf35cd8ba7e2",
+      "review_state": "approved"
+    },
+    "persistApproved": {
+      "review_state": "approved"
+    },
+    "rejected": {
+      "review_state": "rejected"
+    },
+    "restored": "machine_validated"
+  },
+  "registry": [
+    {
+      "id": "350462c0-9111-4555-b19f-1eee6880cb22",
+      "code": "SSC_CGL",
+      "name": "SSC Combined Graduate Level",
+      "is_public": true,
+      "review_state": "approved",
+      "legacy_exam_type": "SSC Exams (CGL/CHSL)"
+    },
+    {
+      "id": "4da8db79-b9b2-4611-a037-b283b19f0cdf",
+      "code": "IBPS_PO",
+      "name": "IBPS PO Preliminary",
+      "is_public": true,
+      "review_state": "approved",
+      "legacy_exam_type": "Banking (IBPS/SBI/RBI)"
+    },
+    {
+      "id": "635da7d7-600a-4c52-9492-aa3ae023122c",
+      "code": "UPSC_CSE_PRELIMS",
+      "name": "UPSC Civil Services Preliminary (GS)",
+      "is_public": true,
+      "review_state": "approved",
+      "legacy_exam_type": "UPSC CSE"
+    },
+    {
+      "id": "44f342de-705b-493f-9673-b1a2b06e503d",
+      "code": "APPSC_GROUP2",
+      "name": "APPSC Group-II Screening",
+      "is_public": true,
+      "review_state": "approved",
+      "legacy_exam_type": "APPSC (Group 1/2/3/4)"
+    },
+    {
+      "id": "947591af-ed99-4dab-a242-2e0357fcd821",
+      "code": "RRB_NTPC",
+      "name": "RRB NTPC",
+      "is_public": true,
+      "review_state": "approved",
+      "legacy_exam_type": "RRB NTPC"
+    }
+  ],
+  "registrySearch": {
+    "error": "Could not find the function public.search_gov_exams(p_query) in the schema cache"
+  },
+  "learning": {
+    "course": {
+      "id": "f46c0570-9fc7-42b7-8ca7-fbc367fce0db",
+      "slug": "qa-admin-learn-mtaxvzrv",
+      "publish_status": "draft"
+    },
+    "module": "5c321226",
+    "lesson": "Could not find the 'content_md' column of 'learning_lessons' in the schema cache",
+    "published": null,
+    "freeVisible": null
+  },
+  "featureFlags": {
+    "key": "offline_mode",
+    "before": true,
+    "afterWrite": {
+      "is_enabled": false
+    },
+    "publicSees": {
+      "key": "offline_mode",
+      "is_enabled": false
+    },
+    "restored": true
+  },
+  "blog": {
+    "created": {
+      "id": "f5394399-ace7-4daa-80aa-76119504772e",
+      "slug": "qa-blog-pub-mtaxvzrv",
+      "published": true
+    },
+    "anonSeesPublished": {
+      "slug": "qa-blog-pub-mtaxvzrv",
+      "title": "QA Blog mtaxvzrv",
+      "published": true
+    },
+    "anonSeesAfterUnpublish": null
+  },
+  "govSource": {
+    "insert": {
+      "id": "53c6d0b4-5ed8-40c4-9b78-e9856e95a9c5",
+      "title": "QA Source mtaxvzrv",
+      "review_state": "draft"
+    },
+    "persist": {
+      "id": "53c6d0b4-5ed8-40c4-9b78-e9856e95a9c5",
+      "title": "QA Source mtaxvzrv",
+      "review_state": "draft"
+    }
+  },
+  "promoRedeem": {
+    "status": 404,
+    "body": "{\"code\":\"NOT_FOUND\",\"message\":\"Requested function was not found\"}"
+  }
+}

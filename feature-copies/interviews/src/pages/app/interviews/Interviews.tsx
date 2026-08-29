@@ -1,0 +1,399 @@
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
+import { useInterviewScheduler } from "@/hooks/useInterviewScheduler";
+import { useCalendarSync } from "@/hooks/useCalendarSync";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import { SkeletonCard } from "@/components/ui/SkeletonLoader";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import {
+  CalendarDays, Plus, Building2, Clock,
+  ChevronRight, CheckCircle, AlertCircle,
+  Circle, Trash2, RefreshCw, Target,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  getCurrentRoundDate,
+  getCurrentRoundStatus,
+} from "@/lib/interviews/roundHelpers";
+import { format, isToday, isFuture } from "date-fns";
+import { toast } from "sonner";
+import { useSwipeAction } from "@/hooks/useSwipeAction";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { PAGE_SHELL } from "@/lib/ui/responsivePage";
+
+// ─────────────────────────────────────────────────────────────────
+// Interviews — full scheduled interview list
+// ─────────────────────────────────────────────────────────────────
+
+const STATUS_FILTERS = ["all", "upcoming", "today", "completed", "cancelled"] as const;
+type StatusFilter = typeof STATUS_FILTERS[number];
+
+export default function Interviews() {
+  const navigate   = useNavigate();
+  const scheduler  = useInterviewScheduler();
+  const store      = useInterviewSchedulerStore();
+  const calendar   = useCalendarSync();
+
+  const [filter, setFilter] = useState<StatusFilter>("all");
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  useEffect(() => { scheduler.reload(); }, []);
+
+  async function handleCalendarAction() {
+    if (!calendar.syncAvailable) {
+      toast.info("Google Calendar sync isn't configured yet — coming soon.");
+      return;
+    }
+    if (!calendar.isConnected) {
+      await calendar.connectGoogle();
+      return;
+    }
+    const { imported, error } = await calendar.syncNow();
+    if (error) {
+      toast.error(error);
+    } else {
+      toast.success(`Synced ${imported} interview${imported === 1 ? "" : "s"} from Google Calendar`);
+      void scheduler.reload();
+    }
+  }
+
+  const filtered = store.interviews.filter((iv) => {
+    const scheduledAt = getCurrentRoundDate(iv);
+    const status = getCurrentRoundStatus(iv);
+    const d = new Date(scheduledAt);
+    // Active lists hide cancelled; history remains under the Cancelled tab.
+    if (filter === "all")       return status !== "cancelled";
+    if (filter === "upcoming")  return isFuture(d) && !isToday(d) && status !== "cancelled";
+    if (filter === "today")     return isToday(d) && status !== "cancelled";
+    if (filter === "completed") return status === "completed";
+    if (filter === "cancelled") return status === "cancelled";
+    return true;
+  });
+
+  // Group by month
+  const grouped = filtered.reduce<Record<string, any[]>>((acc, iv) => {
+    const scheduledAt = getCurrentRoundDate(iv);
+    const key = format(new Date(scheduledAt), "MMMM yyyy");
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(iv);
+    return acc;
+  }, {});
+
+  return (
+    <div data-testid="page-width-root" className={cn(PAGE_SHELL, "space-y-5")}>
+      <PageHeader
+        title="Interviews"
+        subtitle="Track and manage your scheduled interviews"
+        breadcrumbs={[
+          { label: PRODUCT_NAMES.dashboard, href: "/app/dashboard" },
+          { label: PRODUCT_NAMES.interviews },
+        ]}
+        action={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCalendarAction}
+              loading={calendar.isSyncing || calendar.isProbingSync}
+              disabled={calendar.isCheckingConnection || calendar.isProbingSync}
+              leftIcon={
+                calendar.isConnected && calendar.syncAvailable
+                  ? <RefreshCw className="w-3.5 h-3.5" />
+                  : <CalendarDays className="w-3.5 h-3.5" />
+              }
+              title={
+                !calendar.syncAvailable
+                  ? "Calendar sync not configured"
+                  : calendar.lastSynced
+                    ? `Last synced ${format(calendar.lastSynced, "MMM d, h:mm a")}`
+                    : undefined
+              }
+            >
+              {!calendar.syncAvailable
+                ? "Calendar: Coming soon"
+                : calendar.isConnected
+                  ? "Sync calendar"
+                  : "Connect calendar"}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => navigate("/app/interviews/new")}
+              leftIcon={<Plus className="w-3.5 h-3.5" />}
+            >
+              Schedule interview
+            </Button>
+          </div>
+        }
+      />
+
+      {store.load_error && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span className="flex-1">{store.load_error}</span>
+          <Button variant="ghost" size="sm" onClick={() => scheduler.reload()}>
+            Retry
+          </Button>
+        </div>
+      )}
+
+      {/* Filter tabs */}
+      <div className="flex gap-1.5 flex-wrap">
+        {STATUS_FILTERS.map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            aria-pressed={filter === f}
+            className={cn(
+              "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all capitalize",
+              filter === f
+                ? "bg-primary/10 border-primary/30 text-primary"
+                : "bg-secondary border-border text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {f}
+            {f === "today" && store.interviews.some(
+              (iv) =>
+                isToday(new Date(getCurrentRoundDate(iv))) &&
+                getCurrentRoundStatus(iv) !== "cancelled",
+            ) && (
+              <span className="ml-1.5 w-1.5 h-1.5 bg-primary rounded-full inline-block" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Loading */}
+      {store.is_loading ? (
+        <div className="space-y-3">
+          {[...Array(3)].map((_, i) => <SkeletonCard key={i} />)}
+        </div>
+      ) : filtered.length === 0 ? (
+        <Card className="text-center py-16">
+          <CalendarDays className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
+          <p className="text-muted-foreground text-sm">No interviews found.</p>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="mt-4"
+            onClick={() => navigate("/app/interviews/new")}
+            leftIcon={<Plus className="w-3.5 h-3.5" />}
+          >
+            Schedule your first interview
+          </Button>
+        </Card>
+      ) : (
+        /* Grouped list */
+        Object.entries(grouped).map(([month, ivs]) => (
+          <div key={month}>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">
+              {month}
+            </p>
+            <div className="space-y-2">
+              {ivs.map((iv) => (
+                <InterviewRow
+                  key={iv.id}
+                  interview={iv}
+                  onDelete={() => setPendingDeleteId(iv.id)}
+                />
+              ))}
+            </div>
+          </div>
+        ))
+      )}
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteId(null);
+        }}
+        title="Delete this interview?"
+        description="This permanently removes the interview and its rounds from your schedule. This cannot be undone."
+        confirmLabel="Delete interview"
+        variant="destructive"
+        onConfirm={async () => {
+          if (!pendingDeleteId) return;
+          await scheduler.deleteInterview(pendingDeleteId);
+          setPendingDeleteId(null);
+        }}
+      />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// InterviewRow
+// ─────────────────────────────────────────────────────────────────
+
+function InterviewRow({
+  interview: iv,
+  onDelete,
+}: {
+  interview: any;
+  onDelete:  () => void;
+}) {
+  const navigate  = useNavigate();
+  const swipe = useSwipeAction({ maxReveal: 72, threshold: 48 });
+  const status    = getCurrentRoundStatus(iv);
+  const round     = iv.next_round ?? iv.rounds?.[0] ?? null;
+  const d         = new Date(getCurrentRoundDate(iv));
+  const isNow     = isToday(d);
+  const isCancelled = status === "cancelled";
+  const durationMinutes = round?.duration_minutes ?? iv.duration_minutes;
+  const interviewerName = round?.interviewer_name ?? iv.interviewer_name;
+  const platform = round?.platform ?? iv.platform;
+
+  const statusConfig = {
+    scheduled:  { label: "Scheduled",  variant: "violet"  as const, icon: Circle      },
+    completed:  { label: "Completed",  variant: "emerald" as const, icon: CheckCircle  },
+    cancelled:  { label: "Cancelled",  variant: "red"     as const, icon: AlertCircle  },
+    rescheduled:{ label: "Rescheduled",variant: "amber"   as const, icon: Clock        },
+  }[status] ?? { label: status, variant: "default" as const, icon: Circle };
+
+  const StatusIcon = statusConfig.icon;
+
+  return (
+    <div className="relative overflow-hidden rounded-2xl">
+      <div
+        className="absolute inset-y-0 right-0 flex items-stretch pointer-events-none"
+        aria-hidden={!swipe.revealed}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            swipe.reset();
+            onDelete();
+          }}
+          aria-label={`Delete interview at ${iv.company_name}`}
+          className={cn(
+            "w-[72px] flex items-center justify-center bg-red-500/90 text-white transition-opacity min-h-11",
+            swipe.revealed ? "pointer-events-auto" : "pointer-events-none opacity-0",
+          )}
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+
+    <div
+      {...swipe.bind}
+      className={cn(
+      "relative flex items-start gap-4 p-4 rounded-2xl border transition-all group bg-card",
+      isNow
+        ? "bg-primary/10 border-primary/30"
+        : isCancelled
+        ? "border-border opacity-60"
+        : "border-border hover:bg-secondary/60"
+    )}>
+      {/* Date block */}
+      <div className={cn(
+        "w-12 h-14 rounded-xl flex flex-col items-center justify-center shrink-0 border",
+        isNow
+          ? "bg-primary border-primary"
+          : "bg-accent/5 border-border"
+      )}>
+        <p className={cn(
+          "text-[10px] font-semibold uppercase",
+          isNow ? "text-primary/80" : "text-muted-foreground"
+        )}>
+          {format(d, "MMM")}
+        </p>
+        <p className={cn(
+          "text-xl font-black leading-none",
+          isNow ? "text-foreground" : "text-foreground"
+        )}>
+          {format(d, "d")}
+        </p>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-foreground">
+              {iv.company_name}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {iv.role_title}
+              {iv.interview_type && ` · ${iv.interview_type}`}
+            </p>
+          </div>
+          <Badge variant={statusConfig.variant} size="sm" dot>
+            {statusConfig.label}
+          </Badge>
+        </div>
+
+        <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <Clock className="w-3 h-3" />
+            {format(d, "h:mm a")}
+            {durationMinutes && ` · ${durationMinutes}min`}
+          </span>
+          {interviewerName && (
+            <span>with {interviewerName}</span>
+          )}
+          {platform && (
+            <span className="capitalize">{platform}</span>
+          )}
+        </div>
+
+        {/* Notes preview */}
+        {iv.notes && (
+          <p className="text-xs text-muted-foreground mt-1 truncate">{iv.notes}</p>
+        )}
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-2 mt-3">
+          {isNow && (
+            <Button
+              variant="primary"
+              size="xs"
+              onClick={() => navigate("/app/interview-day")}
+              leftIcon={<Target className="w-3 h-3" />}
+            >
+              Enter focus mode
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => navigate(`/app/interviews/${iv.id}`)}
+            rightIcon={<ChevronRight className="w-3 h-3" />}
+          >
+            View details
+          </Button>
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => navigate(`/app/interviews/${iv.id}/edit`)}
+          >
+            Edit
+          </Button>
+          {!isNow && status !== "completed" && (
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => navigate(`/app/mock?company=${iv.company_name}`)}
+            >
+              Practice now
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Delete — always visible for touch devices */}
+      <button
+        type="button"
+        onClick={onDelete}
+        aria-label={`Delete interview at ${iv.company_name}`}
+        className="p-2 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-accent/5 transition-all shrink-0 min-h-11 min-w-11 inline-flex items-center justify-center"
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
+    </div>
+    </div>
+  );
+}

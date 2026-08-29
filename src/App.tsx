@@ -499,7 +499,7 @@ function AppShell(): JSX.Element {
         <AppHotkeyListener />
 
         <main id="main-content" className="flex-1 overflow-y-auto pb-16 md:pb-0 body-cookie-pad">
-          <div className="max-w-7xl mx-auto w-full min-w-0 px-3 sm:px-4 md:px-6 lg:px-8 py-4 md:py-6">
+          <div className="w-full min-w-0 px-2 sm:px-3 md:px-4 lg:px-6 xl:px-8 py-3 sm:py-4 md:py-5 lg:py-6">
             {showSetupChecklist && (
               <div className="mb-6">
                 <SetupChecklist prominent dismissible />

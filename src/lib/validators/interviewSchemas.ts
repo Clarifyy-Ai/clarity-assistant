@@ -418,6 +418,144 @@ export const liveTranscriptChunkSchema = z.object({
   timestamp: z.string().datetime("Invalid transcript timestamp.").optional(),
 });
 
+// ─────────────────────────────────────────────────────────────────
+// SCHEDULER VALIDATION SCHEMAS (Interview Scheduling)
+// ─────────────────────────────────────────────────────────────────
+// Validate interview creation, round scheduling, and edits.
+// Used in NewInterview.tsx and schedule-interview edge function.
+
+const COMPANY_MIN_LENGTH = 2;
+const COMPANY_MAX_LENGTH = 150;
+const ROLE_MIN_LENGTH = 2;
+const ROLE_MAX_LENGTH = 150;
+
+// Canonical IANA timezone identifiers (expanded common set)
+const VALID_IANA_TIMEZONES = new Set([
+  // Americas
+  "America/Anchorage", "America/Chicago", "America/Denver", "America/Los_Angeles",
+  "America/New_York", "America/Toronto", "America/Mexico_City", "America/Sao_Paulo",
+  "America/Buenos_Aires", "America/Caracas", "America/Jamaica", "America/Antigua_and_Barbuda",
+  // Europe
+  "Europe/London", "Europe/Paris", "Europe/Berlin", "Europe/Amsterdam", "Europe/Brussels",
+  "Europe/Vienna", "Europe/Prague", "Europe/Budapest", "Europe/Warsaw", "Europe/Moscow",
+  "Europe/Dublin", "Europe/Lisbon", "Europe/Madrid", "Europe/Rome", "Europe/Athens",
+  "Europe/Istanbul", "Europe/Kiev", "Europe/Zurich",
+  // Asia
+  "Asia/Kolkata", "Asia/Bangkok", "Asia/Singapore", "Asia/Hong_Kong", "Asia/Shanghai",
+  "Asia/Tokyo", "Asia/Seoul", "Asia/Ho_Chi_Minh", "Asia/Manila", "Asia/Jakarta",
+  "Asia/Dubai", "Asia/Karachi", "Asia/Bangalore", "Asia/Almaty", "Asia/Novosibirsk",
+  "Asia/Tehran", "Asia/Tel_Aviv", "Asia/Baghdad",
+  // Africa
+  "Africa/Cairo", "Africa/Lagos", "Africa/Nairobi", "Africa/Johannesburg", "Africa/Casablanca",
+  // Oceania
+  "Australia/Sydney", "Australia/Melbourne", "Australia/Brisbane", "Australia/Perth",
+  "Australia/Adelaide", "Pacific/Auckland", "Pacific/Fiji", "Pacific/Honolulu",
+  // UTC
+  "UTC",
+]);
+
+export const schedulerCompanyNameSchema = z
+  .string()
+  .trim()
+  .min(COMPANY_MIN_LENGTH, `Company name must be at least ${COMPANY_MIN_LENGTH} characters.`)
+  .max(COMPANY_MAX_LENGTH, `Company name must be at most ${COMPANY_MAX_LENGTH} characters.`)
+  .refine((value) => !containsSuspiciousHTML(value), {
+    message: "Company name contains unsafe HTML.",
+  })
+  .refine((value) => /[a-zA-Z]/.test(value), {
+    message: "Company name must contain at least one letter.",
+  })
+  .transform((value) => sanitizeText(value));
+
+export const schedulerRoleTitleSchema = z
+  .string()
+  .trim()
+  .min(ROLE_MIN_LENGTH, `Role title must be at least ${ROLE_MIN_LENGTH} characters.`)
+  .max(ROLE_MAX_LENGTH, `Role title must be at most ${ROLE_MAX_LENGTH} characters.`)
+  .refine((value) => !containsSuspiciousHTML(value), {
+    message: "Role title contains unsafe HTML.",
+  })
+  .refine((value) => /[a-zA-Z]/.test(value), {
+    message: "Role title must contain at least one letter.",
+  })
+  .transform((value) => sanitizeText(value));
+
+export const schedulerTimezoneSchema = z
+  .string()
+  .trim()
+  .min(1, "Timezone is required.")
+  .refine(
+    (value) => value === "local" || VALID_IANA_TIMEZONES.has(value),
+    "Invalid timezone. Use IANA identifier (e.g., Asia/Kolkata) or 'local'."
+  );
+
+export const schedulerDateTimeSchema = z.object({
+  dateString: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be YYYY-MM-DD format."),
+  timeString: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/, "Time must be HH:MM format."),
+  timezone: schedulerTimezoneSchema,
+}).refine(
+  (obj) => {
+    const now = new Date();
+    const testDate = new Date(`${obj.dateString}T${obj.timeString}:00Z`);
+    return testDate.getTime() > now.getTime();
+  },
+  { message: "Interview must be scheduled for a future date and time." }
+);
+
+export const createScheduledInterviewSchema = z.object({
+  userId: z.string().uuid("Invalid user ID."),
+  companyName: schedulerCompanyNameSchema,
+  roleTitle: schedulerRoleTitleSchema,
+  stage: z.enum(["phone_screen", "technical_round", "final_round", "applied", "wishlist"], {
+    errorMap: () => ({ message: "Invalid interview stage." }),
+  }),
+  priority: z.enum(["low", "medium", "high"], { errorMap: () => ({ message: "Invalid priority." }) }).default("medium"),
+  isRemote: z.boolean().default(true),
+  location: z.string().max(200, "Location is too long.").optional(),
+  jobPostingUrl: z.string().url("Invalid job posting URL.").optional().or(z.literal("")),
+  notes: z.string().max(MAX_NOTES_LENGTH, "Notes are too long.").optional(),
+  resumeId: z.string().uuid("Invalid resume ID.").optional().nullable(),
+  jdId: z.string().uuid("Invalid JD ID.").optional().nullable(),
+});
+
+export const createInterviewRoundSchema = z.object({
+  interviewId: z.string().uuid("Invalid interview ID."),
+  userId: z.string().uuid("Invalid user ID."),
+  roundNumber: z.number().int().min(1, "Round number must be at least 1.").max(10, "Round number cannot exceed 10."),
+  roundLabel: z.string().max(200, "Round label is too long.").optional(),
+  interviewType: z.enum([
+    "behavioral", "technical", "system_design", "hr", "mixed", "custom", "phone_screen", "other"
+  ], { errorMap: () => ({ message: "Invalid interview type." }) }),
+  scheduledAt: z.string().datetime("Invalid timestamp.").refine(
+    (value) => new Date(value).getTime() > Date.now(),
+    "Scheduled time must be in the future."
+  ),
+  durationMinutes: z.number().int().min(15, "Duration must be at least 15 minutes.").max(480, "Duration cannot exceed 8 hours.").default(60),
+  interviewerName: z.string().max(150, "Interviewer name is too long.").optional(),
+  interviewerTitle: z.string().max(150, "Interviewer title is too long.").optional(),
+  platform: z.enum(["zoom", "google_meet", "teams", "phone", "onsite", "other"], {
+    errorMap: () => ({ message: "Invalid platform." }),
+  }).default("zoom"),
+  meetingLink: z.string().url("Invalid meeting URL.").optional().or(z.literal("")),
+  notes: z.string().max(MAX_NOTES_LENGTH, "Notes are too long.").optional(),
+});
+
+export const scheduleInterviewEdgeFunctionSchema = z.object({
+  interviewId: z.string().uuid("Invalid interview ID."),
+  companyName: schedulerCompanyNameSchema,
+  roleTitle: schedulerRoleTitleSchema,
+  scheduledAt: z.string().datetime("Invalid timestamp."),
+  sendConfirmation: z.boolean().default(true),
+});
+
+export type CreateScheduledInterviewInput = z.infer<typeof createScheduledInterviewSchema>;
+export type CreateInterviewRoundInput = z.infer<typeof createInterviewRoundSchema>;
+export type ScheduleInterviewEdgeFunctionInput = z.infer<typeof scheduleInterviewEdgeFunctionSchema>;
+
 export const interviewValidationLimits = {
   MAX_SHORT_TEXT_LENGTH,
   MAX_MEDIUM_TEXT_LENGTH,
@@ -426,6 +564,10 @@ export const interviewValidationLimits = {
   MAX_NOTES_LENGTH,
   MAX_QUESTIONS_PER_REQUEST,
   MAX_TEST_ANSWERS,
+  SCHEDULER_COMPANY_MIN_LENGTH: COMPANY_MIN_LENGTH,
+  SCHEDULER_COMPANY_MAX_LENGTH: COMPANY_MAX_LENGTH,
+  SCHEDULER_ROLE_MIN_LENGTH: ROLE_MIN_LENGTH,
+  SCHEDULER_ROLE_MAX_LENGTH: ROLE_MAX_LENGTH,
 } as const;
 
 export type InterviewType = z.infer<typeof interviewTypeSchema>;

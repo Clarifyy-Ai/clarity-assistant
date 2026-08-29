@@ -608,7 +608,7 @@ export const sessionsDB = {
     const { data, error } = await supabase
       .from("sessions")
       .select(
-        "id, type, title, overall_score, created_at, started_at, ended_at, questions_asked, status, tags, credits_used, source_type",
+        "id, type, title, overall_score, created_at, started_at, ended_at, duration_seconds, questions_asked, status, tags, credits_used, source_type",
       )
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
@@ -634,17 +634,20 @@ export const sessionsDB = {
       tags: r.tags,
       source_type: r.source_type ?? null,
       credits_consumed: r.credits_used ?? 0,
+      // Use canonical duration_seconds from DB; fall back to calculation only if missing
       duration_seconds:
-        r.started_at && r.ended_at
-          ? Math.max(
-              0,
-              Math.round(
-                (new Date(r.ended_at).getTime() -
-                  new Date(r.started_at).getTime()) /
-                  1000,
-              ),
-            )
-          : 0,
+        typeof r.duration_seconds === "number" && r.duration_seconds >= 0
+          ? r.duration_seconds
+          : r.started_at && r.ended_at
+            ? Math.max(
+                0,
+                Math.round(
+                  (new Date(r.ended_at).getTime() -
+                    new Date(r.started_at).getTime()) /
+                    1000,
+                ),
+              )
+            : 0,
     }));
   },
 

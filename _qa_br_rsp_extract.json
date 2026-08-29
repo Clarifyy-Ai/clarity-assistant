@@ -1,0 +1,2735 @@
+{
+  "workbook": "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\Clarify_AI_BB_Manual_QA_Workbook (2).xlsx",
+  "sheet_names": [
+    "00 Cover _ Instructions",
+    "00b Section Completion Gate",
+    "01 Application Inventory",
+    "02 User Roles _ Permissions",
+    "03 Test Accounts",
+    "05 All Test Cases",
+    "39 Defect Log",
+    "Anushka-Extra bug"
+  ],
+  "images": [
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V5",
+      "excel_row": 5,
+      "excel_col": 22,
+      "vm_index": 1,
+      "media": "xl/media/image1.png",
+      "saved_path": "_qa_br_rsp_images\\image1.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V6",
+      "excel_row": 6,
+      "excel_col": 22,
+      "vm_index": 2,
+      "media": "xl/media/image2.png",
+      "saved_path": "_qa_br_rsp_images\\image2.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V7",
+      "excel_row": 7,
+      "excel_col": 22,
+      "vm_index": 3,
+      "media": "xl/media/image3.png",
+      "saved_path": "_qa_br_rsp_images\\image3.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V8",
+      "excel_row": 8,
+      "excel_col": 22,
+      "vm_index": 4,
+      "media": "xl/media/image4.png",
+      "saved_path": "_qa_br_rsp_images\\image4.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V9",
+      "excel_row": 9,
+      "excel_col": 22,
+      "vm_index": 5,
+      "media": "xl/media/image5.png",
+      "saved_path": "_qa_br_rsp_images\\image5.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V10",
+      "excel_row": 10,
+      "excel_col": 22,
+      "vm_index": 6,
+      "media": "xl/media/image6.png",
+      "saved_path": "_qa_br_rsp_images\\image6.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V11",
+      "excel_row": 11,
+      "excel_col": 22,
+      "vm_index": 7,
+      "media": "xl/media/image7.png",
+      "saved_path": "_qa_br_rsp_images\\image7.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V12",
+      "excel_row": 12,
+      "excel_col": 22,
+      "vm_index": 8,
+      "media": "xl/media/image8.png",
+      "saved_path": "_qa_br_rsp_images\\image8.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V13",
+      "excel_row": 13,
+      "excel_col": 22,
+      "vm_index": 9,
+      "media": "xl/media/image9.png",
+      "saved_path": "_qa_br_rsp_images\\image9.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V14",
+      "excel_row": 14,
+      "excel_col": 22,
+      "vm_index": 10,
+      "media": "xl/media/image10.png",
+      "saved_path": "_qa_br_rsp_images\\image10.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V15",
+      "excel_row": 15,
+      "excel_col": 22,
+      "vm_index": 11,
+      "media": "xl/media/image11.png",
+      "saved_path": "_qa_br_rsp_images\\image11.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V16",
+      "excel_row": 16,
+      "excel_col": 22,
+      "vm_index": 12,
+      "media": "xl/media/image12.png",
+      "saved_path": "_qa_br_rsp_images\\image12.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V17",
+      "excel_row": 17,
+      "excel_col": 22,
+      "vm_index": 13,
+      "media": "xl/media/image13.png",
+      "saved_path": "_qa_br_rsp_images\\image13.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V18",
+      "excel_row": 18,
+      "excel_col": 22,
+      "vm_index": 14,
+      "media": "xl/media/image14.png",
+      "saved_path": "_qa_br_rsp_images\\image14.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V19",
+      "excel_row": 19,
+      "excel_col": 22,
+      "vm_index": 15,
+      "media": "xl/media/image15.png",
+      "saved_path": "_qa_br_rsp_images\\image15.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V20",
+      "excel_row": 20,
+      "excel_col": 22,
+      "vm_index": 16,
+      "media": "xl/media/image16.png",
+      "saved_path": "_qa_br_rsp_images\\image16.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V21",
+      "excel_row": 21,
+      "excel_col": 22,
+      "vm_index": 17,
+      "media": "xl/media/image17.png",
+      "saved_path": "_qa_br_rsp_images\\image17.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V22",
+      "excel_row": 22,
+      "excel_col": 22,
+      "vm_index": 18,
+      "media": "xl/media/image18.png",
+      "saved_path": "_qa_br_rsp_images\\image18.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V23",
+      "excel_row": 23,
+      "excel_col": 22,
+      "vm_index": 19,
+      "media": "xl/media/image19.png",
+      "saved_path": "_qa_br_rsp_images\\image19.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V24",
+      "excel_row": 24,
+      "excel_col": 22,
+      "vm_index": 20,
+      "media": "xl/media/image20.png",
+      "saved_path": "_qa_br_rsp_images\\image20.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V25",
+      "excel_row": 25,
+      "excel_col": 22,
+      "vm_index": 21,
+      "media": "xl/media/image21.png",
+      "saved_path": "_qa_br_rsp_images\\image21.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V26",
+      "excel_row": 26,
+      "excel_col": 22,
+      "vm_index": 22,
+      "media": "xl/media/image22.png",
+      "saved_path": "_qa_br_rsp_images\\image22.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V27",
+      "excel_row": 27,
+      "excel_col": 22,
+      "vm_index": 23,
+      "media": "xl/media/image23.png",
+      "saved_path": "_qa_br_rsp_images\\image23.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V28",
+      "excel_row": 28,
+      "excel_col": 22,
+      "vm_index": 24,
+      "media": "xl/media/image24.png",
+      "saved_path": "_qa_br_rsp_images\\image24.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V29",
+      "excel_row": 29,
+      "excel_col": 22,
+      "vm_index": 25,
+      "media": "xl/media/image25.png",
+      "saved_path": "_qa_br_rsp_images\\image25.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V30",
+      "excel_row": 30,
+      "excel_col": 22,
+      "vm_index": 26,
+      "media": "xl/media/image26.png",
+      "saved_path": "_qa_br_rsp_images\\image26.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V31",
+      "excel_row": 31,
+      "excel_col": 22,
+      "vm_index": 27,
+      "media": "xl/media/image27.png",
+      "saved_path": "_qa_br_rsp_images\\image27.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V32",
+      "excel_row": 32,
+      "excel_col": 22,
+      "vm_index": 28,
+      "media": "xl/media/image28.png",
+      "saved_path": "_qa_br_rsp_images\\image28.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V33",
+      "excel_row": 33,
+      "excel_col": 22,
+      "vm_index": 29,
+      "media": "xl/media/image29.png",
+      "saved_path": "_qa_br_rsp_images\\image29.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V34",
+      "excel_row": 34,
+      "excel_col": 22,
+      "vm_index": 30,
+      "media": "xl/media/image30.png",
+      "saved_path": "_qa_br_rsp_images\\image30.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V35",
+      "excel_row": 35,
+      "excel_col": 22,
+      "vm_index": 31,
+      "media": "xl/media/image31.png",
+      "saved_path": "_qa_br_rsp_images\\image31.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V36",
+      "excel_row": 36,
+      "excel_col": 22,
+      "vm_index": 32,
+      "media": "xl/media/image32.png",
+      "saved_path": "_qa_br_rsp_images\\image32.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V37",
+      "excel_row": 37,
+      "excel_col": 22,
+      "vm_index": 33,
+      "media": "xl/media/image33.png",
+      "saved_path": "_qa_br_rsp_images\\image33.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V38",
+      "excel_row": 38,
+      "excel_col": 22,
+      "vm_index": 34,
+      "media": "xl/media/image34.png",
+      "saved_path": "_qa_br_rsp_images\\image34.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V39",
+      "excel_row": 39,
+      "excel_col": 22,
+      "vm_index": 35,
+      "media": "xl/media/image35.png",
+      "saved_path": "_qa_br_rsp_images\\image35.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V40",
+      "excel_row": 40,
+      "excel_col": 22,
+      "vm_index": 36,
+      "media": "xl/media/image36.png",
+      "saved_path": "_qa_br_rsp_images\\image36.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V41",
+      "excel_row": 41,
+      "excel_col": 22,
+      "vm_index": 37,
+      "media": "xl/media/image37.png",
+      "saved_path": "_qa_br_rsp_images\\image37.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V74",
+      "excel_row": 74,
+      "excel_col": 22,
+      "vm_index": 38,
+      "media": "xl/media/image38.png",
+      "saved_path": "_qa_br_rsp_images\\image38.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V75",
+      "excel_row": 75,
+      "excel_col": 22,
+      "vm_index": 39,
+      "media": "xl/media/image39.png",
+      "saved_path": "_qa_br_rsp_images\\image39.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V76",
+      "excel_row": 76,
+      "excel_col": 22,
+      "vm_index": 40,
+      "media": "xl/media/image40.png",
+      "saved_path": "_qa_br_rsp_images\\image40.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V77",
+      "excel_row": 77,
+      "excel_col": 22,
+      "vm_index": 41,
+      "media": "xl/media/image41.png",
+      "saved_path": "_qa_br_rsp_images\\image41.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V78",
+      "excel_row": 78,
+      "excel_col": 22,
+      "vm_index": 42,
+      "media": "xl/media/image42.png",
+      "saved_path": "_qa_br_rsp_images\\image42.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V79",
+      "excel_row": 79,
+      "excel_col": 22,
+      "vm_index": 43,
+      "media": "xl/media/image43.png",
+      "saved_path": "_qa_br_rsp_images\\image43.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V80",
+      "excel_row": 80,
+      "excel_col": 22,
+      "vm_index": 44,
+      "media": "xl/media/image44.png",
+      "saved_path": "_qa_br_rsp_images\\image44.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V81",
+      "excel_row": 81,
+      "excel_col": 22,
+      "vm_index": 45,
+      "media": "xl/media/image45.png",
+      "saved_path": "_qa_br_rsp_images\\image45.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V82",
+      "excel_row": 82,
+      "excel_col": 22,
+      "vm_index": 46,
+      "media": "xl/media/image46.png",
+      "saved_path": "_qa_br_rsp_images\\image46.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V83",
+      "excel_row": 83,
+      "excel_col": 22,
+      "vm_index": 47,
+      "media": "xl/media/image47.png",
+      "saved_path": "_qa_br_rsp_images\\image47.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V84",
+      "excel_row": 84,
+      "excel_col": 22,
+      "vm_index": 48,
+      "media": "xl/media/image48.png",
+      "saved_path": "_qa_br_rsp_images\\image48.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V85",
+      "excel_row": 85,
+      "excel_col": 22,
+      "vm_index": 49,
+      "media": "xl/media/image49.png",
+      "saved_path": "_qa_br_rsp_images\\image49.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V86",
+      "excel_row": 86,
+      "excel_col": 22,
+      "vm_index": 50,
+      "media": "xl/media/image50.png",
+      "saved_path": "_qa_br_rsp_images\\image50.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V87",
+      "excel_row": 87,
+      "excel_col": 22,
+      "vm_index": 51,
+      "media": "xl/media/image51.png",
+      "saved_path": "_qa_br_rsp_images\\image51.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V88",
+      "excel_row": 88,
+      "excel_col": 22,
+      "vm_index": 52,
+      "media": "xl/media/image52.png",
+      "saved_path": "_qa_br_rsp_images\\image52.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V89",
+      "excel_row": 89,
+      "excel_col": 22,
+      "vm_index": 53,
+      "media": "xl/media/image53.png",
+      "saved_path": "_qa_br_rsp_images\\image53.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V90",
+      "excel_row": 90,
+      "excel_col": 22,
+      "vm_index": 54,
+      "media": "xl/media/image54.png",
+      "saved_path": "_qa_br_rsp_images\\image54.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V91",
+      "excel_row": 91,
+      "excel_col": 22,
+      "vm_index": 55,
+      "media": "xl/media/image55.png",
+      "saved_path": "_qa_br_rsp_images\\image55.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V92",
+      "excel_row": 92,
+      "excel_col": 22,
+      "vm_index": 56,
+      "media": "xl/media/image56.png",
+      "saved_path": "_qa_br_rsp_images\\image56.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V93",
+      "excel_row": 93,
+      "excel_col": 22,
+      "vm_index": 57,
+      "media": "xl/media/image57.png",
+      "saved_path": "_qa_br_rsp_images\\image57.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V94",
+      "excel_row": 94,
+      "excel_col": 22,
+      "vm_index": 58,
+      "media": "xl/media/image58.png",
+      "saved_path": "_qa_br_rsp_images\\image58.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V95",
+      "excel_row": 95,
+      "excel_col": 22,
+      "vm_index": 59,
+      "media": "xl/media/image59.png",
+      "saved_path": "_qa_br_rsp_images\\image59.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V96",
+      "excel_row": 96,
+      "excel_col": 22,
+      "vm_index": 60,
+      "media": "xl/media/image60.png",
+      "saved_path": "_qa_br_rsp_images\\image60.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V97",
+      "excel_row": 97,
+      "excel_col": 22,
+      "vm_index": 61,
+      "media": "xl/media/image61.png",
+      "saved_path": "_qa_br_rsp_images\\image61.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V98",
+      "excel_row": 98,
+      "excel_col": 22,
+      "vm_index": 62,
+      "media": "xl/media/image62.png",
+      "saved_path": "_qa_br_rsp_images\\image62.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V99",
+      "excel_row": 99,
+      "excel_col": 22,
+      "vm_index": 63,
+      "media": "xl/media/image63.png",
+      "saved_path": "_qa_br_rsp_images\\image63.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V100",
+      "excel_row": 100,
+      "excel_col": 22,
+      "vm_index": 64,
+      "media": "xl/media/image64.png",
+      "saved_path": "_qa_br_rsp_images\\image64.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V101",
+      "excel_row": 101,
+      "excel_col": 22,
+      "vm_index": 65,
+      "media": "xl/media/image65.png",
+      "saved_path": "_qa_br_rsp_images\\image65.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V102",
+      "excel_row": 102,
+      "excel_col": 22,
+      "vm_index": 66,
+      "media": "xl/media/image66.png",
+      "saved_path": "_qa_br_rsp_images\\image66.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V103",
+      "excel_row": 103,
+      "excel_col": 22,
+      "vm_index": 67,
+      "media": "xl/media/image67.png",
+      "saved_path": "_qa_br_rsp_images\\image67.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V104",
+      "excel_row": 104,
+      "excel_col": 22,
+      "vm_index": 68,
+      "media": "xl/media/image68.png",
+      "saved_path": "_qa_br_rsp_images\\image68.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V130",
+      "excel_row": 130,
+      "excel_col": 22,
+      "vm_index": 69,
+      "media": "xl/media/image69.png",
+      "saved_path": "_qa_br_rsp_images\\image69.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V131",
+      "excel_row": 131,
+      "excel_col": 22,
+      "vm_index": 70,
+      "media": "xl/media/image70.png",
+      "saved_path": "_qa_br_rsp_images\\image70.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V132",
+      "excel_row": 132,
+      "excel_col": 22,
+      "vm_index": 71,
+      "media": "xl/media/image71.png",
+      "saved_path": "_qa_br_rsp_images\\image71.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V133",
+      "excel_row": 133,
+      "excel_col": 22,
+      "vm_index": 72,
+      "media": "xl/media/image72.png",
+      "saved_path": "_qa_br_rsp_images\\image72.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V134",
+      "excel_row": 134,
+      "excel_col": 22,
+      "vm_index": 73,
+      "media": "xl/media/image73.png",
+      "saved_path": "_qa_br_rsp_images\\image73.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V135",
+      "excel_row": 135,
+      "excel_col": 22,
+      "vm_index": 74,
+      "media": "xl/media/image74.png",
+      "saved_path": "_qa_br_rsp_images\\image74.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V136",
+      "excel_row": 136,
+      "excel_col": 22,
+      "vm_index": 75,
+      "media": "xl/media/image75.png",
+      "saved_path": "_qa_br_rsp_images\\image75.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V137",
+      "excel_row": 137,
+      "excel_col": 22,
+      "vm_index": 76,
+      "media": "xl/media/image76.png",
+      "saved_path": "_qa_br_rsp_images\\image76.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V146",
+      "excel_row": 146,
+      "excel_col": 22,
+      "vm_index": 77,
+      "media": "xl/media/image77.png",
+      "saved_path": "_qa_br_rsp_images\\image77.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V147",
+      "excel_row": 147,
+      "excel_col": 22,
+      "vm_index": 78,
+      "media": "xl/media/image78.png",
+      "saved_path": "_qa_br_rsp_images\\image78.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V148",
+      "excel_row": 148,
+      "excel_col": 22,
+      "vm_index": 79,
+      "media": "xl/media/image79.png",
+      "saved_path": "_qa_br_rsp_images\\image79.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V149",
+      "excel_row": 149,
+      "excel_col": 22,
+      "vm_index": 80,
+      "media": "xl/media/image80.png",
+      "saved_path": "_qa_br_rsp_images\\image80.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V150",
+      "excel_row": 150,
+      "excel_col": 22,
+      "vm_index": 81,
+      "media": "xl/media/image81.png",
+      "saved_path": "_qa_br_rsp_images\\image81.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V151",
+      "excel_row": 151,
+      "excel_col": 22,
+      "vm_index": 82,
+      "media": "xl/media/image82.png",
+      "saved_path": "_qa_br_rsp_images\\image82.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V152",
+      "excel_row": 152,
+      "excel_col": 22,
+      "vm_index": 83,
+      "media": "xl/media/image83.png",
+      "saved_path": "_qa_br_rsp_images\\image83.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V153",
+      "excel_row": 153,
+      "excel_col": 22,
+      "vm_index": 84,
+      "media": "xl/media/image84.png",
+      "saved_path": "_qa_br_rsp_images\\image84.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V154",
+      "excel_row": 154,
+      "excel_col": 22,
+      "vm_index": 85,
+      "media": "xl/media/image85.png",
+      "saved_path": "_qa_br_rsp_images\\image85.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V155",
+      "excel_row": 155,
+      "excel_col": 22,
+      "vm_index": 86,
+      "media": "xl/media/image86.png",
+      "saved_path": "_qa_br_rsp_images\\image86.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V156",
+      "excel_row": 156,
+      "excel_col": 22,
+      "vm_index": 87,
+      "media": "xl/media/image87.png",
+      "saved_path": "_qa_br_rsp_images\\image87.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V157",
+      "excel_row": 157,
+      "excel_col": 22,
+      "vm_index": 88,
+      "media": "xl/media/image88.png",
+      "saved_path": "_qa_br_rsp_images\\image88.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V158",
+      "excel_row": 158,
+      "excel_col": 22,
+      "vm_index": 89,
+      "media": "xl/media/image89.png",
+      "saved_path": "_qa_br_rsp_images\\image89.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V159",
+      "excel_row": 159,
+      "excel_col": 22,
+      "vm_index": 90,
+      "media": "xl/media/image90.png",
+      "saved_path": "_qa_br_rsp_images\\image90.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V166",
+      "excel_row": 166,
+      "excel_col": 22,
+      "vm_index": 91,
+      "media": "xl/media/image91.png",
+      "saved_path": "_qa_br_rsp_images\\image91.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V167",
+      "excel_row": 167,
+      "excel_col": 22,
+      "vm_index": 92,
+      "media": "xl/media/image92.png",
+      "saved_path": "_qa_br_rsp_images\\image92.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V168",
+      "excel_row": 168,
+      "excel_col": 22,
+      "vm_index": 93,
+      "media": "xl/media/image93.png",
+      "saved_path": "_qa_br_rsp_images\\image93.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V169",
+      "excel_row": 169,
+      "excel_col": 22,
+      "vm_index": 94,
+      "media": "xl/media/image94.png",
+      "saved_path": "_qa_br_rsp_images\\image94.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V170",
+      "excel_row": 170,
+      "excel_col": 22,
+      "vm_index": 95,
+      "media": "xl/media/image95.png",
+      "saved_path": "_qa_br_rsp_images\\image95.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V199",
+      "excel_row": 199,
+      "excel_col": 22,
+      "vm_index": 96,
+      "media": "xl/media/image96.png",
+      "saved_path": "_qa_br_rsp_images\\image96.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V200",
+      "excel_row": 200,
+      "excel_col": 22,
+      "vm_index": 97,
+      "media": "xl/media/image97.png",
+      "saved_path": "_qa_br_rsp_images\\image97.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V201",
+      "excel_row": 201,
+      "excel_col": 22,
+      "vm_index": 98,
+      "media": "xl/media/image98.png",
+      "saved_path": "_qa_br_rsp_images\\image98.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V202",
+      "excel_row": 202,
+      "excel_col": 22,
+      "vm_index": 99,
+      "media": "xl/media/image99.png",
+      "saved_path": "_qa_br_rsp_images\\image99.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V203",
+      "excel_row": 203,
+      "excel_col": 22,
+      "vm_index": 100,
+      "media": "xl/media/image100.png",
+      "saved_path": "_qa_br_rsp_images\\image100.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V204",
+      "excel_row": 204,
+      "excel_col": 22,
+      "vm_index": 101,
+      "media": "xl/media/image101.png",
+      "saved_path": "_qa_br_rsp_images\\image101.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V205",
+      "excel_row": 205,
+      "excel_col": 22,
+      "vm_index": 102,
+      "media": "xl/media/image102.png",
+      "saved_path": "_qa_br_rsp_images\\image102.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V206",
+      "excel_row": 206,
+      "excel_col": 22,
+      "vm_index": 103,
+      "media": "xl/media/image103.png",
+      "saved_path": "_qa_br_rsp_images\\image103.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V207",
+      "excel_row": 207,
+      "excel_col": 22,
+      "vm_index": 104,
+      "media": "xl/media/image104.png",
+      "saved_path": "_qa_br_rsp_images\\image104.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V208",
+      "excel_row": 208,
+      "excel_col": 22,
+      "vm_index": 105,
+      "media": "xl/media/image105.png",
+      "saved_path": "_qa_br_rsp_images\\image105.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V209",
+      "excel_row": 209,
+      "excel_col": 22,
+      "vm_index": 106,
+      "media": "xl/media/image106.png",
+      "saved_path": "_qa_br_rsp_images\\image106.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V210",
+      "excel_row": 210,
+      "excel_col": 22,
+      "vm_index": 107,
+      "media": "xl/media/image107.png",
+      "saved_path": "_qa_br_rsp_images\\image107.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V211",
+      "excel_row": 211,
+      "excel_col": 22,
+      "vm_index": 108,
+      "media": "xl/media/image108.png",
+      "saved_path": "_qa_br_rsp_images\\image108.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V212",
+      "excel_row": 212,
+      "excel_col": 22,
+      "vm_index": 109,
+      "media": "xl/media/image109.png",
+      "saved_path": "_qa_br_rsp_images\\image109.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V218",
+      "excel_row": 218,
+      "excel_col": 22,
+      "vm_index": 110,
+      "media": "xl/media/image110.png",
+      "saved_path": "_qa_br_rsp_images\\image110.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V219",
+      "excel_row": 219,
+      "excel_col": 22,
+      "vm_index": 111,
+      "media": "xl/media/image111.png",
+      "saved_path": "_qa_br_rsp_images\\image111.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V220",
+      "excel_row": 220,
+      "excel_col": 22,
+      "vm_index": 112,
+      "media": "xl/media/image112.png",
+      "saved_path": "_qa_br_rsp_images\\image112.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V221",
+      "excel_row": 221,
+      "excel_col": 22,
+      "vm_index": 113,
+      "media": "xl/media/image113.png",
+      "saved_path": "_qa_br_rsp_images\\image113.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V222",
+      "excel_row": 222,
+      "excel_col": 22,
+      "vm_index": 114,
+      "media": "xl/media/image114.png",
+      "saved_path": "_qa_br_rsp_images\\image114.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V270",
+      "excel_row": 270,
+      "excel_col": 22,
+      "vm_index": 115,
+      "media": "xl/media/image115.png",
+      "saved_path": "_qa_br_rsp_images\\image115.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V272",
+      "excel_row": 272,
+      "excel_col": 22,
+      "vm_index": 116,
+      "media": "xl/media/image116.png",
+      "saved_path": "_qa_br_rsp_images\\image116.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V273",
+      "excel_row": 273,
+      "excel_col": 22,
+      "vm_index": 117,
+      "media": "xl/media/image117.png",
+      "saved_path": "_qa_br_rsp_images\\image117.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V274",
+      "excel_row": 274,
+      "excel_col": 22,
+      "vm_index": 118,
+      "media": "xl/media/image118.png",
+      "saved_path": "_qa_br_rsp_images\\image118.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V278",
+      "excel_row": 278,
+      "excel_col": 22,
+      "vm_index": 119,
+      "media": "xl/media/image119.png",
+      "saved_path": "_qa_br_rsp_images\\image119.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V279",
+      "excel_row": 279,
+      "excel_col": 22,
+      "vm_index": 120,
+      "media": "xl/media/image120.png",
+      "saved_path": "_qa_br_rsp_images\\image120.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V280",
+      "excel_row": 280,
+      "excel_col": 22,
+      "vm_index": 121,
+      "media": "xl/media/image121.png",
+      "saved_path": "_qa_br_rsp_images\\image121.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V281",
+      "excel_row": 281,
+      "excel_col": 22,
+      "vm_index": 122,
+      "media": "xl/media/image122.png",
+      "saved_path": "_qa_br_rsp_images\\image122.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V282",
+      "excel_row": 282,
+      "excel_col": 22,
+      "vm_index": 123,
+      "media": "xl/media/image123.png",
+      "saved_path": "_qa_br_rsp_images\\image123.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V283",
+      "excel_row": 283,
+      "excel_col": 22,
+      "vm_index": 124,
+      "media": "xl/media/image124.png",
+      "saved_path": "_qa_br_rsp_images\\image124.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V284",
+      "excel_row": 284,
+      "excel_col": 22,
+      "vm_index": 125,
+      "media": "xl/media/image125.png",
+      "saved_path": "_qa_br_rsp_images\\image125.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V312",
+      "excel_row": 312,
+      "excel_col": 22,
+      "vm_index": 126,
+      "media": "xl/media/image126.png",
+      "saved_path": "_qa_br_rsp_images\\image126.png"
+    },
+    {
+      "sheet": "Anushka-Extra bug",
+      "cell": "M2",
+      "excel_row": 2,
+      "excel_col": 13,
+      "vm_index": 127,
+      "media": "xl/media/image127.png",
+      "saved_path": "_qa_br_rsp_images\\image127.png"
+    },
+    {
+      "sheet": "Anushka-Extra bug",
+      "cell": "M3",
+      "excel_row": 3,
+      "excel_col": 13,
+      "vm_index": 128,
+      "media": "xl/media/image128.png",
+      "saved_path": "_qa_br_rsp_images\\image128.png"
+    },
+    {
+      "sheet": "Anushka-Extra bug",
+      "cell": "M4",
+      "excel_row": 4,
+      "excel_col": 13,
+      "vm_index": 129,
+      "media": "xl/media/image129.png",
+      "saved_path": "_qa_br_rsp_images\\image129.png"
+    }
+  ],
+  "media_note": "Excel richData cell images (not classic xdr drawings). 129 xl/media files extracted to _qa_br_rsp_images/. 129 cell image refs with anchors (sheet/cell/row/col). openpyxl ws._images empty; media is embedded via rich values.",
+  "xlsx_package": {
+    "media_files_count": 129,
+    "drawing_files": [],
+    "rich_data": true
+  },
+  "tc_br": [
+    {
+      "Test Case ID": "TC-BR-001",
+      "Actual Result": "1. Login works: Authentication succeeded on Chrome for PRO_USER_01.\n2. Modules load: Dashboard, Practice Coach setup, Documents upload UI, Gov Hub, and Billing pages loaded without critical layout distortion.\n3. Differences documented: Audio permissions and UI elements perform as expected on latest Google Chrome.",
+      "Pass / Fail": "Pass",
+      "Defect ID": null,
+      "Execution Date": "2026-08-25T00:00:00",
+      "Notes": "Chrome smoke run completed successfully across key app routes.",
+      "Module": "Responsive / Cross-Browser",
+      "Sub-Module": "Responsive / Cross-Browser",
+      "Feature": "Chrome smoke",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Cross-Browser",
+      "User Type": "Authenticated",
+      "Role": "user",
+      "Account ID": "PRO_USER_01",
+      "Tester": "Anushka",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Browser=Chrome | Login email/password: see sheet 03 Test Accounts for Account ID PRO_USER_01",
+      "Exact Steps": "1. On Chrome (latest available), login PRO_USER_01.\n2. Dashboard → Practice Coach setup page → Documents upload UI → Gov hub → Billing.\n3. Note audio permission differences.\n4. If Safari unavailable on machine, mark Blocked by Environment.",
+      "Expected Result (per step)": "1. Login works.\n2. Modules load.\n3. Differences documented.\n4. Honest Blocked if unavailable.",
+      "Final Expected Result": "Critical smoke passes on Chrome or environment limitation recorded.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 274,
+      "hyperlinks": {},
+      "urls": [],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V274",
+          "excel_row": 274,
+          "excel_col": 22,
+          "vm_index": 118,
+          "media": "xl/media/image118.png",
+          "saved_path": "_qa_br_rsp_images\\image118.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-BR-002",
+      "Actual Result": "1. Login works: Authentication succeeded smoothly on Microsoft Edge for PRO_USER_01.\n2. Modules load: Dashboard, Practice Plan (/app/plan), Practice Coach, and remaining primary navigation modules rendered without errors.\n3. Differences documented: Navigation menus, plan list items, and action buttons are fully interactive with no blocking console crashes.",
+      "Pass / Fail": "Pass",
+      "Defect ID": null,
+      "Execution Date": "2026-08-25T00:00:00",
+      "Notes": "Edge smoke suite completed with full functional pass; authentication and core dashboards load smoothly.",
+      "Module": "Responsive / Cross-Browser",
+      "Sub-Module": "Responsive / Cross-Browser",
+      "Feature": "Edge smoke",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Cross-Browser",
+      "User Type": "Authenticated",
+      "Role": "user",
+      "Account ID": "PRO_USER_01",
+      "Tester": "Anushka",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Browser=Edge | Login email/password: see sheet 03 Test Accounts for Account ID PRO_USER_01",
+      "Exact Steps": "1. On Edge (latest available), login PRO_USER_01.\n2. Dashboard → Practice Coach setup page → Documents upload UI → Gov hub → Billing.\n3. Note audio permission differences.\n4. If Safari unavailable on machine, mark Blocked by Environment.",
+      "Expected Result (per step)": "1. Login works.\n2. Modules load.\n3. Differences documented.\n4. Honest Blocked if unavailable.",
+      "Final Expected Result": "Critical smoke passes on Edge or environment limitation recorded.",
+      "Screenshot / Evidence Requirement": null,
+      "row": 275,
+      "hyperlinks": {},
+      "urls": [],
+      "evidence_images": []
+    },
+    {
+      "Test Case ID": "TC-BR-003",
+      "Actual Result": null,
+      "Pass / Fail": "Not Run",
+      "Defect ID": null,
+      "Execution Date": null,
+      "Notes": null,
+      "Module": "Responsive / Cross-Browser",
+      "Sub-Module": "Responsive / Cross-Browser",
+      "Feature": "Firefox smoke",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Cross-Browser",
+      "User Type": "Authenticated",
+      "Role": "user",
+      "Account ID": "PRO_USER_01",
+      "Tester": "Anushka",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Browser=Firefox | Login email/password: see sheet 03 Test Accounts for Account ID PRO_USER_01",
+      "Exact Steps": "1. On Firefox (latest available), login PRO_USER_01.\n2. Dashboard → Practice Coach setup page → Documents upload UI → Gov hub → Billing.\n3. Note audio permission differences.\n4. If Safari unavailable on machine, mark Blocked by Environment.",
+      "Expected Result (per step)": "1. Login works.\n2. Modules load.\n3. Differences documented.\n4. Honest Blocked if unavailable.",
+      "Final Expected Result": "Critical smoke passes on Firefox or environment limitation recorded.",
+      "Screenshot / Evidence Requirement": null,
+      "row": 276,
+      "hyperlinks": {},
+      "urls": [],
+      "evidence_images": []
+    },
+    {
+      "Test Case ID": "TC-BR-004",
+      "Actual Result": null,
+      "Pass / Fail": "Not Run",
+      "Defect ID": null,
+      "Execution Date": null,
+      "Notes": null,
+      "Module": "Responsive / Cross-Browser",
+      "Sub-Module": "Responsive / Cross-Browser",
+      "Feature": "Safari smoke",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Cross-Browser",
+      "User Type": "Authenticated",
+      "Role": "user",
+      "Account ID": "PRO_USER_01",
+      "Tester": "Anushka",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Browser=Safari | Login email/password: see sheet 03 Test Accounts for Account ID PRO_USER_01",
+      "Exact Steps": "1. On Safari (latest available), login PRO_USER_01.\n2. Dashboard → Practice Coach setup page → Documents upload UI → Gov hub → Billing.\n3. Note audio permission differences.\n4. If Safari unavailable on machine, mark Blocked by Environment.",
+      "Expected Result (per step)": "1. Login works.\n2. Modules load.\n3. Differences documented.\n4. Honest Blocked if unavailable.",
+      "Final Expected Result": "Critical smoke passes on Safari or environment limitation recorded.",
+      "Screenshot / Evidence Requirement": null,
+      "row": 277,
+      "hyperlinks": {},
+      "urls": [],
+      "evidence_images": []
+    }
+  ],
+  "tc_rsp": [
+    {
+      "Test Case ID": "TC-RSP-001",
+      "Actual Result": "1. Viewport set: Viewport set to 360x800 in DevTools.\n2. Pages load: Landing, dashboard, and gov exam hub loaded successfully.\n3. Overlap & clipping defects: \n   - Dashboard: Severe text squishing and horizontal text overlap inside the Desktop App installer card.\n   - Gov Exam Prep: Top header and action buttons ('Generate paper', 'My Questions') compress vertically, causing text overlap with the subtitle and disclaimer section.\n4. Core CTAs: Bottom navigation bar and search bar remain functional, but UI layout breaks on narrow screen widths.",
+      "Pass / Fail": "Fail",
+      "Defect ID": null,
+      "Execution Date": "2026-08-25T00:00:00",
+      "Notes": "UI layout failure: Text and card containers fail responsive wrap at 360px width across Dashboard and Gov Exam Hub.",
+      "Module": "Responsive / Cross-Browser",
+      "Sub-Module": "Responsive / Cross-Browser",
+      "Feature": "Layout @ 360x800",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Responsive",
+      "User Type": "Authenticated",
+      "Role": "user",
+      "Account ID": "PRO_USER_01",
+      "Tester": "Anushka",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Viewport 360x800 | Login email/password: see sheet 03 Test Accounts for Account ID PRO_USER_01",
+      "Exact Steps": "1. Set viewport to 360x800 (Mobile) in DevTools or device.\n2. Visit landing, login, dashboard, gov exam hub, settings billing.\n3. Check horizontal scroll, clipped CTAs, nav/sidebar/bottom nav, modals, forms.\n4. Open one modal and one dropdown.",
+      "Expected Result (per step)": "1. Viewport set.\n2. Pages load.\n3. No blocking overflow; primary actions reachable.\n4. Overlay UI usable.",
+      "Final Expected Result": "Core flows usable at 360x800 without critical layout breakage.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 278,
+      "hyperlinks": {},
+      "urls": [],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V278",
+          "excel_row": 278,
+          "excel_col": 22,
+          "vm_index": 119,
+          "media": "xl/media/image119.png",
+          "saved_path": "_qa_br_rsp_images\\image119.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-RSP-002",
+      "Actual Result": "1. Viewport set: Viewport successfully configured to 375x812 (Mobile) in Chrome DevTools.\n2. Pages load: Landing, dashboard, gov exam hub, and billing pages load and remain functionally responsive (buttons, bottom navigation, and modal overlays are clickable).\n3. UI defects observed:\n   - Dashboard: Desktop App installer card has broken responsiveness where left-column text ('Desktop app...') squishes to 2-3 characters per line and overlaps directly on top of the right-column text/buttons ('Continue in web Practice Coach').\n   - Gov Exam Prep: Top header and action buttons ('Generate paper', 'My Questions') compress vertically, causing slight alignment crowding above the disclaimer text.",
+      "Pass / Fail": "Fail",
+      "Defect ID": null,
+      "Execution Date": "2026-08-25T00:00:00",
+      "Notes": "Functionally responsive, but marked Fail due to UI defect: Desktop installer card fails CSS flex-wrapping and causes unreadable text overlap at 375px width.",
+      "Module": "Responsive / Cross-Browser",
+      "Sub-Module": "Responsive / Cross-Browser",
+      "Feature": "Layout @ 375x812",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Responsive",
+      "User Type": "Authenticated",
+      "Role": "user",
+      "Account ID": "PRO_USER_01",
+      "Tester": "Anushka",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Viewport 375x812 | Login email/password: see sheet 03 Test Accounts for Account ID PRO_USER_01",
+      "Exact Steps": "1. Set viewport to 375x812 (Mobile) in DevTools or device.\n2. Visit landing, login, dashboard, gov exam hub, settings billing.\n3. Check horizontal scroll, clipped CTAs, nav/sidebar/bottom nav, modals, forms.\n4. Open one modal and one dropdown.",
+      "Expected Result (per step)": "1. Viewport set.\n2. Pages load.\n3. No blocking overflow; primary actions reachable.\n4. Overlay UI usable.",
+      "Final Expected Result": "Core flows usable at 375x812 without critical layout breakage.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 279,
+      "hyperlinks": {},
+      "urls": [],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V279",
+          "excel_row": 279,
+          "excel_col": 22,
+          "vm_index": 120,
+          "media": "xl/media/image120.png",
+          "saved_path": "_qa_br_rsp_images\\image120.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-RSP-003",
+      "Actual Result": "1. Viewport set: Viewport configured to 414x896 (Mobile) in DevTools.\n2. Pages load: Landing, dashboard, and mock interview routes loaded.\n3. Overlap & Contrast defects observed:\n   - Dashboard: Desktop App card text remains squished and overlaps horizontally.\n   - Mock Interview: Warning/info alert banners fail color contrast readability; scrolling down displays severe vertical component overlapping where 'Start Practice Coach' content renders directly over configuration cards.\n4. Overlays usable: Navigation bar remains clickable, but page content has major visual breakage.",
+      "Pass / Fail": "Fail",
+      "Defect ID": null,
+      "Execution Date": "2026-08-25T00:00:00",
+      "Notes": "UI layout failure: Component overlap on /app/mock and low contrast on alert banners at 414px width.",
+      "Module": "Responsive / Cross-Browser",
+      "Sub-Module": "Responsive / Cross-Browser",
+      "Feature": "Layout @ 414x896",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Responsive",
+      "User Type": "Authenticated",
+      "Role": "user",
+      "Account ID": "PRO_USER_01",
+      "Tester": "Anushka",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Viewport 414x896 | Login email/password: see sheet 03 Test Accounts for Account ID PRO_USER_01",
+      "Exact Steps": "1. Set viewport to 414x896 (Mobile) in DevTools or device.\n2. Visit landing, login, dashboard, gov exam hub, settings billing.\n3. Check horizontal scroll, clipped CTAs, nav/sidebar/bottom nav, modals, forms.\n4. Open one modal and one dropdown.",
+      "Expected Result (per step)": "1. Viewport set.\n2. Pages load.\n3. No blocking overflow; primary actions reachable.\n4. Overlay UI usable.",
+      "Final Expected Result": "Core flows usable at 414x896 without critical layout breakage.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 280,
+      "hyperlinks": {},
+      "urls": [],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V280",
+          "excel_row": 280,
+          "excel_col": 22,
+          "vm_index": 121,
+          "media": "xl/media/image121.png",
+          "saved_path": "_qa_br_rsp_images\\image121.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-RSP-004",
+      "Actual Result": "1. Viewport set: Viewport set to 768x1024 (Tablet) in DevTools.\n2. Pages load: Dashboard, Settings, and Profile views loaded.\n3. UI defects observed:\n   - Profile/Settings: Large redundant vertical whitespace gap observed inside settings views, with collapsed side navigation icons.\n   - Contrast & Readability: Information banners and tag indicators exhibit low contrast ratios against light background containers, degrading text visibility.\n4. Overlays usable: Navigation and primary form buttons remain functional.",
+      "Pass / Fail": "Fail",
+      "Defect ID": null,
+      "Execution Date": "2026-08-25T00:00:00",
+      "Notes": "UI/UX defects at 768x1024: Low contrast banners and excessive vertical container spacing in Settings.",
+      "Module": "Responsive / Cross-Browser",
+      "Sub-Module": "Responsive / Cross-Browser",
+      "Feature": "Layout @ 768x1024",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Responsive",
+      "User Type": "Authenticated",
+      "Role": "user",
+      "Account ID": "PRO_USER_01",
+      "Tester": "Anushka",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Viewport 768x1024 | Login email/password: see sheet 03 Test Accounts for Account ID PRO_USER_01",
+      "Exact Steps": "1. Set viewport to 768x1024 (Tablet) in DevTools or device.\n2. Visit landing, login, dashboard, gov exam hub, settings billing.\n3. Check horizontal scroll, clipped CTAs, nav/sidebar/bottom nav, modals, forms.\n4. Open one modal and one dropdown.",
+      "Expected Result (per step)": "1. Viewport set.\n2. Pages load.\n3. No blocking overflow; primary actions reachable.\n4. Overlay UI usable.",
+      "Final Expected Result": "Core flows usable at 768x1024 without critical layout breakage.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 281,
+      "hyperlinks": {},
+      "urls": [],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V281",
+          "excel_row": 281,
+          "excel_col": 22,
+          "vm_index": 122,
+          "media": "xl/media/image122.png",
+          "saved_path": "_qa_br_rsp_images\\image122.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-RSP-005",
+      "Actual Result": "1. Viewport set: Viewport set to 1366x768 (Desktop) in DevTools.\n2. Pages load: Practice Coach (/app/live), Debriefs (/app/debriefs), Documents, and Interviews pages loaded.\n3. UI / Space Utilization defect observed: \n   - Content and interactive cards do not fully expand or stretch to utilize the desktop container width.\n   - Significant empty space/whitespace appears on the right side of views across Practice Coach, Debriefs, and Interviews.\n   - Left navigation rail remains tight and unexpanded relative to the screen width.\n4. Overlays usable: Buttons, dropdown selects, and links remain functional.",
+      "Pass / Fail": "Fail",
+      "Defect ID": null,
+      "Execution Date": "2026-08-25T00:00:00",
+      "Notes": "Layout usability defect at 1366x768: Screen space underutilized with large empty whitespace gaps across Practice Coach, Debriefs, and Interviews.",
+      "Module": "Responsive / Cross-Browser",
+      "Sub-Module": "Responsive / Cross-Browser",
+      "Feature": "Layout @ 1366x768",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Responsive",
+      "User Type": "Authenticated",
+      "Role": "user",
+      "Account ID": "PRO_USER_01",
+      "Tester": "Anushka",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Viewport 1366x768 | Login email/password: see sheet 03 Test Accounts for Account ID PRO_USER_01",
+      "Exact Steps": "1. Set viewport to 1366x768 (Desktop) in DevTools or device.\n2. Visit landing, login, dashboard, gov exam hub, settings billing.\n3. Check horizontal scroll, clipped CTAs, nav/sidebar/bottom nav, modals, forms.\n4. Open one modal and one dropdown.",
+      "Expected Result (per step)": "1. Viewport set.\n2. Pages load.\n3. No blocking overflow; primary actions reachable.\n4. Overlay UI usable.",
+      "Final Expected Result": "Core flows usable at 1366x768 without critical layout breakage.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 282,
+      "hyperlinks": {},
+      "urls": [],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V282",
+          "excel_row": 282,
+          "excel_col": 22,
+          "vm_index": 123,
+          "media": "xl/media/image123.png",
+          "saved_path": "_qa_br_rsp_images\\image123.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-RSP-006",
+      "Actual Result": "1. Viewport set: Viewport set to 1440x900 (Desktop) in DevTools.\n2. Pages load: All major routes (Assessments, Gov Exams, Practice Coach, Debriefs, Practice Workspace, Mock Interview) loaded.\n3. Inconsistent UI & Space Utilization defects:\n   - Full width utilization works on Exam Templates (/app/assessments) and Gov Exams.\n   - Severe underutilization and excessive whitespace observed on Practice Coach (/app/live), Debriefs (/app/debriefs), and Practice Workspace (/app/practice-workspace), where content remains trapped in a narrow left column leaving the right screen empty.\n   - Mock Interview (/app/mock) exhibits vertical component overlap/bleeding.\n4. Overlays usable: Navigation links and buttons trigger, but layout consistency fails desktop standards.",
+      "Pass / Fail": "Fail",
+      "Defect ID": null,
+      "Execution Date": "2026-08-25T00:00:00",
+      "Notes": "Inconsistent responsive layout at 1440x900: Excessive empty white space across live coach/debriefs, contrasting with full-width grid on assessments.",
+      "Module": "Responsive / Cross-Browser",
+      "Sub-Module": "Responsive / Cross-Browser",
+      "Feature": "Layout @ 1440x900",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Responsive",
+      "User Type": "Authenticated",
+      "Role": "user",
+      "Account ID": "PRO_USER_01",
+      "Tester": "Anushka",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Viewport 1440x900 | Login email/password: see sheet 03 Test Accounts for Account ID PRO_USER_01",
+      "Exact Steps": "1. Set viewport to 1440x900 (Desktop) in DevTools or device.\n2. Visit landing, login, dashboard, gov exam hub, settings billing.\n3. Check horizontal scroll, clipped CTAs, nav/sidebar/bottom nav, modals, forms.\n4. Open one modal and one dropdown.",
+      "Expected Result (per step)": "1. Viewport set.\n2. Pages load.\n3. No blocking overflow; primary actions reachable.\n4. Overlay UI usable.",
+      "Final Expected Result": "Core flows usable at 1440x900 without critical layout breakage.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 283,
+      "hyperlinks": {},
+      "urls": [],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V283",
+          "excel_row": 283,
+          "excel_col": 22,
+          "vm_index": 124,
+          "media": "xl/media/image124.png",
+          "saved_path": "_qa_br_rsp_images\\image124.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-RSP-007",
+      "Actual Result": "1. Viewport set: Set to 1920x1080 (Desktop FHD) in DevTools.\n2. Pages load: Dashboard, Live Practice Coach, Mock Interview, Learning Hub, Skills Analytics, and Referrals routes loaded.\n3. Severe UI & space underutilization defects observed:\n   - Excessive whitespace across major views: Learning Hub, Analytics, Referrals, and Live Practice Coach restrict content to a narrow left-aligned box, leaving >50% of the screen blank.\n   - Mock Interview (/app/mock) continues to suffer vertical component bleeding and overlap.\n4. Overlays usable: Navigation menu, links, and action buttons remain clickable.",
+      "Pass / Fail": "Fail",
+      "Defect ID": null,
+      "Execution Date": "2026-08-25T00:00:00",
+      "Notes": "Systemic desktop layout failure at 1920x1080: App fails to scale across full dashboard width, leaving massive empty whitespace across almost all pages.",
+      "Module": "Responsive / Cross-Browser",
+      "Sub-Module": "Responsive / Cross-Browser",
+      "Feature": "Layout @ 1920x1080",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Responsive",
+      "User Type": "Authenticated",
+      "Role": "user",
+      "Account ID": "PRO_USER_01",
+      "Tester": "Anushka",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Viewport 1920x1080 | Login email/password: see sheet 03 Test Accounts for Account ID PRO_USER_01",
+      "Exact Steps": "1. Set viewport to 1920x1080 (Desktop) in DevTools or device.\n2. Visit landing, login, dashboard, gov exam hub, settings billing.\n3. Check horizontal scroll, clipped CTAs, nav/sidebar/bottom nav, modals, forms.\n4. Open one modal and one dropdown.",
+      "Expected Result (per step)": "1. Viewport set.\n2. Pages load.\n3. No blocking overflow; primary actions reachable.\n4. Overlay UI usable.",
+      "Final Expected Result": "Core flows usable at 1920x1080 without critical layout breakage.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 284,
+      "hyperlinks": {},
+      "urls": [],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V284",
+          "excel_row": 284,
+          "excel_col": 22,
+          "vm_index": 125,
+          "media": "xl/media/image125.png",
+          "saved_path": "_qa_br_rsp_images\\image125.png"
+        }
+      ]
+    }
+  ],
+  "tc_pub": [
+    {
+      "Test Case ID": "TC-PUB-001",
+      "Actual Result": "Page Load Successfully But some footer link content should be modify .",
+      "Pass / Fail": "Fail",
+      "Defect ID": "D_ID_1",
+      "Execution Date": "2026-08-24T00:00:00",
+      "Notes": "Where as the change the font of System status: Email support@clarifyprep.com for outages (no public status page configured) in the page help only mail is link test all in normal mode where as the same page content should modify (Is there a free plan? and can i buy extra credits \nplease check and verify",
+      "Module": "Public Pages",
+      "Sub-Module": "Marketing",
+      "Feature": "Landing",
+      "Priority": "P0",
+      "Severity": "Critical",
+      "Test Type": "Positive",
+      "User Type": "Guest",
+      "Role": "guest",
+      "Account ID": "GUEST",
+      "Tester": "Venkat",
+      "Preconditions": "Logged out. Incognito. No extensions blocking scripts.",
+      "Test Data": "URL=https://clarify.ai.sltfinanceindia.com/ | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
+      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/ in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+      "Expected Result (per step)": "1. URL is https://clarify.ai.sltfinanceindia.com/ (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
+      "Final Expected Result": "Landing loads with brand, headline, primary CTA",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 27,
+      "hyperlinks": {
+        "Notes": "mailto:support@clarifyprep.com"
+      },
+      "urls": [
+        "https://clarify.ai.sltfinanceindia.com/",
+        "mailto:support@clarifyprep.com"
+      ],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V27",
+          "excel_row": 27,
+          "excel_col": 22,
+          "vm_index": 23,
+          "media": "xl/media/image23.png",
+          "saved_path": "_qa_br_rsp_images\\image23.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-PUB-013",
+      "Actual Result": "where as the Continue with Google CTA which gives the 400 Bad Request \"validation_failed\"",
+      "Pass / Fail": "Blocked",
+      "Defect ID": null,
+      "Execution Date": "2026-08-24T00:00:00",
+      "Notes": "sing up free,get started free and Get Started which is pro account load login with pricing url where as the \"Continue With Google CTA which blocked  auth it doesn't reached entery pointes.",
+      "Module": "Public Pages",
+      "Sub-Module": "CTAs",
+      "Feature": "Public CTA to Signup/Login",
+      "Priority": "P0",
+      "Severity": "Critical",
+      "Test Type": "Positive",
+      "User Type": "Guest",
+      "Role": "guest",
+      "Account ID": "GUEST",
+      "Tester": "Venkat",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Use approved test credentials from Test Accounts sheet.",
+      "Exact Steps": "1. From landing, click primary Sign up / Get started CTA.\n2. From pricing, click a plan CTA.\n3. Use Login link from signup.",
+      "Expected Result (per step)": "1. Navigates to /signup.\n2. Navigates to signup/checkout/login as designed.\n3. Login page loads.",
+      "Final Expected Result": "Public CTAs reach correct auth entry points.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 28,
+      "hyperlinks": {},
+      "urls": [],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V28",
+          "excel_row": 28,
+          "excel_col": 22,
+          "vm_index": 24,
+          "media": "xl/media/image24.png",
+          "saved_path": "_qa_br_rsp_images\\image24.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-PUB-002",
+      "Actual Result": "User Can see and feel the CTA which is clearly identify where as the Start Free,Get Started,Get Max",
+      "Pass / Fail": "Pass",
+      "Defect ID": null,
+      "Execution Date": "2026-08-24T00:00:00",
+      "Notes": "User can click there recommend account it gives the correct page url https://clarify.ai.sltfinanceindia.com/signup?plan=pro\nhttps://clarify.ai.sltfinanceindia.com/signup?plan=enterprise\nhttps://clarify.ai.sltfinanceindia.com/signup",
+      "Module": "Public Pages",
+      "Sub-Module": "Marketing",
+      "Feature": "Pricing",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Positive",
+      "User Type": "Guest",
+      "Role": "guest",
+      "Account ID": "GUEST",
+      "Tester": "Venkat",
+      "Preconditions": "Logged out. Incognito. No extensions blocking scripts.",
+      "Test Data": "URL=https://clarify.ai.sltfinanceindia.com/pricing | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
+      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/pricing in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+      "Expected Result (per step)": "1. URL is https://clarify.ai.sltfinanceindia.com/pricing (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
+      "Final Expected Result": "Pricing plans and CTAs visible",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 29,
+      "hyperlinks": {},
+      "urls": [
+        "https://clarify.ai.sltfinanceindia.com/pricing",
+        "https://clarify.ai.sltfinanceindia.com/signup",
+        "https://clarify.ai.sltfinanceindia.com/signup?plan=enterprise",
+        "https://clarify.ai.sltfinanceindia.com/signup?plan=pro"
+      ],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V29",
+          "excel_row": 29,
+          "excel_col": 22,
+          "vm_index": 25,
+          "media": "xl/media/image25.png",
+          "saved_path": "_qa_br_rsp_images\\image25.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-PUB-003",
+      "Actual Result": "Gov exam page land successfully without any errors user can see the type of exams that's intergated",
+      "Pass / Fail": "Pass",
+      "Defect ID": null,
+      "Execution Date": "2026-08-24T00:00:00",
+      "Notes": "Where the gov exams page look \nand feel successfully",
+      "Module": "Public Pages",
+      "Sub-Module": "Marketing",
+      "Feature": "Gov Exams marketing",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Positive",
+      "User Type": "Guest",
+      "Role": "guest",
+      "Account ID": "GUEST",
+      "Tester": "Venkat",
+      "Preconditions": "Logged out. Incognito. No extensions blocking scripts.",
+      "Test Data": "URL=https://clarify.ai.sltfinanceindia.com/gov-exams | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
+      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/gov-exams in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+      "Expected Result (per step)": "1. URL is https://clarify.ai.sltfinanceindia.com/gov-exams (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
+      "Final Expected Result": "Gov exam marketing content loads",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 30,
+      "hyperlinks": {},
+      "urls": [
+        "https://clarify.ai.sltfinanceindia.com/gov-exams"
+      ],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V30",
+          "excel_row": 30,
+          "excel_col": 22,
+          "vm_index": 26,
+          "media": "xl/media/image26.png",
+          "saved_path": "_qa_br_rsp_images\\image26.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-PUB-004",
+      "Actual Result": "In the Help section which is some articles it gives invalid information .",
+      "Pass / Fail": "Fail",
+      "Defect ID": "D_ID_2",
+      "Execution Date": "2026-08-24T00:00:00",
+      "Notes": "Help load successfully which is invalid data in articles check the is there a free plane and Can I buy extra credits which is the corrupted characters",
+      "Module": "Public Pages",
+      "Sub-Module": "Marketing",
+      "Feature": "Help",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Positive",
+      "User Type": "Guest",
+      "Role": "guest",
+      "Account ID": "GUEST",
+      "Tester": "Venkat",
+      "Preconditions": "Logged out. Incognito. No extensions blocking scripts.",
+      "Test Data": "URL=https://clarify.ai.sltfinanceindia.com/help | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
+      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/help in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+      "Expected Result (per step)": "1. URL is https://clarify.ai.sltfinanceindia.com/help (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
+      "Final Expected Result": "Help center lists articles or empty-state",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 31,
+      "hyperlinks": {},
+      "urls": [
+        "https://clarify.ai.sltfinanceindia.com/help"
+      ],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V31",
+          "excel_row": 31,
+          "excel_col": 22,
+          "vm_index": 27,
+          "media": "xl/media/image27.png",
+          "saved_path": "_qa_br_rsp_images\\image27.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-PUB-005",
+      "Actual Result": "User see the shortcut page successfully without error",
+      "Pass / Fail": "Pass",
+      "Defect ID": null,
+      "Execution Date": "2026-08-24T00:00:00",
+      "Notes": "user see the shortcut keys of Clarify AI commands and information",
+      "Module": "Public Pages",
+      "Sub-Module": "Marketing",
+      "Feature": "Shortcuts",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Positive",
+      "User Type": "Guest",
+      "Role": "guest",
+      "Account ID": "GUEST",
+      "Tester": "Venkat",
+      "Preconditions": "Logged out. Incognito. No extensions blocking scripts.",
+      "Test Data": "URL=https://clarify.ai.sltfinanceindia.com/shortcuts | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
+      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/shortcuts in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+      "Expected Result (per step)": "1. URL is https://clarify.ai.sltfinanceindia.com/shortcuts (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
+      "Final Expected Result": "Shortcuts page loads",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 32,
+      "hyperlinks": {},
+      "urls": [
+        "https://clarify.ai.sltfinanceindia.com/shortcuts"
+      ],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V32",
+          "excel_row": 32,
+          "excel_col": 22,
+          "vm_index": 28,
+          "media": "xl/media/image28.png",
+          "saved_path": "_qa_br_rsp_images\\image28.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-PUB-006",
+      "Actual Result": "user see the Blog page successfully without errors",
+      "Pass / Fail": "Pass",
+      "Defect ID": null,
+      "Execution Date": "2026-08-24T00:00:00",
+      "Notes": "user can see the in BLOG where as the marking knowledge information how the market standards presention skills where as the information in blog",
+      "Module": "Public Pages",
+      "Sub-Module": "Marketing",
+      "Feature": "Blog",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Positive",
+      "User Type": "Guest",
+      "Role": "guest",
+      "Account ID": "GUEST",
+      "Tester": "Venkat",
+      "Preconditions": "Logged out. Incognito. No extensions blocking scripts.",
+      "Test Data": "URL=https://clarify.ai.sltfinanceindia.com/blog | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
+      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/blog in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+      "Expected Result (per step)": "1. URL is https://clarify.ai.sltfinanceindia.com/blog (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
+      "Final Expected Result": "Blog list loads",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 33,
+      "hyperlinks": {},
+      "urls": [
+        "https://clarify.ai.sltfinanceindia.com/blog"
+      ],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V33",
+          "excel_row": 33,
+          "excel_col": 22,
+          "vm_index": 29,
+          "media": "xl/media/image29.png",
+          "saved_path": "_qa_br_rsp_images\\image29.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-PUB-007",
+      "Actual Result": "user see the terms page successfully where as contact email it give canceled status in network .",
+      "Pass / Fail": "fail",
+      "Defect ID": "D_ID_3",
+      "Execution Date": "2026-08-24T00:00:00",
+      "Notes": "user can see the how the application behave and how to use the application and envirnoment user can see the successfull information of the application and legal@clarifyprep.com which is getting the canceled status for the application browsering",
+      "Module": "Public Pages",
+      "Sub-Module": "Marketing",
+      "Feature": "Terms",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Positive",
+      "User Type": "Guest",
+      "Role": "guest",
+      "Account ID": "GUEST",
+      "Tester": "Venkat",
+      "Preconditions": "Logged out. Incognito. No extensions blocking scripts.",
+      "Test Data": "URL=https://clarify.ai.sltfinanceindia.com/terms | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
+      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/terms in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+      "Expected Result (per step)": "1. URL is https://clarify.ai.sltfinanceindia.com/terms (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
+      "Final Expected Result": "Terms content loads",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 34,
+      "hyperlinks": {
+        "Notes": "mailto:legal@clarifyprep.com"
+      },
+      "urls": [
+        "https://clarify.ai.sltfinanceindia.com/terms",
+        "mailto:legal@clarifyprep.com"
+      ],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V34",
+          "excel_row": 34,
+          "excel_col": 22,
+          "vm_index": 30,
+          "media": "xl/media/image30.png",
+          "saved_path": "_qa_br_rsp_images\\image30.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-PUB-008",
+      "Actual Result": "user see the privacy page successfully where as contact email it give the canceled status in network",
+      "Pass / Fail": "Fail",
+      "Defect ID": "D_ID_4",
+      "Execution Date": "2026-08-24T00:00:00",
+      "Notes": "user can see the how the application can protected the information and mainten the security . where as the privacy@clarifyprep.com which is getting the canceled status for the platform application browsering",
+      "Module": "Public Pages",
+      "Sub-Module": "Marketing",
+      "Feature": "Privacy",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Positive",
+      "User Type": "Guest",
+      "Role": "guest",
+      "Account ID": "GUEST",
+      "Tester": "Venkat",
+      "Preconditions": "Logged out. Incognito. No extensions blocking scripts.",
+      "Test Data": "URL=https://clarify.ai.sltfinanceindia.com/privacy | Login email/password: see sheet 03 Test Accounts for Account ID GUEST",
+      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/privacy in a logged-out Incognito window.\n2. Wait for page load (max 15s).\n3. Scroll full page; click primary nav/footer links that stay on-site.\n4. Note any console red errors (ignore 3rd-party noise).",
+      "Expected Result (per step)": "1. URL is https://clarify.ai.sltfinanceindia.com/privacy (or intentional redirect).\n2. Page content renders; no infinite spinner/blank screen.\n3. Links navigate correctly; no broken chrome.\n4. No app-breaking console errors.",
+      "Final Expected Result": "Privacy content loads",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 35,
+      "hyperlinks": {
+        "Notes": "mailto:privacy@clarifyprep.com"
+      },
+      "urls": [
+        "https://clarify.ai.sltfinanceindia.com/privacy",
+        "mailto:privacy@clarifyprep.com"
+      ],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V35",
+          "excel_row": 35,
+          "excel_col": 22,
+          "vm_index": 31,
+          "media": "xl/media/image31.png",
+          "saved_path": "_qa_br_rsp_images\\image31.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-PUB-011",
+      "Actual Result": "user can't find the certificates option in public pages  (user can push the certificate in auth account only to be integrated)",
+      "Pass / Fail": "Partial",
+      "Defect ID": null,
+      "Execution Date": "2026-08-24T00:00:00",
+      "Notes": "Where as  the certificates it gives the invalid certificate ID( where it certificates integrated in the application not in the public page",
+      "Module": "Public Pages",
+      "Sub-Module": "Certificates",
+      "Feature": "Certificate verification — invalid ID",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Negative",
+      "User Type": "Guest",
+      "Role": "guest",
+      "Account ID": "GUEST",
+      "Tester": "Venkat",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Use approved test credentials from Test Accounts sheet.",
+      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/verify-certificate/invalid-test-id-000.\n2. Observe message.",
+      "Expected Result (per step)": "1. Page loads without crash.\n2. Clear invalid/not-found message; no other users' data shown.",
+      "Final Expected Result": "Invalid certificate ID fails safely with no data leak.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 36,
+      "hyperlinks": {},
+      "urls": [
+        "https://clarify.ai.sltfinanceindia.com/verify-certificate/invalid-test-id-000."
+      ],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V36",
+          "excel_row": 36,
+          "excel_col": 22,
+          "vm_index": 32,
+          "media": "xl/media/image32.png",
+          "saved_path": "_qa_br_rsp_images\\image32.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-PUB-012",
+      "Actual Result": "user can't find the sharing feature in the public page where as the link .",
+      "Pass / Fail": "Partial",
+      "Defect ID": null,
+      "Execution Date": "2026-08-24T00:00:00",
+      "Notes": "where as the sharelink is unavailable using debrief it will give the information. please check",
+      "Module": "Public Pages",
+      "Sub-Module": "Sharing",
+      "Feature": "Shared debrief — invalid token",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Security",
+      "User Type": "Guest",
+      "Role": "guest",
+      "Account ID": "GUEST",
+      "Tester": "Venkat",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Use approved test credentials from Test Accounts sheet.",
+      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/share/not-a-real-token.\n2. Observe UI.",
+      "Expected Result (per step)": "1. Safe error or not-found.\n2. No private debrief content exposed.",
+      "Final Expected Result": "Invalid share token does not leak session content.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 37,
+      "hyperlinks": {},
+      "urls": [
+        "https://clarify.ai.sltfinanceindia.com/share/not-a-real-token."
+      ],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V37",
+          "excel_row": 37,
+          "excel_col": 22,
+          "vm_index": 33,
+          "media": "xl/media/image33.png",
+          "saved_path": "_qa_br_rsp_images\\image33.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-PUB-009",
+      "Actual Result": "user can see the article successfully which is unreadble format .",
+      "Pass / Fail": "Fail",
+      "Defect ID": "D_ID_5",
+      "Execution Date": "2026-08-24T00:00:00",
+      "Notes": "Help ariticel is not readable which is can i buy extra credits.",
+      "Module": "Public Pages",
+      "Sub-Module": "Help",
+      "Feature": "Help article deep link",
+      "Priority": "P2",
+      "Severity": "Minor",
+      "Test Type": "Positive",
+      "User Type": "Guest",
+      "Role": "guest",
+      "Account ID": "GUEST",
+      "Tester": "Venkat",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Use approved test credentials from Test Accounts sheet.",
+      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/help and click the first available article (or open a known slug).\n2. Verify title, body, and back/nav.\n3. Refresh the article URL.",
+      "Expected Result (per step)": "1. Article opens.\n2. Content readable; nav works.\n3. Same article still loads after refresh.",
+      "Final Expected Result": "Help article deep links work and persist on refresh.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 38,
+      "hyperlinks": {},
+      "urls": [
+        "https://clarify.ai.sltfinanceindia.com/help"
+      ],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V38",
+          "excel_row": 38,
+          "excel_col": 22,
+          "vm_index": 34,
+          "media": "xl/media/image34.png",
+          "saved_path": "_qa_br_rsp_images\\image34.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-PUB-010",
+      "Actual Result": "user can see the successfully Blog there postes",
+      "Pass / Fail": "Pass",
+      "Defect ID": null,
+      "Execution Date": "2026-08-24T00:00:00",
+      "Notes": "where successfully Blog postes there information how the walk in goes and industry technical source of information how give the answer in interview times.",
+      "Module": "Public Pages",
+      "Sub-Module": "Blog",
+      "Feature": "Blog post deep link",
+      "Priority": "P2",
+      "Severity": "Minor",
+      "Test Type": "Positive",
+      "User Type": "Guest",
+      "Role": "guest",
+      "Account ID": "GUEST",
+      "Tester": "Venkat",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Use approved test credentials from Test Accounts sheet.",
+      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/blog; open first post if any.\n2. If empty, record CONTENT_NOT_AVAILABLE (not a defect unless content is required).\n3. Refresh post URL if opened.",
+      "Expected Result (per step)": "1. Post opens or empty state is clear.\n2. Empty ≠ crash.\n3. Refresh keeps content.",
+      "Final Expected Result": "Blog post loads or honest empty state.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 39,
+      "hyperlinks": {},
+      "urls": [
+        "https://clarify.ai.sltfinanceindia.com/blog;"
+      ],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V39",
+          "excel_row": 39,
+          "excel_col": 22,
+          "vm_index": 35,
+          "media": "xl/media/image35.png",
+          "saved_path": "_qa_br_rsp_images\\image35.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-PUB-015",
+      "Actual Result": "user can see the successfully Unknown routes show safe 404.",
+      "Pass / Fail": "pass",
+      "Defect ID": null,
+      "Execution Date": "2026-08-24T00:00:00",
+      "Notes": "user can the navigated to home page valid name and not found 404",
+      "Module": "Public Pages",
+      "Sub-Module": "Errors",
+      "Feature": "404 / unknown public path",
+      "Priority": "P2",
+      "Severity": "Minor",
+      "Test Type": "Negative",
+      "User Type": "Guest",
+      "Role": "guest",
+      "Account ID": "GUEST",
+      "Tester": "Venkat",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Use approved test credentials from Test Accounts sheet.",
+      "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/this-page-does-not-exist-qa.\n2. Observe not-found UI and navigation home.",
+      "Expected Result (per step)": "1. Friendly 404 (not blank/crash).\n2. User can navigate back to a valid page.",
+      "Final Expected Result": "Unknown routes show safe 404.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 40,
+      "hyperlinks": {},
+      "urls": [
+        "https://clarify.ai.sltfinanceindia.com/this-page-does-not-exist-qa."
+      ],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V40",
+          "excel_row": 40,
+          "excel_col": 22,
+          "vm_index": 36,
+          "media": "xl/media/image36.png",
+          "saved_path": "_qa_br_rsp_images\\image36.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-PUB-014",
+      "Actual Result": "user can't see the careers",
+      "Pass / Fail": "Partial",
+      "Defect ID": null,
+      "Execution Date": "2026-08-24T00:00:00",
+      "Notes": "Mark Application Inventory accordingly.",
+      "Module": "Public Pages",
+      "Sub-Module": "Inventory",
+      "Feature": "Missing marketing routes (About/Contact/etc.)",
+      "Priority": "P3",
+      "Severity": "Cosmetic",
+      "Test Type": "Positive",
+      "User Type": "Guest",
+      "Role": "guest",
+      "Account ID": "GUEST",
+      "Tester": "Venkat",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Use approved test credentials from Test Accounts sheet.",
+      "Exact Steps": "1. From landing & footer, look for About, Contact, Careers, Features, Industries, Cookies, FAQ.\n2. For each missing route, record Unavailable.\n3. For each present link, open and verify load.",
+      "Expected Result (per step)": "1. Inventory updated honestly.\n2. Missing ≠ Fail unless product promises the page.\n3. Present pages load.",
+      "Final Expected Result": "Public route inventory complete; no false 'working' claims.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 41,
+      "hyperlinks": {},
+      "urls": [],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V41",
+          "excel_row": 41,
+          "excel_col": 22,
+          "vm_index": 37,
+          "media": "xl/media/image37.png",
+          "saved_path": "_qa_br_rsp_images\\image37.png"
+        }
+      ]
+    }
+  ],
+  "responsive_fail_partial_admin_notes": [
+    {
+      "Test Case ID": "TC-RSP-001",
+      "Actual Result": "1. Viewport set: Viewport set to 360x800 in DevTools.\n2. Pages load: Landing, dashboard, and gov exam hub loaded successfully.\n3. Overlap & clipping defects: \n   - Dashboard: Severe text squishing and horizontal text overlap inside the Desktop App installer card.\n   - Gov Exam Prep: Top header and action buttons ('Generate paper', 'My Questions') compress vertically, causing text overlap with the subtitle and disclaimer section.\n4. Core CTAs: Bottom navigation bar and search bar remain functional, but UI layout breaks on narrow screen widths.",
+      "Pass / Fail": "Fail",
+      "Defect ID": null,
+      "Execution Date": "2026-08-25T00:00:00",
+      "Notes": "UI layout failure: Text and card containers fail responsive wrap at 360px width across Dashboard and Gov Exam Hub.",
+      "Module": "Responsive / Cross-Browser",
+      "Sub-Module": "Responsive / Cross-Browser",
+      "Feature": "Layout @ 360x800",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Responsive",
+      "User Type": "Authenticated",
+      "Role": "user",
+      "Account ID": "PRO_USER_01",
+      "Tester": "Anushka",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Viewport 360x800 | Login email/password: see sheet 03 Test Accounts for Account ID PRO_USER_01",
+      "Exact Steps": "1. Set viewport to 360x800 (Mobile) in DevTools or device.\n2. Visit landing, login, dashboard, gov exam hub, settings billing.\n3. Check horizontal scroll, clipped CTAs, nav/sidebar/bottom nav, modals, forms.\n4. Open one modal and one dropdown.",
+      "Expected Result (per step)": "1. Viewport set.\n2. Pages load.\n3. No blocking overflow; primary actions reachable.\n4. Overlay UI usable.",
+      "Final Expected Result": "Core flows usable at 360x800 without critical layout breakage.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 278,
+      "hyperlinks": {},
+      "urls": [],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V278",
+          "excel_row": 278,
+          "excel_col": 22,
+          "vm_index": 119,
+          "media": "xl/media/image119.png",
+          "saved_path": "_qa_br_rsp_images\\image119.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-RSP-002",
+      "Actual Result": "1. Viewport set: Viewport successfully configured to 375x812 (Mobile) in Chrome DevTools.\n2. Pages load: Landing, dashboard, gov exam hub, and billing pages load and remain functionally responsive (buttons, bottom navigation, and modal overlays are clickable).\n3. UI defects observed:\n   - Dashboard: Desktop App installer card has broken responsiveness where left-column text ('Desktop app...') squishes to 2-3 characters per line and overlaps directly on top of the right-column text/buttons ('Continue in web Practice Coach').\n   - Gov Exam Prep: Top header and action buttons ('Generate paper', 'My Questions') compress vertically, causing slight alignment crowding above the disclaimer text.",
+      "Pass / Fail": "Fail",
+      "Defect ID": null,
+      "Execution Date": "2026-08-25T00:00:00",
+      "Notes": "Functionally responsive, but marked Fail due to UI defect: Desktop installer card fails CSS flex-wrapping and causes unreadable text overlap at 375px width.",
+      "Module": "Responsive / Cross-Browser",
+      "Sub-Module": "Responsive / Cross-Browser",
+      "Feature": "Layout @ 375x812",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Responsive",
+      "User Type": "Authenticated",
+      "Role": "user",
+      "Account ID": "PRO_USER_01",
+      "Tester": "Anushka",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Viewport 375x812 | Login email/password: see sheet 03 Test Accounts for Account ID PRO_USER_01",
+      "Exact Steps": "1. Set viewport to 375x812 (Mobile) in DevTools or device.\n2. Visit landing, login, dashboard, gov exam hub, settings billing.\n3. Check horizontal scroll, clipped CTAs, nav/sidebar/bottom nav, modals, forms.\n4. Open one modal and one dropdown.",
+      "Expected Result (per step)": "1. Viewport set.\n2. Pages load.\n3. No blocking overflow; primary actions reachable.\n4. Overlay UI usable.",
+      "Final Expected Result": "Core flows usable at 375x812 without critical layout breakage.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 279,
+      "hyperlinks": {},
+      "urls": [],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V279",
+          "excel_row": 279,
+          "excel_col": 22,
+          "vm_index": 120,
+          "media": "xl/media/image120.png",
+          "saved_path": "_qa_br_rsp_images\\image120.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-RSP-003",
+      "Actual Result": "1. Viewport set: Viewport configured to 414x896 (Mobile) in DevTools.\n2. Pages load: Landing, dashboard, and mock interview routes loaded.\n3. Overlap & Contrast defects observed:\n   - Dashboard: Desktop App card text remains squished and overlaps horizontally.\n   - Mock Interview: Warning/info alert banners fail color contrast readability; scrolling down displays severe vertical component overlapping where 'Start Practice Coach' content renders directly over configuration cards.\n4. Overlays usable: Navigation bar remains clickable, but page content has major visual breakage.",
+      "Pass / Fail": "Fail",
+      "Defect ID": null,
+      "Execution Date": "2026-08-25T00:00:00",
+      "Notes": "UI layout failure: Component overlap on /app/mock and low contrast on alert banners at 414px width.",
+      "Module": "Responsive / Cross-Browser",
+      "Sub-Module": "Responsive / Cross-Browser",
+      "Feature": "Layout @ 414x896",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Responsive",
+      "User Type": "Authenticated",
+      "Role": "user",
+      "Account ID": "PRO_USER_01",
+      "Tester": "Anushka",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Viewport 414x896 | Login email/password: see sheet 03 Test Accounts for Account ID PRO_USER_01",
+      "Exact Steps": "1. Set viewport to 414x896 (Mobile) in DevTools or device.\n2. Visit landing, login, dashboard, gov exam hub, settings billing.\n3. Check horizontal scroll, clipped CTAs, nav/sidebar/bottom nav, modals, forms.\n4. Open one modal and one dropdown.",
+      "Expected Result (per step)": "1. Viewport set.\n2. Pages load.\n3. No blocking overflow; primary actions reachable.\n4. Overlay UI usable.",
+      "Final Expected Result": "Core flows usable at 414x896 without critical layout breakage.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 280,
+      "hyperlinks": {},
+      "urls": [],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V280",
+          "excel_row": 280,
+          "excel_col": 22,
+          "vm_index": 121,
+          "media": "xl/media/image121.png",
+          "saved_path": "_qa_br_rsp_images\\image121.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-RSP-004",
+      "Actual Result": "1. Viewport set: Viewport set to 768x1024 (Tablet) in DevTools.\n2. Pages load: Dashboard, Settings, and Profile views loaded.\n3. UI defects observed:\n   - Profile/Settings: Large redundant vertical whitespace gap observed inside settings views, with collapsed side navigation icons.\n   - Contrast & Readability: Information banners and tag indicators exhibit low contrast ratios against light background containers, degrading text visibility.\n4. Overlays usable: Navigation and primary form buttons remain functional.",
+      "Pass / Fail": "Fail",
+      "Defect ID": null,
+      "Execution Date": "2026-08-25T00:00:00",
+      "Notes": "UI/UX defects at 768x1024: Low contrast banners and excessive vertical container spacing in Settings.",
+      "Module": "Responsive / Cross-Browser",
+      "Sub-Module": "Responsive / Cross-Browser",
+      "Feature": "Layout @ 768x1024",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Responsive",
+      "User Type": "Authenticated",
+      "Role": "user",
+      "Account ID": "PRO_USER_01",
+      "Tester": "Anushka",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Viewport 768x1024 | Login email/password: see sheet 03 Test Accounts for Account ID PRO_USER_01",
+      "Exact Steps": "1. Set viewport to 768x1024 (Tablet) in DevTools or device.\n2. Visit landing, login, dashboard, gov exam hub, settings billing.\n3. Check horizontal scroll, clipped CTAs, nav/sidebar/bottom nav, modals, forms.\n4. Open one modal and one dropdown.",
+      "Expected Result (per step)": "1. Viewport set.\n2. Pages load.\n3. No blocking overflow; primary actions reachable.\n4. Overlay UI usable.",
+      "Final Expected Result": "Core flows usable at 768x1024 without critical layout breakage.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 281,
+      "hyperlinks": {},
+      "urls": [],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V281",
+          "excel_row": 281,
+          "excel_col": 22,
+          "vm_index": 122,
+          "media": "xl/media/image122.png",
+          "saved_path": "_qa_br_rsp_images\\image122.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-RSP-005",
+      "Actual Result": "1. Viewport set: Viewport set to 1366x768 (Desktop) in DevTools.\n2. Pages load: Practice Coach (/app/live), Debriefs (/app/debriefs), Documents, and Interviews pages loaded.\n3. UI / Space Utilization defect observed: \n   - Content and interactive cards do not fully expand or stretch to utilize the desktop container width.\n   - Significant empty space/whitespace appears on the right side of views across Practice Coach, Debriefs, and Interviews.\n   - Left navigation rail remains tight and unexpanded relative to the screen width.\n4. Overlays usable: Buttons, dropdown selects, and links remain functional.",
+      "Pass / Fail": "Fail",
+      "Defect ID": null,
+      "Execution Date": "2026-08-25T00:00:00",
+      "Notes": "Layout usability defect at 1366x768: Screen space underutilized with large empty whitespace gaps across Practice Coach, Debriefs, and Interviews.",
+      "Module": "Responsive / Cross-Browser",
+      "Sub-Module": "Responsive / Cross-Browser",
+      "Feature": "Layout @ 1366x768",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Responsive",
+      "User Type": "Authenticated",
+      "Role": "user",
+      "Account ID": "PRO_USER_01",
+      "Tester": "Anushka",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Viewport 1366x768 | Login email/password: see sheet 03 Test Accounts for Account ID PRO_USER_01",
+      "Exact Steps": "1. Set viewport to 1366x768 (Desktop) in DevTools or device.\n2. Visit landing, login, dashboard, gov exam hub, settings billing.\n3. Check horizontal scroll, clipped CTAs, nav/sidebar/bottom nav, modals, forms.\n4. Open one modal and one dropdown.",
+      "Expected Result (per step)": "1. Viewport set.\n2. Pages load.\n3. No blocking overflow; primary actions reachable.\n4. Overlay UI usable.",
+      "Final Expected Result": "Core flows usable at 1366x768 without critical layout breakage.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 282,
+      "hyperlinks": {},
+      "urls": [],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V282",
+          "excel_row": 282,
+          "excel_col": 22,
+          "vm_index": 123,
+          "media": "xl/media/image123.png",
+          "saved_path": "_qa_br_rsp_images\\image123.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-RSP-006",
+      "Actual Result": "1. Viewport set: Viewport set to 1440x900 (Desktop) in DevTools.\n2. Pages load: All major routes (Assessments, Gov Exams, Practice Coach, Debriefs, Practice Workspace, Mock Interview) loaded.\n3. Inconsistent UI & Space Utilization defects:\n   - Full width utilization works on Exam Templates (/app/assessments) and Gov Exams.\n   - Severe underutilization and excessive whitespace observed on Practice Coach (/app/live), Debriefs (/app/debriefs), and Practice Workspace (/app/practice-workspace), where content remains trapped in a narrow left column leaving the right screen empty.\n   - Mock Interview (/app/mock) exhibits vertical component overlap/bleeding.\n4. Overlays usable: Navigation links and buttons trigger, but layout consistency fails desktop standards.",
+      "Pass / Fail": "Fail",
+      "Defect ID": null,
+      "Execution Date": "2026-08-25T00:00:00",
+      "Notes": "Inconsistent responsive layout at 1440x900: Excessive empty white space across live coach/debriefs, contrasting with full-width grid on assessments.",
+      "Module": "Responsive / Cross-Browser",
+      "Sub-Module": "Responsive / Cross-Browser",
+      "Feature": "Layout @ 1440x900",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Responsive",
+      "User Type": "Authenticated",
+      "Role": "user",
+      "Account ID": "PRO_USER_01",
+      "Tester": "Anushka",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Viewport 1440x900 | Login email/password: see sheet 03 Test Accounts for Account ID PRO_USER_01",
+      "Exact Steps": "1. Set viewport to 1440x900 (Desktop) in DevTools or device.\n2. Visit landing, login, dashboard, gov exam hub, settings billing.\n3. Check horizontal scroll, clipped CTAs, nav/sidebar/bottom nav, modals, forms.\n4. Open one modal and one dropdown.",
+      "Expected Result (per step)": "1. Viewport set.\n2. Pages load.\n3. No blocking overflow; primary actions reachable.\n4. Overlay UI usable.",
+      "Final Expected Result": "Core flows usable at 1440x900 without critical layout breakage.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 283,
+      "hyperlinks": {},
+      "urls": [],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V283",
+          "excel_row": 283,
+          "excel_col": 22,
+          "vm_index": 124,
+          "media": "xl/media/image124.png",
+          "saved_path": "_qa_br_rsp_images\\image124.png"
+        }
+      ]
+    },
+    {
+      "Test Case ID": "TC-RSP-007",
+      "Actual Result": "1. Viewport set: Set to 1920x1080 (Desktop FHD) in DevTools.\n2. Pages load: Dashboard, Live Practice Coach, Mock Interview, Learning Hub, Skills Analytics, and Referrals routes loaded.\n3. Severe UI & space underutilization defects observed:\n   - Excessive whitespace across major views: Learning Hub, Analytics, Referrals, and Live Practice Coach restrict content to a narrow left-aligned box, leaving >50% of the screen blank.\n   - Mock Interview (/app/mock) continues to suffer vertical component bleeding and overlap.\n4. Overlays usable: Navigation menu, links, and action buttons remain clickable.",
+      "Pass / Fail": "Fail",
+      "Defect ID": null,
+      "Execution Date": "2026-08-25T00:00:00",
+      "Notes": "Systemic desktop layout failure at 1920x1080: App fails to scale across full dashboard width, leaving massive empty whitespace across almost all pages.",
+      "Module": "Responsive / Cross-Browser",
+      "Sub-Module": "Responsive / Cross-Browser",
+      "Feature": "Layout @ 1920x1080",
+      "Priority": "P1",
+      "Severity": "Major",
+      "Test Type": "Responsive",
+      "User Type": "Authenticated",
+      "Role": "user",
+      "Account ID": "PRO_USER_01",
+      "Tester": "Anushka",
+      "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+      "Test Data": "Viewport 1920x1080 | Login email/password: see sheet 03 Test Accounts for Account ID PRO_USER_01",
+      "Exact Steps": "1. Set viewport to 1920x1080 (Desktop) in DevTools or device.\n2. Visit landing, login, dashboard, gov exam hub, settings billing.\n3. Check horizontal scroll, clipped CTAs, nav/sidebar/bottom nav, modals, forms.\n4. Open one modal and one dropdown.",
+      "Expected Result (per step)": "1. Viewport set.\n2. Pages load.\n3. No blocking overflow; primary actions reachable.\n4. Overlay UI usable.",
+      "Final Expected Result": "Core flows usable at 1920x1080 without critical layout breakage.",
+      "Screenshot / Evidence Requirement": "#VALUE!",
+      "row": 284,
+      "hyperlinks": {},
+      "urls": [],
+      "evidence_images": [
+        {
+          "sheet": "05 All Test Cases",
+          "cell": "V284",
+          "excel_row": 284,
+          "excel_col": 22,
+          "vm_index": 125,
+          "media": "xl/media/image125.png",
+          "saved_path": "_qa_br_rsp_images\\image125.png"
+        }
+      ]
+    }
+  ],
+  "anushka_extra_bug": [
+    {
+      "Defect ID": "DEF-001",
+      "Title": "Infinite search spinner & profile load timeout on /app/mock-test",
+      "Module": "Gov Exams hub (/app/mock-test)",
+      "Test Case ID": "TC-MOD-003",
+      "Severity (P0-P4)": "P1",
+      "Business Impact": null,
+      "Reproducibility": "Always",
+      "Environment": "Production(web/chrome)",
+      "Account ID": "Pro_USER_01",
+      "Steps to Reproduce": "1. Login as PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/mock-test.\n3. Observe the search bar and DevTools Console.\n4. Type any search keyword (e.g., \"ssc\") into the search box.",
+      "Expected": "Profile data loads cleanly without errors, the search bar finishes initializing, and entering a keyword filters/returns relevant exam test papers.",
+      "Actual": "Search bar shows an infinite loading spinner and gets stuck displaying \"Searching...\". DevTools Console throws multiple errors: \"[clarify:auth:profile:load_timed_out]\" and \"[authStore] Failed to load profile\".",
+      "Evidence Links": "#VALUE!",
+      "Status": "New",
+      "row": 2,
+      "hyperlinks": {
+        "Steps to Reproduce": "https://clarify.ai.sltfinanceindia.com/app/mock-test."
+      },
+      "urls": [
+        "https://clarify.ai.sltfinanceindia.com/app/mock-test."
+      ]
+    },
+    {
+      "Defect ID": "DEF-002",
+      "Title": "Missing DialogTitle accessibility prop in Quick Search modal throws repeated console errors on click",
+      "Module": "Global Navigation (/app/guide/practice-coach)",
+      "Test Case ID": "TC-MOD-022",
+      "Severity (P0-P4)": "P3",
+      "Business Impact": null,
+      "Reproducibility": "Always",
+      "Environment": "Production(web/chrome)",
+      "Account ID": "Pro_USER_01",
+      "Steps to Reproduce": "1. Login as PRO_USER_01.\n2. Navigate to any page (e.g., https://clarify.ai.sltfinanceindia.com/app/guide/practice-coach).\n3. Open DevTools Console panel.\n4. Click on the global search input bar (\"Search pages, actions, settings...\").\n5. Observe the DevTools Console.",
+      "Expected": "Global search modal overlay opens cleanly with full screen reader accessibility support and zero console errors.",
+      "Actual": "Search modal opens, but DevTools console immediately logs repeated Radix UI runtime errors: \"`DialogContent` requires a `DialogTitle` for the component to be accessible for screen reader users\" along with missing `aria-describedby` warnings.",
+      "Evidence Links": "#VALUE!",
+      "Status": null,
+      "row": 3,
+      "hyperlinks": {
+        "Steps to Reproduce": "https://clarify.ai.sltfinanceindia.com/app/guide/practice-coach)."
+      },
+      "urls": [
+        "https://clarify.ai.sltfinanceindia.com/app/guide/practice-coach",
+        "https://clarify.ai.sltfinanceindia.com/app/guide/practice-coach)."
+      ]
+    },
+    {
+      "Defect ID": "DEF-003",
+      "Title": "Razorpay risk detection script blocked by Content Security Policy (CSP) on checkout modal",
+      "Module": "Billing & Plan (/app/settings/billing)",
+      "Test Case ID": "TC-A11Y-002",
+      "Severity (P0-P4)": "p2",
+      "Business Impact": null,
+      "Reproducibility": "Always",
+      "Environment": "Production(web/chrome)",
+      "Account ID": "Pro_USER_01",
+      "Steps to Reproduce": "1. Login as PRO_USER_01.\n2. Navigate to https://clarify.ai.sltfinanceindia.com/app/settings/billing.\n3. Open DevTools Console panel.\n4. Click on 'Buy Max (one-time)' button to trigger checkout.\n5. Observe DevTools Console.",
+      "Expected": "Payment modal opens and all third-party vendor dependencies (Razorpay scripts) load cleanly without CSP or header access violations.",
+      "Actual": "Console throws CSP violation error: Loading script 'https://cdn.razorpay.com/static/cx/razorpay-risk-detection/bundle.js' violates directive 'script-src'. Action blocked along with unsafe header errors.",
+      "Evidence Links": "#VALUE!",
+      "Status": null,
+      "row": 4,
+      "hyperlinks": {
+        "Steps to Reproduce": "https://clarify.ai.sltfinanceindia.com/app/settings/billing."
+      },
+      "urls": [
+        "https://cdn.razorpay.com/static/cx/razorpay-risk-detection/bundle.js",
+        "https://clarify.ai.sltfinanceindia.com/app/settings/billing."
+      ]
+    }
+  ],
+  "summaries_br_rsp_text": "============================================================\nTC-BR CASES\n============================================================\nID: TC-BR-001\nPass/Fail: Pass\nNotes: Chrome smoke run completed successfully across key app routes.\nActual: 1. Login works: Authentication succeeded on Chrome for PRO_USER_01.\n2. Modules load: Dashboard, Practice Coach setup, Documents upload UI, Gov Hub, and Billing pages loaded without critical layout distortion.\n3. Differences documented: Audio permissions and UI elements perform as expected on latest Google Chrome.\nURLs: (none)\nEvidence images: V274->_qa_br_rsp_images\\image118.png\n----------------------------------------\nID: TC-BR-002\nPass/Fail: Pass\nNotes: Edge smoke suite completed with full functional pass; authentication and core dashboards load smoothly.\nActual: 1. Login works: Authentication succeeded smoothly on Microsoft Edge for PRO_USER_01.\n2. Modules load: Dashboard, Practice Plan (/app/plan), Practice Coach, and remaining primary navigation modules rendered without errors.\n3. Differences documented: Navigation menus, plan list items, and action buttons are fully interactive with no blocking console crashes.\nURLs: (none)\n----------------------------------------\nID: TC-BR-003\nPass/Fail: Not Run\nNotes: \nActual: \nURLs: (none)\n----------------------------------------\nID: TC-BR-004\nPass/Fail: Not Run\nNotes: \nActual: \nURLs: (none)\n----------------------------------------\n\n============================================================\nTC-RSP CASES\n============================================================\nID: TC-RSP-001\nPass/Fail: Fail\nNotes: UI layout failure: Text and card containers fail responsive wrap at 360px width across Dashboard and Gov Exam Hub.\nActual: 1. Viewport set: Viewport set to 360x800 in DevTools.\n2. Pages load: Landing, dashboard, and gov exam hub loaded successfully.\n3. Overlap & clipping defects: \n   - Dashboard: Severe text squishing and horizontal text overlap inside the Desktop App installer card.\n   - Gov Exam Prep: Top header and action buttons ('Generate paper', 'My Questions') compress vertically, causing text overlap with the subtitle and disclaimer section.\n4. Core CTAs: Bottom navigation bar and search bar remain functional, but UI layout breaks on narrow screen widths.\nURLs: (none)\nEvidence images: V278->_qa_br_rsp_images\\image119.png\n----------------------------------------\nID: TC-RSP-002\nPass/Fail: Fail\nNotes: Functionally responsive, but marked Fail due to UI defect: Desktop installer card fails CSS flex-wrapping and causes unreadable text overlap at 375px width.\nActual: 1. Viewport set: Viewport successfully configured to 375x812 (Mobile) in Chrome DevTools.\n2. Pages load: Landing, dashboard, gov exam hub, and billing pages load and remain functionally responsive (buttons, bottom navigation, and modal overlays are clickable).\n3. UI defects observed:\n   - Dashboard: Desktop App installer card has broken responsiveness where left-column text ('Desktop app...') squishes to 2-3 characters per line and overlaps directly on top of the right-column text/buttons ('Continue in web Practice Coach').\n   - Gov Exam Prep: Top header and action buttons ('Generate paper', 'My Questions') compress vertically, causing slight alignment crowding above the disclaimer text.\nURLs: (none)\nEvidence images: V279->_qa_br_rsp_images\\image120.png\n----------------------------------------\nID: TC-RSP-003\nPass/Fail: Fail\nNotes: UI layout failure: Component overlap on /app/mock and low contrast on alert banners at 414px width.\nActual: 1. Viewport set: Viewport configured to 414x896 (Mobile) in DevTools.\n2. Pages load: Landing, dashboard, and mock interview routes loaded.\n3. Overlap & Contrast defects observed:\n   - Dashboard: Desktop App card text remains squished and overlaps horizontally.\n   - Mock Interview: Warning/info alert banners fail color contrast readability; scrolling down displays severe vertical component overlapping where 'Start Practice Coach' content renders directly over configuration cards.\n4. Overlays usable: Navigation bar remains clickable, but page content has major visual breakage.\nURLs: (none)\nEvidence images: V280->_qa_br_rsp_images\\image121.png\n----------------------------------------\nID: TC-RSP-004\nPass/Fail: Fail\nNotes: UI/UX defects at 768x1024: Low contrast banners and excessive vertical container spacing in Settings.\nActual: 1. Viewport set: Viewport set to 768x1024 (Tablet) in DevTools.\n2. Pages load: Dashboard, Settings, and Profile views loaded.\n3. UI defects observed:\n   - Profile/Settings: Large redundant vertical whitespace gap observed inside settings views, with collapsed side navigation icons.\n   - Contrast & Readability: Information banners and tag indicators exhibit low contrast ratios against light background containers, degrading text visibility.\n4. Overlays usable: Navigation and primary form buttons remain functional.\nURLs: (none)\nEvidence images: V281->_qa_br_rsp_images\\image122.png\n----------------------------------------\nID: TC-RSP-005\nPass/Fail: Fail\nNotes: Layout usability defect at 1366x768: Screen space underutilized with large empty whitespace gaps across Practice Coach, Debriefs, and Interviews.\nActual: 1. Viewport set: Viewport set to 1366x768 (Desktop) in DevTools.\n2. Pages load: Practice Coach (/app/live), Debriefs (/app/debriefs), Documents, and Interviews pages loaded.\n3. UI / Space Utilization defect observed: \n   - Content and interactive cards do not fully expand or stretch to utilize the desktop container width.\n   - Significant empty space/whitespace appears on the right side of views across Practice Coach, Debriefs, and Interviews.\n   - Left navigation rail remains tight and unexpanded relative to the screen width.\n4. Overlays usable: Buttons, dropdown selects, and links remain functional.\nURLs: (none)\nEvidence images: V282->_qa_br_rsp_images\\image123.png\n----------------------------------------\nID: TC-RSP-006\nPass/Fail: Fail\nNotes: Inconsistent responsive layout at 1440x900: Excessive empty white space across live coach/debriefs, contrasting with full-width grid on assessments.\nActual: 1. Viewport set: Viewport set to 1440x900 (Desktop) in DevTools.\n2. Pages load: All major routes (Assessments, Gov Exams, Practice Coach, Debriefs, Practice Workspace, Mock Interview) loaded.\n3. Inconsistent UI & Space Utilization defects:\n   - Full width utilization works on Exam Templates (/app/assessments) and Gov Exams.\n   - Severe underutilization and excessive whitespace observed on Practice Coach (/app/live), Debriefs (/app/debriefs), and Practice Workspace (/app/practice-workspace), where content remains trapped in a narrow left column leaving the right screen empty.\n   - Mock Interview (/app/mock) exhibits vertical component overlap/bleeding.\n4. Overlays usable: Navigation links and buttons trigger, but layout consistency fails desktop standards.\nURLs: (none)\nEvidence images: V283->_qa_br_rsp_images\\image124.png\n----------------------------------------\nID: TC-RSP-007\nPass/Fail: Fail\nNotes: Systemic desktop layout failure at 1920x1080: App fails to scale across full dashboard width, leaving massive empty whitespace across almost all pages.\nActual: 1. Viewport set: Set to 1920x1080 (Desktop FHD) in DevTools.\n2. Pages load: Dashboard, Live Practice Coach, Mock Interview, Learning Hub, Skills Analytics, and Referrals routes loaded.\n3. Severe UI & space underutilization defects observed:\n   - Excessive whitespace across major views: Learning Hub, Analytics, Referrals, and Live Practice Coach restrict content to a narrow left-aligned box, leaving >50% of the screen blank.\n   - Mock Interview (/app/mock) continues to suffer vertical component bleeding and overlap.\n4. Overlays usable: Navigation menu, links, and action buttons remain clickable.\nURLs: (none)\nEvidence images: V284->_qa_br_rsp_images\\image125.png\n----------------------------------------",
+  "images_on_br_rsp_pub_rows": [
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V27",
+      "excel_row": 27,
+      "excel_col": 22,
+      "vm_index": 23,
+      "media": "xl/media/image23.png",
+      "saved_path": "_qa_br_rsp_images\\image23.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V28",
+      "excel_row": 28,
+      "excel_col": 22,
+      "vm_index": 24,
+      "media": "xl/media/image24.png",
+      "saved_path": "_qa_br_rsp_images\\image24.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V29",
+      "excel_row": 29,
+      "excel_col": 22,
+      "vm_index": 25,
+      "media": "xl/media/image25.png",
+      "saved_path": "_qa_br_rsp_images\\image25.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V30",
+      "excel_row": 30,
+      "excel_col": 22,
+      "vm_index": 26,
+      "media": "xl/media/image26.png",
+      "saved_path": "_qa_br_rsp_images\\image26.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V31",
+      "excel_row": 31,
+      "excel_col": 22,
+      "vm_index": 27,
+      "media": "xl/media/image27.png",
+      "saved_path": "_qa_br_rsp_images\\image27.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V32",
+      "excel_row": 32,
+      "excel_col": 22,
+      "vm_index": 28,
+      "media": "xl/media/image28.png",
+      "saved_path": "_qa_br_rsp_images\\image28.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V33",
+      "excel_row": 33,
+      "excel_col": 22,
+      "vm_index": 29,
+      "media": "xl/media/image29.png",
+      "saved_path": "_qa_br_rsp_images\\image29.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V34",
+      "excel_row": 34,
+      "excel_col": 22,
+      "vm_index": 30,
+      "media": "xl/media/image30.png",
+      "saved_path": "_qa_br_rsp_images\\image30.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V35",
+      "excel_row": 35,
+      "excel_col": 22,
+      "vm_index": 31,
+      "media": "xl/media/image31.png",
+      "saved_path": "_qa_br_rsp_images\\image31.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V36",
+      "excel_row": 36,
+      "excel_col": 22,
+      "vm_index": 32,
+      "media": "xl/media/image32.png",
+      "saved_path": "_qa_br_rsp_images\\image32.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V37",
+      "excel_row": 37,
+      "excel_col": 22,
+      "vm_index": 33,
+      "media": "xl/media/image33.png",
+      "saved_path": "_qa_br_rsp_images\\image33.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V38",
+      "excel_row": 38,
+      "excel_col": 22,
+      "vm_index": 34,
+      "media": "xl/media/image34.png",
+      "saved_path": "_qa_br_rsp_images\\image34.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V39",
+      "excel_row": 39,
+      "excel_col": 22,
+      "vm_index": 35,
+      "media": "xl/media/image35.png",
+      "saved_path": "_qa_br_rsp_images\\image35.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V40",
+      "excel_row": 40,
+      "excel_col": 22,
+      "vm_index": 36,
+      "media": "xl/media/image36.png",
+      "saved_path": "_qa_br_rsp_images\\image36.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V41",
+      "excel_row": 41,
+      "excel_col": 22,
+      "vm_index": 37,
+      "media": "xl/media/image37.png",
+      "saved_path": "_qa_br_rsp_images\\image37.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V274",
+      "excel_row": 274,
+      "excel_col": 22,
+      "vm_index": 118,
+      "media": "xl/media/image118.png",
+      "saved_path": "_qa_br_rsp_images\\image118.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V278",
+      "excel_row": 278,
+      "excel_col": 22,
+      "vm_index": 119,
+      "media": "xl/media/image119.png",
+      "saved_path": "_qa_br_rsp_images\\image119.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V279",
+      "excel_row": 279,
+      "excel_col": 22,
+      "vm_index": 120,
+      "media": "xl/media/image120.png",
+      "saved_path": "_qa_br_rsp_images\\image120.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V280",
+      "excel_row": 280,
+      "excel_col": 22,
+      "vm_index": 121,
+      "media": "xl/media/image121.png",
+      "saved_path": "_qa_br_rsp_images\\image121.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V281",
+      "excel_row": 281,
+      "excel_col": 22,
+      "vm_index": 122,
+      "media": "xl/media/image122.png",
+      "saved_path": "_qa_br_rsp_images\\image122.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V282",
+      "excel_row": 282,
+      "excel_col": 22,
+      "vm_index": 123,
+      "media": "xl/media/image123.png",
+      "saved_path": "_qa_br_rsp_images\\image123.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V283",
+      "excel_row": 283,
+      "excel_col": 22,
+      "vm_index": 124,
+      "media": "xl/media/image124.png",
+      "saved_path": "_qa_br_rsp_images\\image124.png"
+    },
+    {
+      "sheet": "05 All Test Cases",
+      "cell": "V284",
+      "excel_row": 284,
+      "excel_col": 22,
+      "vm_index": 125,
+      "media": "xl/media/image125.png",
+      "saved_path": "_qa_br_rsp_images\\image125.png"
+    }
+  ]
+}

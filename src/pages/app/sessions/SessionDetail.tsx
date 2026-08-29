@@ -36,12 +36,21 @@ export default function SessionDetail() {
   const [expanded,    setExpanded]    = useState<Record<string, boolean>>({});
   const [chatOpen,    setChatOpen]    = useState(false);
   const [shareOpen,   setShareOpen]   = useState(false);
+  const [userIdWhenMounted] = useState(user?.id); // Capture user.id at mount for stable comparison
   const fetchRequestRef = useRef(0);
 
   // ── Fetch session + answers ───────────────────────────────────
 
   const fetchSession = useCallback(async () => {
-    if (!id || !user?.id) return;
+    if (!id) {
+      setFetchError("Session ID is required");
+      setLoading(false);
+      return;
+    }
+    if (!user?.id) {
+      // User data not yet loaded — wait for auth to complete
+      return;
+    }
     const requestId = ++fetchRequestRef.current;
     setLoading(true);
     setFetchError(null);

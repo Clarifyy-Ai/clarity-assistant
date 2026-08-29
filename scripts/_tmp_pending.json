@@ -1,0 +1,290 @@
+﻿[
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260318032847_d6ef0486-2387-4402-ba66-d8a0eb3df846.sql",
+        "Name":  "20260318032847_d6ef0486-2387-4402-ba66-d8a0eb3df846.sql",
+        "Ver":  "20260318032847",
+        "MigName":  "d6ef0486-2387-4402-ba66-d8a0eb3df846"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260326015605_b22a9800-63d9-45f8-8e86-c7985e60965a.sql",
+        "Name":  "20260326015605_b22a9800-63d9-45f8-8e86-c7985e60965a.sql",
+        "Ver":  "20260326015605",
+        "MigName":  "b22a9800-63d9-45f8-8e86-c7985e60965a"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260331023945_1087eeba-2851-4d2b-ba42-d4a22372e69c.sql",
+        "Name":  "20260331023945_1087eeba-2851-4d2b-ba42-d4a22372e69c.sql",
+        "Ver":  "20260331023945",
+        "MigName":  "1087eeba-2851-4d2b-ba42-d4a22372e69c"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260401024557_a394e39c-fa98-4ab0-bdcf-2e92bf79f23e.sql",
+        "Name":  "20260401024557_a394e39c-fa98-4ab0-bdcf-2e92bf79f23e.sql",
+        "Ver":  "20260401024557",
+        "MigName":  "a394e39c-fa98-4ab0-bdcf-2e92bf79f23e"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260403045505_975427e9-90c7-4e37-a803-c11e6c6c6615.sql",
+        "Name":  "20260403045505_975427e9-90c7-4e37-a803-c11e6c6c6615.sql",
+        "Ver":  "20260403045505",
+        "MigName":  "975427e9-90c7-4e37-a803-c11e6c6c6615"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260405010208_a4f1a02a-a9eb-4f48-82bb-80b7d1bab00a.sql",
+        "Name":  "20260405010208_a4f1a02a-a9eb-4f48-82bb-80b7d1bab00a.sql",
+        "Ver":  "20260405010208",
+        "MigName":  "a4f1a02a-a9eb-4f48-82bb-80b7d1bab00a"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260413024236_eaed2f00-bd76-4554-b28c-edf3b3cc9fea.sql",
+        "Name":  "20260413024236_eaed2f00-bd76-4554-b28c-edf3b3cc9fea.sql",
+        "Ver":  "20260413024236",
+        "MigName":  "eaed2f00-bd76-4554-b28c-edf3b3cc9fea"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260416022447_845b758e-c548-4324-a09e-983b9a078bdf.sql",
+        "Name":  "20260416022447_845b758e-c548-4324-a09e-983b9a078bdf.sql",
+        "Ver":  "20260416022447",
+        "MigName":  "845b758e-c548-4324-a09e-983b9a078bdf"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260418165604_8c2c1865-ddcf-4967-88b2-7136f75bc424.sql",
+        "Name":  "20260418165604_8c2c1865-ddcf-4967-88b2-7136f75bc424.sql",
+        "Ver":  "20260418165604",
+        "MigName":  "8c2c1865-ddcf-4967-88b2-7136f75bc424"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260418165858_e744c4ee-e68b-4227-839e-b5065e39a47d.sql",
+        "Name":  "20260418165858_e744c4ee-e68b-4227-839e-b5065e39a47d.sql",
+        "Ver":  "20260418165858",
+        "MigName":  "e744c4ee-e68b-4227-839e-b5065e39a47d"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260418170917_3d32f859-ea40-4b99-a6b2-010c67e2c5f6.sql",
+        "Name":  "20260418170917_3d32f859-ea40-4b99-a6b2-010c67e2c5f6.sql",
+        "Ver":  "20260418170917",
+        "MigName":  "3d32f859-ea40-4b99-a6b2-010c67e2c5f6"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260430204228_576139ec-eb23-40fb-ac43-a3dcb5e08192.sql",
+        "Name":  "20260430204228_576139ec-eb23-40fb-ac43-a3dcb5e08192.sql",
+        "Ver":  "20260430204228",
+        "MigName":  "576139ec-eb23-40fb-ac43-a3dcb5e08192"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260430204307_c1c01a63-67e2-4290-9207-2e1f6bdaf554.sql",
+        "Name":  "20260430204307_c1c01a63-67e2-4290-9207-2e1f6bdaf554.sql",
+        "Ver":  "20260430204307",
+        "MigName":  "c1c01a63-67e2-4290-9207-2e1f6bdaf554"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260504024629_f19e2b3c-b485-49b4-b45e-d9995e81870d.sql",
+        "Name":  "20260504024629_f19e2b3c-b485-49b4-b45e-d9995e81870d.sql",
+        "Ver":  "20260504024629",
+        "MigName":  "f19e2b3c-b485-49b4-b45e-d9995e81870d"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260504150325_fce73b68-83be-476c-995e-04e470c51ad5.sql",
+        "Name":  "20260504150325_fce73b68-83be-476c-995e-04e470c51ad5.sql",
+        "Ver":  "20260504150325",
+        "MigName":  "fce73b68-83be-476c-995e-04e470c51ad5"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260507041140_5b6ae615-968c-422b-b609-4ca3d7568825.sql",
+        "Name":  "20260507041140_5b6ae615-968c-422b-b609-4ca3d7568825.sql",
+        "Ver":  "20260507041140",
+        "MigName":  "5b6ae615-968c-422b-b609-4ca3d7568825"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260507061743_1cc08af1-e4de-4dd1-92b3-9a8f0ac2fc26.sql",
+        "Name":  "20260507061743_1cc08af1-e4de-4dd1-92b3-9a8f0ac2fc26.sql",
+        "Ver":  "20260507061743",
+        "MigName":  "1cc08af1-e4de-4dd1-92b3-9a8f0ac2fc26"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260511154610_25cb3874-b41d-4b8d-8ebd-c94ccc6bc27a.sql",
+        "Name":  "20260511154610_25cb3874-b41d-4b8d-8ebd-c94ccc6bc27a.sql",
+        "Ver":  "20260511154610",
+        "MigName":  "25cb3874-b41d-4b8d-8ebd-c94ccc6bc27a"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260513030357_325416f3-a0a9-4ade-bfc5-e127b416e390.sql",
+        "Name":  "20260513030357_325416f3-a0a9-4ade-bfc5-e127b416e390.sql",
+        "Ver":  "20260513030357",
+        "MigName":  "325416f3-a0a9-4ade-bfc5-e127b416e390"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260521021605_6921cb29-dd73-4b99-a177-a5b9caab57ab.sql",
+        "Name":  "20260521021605_6921cb29-dd73-4b99-a177-a5b9caab57ab.sql",
+        "Ver":  "20260521021605",
+        "MigName":  "6921cb29-dd73-4b99-a177-a5b9caab57ab"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260523163353_0d8b5ef0-8066-42db-aa4c-df6ec4362143.sql",
+        "Name":  "20260523163353_0d8b5ef0-8066-42db-aa4c-df6ec4362143.sql",
+        "Ver":  "20260523163353",
+        "MigName":  "0d8b5ef0-8066-42db-aa4c-df6ec4362143"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260523165519_2ffdda9f-3d8c-4024-8296-aecfc8409195.sql",
+        "Name":  "20260523165519_2ffdda9f-3d8c-4024-8296-aecfc8409195.sql",
+        "Ver":  "20260523165519",
+        "MigName":  "2ffdda9f-3d8c-4024-8296-aecfc8409195"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260523172604_e097cece-c1d0-4210-8b06-32f1472c00b4.sql",
+        "Name":  "20260523172604_e097cece-c1d0-4210-8b06-32f1472c00b4.sql",
+        "Ver":  "20260523172604",
+        "MigName":  "e097cece-c1d0-4210-8b06-32f1472c00b4"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260523173444_024e57e3-18a8-4311-a930-236dfc6a9f36.sql",
+        "Name":  "20260523173444_024e57e3-18a8-4311-a930-236dfc6a9f36.sql",
+        "Ver":  "20260523173444",
+        "MigName":  "024e57e3-18a8-4311-a930-236dfc6a9f36"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260523191055_240a3c32-a984-4000-82ea-6bd8c996458e.sql",
+        "Name":  "20260523191055_240a3c32-a984-4000-82ea-6bd8c996458e.sql",
+        "Ver":  "20260523191055",
+        "MigName":  "240a3c32-a984-4000-82ea-6bd8c996458e"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260528022137_f8c592f9-1250-4f95-b7c1-f3437e90284b.sql",
+        "Name":  "20260528022137_f8c592f9-1250-4f95-b7c1-f3437e90284b.sql",
+        "Ver":  "20260528022137",
+        "MigName":  "f8c592f9-1250-4f95-b7c1-f3437e90284b"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260530200159_3a156a38-9b4f-4c02-ae62-c1663f334470.sql",
+        "Name":  "20260530200159_3a156a38-9b4f-4c02-ae62-c1663f334470.sql",
+        "Ver":  "20260530200159",
+        "MigName":  "3a156a38-9b4f-4c02-ae62-c1663f334470"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260531173635_4cc8be77-5a73-4c61-be92-3bd95a048445.sql",
+        "Name":  "20260531173635_4cc8be77-5a73-4c61-be92-3bd95a048445.sql",
+        "Ver":  "20260531173635",
+        "MigName":  "4cc8be77-5a73-4c61-be92-3bd95a048445"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260531173759_fa8f1333-49b0-4244-af29-4600923009a4.sql",
+        "Name":  "20260531173759_fa8f1333-49b0-4244-af29-4600923009a4.sql",
+        "Ver":  "20260531173759",
+        "MigName":  "fa8f1333-49b0-4244-af29-4600923009a4"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260531174228_16afc0da-648f-4821-9f95-9a22563f17ae.sql",
+        "Name":  "20260531174228_16afc0da-648f-4821-9f95-9a22563f17ae.sql",
+        "Ver":  "20260531174228",
+        "MigName":  "16afc0da-648f-4821-9f95-9a22563f17ae"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260604021915_bd32d26d-0d78-4a73-91ec-6779114af770.sql",
+        "Name":  "20260604021915_bd32d26d-0d78-4a73-91ec-6779114af770.sql",
+        "Ver":  "20260604021915",
+        "MigName":  "bd32d26d-0d78-4a73-91ec-6779114af770"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260610031204_510d5a22-dbb3-4922-9d79-7ac9f9049d94.sql",
+        "Name":  "20260610031204_510d5a22-dbb3-4922-9d79-7ac9f9049d94.sql",
+        "Ver":  "20260610031204",
+        "MigName":  "510d5a22-dbb3-4922-9d79-7ac9f9049d94"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260614015211_56f501d2-6ff1-4ca2-92fc-571260438bfc.sql",
+        "Name":  "20260614015211_56f501d2-6ff1-4ca2-92fc-571260438bfc.sql",
+        "Ver":  "20260614015211",
+        "MigName":  "56f501d2-6ff1-4ca2-92fc-571260438bfc"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260616031020_ecfbeac5-b8c6-47c9-8633-4e57b18570f0.sql",
+        "Name":  "20260616031020_ecfbeac5-b8c6-47c9-8633-4e57b18570f0.sql",
+        "Ver":  "20260616031020",
+        "MigName":  "ecfbeac5-b8c6-47c9-8633-4e57b18570f0"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260616031941_c1f6f2fc-54c6-4a01-b4c8-1ab8466a3294.sql",
+        "Name":  "20260616031941_c1f6f2fc-54c6-4a01-b4c8-1ab8466a3294.sql",
+        "Ver":  "20260616031941",
+        "MigName":  "c1f6f2fc-54c6-4a01-b4c8-1ab8466a3294"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260628125108_6b8022e6-1e15-487f-9940-8b013947994e.sql",
+        "Name":  "20260628125108_6b8022e6-1e15-487f-9940-8b013947994e.sql",
+        "Ver":  "20260628125108",
+        "MigName":  "6b8022e6-1e15-487f-9940-8b013947994e"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260630175437_92dcdbb7-d856-4c1a-9056-5669c4c7b733.sql",
+        "Name":  "20260630175437_92dcdbb7-d856-4c1a-9056-5669c4c7b733.sql",
+        "Ver":  "20260630175437",
+        "MigName":  "92dcdbb7-d856-4c1a-9056-5669c4c7b733"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260729120000_expand_gov_exam_mcq_seeds.sql",
+        "Name":  "20260729120000_expand_gov_exam_mcq_seeds.sql",
+        "Ver":  "20260729120000",
+        "MigName":  "expand_gov_exam_mcq_seeds"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260802170100_content_quality_incidents.sql",
+        "Name":  "20260802170100_content_quality_incidents.sql",
+        "Ver":  "20260802170100",
+        "MigName":  "content_quality_incidents"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260810000100_resumes_bucket_allow_txt.sql",
+        "Name":  "20260810000100_resumes_bucket_allow_txt.sql",
+        "Ver":  "20260810000100",
+        "MigName":  "resumes_bucket_allow_txt"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260810180000_ai_hub.sql",
+        "Name":  "20260810180000_ai_hub.sql",
+        "Ver":  "20260810180000",
+        "MigName":  "ai_hub"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260810210000_resume_content_hash.sql",
+        "Name":  "20260810210000_resume_content_hash.sql",
+        "Ver":  "20260810210000",
+        "MigName":  "resume_content_hash"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260811080000_support_guest_chat.sql",
+        "Name":  "20260811080000_support_guest_chat.sql",
+        "Ver":  "20260811080000",
+        "MigName":  "support_guest_chat"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260814223000_dedupe_public_question_stems.sql",
+        "Name":  "20260814223000_dedupe_public_question_stems.sql",
+        "Ver":  "20260814223000",
+        "MigName":  "dedupe_public_question_stems"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260819010000_document_library_docx_mime.sql",
+        "Name":  "20260819010000_document_library_docx_mime.sql",
+        "Ver":  "20260819010000",
+        "MigName":  "document_library_docx_mime"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260821110000_atomic_edge_credit_operations.sql",
+        "Name":  "20260821110000_atomic_edge_credit_operations.sql",
+        "Ver":  "20260821110000",
+        "MigName":  "atomic_edge_credit_operations"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260821130000_document_processing_jobs.sql",
+        "Name":  "20260821130000_document_processing_jobs.sql",
+        "Ver":  "20260821130000",
+        "MigName":  "document_processing_jobs"
+    },
+    {
+        "File":  "C:\\Users\\TECH-GENIUSES\\Downloads\\clarity-assistant\\supabase\\migrations\\20260825140000_wave1_billing_credits_hardening.sql",
+        "Name":  "20260825140000_wave1_billing_credits_hardening.sql",
+        "Ver":  "20260825140000",
+        "MigName":  "wave1_billing_credits_hardening"
+    }
+]

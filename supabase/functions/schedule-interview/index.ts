@@ -150,8 +150,8 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
 
     const interviewId = sanitize(body?.interview_id, 64);
-    const company = sanitize(body?.company_name, 120);
-    const role = sanitize(body?.role_title, 120);
+    const company = sanitize(body?.company_name, 150);
+    const role = sanitize(body?.role_title, 150);
     const scheduledAt = sanitize(body?.scheduled_at, 64);
     // Immediate confirmation email is optional (default true when RESEND configured).
     const sendConfirmation =
@@ -159,13 +159,48 @@ Deno.serve(async (req) => {
         ? true
         : Boolean(body.send_confirmation);
 
+    const placeholderValues = new Set([
+      "test",
+      "testing",
+      "asdf",
+      "qwerty",
+      "xxx",
+      "xyz",
+      "abc",
+      "n/a",
+      "na",
+      "none",
+      "null",
+      "company",
+      "role",
+      "5555",
+      "tttttt",
+    ]);
+
     if (
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(interviewId) ||
       !company ||
+      company.length < 2 ||
+      company.length > 150 ||
+      !/[a-zA-Z]/.test(company) ||
+      placeholderValues.has(company.toLowerCase()) ||
       !scheduledAt
     ) {
       return new Response(
-        JSON.stringify({ error: "Missing interview_id, company_name, or scheduled_at" }),
+        JSON.stringify({ error: "Company name is required and must be a meaningful value." }),
+        { status: 400, headers },
+      );
+    }
+
+    if (
+      !role ||
+      role.length < 2 ||
+      role.length > 150 ||
+      !/[a-zA-Z]/.test(role) ||
+      placeholderValues.has(role.toLowerCase())
+    ) {
+      return new Response(
+        JSON.stringify({ error: "Role title is required and must be a meaningful value." }),
         { status: 400, headers },
       );
     }

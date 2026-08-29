@@ -1,0 +1,43 @@
+{
+  "stamp": "mtaxxhbj",
+  "learning": {
+    "course": {
+      "id": "1a9de77c-2e02-4d7d-a8e0-94eb40b0202f",
+      "slug": "qa-learn-mtaxxhbj",
+      "publish_status": "draft"
+    },
+    "moduleOk": true,
+    "lessonOk": true,
+    "published": {
+      "publish_status": "published"
+    },
+    "freeSees": {
+      "id": "1a9de77c-2e02-4d7d-a8e0-94eb40b0202f",
+      "slug": "qa-learn-mtaxxhbj",
+      "publish_status": "published"
+    }
+  },
+  "searchExams": {
+    "status": 200,
+    "body": "{\"success\":true,\"query\":\"\",\"family\":null,\"count\":5,\"results\":[{\"resultType\":\"official_exam\",\"examId\":\"44f342de-705b-493f-9673-b1a2b06e503d\",\"code\":\"APPSC_GROUP2\",\"shortName\":\"APPSC GROUP2\",\"name\":\"APPSC Group-II Screening\",\"family\":\"state_psc\",\"description\":\"Screening-style objective practice pack aligned to APPSC Group-II patterns. Independent platform — verify the active notification and scheme on psc.ap.gov.in. Not affiliated with APPSC.\",\"legacyExamType\":\"APPSC (Group 1/2/3/4)\",\"jurisdiction"
+  },
+  "extract": {
+    "status": 500,
+    "body": "{\"success\":false,\"error\":\"Gemini API error (400): {\\n  \\\"error\\\": {\\n    \\\"code\\\": 400,\\n    \\\"message\\\": \\\"API key not valid. Please pass a valid API key.\\\",\\n    \\\"status\\\": \\\"INVALID_ARGUMENT\\\",\\n    \\\"details\\\": [\\n      {\\n        \\\"@type\\\": \\\"type.googleapis.com/google.rpc.ErrorInfo\\\",\\n        \\\"reason\\\": \\\"API_KEY_INVALID\\\",\\n        \\\"domain\\\": \\\"googleapis.com\\\",\\n        \\\"metadata\\\": {\\n          \\\"service\\\": \\\"generativelanguage.googleapis.com\\\"\\n        }\\n      },\\n      {\\n        \\\"@type\\\": \\\"type.googleapis.com/google.rpc.LocalizedMessage\\\",\\n        \\\"locale\\\": \\\"en-US\\\",\\n        \\\"message\\\": \\\"API key not valid. Please pass a valid API key.\\\"\\n      }\\n    ]\\n  }\\n}\\n\",\"code\":\"INTERNAL\",\"correlation_id\":\"f191c90d-5bd1-4824-aa4c-867c3692802e\",\"correlationId\":\"f191c90d-5"
+  },
+  "creditsBefore": {
+    "id": "d17262d4-a63c-4f6d-9543-51452997144b",
+    "credits": 50
+  },
+  "bulkUpdateUsers": {
+    "ok": true,
+    "data": 0
+  },
+  "translations": {
+    "count": 0,
+    "sample": []
+  },
+  "community": {
+    "error": "column community_posts.visibility does not exist"
+  }
+}

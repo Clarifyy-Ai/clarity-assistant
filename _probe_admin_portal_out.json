@@ -1,0 +1,387 @@
+{
+  "host": "qzgvjrvtkwlzxpmlddkx.supabase.co",
+  "admin": {
+    "label": "ADMIN",
+    "userId": "487ebbad",
+    "is_admin": {
+      "data": true
+    },
+    "own_roles": [
+      {
+        "role": "admin"
+      }
+    ],
+    "all_roles_sample": {
+      "count": 2,
+      "otherUsers": true,
+      "roles": [
+        "admin"
+      ]
+    },
+    "profiles_list": {
+      "count": 5
+    },
+    "promo_codes": [
+      {
+        "code": "ONAM",
+        "bonus_credits": 15,
+        "discount_percent": 15,
+        "is_active": true
+      },
+      {
+        "code": "HOLI",
+        "bonus_credits": 10,
+        "discount_percent": 12,
+        "is_active": true
+      },
+      {
+        "code": "DIWALI",
+        "bonus_credits": 0,
+        "discount_percent": 12,
+        "is_active": true
+      }
+    ],
+    "help_articles": {
+      "total": 19,
+      "dups": [
+        {
+          "q": "is there a free plan?",
+          "c": 2
+        }
+      ],
+      "focus": [
+        {
+          "id": "3960946c-dda8-4612-b760-d9745e2a9583",
+          "slug": "gs-4",
+          "question": "Is there a free plan?",
+          "published": false
+        },
+        {
+          "id": "bfd57cdd-2e31-458b-a97f-954950816b77",
+          "slug": "bi-5",
+          "question": "Can I buy extra credits?",
+          "published": true
+        },
+        {
+          "id": "50222978-02db-4210-81b9-923bbe353f19",
+          "slug": "gs-3",
+          "question": "Is there a free plan?",
+          "published": true
+        }
+      ]
+    },
+    "blog_posts": {
+      "keys": [
+        "id",
+        "slug",
+        "title",
+        "excerpt",
+        "content",
+        "category",
+        "author",
+        "read_time",
+        "cover_image_url",
+        "published",
+        "published_at",
+        "created_at",
+        "updated_at"
+      ]
+    },
+    "questions_public_unverified": {
+      "count": 0,
+      "sample": []
+    },
+    "questions_filter_exam_types": {
+      "types": [
+        "Banking (IBPS/SBI/RBI)",
+        "SSC Exams (CGL/CHSL)",
+        "CLARIFY_ORIGINAL",
+        "RRB NTPC",
+        "UPSC CSE"
+      ],
+      "probes": {
+        "UPSC": {
+          "count": 0
+        },
+        "ssc_cgl": {
+          "count": 0
+        },
+        "IBPS_PO": {
+          "count": 0
+        },
+        "custom": {
+          "count": 0
+        },
+        "Banking (IBPS/SBI/RBI)": {
+          "count": 165
+        }
+      }
+    },
+    "profile_column_probes": {
+      "id,plan_id,subscription_status": "ok",
+      "id,stripe_subscription_id": "column profiles.stripe_subscription_id does not exist",
+      "id,subscription_id": "ok"
+    },
+    "feature_flags": [
+      {
+        "key": "stealth_overlay",
+        "is_enabled": true
+      },
+      {
+        "key": "live_transcription",
+        "is_enabled": true
+      },
+      {
+        "key": "byok",
+        "is_enabled": true
+      },
+      {
+        "key": "advanced_analytics",
+        "is_enabled": true
+      },
+      {
+        "key": "practice_rooms",
+        "is_enabled": true
+      },
+      {
+        "key": "export_data",
+        "is_enabled": true
+      },
+      {
+        "key": "system_design_mode",
+        "is_enabled": true
+      },
+      {
+        "key": "offline_mode",
+        "is_enabled": true
+      },
+      {
+        "key": "ai_coach",
+        "is_enabled": true
+      },
+      {
+        "key": "company_research",
+        "is_enabled": true
+      },
+      {
+        "key": "live_assist",
+        "is_enabled": true
+      },
+      {
+        "key": "answer_bank",
+        "is_enabled": true
+      }
+    ],
+    "admin_audit_log": [
+      {
+        "action": "update",
+        "target_type": "community_report",
+        "created_at": "2026-08-26T16:44:09.813204+00:00"
+      },
+      {
+        "action": "update",
+        "target_type": "community_report",
+        "created_at": "2026-08-26T16:44:06.901747+00:00"
+      },
+      {
+        "action": "update",
+        "target_type": "community_post",
+        "created_at": "2026-08-26T16:43:54.39231+00:00"
+      },
+      {
+        "action": "update",
+        "target_type": "community_post",
+        "created_at": "2026-08-26T16:43:53.106616+00:00"
+      },
+      {
+        "action": "update",
+        "target_type": "community_post",
+        "created_at": "2026-08-26T16:43:52.153856+00:00"
+      }
+    ],
+    "tables": {
+      "gov_sources": "Could not find the table 'public.gov_sources' in the schema cache",
+      "gov_exams": {
+        "keys": [
+          "id",
+          "recruiting_body_id",
+          "code",
+          "name",
+          "family",
+          "description",
+          "legacy_exam_type",
+          "review_state",
+          "is_public",
+          "created_at",
+          "updated_at",
+          "short_name"
+        ],
+        "n": 1
+      },
+      "ingestion_jobs": "Could not find the table 'public.ingestion_jobs' in the schema cache",
+      "gov_ingestion_jobs": "Could not find the table 'public.gov_ingestion_jobs' in the schema cache",
+      "support_tickets": "Could not find the table 'public.support_tickets' in the schema cache",
+      "support_threads": {
+        "keys": [
+          "id",
+          "user_id",
+          "subject",
+          "status",
+          "priority",
+          "assigned_admin_id",
+          "last_message_at",
+          "last_message_preview",
+          "unread_for_admin",
+          "unread_for_user",
+          "created_at",
+          "updated_at"
+        ],
+        "n": 1
+      },
+      "billing_settings": {
+        "keys": [
+          "id",
+          "referral_discount_percent",
+          "referrer_credit_reward",
+          "referee_credit_reward",
+          "auto_deduct_credits",
+          "razorpay_enabled",
+          "pro_monthly_inr_paise",
+          "enterprise_monthly_inr_paise",
+          "credits_50_inr_paise",
+          "credits_150_inr_paise",
+          "credits_500_inr_paise",
+          "updated_at"
+        ],
+        "n": 1
+      },
+      "app_settings": "Could not find the table 'public.app_settings' in the schema cache",
+      "promo_redemptions": "Could not find the table 'public.promo_redemptions' in the schema cache",
+      "official_paper_sources": "Could not find the table 'public.official_paper_sources' in the schema cache",
+      "gov_exam_papers": "Could not find the table 'public.gov_exam_papers' in the schema cache"
+    }
+  },
+  "free": {
+    "label": "FREE",
+    "userId": "d17262d4",
+    "is_admin": {
+      "data": false
+    },
+    "own_roles": [],
+    "all_roles_sample": {
+      "count": 0,
+      "otherUsers": false,
+      "roles": []
+    },
+    "profiles_list": {
+      "count": 1
+    },
+    "promo_codes": [],
+    "help_articles": {
+      "total": 18,
+      "dups": [],
+      "focus": [
+        {
+          "id": "bfd57cdd-2e31-458b-a97f-954950816b77",
+          "slug": "bi-5",
+          "question": "Can I buy extra credits?",
+          "published": true
+        },
+        {
+          "id": "50222978-02db-4210-81b9-923bbe353f19",
+          "slug": "gs-3",
+          "question": "Is there a free plan?",
+          "published": true
+        }
+      ]
+    },
+    "blog_posts": {
+      "keys": [
+        "id",
+        "slug",
+        "title",
+        "excerpt",
+        "content",
+        "category",
+        "author",
+        "read_time",
+        "cover_image_url",
+        "published",
+        "published_at",
+        "created_at",
+        "updated_at"
+      ]
+    },
+    "questions_public_unverified": {
+      "count": 0,
+      "sample": []
+    },
+    "questions_filter_exam_types": {
+      "types": [
+        "Banking (IBPS/SBI/RBI)",
+        "SSC Exams (CGL/CHSL)",
+        "CLARIFY_ORIGINAL",
+        "JEE Main"
+      ],
+      "probes": {
+        "UPSC": {
+          "count": 0
+        },
+        "ssc_cgl": {
+          "count": 0
+        },
+        "IBPS_PO": {
+          "count": 0
+        },
+        "custom": {
+          "count": 0
+        },
+        "Banking (IBPS/SBI/RBI)": {
+          "count": 20
+        }
+      }
+    },
+    "profile_column_probes": {
+      "id,plan_id,subscription_status": "ok",
+      "id,stripe_subscription_id": "column profiles.stripe_subscription_id does not exist",
+      "id,subscription_id": "ok"
+    },
+    "feature_flags": [],
+    "admin_audit_log": [],
+    "tables": {
+      "gov_sources": "Could not find the table 'public.gov_sources' in the schema cache",
+      "gov_exams": {
+        "keys": [
+          "id",
+          "recruiting_body_id",
+          "code",
+          "name",
+          "family",
+          "description",
+          "legacy_exam_type",
+          "review_state",
+          "is_public",
+          "created_at",
+          "updated_at",
+          "short_name"
+        ],
+        "n": 1
+      },
+      "ingestion_jobs": "Could not find the table 'public.ingestion_jobs' in the schema cache",
+      "gov_ingestion_jobs": "Could not find the table 'public.gov_ingestion_jobs' in the schema cache",
+      "support_tickets": "Could not find the table 'public.support_tickets' in the schema cache",
+      "support_threads": {
+        "keys": [],
+        "n": 0
+      },
+      "billing_settings": {
+        "keys": [],
+        "n": 0
+      },
+      "app_settings": "Could not find the table 'public.app_settings' in the schema cache",
+      "promo_redemptions": "Could not find the table 'public.promo_redemptions' in the schema cache",
+      "official_paper_sources": "Could not find the table 'public.official_paper_sources' in the schema cache",
+      "gov_exam_papers": "Could not find the table 'public.gov_exam_papers' in the schema cache"
+    }
+  }
+}

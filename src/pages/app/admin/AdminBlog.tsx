@@ -67,6 +67,24 @@ export default function AdminBlog() {
     void load();
   }, [load]);
 
+  async function checkSlugUnique(slug: string, exceptId?: string): Promise<string | null> {
+    const trimmed = slug.trim().toLowerCase();
+    if (!trimmed) return "Slug is required";
+    if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(trimmed)) {
+      return "Slug must be lowercase alphanumeric with hyphens (e.g. my-post)";
+    }
+    const { data, error } = await supabase
+      .from("blog_posts")
+      .select("id, slug")
+      .eq("slug", trimmed);
+    if (error) return toAdminUserMessage(error, undefined, "AdminBlog.slugCheck");
+    const clash = (data ?? []).find((row) => row.id !== exceptId);
+    if (clash) {
+      return `Slug "${trimmed}" already in use. Use a unique slug (e.g. ${trimmed}-2).`;
+    }
+    return null;
+  }
+
   async function save() {
     if (!editing?.title.trim() || !editing.slug.trim()) {
       toast.error("Title and slug are required");
@@ -75,8 +93,14 @@ export default function AdminBlog() {
     if (saving) return;
     setSaving(true);
     try {
+      const slugError = await checkSlugUnique(editing.slug, editing.id);
+      if (slugError) {
+        toast.error(slugError);
+        setSaving(false);
+        return;
+      }
       const payload = {
-        slug: editing.slug.trim(),
+        slug: editing.slug.trim().toLowerCase(),
         title: editing.title.trim(),
         excerpt: editing.excerpt,
         content: editing.content,

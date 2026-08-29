@@ -1,0 +1,153 @@
+/**
+ * Client-side policy helper for paper generation vs approved inventory.
+ * The server remains the authority; this only decides what the UI may offer.
+ *
+ * Honesty rules (P0-02):
+ *   - Bank covers request → Full Mock / bank_only.
+ *   - Short bank + AI fill capability → AI-assisted Full Mock.
+ *   - Otherwise fail closed → Custom Practice (never invent hybrid /
+ *     "Realistic Mock" from fragile Python-fill heuristics).
+ */
+
+export type InventoryMode =
+  | "bank_only"
+  | "ai_assisted"
+  | "hybrid_deterministic"
+  | "blocked";
+
+export type InventoryDecision = {
+  canGenerateRequested: boolean;
+  mode: InventoryMode;
+  available: number;
+  requested: number;
+  /** How many questions AI would have to produce for a full paper. */
+  aiQuestions: number;
+  /** How many questions Python templates would fill when AI is off. */
+  deterministicQuestions: number;
+  customPracticeMax: number;
+  reason: "ok" | "empty" | "short" | "ai_fill" | "hybrid_fill";
+};
+
+export function decideQuestionInventory(input: {
+  available: number;
+  requested: number;
+  minQuestions?: number;
+  /** True when the signed-in plan may generate missing questions with AI. */
+  aiFillAvailable?: boolean;
+  /**
+   * @deprecated Ignored for client honesty. Short banks fail closed to
+   * Custom Practice unless AI fill is available — do not unlock Full Mock
+   * from Python/hybrid heuristics.
+   */
+  pythonFillAvailable?: boolean;
+}): InventoryDecision {
+  const available = Math.max(0, Math.floor(Number(input.available) || 0));
+  const requested = Math.max(0, Math.floor(Number(input.requested) || 0));
+  const minQuestions = Math.max(1, Math.floor(Number(input.minQuestions) || 5));
+  const aiFillAvailable = input.aiFillAvailable === true;
+  const customPracticeMax = available;
+  const shortfall = Math.max(0, requested - available);
+
+  if (aiFillAvailable && shortfall > 0) {
+    return {
+      canGenerateRequested: true,
+      mode: "ai_assisted",
+      available,
+      requested,
+      aiQuestions: shortfall,
+      deterministicQuestions: 0,
+      customPracticeMax,
+      reason: "ai_fill",
+    };
+  }
+
+  // Intentionally ignore pythonFillAvailable: hybrid/realistic-mock unlock
+  // from env/heuristic flags misled QA. Fail closed to Custom Practice.
+
+  if (available < minQuestions) {
+    return {
+      canGenerateRequested: false,
+      mode: "blocked",
+      available,
+      requested,
+      aiQuestions: 0,
+      deterministicQuestions: 0,
+      customPracticeMax,
+      reason: "empty",
+    };
+  }
+
+  if (requested > available) {
+    return {
+      canGenerateRequested: false,
+      mode: "blocked",
+      available,
+      requested,
+      aiQuestions: 0,
+      deterministicQuestions: 0,
+      customPracticeMax,
+      reason: "short",
+    };
+  }
+
+  return {
+    canGenerateRequested: true,
+    mode: "bank_only",
+    available,
+    requested,
+    aiQuestions: 0,
+    deterministicQuestions: 0,
+    customPracticeMax,
+    reason: "ok",
+  };
+}
+
+export function formatInventoryCoverage(available: number, requested: number): string {
+  const avail = Math.max(0, Math.floor(Number(available) || 0));
+  const req = Math.max(0, Math.floor(Number(requested) || 0));
+  if (req <= 0) return `${avail} approved questions available`;
+  return `${avail} / ${req} questions available`;
+}
+
+/** Pre-charge shortage copy when a full mock cannot be served from inventory. */
+export function inventoryAvailabilityMessage(available: number): string {
+  const n = Math.max(0, Math.floor(Number(available) || 0));
+  return `Only ${n} approved questions are currently available.`;
+}
+
+export function customPracticeSetLabel(maxQuestions: number): string {
+  const n = Math.max(0, Math.floor(Number(maxQuestions) || 0));
+  return `Generate Custom Practice Set — up to ${n} questions`;
+}
+
+export function generateButtonLabel(decision: InventoryDecision): string {
+  if (decision.mode === "hybrid_deterministic") {
+    return `Generate Realistic Mock Exam — ${decision.requested} questions`;
+  }
+  if (decision.mode === "ai_assisted") {
+    return `Generate Full AI Mock Paper — ${decision.requested} questions`;
+  }
+  if (decision.canGenerateRequested) {
+    return `Generate Full Mock Paper — ${decision.requested} questions`;
+  }
+  return customPracticeSetLabel(decision.customPracticeMax);
+}
+
+export function generationSourceSummary(decision: InventoryDecision): string {
+  if (decision.mode === "bank_only") {
+    return `All ${decision.requested} questions come from the approved bank.`;
+  }
+  if (decision.mode === "hybrid_deterministic") {
+    if (decision.available <= 0) {
+      return `All ${decision.requested} questions are Python practice variants (not official PYQ).`;
+    }
+    return `${decision.available} from the approved bank, ${decision.deterministicQuestions} Python practice fill (not official PYQ).`;
+  }
+  if (decision.mode === "ai_assisted") {
+    if (decision.available <= 0) {
+      return `All ${decision.requested} questions are generated by AI to the official blueprint.`;
+    }
+    return `${decision.available} from the approved bank, ${decision.aiQuestions} generated by AI to the official blueprint.`;
+  }
+  return "Insufficient content";
+}

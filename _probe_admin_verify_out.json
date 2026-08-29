@@ -1,0 +1,121 @@
+{
+  "stamp": "mtaxuh5a",
+  "questionReview": {
+    "withScore": {
+      "ok": true,
+      "count": 0
+    },
+    "withoutScore": {
+      "ok": true,
+      "count": 5
+    }
+  },
+  "help": {
+    "rows": [
+      {
+        "id": "3960946c-dda8-4612-b760-d9745e2a9583",
+        "slug": "gs-4",
+        "question": "Is there a free plan? (archived draft — use gs-3)",
+        "published": false
+      },
+      {
+        "id": "50222978-02db-4210-81b9-923bbe353f19",
+        "slug": "gs-3",
+        "question": "Is there a free plan?",
+        "published": true
+      }
+    ],
+    "publishedDupCounts": {
+      "is there a free plan?": 1
+    },
+    "conflict": {
+      "blocked": true,
+      "message": "duplicate key value violates unique constraint \"help_articles_published_question_uidx\""
+    }
+  },
+  "promo": {
+    "insert": {
+      "id": "eaceeb26-a5ac-44fb-ad02-ec18ba5c2b3d",
+      "code": "V0100MTAXUH5A",
+      "bonus_credits": 100
+    },
+    "reread": {
+      "bonus_credits": 100
+    },
+    "match": true
+  },
+  "support": {
+    "threadId": "5653bad7",
+    "insert": {
+      "id": "169aae3b-243f-42e1-866f-d1ac4aac4950"
+    },
+    "persist": "QA admin probe reply mtaxuh5a"
+  },
+  "papers": [
+    {
+      "id": "9871ab56-3969-49e6-b580-cf35cd8ba7e2",
+      "title": "IBPS PO Preliminary practice paper",
+      "review_state": "machine_validated"
+    },
+    {
+      "id": "a43325de-c4fc-4bcf-ac80-87b6d795a18c",
+      "title": "IBPS PO Preliminary practice paper",
+      "review_state": "machine_validated"
+    },
+    {
+      "id": "a3f4b452-885b-4c5c-b205-07c57293c92c",
+      "title": "IBPS PO Preliminary practice paper",
+      "review_state": "machine_validated"
+    },
+    {
+      "id": "e7134d0b-162b-40d5-b816-6c82212f01b6",
+      "title": "SSC Combined Graduate Level practice paper",
+      "review_state": "machine_validated"
+    },
+    {
+      "id": "f7f883d7-6dfb-4c60-b3db-d525b792e7e1",
+      "title": "IBPS PO Preliminary practice paper",
+      "review_state": "machine_validated"
+    }
+  ],
+  "freeAuth": {
+    "is_admin": false,
+    "rolesVisible": 0,
+    "helpPublish": {
+      "rows": 0
+    }
+  },
+  "diagnostics": {
+    "status": 200,
+    "db": {
+      "ok": true,
+      "status": "ok"
+    },
+    "storage": {
+      "ok": true,
+      "status": "ok"
+    },
+    "python": {
+      "configured": true,
+      "up": true,
+      "status": "ok",
+      "ready_ok": true,
+      "signed_ok": true
+    },
+    "razorpay": "ok",
+    "ai": {
+      "gemini": {
+        "configured": true,
+        "status": "ok"
+      },
+      "openai": {
+        "configured": true,
+        "status": "ok"
+      },
+      "anthropic": {
+        "configured": false,
+        "status": "not_configured"
+      }
+    }
+  }
+}

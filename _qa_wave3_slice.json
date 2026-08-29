@@ -1,0 +1,2418 @@
+[
+  {
+    "excel_row": 66,
+    "Test Case ID": "TC-DASH-001",
+    "Actual Result": "Free user can access Continue to Practice Coach, while the Upgrade to Pro option is displayed. No backend issues were observed.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "Free-tier access and upgrade prompt are functioning as expected.",
+    "Module": "Dashboard",
+    "Sub-Module": "Dashboard",
+    "Feature": "Dashboard loads",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "FREE_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Login FREE_USER_01.\n2. Open https://clarify.ai.sltfinanceindia.com/app/dashboard.\n3. Wait for widgets.",
+    "Expected Result (per step)": "1. Authenticated.\n2. Dashboard route loads.\n3. Widgets/KPIs/shortcuts visible or honest empty states.",
+    "Final Expected Result": "Dashboard renders without infinite loading.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1YiO_OEbjl3WTE67OzU1ZEjS7vhgPVmMP/view?usp=drive_linkhttps://drive.google.com/file/d/1mOMO2H43gOdN2hh7xRqGn7bfssp1n3Mg/view?usp=drive_link",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/dashboard."
+      },
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1YiO_OEbjl3WTE67OzU1ZEjS7vhgPVmMP/view?usp=drive_linkhttps://drive.google.com/file/d/1mOMO2H43gOdN2hh7xRqGn7bfssp1n3Mg/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 67,
+    "Test Case ID": "TC-DASH-002",
+    "Actual Result": "Credits/plan indicators are displayed correctly on the dashboard, and the visible balance matches the Usage/Billing information.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "No discrepancy was observed between the dashboard and Usage/Billing balance.",
+    "Module": "Dashboard",
+    "Sub-Module": "Dashboard",
+    "Feature": "Credits / plan visible",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. On dashboard, locate credits/plan indicators.\n2. Open Usage/Billing and compare visible balance roughly.",
+    "Expected Result (per step)": "1. Credits/plan shown if product displays them.\n2. No contradictory impossible values without explanation.",
+    "Final Expected Result": "Dashboard credit/plan display is user-consistent.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1U1yTv57edgAJHc5YdpRwXZkmLTM5C3YI/view?usp=drive_linkhttps://drive.google.com/file/d/1tpQ_vEXpFx7NqJ-fbyPFKGq_vBYLnWhQ/view?usp=drive_link",
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1U1yTv57edgAJHc5YdpRwXZkmLTM5C3YI/view?usp=drive_linkhttps://drive.google.com/file/d/1tpQ_vEXpFx7NqJ-fbyPFKGq_vBYLnWhQ/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 68,
+    "Test Case ID": "TC-DASH-003",
+    "Actual Result": "No history is available, and the application displays the empty state correctly without showing an error.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "Empty-state message is clear and navigation works as expected.",
+    "Module": "Dashboard",
+    "Sub-Module": "Dashboard",
+    "Feature": "Recent sessions / activity",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "HISTORY_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. As HISTORY_USER_01 open dashboard.\n2. Open a recent session shortcut if present.\n3. As NO_HISTORY_01 confirm empty state.",
+    "Expected Result (per step)": "1. Recent items appear when history exists.\n2. Navigation works.\n3. Empty state clear — not an error.",
+    "Final Expected Result": "Recent activity and empty states behave correctly.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1Lmo63BX_2MiUWw6OESuwMZ1EwkohblVT/view?usp=drive_link",
+    "Screenshot / Evidence Requirement__hyperlink": "https://drive.google.com/file/d/1Lmo63BX_2MiUWw6OESuwMZ1EwkohblVT/view?usp=drive_link",
+    "_hyperlinks": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "target": "https://drive.google.com/file/d/1Lmo63BX_2MiUWw6OESuwMZ1EwkohblVT/view?usp=drive_link",
+        "display": "https://drive.google.com/file/d/1Lmo63BX_2MiUWw6OESuwMZ1EwkohblVT/view?usp=drive_link"
+      }
+    ],
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1Lmo63BX_2MiUWw6OESuwMZ1EwkohblVT/view?usp=drive_link"
+      },
+      {
+        "col": "Screenshot / Evidence Requirement__hyperlink",
+        "url": "https://drive.google.com/file/d/1Lmo63BX_2MiUWw6OESuwMZ1EwkohblVT/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 69,
+    "Test Case ID": "TC-DASH-004",
+    "Actual Result": "All primary dashboard shortcuts navigate to their respective modules successfully.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "Practice Coach, Mock, Gov Exams, Prep, and other shortcuts load correctly without navigation issues.",
+    "Module": "Dashboard",
+    "Sub-Module": "Dashboard",
+    "Feature": "Shortcuts / CTAs",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Click each primary dashboard shortcut (Practice Coach, Mock, Gov Exams, Prep, etc.).\n2. Confirm destination module loads.",
+    "Expected Result (per step)": "1. Each shortcut navigates.\n2. Destination is the expected module (or plan gate / coming soon — honest).",
+    "Final Expected Result": "Dashboard shortcuts navigate to real modules.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1DCdV5bZCGEYLJLgU5yc4aD34-ZBLYtho/view?usp=drive_link",
+    "Screenshot / Evidence Requirement__hyperlink": "https://drive.google.com/file/d/1DCdV5bZCGEYLJLgU5yc4aD34-ZBLYtho/view?usp=drive_link",
+    "_hyperlinks": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "target": "https://drive.google.com/file/d/1DCdV5bZCGEYLJLgU5yc4aD34-ZBLYtho/view?usp=drive_link",
+        "display": "https://drive.google.com/file/d/1DCdV5bZCGEYLJLgU5yc4aD34-ZBLYtho/view?usp=drive_link"
+      }
+    ],
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1DCdV5bZCGEYLJLgU5yc4aD34-ZBLYtho/view?usp=drive_link"
+      },
+      {
+        "col": "Screenshot / Evidence Requirement__hyperlink",
+        "url": "https://drive.google.com/file/d/1DCdV5bZCGEYLJLgU5yc4aD34-ZBLYtho/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 70,
+    "Test Case ID": "TC-DASH-005",
+    "Actual Result": "Under Slow 3G conditions, the application displays “Connection looks unstable” with a “Test Speed” option.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "The network condition is handled with a clear user-facing message and speed test option.",
+    "Module": "Dashboard",
+    "Sub-Module": "Dashboard",
+    "Feature": "Loading and error retry",
+    "Priority": "P2",
+    "Severity": "Minor",
+    "Test Type": "Negative",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "FREE_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Throttle network to Slow 3G (DevTools) if permitted.\n2. Reload dashboard.\n3. Restore network; use Retry if shown.",
+    "Expected Result (per step)": "1. Network slowed.\n2. Loading indicators appear; eventual error or success.\n3. Retry recovers or shows clear failure.",
+    "Final Expected Result": "Dashboard handles slow/error network gracefully.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1MxiI6296ndnEawhtWNGCgiEqGT0szNNK/view?usp=drive_link",
+    "Screenshot / Evidence Requirement__hyperlink": "https://drive.google.com/file/d/1MxiI6296ndnEawhtWNGCgiEqGT0szNNK/view?usp=drive_link",
+    "_hyperlinks": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "target": "https://drive.google.com/file/d/1MxiI6296ndnEawhtWNGCgiEqGT0szNNK/view?usp=drive_link",
+        "display": "https://drive.google.com/file/d/1MxiI6296ndnEawhtWNGCgiEqGT0szNNK/view?usp=drive_link"
+      }
+    ],
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1MxiI6296ndnEawhtWNGCgiEqGT0szNNK/view?usp=drive_link"
+      },
+      {
+        "col": "Screenshot / Evidence Requirement__hyperlink",
+        "url": "https://drive.google.com/file/d/1MxiI6296ndnEawhtWNGCgiEqGT0szNNK/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 71,
+    "Test Case ID": "TC-DASH-006",
+    "Actual Result": "The page clearly displays “No interviews are scheduled”, and the layout is usable for the free user.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "Empty state is clear and the page remains functional.",
+    "Module": "Dashboard",
+    "Sub-Module": "Dashboard",
+    "Feature": "Interview Day page",
+    "Priority": "P2",
+    "Severity": "Minor",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "FREE_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/interview-day.\n2. Verify layout and any scheduled items/empty state.",
+    "Expected Result (per step)": "1. Page loads.\n2. Content or empty state; no crash.",
+    "Final Expected Result": "Interview Day page is usable.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1EtoqSahOO-iCNc_Uit5hIszo5NVhd9w_/view?usp=drive_link",
+    "Screenshot / Evidence Requirement__hyperlink": "https://drive.google.com/file/d/1EtoqSahOO-iCNc_Uit5hIszo5NVhd9w_/view?usp=drive_link",
+    "_hyperlinks": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "target": "https://drive.google.com/file/d/1EtoqSahOO-iCNc_Uit5hIszo5NVhd9w_/view?usp=drive_link",
+        "display": "https://drive.google.com/file/d/1EtoqSahOO-iCNc_Uit5hIszo5NVhd9w_/view?usp=drive_link"
+      }
+    ],
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/interview-day."
+      },
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1EtoqSahOO-iCNc_Uit5hIszo5NVhd9w_/view?usp=drive_link"
+      },
+      {
+        "col": "Screenshot / Evidence Requirement__hyperlink",
+        "url": "https://drive.google.com/file/d/1EtoqSahOO-iCNc_Uit5hIszo5NVhd9w_/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 72,
+    "Test Case ID": "TC-DASH-007",
+    "Actual Result": "Notifications open successfully, and the available notification is displayed correctly.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "Notification list is accessible and functioning as expected.",
+    "Module": "Dashboard",
+    "Sub-Module": "Dashboard",
+    "Feature": "Notifications entry",
+    "Priority": "P2",
+    "Severity": "Minor",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "FREE_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. From dashboard/header open Notifications.\n2. Verify list or empty state.",
+    "Expected Result (per step)": "1. Notifications page/panel opens.\n2. Readable list or empty state.",
+    "Final Expected Result": "Notifications reachable from chrome.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/10JQugH6mSxUnEZaGzXNXeLo-St-iryt4/view?usp=drive_link",
+    "Screenshot / Evidence Requirement__hyperlink": "https://drive.google.com/file/d/10JQugH6mSxUnEZaGzXNXeLo-St-iryt4/view?usp=drive_link",
+    "_hyperlinks": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "target": "https://drive.google.com/file/d/10JQugH6mSxUnEZaGzXNXeLo-St-iryt4/view?usp=drive_link",
+        "display": "https://drive.google.com/file/d/10JQugH6mSxUnEZaGzXNXeLo-St-iryt4/view?usp=drive_link"
+      }
+    ],
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/10JQugH6mSxUnEZaGzXNXeLo-St-iryt4/view?usp=drive_link"
+      },
+      {
+        "col": "Screenshot / Evidence Requirement__hyperlink",
+        "url": "https://drive.google.com/file/d/10JQugH6mSxUnEZaGzXNXeLo-St-iryt4/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 73,
+    "Test Case ID": "TC-DASH-008",
+    "Actual Result": "The referral code/link is displayed and can be copied successfully. After refreshing the page, the referral code remains available.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "Referral information persists correctly after refresh.",
+    "Module": "Dashboard",
+    "Sub-Module": "Dashboard",
+    "Feature": "Referrals page",
+    "Priority": "P2",
+    "Severity": "Minor",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "FREE_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/referrals.\n2. Copy referral code/link if shown.\n3. Refresh; confirm code persists.",
+    "Expected Result (per step)": "1. Page loads.\n2. Code/link usable.\n3. Persists after refresh.",
+    "Final Expected Result": "Referrals page works and persists codes.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/10w2LeiYkwhkqMHW3Zb_RafR0HegVc52n/view?usp=drive_link",
+    "Screenshot / Evidence Requirement__hyperlink": "https://drive.google.com/file/d/10w2LeiYkwhkqMHW3Zb_RafR0HegVc52n/view?usp=drive_link",
+    "_hyperlinks": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "target": "https://drive.google.com/file/d/10w2LeiYkwhkqMHW3Zb_RafR0HegVc52n/view?usp=drive_link",
+        "display": "https://drive.google.com/file/d/10w2LeiYkwhkqMHW3Zb_RafR0HegVc52n/view?usp=drive_link"
+      }
+    ],
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/referrals."
+      },
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/10w2LeiYkwhkqMHW3Zb_RafR0HegVc52n/view?usp=drive_link"
+      },
+      {
+        "col": "Screenshot / Evidence Requirement__hyperlink",
+        "url": "https://drive.google.com/file/d/10w2LeiYkwhkqMHW3Zb_RafR0HegVc52n/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 139,
+    "Test Case ID": "TC-PREP-007",
+    "Actual Result": "During the AI-down window, STAR generation falls back correctly, and the system accurately deducts 10 credits as indicated.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "Credit deduction messaging is consistent and truthful even when the AI generation falls back.",
+    "Module": "Prep Lab",
+    "Sub-Module": "Prep Lab",
+    "Feature": "AI failure fallback",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Negative",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "SUFFICIENT_CREDIT_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. During AI-down window run STAR generate.\n2. Observe fallback/error.\n3. Confirm credits messaging truthful.",
+    "Expected Result (per step)": "1. Down.\n2. Fallback/error.\n3. No false credit error.",
+    "Final Expected Result": "Prep tools fail gracefully when AI is down.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/184QUQrAqmpGRmHmGz1dLPHxB88VMflo_/view?usp=drive_linkhttps://drive.google.com/file/d/1rPryvSnzAlWVpfie5jKtzMXygKA5jHQC/view?usp=drive_link",
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/184QUQrAqmpGRmHmGz1dLPHxB88VMflo_/view?usp=drive_linkhttps://drive.google.com/file/d/1rPryvSnzAlWVpfie5jKtzMXygKA5jHQC/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 160,
+    "Test Case ID": "TC-ANS-004",
+    "Actual Result": "USER_B cannot access or view the answer generated by USER_A through the copied URL.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "Access is correctly restricted between users.",
+    "Module": "Answer Bank",
+    "Sub-Module": "Answer Bank",
+    "Feature": "Ownership isolation",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Security",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "USER_A_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. USER_A creates answer; copy URL.\n2. USER_B opens URL.\n3. Confirm denied.",
+    "Expected Result (per step)": "1. A owns answer.\n2. B attempts.\n3. No access to A's content.",
+    "Final Expected Result": "Answers are not cross-user accessible.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1ovhEjIfuiInff9xm36UqNEqNCObivUCf/view?usp=drive_linkhttps://drive.google.com/file/d/1Ec1P0Gn2VGm_FyHiKZ8Bs4qXwJaD1kuV/view?usp=drive_link",
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1ovhEjIfuiInff9xm36UqNEqNCObivUCf/view?usp=drive_linkhttps://drive.google.com/file/d/1Ec1P0Gn2VGm_FyHiKZ8Bs4qXwJaD1kuV/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 161,
+    "Test Case ID": "TC-ANS-001",
+    "Actual Result": "A new answer can be created with a title and body, saved successfully, and is displayed correctly after refreshing the list.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "Answer creation and persistence are working as expected.",
+    "Module": "Answer Bank",
+    "Sub-Module": "Answer Bank",
+    "Feature": "Create answer",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/answers.\n2. Create new answer with title+body.\n3. Save.\n4. Refresh list.",
+    "Expected Result (per step)": "1. List loads (or feature-flag message).\n2. Form works.\n3. Saved.\n4. Appears after refresh.",
+    "Final Expected Result": "Create answer persists.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1SVQqeMk7WZvIW8uttruKHlEok2s2diuv/view?usp=drive_link",
+    "Screenshot / Evidence Requirement__hyperlink": "https://drive.google.com/file/d/1SVQqeMk7WZvIW8uttruKHlEok2s2diuv/view?usp=drive_link",
+    "_hyperlinks": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "target": "https://drive.google.com/file/d/1SVQqeMk7WZvIW8uttruKHlEok2s2diuv/view?usp=drive_link",
+        "display": "https://drive.google.com/file/d/1SVQqeMk7WZvIW8uttruKHlEok2s2diuv/view?usp=drive_link"
+      }
+    ],
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/answers."
+      },
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1SVQqeMk7WZvIW8uttruKHlEok2s2diuv/view?usp=drive_link"
+      },
+      {
+        "col": "Screenshot / Evidence Requirement__hyperlink",
+        "url": "https://drive.google.com/file/d/1SVQqeMk7WZvIW8uttruKHlEok2s2diuv/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 162,
+    "Test Case ID": "TC-ANS-002",
+    "Actual Result": "The answer can be edited and saved successfully, and the changes persist after refresh. The answer can also be deleted and is no longer displayed after refreshing.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "Edit, save, refresh, and delete functionality works as expected.",
+    "Module": "Answer Bank",
+    "Sub-Module": "Answer Bank",
+    "Feature": "Edit / delete",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Edit an answer; save; refresh.\n2. Delete; refresh; confirm gone.",
+    "Expected Result (per step)": "1. Edit persists.\n2. Delete persists.",
+    "Final Expected Result": "Edit and delete persist.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1E487BiIPqBmO3BHr6RfgGZV9UPRg4jmE/view?usp=drive_linkhttps://drive.google.com/file/d/1c4R8EZhpShyuy7xoGLNcisxNkTvegF7z/view?usp=drive_link",
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1E487BiIPqBmO3BHr6RfgGZV9UPRg4jmE/view?usp=drive_linkhttps://drive.google.com/file/d/1c4R8EZhpShyuy7xoGLNcisxNkTvegF7z/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 163,
+    "Test Case ID": "TC-ANS-003",
+    "Actual Result": "Answers can be created with different categories, searched by keyword, and filtered successfully.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "Search and filtering functionality works as expected.",
+    "Module": "Answer Bank",
+    "Sub-Module": "Answer Bank",
+    "Feature": "Search / filter / categories",
+    "Priority": "P2",
+    "Severity": "Minor",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Create two differently categorized answers if categories exist.\n2. Search by keyword.\n3. Apply filters.",
+    "Expected Result (per step)": "1. Data ready.\n2. Search finds match.\n3. Filters narrow correctly.",
+    "Final Expected Result": "Search and filters work.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1IcV2bv3uhScGhubbFJblS1Wpd9bh4inh/view?usp=drive_linkhttps://drive.google.com/file/d/1C3gvb-BDintfLRW60wmTktUKOCcRfp54/view?usp=drive_linkhttps://drive.google.com/file/d/1F8n5Dc7Mn1GWZXP7ACZtoScTXaGNFnj4/view?usp=drive_link",
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1IcV2bv3uhScGhubbFJblS1Wpd9bh4inh/view?usp=drive_linkhttps://drive.google.com/file/d/1C3gvb-BDintfLRW60wmTktUKOCcRfp54/view?usp=drive_linkhttps://drive.google.com/file/d/1F8n5Dc7Mn1GWZXP7ACZtoScTXaGNFnj4/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 164,
+    "Test Case ID": "TC-ANS-006",
+    "Actual Result": "The answer-bank item can be inserted into Practice Coach successfully.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "The integration between the Answer Bank and Practice Coach is working as expected",
+    "Module": "Answer Bank",
+    "Sub-Module": "Answer Bank",
+    "Feature": "Use in Practice Coach",
+    "Priority": "P2",
+    "Severity": "Minor",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. If UI allows inserting answer-bank item into Practice Coach, do so.\n2. Else mark Unavailable.",
+    "Expected Result (per step)": "1. Integration works or Unavailable recorded.\n2. Do not Pass a dead button.",
+    "Final Expected Result": "Answer Bank → Practice Coach integration verified or classified Unavailable.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/15QYaRNHdFumrtbvmFMDUMEI406dTgkt6/view?usp=drive_link",
+    "Screenshot / Evidence Requirement__hyperlink": "https://drive.google.com/file/d/15QYaRNHdFumrtbvmFMDUMEI406dTgkt6/view?usp=drive_link",
+    "_hyperlinks": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "target": "https://drive.google.com/file/d/15QYaRNHdFumrtbvmFMDUMEI406dTgkt6/view?usp=drive_link",
+        "display": "https://drive.google.com/file/d/15QYaRNHdFumrtbvmFMDUMEI406dTgkt6/view?usp=drive_link"
+      }
+    ],
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/15QYaRNHdFumrtbvmFMDUMEI406dTgkt6/view?usp=drive_link"
+      },
+      {
+        "col": "Screenshot / Evidence Requirement__hyperlink",
+        "url": "https://drive.google.com/file/d/15QYaRNHdFumrtbvmFMDUMEI406dTgkt6/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 165,
+    "Test Case ID": "TC-ANS-005",
+    "Actual Result": "The Answer Bank displays the empty state correctly for an account with no history, including the appropriate call-to-action.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "No error is displayed, and the empty-state experience is clear.",
+    "Module": "Answer Bank",
+    "Sub-Module": "Answer Bank",
+    "Feature": "Empty state",
+    "Priority": "P3",
+    "Severity": "Cosmetic",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "FREE_USER_02",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. As NO_HISTORY/empty account open Answer Bank.\n2. Observe empty CTA.",
+    "Expected Result (per step)": "1. Opens.\n2. Empty state with create CTA — not error.",
+    "Final Expected Result": "Empty Answer Bank is clear.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1EPvW_fQa_RRBkikcWLV0QQLJ6TyYcPmJ/view?usp=drive_link",
+    "Screenshot / Evidence Requirement__hyperlink": "https://drive.google.com/file/d/1EPvW_fQa_RRBkikcWLV0QQLJ6TyYcPmJ/view?usp=drive_link",
+    "_hyperlinks": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "target": "https://drive.google.com/file/d/1EPvW_fQa_RRBkikcWLV0QQLJ6TyYcPmJ/view?usp=drive_link",
+        "display": "https://drive.google.com/file/d/1EPvW_fQa_RRBkikcWLV0QQLJ6TyYcPmJ/view?usp=drive_link"
+      }
+    ],
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1EPvW_fQa_RRBkikcWLV0QQLJ6TyYcPmJ/view?usp=drive_link"
+      },
+      {
+        "col": "Screenshot / Evidence Requirement__hyperlink",
+        "url": "https://drive.google.com/file/d/1EPvW_fQa_RRBkikcWLV0QQLJ6TyYcPmJ/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 166,
+    "Test Case ID": "TC-SCH-001",
+    "Actual Result": "user land the page which give the 401 (Unauthorized) disconnect calendar",
+    "Pass / Fail": "Fail",
+    "Defect ID": "D_ID_6",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "where as the user can enter the 01-01-2025 it gives the choose a future time in the issue give valid date and valid time.",
+    "Module": "Interview Scheduler",
+    "Sub-Module": "Interview Scheduler",
+    "Feature": "Create interview",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/interviews/new (or note feature flag).\n2. Fill required date/time/title.\n3. Save.\n4. Refresh list.",
+    "Expected Result (per step)": "1. Form opens or flagged.\n2. Validation works.\n3. Saved.\n4. Persists.",
+    "Final Expected Result": "Create interview persists.",
+    "Screenshot / Evidence Requirement": "#VALUE!",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/interviews/new"
+      }
+    ]
+  },
+  {
+    "excel_row": 167,
+    "Test Case ID": "TC-SCH-002",
+    "Actual Result": "Edit option is not working user perspective where as without opean the dev tools and also cancelled option is  created the interview",
+    "Pass / Fail": "Fail",
+    "Defect ID": "D_ID_7",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "user can opean the dev tools after edit option is working and also cancelled interview can created the interview  .User should not see the cancelled interviews",
+    "Module": "Interview Scheduler",
+    "Sub-Module": "Interview Scheduler",
+    "Feature": "Edit / reschedule / cancel",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Edit time; save; refresh.\n2. Cancel/delete; refresh.",
+    "Expected Result (per step)": "1. Reschedule persists.\n2. Cancel removes/marks cancelled.",
+    "Final Expected Result": "Edit and cancel persist.",
+    "Screenshot / Evidence Requirement": "#VALUE!"
+  },
+  {
+    "excel_row": 168,
+    "Test Case ID": "TC-SCH-004",
+    "Actual Result": "User can navigated to the Inegration it give the 501 Calendar sync is not available yet.(Not Implemented)",
+    "Pass / Fail": "Fail",
+    "Defect ID": "D_ID_8",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "Button opening dialog ≠ working integration.",
+    "Module": "Interview Scheduler",
+    "Sub-Module": "Interview Scheduler",
+    "Feature": "Calendar integration",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open Settings → Integrations.\n2. Connect Google Calendar if available.\n3. If not configured, mark Requires Configuration.\n4. Disconnect if connected.",
+    "Expected Result (per step)": "1. Integrations page.\n2. OAuth success or clear failure.\n3. Honest Requires Configuration if missing.\n4. Disconnect works.",
+    "Final Expected Result": "Calendar integration verified or Requires Configuration.",
+    "Screenshot / Evidence Requirement": "#VALUE!"
+  },
+  {
+    "excel_row": 169,
+    "Test Case ID": "TC-SCH-003",
+    "Actual Result": "It successfully working where the future time if your can see the message is verify the date or verity the time",
+    "Pass / Fail": "Fail",
+    "Defect ID": "D_ID_9",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "User can enter the invalid date and time it gives the fututre time where as the give the change the date or change the time",
+    "Module": "Interview Scheduler",
+    "Sub-Module": "Interview Scheduler",
+    "Feature": "Invalid date / timezone",
+    "Priority": "P2",
+    "Severity": "Minor",
+    "Test Type": "Negative",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Enter past-invalid date if restricted.\n2. Toggle timezone if control exists.\n3. Observe validation.",
+    "Expected Result (per step)": "1. Invalid blocked or warned.\n2. Timezone applies.\n3. Clear errors.",
+    "Final Expected Result": "Date/timezone validation works.",
+    "Screenshot / Evidence Requirement": "#VALUE!"
+  },
+  {
+    "excel_row": 170,
+    "Test Case ID": "TC-SCH-005",
+    "Actual Result": "Email is not configured in the interview module",
+    "Pass / Fail": "Partial",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "Where as the user can enter the mail which is the get notification on interview day get personal mailnotification",
+    "Module": "Interview Scheduler",
+    "Sub-Module": "Interview Scheduler",
+    "Feature": "Email reminder (if configured)",
+    "Priority": "P2",
+    "Severity": "Minor",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Create interview soon enough to trigger reminder if QA harness supports.\n2. Check QA inbox.\n3. Else mark Requires Configuration / Blocked by Environment.",
+    "Expected Result (per step)": "1. Interview created.\n2. Email arrives or N/A.\n3. Honest classification.",
+    "Final Expected Result": "Reminder email verified only when email system configured.",
+    "Screenshot / Evidence Requirement": "#VALUE!"
+  },
+  {
+    "excel_row": 171,
+    "Test Case ID": "TC-SES-001",
+    "Actual Result": "The Sessions page provides Mock, Live, and Practice status filters, and the filters work correctly.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "Session filtering functions as expected.",
+    "Module": "Sessions",
+    "Sub-Module": "Sessions",
+    "Feature": "List sessions",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "HISTORY_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/sessions as HISTORY_USER_01.\n2. Apply status filter if present.\n3. Search if present.",
+    "Expected Result (per step)": "1. List shows sessions.\n2. Filters work.\n3. Search works or N/A.",
+    "Final Expected Result": "Session list/filter/search usable.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/17bs19gECGh2rg7tl8yYx0Sz6FP5BMbnr/view?usp=drive_linkhttps://drive.google.com/file/d/1ikn1NePIA0hOB_6KSKKSNpPKuGECjPsn/view?usp=drive_linkhttps://drive.google.com/file/d/1zufQ84a9QNUnby_gVJQkCXk5A5fLrpfE/view?usp=drive_link",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/sessions"
+      },
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/17bs19gECGh2rg7tl8yYx0Sz6FP5BMbnr/view?usp=drive_linkhttps://drive.google.com/file/d/1ikn1NePIA0hOB_6KSKKSNpPKuGECjPsn/view?usp=drive_linkhttps://drive.google.com/file/d/1zufQ84a9QNUnby_gVJQkCXk5A5fLrpfE/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 172,
+    "Test Case ID": "TC-SES-002",
+    "Actual Result": "The session page displays the session type, duration, AI usage, creation date, and available actions correctly. However, the View Details option is not working and 401 Unauthorized error found.",
+    "Pass / Fail": "Fail",
+    "Defect ID": "PR-004",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "Session information is visible on the main session page, but detailed session view could not be accessed.",
+    "Module": "Sessions",
+    "Sub-Module": "Sessions",
+    "Feature": "Session detail — transcript/score",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "HISTORY_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open a completed session.\n2. Verify date, duration, status, transcript/answers/score sections.\n3. Refresh.",
+    "Expected Result (per step)": "1. Detail opens.\n2. Key fields present or explicitly unavailable.\n3. Persists.",
+    "Final Expected Result": "Session detail shows durable session data.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1--zDXP6zK2kHYxKKb4qgTmUKP8aoo5YE/view?usp=drive_link",
+    "Screenshot / Evidence Requirement__hyperlink": "https://drive.google.com/file/d/1--zDXP6zK2kHYxKKb4qgTmUKP8aoo5YE/view?usp=drive_link",
+    "_hyperlinks": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "target": "https://drive.google.com/file/d/1--zDXP6zK2kHYxKKb4qgTmUKP8aoo5YE/view?usp=drive_link",
+        "display": "https://drive.google.com/file/d/1--zDXP6zK2kHYxKKb4qgTmUKP8aoo5YE/view?usp=drive_link"
+      }
+    ],
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1--zDXP6zK2kHYxKKb4qgTmUKP8aoo5YE/view?usp=drive_link"
+      },
+      {
+        "col": "Screenshot / Evidence Requirement__hyperlink",
+        "url": "https://drive.google.com/file/d/1--zDXP6zK2kHYxKKb4qgTmUKP8aoo5YE/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 173,
+    "Test Case ID": "TC-SES-004",
+    "Actual Result": "When attempting to start a Practice/Mock session, the message “Transcription service is temporarily unavailable” is displayed, preventing the session from being completed and verified in the session list.",
+    "Pass / Fail": "Fail",
+    "Defect ID": "PR-005",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "Session completion could not be validated due to transcription service unavailability.",
+    "Module": "Sessions",
+    "Sub-Module": "Sessions",
+    "Feature": "End active session from UI",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "SUFFICIENT_CREDIT_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Start a short Practice/Mock.\n2. End from UI.\n3. Confirm appears completed in list.",
+    "Expected Result (per step)": "1. Active.\n2. Ended.\n3. Listed completed with sensible duration/status.",
+    "Final Expected Result": "Ending a session updates history.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/15W7sPqAq0Z7oK1TI-xf-zJ1d55BrpvXR/view?usp=drive_link",
+    "Screenshot / Evidence Requirement__hyperlink": "https://drive.google.com/file/d/15W7sPqAq0Z7oK1TI-xf-zJ1d55BrpvXR/view?usp=drive_link",
+    "_hyperlinks": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "target": "https://drive.google.com/file/d/15W7sPqAq0Z7oK1TI-xf-zJ1d55BrpvXR/view?usp=drive_link",
+        "display": "https://drive.google.com/file/d/15W7sPqAq0Z7oK1TI-xf-zJ1d55BrpvXR/view?usp=drive_link"
+      }
+    ],
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/15W7sPqAq0Z7oK1TI-xf-zJ1d55BrpvXR/view?usp=drive_link"
+      },
+      {
+        "col": "Screenshot / Evidence Requirement__hyperlink",
+        "url": "https://drive.google.com/file/d/15W7sPqAq0Z7oK1TI-xf-zJ1d55BrpvXR/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 174,
+    "Test Case ID": "TC-SES-005",
+    "Actual Result": "USER_B cannot access USER_A’s session details. However, both users currently have no session history available to fully validate cross-user access control.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "Access restriction appears to work, but the test could not be fully validated because there are no session records.",
+    "Module": "Sessions",
+    "Sub-Module": "Sessions",
+    "Feature": "Cross-user session URL",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Security",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "USER_A_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. USER_A copies session detail URL.\n2. USER_B opens it.\n3. Confirm denied.",
+    "Expected Result (per step)": "1. A URL.\n2. B opens.\n3. No A transcript/score exposed.",
+    "Final Expected Result": "Session detail is owner-scoped.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1pV5VV2rKBFEGjlteORYhbxNsr178VPQm/view?usp=drive_linkhttps://drive.google.com/file/d/15kzojUHFlp5P2Scgme9DSNPN67mnPELV/view?usp=drive_link",
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1pV5VV2rKBFEGjlteORYhbxNsr178VPQm/view?usp=drive_linkhttps://drive.google.com/file/d/15kzojUHFlp5P2Scgme9DSNPN67mnPELV/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 175,
+    "Test Case ID": "TC-SES-003",
+    "Actual Result": "The Sessions page displays the empty state correctly for the free user, along with the appropriate CTA.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "No error is displayed, and the empty state is clear.",
+    "Module": "Sessions",
+    "Sub-Module": "Sessions",
+    "Feature": "Empty history",
+    "Priority": "P2",
+    "Severity": "Minor",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "FREE_USER_02",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. As FREE_USER_02 open https://clarify.ai.sltfinanceindia.com/app/sessions.\n2. Confirm empty state CTA.",
+    "Expected Result (per step)": "1. Opens.\n2. Empty state — not error.",
+    "Final Expected Result": "Empty sessions state is clear.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1pV5VV2rKBFEGjlteORYhbxNsr178VPQm/view?usp=drive_link",
+    "Screenshot / Evidence Requirement__hyperlink": "https://drive.google.com/file/d/1pV5VV2rKBFEGjlteORYhbxNsr178VPQm/view?usp=drive_link",
+    "_hyperlinks": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "target": "https://drive.google.com/file/d/1pV5VV2rKBFEGjlteORYhbxNsr178VPQm/view?usp=drive_link",
+        "display": "https://drive.google.com/file/d/1pV5VV2rKBFEGjlteORYhbxNsr178VPQm/view?usp=drive_link"
+      }
+    ],
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/sessions."
+      },
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1pV5VV2rKBFEGjlteORYhbxNsr178VPQm/view?usp=drive_link"
+      },
+      {
+        "col": "Screenshot / Evidence Requirement__hyperlink",
+        "url": "https://drive.google.com/file/d/1pV5VV2rKBFEGjlteORYhbxNsr178VPQm/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 176,
+    "Test Case ID": "TC-REP-001",
+    "Actual Result": "Debriefs are available and displayed correctly in the list. The debrief details page also loads successfully and remains accessible after refresh.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "Debrief listing, detail view, and refresh functionality work as expected.",
+    "Module": "Reports",
+    "Sub-Module": "Reports",
+    "Feature": "Debrief list & detail",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "HISTORY_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/debriefs.\n2. Open a debrief.\n3. Refresh detail.",
+    "Expected Result (per step)": "1. List loads.\n2. Detail shows scorecard/insights or generating/error.\n3. Persists.",
+    "Final Expected Result": "Debriefs list/detail work.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1vRtW-blWOGpIudeYb3AP816SIAqj3yKP/view?usp=drive_link",
+    "Screenshot / Evidence Requirement__hyperlink": "https://drive.google.com/file/d/1vRtW-blWOGpIudeYb3AP816SIAqj3yKP/view?usp=drive_link",
+    "_hyperlinks": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "target": "https://drive.google.com/file/d/1vRtW-blWOGpIudeYb3AP816SIAqj3yKP/view?usp=drive_link",
+        "display": "https://drive.google.com/file/d/1vRtW-blWOGpIudeYb3AP816SIAqj3yKP/view?usp=drive_link"
+      }
+    ],
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/debriefs."
+      },
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1vRtW-blWOGpIudeYb3AP816SIAqj3yKP/view?usp=drive_link"
+      },
+      {
+        "col": "Screenshot / Evidence Requirement__hyperlink",
+        "url": "https://drive.google.com/file/d/1vRtW-blWOGpIudeYb3AP816SIAqj3yKP/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 177,
+    "Test Case ID": "TC-REP-002",
+    "Actual Result": "The scorecard opens successfully from the session/debrief link, and the relevant metrics are displayed correctly. The available sharing controls also work as expected.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "Scorecard access and metrics visibility are functioning correctly",
+    "Module": "Reports",
+    "Sub-Module": "Reports",
+    "Feature": "Scorecard page",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "HISTORY_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open scorecard from session/debrief link.\n2. Verify metrics visible.\n3. Share control if present — use invalid/public rules carefully.",
+    "Expected Result (per step)": "1. Scorecard loads.\n2. Metrics shown.\n3. Share behaves safely.",
+    "Final Expected Result": "Scorecard renders for completed sessions.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1Tn_dlgknAXoCNeNgNd6ftdZoWwU5cUb_/view?usp=drive_linkhttps://drive.google.com/file/d/1L74PGQGc50P-audBmLwYefRoqtqHJnUx/view?usp=drive_link",
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1Tn_dlgknAXoCNeNgNd6ftdZoWwU5cUb_/view?usp=drive_linkhttps://drive.google.com/file/d/1L74PGQGc50P-audBmLwYefRoqtqHJnUx/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 178,
+    "Test Case ID": "TC-REP-003",
+    "Actual Result": "The comparison feature requires sessions to be completed and scored before they can be compared.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "The system correctly prevents comparison when sessions do not meet the required completion and scoring criteria.",
+    "Module": "Reports",
+    "Sub-Module": "Reports",
+    "Feature": "Compare Session A vs B",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "HISTORY_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. If compare UI exists (analytics/compare), select two different sessions.\n2. View delta.\n3. Try same session twice — expect rejection.\n4. Try unscored session.",
+    "Expected Result (per step)": "1. Two sessions selectable.\n2. Comparison metrics/delta shown.\n3. Same-session rejected.\n4. Unscored handled with message.",
+    "Final Expected Result": "Session compare validates selections and shows deltas.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1sqNW0_eXcoPjNVTsVNYHlpvZLl0XvncA/view?usp=drive_link",
+    "Screenshot / Evidence Requirement__hyperlink": "https://drive.google.com/file/d/1sqNW0_eXcoPjNVTsVNYHlpvZLl0XvncA/view?usp=drive_link",
+    "_hyperlinks": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "target": "https://drive.google.com/file/d/1sqNW0_eXcoPjNVTsVNYHlpvZLl0XvncA/view?usp=drive_link",
+        "display": "https://drive.google.com/file/d/1sqNW0_eXcoPjNVTsVNYHlpvZLl0XvncA/view?usp=drive_link"
+      }
+    ],
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1sqNW0_eXcoPjNVTsVNYHlpvZLl0XvncA/view?usp=drive_link"
+      },
+      {
+        "col": "Screenshot / Evidence Requirement__hyperlink",
+        "url": "https://drive.google.com/file/d/1sqNW0_eXcoPjNVTsVNYHlpvZLl0XvncA/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 179,
+    "Test Case ID": "TC-REP-005",
+    "Actual Result": "The session loads successfully and clearly displays “Not Scored” with no question recorded.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "The system handles the missing transcript/session data without displaying an error.",
+    "Module": "Reports",
+    "Sub-Module": "Reports",
+    "Feature": "Missing data session",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Negative",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "HISTORY_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open a session with missing transcript if available.\n2. Observe debrief/score behavior.",
+    "Expected Result (per step)": "1. Opens.\n2. Clear missing-data state — not fake scores.",
+    "Final Expected Result": "Missing data does not fabricate scores.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1jS0oqsSa_f5zpF11iXrk0I0b9McrIf__/view?usp=drive_link",
+    "Screenshot / Evidence Requirement__hyperlink": "https://drive.google.com/file/d/1jS0oqsSa_f5zpF11iXrk0I0b9McrIf__/view?usp=drive_link",
+    "_hyperlinks": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "target": "https://drive.google.com/file/d/1jS0oqsSa_f5zpF11iXrk0I0b9McrIf__/view?usp=drive_link",
+        "display": "https://drive.google.com/file/d/1jS0oqsSa_f5zpF11iXrk0I0b9McrIf__/view?usp=drive_link"
+      }
+    ],
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1jS0oqsSa_f5zpF11iXrk0I0b9McrIf__/view?usp=drive_link"
+      },
+      {
+        "col": "Screenshot / Evidence Requirement__hyperlink",
+        "url": "https://drive.google.com/file/d/1jS0oqsSa_f5zpF11iXrk0I0b9McrIf__/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 180,
+    "Test Case ID": "TC-REP-004",
+    "Actual Result": "The export file downloads successfully and can be opened without issues. No sensitive secrets or credentials are exposed in the exported data.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "Export functionality works as expected and the exported file does not contain secrets.",
+    "Module": "Reports",
+    "Sub-Module": "Reports",
+    "Feature": "Export report",
+    "Priority": "P2",
+    "Severity": "Minor",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "HISTORY_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Use Export if available.\n2. Open downloaded file.\n3. Confirm no secrets embedded.",
+    "Expected Result (per step)": "1. Export starts.\n2. File opens.\n3. Contains expected summary only.",
+    "Final Expected Result": "Export produces a usable file without secrets.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1Lifij7H-dsKdyMKyrURNVAXbmqktbzTA/view?usp=drive_linkhttps://drive.google.com/file/d/1o21OM4TUQfQo9DfepKGOJp7X54yPcwZY/view?usp=drive_link",
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1Lifij7H-dsKdyMKyrURNVAXbmqktbzTA/view?usp=drive_linkhttps://drive.google.com/file/d/1o21OM4TUQfQo9DfepKGOJp7X54yPcwZY/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 181,
+    "Test Case ID": "TC-AN-001",
+    "Actual Result": "Analytics data updates correctly when switching between the available time ranges (7d, 30d, 90d, and all-time).",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "No issues were observed with the chart updates or time-range filters.",
+    "Module": "Analytics",
+    "Sub-Module": "Analytics",
+    "Feature": "Range 7 / 30 / 90 / all",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "HISTORY_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/analytics.\n2. Switch 7d, 30d, 90d, all-time if offered.\n3. Observe chart updates.",
+    "Expected Result (per step)": "1. Page loads (or flag).\n2. Ranges switch.\n3. Charts/empty update without crash.",
+    "Final Expected Result": "Analytics ranges switch correctly.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/15UxISyPF7gXaXAWHctFINDIhs5ONT1QN/view?usp=drive_linkhttps://drive.google.com/file/d/1owcMXVtH3unvhPwcEdrEqYRhv1pcycZQ/view?usp=drive_linkhttps://drive.google.com/file/d/1cKcArMrYmnO8b6T8H2lSZFuw8ioOY7wa/view?usp=drive_linkhttps://drive.google.com/file/d/11XgzoRaNOci2njMRZHwcWXQOH7f3sbU0/view?usp=drive_link",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/analytics."
+      },
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/15UxISyPF7gXaXAWHctFINDIhs5ONT1QN/view?usp=drive_linkhttps://drive.google.com/file/d/1owcMXVtH3unvhPwcEdrEqYRhv1pcycZQ/view?usp=drive_linkhttps://drive.google.com/file/d/1cKcArMrYmnO8b6T8H2lSZFuw8ioOY7wa/view?usp=drive_linkhttps://drive.google.com/file/d/11XgzoRaNOci2njMRZHwcWXQOH7f3sbU0/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 182,
+    "Test Case ID": "TC-AN-002",
+    "Actual Result": "The Analytics page displays the appropriate empty state for the free user without any errors.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "No backend or UI issues were observed.",
+    "Module": "Analytics",
+    "Sub-Module": "Analytics",
+    "Feature": "Empty analytics",
+    "Priority": "P2",
+    "Severity": "Minor",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "FREE_USER_02",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. As FREE_USER_02 open analytics.\n2. Confirm empty state.",
+    "Expected Result (per step)": "1. Opens.\n2. Empty — not error.",
+    "Final Expected Result": "Empty analytics is clear.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/142nfu7tKayO_dnJjFzie3GMQ4Cj1WjGa/view?usp=drive_link",
+    "Screenshot / Evidence Requirement__hyperlink": "https://drive.google.com/file/d/142nfu7tKayO_dnJjFzie3GMQ4Cj1WjGa/view?usp=drive_link",
+    "_hyperlinks": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "target": "https://drive.google.com/file/d/142nfu7tKayO_dnJjFzie3GMQ4Cj1WjGa/view?usp=drive_link",
+        "display": "https://drive.google.com/file/d/142nfu7tKayO_dnJjFzie3GMQ4Cj1WjGa/view?usp=drive_link"
+      }
+    ],
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/142nfu7tKayO_dnJjFzie3GMQ4Cj1WjGa/view?usp=drive_link"
+      },
+      {
+        "col": "Screenshot / Evidence Requirement__hyperlink",
+        "url": "https://drive.google.com/file/d/142nfu7tKayO_dnJjFzie3GMQ4Cj1WjGa/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 183,
+    "Test Case ID": "TC-AN-003",
+    "Actual Result": "Weak topics and performance trends are displayed correctly for the history user, and the available items are clickable and navigate as expected.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "Analytics insights and navigation are working correctly.",
+    "Module": "Analytics",
+    "Sub-Module": "Analytics",
+    "Feature": "Weak topics / trends widgets",
+    "Priority": "P2",
+    "Severity": "Minor",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "HISTORY_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. With history user, locate weak topics/trends.\n2. Click through if clickable.",
+    "Expected Result (per step)": "1. Widgets show data or empty.\n2. Navigation works; do not validate hidden formulas.",
+    "Final Expected Result": "Trend widgets are user-sensible without formula audits.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1fmZx-vq3d3l969Sk72hA3SnSej8ED5PY/view?usp=drive_link",
+    "Screenshot / Evidence Requirement__hyperlink": "https://drive.google.com/file/d/1fmZx-vq3d3l969Sk72hA3SnSej8ED5PY/view?usp=drive_link",
+    "_hyperlinks": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "target": "https://drive.google.com/file/d/1fmZx-vq3d3l969Sk72hA3SnSej8ED5PY/view?usp=drive_link",
+        "display": "https://drive.google.com/file/d/1fmZx-vq3d3l969Sk72hA3SnSej8ED5PY/view?usp=drive_link"
+      }
+    ],
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1fmZx-vq3d3l969Sk72hA3SnSej8ED5PY/view?usp=drive_link"
+      },
+      {
+        "col": "Screenshot / Evidence Requirement__hyperlink",
+        "url": "https://drive.google.com/file/d/1fmZx-vq3d3l969Sk72hA3SnSej8ED5PY/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 184,
+    "Test Case ID": "TC-AN-004",
+    "Actual Result": "Analytics loads successfully under slow network conditions, and the page works correctly after restoring the network and retrying.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "No loading or retry issues were observed.",
+    "Module": "Analytics",
+    "Sub-Module": "Analytics",
+    "Feature": "Loading / error retry",
+    "Priority": "P2",
+    "Severity": "Minor",
+    "Test Type": "Negative",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Slow network; reload analytics.\n2. Restore; retry.",
+    "Expected Result (per step)": "1. Loading/error visible.\n2. Recovers.",
+    "Final Expected Result": "Analytics handles load errors.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1AnW-O0POatkUyvYfgzmqHvWa7Xjrm5mZ/view?usp=drive_link",
+    "Screenshot / Evidence Requirement__hyperlink": "https://drive.google.com/file/d/1AnW-O0POatkUyvYfgzmqHvWa7Xjrm5mZ/view?usp=drive_link",
+    "_hyperlinks": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "target": "https://drive.google.com/file/d/1AnW-O0POatkUyvYfgzmqHvWa7Xjrm5mZ/view?usp=drive_link",
+        "display": "https://drive.google.com/file/d/1AnW-O0POatkUyvYfgzmqHvWa7Xjrm5mZ/view?usp=drive_link"
+      }
+    ],
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1AnW-O0POatkUyvYfgzmqHvWa7Xjrm5mZ/view?usp=drive_link"
+      },
+      {
+        "col": "Screenshot / Evidence Requirement__hyperlink",
+        "url": "https://drive.google.com/file/d/1AnW-O0POatkUyvYfgzmqHvWa7Xjrm5mZ/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 185,
+    "Test Case ID": "TC-BILL-001",
+    "Actual Result": "Billing page loaded successfully, and the plan, credits, and purchase CTAs were visible. However, multiple CORS/connection errors were observed in DevTools from loader.min.js while loading localhost image resources.",
+    "Pass / Fail": "Pass",
+    "Defect ID": "TC-BILL-001",
+    "Execution Date": "2026-08-23 00:00:00",
+    "Notes": "Billing page is functional; unrelated loader.min.js CORS/localhost errors observed in console.",
+    "Module": "Billing",
+    "Sub-Module": "Billing",
+    "Feature": "Billing page loads",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "FREE_USER_01",
+    "Tester": "Raj Balani",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/billing.\n2. Note plan, credits, purchase CTAs.",
+    "Expected Result (per step)": "1. Page loads.\n2. Plan/credits/CTAs visible.",
+    "Final Expected Result": "Billing settings page usable.",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/settings/billing."
+      }
+    ]
+  },
+  {
+    "excel_row": 186,
+    "Test Case ID": "TC-BILL-002",
+    "Actual Result": "Razorpay test checkout opened successfully in test mode, but payment failed with HTTP 400 because the test card was treated as an unsupported international card. The checkout displayed an error and did not complete the payment.",
+    "Pass / Fail": "Fail",
+    "Defect ID": "TC-BILL-002",
+    "Execution Date": "2026-08-23 00:00:00",
+    "Notes": "Razorpay sandbox checkout opens, but the provided test-card payment fails with international_transaction_not_allowed (400).",
+    "Module": "Billing",
+    "Sub-Module": "Billing",
+    "Feature": "Sandbox purchase start (Razorpay/Stripe test)",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "FREE_USER_01",
+    "Tester": "Raj Balani",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Sandbox keys only. Never use real money unless explicitly approved. | Login email/password: see sheet 03 Test Accounts for Account ID FREE_USER_01",
+    "Exact Steps": "1. Click Buy credits / Upgrade using TEST mode only.\n2. Confirm checkout opens sandbox.\n3. Cancel checkout.",
+    "Expected Result (per step)": "1. CTA works.\n2. Sandbox checkout (not live charge).\n3. Cancel returns safely; balance unchanged.",
+    "Final Expected Result": "Checkout opens in sandbox and cancel is safe.",
+    "Screenshot / Evidence Requirement": "Screenshot of sandbox checkout (mask card fields)."
+  },
+  {
+    "excel_row": 187,
+    "Test Case ID": "TC-BILL-003",
+    "Actual Result": "Razorpay payments/validate/account returns HTTP 500 with SERVER_ERROR, preventing the payment flow from completing and credits from being granted.",
+    "Pass / Fail": "Fail",
+    "Defect ID": "TC-BILL-003",
+    "Execution Date": "2026-08-23 00:00:00",
+    "Notes": "Payment attempt → Razorpay validation API 500 → payment flow fails → credit grant cannot be tested",
+    "Module": "Billing",
+    "Sub-Module": "Billing",
+    "Feature": "Successful test payment → credit grant",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "FREE_USER_01",
+    "Tester": "Raj Balani",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Note credits.\n2. Complete sandbox payment with test card/UPI as instructed.\n3. Wait for grant (incl. webhook delay).\n4. Refresh billing; confirm increase + history row.",
+    "Expected Result (per step)": "1. Baseline recorded.\n2. Payment success in sandbox.\n3. Grant appears (allow documented delay).\n4. Balance + history updated.",
+    "Final Expected Result": "Successful sandbox payment grants credits visibly."
+  },
+  {
+    "excel_row": 188,
+    "Test Case ID": "TC-BILL-004",
+    "Actual Result": "Failed payment displayed correctly and no credits were granted.",
+    "Pass / Fail": "Pass",
+    "Defect ID": "TC-BILL-004",
+    "Execution Date": "2026-08-23 00:00:00",
+    "Notes": "Negative payment flow works as expected; credit balance remained unchanged.",
+    "Module": "Billing",
+    "Sub-Module": "Billing",
+    "Feature": "Failed payment",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Negative",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "FREE_USER_01",
+    "Tester": "Raj Balani",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Use failing test payment method if provided.\n2. Observe UI.\n3. Confirm credits unchanged.",
+    "Expected Result (per step)": "1. Failure path.\n2. Clear failure message.\n3. No credit grant.",
+    "Final Expected Result": "Failed payment does not grant credits."
+  },
+  {
+    "excel_row": 189,
+    "Test Case ID": "TC-BILL-005",
+    "Actual Result": "Payment could not be completed due to the payment api failure, so duplicate payment handling and credit grant could not be verified.",
+    "Pass / Fail": "Blocked",
+    "Defect ID": "TC-BILL-005",
+    "Execution Date": "2026-08-23 00:00:00",
+    "Module": "Billing",
+    "Sub-Module": "Billing",
+    "Feature": "Duplicate payment attempt",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Negative",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "FREE_USER_01",
+    "Tester": "Raj Balani",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Start checkout.\n2. Rapidly re-click Buy.\n3. Complete at most one sandbox payment.\n4. Confirm no double grant for one intent.",
+    "Expected Result (per step)": "1. Checkout.\n2. Double click handled.\n3. Single completion.\n4. Credits match single purchase.",
+    "Final Expected Result": "Duplicate payment attempts do not double-grant."
+  },
+  {
+    "excel_row": 190,
+    "Test Case ID": "TC-BILL-006",
+    "Pass / Fail": "Not Run",
+    "Module": "Billing",
+    "Sub-Module": "Billing",
+    "Feature": "Purchase history",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "FREE_USER_01",
+    "Tester": "Raj Balani",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open purchase/billing history.\n2. Match last sandbox purchase.\n3. Refresh.",
+    "Expected Result (per step)": "1. History visible.\n2. Row matches.\n3. Persists.",
+    "Final Expected Result": "Purchase history persists."
+  },
+  {
+    "excel_row": 191,
+    "Test Case ID": "TC-BILL-008",
+    "Pass / Fail": "Not Run",
+    "Module": "Billing",
+    "Sub-Module": "Billing",
+    "Feature": "Plan gate from pricing page",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "FREE_USER_01",
+    "Tester": "Raj Balani",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Logged in as FREE_USER_01 open https://clarify.ai.sltfinanceindia.com/pricing.\n2. Click Pro CTA.\n3. Land on upgrade/checkout.",
+    "Expected Result (per step)": "1. Pricing loads.\n2. CTA works.\n3. Upgrade path correct.",
+    "Final Expected Result": "Pricing CTAs reach upgrade/checkout.",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/pricing."
+      }
+    ]
+  },
+  {
+    "excel_row": 192,
+    "Test Case ID": "TC-BILL-007",
+    "Pass / Fail": "Not Run",
+    "Module": "Billing",
+    "Sub-Module": "Billing",
+    "Feature": "Refund path (if supported in sandbox)",
+    "Priority": "P2",
+    "Severity": "Minor",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "ADMIN_USER_01",
+    "Tester": "Raj Balani",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. If refunds supported in QA, trigger per playbook.\n2. Else mark Requires Configuration / N/A.",
+    "Expected Result (per step)": "1. Refund attempted or N/A.\n2. Balance/history reflect refund or honest N/A.",
+    "Final Expected Result": "Refunds verified only when sandbox supports them."
+  },
+  {
+    "excel_row": 193,
+    "Test Case ID": "TC-CR-001",
+    "Pass / Fail": "Not Run",
+    "Module": "Credits",
+    "Sub-Module": "Credits",
+    "Feature": "Balance visible",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Raj Balani",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/usage and billing.\n2. Record displayed balance.",
+    "Expected Result (per step)": "1. Pages load.\n2. Balance visible and consistent across surfaces.",
+    "Final Expected Result": "Credit balance is visible and consistent.",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/usage"
+      }
+    ]
+  },
+  {
+    "excel_row": 194,
+    "Test Case ID": "TC-CR-002",
+    "Pass / Fail": "Not Run",
+    "Module": "Credits",
+    "Sub-Module": "Credits",
+    "Feature": "Deduction on AI action",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "SUFFICIENT_CREDIT_01",
+    "Tester": "Raj Balani",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Note balance.\n2. Run one credit-consuming AI action (prep/chat/gov generate).\n3. Refresh balance.",
+    "Expected Result (per step)": "1. Baseline.\n2. Action succeeds.\n3. Balance decreases per UI messaging.",
+    "Final Expected Result": "Successful AI action deducts credits as shown to user."
+  },
+  {
+    "excel_row": 195,
+    "Test Case ID": "TC-CR-003",
+    "Pass / Fail": "Not Run",
+    "Module": "Credits",
+    "Sub-Module": "Credits",
+    "Feature": "Zero credit block",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Negative",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "ZERO_CREDIT_01",
+    "Tester": "Raj Balani",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. As ZERO_CREDIT_01 attempt credit action.\n2. Confirm block + CTA.",
+    "Expected Result (per step)": "1. Attempt.\n2. Blocked with upgrade/buy CTA; no silent success.",
+    "Final Expected Result": "Zero credits block consumption cleanly."
+  },
+  {
+    "excel_row": 196,
+    "Test Case ID": "TC-CR-005",
+    "Pass / Fail": "Not Run",
+    "Module": "Credits",
+    "Sub-Module": "Credits",
+    "Feature": "Boundary — exact remaining credits",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Boundary",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "LOW_CREDIT_01",
+    "Tester": "Raj Balani",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. With known small balance, run action costing exactly remaining (if known from UI).\n2. Confirm success then subsequent block.",
+    "Expected Result (per step)": "1. Exact spend succeeds if allowed.\n2. Next action blocks at zero.",
+    "Final Expected Result": "Exact credit boundary behaves correctly."
+  },
+  {
+    "excel_row": 197,
+    "Test Case ID": "TC-CR-006",
+    "Pass / Fail": "Not Run",
+    "Module": "Credits",
+    "Sub-Module": "Credits",
+    "Feature": "Rate limiting vs credit errors",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Negative",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "SUFFICIENT_CREDIT_01",
+    "Tester": "Raj Balani",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Trigger rapid AI calls.\n2. Distinguish rate-limit message vs insufficient credits.",
+    "Expected Result (per step)": "1. Burst.\n2. Messages are distinct and truthful.",
+    "Final Expected Result": "Rate limit is not mislabeled as credit failure."
+  },
+  {
+    "excel_row": 198,
+    "Test Case ID": "TC-CR-004",
+    "Pass / Fail": "Not Run",
+    "Module": "Credits",
+    "Sub-Module": "Credits",
+    "Feature": "Low credit banner",
+    "Priority": "P2",
+    "Severity": "Minor",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "LOW_CREDIT_01",
+    "Tester": "Raj Balani",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. As LOW_CREDIT_01 browse app.\n2. Confirm low-credit banner/warning if product has threshold.",
+    "Expected Result (per step)": "1. Low balance account.\n2. Warning visible or document if not implemented.",
+    "Final Expected Result": "Low credit warning appears when applicable."
+  },
+  {
+    "excel_row": 199,
+    "Test Case ID": "TC-SET-001",
+    "Actual Result": "In Profile there is no data retrive after the refresh losing the data after refresh",
+    "Pass / Fail": "Fail",
+    "Defect ID": "D_ID_10",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "in profile where user can enter the bio, website link is not retrieve the data where as the website link is no validation",
+    "Module": "Settings",
+    "Sub-Module": "profile",
+    "Feature": "Profile save → refresh",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/profile.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+    "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
+    "Final Expected Result": "Settings/profile works with save→refresh persistence where editable.",
+    "Screenshot / Evidence Requirement": "#VALUE!",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/settings/profile."
+      }
+    ]
+  },
+  {
+    "excel_row": 200,
+    "Test Case ID": "TC-SET-008",
+    "Actual Result": "User can't find the save option and update password section click hide/show functionlity",
+    "Pass / Fail": "Fail",
+    "Defect ID": "D_ID_11",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "user can click show/hide option both new and confirm both can operation doing same felid",
+    "Module": "Settings",
+    "Sub-Module": "security",
+    "Feature": "Security / MFA controls visible",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/security.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+    "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
+    "Final Expected Result": "Settings/security works with save→refresh persistence where editable.",
+    "Screenshot / Evidence Requirement": "#VALUE!",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/settings/security."
+      }
+    ]
+  },
+  {
+    "excel_row": 201,
+    "Test Case ID": "TC-SET-012",
+    "Actual Result": "User can't find the save option and Export your data should be the limited rate",
+    "Pass / Fail": "Fail",
+    "Defect ID": "D_ID_12",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "There is no option to save where as the Export Your data have the limited user can download n times using pro account .which 429 to many request.",
+    "Module": "Settings",
+    "Sub-Module": "danger",
+    "Feature": "Danger zone warnings visible",
+    "Priority": "P0",
+    "Severity": "Major",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/danger.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+    "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
+    "Final Expected Result": "Settings/danger works with save→refresh persistence where editable.",
+    "Screenshot / Evidence Requirement": "#VALUE!",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/settings/danger."
+      }
+    ]
+  },
+  {
+    "excel_row": 202,
+    "Test Case ID": "TC-SET-014",
+    "Actual Result": "In billing section there is no  modify and save option where as the apply the promo /referral code check there functionality",
+    "Pass / Fail": "Fail",
+    "Defect ID": "D_ID_13",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "In this referral and promo code is available after enter how to apply or verify the code verify the feature and validation",
+    "Module": "Settings",
+    "Sub-Module": "billing",
+    "Feature": "Billing tab reachable from settings",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/billing.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+    "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
+    "Final Expected Result": "Settings/billing works with save→refresh persistence where editable.",
+    "Screenshot / Evidence Requirement": "#VALUE!",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/settings/billing."
+      }
+    ]
+  },
+  {
+    "excel_row": 203,
+    "Test Case ID": "TC-SET-002",
+    "Actual Result": "In the section apply changes working to save the user instructions and without persistence the after refresh  and also editable.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "where as the user perspective change the appearance and hold the",
+    "Module": "Settings",
+    "Sub-Module": "appearance",
+    "Feature": "Appearance save → refresh",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/appearance.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+    "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
+    "Final Expected Result": "Settings/appearance works with save→refresh persistence where editable.",
+    "Screenshot / Evidence Requirement": "#VALUE!",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/settings/appearance."
+      }
+    ]
+  },
+  {
+    "excel_row": 204,
+    "Test Case ID": "TC-SET-003",
+    "Actual Result": "In  this section save preferences is not persistence(not hold the information) after refresh",
+    "Pass / Fail": "Fail",
+    "Defect ID": "D_ID_14",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "Where as the notifications enable and disable option of the feature the click on save preferences can hold the information after refresh the page .",
+    "Module": "Settings",
+    "Sub-Module": "notifications",
+    "Feature": "Notification prefs save → refresh",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/notifications.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+    "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
+    "Final Expected Result": "Settings/notifications works with save→refresh persistence where editable.",
+    "Screenshot / Evidence Requirement": "#VALUE!",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/settings/notifications."
+      }
+    ]
+  },
+  {
+    "excel_row": 205,
+    "Test Case ID": "TC-SET-004",
+    "Actual Result": "Can't save the information after refresh the page .",
+    "Pass / Fail": "Fail",
+    "Defect ID": "D_ID_15",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "Where as the save audio settings can't hold the information after refresh.it be come again normal mode.",
+    "Module": "Settings",
+    "Sub-Module": "audio",
+    "Feature": "Audio device prefs save → refresh",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/audio.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+    "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
+    "Final Expected Result": "Settings/audio works with save→refresh persistence where editable.",
+    "Screenshot / Evidence Requirement": "#VALUE!",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/settings/audio."
+      }
+    ]
+  },
+  {
+    "excel_row": 206,
+    "Test Case ID": "TC-SET-005",
+    "Actual Result": "where as the practice -coach is save preferences can't hold the instructions when page can refresh",
+    "Pass / Fail": "Fail",
+    "Defect ID": "D_ID_16",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "In this save persistence  can't hold the information it remains same features.",
+    "Module": "Settings",
+    "Sub-Module": "practice-coach",
+    "Feature": "Practice Coach prefs save → refresh",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/practice-coach.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+    "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
+    "Final Expected Result": "Settings/practice-coach works with save→refresh persistence where editable.",
+    "Screenshot / Evidence Requirement": "#VALUE!",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/settings/practice-coach."
+      }
+    ]
+  },
+  {
+    "excel_row": 207,
+    "Test Case ID": "TC-SET-006",
+    "Actual Result": "Here mainly hotkeys after refresh it hold custom and successfully reset all the option where as pressing keys its not be give the proper result",
+    "Pass / Fail": "Fail",
+    "Defect ID": "D_ID_17",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "where as the mainly some keys are not working properly which ctrl+shift+w it not moving the custom section .",
+    "Module": "Settings",
+    "Sub-Module": "hotkeys",
+    "Feature": "Hotkeys page loads / reset",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/hotkeys.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+    "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
+    "Final Expected Result": "Settings/hotkeys works with save→refresh persistence where editable.",
+    "Screenshot / Evidence Requirement": "#VALUE!",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/settings/hotkeys."
+      }
+    ]
+  },
+  {
+    "excel_row": 208,
+    "Test Case ID": "TC-SET-007",
+    "Actual Result": "Here mainly save privacy setting can hold the information give the user can enable and disable option clearly",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "user can clearly save the options and after refresh it will give the persistence",
+    "Module": "Settings",
+    "Sub-Module": "privacy",
+    "Feature": "Privacy prefs save → refresh",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/privacy.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+    "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
+    "Final Expected Result": "Settings/privacy works with save→refresh persistence where editable.",
+    "Screenshot / Evidence Requirement": "#VALUE!",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/settings/privacy."
+      }
+    ]
+  },
+  {
+    "excel_row": 209,
+    "Test Case ID": "TC-SET-009",
+    "Actual Result": "user can change the there related model and save preference which leads the same model after refresh.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "in this mainly font issues is there were as the save preference other wise it give the persistence.",
+    "Module": "Settings",
+    "Sub-Module": "models",
+    "Feature": "Models / BYOK page loads",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/models.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+    "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
+    "Final Expected Result": "Settings/models works with save→refresh persistence where editable.",
+    "Screenshot / Evidence Requirement": "#VALUE!",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/settings/models."
+      }
+    ]
+  },
+  {
+    "excel_row": 210,
+    "Test Case ID": "TC-SET-010",
+    "Actual Result": "user can see the integration models in that calendar can give API 501 (Not Implemented)",
+    "Pass / Fail": "Fail",
+    "Defect ID": "D_ID_18",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "User can't see the save option ,where as list of integration models it can be the calendar can \"Calendar sync is not available yet.\" 501",
+    "Module": "Settings",
+    "Sub-Module": "integrations",
+    "Feature": "Integrations list loads",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/integrations.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+    "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
+    "Final Expected Result": "Settings/integrations works with save→refresh persistence where editable.",
+    "Screenshot / Evidence Requirement": "#VALUE!",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/settings/integrations."
+      }
+    ]
+  },
+  {
+    "excel_row": 211,
+    "Test Case ID": "TC-SET-011",
+    "Actual Result": "User can export the data there is no any save options.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "where as the export data json which get limited rate to download please verity .",
+    "Module": "Settings",
+    "Sub-Module": "data",
+    "Feature": "Data export control",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/data.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+    "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
+    "Final Expected Result": "Settings/data works with save→refresh persistence where editable.",
+    "Screenshot / Evidence Requirement": "#VALUE!",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/settings/data."
+      }
+    ]
+  },
+  {
+    "excel_row": 212,
+    "Test Case ID": "TC-SET-013",
+    "Actual Result": "User change the modification and click on the save preference it will not be persistence",
+    "Pass / Fail": "Fail",
+    "Defect ID": "D_ID_19",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "In the module mainly UI issues there save preference option also scrolling please be verify",
+    "Module": "Settings",
+    "Sub-Module": "polish",
+    "Feature": "Polish prefs save → refresh",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/polish.\n2. Change a safe non-destructive setting if editable.\n3. Save.\n4. Refresh and verify persistence.\n5. For danger/export: do NOT delete account unless on disposable NEW_USER.",
+    "Expected Result (per step)": "1. Page loads.\n2. Controls editable or clearly read-only.\n3. Save succeeds or validates.\n4. Values persist.\n5. Destructive actions require confirm.",
+    "Final Expected Result": "Settings/polish works with save→refresh persistence where editable.",
+    "Screenshot / Evidence Requirement": "#VALUE!",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/settings/polish."
+      }
+    ]
+  },
+  {
+    "excel_row": 213,
+    "Test Case ID": "TC-SET-015",
+    "Pass / Fail": "Not Run",
+    "Notes": "Skip if not authorized this cycle — mark Blocked.",
+    "Module": "Settings",
+    "Sub-Module": "Settings",
+    "Feature": "Account deletion (disposable only)",
+    "Priority": "P1",
+    "Severity": "Critical",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "NEW_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Using disposable NEW_USER only, open Danger zone.\n2. Read warnings.\n3. Complete deletion if approved in this run.\n4. Confirm login fails afterward.",
+    "Expected Result (per step)": "1. Danger page.\n2. Strong confirmations.\n3. Account deleted.\n4. Cannot login.",
+    "Final Expected Result": "Account deletion works on disposable accounts only."
+  },
+  {
+    "excel_row": 214,
+    "Test Case ID": "TC-NTF-001",
+    "Actual Result": "Notifications can be marked as read successfully, and the read status is retained after refreshing the page.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "Notification read-status functionality works as expected.",
+    "Module": "Notifications",
+    "Sub-Module": "Notifications",
+    "Feature": "List read/unread",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/notifications.\n2. Mark read if control exists.\n3. Refresh.",
+    "Expected Result (per step)": "1. List/empty.\n2. Read state updates.\n3. Persists.",
+    "Final Expected Result": "Notification read state persists.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1ueQzjbpkpmW9NxNaMMJMtkUGY35JFIcU/view?usp=drive_linkhttps://drive.google.com/file/d/18cRDd4lrGx3Q_U8oLBEFv440gfU3zYPE/view?usp=drive_link",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/notifications."
+      },
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1ueQzjbpkpmW9NxNaMMJMtkUGY35JFIcU/view?usp=drive_linkhttps://drive.google.com/file/d/18cRDd4lrGx3Q_U8oLBEFv440gfU3zYPE/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 215,
+    "Test Case ID": "TC-NTF-002",
+    "Actual Result": "Unread/All notification filters are not available, so the notification list cannot be filtered by read status.",
+    "Pass / Fail": "Blocked",
+    "Defect ID": "PR-006",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "The filter functionality could not be verified because the required controls are missing.",
+    "Module": "Notifications",
+    "Sub-Module": "Notifications",
+    "Feature": "Filters",
+    "Priority": "P2",
+    "Severity": "Minor",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Apply unread/all filters if present.\n2. Confirm list changes.",
+    "Expected Result (per step)": "1. Filters work.\n2. Results match filter.",
+    "Final Expected Result": "Notification filters work.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1o_0zbw87o2Y3Lfo3XpdsFjKli2UUvw1V/view?usp=drive_link",
+    "Screenshot / Evidence Requirement__hyperlink": "https://drive.google.com/file/d/1o_0zbw87o2Y3Lfo3XpdsFjKli2UUvw1V/view?usp=drive_link",
+    "_hyperlinks": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "target": "https://drive.google.com/file/d/1o_0zbw87o2Y3Lfo3XpdsFjKli2UUvw1V/view?usp=drive_link",
+        "display": "https://drive.google.com/file/d/1o_0zbw87o2Y3Lfo3XpdsFjKli2UUvw1V/view?usp=drive_link"
+      }
+    ],
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1o_0zbw87o2Y3Lfo3XpdsFjKli2UUvw1V/view?usp=drive_link"
+      },
+      {
+        "col": "Screenshot / Evidence Requirement__hyperlink",
+        "url": "https://drive.google.com/file/d/1o_0zbw87o2Y3Lfo3XpdsFjKli2UUvw1V/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 216,
+    "Test Case ID": "TC-NTF-003",
+    "Actual Result": "The application remains usable without any delay or UI instability when handling browser notification permissions.",
+    "Pass / Fail": "Pass",
+    "Execution Date": "2026-08-24 00:00:00",
+    "Notes": "No usability issues were observed.",
+    "Module": "Notifications",
+    "Sub-Module": "Notifications",
+    "Feature": "Browser permission",
+    "Priority": "P2",
+    "Severity": "Minor",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Trigger browser notification permission if prompted.\n2. Allow/deny.\n3. Confirm app still usable.",
+    "Expected Result (per step)": "1. Prompt or settings path.\n2. Choice respected.\n3. No broken UI.",
+    "Final Expected Result": "Browser notification permission handled safely.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1o_0zbw87o2Y3Lfo3XpdsFjKli2UUvw1V/view?usp=drive_link",
+    "Screenshot / Evidence Requirement__hyperlink": "https://drive.google.com/file/d/1o_0zbw87o2Y3Lfo3XpdsFjKli2UUvw1V/view?usp=drive_link",
+    "_hyperlinks": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "target": "https://drive.google.com/file/d/1o_0zbw87o2Y3Lfo3XpdsFjKli2UUvw1V/view?usp=drive_link",
+        "display": "https://drive.google.com/file/d/1o_0zbw87o2Y3Lfo3XpdsFjKli2UUvw1V/view?usp=drive_link"
+      }
+    ],
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1o_0zbw87o2Y3Lfo3XpdsFjKli2UUvw1V/view?usp=drive_link"
+      },
+      {
+        "col": "Screenshot / Evidence Requirement__hyperlink",
+        "url": "https://drive.google.com/file/d/1o_0zbw87o2Y3Lfo3XpdsFjKli2UUvw1V/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 217,
+    "Test Case ID": "TC-NTF-004",
+    "Actual Result": "After disabling a notification type and saving the preference, the setting becomes enabled again after persistence. The notification preference is not being retained correctly.",
+    "Pass / Fail": "Fail",
+    "Defect ID": "PR-007",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "Notification settings are not persisting after save.",
+    "Module": "Notifications",
+    "Sub-Module": "Notifications",
+    "Feature": "Preferences linkage",
+    "Priority": "P2",
+    "Severity": "Minor",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Sultana",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Disable a notification type in Settings.\n2. Trigger related event if possible.\n3. Confirm preference honored or document limits.",
+    "Expected Result (per step)": "1. Pref changed.\n2. Event.\n3. Preference effect observed or Not verifiable noted.",
+    "Final Expected Result": "Notification preferences take effect where testable.",
+    "Screenshot / Evidence Requirement": "https://drive.google.com/file/d/1tZDZLCcwPKYJhN32sqsEeM47nToYYKZp/view?usp=drive_linkhttps://drive.google.com/file/d/1TNzU2vpYUboBwJ002tMUbOIX3LjjvYry/view?usp=drive_link",
+    "_urls_in_text": [
+      {
+        "col": "Screenshot / Evidence Requirement",
+        "url": "https://drive.google.com/file/d/1tZDZLCcwPKYJhN32sqsEeM47nToYYKZp/view?usp=drive_linkhttps://drive.google.com/file/d/1TNzU2vpYUboBwJ002tMUbOIX3LjjvYry/view?usp=drive_link"
+      }
+    ]
+  },
+  {
+    "excel_row": 218,
+    "Test Case ID": "TC-INT-001",
+    "Actual Result": "user can see the integration LIST but not be sync-API 501 (Not Implemented)",
+    "Pass / Fail": "Fail",
+    "Defect ID": "D_ID_20",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "where as the calendar can status the 501 Calendar sync is not available yet. which is not implemented.",
+    "Module": "Integrations",
+    "Sub-Module": "Integrations",
+    "Feature": "List visible integrations",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Open https://clarify.ai.sltfinanceindia.com/app/settings/integrations.\n2. Inventory each card (Google Calendar, etc.).\n3. Classify configured vs not.",
+    "Expected Result (per step)": "1. Page loads.\n2. Cards listed.\n3. Status honest.",
+    "Final Expected Result": "Integrations inventory completed from UI.",
+    "Screenshot / Evidence Requirement": "#VALUE!",
+    "_urls_in_text": [
+      {
+        "col": "Exact Steps",
+        "url": "https://clarify.ai.sltfinanceindia.com/app/settings/integrations."
+      }
+    ]
+  },
+  {
+    "excel_row": 219,
+    "Test Case ID": "TC-INT-002",
+    "Actual Result": "Presently there is no any integration feature is available to connect",
+    "Pass / Fail": "Partial",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "if feature is implenented give the connection option",
+    "Module": "Integrations",
+    "Sub-Module": "Integrations",
+    "Feature": "Connect success path",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. For an available integration, Connect.\n2. Complete OAuth with approved test identity.\n3. Confirm Connected status after return.",
+    "Expected Result (per step)": "1. Connect starts.\n2. OAuth completes.\n3. Connected — not merely dialog opened.",
+    "Final Expected Result": "Connect results in Connected state.",
+    "Screenshot / Evidence Requirement": "#VALUE!"
+  },
+  {
+    "excel_row": 220,
+    "Test Case ID": "TC-INT-003",
+    "Actual Result": "Presently there is no any for failure to connect or deny",
+    "Pass / Fail": "Partial",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "If feature is implenented give the failure option or denty  options are insert",
+    "Module": "Integrations",
+    "Sub-Module": "Integrations",
+    "Feature": "Connect failure / deny",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Negative",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Start Connect.\n2. Deny permissions on provider.\n3. Observe app message.",
+    "Expected Result (per step)": "1. Connect.\n2. Denied.\n3. Clear failure; app stable; not falsely Connected.",
+    "Final Expected Result": "Denied OAuth does not mark Connected.",
+    "Screenshot / Evidence Requirement": "#VALUE!"
+  },
+  {
+    "excel_row": 221,
+    "Test Case ID": "TC-INT-004",
+    "Actual Result": "presently there is no disconnect feature in the inegration module",
+    "Pass / Fail": "Partial",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "if the feature implenented please insert the disconnect feature",
+    "Module": "Integrations",
+    "Sub-Module": "Integrations",
+    "Feature": "Disconnect",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Persistence",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Disconnect a connected integration.\n2. Refresh.\n3. Confirm disconnected.",
+    "Expected Result (per step)": "1. Disconnect.\n2. Refresh.\n3. Status disconnected.",
+    "Final Expected Result": "Disconnect persists.",
+    "Screenshot / Evidence Requirement": "#VALUE!"
+  },
+  {
+    "excel_row": 222,
+    "Test Case ID": "TC-INT-005",
+    "Actual Result": "presently there is connect and there failed features are the not available",
+    "Pass / Fail": "Partial",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "how the approach the if connection get the fails and insert the how it fails discription.",
+    "Module": "Integrations",
+    "Sub-Module": "Integrations",
+    "Feature": "Not configured provider",
+    "Priority": "P1",
+    "Severity": "Major",
+    "Test Type": "Positive",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Venkat",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. If Connect fails with configuration error, capture message.\n2. Mark Requires Configuration — not Pass.",
+    "Expected Result (per step)": "1. Error visible.\n2. Classification Requires Configuration.",
+    "Final Expected Result": "Missing provider config classified correctly.",
+    "Screenshot / Evidence Requirement": "#VALUE!"
+  },
+  {
+    "excel_row": 294,
+    "Test Case ID": "TC-FB-005",
+    "Actual Result": "With sufficient credits, the AI provider request returned 502 Bad Gateway. The system displayed an AI service unavailable message and refunded the credits instead of reporting insufficient credits.",
+    "Pass / Fail": "Pass",
+    "Defect ID": "TC-FB-005",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "Provider failure was correctly distinguished from credit failure.",
+    "Module": "AI / Fallback",
+    "Sub-Module": "AI / Fallback",
+    "Feature": "Provider failure ≠ credit failure",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Negative",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "SUFFICIENT_CREDIT_01",
+    "Tester": "Raj Balani",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. With sufficient credits, induce provider failure.\n2. Compare message to zero-credit message.",
+    "Expected Result (per step)": "1. Credits remain.\n2. Messages distinct; no false insufficient credits.",
+    "Final Expected Result": "Provider failures are not mislabeled as credit errors."
+  },
+  {
+    "excel_row": 300,
+    "Test Case ID": "TC-REG-005",
+    "Actual Result": "prep-tool returned 401 Unauthorized with AUTH_INVALID (Invalid or expired token) while the user was authenticated.",
+    "Pass / Fail": "Fail",
+    "Defect ID": "TC-REG-005",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "Authenticated Prep request was rejected due to an invalid/expired token.",
+    "Module": "Regression",
+    "Sub-Module": "Regression",
+    "Feature": "Credits deduction/grant",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Regression",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Raj Balani",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Re-run TC-CR-002 and TC-BILL-003.\n2. Execute full steps from the referenced case on current build.\n3. Compare to prior fix notes.",
+    "Expected Result (per step)": "1. Case located.\n2. Executed.\n3. Still Pass — Fail if regression.",
+    "Final Expected Result": "Regression check for Credits deduction/grant remains Pass."
+  },
+  {
+    "excel_row": 301,
+    "Test Case ID": "TC-REG-006",
+    "Actual Result": "Payment initiation was blocked because the razorpay-create-order API returned 401 Unauthorized. The UI displayed “Payment service temporarily unavailable.”",
+    "Pass / Fail": "Blocked",
+    "Defect ID": "TC-REG-006",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "Duplicate-charge behavior could not be verified because the payment service could not create the payment order due to the authentication error.",
+    "Module": "Regression",
+    "Sub-Module": "Regression",
+    "Feature": "Duplicate charges",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Regression",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Raj Balani",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Re-run TC-BILL-005.\n2. Execute full steps from the referenced case on current build.\n3. Compare to prior fix notes.",
+    "Expected Result (per step)": "1. Case located.\n2. Executed.\n3. Still Pass — Fail if regression.",
+    "Final Expected Result": "Regression check for Duplicate charges remains Pass."
+  },
+  {
+    "excel_row": 308,
+    "Test Case ID": "TC-REG-013",
+    "Actual Result": "Billing sandbox payment could not be completed because the razorpay-create-order API returned 401 Unauthorized, and the UI displayed “Payment service temporarily unavailable.",
+    "Pass / Fail": "Blocked",
+    "Defect ID": "TC-REG-013",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "Billing sandbox regression could not be verified due to the payment API authentication failure.",
+    "Module": "Regression",
+    "Sub-Module": "Regression",
+    "Feature": "Billing sandbox",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "Regression",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "PRO_USER_01",
+    "Tester": "Raj Balani",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Re-run TC-BILL-002.\n2. Execute full steps from the referenced case on current build.\n3. Compare to prior fix notes.",
+    "Expected Result (per step)": "1. Case located.\n2. Executed.\n3. Still Pass — Fail if regression.",
+    "Final Expected Result": "Regression check for Billing sandbox remains Pass."
+  },
+  {
+    "excel_row": 314,
+    "Test Case ID": "TC-JRN-004",
+    "Actual Result": "Credit purchase and consumption could not be completed because the razorpay-create-order API returned 401 Unauthorized, and the UI displayed “Payment service temporarily unavailable.”",
+    "Pass / Fail": "Blocked",
+    "Defect ID": "TC-JRN-004",
+    "Execution Date": "2026-08-25 00:00:00",
+    "Notes": "End-to-end credit purchase and consumption could not be verified due to the payment API authentication failure.",
+    "Module": "Cross-Module Journeys",
+    "Sub-Module": "Cross-Module Journeys",
+    "Feature": "Journey 4 — Purchase credits and consume",
+    "Priority": "P0",
+    "Severity": "Critical",
+    "Test Type": "E2E Journey",
+    "User Type": "Authenticated",
+    "Role": "user",
+    "Account ID": "FREE_USER_01",
+    "Tester": "Raj Balani",
+    "Preconditions": "Logged in. App URL available. Browser DevTools permitted.",
+    "Test Data": "Use approved test credentials from Test Accounts sheet.",
+    "Exact Steps": "1. Note balance.\n2. Sandbox purchase.\n3. Confirm grant.\n4. Consume via AI action.\n5. Confirm new balance.",
+    "Expected Result (per step)": "1. Baseline.\n2. Paid in sandbox.\n3. Granted.\n4. Consumed.\n5. Balance coherent.",
+    "Final Expected Result": "Purchase → grant → consume balance journey works."
+  }
+]

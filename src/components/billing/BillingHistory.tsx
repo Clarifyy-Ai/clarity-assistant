@@ -64,6 +64,27 @@ export function BillingHistory({
   const [filterType, setFilterType] = useState<'all' | 'purchase' | 'usage' | 'refund' | 'bonus'>('all');
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'amount-desc'>('date-desc');
 
+  const filteredTransactions = transactions
+    .filter((t) => filterType === 'all' || t.type === filterType)
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'date-desc':
+          return b.date.getTime() - a.date.getTime();
+        case 'date-asc':
+          return a.date.getTime() - b.date.getTime();
+        case 'amount-desc':
+          return b.amount - a.amount;
+        default:
+          return 0;
+      }
+    });
+
+  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
+
+  useEffect(() => {
+    setCurrentPage((page) => (totalPages > 0 ? Math.min(page, totalPages) : 1));
+  }, [filteredTransactions.length, itemsPerPage, totalPages]);
+
   useEffect(() => {
     const loadTransactions = async () => {
       if (!profile?.id) return;
@@ -160,22 +181,6 @@ export function BillingHistory({
 
     loadTransactions();
   }, [profile?.id]);
-
-  // Filter and sort
-  const filteredTransactions = transactions
-    .filter((t) => filterType === 'all' || t.type === filterType)
-    .sort((a, b) => {
-      switch (sortBy) {
-        case 'date-desc':
-          return b.date.getTime() - a.date.getTime();
-        case 'date-asc':
-          return a.date.getTime() - b.date.getTime();
-        case 'amount-desc':
-          return b.amount - a.amount;
-        default:
-          return 0;
-      }
-    });
 
   // Paginate
   const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
