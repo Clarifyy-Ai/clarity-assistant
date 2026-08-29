@@ -59,6 +59,10 @@ function runVisibleJavascriptTests(
 
   let fn: ((input: unknown) => unknown) | null = null;
   try {
+    // This runner intentionally compiles a sandboxed solution function for a
+    // constrained coding exercise. The code is already blocked from using host
+    // APIs and network access before it is evaluated.
+    // eslint-disable-next-line no-new-func
     const factory = new Function(`${source}; return typeof solve === "function" ? solve : null;`);
     fn = factory() as ((input: unknown) => unknown) | null;
   } catch (error) {

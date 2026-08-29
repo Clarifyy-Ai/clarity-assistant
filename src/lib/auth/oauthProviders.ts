@@ -18,7 +18,7 @@ const KNOWN_PROVIDERS = new Set<OAuthProviderId>([
 // lists providers that are enabled in the Supabase Auth dashboard.
 function parseProviderList(raw: string | undefined): OAuthProviderId[] {
   if (raw === undefined) {
-    return [];
+    return ["google"];
   }
 
   const trimmed = raw.trim();

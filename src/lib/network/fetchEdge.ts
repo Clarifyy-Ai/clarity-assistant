@@ -137,8 +137,8 @@ const NO_NETWORK_RETRY_FNS = new Set([
   "razorpay-verify-payment",
   "moderate-content",
   "score-coding-submission",
-  // Typeahead / availability: retries amplify rate-limit and spinner storms.
-  "search-exams",
+  // Typeahead / availability: retries are kept to a single attempt to avoid
+  // spinner storms while still recovering from transient network blips.
   "check-exam-paper-availability",
 ]);
 
