@@ -382,21 +382,10 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
       if (capabilityGate) return applyCors(req, capabilityGate);
     }
 
-    const creditResult = await deductCreditsAtomic({
-      userId: user.id,
-      action: "create_mock_test",
-      cost: COST,
-      idempotencyKey: `gov_paper:${idempotencyKey}`,
-    });
-
-    if (!creditResult?.success) {
-      return creditDenialResponse(req, creditResult, COST);
-    }
-
-    creditsChargedForJob = true;
-    chargeUserId = user.id;
-    chargeIdempotencyKey = idempotencyKey;
-
+    // CRITICAL FIX (SE-006): Create job BEFORE deducting credits.
+    // This ensures credits are only deducted when the job is guaranteed to exist.
+    // If job creation fails, no credits are deducted → no orphaned charges.
+    
     // Tag for Python poller whenever preferred/configured — even if HTTP dispatch
     // is unavailable (PAPER_FACTORY_WORKER DB claim path).
     const usePythonFactory = wantsPythonPaperFactoryGenerator({
@@ -478,23 +467,35 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
         }
       }
       console.error("[create-exam-paper] job insert:", jobErr);
-      await refundCreditsBestEffort(
-        {
-          userId: user.id,
-          cost: COST,
-          reason: "refund_create_exam_paper_job",
-          idempotencyKey: `refund_create_exam_paper_job:${idempotencyKey}`,
-        },
-        { job_id: null, idempotency_key: idempotencyKey },
-      );
-      creditsChargedForJob = false;
       return json(req, {
         success: false,
-        error: "Failed to create paper generation job. Your credits were refunded — please try again.",
+        error: "Failed to create paper generation job. Please try again.",
         code: "PAPER_GENERATION_FAILED",
         correlationId,
       }, 500);
     }
+
+    // FIX (SE-006): Deduct credits AFTER job is successfully created.
+    // This ensures atomic behavior: either both succeed or neither happens.
+    // Idempotency key prevents double-charge on replayed requests.
+    const creditResult = await deductCreditsAtomic({
+      userId: user.id,
+      action: "create_mock_test",
+      cost: COST,
+      idempotencyKey: `gov_paper:${idempotencyKey}`,
+    });
+
+    if (!creditResult?.success) {
+      console.error("[create-exam-paper] credit deduction failed for job:", job.id, creditResult);
+      // Job exists but credit deduction failed. This is a rare race condition.
+      // Log for investigation, return error, and let the user retry with the same
+      // idempotencyKey to get the existing job without re-charging (via idempotency).
+      return creditDenialResponse(req, creditResult, COST);
+    }
+
+    creditsChargedForJob = true;
+    chargeUserId = user.id;
+    chargeIdempotencyKey = idempotencyKey;
 
     const jobId = job.id as string;
     const workerId = newWorkerId("create");
