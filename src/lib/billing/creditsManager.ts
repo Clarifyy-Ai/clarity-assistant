@@ -119,6 +119,7 @@ export interface CreditDeductionResult {
   creditsDeducted:  number;
   creditsRemaining: number;
   error:            string | null;
+  code?:            string;
 }
 
 const LOW_CREDIT_THRESHOLD = 5;
@@ -221,15 +222,34 @@ export async function deductCreditsForAction(
     );
 
     if (!response.ok) {
-      if (response.status === 402) {
+      const errBody = await response.json().catch(() => null);
+      const errCode =
+        typeof errBody?.code === "string" ? errBody.code.trim().toUpperCase() : "";
+
+      if (response.status === 402 || errCode === "INSUFFICIENT_CREDITS") {
         await refreshCredits();
-        const errBody = await response.json().catch(() => null);
         const msg = errBody?.error ?? "Insufficient credits";
         return {
           success:          false,
           creditsDeducted:  0,
           creditsRemaining: useAuthStore.getState().profile?.credits ?? 0,
           error:            msg,
+          code:             errCode || "INSUFFICIENT_CREDITS",
+        };
+      }
+
+      if (response.status === 429 || errCode === "MAX_ATTEMPTS_REACHED" || errCode === "RATE_LIMITED") {
+        const msg =
+          errBody?.error ??
+          (errCode === "MAX_ATTEMPTS_REACHED"
+            ? "You have reached today's attempt limit."
+            : "Too many requests. Please wait and try again.");
+        return {
+          success:          false,
+          creditsDeducted:  0,
+          creditsRemaining: useAuthStore.getState().profile?.credits ?? 0,
+          error:            msg,
+          code:             errCode || "RATE_LIMITED",
         };
       }
 

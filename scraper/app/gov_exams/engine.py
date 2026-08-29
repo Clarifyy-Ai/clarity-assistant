@@ -38,7 +38,14 @@ from app.paper_factory.repository import BankQuestion, PaperRepository, _uuid_or
 from app.paper_factory.validate import CandidateValidator, MIN_QUALITY_SCORE, score_assembled_question
 
 AI_ELIGIBLE_MODES = frozenset({"generated_mock", "custom_mock", "adaptive"})
-EXACT_MODES = frozenset({"official_previous", "generated_mock"})
+GOV_QUESTION_COUNT_MIN = 5
+GOV_QUESTION_COUNT_MAX = 100
+
+
+def _clamp_question_count(raw: int | None, *, default: int = 25) -> int:
+    if raw is None or raw < GOV_QUESTION_COUNT_MIN:
+        return GOV_QUESTION_COUNT_MIN
+    return min(GOV_QUESTION_COUNT_MAX, int(raw))
 
 
 def _request_json(job: dict[str, Any]) -> dict[str, Any]:
@@ -129,12 +136,15 @@ async def process_gov_exam_job(
         await set_stage("validating")
         await set_stage("building_blueprint")
 
+        raw_count = _optional_int(payload, "questionCount", "question_count")
+        question_count = _clamp_question_count(raw_count)
+
         request = GenerationRequest(
             exam_query=str(job.get("exam_id")),
             stage=str(job["stage_id"]) if job.get("stage_id") else None,
             mode=mode,
             language=language,
-            question_count=_optional_int(payload, "questionCount", "question_count"),
+            question_count=question_count,
             duration_minutes=_optional_int(payload, "durationMinutes", "duration_minutes"),
             random_seed=seed,
             user_id=user_id or None,

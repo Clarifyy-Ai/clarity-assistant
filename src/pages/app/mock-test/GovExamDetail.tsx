@@ -133,6 +133,8 @@ export default function GovExamDetail(): React.ReactElement {
   const [masteryRows, setMasteryRows] = useState<TopicMasterySummary[]>([]);
   const [prepPlan, setPrepPlan] = useState<PreparationPlanSummary | null>(null);
   const [tabLoading, setTabLoading] = useState(false);
+  const [patternTabError, setPatternTabError] = useState<string | null>(null);
+  const [syllabusTabError, setSyllabusTabError] = useState<string | null>(null);
 
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [topicBusy, setTopicBusy] = useState(false);
@@ -213,12 +215,36 @@ export default function GovExamDetail(): React.ReactElement {
       setTabLoading(true);
       try {
         if (tab === "pattern" && stageId) {
-          const res = await getExamPattern({ examId, stageId });
-          if (!cancelled) setPatternDetail(res);
+          setPatternTabError(null);
+          try {
+            const res = await getExamPattern({ examId, stageId });
+            if (!cancelled) setPatternDetail(res);
+          } catch (e) {
+            if (!cancelled) {
+              setPatternDetail(null);
+              setPatternTabError(
+                e instanceof Error && /PATTERN_NOT/i.test(String(e.message))
+                  ? "Approved exam pattern is not configured for this stage yet."
+                  : "Could not load exam pattern.",
+              );
+            }
+          }
         } else if (tab === "syllabus" || tab === "topic") {
           if (stageId) {
-            const res = await getExamSyllabus({ examId, stageId });
-            if (!cancelled) setSyllabusDetail(res);
+            setSyllabusTabError(null);
+            try {
+              const res = await getExamSyllabus({ examId, stageId });
+              if (!cancelled) setSyllabusDetail(res);
+            } catch (e) {
+              if (!cancelled) {
+                setSyllabusDetail(null);
+                setSyllabusTabError(
+                  e instanceof Error && /SYLLABUS_NOT/i.test(String(e.message))
+                    ? "Approved syllabus is not configured for this stage yet."
+                    : "Could not load syllabus.",
+                );
+              }
+            }
           }
         } else if (tab === "previous") {
           // registry already loaded with details; refresh lightly
@@ -562,7 +588,18 @@ export default function GovExamDetail(): React.ReactElement {
             </div>
           )}
 
-          {tab === "pattern" && !tabLoading && patternDetail && (
+          {tab === "pattern" && !tabLoading && patternTabError && (
+            <InlineErrorRetry
+              message={patternTabError}
+              onRetry={() => {
+                setPatternTabError(null);
+                setTab("overview");
+                window.setTimeout(() => setTab("pattern"), 0);
+              }}
+            />
+          )}
+
+          {tab === "pattern" && !tabLoading && !patternTabError && patternDetail && (
             <section className="space-y-4 rounded-xl border border-border p-5">
               <div>
                 <h3 className="text-sm font-semibold">
@@ -609,7 +646,18 @@ export default function GovExamDetail(): React.ReactElement {
             </section>
           )}
 
-          {tab === "syllabus" && !tabLoading && (
+          {tab === "syllabus" && !tabLoading && syllabusTabError && (
+            <InlineErrorRetry
+              message={syllabusTabError}
+              onRetry={() => {
+                setSyllabusTabError(null);
+                setTab("overview");
+                window.setTimeout(() => setTab("syllabus"), 0);
+              }}
+            />
+          )}
+
+          {tab === "syllabus" && !tabLoading && !syllabusTabError && (
             <section className="space-y-3 rounded-xl border border-border p-5">
               <h3 className="text-sm font-semibold">
                 Syllabus {syllabusDetail?.syllabus.version ?? details.syllabusSummary?.version ?? ""}

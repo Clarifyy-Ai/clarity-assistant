@@ -12,6 +12,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
+import { useOverlaySessionAuthorityStore } from "@/store/overlaySessionAuthorityStore";
 import { cn } from "@/lib/utils";
 import type { LiveSessionConfig } from "@/types/session.types";
 import { notifyOverlayVisibilityOnMobile } from "@/lib/overlay/overlayVisibilityNotice";
@@ -41,7 +42,11 @@ export default function LiveRehearsal() {
     (s) => s.status === "active" && Boolean(s.session_id),
   );
   const overlayVisible = useOverlayStore((s) => s.is_visible);
-  const hasActiveOverlaySession = sessionActive || overlayVisible;
+  const authorityTerminal = useOverlaySessionAuthorityStore(
+    (s) => s.lifecycle === "terminal",
+  );
+  const hasActiveOverlaySession =
+    (sessionActive || overlayVisible) && !authorityTerminal;
   const shouldRedirectToOverlay =
     hasActiveOverlaySession && !endedSessionId && !practiceContextId;
 

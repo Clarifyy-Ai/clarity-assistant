@@ -96,6 +96,8 @@ export interface ProfileRow {
   domain?:            string | null;
   industry?:          string | null;
   interview_date?:    string | null;
+  improvement_goals?: string[] | null;
+  interview_weaknesses?: string[] | null;
   onboarding_step?:   number;
   is_actively_looking?: boolean | null;
   is_banned?:         boolean;

@@ -24,18 +24,51 @@ export type MockGenerateQuestionsRequest = {
   allow_fallback?: boolean;
 };
 
+export type MockQuestionSource =
+  | "approved_bank"
+  | "ai_generated_practice"
+  | "generated_practice_python"
+  | "fallback_bank";
+
 export type MockGenerateQuestionsResult = {
   question: SessionQuestion;
-  source: "ai" | "fallback";
+  source: "ai" | "fallback" | "python";
+  questionSource: MockQuestionSource;
   operationId: string;
   cached?: boolean;
 };
+
+function mapEdgeSourceToQuestionSource(
+  edgeSource: string | undefined,
+  fromClientBank: boolean,
+): MockQuestionSource {
+  if (fromClientBank) return "fallback_bank";
+  switch (edgeSource) {
+    case "fallback":
+    case "database":
+      return "approved_bank";
+    case "python":
+      return "generated_practice_python";
+    case "ai":
+    default:
+      return "ai_generated_practice";
+  }
+}
+
+function tagQuestionWithSource(
+  question: SessionQuestion,
+  questionSource: MockQuestionSource,
+): SessionQuestion {
+  const tags = Array.from(new Set([...(question.tags ?? []), questionSource]));
+  return { ...question, tags };
+}
 
 function mapUserFacingGenerationError(err: unknown): string {
   if (err instanceof ApiClientError) {
     const code = err.code;
     if (
       code === "QUESTION_GENERATION_UNAVAILABLE" ||
+      code === "QUESTION_GENERATION_FAILED" ||
       code === "AI_UNAVAILABLE" ||
       code === "PROVIDER_UNAVAILABLE" ||
       err.status === 502 ||
@@ -115,8 +148,9 @@ export async function generateMockInterviewQuestion(
       });
     }
     return {
-      question: validated.question,
+      question: tagQuestionWithSource(validated.question, "fallback_bank"),
       source: "fallback",
+      questionSource: "fallback_bank",
       operationId: idempotencyKey,
     };
   }
@@ -125,7 +159,7 @@ export async function generateMockInterviewQuestion(
     const data = await fetchEdgeJson<{
       questions?: unknown[];
       data?: { questions?: unknown[] };
-      source?: "ai" | "fallback";
+      source?: "ai" | "fallback" | "python" | "database";
       cached?: boolean;
       success?: boolean;
       code?: string;
@@ -173,9 +207,18 @@ export async function generateMockInterviewQuestion(
         usedTexts,
       });
       if (validated.ok) {
+        const edgeSource = data.source ?? "ai";
+        const mappedSource =
+          edgeSource === "fallback" || edgeSource === "database"
+            ? "fallback"
+            : edgeSource === "python"
+              ? "python"
+              : "ai";
+        const questionSource = mapEdgeSourceToQuestionSource(edgeSource, false);
         return {
-          question: validated.question,
-          source: data.source === "fallback" ? "fallback" : "ai",
+          question: tagQuestionWithSource(validated.question, questionSource),
+          source: mappedSource,
+          questionSource,
           operationId: idempotencyKey,
           cached: Boolean(data.cached),
         };
@@ -207,8 +250,9 @@ export async function generateMockInterviewQuestion(
         });
         if (validated.ok) {
           return {
-            question: validated.question,
+            question: tagQuestionWithSource(validated.question, "fallback_bank"),
             source: "fallback",
+            questionSource: "fallback_bank",
             operationId: idempotencyKey,
           };
         }

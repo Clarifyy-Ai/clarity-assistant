@@ -70,6 +70,27 @@ const TECHNICAL: FallbackBankQuestion[] = [
   },
 ];
 
+const SYSTEM_DESIGN: FallbackBankQuestion[] = [
+  {
+    question: "Design a URL shortener like bit.ly. What are the key components?",
+    difficulty: "medium",
+    type: "system_design",
+    tags: ["scaling", "fallback_bank"],
+  },
+  {
+    question: "How would you design a real-time notification system for millions of users?",
+    difficulty: "hard",
+    type: "system_design",
+    tags: ["realtime", "scaling", "fallback_bank"],
+  },
+  {
+    question: "Design a rate-limited chat application. What trade-offs would you make?",
+    difficulty: "hard",
+    type: "system_design",
+    tags: ["messaging", "fallback_bank"],
+  },
+];
+
 const HR: FallbackBankQuestion[] = [
   {
     question: "Why are you interested in this role and our company?",
@@ -83,11 +104,18 @@ const HR: FallbackBankQuestion[] = [
     type: "hr",
     tags: ["career", "fallback_bank"],
   },
+  {
+    question: "What kind of work environment helps you do your best work?",
+    difficulty: "easy",
+    type: "hr",
+    tags: ["culture", "fallback_bank"],
+  },
 ];
 
 function normalizeType(raw: string): string {
   const t = raw.toLowerCase().replace(/\s+/g, "_");
   if (t === "behavioural" || t === "behavioral") return "behavioral";
+  if (t === "system-design" || t === "system_design") return "system_design";
   return t || "behavioral";
 }
 
@@ -95,10 +123,12 @@ function poolForType(type: string): FallbackBankQuestion[] {
   switch (normalizeType(type)) {
     case "technical":
       return TECHNICAL;
+    case "system_design":
+      return SYSTEM_DESIGN;
     case "hr":
       return HR;
     case "mixed":
-      return [...BEHAVIOURAL, ...TECHNICAL, ...HR];
+      return [...BEHAVIOURAL, ...TECHNICAL, ...SYSTEM_DESIGN, ...HR];
     default:
       return BEHAVIOURAL;
   }

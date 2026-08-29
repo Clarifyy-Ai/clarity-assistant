@@ -72,6 +72,21 @@ export type VADEvent =
 
 // ── Deepgram / STT ────────────────────────────────────────────────
 
+export type DeepgramTokenState =
+  | "idle"
+  | "connecting"
+  | "ready"
+  | "failed";
+
+export type RuntimeMicState =
+  | "not_checked"
+  | "requesting_permission"
+  | "ready"
+  | "permission_denied"
+  | "device_unavailable"
+  | "no_signal"
+  | "error";
+
 export type DeepgramConnectionStatus =
   | "disconnected"
   | "connecting"
@@ -185,6 +200,8 @@ export interface AudioStoreState {
   transcript: TranscriptState;
   vad_config: VADConfig;
   deepgram_status: DeepgramConnectionStatus;
+  token_state: DeepgramTokenState;
+  mic_state: RuntimeMicState;
   pipeline_status: AudioPipelineStatus;
   setup: AudioSetupState;
   noise_level: number;             // 0.0 – 1.0 ambient noise

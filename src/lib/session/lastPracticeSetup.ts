@@ -129,6 +129,14 @@ function readPendingPracticeSetup(remove: boolean): LiveSessionConfig | null {
   }
 }
 
+export function clearPendingPracticeSetup(): void {
+  try {
+    sessionStorage.removeItem(PENDING_SETUP_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 /** Read a handoff config without consuming it (wizard prefill). */
 export function peekPendingPracticeSetup(): LiveSessionConfig | null {
   return readPendingPracticeSetup(false);

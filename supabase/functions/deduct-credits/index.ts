@@ -19,7 +19,7 @@ import {
   withCorsHeaders,
 } from "../_shared/cors.ts";
 
-import { authenticateRequest } from "../_shared/auth.ts";
+import { authenticateRequest, requireOnboardingComplete } from "../_shared/auth.ts";
 
 import {
   checkRateLimitAsync,
@@ -223,6 +223,11 @@ Deno.serve(async (req: Request) => {
   }
 
   const { user } = auth.context;
+
+  const onboardingBlock = await requireOnboardingComplete(user.id, req);
+  if (onboardingBlock) {
+    return withCorsHeaders(req, onboardingBlock);
+  }
 
   const db = createServiceClient();
   if (await isUserBanned(db, user.id)) {

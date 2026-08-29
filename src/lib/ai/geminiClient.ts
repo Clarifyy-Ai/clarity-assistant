@@ -84,6 +84,14 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
       ? opts.questionId
       : undefined;
 
+  const resolvedMode =
+    opts.mode ??
+    (sessionId
+      ? undefined
+      : opts.isLive
+        ? "rehearsal"
+        : "practice");
+
   const body = {
     question,
     model: model ?? "gemini-2.5-flash",
@@ -96,7 +104,8 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
     screenshot_base64: screenshotBase64 ?? null,
     session_id: sessionId ?? null,
     question_id: questionId ?? null,
-    mode: opts.mode ?? null,
+    // Sessionless calls must declare mode; with session_id, Edge uses session type.
+    ...(resolvedMode ? { mode: resolvedMode } : {}),
   };
 
   try {
@@ -129,6 +138,14 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
 export async function streamFullAnswer(opts: GeminiStreamOptions): Promise<void> {
   const { question, context, simpleLanguage, onChunk, onDone, onError, signal, model, screenshotBase64 } = opts;
 
+  const answerSessionId =
+    typeof opts.sessionId === "string" && opts.sessionId.trim()
+      ? opts.sessionId
+      : null;
+  const answerMode =
+    opts.mode ??
+    (answerSessionId ? undefined : opts.isLive ? "rehearsal" : "practice");
+
   const body = {
     question,
     model: model ?? "gemini-2.5-flash",
@@ -137,8 +154,8 @@ export async function streamFullAnswer(opts: GeminiStreamOptions): Promise<void>
     transcript: context.last_transcript ?? "",
     resume_context: context.resume_experience_summary ?? "",
     screenshot_base64: screenshotBase64 ?? null,
-    session_id: opts.sessionId ?? null,
-    mode: opts.mode ?? null,
+    session_id: answerSessionId,
+    ...(answerMode ? { mode: answerMode } : {}),
   };
 
   const idempotencyKey =
@@ -179,7 +196,8 @@ export async function streamFullAnswer(opts: GeminiStreamOptions): Promise<void>
         response.status === 502 ||
         response.status === 503 ||
         code === "PROVIDER_UNAVAILABLE" ||
-        code === "AI_PROVIDER_UNAVAILABLE";
+        code === "AI_PROVIDER_UNAVAILABLE" ||
+        code === "PYTHON_SERVICE_UNAVAILABLE";
       const insufficientCredits =
         !providerUnavailable &&
         (code === "INSUFFICIENT_CREDITS" ||

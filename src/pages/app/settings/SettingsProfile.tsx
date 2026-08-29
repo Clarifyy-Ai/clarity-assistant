@@ -10,11 +10,12 @@ import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import {
   User, Camera, Save, CheckCircle,
-  Briefcase, MapPin, Globe, RotateCcw, Mail, Lock, Eye, EyeOff,
+  Briefcase, Globe, RotateCcw, Mail, Lock, Eye, EyeOff,
 } from "lucide-react";
 import { cn, isValidUrl } from "@/lib/utils";
 import { toast } from "sonner";
 import { getPasswordStrength } from "@/lib/validators/emailValidator";
+import { changePasswordSchema } from "@/lib/validators/authSchemas";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 
 function normalizeWebsiteUrl(raw: string): string | null {
@@ -24,8 +25,31 @@ function normalizeWebsiteUrl(raw: string): string | null {
   if (!isValidUrl(candidate)) {
     throw new Error("Enter a valid website URL (e.g. https://example.com).");
   }
+  try {
+    const u = new URL(candidate);
+    if (u.protocol !== "http:" && u.protocol !== "https:") {
+      throw new Error("Website must use http or https.");
+    }
+    if (!u.hostname.includes(".")) {
+      throw new Error("Enter a valid website URL (e.g. https://example.com).");
+    }
+  } catch (err) {
+    if (err instanceof Error && /valid website|http or https/i.test(err.message)) throw err;
+    throw new Error("Enter a valid website URL (e.g. https://example.com).");
+  }
   return candidate;
 }
+
+const PROFILE_TIMEZONES = [
+  "Asia/Kolkata",
+  "UTC",
+  "America/New_York",
+  "America/Los_Angeles",
+  "Europe/London",
+  "Europe/Berlin",
+  "Asia/Singapore",
+  "Australia/Sydney",
+] as const;
 
 const AVATAR_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
 const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
@@ -63,8 +87,9 @@ export default function SettingsProfile() {
 
   const [name,       setName]       = useState(profile?.full_name ?? "");
   const [bio,        setBio]        = useState(profile?.bio ?? "");
-  const [location,   setLocation]   = useState(profile?.timezone ?? "");
+  const [timezone,   setTimezone]   = useState(profile?.timezone ?? "UTC");
   const [website,    setWebsite]    = useState(profile?.website_url ?? "");
+  const [websiteError, setWebsiteError] = useState<string | null>(null);
   const [experience, setExperience] = useState<string>(yearsToLabel(profile?.experience_years));
   const [targetRole, setTargetRole] = useState(profile?.target_role ?? "");
   const [saving,     setSaving]     = useState(false);
@@ -78,8 +103,9 @@ export default function SettingsProfile() {
     if (!profile) return;
     setName(profile.full_name ?? "");
     setBio(profile.bio ?? "");
-    setLocation(profile.timezone ?? "");
+    setTimezone(profile.timezone ?? "UTC");
     setWebsite(profile.website_url ?? "");
+    setWebsiteError(null);
     setExperience(yearsToLabel(profile.experience_years));
     setTargetRole(profile.target_role ?? "");
     setAvatarUrl(profile.avatar_url ?? "");
@@ -183,16 +209,13 @@ export default function SettingsProfile() {
 
   async function handlePasswordChange() {
     if (!user) return;
-    if (!currentPassword) {
-      toast.error("Enter your current password.");
-      return;
-    }
-    if (!passwordStrength.isAcceptable) {
-      toast.error("Choose a stronger password.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      toast.error("New passwords do not match.");
+    const parsed = changePasswordSchema.safeParse({
+      currentPassword,
+      newPassword,
+      confirmPassword,
+    });
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0]?.message ?? "Password does not meet requirements.");
       return;
     }
 
@@ -227,8 +250,10 @@ export default function SettingsProfile() {
     let websiteUrl: string | null;
     try {
       websiteUrl = normalizeWebsiteUrl(website);
+      setWebsiteError(null);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Invalid website URL.";
+      setWebsiteError(message);
       toast.error(message);
       setSaveFailed(true);
       setSaving(false);
@@ -236,10 +261,14 @@ export default function SettingsProfile() {
     }
 
     const yearsNum = EXPERIENCE_LEVELS.find((l) => l.label === experience)?.years ?? null;
+    const tz =
+      PROFILE_TIMEZONES.includes(timezone as (typeof PROFILE_TIMEZONES)[number])
+        ? timezone
+        : "UTC";
     const updates: Record<string, unknown> = {
       full_name:        name.trim(),
       bio:              bio.trim(),
-      timezone:         location.trim() || "UTC",
+      timezone:         tz,
       website_url:      websiteUrl,
       experience_years: yearsNum,
       target_role:      targetRole || null,
@@ -338,20 +367,56 @@ export default function SettingsProfile() {
             </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Location"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="e.g. London, UK"
-              leftIcon={<MapPin className="w-3.5 h-3.5" />}
-            />
-            <Input
-              label="Website"
-              value={website}
-              onChange={(e) => setWebsite(e.target.value)}
-              placeholder="https://…"
-              leftIcon={<Globe className="w-3.5 h-3.5" />}
-            />
+            <div>
+              <label className="text-xs font-medium text-foreground mb-1.5 block" htmlFor="profile-timezone">
+                Timezone
+              </label>
+              <select
+                id="profile-timezone"
+                value={PROFILE_TIMEZONES.includes(timezone as (typeof PROFILE_TIMEZONES)[number]) ? timezone : "UTC"}
+                onChange={(e) => setTimezone(e.target.value)}
+                className="w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm"
+              >
+                {PROFILE_TIMEZONES.map((z) => (
+                  <option key={z} value={z}>
+                    {z}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                Canonical IANA timezone used for reminders and scheduling.
+              </p>
+            </div>
+            <div>
+              <Input
+                label="Website"
+                value={website}
+                onChange={(e) => {
+                  setWebsite(e.target.value);
+                  setWebsiteError(null);
+                }}
+                onBlur={() => {
+                  if (!website.trim()) {
+                    setWebsiteError(null);
+                    return;
+                  }
+                  try {
+                    normalizeWebsiteUrl(website);
+                    setWebsiteError(null);
+                  } catch (err) {
+                    setWebsiteError(err instanceof Error ? err.message : "Invalid website URL.");
+                  }
+                }}
+                placeholder="https://example.com"
+                leftIcon={<Globe className="w-3.5 h-3.5" />}
+                aria-invalid={Boolean(websiteError)}
+              />
+              {websiteError && (
+                <p className="mt-1 text-xs text-destructive" role="alert">
+                  {websiteError}
+                </p>
+              )}
+            </div>
           </div>
         </div>
       </Card>

@@ -35,9 +35,20 @@ export function sanitizeCoachTone(input: unknown, fallback: CoachTone = "encoura
 
 export function sanitizeHintStyle(input: unknown, fallback: HintStyle = "short_hints"): HintStyle {
   const value = String(input ?? "").trim().toLowerCase();
-  return (HINT_STYLES as readonly string[]).includes(value)
-    ? (value as HintStyle)
-    : fallback;
+  if ((HINT_STYLES as readonly string[]).includes(value)) {
+    return value as HintStyle;
+  }
+  // Wizard / profile legacy values
+  switch (value) {
+    case "minimal":
+      return "keywords_only";
+    case "balanced":
+      return "short_hints";
+    case "detailed":
+      return "full_answer";
+    default:
+      return fallback;
+  }
 }
 
 function asString(value: unknown): string {

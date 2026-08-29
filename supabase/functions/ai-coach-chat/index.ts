@@ -14,6 +14,7 @@ import {
 import {
   authenticateRequest,
   enforceResourceOwnership,
+  requireOnboardingComplete,
   resolveUserPlanId,
 } from "../_shared/auth.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
@@ -406,6 +407,11 @@ Deno.serve(async (req: Request) => {
   }
 
   const { user } = auth.context;
+
+  const onboardingBlock = await requireOnboardingComplete(user.id, req);
+  if (onboardingBlock) {
+    return withCorsHeaders(req, onboardingBlock);
+  }
   const planId = await resolveUserPlanId(user.id);
   const capabilityGate = await requireCapabilityForFunction(
     planId,

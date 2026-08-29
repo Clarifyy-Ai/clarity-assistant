@@ -15,9 +15,9 @@
 
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
-import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders, withCorsHeaders } from "../_shared/cors.ts";
 import { bannedResponse, isUserBanned } from "../_shared/banCheck.ts";
-import { authenticateRequest } from "../_shared/auth.ts";
+import { authenticateRequest, requireOnboardingComplete } from "../_shared/auth.ts";
 
 import {
   enforceAiSessionAccess,
@@ -569,6 +569,11 @@ Deno.serve(async (req: Request) => {
 
   const { user } = auth.context;
 
+  const onboardingBlock = await requireOnboardingComplete(user.id, req);
+  if (onboardingBlock) {
+    return withCorsHeaders(req, onboardingBlock);
+  }
+
   const rateLimitResult = await checkRateLimitAsync(db, {
     key: createRateLimitKey(FUNCTION_NAME, user.id),
     ...RATE_LIMIT_PRESETS.AI_GENERATION_STRICT,
@@ -773,6 +778,7 @@ Deno.serve(async (req: Request) => {
           transcript: body.transcript,
           interview_type: body.interview_type,
           resume_context: body.resume_context,
+          target_company: body.target_company,
         },
       });
       if (!pythonCoach.ok) return null;

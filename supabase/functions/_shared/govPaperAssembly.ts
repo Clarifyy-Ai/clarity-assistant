@@ -9,7 +9,7 @@
  * `allowDeterministicFill`).
  */
 
-import { createServiceClient, refundCredits } from "./supabase.ts";
+import { createServiceClient, refundCreditsBestEffort } from "./supabase.ts";
 import { claimJobCreditsForRefund } from "./claimJobCredits.ts";
 import {
   buildBlueprint,
@@ -281,12 +281,15 @@ async function failJob(
   );
   const cost = await claimJobCreditsForRefund(db, job.id);
   if (cost > 0) {
-    await refundCredits({
-      userId: job.user_id,
-      cost,
-      reason: `refund_paper_gen_${errorCode.toLowerCase()}`,
-      idempotencyKey: `refund_paper_job:${job.id}`,
-    }).catch(() => {});
+    await refundCreditsBestEffort(
+      {
+        userId: job.user_id,
+        cost,
+        reason: `refund_paper_gen_${errorCode.toLowerCase()}`,
+        idempotencyKey: `refund_paper_job:${job.id}`,
+      },
+      { job_id: job.id, error_code: errorCode },
+    );
   }
 }
 

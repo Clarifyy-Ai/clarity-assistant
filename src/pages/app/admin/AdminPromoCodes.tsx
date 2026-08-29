@@ -31,6 +31,7 @@ export default function AdminPromoCodes() {
   const [bonus, setBonus] = useState("0");
   const [maxRedemptions, setMaxRedemptions] = useState<string>("");
   const [validUntil, setValidUntil] = useState("");
+  const [saving, setSaving] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -51,6 +52,7 @@ export default function AdminPromoCodes() {
   }, []);
 
   async function createPromo() {
+    if (saving) return;
     const trimmed = code.trim().toUpperCase();
     if (trimmed.length < 4) {
       toast.error("Code must be at least 4 characters");
@@ -66,21 +68,31 @@ export default function AdminPromoCodes() {
       toast.error("Bonus credits must be a whole number (e.g. 100 or 0100)");
       return;
     }
-    const { data, error } = await supabase
-      .from("promo_codes")
-      .insert({
-        code: trimmed,
-        discount_percent: discountNum,
-        bonus_credits: bonusNum,
-        applies_to: "all",
-        is_active: true,
-        max_redemptions: maxRedemptions.trim() ? Number(maxRedemptions) : null,
-        valid_until: validUntil ? new Date(validUntil).toISOString() : null,
-      })
-      .select("id")
-      .maybeSingle();
-    if (error) toast.error(adminActionFailedMessage(error));
-    else {
+    const maxRaw = maxRedemptions.trim();
+    const maxNum = maxRaw ? Number.parseInt(maxRaw, 10) : null;
+    if (maxRaw && (!Number.isFinite(maxNum) || (maxNum as number) < 1)) {
+      toast.error("Max redemptions must be a positive whole number");
+      return;
+    }
+    setSaving(true);
+    try {
+      const { data, error } = await supabase
+        .from("promo_codes")
+        .insert({
+          code: trimmed,
+          discount_percent: discountNum,
+          bonus_credits: bonusNum,
+          applies_to: "all",
+          is_active: true,
+          max_redemptions: maxNum,
+          valid_until: validUntil ? new Date(validUntil).toISOString() : null,
+        })
+        .select("id, bonus_credits")
+        .maybeSingle();
+      if (error) {
+        toast.error(adminActionFailedMessage(error));
+        return;
+      }
       if (data?.id) {
         await writeAdminAudit({
           action: "create",
@@ -89,16 +101,21 @@ export default function AdminPromoCodes() {
           newValue: {
             code: trimmed,
             discount_percent: discountNum,
-            bonus_credits: bonusNum,
+            bonus_credits: data.bonus_credits ?? bonusNum,
           },
         });
       }
-      toast.success(`Promo code created${bonusNum > 0 ? ` (+${bonusNum} bonus credits)` : ""}`);
+      const stored = Number(data?.bonus_credits ?? bonusNum);
+      toast.success(
+        `Promo code created${stored > 0 ? ` (+${stored} bonus credits)` : ""}`,
+      );
       setCode("");
       setBonus("0");
       setMaxRedemptions("");
       setValidUntil("");
-      void load();
+      await load();
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -170,8 +187,12 @@ export default function AdminPromoCodes() {
             value={validUntil}
             onChange={(e) => setValidUntil(e.target.value)}
           />
-          <Button onClick={() => void createPromo()} leftIcon={<Plus className="w-4 h-4" />}>
-            Add
+          <Button
+            onClick={() => void createPromo()}
+            disabled={saving}
+            leftIcon={<Plus className="w-4 h-4" />}
+          >
+            {saving ? "Saving…" : "Add"}
           </Button>
         </div>
       </Card>

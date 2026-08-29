@@ -1,19 +1,35 @@
 import type { DetectedOs } from "@/lib/platform/detectOs";
 
+function sanitizeProductionUrl(raw: string | undefined): string {
+  const trimmed = raw?.trim() ?? "";
+  if (!trimmed) return "";
+  if (
+    import.meta.env.PROD &&
+    /^(https?:\/\/)?(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/i.test(trimmed)
+  ) {
+    return "";
+  }
+  return trimmed;
+}
+
 /** Optional direct installer URL (all platforms). */
-export const DESKTOP_DOWNLOAD_URL =
-  (typeof import.meta !== "undefined" &&
-    (import.meta.env.VITE_DESKTOP_DOWNLOAD_URL as string | undefined)?.trim()) ||
-  "";
+export const DESKTOP_DOWNLOAD_URL = sanitizeProductionUrl(
+  typeof import.meta !== "undefined"
+    ? (import.meta.env.VITE_DESKTOP_DOWNLOAD_URL as string | undefined)
+    : undefined,
+);
 
-const DESKTOP_DOWNLOAD_URL_WIN =
-  (import.meta.env.VITE_DESKTOP_DOWNLOAD_URL_WIN as string | undefined)?.trim() || "";
+const DESKTOP_DOWNLOAD_URL_WIN = sanitizeProductionUrl(
+  import.meta.env.VITE_DESKTOP_DOWNLOAD_URL_WIN as string | undefined,
+);
 
-const DESKTOP_DOWNLOAD_URL_MAC =
-  (import.meta.env.VITE_DESKTOP_DOWNLOAD_URL_MAC as string | undefined)?.trim() || "";
+const DESKTOP_DOWNLOAD_URL_MAC = sanitizeProductionUrl(
+  import.meta.env.VITE_DESKTOP_DOWNLOAD_URL_MAC as string | undefined,
+);
 
-const DESKTOP_DOWNLOAD_URL_LINUX =
-  (import.meta.env.VITE_DESKTOP_DOWNLOAD_URL_LINUX as string | undefined)?.trim() || "";
+const DESKTOP_DOWNLOAD_URL_LINUX = sanitizeProductionUrl(
+  import.meta.env.VITE_DESKTOP_DOWNLOAD_URL_LINUX as string | undefined,
+);
 
 /**
  * GitHub repo for auto-resolving latest release asset (owner/repo).

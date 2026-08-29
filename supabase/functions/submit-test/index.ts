@@ -1,6 +1,7 @@
 // supabase/functions/submit-test/index.ts
 // PRODUCTION-READY VERSION
 
+import { requireOnboardingComplete } from "../_shared/auth.ts";
 import {
   handleCors,
   requireAuth,
@@ -394,6 +395,9 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
     const auth = await requireAuth(req);
     const userId = auth.userId;
     const db = createServiceClient();
+
+    const onboardingBlock = await requireOnboardingComplete(userId, req);
+    if (onboardingBlock) return onboardingBlock;
 
     const rateLimitResult = await checkRateLimitAsync(db, {
       key: createRateLimitKey("submit-test", auth.userId),

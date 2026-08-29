@@ -16,6 +16,8 @@ export interface SessionRefreshResult {
 const SESSION_SKEW_MS = 60_000;
 
 let inFlight: Promise<SessionRefreshResult> | null = null;
+/** True when the current inFlight was started with forceRefresh. */
+let inFlightForced = false;
 
 export function isSessionNearExpiry(
   expiresAtSeconds: number | null | undefined,
@@ -40,24 +42,41 @@ function toResult(
 }
 
 /**
- * One session refresh at a time. Reads the current session, refreshes only
- * when the access token is missing or near expiry, and never starts Dashboard
- * work on a known-expired token.
+ * One session refresh at a time. Soft callers coalesce. A forceRefresh caller
+ * never joins a soft in-flight (that would skip refresh and reattach a stale JWT).
+ * Multiple forceRefresh callers still share a single refresh.
  */
 export async function ensureAuthSession(options?: {
   forceRefresh?: boolean;
   now?: number;
 }): Promise<SessionRefreshResult> {
-  if (inFlight) return inFlight;
+  const forceRefresh = options?.forceRefresh === true;
 
-  inFlight = runEnsure(options).finally(() => {
-    inFlight = null;
-  });
+  if (inFlight) {
+    // Soft → join any in-flight. Force → join only another force.
+    if (!forceRefresh || inFlightForced) {
+      return inFlight;
+    }
+    // Soft in-flight cannot satisfy forceRefresh — wait, then start a force pass.
+    try {
+      await inFlight;
+    } catch {
+      /* continue to force refresh */
+    }
+  }
+
+  inFlightForced = forceRefresh;
+  inFlight = runEnsure({ ...options, forceRefresh })
+    .finally(() => {
+      inFlight = null;
+      inFlightForced = false;
+    });
   return inFlight;
 }
 
 export function __resetSessionRefreshForTests(): void {
   inFlight = null;
+  inFlightForced = false;
 }
 
 async function runEnsure(options?: {

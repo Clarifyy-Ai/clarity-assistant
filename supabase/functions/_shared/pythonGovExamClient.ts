@@ -27,6 +27,7 @@ export type PythonAvailabilityRequest = {
   difficulty?: string | null;
   correlation_id: string;
   job_id?: string | null;
+  bank_type_keys?: string[];
 };
 
 export type PythonAvailabilityResult = {
@@ -348,6 +349,7 @@ export async function pythonGovAvailability(
       difficulty: input.difficulty ?? null,
       correlation_id: correlationId,
       job_id: input.job_id ?? null,
+      bank_type_keys: input.bank_type_keys ?? [],
     },
     {
       timeoutMs: DEFAULT_TIMEOUT_MS,

@@ -1,7 +1,6 @@
 import { memo, useEffect, useState } from "react";
 import { Navigate, Outlet, useLocation, Link } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
-import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { AppLoadingFallback } from "@/components/layout/AppLoadingFallback";
 import { AlertCircle } from "lucide-react";
@@ -21,10 +20,9 @@ import {
 import { canRetryAccountRecovery } from "@/lib/auth/accountBootstrap";
 import { SUPPORT_EMAIL } from "@/lib/constants/contact";
 import { useClaimStoredReferral } from "@/hooks/useClaimStoredReferral";
-import {
-  evaluateMfaAssurance,
-  MFA_REQUIRED_REASON,
-} from "@/hooks/useAuth";
+import { MFA_REQUIRED_REASON } from "@/hooks/useAuth";
+import { resolveMfaGateDecision } from "@/lib/auth/mfaGate";
+import { canBrowseGovExamsBeforeProfileReady } from "@/lib/gov-exam/govExamRoutes";
 
 interface ProtectedRouteProps {
   requireOnboarding?: boolean;
@@ -124,7 +122,6 @@ export const ProtectedRoute = memo(function ProtectedRoute({
   const isAdminResolved = useAuthStore((s) => s.isAdminResolved);
   const needsStaffGate = requireAdmin || requireStaff;
   const isProfileLoaded = useAuthStore((s) => s.isProfileLoaded);
-  const isOnboarded = useAuthStore((s) => s.isOnboarded);
 
   const location = useLocation();
   const [adminWaitExpired, setAdminWaitExpired] = useState(false);
@@ -162,11 +159,9 @@ export const ProtectedRoute = memo(function ProtectedRoute({
 
     void (async () => {
       try {
-        const { data: aal, error } =
-          await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-        const decision = evaluateMfaAssurance({ error, aal });
+        const gate = await resolveMfaGateDecision();
         if (cancelled) return;
-        if (decision === "allow") {
+        if (gate.decision === "allow") {
           setMfaVerifiedUserId(userId);
           setMfaAal("ok");
         } else {
@@ -194,11 +189,18 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     return () => window.clearTimeout(t);
   }, [needsStaffGate, isProfileLoaded, isAdminResolved]);
 
-  // Wait for authoritative account context. Never render protected pages
-  // while session/profile are still resolving.
+  const govBrowseBeforeProfile = canBrowseGovExamsBeforeProfileReady({
+    pathname: location.pathname,
+    status,
+    hasUser: Boolean(user),
+    mfaBlocked: mfaAal === "pending" || mfaAal === "block",
+  });
+
+  // Wait for authoritative account context. Government Exam search may render
+  // once auth + MFA are ready even if profile bootstrap is still in flight.
   if (
     accountPhase === "INITIALIZING" ||
-    accountPhase === "ACCOUNT_LOADING" ||
+    (accountPhase === "ACCOUNT_LOADING" && !govBrowseBeforeProfile) ||
     accountPhase === "AUTHENTICATED"
   ) {
     return <AppLoadingFallback />;
@@ -407,10 +409,13 @@ export const ProtectedRoute = memo(function ProtectedRoute({
   // Source of truth is profiles.onboarding_completed (not persisted isOnboarded alone),
   // so a stale local true cannot bypass the gate for incomplete accounts.
   if (requireOnboarded || requireOnboarding) {
-    if (!isProfileLoaded) {
+    if (!isProfileLoaded && !govBrowseBeforeProfile) {
       return <AppLoadingFallback />;
     }
-    const completed = profile?.onboarding_completed === true;
+    const completed =
+      !isProfileLoaded && govBrowseBeforeProfile
+        ? true
+        : profile?.onboarding_completed === true;
     if (!completed) {
       logger.info(LogEvents.ROUTE_GUARD_DECISION, {
         route: location.pathname,

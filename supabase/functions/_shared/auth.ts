@@ -430,6 +430,48 @@ export async function resolveUserPlanId(userId: string): Promise<string> {
 }
 
 /**
+ * Standard 403 when onboarding is incomplete.
+ */
+export function onboardingRequiredResponse(req?: Request): Response {
+  return jsonResponse(
+    {
+      error: "Complete onboarding before using this feature.",
+      code: "ONBOARDING_REQUIRED",
+    },
+    403,
+    req ? getCorsHeaders(req) : {},
+  );
+}
+
+/**
+ * Server-side onboarding gate for protected Edge capabilities.
+ */
+export async function requireOnboardingComplete(
+  userId: string,
+  req?: Request,
+): Promise<Response | null> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("onboarding_completed")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[auth] onboarding check failed:", error.message);
+    const dependencyError = new Error("Authorization dependency unavailable.");
+    dependencyError.name = "DependencyUnavailableError";
+    throw dependencyError;
+  }
+
+  if (!data?.onboarding_completed) {
+    return onboardingRequiredResponse(req);
+  }
+
+  return null;
+}
+
+/**
  * Requires admin role.
  *
  * Throws if user is not admin.

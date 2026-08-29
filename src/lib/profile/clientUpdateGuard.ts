@@ -24,6 +24,8 @@ export const PROFILE_CLIENT_PINNED_COLUMNS = [
   "byok_gemini",
   "byok_openai",
   "byok_anthropic",
+  "onboarding_completed",
+  "onboarding_step",
 ] as const;
 
 export type ProfilePinnedColumn = (typeof PROFILE_CLIENT_PINNED_COLUMNS)[number];

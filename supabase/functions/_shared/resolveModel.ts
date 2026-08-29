@@ -102,14 +102,15 @@ export async function resolveModel(
 
 export function getFallbackModels(primary: string): string[] {
   const chain = [primary];
-  if (primary !== "gemini-2.5-flash") chain.push("gemini-2.5-flash");
-  if (primary !== "gemini-flash-latest") chain.push("gemini-flash-latest");
-  // When Gemini quota is exhausted (429), fail over to OpenAI/Anthropic if configured.
+  // Prefer cross-provider failover before additional Gemini models — Gemini
+  // project quota/404 often affects the whole Gemini family at once.
   if ((Deno.env.get("OPENAI_API_KEY") ?? "").trim()) {
     chain.push("gpt-4o-mini");
   }
   if ((Deno.env.get("ANTHROPIC_API_KEY") ?? "").trim()) {
     chain.push("claude-3-haiku-20240307");
   }
+  if (primary !== "gemini-2.5-flash") chain.push("gemini-2.5-flash");
+  if (primary !== "gemini-flash-latest") chain.push("gemini-flash-latest");
   return [...new Set(chain)];
 }

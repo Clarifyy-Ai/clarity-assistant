@@ -19,6 +19,7 @@ import {
 import {
   authenticateRequest,
   enforceResourceOwnership,
+  requireOnboardingComplete,
   resolveUserPlanId,
 } from "../_shared/auth.ts";
 
@@ -555,6 +556,37 @@ function buildQuestionsHybridData(
   };
 }
 
+/** Ensure we never return 200 with empty or malformed question stems. */
+function filterValidCleanQuestions(questions: CleanQuestion[]): CleanQuestion[] {
+  return questions.filter((q) => {
+    const text = (q.question_text ?? q.question ?? "").trim();
+    return text.length >= 8;
+  });
+}
+
+/** Last-resort approved bank when hybrid chain exhausts all providers. */
+function tryTerminalBankFallback(
+  interviewType: string,
+  questionCount: number,
+  excludeTexts: string[],
+  difficulty: string,
+  requestId: string,
+): QuestionsHybridData | null {
+  const bank = fallbackToCleanQuestions(
+    interviewType,
+    questionCount,
+    excludeTexts,
+    difficulty,
+  );
+  const valid = filterValidCleanQuestions(bank);
+  if (valid.length === 0) return null;
+  return buildQuestionsHybridData(
+    valid.slice(0, Math.max(1, questionCount)),
+    requestId,
+    "fallback",
+  );
+}
+
 function extractQuestionsFromPythonJson(json: unknown): CleanQuestion[] {
   if (!json || typeof json !== "object") return [];
   const obj = json as Record<string, unknown>;
@@ -698,6 +730,11 @@ Deno.serve(async (req: Request) => {
   }
 
   const { user } = auth.context;
+
+  const onboardingBlock = await requireOnboardingComplete(user.id, req);
+  if (onboardingBlock) {
+    return withCorsHeaders(req, onboardingBlock);
+  }
 
   const planId = await resolveUserPlanId(user.id);
   const capabilityGate = await requireCapabilityForFunction(planId, FUNCTION_NAME, req);
@@ -846,11 +883,21 @@ Deno.serve(async (req: Request) => {
         body.exclude_questions,
         body.difficulty,
       );
-      if (bank.length < body.questionCount && !isAiForceUnavailable()) {
-        return null;
+      const valid = filterValidCleanQuestions(bank);
+      if (valid.length === 0) return null;
+      // Return any usable bank question(s) — do not defer a partial bank to AI when we have at least one.
+      if (
+        body.questionCount === 1 ||
+        valid.length >= body.questionCount ||
+        isAiForceUnavailable()
+      ) {
+        return buildQuestionsHybridData(
+          valid.slice(0, body.questionCount),
+          requestId,
+          "fallback",
+        );
       }
-      if (bank.length === 0) return null;
-      return buildQuestionsHybridData(bank, requestId, "fallback");
+      return null;
     },
     runAi: async () => {
       const ai = await withTimeout(
@@ -970,6 +1017,62 @@ Deno.serve(async (req: Request) => {
   });
 
   if (!hybridResult.ok) {
+    // Terminal approved-bank fallback before truthful 503 (bank exhausted only when exclude list covers all).
+    if (body.allow_fallback && body.questionCount <= 15) {
+      const terminal = tryTerminalBankFallback(
+        body.interviewType,
+        body.questionCount,
+        body.exclude_questions,
+        body.difficulty,
+        requestId,
+      );
+      if (terminal && terminal.questions.length > 0) {
+        if (idempotencyKey) {
+          await storeIdempotentResponse(
+            db,
+            idempotencyKey,
+            {
+              success: true,
+              payload: {
+                questions: terminal.questions,
+                source: "fallback",
+                parse_status: "completed",
+              },
+            },
+            {
+              userId: user.id,
+              action: "generate_questions",
+              requestHash,
+            },
+          );
+        }
+        await logAiAudit({
+          req,
+          userId: user.id,
+          action: "GENERATE_QUESTIONS",
+          sessionId: body.session_id ?? null,
+          status: "success",
+          metadata: {
+            requestId,
+            count: terminal.questions.length,
+            requestedCount: body.questionCount,
+            source: "fallback",
+            cost: creditCharge,
+            terminal_bank_fallback: true,
+            prior_hybrid_code: hybridResult.code,
+          },
+        });
+        return json(
+          corsHeaders,
+          200,
+          successPayload(terminal.questions, requestId, {
+            source: "fallback",
+            cached: false,
+          }),
+        );
+      }
+    }
+
     await logAiAudit({
       req,
       userId: user.id,
@@ -985,7 +1088,56 @@ Deno.serve(async (req: Request) => {
   }
 
   const payload = hybridResult.data;
-  const source = payload.source;
+  const validQuestions = filterValidCleanQuestions(payload.questions);
+  if (validQuestions.length === 0) {
+    const terminal = body.allow_fallback
+      ? tryTerminalBankFallback(
+          body.interviewType,
+          body.questionCount,
+          body.exclude_questions,
+          body.difficulty,
+          requestId,
+        )
+      : null;
+    if (terminal && terminal.questions.length > 0) {
+      if (idempotencyKey) {
+        await storeIdempotentResponse(
+          db,
+          idempotencyKey,
+          {
+            success: true,
+            payload: {
+              questions: terminal.questions,
+              source: "fallback",
+              parse_status: "completed",
+            },
+          },
+          {
+            userId: user.id,
+            action: "generate_questions",
+            requestHash,
+          },
+        );
+      }
+      return json(
+        corsHeaders,
+        200,
+        successPayload(terminal.questions, requestId, {
+          source: "fallback",
+          cached: false,
+        }),
+      );
+    }
+    return json(corsHeaders, 503, {
+      success: false,
+      error: "No valid questions could be generated.",
+      code: "QUESTION_GENERATION_FAILED",
+      request_id: requestId,
+    });
+  }
+
+  const source =
+    payload.source === "database" ? "fallback" : payload.source;
 
   if (idempotencyKey) {
     await storeIdempotentResponse(
@@ -994,7 +1146,7 @@ Deno.serve(async (req: Request) => {
       {
         success: true,
         payload: {
-          questions: payload.questions,
+          questions: validQuestions,
           source,
           parse_status: "completed",
         },
@@ -1015,7 +1167,7 @@ Deno.serve(async (req: Request) => {
     status: "success",
     metadata: {
       requestId,
-      count: payload.count,
+      count: validQuestions.length,
       requestedCount: body.questionCount,
       source,
       cost: creditCharge,
@@ -1024,7 +1176,14 @@ Deno.serve(async (req: Request) => {
     },
   });
 
-  return hybridResult.response;
+  return json(
+    corsHeaders,
+    200,
+    successPayload(validQuestions.slice(0, body.questionCount), requestId, {
+      source: source as "ai" | "fallback" | "python",
+      cached: payload.cached ?? false,
+    }),
+  );
 });
 
 // Production hardening included:

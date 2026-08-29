@@ -179,6 +179,9 @@ async function readToken(options?: {
     const ensured = await ensureAuthSession({
       forceRefresh: options?.forceRefresh === true,
     });
+    if (ensured.expired) {
+      return undefined;
+    }
     const ensuredToken = ensured.session?.access_token;
     if (typeof ensuredToken === "string" && ensuredToken.trim()) {
       return ensuredToken.trim();
@@ -187,32 +190,34 @@ async function readToken(options?: {
     logger.warn("auth.session.recovery.failed", {
       error: error instanceof Error ? error.message : String(error),
     });
+    return undefined;
   }
 
   const { data, error } = await supabase.auth.getSession();
   if (error) {
     logger.warn("auth.session.recovery.failed", { error: error.message });
+    return undefined;
   }
   const fresh = data?.session?.access_token;
   if (typeof fresh === "string" && fresh.trim()) return fresh.trim();
 
-  const storeToken = useAuthStore.getState().session?.access_token;
-  if (typeof storeToken === "string" && storeToken.trim()) {
-    return storeToken.trim();
-  }
   return undefined;
 }
 
 function isAuthRetryableStatus(status: number, code?: string, message?: string): boolean {
   if (status !== 401) return false;
   const normalized = `${code ?? ""} ${message ?? ""}`.toUpperCase();
+  // Empty / gateway bodies ("Invalid JWT") must still trigger one refresh retry.
+  if (!normalized.trim()) return true;
   return (
     normalized.includes("AUTH_EXPIRED") ||
     normalized.includes("AUTH_INVALID") ||
     normalized.includes("AUTH_REQUIRED") ||
     normalized.includes("UNAUTHORIZED") ||
     normalized.includes("EXPIRED") ||
-    normalized.includes("INVALID OR EXPIRED")
+    normalized.includes("INVALID OR EXPIRED") ||
+    normalized.includes("INVALID JWT") ||
+    normalized.includes("JWT")
   );
 }
 

@@ -9,6 +9,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store";
 import { recordReferral, getStoredRefCode, normalizeRefCode } from "@/lib/referrals";
 import { ONBOARDING_COMPLETION_PATH } from "@/lib/routes/canonical";
@@ -104,9 +105,7 @@ export default function OnboardingIndex() {
   const [searchParams] = useSearchParams();
   const user = useAuthStore((s) => s.user);
   const profile = useAuthStore((s) => s.profile);
-  const isOnboarded = useAuthStore((s) => s.isOnboarded);
   const isProfileLoaded = useAuthStore((s) => s.isProfileLoaded);
-  const updateProfile = useAuthStore((s) => s.updateProfile);
   const loadProfile = useAuthStore((s) => s.loadProfile);
 
   const isRerun = searchParams.get("rerun") === "1";
@@ -122,10 +121,10 @@ export default function OnboardingIndex() {
   const [hydratedFromProfile, setHydratedFromProfile] = useState(Boolean(restored));
 
   useEffect(() => {
-    if (isProfileLoaded && isOnboarded && !isRerun) {
+    if (isProfileLoaded && profile?.onboarding_completed === true && !isRerun) {
       navigate(ONBOARDING_COMPLETION_PATH, { replace: true });
     }
-  }, [isProfileLoaded, isOnboarded, isRerun, navigate]);
+  }, [isProfileLoaded, profile?.onboarding_completed, isRerun, navigate]);
 
   // Restore step + known profile fields when localStorage draft is missing
   // (new device / cleared storage) so users do not drop back to empty step 1.
@@ -216,41 +215,47 @@ export default function OnboardingIndex() {
         await recordReferral(user.id, refCode);
       }
 
-      await updateProfile({
-        onboarding_completed: true,
-        onboarding_step: 99,
-        target_role:          role,
-        preferred_model:      toDbPreferredModel(finalData.preferredModel),
-        experience_years:
-          finalData.yearsOfExperience ??
-          (level === "junior"
-            ? 1
-            : level === "senior"
-              ? 6
-              : level === "staff"
-                ? 10
-                : level === "intern"
-                  ? 0
-                  : 3),
-        notification_prefs: {
-          ...((profile as { notification_prefs?: Record<string, unknown> } | null)
-            ?.notification_prefs ?? {}),
-          experience_level: level,
-          interview_types: finalData.interviewTypes,
-          interview_difficulty: finalData.difficulty || "medium",
-          ...(typeof finalData.interviewAnxiety === "number"
-            ? { interview_anxiety: finalData.interviewAnxiety }
-            : {}),
-        },
-        ...(finalData.selectedMicId
-          ? { audio_input_device: finalData.selectedMicId }
+      const experienceYears =
+        finalData.yearsOfExperience ??
+        (level === "junior"
+          ? 1
+          : level === "senior"
+            ? 6
+            : level === "staff"
+              ? 10
+              : level === "intern"
+                ? 0
+                : 3);
+
+      const notificationPrefs = {
+        ...((profile as { notification_prefs?: Record<string, unknown> } | null)
+          ?.notification_prefs ?? {}),
+        experience_level: level,
+        interview_types: finalData.interviewTypes,
+        interview_difficulty: finalData.difficulty || "medium",
+        ...(typeof finalData.interviewAnxiety === "number"
+          ? { interview_anxiety: finalData.interviewAnxiety }
           : {}),
-        ...(finalData.industry ? { industry: finalData.industry, domain: finalData.industry } : {}),
-        ...(finalData.interviewDate ? { interview_date: finalData.interviewDate } : {}),
-        ...(finalData.improvementGoals?.length
-          ? { improvement_goals: finalData.improvementGoals, interview_weaknesses: finalData.improvementGoals }
-          : {}),
-      } as Record<string, unknown>);
+      };
+
+      const { error: rpcError } = await supabase.rpc("complete_onboarding", {
+        p_target_role: role,
+        p_experience_level: level,
+        p_preferred_model: toDbPreferredModel(finalData.preferredModel),
+        p_experience_years: experienceYears,
+        p_notification_prefs: notificationPrefs,
+        p_audio_input_device:
+          finalData.selectedMicId && finalData.selectedMicId !== "default"
+            ? finalData.selectedMicId
+            : null,
+        p_industry: finalData.industry || null,
+        p_interview_date: finalData.interviewDate || null,
+        p_improvement_goals: finalData.improvementGoals?.length
+          ? finalData.improvementGoals
+          : null,
+      });
+
+      if (rpcError) throw rpcError;
 
       // Best-effort welcome mail — never block or roll back completion
       // (RESEND_API_KEY missing → 503 PROVIDER_UNAVAILABLE).
@@ -288,7 +293,7 @@ export default function OnboardingIndex() {
     } finally {
       setIsSaving(false);
     }
-  }, [data, updateProfile, loadProfile, user, profile, refCode, navigate]);
+  }, [data, loadProfile, user, profile, refCode, navigate]);
 
   const handleNext = useCallback((stepData?: Partial<OnboardingData>) => {
     if (stepData) mergeData(stepData);

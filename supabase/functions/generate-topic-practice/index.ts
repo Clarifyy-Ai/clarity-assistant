@@ -38,6 +38,10 @@ import {
   scoreQuestionQuality,
 } from "../_shared/govQualityScore.ts";
 import { filterQuestionsByTopics } from "../_shared/govTopicFilter.ts";
+import {
+  GOV_QUESTION_COUNT_ABS_MAX,
+  validateGovQuestionCount,
+} from "../_shared/govQuestionCount.ts";
 import { examBankTypeKeys, mapExamType } from "../_shared/examTypeMap.ts";
 import { type GapFillRow } from "../_shared/govAiGapFill.ts";
 
@@ -131,10 +135,11 @@ Deno.serve(async (req) => {
       }, 400);
     }
 
-    const questionCountRaw = Number(b.questionCount);
-    const questionCount = Number.isFinite(questionCountRaw)
-      ? Math.min(100, Math.max(5, Math.floor(questionCountRaw)))
-      : 10;
+    const qc = validateGovQuestionCount(b.questionCount, GOV_QUESTION_COUNT_ABS_MAX);
+    if (!qc.ok) {
+      return json(req, { error: qc.error, code: qc.code }, 400);
+    }
+    const questionCount = qc.value;
 
     const language = String(b.language ?? "en").trim().slice(0, 8) || "en";
     const difficulty = parseDifficulty(b.difficulty);
@@ -236,6 +241,7 @@ Deno.serve(async (req) => {
     }
 
     const inventory = await countEligibleGovQuestions(db, {
+      examId,
       exam: {
         code: exam.code as string | null,
         name: exam.name as string | null,

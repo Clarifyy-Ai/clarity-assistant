@@ -111,6 +111,7 @@ export function saveActivePaperJob(payload: {
   jobId: string;
   examId: string;
   userId: string;
+  idempotencyKey?: string;
 }): void {
   try {
     localStorage.setItem(
@@ -126,6 +127,7 @@ export function loadActivePaperJob(userId: string): {
   jobId: string;
   examId: string;
   userId: string;
+  idempotencyKey?: string;
 } | null {
   try {
     const raw = localStorage.getItem(PAPER_JOB_STORAGE_KEY);
@@ -134,12 +136,14 @@ export function loadActivePaperJob(userId: string): {
       jobId?: string;
       examId?: string;
       userId?: string;
+      idempotencyKey?: string;
     };
     if (!parsed.jobId || parsed.userId !== userId) return null;
     return {
       jobId: parsed.jobId,
       examId: parsed.examId ?? "",
       userId: parsed.userId,
+      idempotencyKey: parsed.idempotencyKey,
     };
   } catch {
     return null;

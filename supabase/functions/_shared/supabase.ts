@@ -530,6 +530,28 @@ export async function refundCredits(
 
   return { success: false, error: "Refund failed." };
 }
+
+/** Refund with structured logging — never swallow compensation failures silently. */
+export async function refundCreditsBestEffort(
+  input: RefundCreditsInput,
+  logContext?: Record<string, unknown>,
+): Promise<{ success: boolean; error?: string; idempotentReplay?: boolean }> {
+  const result = await refundCredits(input);
+  if (!result.success && !result.idempotentReplay) {
+    console.error(
+      JSON.stringify({
+        tag: "[credits] refund_best_effort_failed",
+        user_id: input.userId,
+        cost: input.cost,
+        reason: input.reason,
+        idempotency_key: input.idempotencyKey ?? null,
+        error: result.error ?? "unknown",
+        ...logContext,
+      }),
+    );
+  }
+  return result;
+}
 //
 // Shared Supabase utilities for Edge Functions.
 //

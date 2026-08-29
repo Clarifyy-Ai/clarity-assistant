@@ -166,6 +166,7 @@ export default function MockTestHub(): React.ReactElement {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [searchQ, setSearchQ] = useState("");
   const [syncQuery, setSyncQuery] = useState<string | undefined>(undefined);
+  const [searchNonce, setSearchNonce] = useState(0);
   const [family, setFamily] = useState("");
   const [govResults, setGovResults] = useState<GovExamSearchResult[]>([]);
   const [selectedExamId, setSelectedExamId] = useState("");
@@ -195,11 +196,12 @@ export default function MockTestHub(): React.ReactElement {
     }
   }, []);
 
-  async function runGovSearch(q: string, fam = family) {
+  function runGovSearch(q: string, fam = family) {
     // Kept for recent-chip / family-chip compatibility; combobox owns live search.
     setSearchQ(q);
     setSyncQuery(q);
     setFamily(fam);
+    setSearchNonce((n) => n + 1);
   }
 
   function rememberChip(label: string) {
@@ -369,6 +371,7 @@ export default function MockTestHub(): React.ReactElement {
           family={family}
           browseWhenEmpty
           syncQuery={syncQuery}
+          searchNonce={searchNonce}
           placeholder="Search exam, post, recruiting body, or subject — e.g. SSC CGL, Railway NTPC, IBPS PO"
           onSelect={(exam) => {
             setSelectedExamId(exam.examId);

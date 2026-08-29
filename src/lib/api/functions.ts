@@ -151,6 +151,15 @@ export async function getAccessToken(): Promise<string | null> {
     return null;
   }
 
+  try {
+    const { ensureAuthSession } = await import("@/lib/focusRecovery/sessionRefresh");
+    const ensured = await ensureAuthSession();
+    const token = ensured.session?.access_token;
+    if (typeof token === "string" && token.trim()) return token.trim();
+  } catch {
+    /* fall through */
+  }
+
   const { data } = await supabase.auth.getSession();
   const fresh = data?.session?.access_token;
   if (typeof fresh === "string" && fresh.trim().length > 0) {
@@ -307,17 +316,21 @@ export async function streamFunction<TBody = unknown>(
           : "";
     const normalized = `${code} ${errMsg}`.toUpperCase();
     const isAuthRetryable =
+      !normalized.trim() ||
       normalized.includes("AUTH_EXPIRED") ||
       normalized.includes("AUTH_INVALID") ||
       normalized.includes("AUTH_REQUIRED") ||
       normalized.includes("UNAUTHORIZED") ||
       normalized.includes("EXPIRED") ||
-      normalized.includes("INVALID OR EXPIRED");
+      normalized.includes("INVALID OR EXPIRED") ||
+      normalized.includes("INVALID JWT") ||
+      normalized.includes("JWT");
 
     if (isAuthRetryable) {
-      const { data, error } = await supabase.auth.refreshSession();
-      const nextToken = data.session?.access_token;
-      if (!error && nextToken) {
+      const { ensureAuthSession } = await import("@/lib/focusRecovery/sessionRefresh");
+      const ensured = await ensureAuthSession({ forceRefresh: true });
+      const nextToken = ensured.session?.access_token;
+      if (nextToken) {
         headers.set("Authorization", `Bearer ${nextToken}`);
         response = await fetch(url, {
           method: "POST",

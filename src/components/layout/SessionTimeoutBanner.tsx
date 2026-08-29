@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Clock, RefreshCw } from "lucide-react";
-import { supabase } from "@/lib/supabase/client";
+import { ensureAuthSession } from "@/lib/focusRecovery/sessionRefresh";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/Button";
 import { assignLoginWithReturnTo } from "@/lib/auth/safeReturnTo";
@@ -89,10 +89,9 @@ export function SessionTimeoutBanner() {
   async function handleExtend() {
     setExtending(true);
     try {
-      const { data, error } = await supabase.auth.refreshSession();
-      if (error) throw error;
-      if (!data.session) throw new Error("Session refresh returned no session");
-      setSession(data.session as Parameters<typeof setSession>[0]);
+      const result = await ensureAuthSession({ forceRefresh: true });
+      if (!result.session) throw new Error("Session refresh returned no session");
+      setSession(result.session as Parameters<typeof setSession>[0]);
       setShowWarning(false);
       setRemainingMs(null);
     } catch (err) {

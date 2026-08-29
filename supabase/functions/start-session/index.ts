@@ -16,7 +16,7 @@ import {
   withCorsHeaders,
 } from "../_shared/cors.ts";
 
-import { authenticateRequest } from "../_shared/auth.ts";
+import { authenticateRequest, requireOnboardingComplete } from "../_shared/auth.ts";
 import { isUserBanned } from "../_shared/banCheck.ts";
 
 import {
@@ -41,7 +41,7 @@ import { requireCapabilityAsync, type Capability } from "../_shared/requireCapab
 import {
   eligibilityUserMessage,
   httpStatusForEligibilityReason,
-  isAiProviderConfigured,
+  isCoachingServiceConfigured,
   sessionServiceReadiness,
   type EligibilityRpc,
 } from "../_shared/sessionStartEligibility.ts";
@@ -677,6 +677,11 @@ Deno.serve(async (req: Request) => {
 
   const { user } = auth.context;
 
+  const onboardingBlock = await requireOnboardingComplete(user.id, req);
+  if (onboardingBlock) {
+    return withCorsHeaders(req, onboardingBlock);
+  }
+
   const db = createServiceClient();
 
   const rateLimitResult = await checkRateLimitAsync(db, {
@@ -749,7 +754,7 @@ Deno.serve(async (req: Request) => {
       });
     }
     let reason = String(data.reason ?? (data.allowed ? "ALLOWED" : "ACCOUNT_RESTRICTED"));
-    if (reason === "ALLOWED" && !isAiProviderConfigured()) {
+    if (reason === "ALLOWED" && !isCoachingServiceConfigured()) {
       reason = "PROVIDER_UNAVAILABLE";
     }
     if (reason === "ALLOWED") {
@@ -812,7 +817,7 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  if (!isAiProviderConfigured()) {
+  if (!isCoachingServiceConfigured()) {
     return eligibilityHttp(corsHeaders, {}, "PROVIDER_UNAVAILABLE");
   }
 

@@ -99,6 +99,7 @@ export function userFacingDocumentError(err: unknown): string {
   const status = err instanceof ApiClientError ? err.status : 0;
   const messages: Record<string, string> = {
     UNSUPPORTED_FILE_TYPE: "This file type is not supported.",
+    UNSUPPORTED_DOCUMENT_TYPE: "This file type is not supported.",
     FILE_TOO_LARGE: "This file is too large to process.",
     EMPTY_FILE: "This file is empty.",
     CORRUPT_FILE: "The file is corrupt or unreadable.",
@@ -106,6 +107,7 @@ export function userFacingDocumentError(err: unknown): string {
     PARSER_FAILED: "The document could not be parsed. Try another file or retry.",
     PARSER_UNAVAILABLE: "Document parsing is temporarily unavailable. You can retry.",
     OCR_UNAVAILABLE: "OCR is temporarily unavailable. You can retry.",
+    OCR_FAILED: "OCR could not read this scanned document. You can retry.",
     INSUFFICIENT_CREDITS: "Not enough credits to process this document.",
     STORAGE_FAILED: "The document could not be read from private storage.",
   };
@@ -174,6 +176,9 @@ export function shouldFallbackToSyncParse(err: unknown, created?: CreateJobResul
     return (
       err.status === 501 ||
       err.status === 503 ||
+      // Empty/legacy MIME on the row used to 422 job create — sync parse can still succeed
+      // when the client supplies a resolved mime_type.
+      (err.status === 422 && code === "UNSUPPORTED_DOCUMENT_TYPE") ||
       code === "JOB_CREATE_FAILED" ||
       code === "PYTHON_UNAVAILABLE" ||
       code === "NOT_CONFIGURED"

@@ -168,14 +168,6 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
     if (auth.error) return applyCors(req, auth.error);
     const user = auth.context.user;
 
-    const rateLimitResult = await checkRateLimitAsync(db, {
-      key: createRateLimitKey("search-exams", user.id),
-      ...RATE_LIMIT_PRESETS.SEARCH_BROWSE,
-    });
-    if (!rateLimitResult.allowed) {
-      return rateLimitResponse(rateLimitResult, req);
-    }
-
     const url = new URL(req.url);
     let rawQuery: unknown = url.searchParams.get("q") ?? "";
     let rawFamily: unknown = url.searchParams.get("family") ?? "";
@@ -232,6 +224,16 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
       return corsError(req, 422, queryValidation.code, queryValidation.message);
     }
     const q = queryValidation.query;
+
+    // Rate-limit only validated searches — invalid/empty payloads must not burn quota.
+    const rateLimitResult = await checkRateLimitAsync(db, {
+      key: createRateLimitKey("search-exams", user.id),
+      ...RATE_LIMIT_PRESETS.SEARCH_BROWSE,
+    });
+    if (!rateLimitResult.allowed) {
+      return rateLimitResponse(rateLimitResult, req);
+    }
+
     const cursorPage = decodeSearchCursor(rawCursor);
     const pageRequest = resolvePagination({
       page: cursorPage ?? rawPage,

@@ -72,10 +72,15 @@ export function Modal({
             </button>
           </>
         )}
-        <DialogDescription className={description ? "px-6 pt-3 text-sm text-muted-foreground" : "sr-only"}>
+        <DialogDescription className="sr-only">
           {description ?? (title ? `${title} dialog` : "Dialog content")}
         </DialogDescription>
-        <div className="p-6">{children}</div>
+        <div className="p-6">
+          {description && (
+            <p className="text-sm text-muted-foreground mb-5">{description}</p>
+          )}
+          {children}
+        </div>
       </DialogContent>
     </Dialog>
   );

@@ -66,7 +66,10 @@ export default function AdminSupport() {
         if (error) throw error;
         setRows((data ?? []) as ThreadRow[]);
       } catch (err) {
-        if (!cancelled) toast.error(err instanceof Error ? err.message : "Failed to load support threads");
+        if (!cancelled) {
+          const { toAdminUserMessage } = await import("@/lib/admin/adminErrors");
+          toast.error(toAdminUserMessage(err, undefined, "AdminSupport.load"));
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }

@@ -5804,6 +5804,7 @@ export type Database = {
           id: string
           is_primary: boolean
           name: string
+          updated_at: string
           url: string | null
           user_id: string
         }
@@ -5815,6 +5816,7 @@ export type Database = {
           id?: string
           is_primary?: boolean
           name: string
+          updated_at?: string
           url?: string | null
           user_id: string
         }
@@ -5826,6 +5828,7 @@ export type Database = {
           id?: string
           is_primary?: boolean
           name?: string
+          updated_at?: string
           url?: string | null
           user_id?: string
         }
@@ -8007,6 +8010,24 @@ export type Database = {
           p_topic: string
         }
         Returns: undefined
+      }
+      complete_onboarding: {
+        Args: {
+          p_target_role: string
+          p_experience_level: string
+          p_preferred_model?: string | null
+          p_experience_years?: number | null
+          p_notification_prefs?: Json | null
+          p_audio_input_device?: string | null
+          p_industry?: string | null
+          p_interview_date?: string | null
+          p_improvement_goals?: string[] | null
+        }
+        Returns: undefined
+      }
+      get_onboarding_state: {
+        Args: Record<PropertyKey, never>
+        Returns: string
       }
       verify_course_certificate: { Args: { p_code: string }; Returns: Json }
     }

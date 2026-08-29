@@ -11,6 +11,8 @@ export interface ClaudeStreamOptions {
   isLive: boolean;
   sessionId: string;
   questionId: string;
+  /** Sessionless AI mode when sessionId is absent. */
+  mode?: string;
   simpleLanguage?: boolean;
   callType?: "interview" | "regular_call";
   language?: string;
@@ -24,6 +26,17 @@ export interface ClaudeStreamOptions {
 export async function streamClaudeHint(opts: ClaudeStreamOptions): Promise<void> {
   const { question, context, simpleLanguage, onChunk, onDone, onError, signal } = opts;
 
+  const sessionId =
+    typeof opts.sessionId === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      opts.sessionId,
+    )
+      ? opts.sessionId
+      : null;
+  const mode =
+    opts.mode ??
+    (sessionId ? undefined : opts.isLive ? "rehearsal" : "practice");
+
   const body = {
     question,
     model: opts.model ?? "claude-3-5-sonnet-20241022",
@@ -32,13 +45,8 @@ export async function streamClaudeHint(opts: ClaudeStreamOptions): Promise<void>
     transcript: context.last_transcript ?? "",
     resume_context: context.resume_experience_summary ?? "",
     simple_language: simpleLanguage ?? false,
-    session_id:
-      typeof opts.sessionId === "string" &&
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-        opts.sessionId,
-      )
-        ? opts.sessionId
-        : null,
+    session_id: sessionId,
+    ...(mode ? { mode } : {}),
   };
 
   try {

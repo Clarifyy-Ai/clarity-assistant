@@ -72,6 +72,7 @@ export default function AdminBlog() {
       toast.error("Title and slug are required");
       return;
     }
+    if (saving) return;
     setSaving(true);
     try {
       const payload = {

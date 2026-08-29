@@ -91,7 +91,7 @@ export async function fetchDeepgramTokenBounded(options?: {
       const data = await fetchEdgeJson<DeepgramTokenResponse>(
         "deepgram-token",
         {},
-        { signal: options?.signal },
+        { signal: options?.signal, timeoutMs: 15_000 },
       );
       if (!data?.token) {
         throw new Error("Deepgram token response missing token field");

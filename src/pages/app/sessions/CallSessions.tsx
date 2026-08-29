@@ -26,6 +26,7 @@ import {
   Eye,
 } from "lucide-react";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { agentDebugIngest } from "@/lib/debug/agentIngest";
 import { formatDistanceToNow } from "date-fns";
 import type { Tables } from "@/integrations/supabase";
 import { useSwipeAction } from "@/hooks/useSwipeAction";
@@ -334,7 +335,30 @@ function SwipeSessionRow({
 
       <div
         {...swipe.bind}
-        className="relative grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_1fr_1fr_80px] gap-2 sm:gap-4 px-4 py-3 hover:bg-muted/10 transition-colors items-start bg-background sm:bg-transparent"
+        role="link"
+        tabIndex={0}
+        onClick={(e) => {
+          if ((e.target as HTMLElement | null)?.closest("button, a, input, select, textarea")) {
+            return;
+          }
+          agentDebugIngest({
+            sessionId: "fcd48a",
+            runId: "post-fix",
+            hypothesisId: "SES-ROW",
+            location: "CallSessions.tsx:rowClick",
+            message: "session row navigate",
+            data: { sessionId: s.id },
+          });
+          navigate(`/app/sessions/${s.id}`);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            navigate(`/app/sessions/${s.id}`);
+          }
+        }}
+        className="relative grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_1fr_1fr_80px] gap-2 sm:gap-4 px-4 py-3 hover:bg-muted/10 transition-colors items-start bg-background sm:bg-transparent cursor-pointer"
+        aria-label={`View session details: ${s.title ?? s.type ?? "session"}`}
       >
         <div className="min-w-0">
           <p className="text-sm font-medium text-foreground truncate">
@@ -403,17 +427,16 @@ function SwipeSessionRow({
         <div className="flex items-center gap-1">
           <button
             type="button"
-            onPointerDown={(e) => {
-            }}
             onClick={(e) => {
               e.stopPropagation();
               navigate(`/app/sessions/${s.id}`);
             }}
-            className="p-2 hover:bg-muted/20 rounded-lg transition-colors min-h-11 min-w-11 inline-flex items-center justify-center"
-            title="View"
-            aria-label="View session"
+            className="inline-flex items-center gap-1.5 px-2 py-2 hover:bg-muted/20 rounded-lg transition-colors min-h-11 text-xs text-muted-foreground hover:text-foreground"
+            title="View details"
+            aria-label="View session details"
           >
-            <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+            <Eye className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Details</span>
           </button>
           <button
             type="button"

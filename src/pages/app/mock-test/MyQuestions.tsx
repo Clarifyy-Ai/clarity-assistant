@@ -50,6 +50,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -182,6 +183,9 @@ function EditModal({
       <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Question</DialogTitle>
+          <DialogDescription className="sr-only">
+            Edit question text, subject, topic, and answer options.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">

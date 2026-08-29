@@ -30,5 +30,7 @@ describe("client profile update guard", () => {
     ]);
     expect(PROFILE_CLIENT_PINNED_COLUMNS).toContain("plan_id");
     expect(PROFILE_CLIENT_PINNED_COLUMNS).toContain("referred_by");
+    expect(PROFILE_CLIENT_PINNED_COLUMNS).toContain("onboarding_completed");
+    expect(PROFILE_CLIENT_PINNED_COLUMNS).toContain("onboarding_step");
   });
 });

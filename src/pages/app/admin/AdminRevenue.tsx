@@ -142,6 +142,7 @@ export default function AdminRevenue() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [mrrIsEstimated, setMrrIsEstimated] = useState(true);
+  const [revenueUnavailable, setRevenueUnavailable] = useState(false);
 
   const fetchData = async (showRefresh = false) => {
     if (showRefresh) setIsRefreshing(true);
@@ -233,18 +234,20 @@ export default function AdminRevenue() {
         let creditPackPaise = 0;
         let planOrderPaise = 0;
         let promoGrantCredits = 0;
+        let paidOrdersFailed = false;
         try {
           inrRevenuePaise = await creditsDB.sumRazorpayPaidPaiseSince(sinceIso);
         } catch {
-          inrRevenuePaise = 0;
+          paidOrdersFailed = true;
         }
 
         try {
-          const { data: paidOrders } = await supabase
+          const { data: paidOrders, error: orderErr } = await supabase
             .from("payment_orders")
             .select("amount_paise, product_type, status, paid_at, credits_granted")
             .in("status", ["paid", "fulfilled"])
             .gte("paid_at", sinceIso);
+          if (orderErr) throw orderErr;
           for (const o of paidOrders ?? []) {
             const paise = Number(o.amount_paise) || 0;
             const pt = String(o.product_type ?? "");
@@ -252,8 +255,10 @@ export default function AdminRevenue() {
             else planOrderPaise += paise;
           }
         } catch {
-          /* payment_orders may be empty or RLS-gated */
+          paidOrdersFailed = true;
         }
+
+        setRevenueUnavailable(paidOrdersFailed && inrRevenuePaise === 0 && planOrderPaise === 0 && creditPackPaise === 0);
 
         try {
           const ledger = await creditsDB.listRecent(500);
@@ -452,14 +457,30 @@ export default function AdminRevenue() {
       <div data-testid="revenue-secondary-row" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <MetricCard
           title="Actual collected (period)"
-          value={metrics ? formatInrPaise(metrics.inrRevenuePaise) : "—"}
-          subtitle="Paid Razorpay payment_orders"
+          value={
+            revenueUnavailable
+              ? "Unavailable"
+              : metrics
+                ? formatInrPaise(metrics.inrRevenuePaise)
+                : "—"
+          }
+          subtitle={
+            revenueUnavailable
+              ? "Payment totals could not be loaded"
+              : "Paid Razorpay payment_orders (ACTUAL)"
+          }
           icon={CreditCard}
           loading={isLoading}
         />
         <MetricCard
           title="Credit-pack payments"
-          value={metrics ? formatInrPaise(metrics.creditRevenue) : "—"}
+          value={
+            revenueUnavailable
+              ? "Unavailable"
+              : metrics
+                ? formatInrPaise(metrics.creditRevenue)
+                : "—"
+          }
           subtitle="Actual paid credit products (not grants)"
           icon={DollarSign}
           loading={isLoading}

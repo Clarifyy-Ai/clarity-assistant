@@ -1,6 +1,7 @@
 // prep-tool/index.ts — FIXED, SECURE, PRODUCTION-READY
 
 import { handleCors, getCorsHeaders, withCorsHeaders } from "../_shared/cors.ts";
+import { requireOnboardingComplete } from "../_shared/auth.ts";
 import {
   requireAuth,
   successResponse,
@@ -583,6 +584,9 @@ Deno.serve(async (req: Request) => {
     /* ----------------------- AUTH ----------------------- */
     const auth   = await requireAuth(req);
     const userId = auth.userId;
+
+    const onboardingBlock = await requireOnboardingComplete(userId, req);
+    if (onboardingBlock) return withCorsHeaders(req, onboardingBlock);
 
     const rateLimited = await enforceAiRateLimitAsync(
       getAdminClient(),

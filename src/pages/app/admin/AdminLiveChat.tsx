@@ -167,7 +167,7 @@ export default function AdminLiveChat() {
   const resolvedCount = threads.filter((t) => t.status === "resolved").length;
 
   async function sendReply() {
-    if (!activeId || !reply.trim() || !user?.id) return;
+    if (!activeId || !reply.trim() || !user?.id || sending) return;
     setSending(true);
     const body = reply.trim();
     setReply("");
@@ -178,8 +178,17 @@ export default function AdminLiveChat() {
         sender_role: "admin",
         body,
       });
+      const { writeAdminAudit } = await import("@/lib/admin/writeAdminAudit");
+      await writeAdminAudit({
+        action: "support.reply",
+        targetType: "support_thread",
+        targetId: activeId,
+        newValue: { body_len: body.length },
+      });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to send reply");
+      const { adminActionFailedMessage } = await import("@/lib/admin/adminErrors");
+      toast.error(adminActionFailedMessage(err, "AdminLiveChat.reply"));
+      setReply(body);
     } finally {
       setSending(false);
     }
@@ -188,10 +197,18 @@ export default function AdminLiveChat() {
   async function setStatus(id: string, status: Thread["status"]) {
     try {
       await supportDB.updateThread(id, { status });
+      const { writeAdminAudit } = await import("@/lib/admin/writeAdminAudit");
+      await writeAdminAudit({
+        action: "support.status",
+        targetType: "support_thread",
+        targetId: id,
+        newValue: { status },
+      });
       toast.success(`Marked ${status}`);
       void loadThreads();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update thread");
+      const { adminActionFailedMessage } = await import("@/lib/admin/adminErrors");
+      toast.error(adminActionFailedMessage(err, "AdminLiveChat.status"));
     }
   }
 

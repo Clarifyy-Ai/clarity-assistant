@@ -31,6 +31,7 @@ import {
   validateExtractQuestionPaperPayload,
   type ExtractPayloadOk,
 } from "../_shared/pdfQuestionExtract.ts";
+import { callPythonProcess, isPythonConfigured } from "../_shared/pythonClient.ts";
 
 type JobStatus =
   | "queued"
@@ -42,6 +43,35 @@ type JobStatus =
   | "linking_paper"
   | "completed"
   | "failed";
+
+async function tryPythonPdfText(
+  pdfBase64: string,
+  correlationId: string,
+): Promise<string | null> {
+  if (!isPythonConfigured()) return null;
+  const result = await callPythonProcess({
+    operation: "document_extract",
+    operationId: correlationId,
+    correlationId,
+    payload: {
+      base64: pdfBase64,
+      filename: "gov-exam-paper.pdf",
+      mime_type: "application/pdf",
+      document_kind: "exam_paper",
+      category_hint: "exam_paper",
+    },
+  });
+  if (!result.ok) {
+    console.warn("[extract-question-paper] python document_extract failed:", result.message);
+    return null;
+  }
+  const data = result.data as Record<string, unknown>;
+  const text =
+    (typeof data.full_text === "string" && data.full_text) ||
+    (typeof data.text === "string" && data.text) ||
+    "";
+  return text.trim() ? text : null;
+}
 
 async function setJob(
   db: ReturnType<typeof createServiceClient>,
@@ -341,16 +371,35 @@ Deno.serve(async (req) => {
               req,
             );
           }
-          const rawText = await geminiGenerateWithPdf(
-            PDF_QUESTION_EXTRACT_PROMPT,
-            pdf.base64,
-            { temperature: 0.2, maxTokens: 8192 },
-          );
+          const correlationId = String(jobId);
+          let rawText: string | null = null;
+          try {
+            rawText = await geminiGenerateWithPdf(
+              PDF_QUESTION_EXTRACT_PROMPT,
+              pdf.base64,
+              { temperature: 0.2, maxTokens: 8192 },
+            );
+          } catch (geminiErr) {
+            console.warn("[extract-question-paper] Gemini PDF extract failed:", geminiErr);
+            rawText = await tryPythonPdfText(pdf.base64, correlationId);
+            if (!rawText) throw geminiErr;
+          }
+          if (!rawText) {
+            rawText = await tryPythonPdfText(pdf.base64, correlationId);
+          }
+          if (!rawText) {
+            throw new Error("PDF extraction failed via AI and Python services.");
+          }
           rawOcrText = rawText;
-          const parsed = parseJSON<{ questions?: unknown[] }>(rawText, {
-            questions: [],
-          });
-          rawQuestions = Array.isArray(parsed.questions) ? parsed.questions : [];
+          const deterministic = parsePlainTextMcqs(rawText);
+          if (deterministic.length > 0) {
+            rawQuestions = deterministic;
+          } else {
+            const parsed = parseJSON<{ questions?: unknown[] }>(rawText, {
+              questions: [],
+            });
+            rawQuestions = Array.isArray(parsed.questions) ? parsed.questions : [];
+          }
         }
       }
 
@@ -582,12 +631,13 @@ Deno.serve(async (req) => {
         /timeout|gemini|openai|provider|api key|INVALID_ARGUMENT|fetch failed|AbortError|timed out|AI text extraction/i.test(
           msg,
         );
+      const isTimeout = /timeout|timed out|AbortError|504|deadline exceeded/i.test(msg);
       return errorResponse(
         parserish
           ? "PDF/text parsing failed. Use clearer pasted MCQ text, a smaller PDF, or check AI provider configuration."
           : "Ingestion failed. Please retry or contact support.",
         parserish ? "PARSER_FAILED" : "INTERNAL",
-        parserish ? 502 : 500,
+        isTimeout ? 504 : parserish ? 502 : 500,
         req,
       );
     }

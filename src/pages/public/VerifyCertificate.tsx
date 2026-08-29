@@ -86,7 +86,7 @@ export default function VerifyCertificatePage() {
   return (
     <div
       data-testid="dd-layout-root"
-      className={`${PAGE_SHELL_STANDARD} mx-auto flex min-h-[100dvh] flex-col px-4 py-6 sm:px-6`}
+      className={`${PAGE_SHELL_STANDARD} mx-auto flex min-h-[100dvh] w-full flex-col px-4 py-8 sm:px-6 sm:py-10`}
     >
       <a
         href="#main-content"
@@ -94,10 +94,10 @@ export default function VerifyCertificatePage() {
       >
         Skip to content
       </a>
-      <main id="main-content" className="flex flex-1 flex-col gap-4">
+      <main id="main-content" className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-4">
         <div>
           <h1 className="text-2xl font-semibold sm:text-3xl">{certificateKindLabel()}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
             This verifies a Clarify AI course completion record. It is not an official
             professional certification. Certificates are issued from your signed-in Learn
             account; this page only checks a public verification code.
@@ -152,20 +152,20 @@ export default function VerifyCertificatePage() {
         )}
 
         {status === "valid" && result?.valid && (
-          <div data-testid="certificate-card">
+          <div data-testid="certificate-card" className="flex flex-1 flex-col justify-center">
             <div
               data-certificate-surface
-              className="w-full rounded-2xl border-2 border-primary/25 bg-gradient-to-br from-background via-background to-primary/5 px-5 py-6 shadow-sm sm:px-8 sm:py-8"
+              className="w-full rounded-2xl border-2 border-primary/25 bg-gradient-to-br from-background via-background to-primary/5 px-6 py-10 shadow-sm sm:px-10 sm:py-12 md:min-h-[20rem] md:px-14 md:py-14"
             >
               <p className="text-sm uppercase tracking-wide text-muted-foreground inline-flex items-center gap-2">
                 <Award className="w-5 h-5 text-primary" aria-hidden />
                 {result.kind}
               </p>
-              <p className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
+              <p className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl md:text-4xl">
                 {result.student_name}
               </p>
-              <p className="mt-2 text-base text-foreground/90 sm:text-lg">{result.course_name}</p>
-              <dl className="mt-6 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 sm:gap-4">
+              <p className="mt-3 max-w-3xl text-base text-foreground/90 sm:text-lg">{result.course_name}</p>
+              <dl className="mt-8 grid grid-cols-1 gap-4 text-sm sm:grid-cols-2 md:gap-6 md:text-base">
                 <div>
                   <dt className="text-muted-foreground">Certificate ID</dt>
                   <dd className="mt-0.5 font-medium break-all">{result.certificate_code}</dd>

@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 import { answerBankDB } from "@/lib/supabase/database";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
@@ -65,7 +66,7 @@ export default function PrepLab() {
     toolParam === "jd_fit" ? "tools" : toolParam === "company" ? "company" : "star";
 
   return (
-    <div className="space-y-5 max-w-5xl">
+    <div className={PAGE_SHELL + " space-y-5"}>
       <PageHeader
         title={PRODUCT_NAMES.prepLab}
         description="Build STAR answers, review your Answer Bank, and use AI tools"

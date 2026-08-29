@@ -340,3 +340,56 @@ Schema:
   "raw_ocr_notes": "optional short notes about OCR quality"
 }
 `.trim();
+
+/**
+ * Deterministic MCQ parser for pasted OCR / plain text (mirrors Edge helper).
+ */
+export function parsePlainTextMcqs(text: string): unknown[] {
+  const cleaned = String(text || "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\u00a0/g, " ")
+    .trim();
+  if (!cleaned) return [];
+
+  const blocks = cleaned.split(/\n(?=(?:Q(?:uestion)?\s*)?\d+[.)]\s)/i);
+  const out: unknown[] = [];
+
+  for (const block of blocks) {
+    const lines = block
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+    if (lines.length < 5) continue;
+
+    const stemLine = lines[0].replace(/^(?:Q(?:uestion)?\s*)?\d+[.)]\s*/i, "").trim();
+    if (stemLine.length < 8) continue;
+
+    const optionMap: Record<string, string> = {};
+    let answerLetter: string | null = null;
+
+    for (const line of lines.slice(1)) {
+      const opt = line.match(/^([A-Da-d])[).:\-]\s*(.+)$/);
+      if (opt) {
+        optionMap[opt[1].toUpperCase()] = opt[2].trim();
+        continue;
+      }
+      const ans = line.match(/^(?:answer|ans|correct)\s*[:\-]\s*([A-Da-d])\b/i);
+      if (ans) answerLetter = ans[1].toUpperCase();
+    }
+
+    const options = ["A", "B", "C", "D"].map((k) => optionMap[k] || "");
+    if (options.filter((o) => o.length > 0).length < 4) continue;
+
+    out.push({
+      question_text: stemLine,
+      options,
+      correct_answer: answerLetter ?? "A",
+      explanation: "",
+      subject: "General",
+      topic: "Extracted",
+      difficulty: "MEDIUM",
+    });
+  }
+
+  return out;
+}

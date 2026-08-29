@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import {
   CheckCircle2, ListChecks, Loader2, Ban, Archive, Languages, EyeOff,
 } from "lucide-react";
@@ -60,6 +61,7 @@ export default function AdminGovQuestionReview() {
   const [rows, setRows] = useState<QuestionReviewRow[]>([]);
   const [runway, setRunway] = useState<VerificationRunwayRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [examType, setExamType] = useState("all");
   const [topic, setTopic] = useState("");
   const [status, setStatus] = useState<QuestionReviewFilterStatus>("public_unverified");
@@ -76,13 +78,19 @@ export default function AdminGovQuestionReview() {
 
   async function load() {
     setLoading(true);
+    setLoadError(null);
     const [qRes, rRes] = await Promise.all([
       listQuestionsForReview({ examType, topic, status }),
       listVerificationRunway(),
     ]);
-    if (qRes.error) toast.error(qRes.error);
+    if (qRes.error) {
+      setLoadError(qRes.error);
+      toast.error(qRes.error);
+      setRows([]);
+    } else {
+      setRows(qRes.data);
+    }
     if (rRes.error) toast.error(rRes.error);
-    setRows(qRes.data);
     setRunway(rRes.data);
     setSelected(new Set());
     setLoading(false);
@@ -324,6 +332,23 @@ export default function AdminGovQuestionReview() {
               Request translation
             </Button>
             {bulkBusy && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+          </CardContent>
+        </Card>
+      )}
+
+      {loadError && (
+        <InlineErrorRetry message={loadError} onRetry={() => void load()} />
+      )}
+
+      {!loading && !loadError && rows.length === 0 && (
+        <Card>
+          <CardContent className="p-6 text-sm text-muted-foreground space-y-1">
+            <p className="font-medium text-foreground">No questions match these filters.</p>
+            <p>
+              If you expected OCR output, confirm the PDF ingest finished and that source
+              metadata is present, then switch status to <span className="font-mono">pending</span>.
+              Missing sources show as empty here — not as a failed request.
+            </p>
           </CardContent>
         </Card>
       )}

@@ -22,6 +22,7 @@ import {
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { messageFromExportCaught } from "@/lib/export/exportUserFacingError";
+import { agentDebugIngest } from "@/lib/debug/agentIngest";
 
 export default function SessionDetail() {
   const { id }   = useParams<{ id: string }>();
@@ -52,6 +53,19 @@ export default function SessionDetail() {
       ]);
       if (requestId !== fetchRequestRef.current) return;
 
+      agentDebugIngest({
+        sessionId: "fcd48a",
+        runId: "prompt05-verify",
+        hypothesisId: "SES",
+        location: "SessionDetail.tsx:fetchSession",
+        message: "session detail loaded",
+        data: {
+          requestedId: id,
+          found: Boolean(sess?.id),
+          status: sess?.status ?? null,
+          answerCount: Array.isArray(ans) ? ans.length : 0,
+        },
+      });
 
       setSession(sess);
       setAnswers(

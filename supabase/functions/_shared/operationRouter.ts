@@ -103,13 +103,13 @@ const MATRIX: Record<HybridOperation, Omit<RouteDecision, "operation" | "canUseP
     creditCostKey: "generate_star_answer",
     durableJob: false,
   },
-  // template/python first, AI optional
+  // AI preferred for Prep Lab "Get AI Breakdown"; python/deterministic are fallbacks only.
   system_design: {
     canCompleteDeterministically: true,
     canCompleteWithDatabase: false,
     isAiOptional: true,
     isAiRequired: false,
-    preferredOrder: ["deterministic", "python", "ai"],
+    preferredOrder: ["ai", "python", "deterministic"],
     pythonFallbackOnAiFailure: true,
     aiFallbackOnPythonFailure: true,
     creditCostKey: "system_design",

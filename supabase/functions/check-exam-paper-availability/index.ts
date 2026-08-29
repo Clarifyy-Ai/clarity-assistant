@@ -25,8 +25,8 @@ import {
   pythonGovAvailability,
 } from "../_shared/pythonGovExamClient.ts";
 import {
-  clampGovQuestionCount,
   GOV_QUESTION_COUNT_ABS_MAX,
+  validateGovQuestionCount,
 } from "../_shared/govQuestionCount.ts";
 
 function json(req: Request, payload: unknown, status = 200) {
@@ -135,10 +135,16 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
     }
 
     const requestedCountRaw = (body as Record<string, unknown>).questionCount;
-    const requested =
-      mode === "custom_mock"
-        ? clampGovQuestionCount(requestedCountRaw, GOV_QUESTION_COUNT_ABS_MAX)
-        : Number(pattern.total_questions) || 0;
+    let requested: number;
+    if (mode === "custom_mock") {
+      const qc = validateGovQuestionCount(requestedCountRaw, GOV_QUESTION_COUNT_ABS_MAX);
+      if (!qc.ok) {
+        return json(req, { error: qc.error, code: qc.code }, 400);
+      }
+      requested = qc.value;
+    } else {
+      requested = Number(pattern.total_questions) || 0;
+    }
 
     const topics = Array.isArray((body as Record<string, unknown>).topics)
       ? ((body as Record<string, unknown>).topics as unknown[])
@@ -161,9 +167,20 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
       requested,
     }));
 
-    let available = 0;
-    let examTypeKeys: string[] = [];
-    let inventorySource: "python" | "edge_bank" = "edge_bank";
+    const inventory = await countEligibleGovQuestions(db, {
+      examId,
+      exam: {
+        code: exam.code as string | null,
+        name: exam.name as string | null,
+        legacy_exam_type: exam.legacy_exam_type as string | null,
+      },
+      language,
+      topics: topics.length ? topics : null,
+      difficulty,
+    });
+    let available = inventory.available;
+    let examTypeKeys = inventory.examTypeKeys;
+    let inventorySource: "canonical_rpc" | "python_enriched" = "canonical_rpc";
 
     if (isPythonGovExamConfigured()) {
       const py = await pythonGovAvailability({
@@ -174,41 +191,25 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
         topics,
         difficulty,
         correlation_id: correlationId,
+        bank_type_keys: examTypeKeys,
       });
       if (py.ok) {
-        available = py.data.available;
-        examTypeKeys = py.data.exam_type_keys ?? [];
-        inventorySource = "python";
+        inventorySource = "python_enriched";
         console.log(JSON.stringify({
-          tag: "[GOV_EXAM] availability_python",
+          tag: "[GOV_EXAM] availability_python_enriched",
           correlation_id: correlationId,
-          available,
+          canonical_available: available,
+          python_available: py.data.available,
           requested: py.data.requested,
-          can_full_mock: py.data.can_full_mock,
         }));
       } else {
         console.warn(JSON.stringify({
-          tag: "[GOV_EXAM] availability_python_fallback",
+          tag: "[GOV_EXAM] availability_python_skipped",
           correlation_id: correlationId,
           code: py.error.code,
           message: py.error.message.slice(0, 160),
         }));
       }
-    }
-
-    if (inventorySource === "edge_bank") {
-      const inventory = await countEligibleGovQuestions(db, {
-        exam: {
-          code: exam.code as string | null,
-          name: exam.name as string | null,
-          legacy_exam_type: exam.legacy_exam_type as string | null,
-        },
-        language,
-        topics: topics.length ? topics : null,
-        difficulty,
-      });
-      available = inventory.available;
-      examTypeKeys = inventory.examTypeKeys;
     }
 
     const { data: profile } = await db

@@ -73,6 +73,7 @@ import {
   markOverlayProductSessionTerminal,
   teardownOverlayProductSession,
 } from "@/lib/session/overlayProductSession";
+import { practiceCoachStartIdempotencyKey } from "@/lib/network/idempotency";
 import { getOverlaySessionAuthority } from "@/store/overlaySessionAuthorityStore";
 
 interface UseLiveCopilotOptions {
@@ -106,6 +107,7 @@ export function useLiveCopilot({
   /** When true, ignore late question / transcript / hint events. */
   const sessionEndedRef = useRef(false);
   const hintOperationIdRef = useRef<string | null>(null);
+  const startAbortRef = useRef<AbortController | null>(null);
   const pendingCaptureMetaRef = useRef<{
     question: string;
     thumbnail?: string;
@@ -829,38 +831,57 @@ export function useLiveCopilot({
 
     abortRef.current?.abort();
     chatAbortRef.current?.abort();
+    startAbortRef.current?.abort();
     sessionEndedRef.current = false;
     hintOperationIdRef.current = null;
 
-    const { generation } = beginOverlayProductSession({ mode: "live" });
+    const reusableSessionId = cfg.practice_context_id
+      ? null
+      : existingSessionIdRef.current;
+    const willRestore =
+      Boolean(reusableSessionId) && !getPrivateMode();
+
+    const { generation } = beginOverlayProductSession({
+      mode: "live",
+      sessionId: willRestore ? reusableSessionId! : undefined,
+      resetStores: !willRestore,
+    });
     overlayGenerationRef.current = generation;
 
     try {
       const privateMode = getPrivateMode();
-      const reusableSessionId = cfg.practice_context_id
-        ? null
-        : existingSessionIdRef.current;
       if (reusableSessionId && !privateMode) {
         sessionIdRef.current = reusableSessionId;
         await activateSession(reusableSessionId);
       } else if (!privateMode) {
         const apiSessionType = sessionType === "live" ? "rehearsal" : sessionType;
 
-        const result = await startSessionApi({
-          session_type: apiSessionType,
-          type: apiSessionType,
-          is_practice: sessionType === "live" ? true : undefined,
-          interview_type: (cfg.interview_type as string) ?? "behavioral",
-          company: cfg.company ?? null,
-          role: cfg.role ?? null,
-          resume_id: cfg.resume_id ?? null,
-          jd_id: cfg.jd_id ?? null,
-          model: useOverlayStore.getState().active_model,
-          duration_minutes: cfg.duration_minutes ?? 30,
-          practice_context_id: cfg.practice_context_id ?? null,
-          source_type: cfg.source_type ?? null,
-          session_call_type: cfg.session_call_type ?? null,
-        });
+        const result = await startSessionApi(
+          {
+            session_type: apiSessionType,
+            type: apiSessionType,
+            is_practice: sessionType === "live" ? true : undefined,
+            interview_type: (cfg.interview_type as string) ?? "behavioral",
+            company: cfg.company ?? null,
+            role: cfg.role ?? null,
+            resume_id: cfg.resume_id ?? null,
+            jd_id: cfg.jd_id ?? null,
+            model: useOverlayStore.getState().active_model,
+            duration_minutes: cfg.duration_minutes ?? 30,
+            practice_context_id: cfg.practice_context_id ?? null,
+            source_type: cfg.source_type ?? null,
+            session_call_type: cfg.session_call_type ?? null,
+          },
+          {
+            idempotencyKey: practiceCoachStartIdempotencyKey(userId, {
+              practice_context_id: cfg.practice_context_id,
+              resume_id: cfg.resume_id,
+              role: cfg.role,
+              company: cfg.company,
+              interview_type: cfg.interview_type,
+            }),
+          },
+        );
         sessionIdRef.current = result.session_id;
       } else {
         sessionIdRef.current = generateId();
@@ -962,6 +983,8 @@ export function useLiveCopilot({
     const gen = overlayGenerationRef.current;
     sessionEndedRef.current = true;
     hintOperationIdRef.current = null;
+    startAbortRef.current?.abort();
+    startAbortRef.current = null;
     abortRef.current?.abort();
     chatAbortRef.current?.abort();
     abortRef.current = null;

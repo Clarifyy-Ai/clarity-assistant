@@ -279,7 +279,10 @@ export function BillingHistory({
 
           <select
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as any)}
+            onChange={(e) => {
+              setSortBy(e.target.value as typeof sortBy);
+              setCurrentPage(1);
+            }}
             className="rounded-lg bg-secondary border border-border px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           >
             <option value="date-desc">Newest First</option>

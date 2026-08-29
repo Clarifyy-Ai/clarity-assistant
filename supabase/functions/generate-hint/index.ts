@@ -21,7 +21,7 @@ import {
   withCorsHeaders,
 } from "../_shared/cors.ts";
 
-import { authenticateRequest, resolveUserPlanId } from "../_shared/auth.ts";
+import { authenticateRequest, requireOnboardingComplete, resolveUserPlanId } from "../_shared/auth.ts";
 
 import {
   enforceAiSessionAccess,
@@ -434,6 +434,11 @@ Deno.serve(async (req: Request) => {
   }
 
   const { user } = auth.context;
+
+  const onboardingBlock = await requireOnboardingComplete(user.id, req);
+  if (onboardingBlock) {
+    return withCorsHeaders(req, onboardingBlock);
+  }
   const db = createServiceClient();
 
   const planId = await resolveUserPlanId(user.id);

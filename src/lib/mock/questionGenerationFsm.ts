@@ -17,7 +17,7 @@ export type QuestionGenerationState =
 export type QuestionGenerationEvent =
   | { type: "START"; operationId: string }
   | { type: "BEGIN_PROVIDER" }
-  | { type: "SUCCESS"; source: "ai" | "fallback" }
+  | { type: "SUCCESS"; source: "ai" | "fallback" | "python" }
   | { type: "FAIL"; code?: string }
   | { type: "FALLBACK_READY" }
   | { type: "CANCEL" }
@@ -26,7 +26,7 @@ export type QuestionGenerationEvent =
 export interface QuestionGenerationSnapshot {
   state: QuestionGenerationState;
   operationId: string | null;
-  source: "ai" | "fallback" | null;
+  source: "ai" | "fallback" | "python" | null;
   errorCode: string | null;
 }
 

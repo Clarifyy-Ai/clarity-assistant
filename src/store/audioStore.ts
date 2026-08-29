@@ -9,6 +9,8 @@ import type {
   TranscriptUtterance,
   Speaker,
   DeepgramConnectionStatus,
+  DeepgramTokenState,
+  RuntimeMicState,
   AudioSetupStep,
   AudioPipelineStatus,
   AudioError,
@@ -57,6 +59,8 @@ interface AudioStore extends AudioStoreState {
 
   // Deepgram actions
   setDeepgramStatus: (status: DeepgramConnectionStatus) => void;
+  setTokenState: (state: DeepgramTokenState) => void;
+  setMicState: (state: RuntimeMicState) => void;
   setPipelineStatus: (status: AudioPipelineStatus) => void;
 
   // Setup wizard actions
@@ -112,6 +116,8 @@ const INITIAL_AUDIO_STATE: AudioStoreState = {
     noise_floor: 0.05,
   },
   deepgram_status: "disconnected",
+  token_state: "idle",
+  mic_state: "not_checked",
   pipeline_status: "idle",
   setup: {
     step: "device_selection",
@@ -312,6 +318,8 @@ export const useAudioStore = create<AudioStore>()(
             ? { ...s.streams, error: null }
             : s.streams,
       })),
+    setTokenState: (token_state) => set({ token_state }),
+    setMicState: (mic_state) => set({ mic_state }),
     setPipelineStatus: (pipeline_status) => set({ pipeline_status }),
 
     // ── Setup wizard actions ───────────────────────────────

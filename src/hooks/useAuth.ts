@@ -14,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 import type { Provider } from "@supabase/supabase-js";
 
 import { supabase, STORAGE_BUCKETS, uploadFile } from "@/lib/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { useAuthStore } from "@/store/authStore";
 import { sanitizeFileName } from "@/lib/security";
 import { buildAuthRedirectUrl } from "@/lib/auth/redirectUrl";
@@ -457,19 +458,43 @@ export function useAuth() {
   // ───────────────────────────────────────────────────────────────────────────
 
   const completeOnboarding = useCallback(
-    async (data: Partial<UserProfile>): Promise<void> => {
-      const result = await updateProfile({
-        ...data,
-        onboarding_completed: true,
-      });
+    async (data: Partial<ProfileRow>): Promise<void> => {
+      const profile = useAuthStore.getState().profile;
+      const targetRole = (data.target_role ?? profile?.target_role ?? "").trim();
+      const prefs =
+        profile?.notification_prefs &&
+        typeof profile.notification_prefs === "object" &&
+        !Array.isArray(profile.notification_prefs)
+          ? (profile.notification_prefs as Record<string, unknown>)
+          : {};
+      const experienceLevel =
+        typeof prefs.experience_level === "string" ? prefs.experience_level.trim() : "";
 
-      if (result.error) {
-        throw result.error;
+      if (!targetRole || !experienceLevel) {
+        throw new Error("Complete required onboarding fields before finishing setup.");
       }
 
+      const { error } = await supabase.rpc("complete_onboarding", {
+        p_target_role: targetRole,
+        p_experience_level: experienceLevel,
+        p_preferred_model: data.preferred_model ?? profile?.preferred_model ?? null,
+        p_experience_years: data.experience_years ?? profile?.experience_years ?? null,
+        p_notification_prefs: prefs as Json,
+        p_audio_input_device: data.audio_input_device ?? profile?.audio_input_device ?? null,
+        p_industry: data.industry ?? profile?.industry ?? null,
+        p_interview_date: data.interview_date ?? profile?.interview_date ?? null,
+        p_improvement_goals:
+          data.improvement_goals ?? profile?.improvement_goals ?? null,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      await useAuthStore.getState().loadProfile();
       navigate("/app/dashboard", { replace: true });
     },
-    [navigate, updateProfile]
+    [navigate],
   );
 
   // ───────────────────────────────────────────────────────────────────────────

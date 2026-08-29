@@ -1,5 +1,5 @@
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
-import { authenticateRequest } from "../_shared/auth.ts";
+import { authenticateRequest, requireOnboardingComplete } from "../_shared/auth.ts";
 import { createServiceClient, deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
 import { isUserBanned, bannedResponse } from "../_shared/banCheck.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
@@ -39,6 +39,9 @@ Deno.serve(async (req) => {
     const auth = await authenticateRequest(req);
     if (auth.error) return auth.error;
     const user = auth.context.user;
+
+    const onboardingBlock = await requireOnboardingComplete(user.id, req);
+    if (onboardingBlock) return onboardingBlock;
     const db = createServiceClient();
     if (await isUserBanned(db, user.id)) return bannedResponse(getCorsHeaders(req));
     const limited = await checkRateLimitAsync(db, {

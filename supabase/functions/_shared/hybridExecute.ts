@@ -466,6 +466,10 @@ export async function executeHybridOperation<T = unknown>(
 
       if (outcome.kind === "fail") {
         lastFailCode = outcome.code;
+        // Always record the failed source — even when fallbacks were already queued
+        // in preferredOrder (otherwise meta.fallback_reason stays null and ops cannot
+        // tell AI failed vs Python was preferred).
+        fallbackReason = `${source}_failed:${outcome.code}`;
         console.warn(
           JSON.stringify({
             phase: "HYBRID_SOURCE_FAIL",
@@ -474,13 +478,13 @@ export async function executeHybridOperation<T = unknown>(
             operation,
             source,
             code: outcome.code,
+            error:
+              outcome.error instanceof Error
+                ? outcome.error.message.slice(0, 240)
+                : String(outcome.error ?? "").slice(0, 240),
           }),
         );
-        const before = queue.length;
         enqueueFallbacks(source, route, queue, queued);
-        if (queue.length > before) {
-          fallbackReason = `${source}_failed:${outcome.code}`;
-        }
         continue;
       }
 

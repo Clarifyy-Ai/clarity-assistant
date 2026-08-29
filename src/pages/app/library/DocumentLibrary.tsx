@@ -16,6 +16,7 @@ import {
   validateDocumentFile,
 } from "@/lib/documents/uploadValidation";
 import { LICENSE_TYPES, type LicenseType } from "@/lib/content/license";
+import { agentDebugIngest } from "@/lib/debug/agentIngest";
 import {
   cancelDocumentProcessingJob,
   createDocumentProcessingJob,
@@ -55,7 +56,8 @@ type Doc = {
 type StatusTone = "uploaded" | "queued" | "processing" | "completed" | "failed" | "cancelled";
 
 function mimeForDoc(name: string, mime: string | null): string {
-  if (mime) return mime;
+  const cleaned = String(mime ?? "").trim().toLowerCase().split(";")[0]?.trim() ?? "";
+  if (cleaned && cleaned !== "application/octet-stream") return cleaned;
   return ({
     pdf: "application/pdf",
     docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -396,11 +398,27 @@ export default function DocumentLibraryPage() {
       return;
     }
       try {
+      const resolvedMime = mimeForDoc(file.name, file.type);
+      agentDebugIngest({
+        sessionId: "fcd48a",
+        runId: "prompt05",
+        hypothesisId: "DOC-MIME",
+        location: "DocumentLibrary.tsx:upload",
+        message: "resolved library mime before insert",
+        data: {
+          name: file.name,
+          rawType: file.type || null,
+          resolvedMime,
+          size: file.size,
+        },
+      });
       const { error } = await supabase.from("personal_library_documents").insert({
         owner_id: user.id,
         uploaded_by: user.id,
         document_name: file.name,
-        mime_type: file.type,
+        // Windows/browsers often leave file.type empty — persist extension-resolved MIME
+        // so create-document-processing-job does not 422 UNSUPPORTED_DOCUMENT_TYPE.
+        mime_type: resolvedMime,
         storage_path: path,
         source,
         content_rights: rights,
@@ -425,7 +443,7 @@ export default function DocumentLibraryPage() {
             void load();
             await processLibraryDocument({
               documentId: inserted.data.id,
-              mimeType: mimeForDoc(file.name, file.type),
+              mimeType: resolvedMime,
               contentHash,
             });
           }

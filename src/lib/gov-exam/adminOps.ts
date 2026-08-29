@@ -585,7 +585,8 @@ export type QuestionReviewRow = {
   difficulty: string | null;
   source: string | null;
   source_type: string | null;
-  quality_score: number | null;
+  /** Optional — not present on all environments; never required for listing. */
+  quality_score?: number | null;
   quality_algorithm_version?: string | null;
   is_verified: boolean | null;
   is_public: boolean | null;
@@ -606,10 +607,12 @@ export async function listQuestionsForReview(filters: {
   publicUnverifiedOnly?: boolean;
   limit?: number;
 }): Promise<{ data: QuestionReviewRow[]; error: string | null }> {
+  // Do not select `quality_score` — column exists on paper question joins in some
+  // environments but is absent on `public.questions` in production (PGRST/42703 → HTTP 400).
   let q = db()
     .from("questions")
     .select(
-      "id, question_text, exam_type, topic, subject, difficulty, source, source_type, quality_score, metadata, is_verified, is_public, created_at",
+      "id, question_text, exam_type, topic, subject, difficulty, source, source_type, quality_algorithm_version, metadata, is_verified, is_public, created_at",
     )
     .order("created_at", { ascending: false })
     .limit(filters.limit ?? 200);
@@ -646,9 +649,23 @@ export async function listQuestionsForReview(filters: {
     rows = rows.filter((r) => deriveQuestionQueueStatus(r) === "rejected");
   }
   rows = rows.slice(0, filters.limit ?? 100);
+
+  let friendly: string | null = null;
+  if (error) {
+    const raw = error.message || "Unable to load questions";
+    if (/quality_score|column .* does not exist/i.test(raw)) {
+      friendly =
+        "Question review is unavailable due to a schema mismatch. Retry after the latest migration.";
+    } else if (/permission|rls|not authorized|42501/i.test(raw)) {
+      friendly = "You are not authorized to review questions.";
+    } else {
+      friendly = "Unable to load the question review queue. Please retry.";
+    }
+  }
+
   return {
-    data: rows,
-    error: error?.message ?? null,
+    data: error ? [] : rows,
+    error: friendly,
   };
 }
 

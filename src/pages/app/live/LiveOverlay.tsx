@@ -28,6 +28,7 @@ import {
   teardownDesktopOverlayWindow,
 } from "@/lib/platform/electronWindowManager";
 import {
+  clearPendingPracticeSetup,
   consumePendingPracticeSetup,
   peekPendingPracticeSetup,
   saveLastPracticeSetup,
@@ -69,6 +70,14 @@ const DEFAULT_CONFIG: LiveSessionConfig = {
 
 const IS_ELECTRON = isElectronApp();
 
+type LiveOverlayPhase =
+  | "setup"
+  | "starting"
+  | "active"
+  | "ending"
+  | "ended"
+  | "expired";
+
 export default function LiveOverlay() {
   return <LiveOverlaySession />;
 }
@@ -83,16 +92,19 @@ function LiveOverlaySession() {
   const authorityLifecycle = useOverlaySessionAuthorityStore((s) => s.lifecycle);
 
   const skipWizardRef = useRef(Boolean(peekPendingPracticeSetup()));
-  const [phase, setPhase] = useState<"setup" | "starting" | "active" | "expired">("setup");
+  const [phase, setPhase] = useState<LiveOverlayPhase>("setup");
   const [config, setConfig] = useState<LiveSessionConfig>(DEFAULT_CONFIG);
   const [lastSessionId, setLastSessionId] = useState<string | null>(null);
   const [restoreSessionId, setRestoreSessionId] = useState<string | null>(null);
+  const [sessionWasRestored, setSessionWasRestored] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [terminalReason, setTerminalReason] = useState<string | null>(null);
 
   const hasStartedRef = useRef(false);
   const didEndRef = useRef(false);
+  const endingRef = useRef(false);
   const restoreAttemptedRef = useRef(false);
+  const sessionRestoredRef = useRef(false);
 
   useEffect(() => {
     syncOverlayAuthReady(Boolean(authUserId));
@@ -180,13 +192,15 @@ function LiveOverlaySession() {
 
   // Auto-start when redirected from /app/live with a stashed config
   useEffect(() => {
+    if (didEndRef.current || phase === "ending" || phase === "ended") return;
     const pending = consumePendingPracticeSetup();
     if (pending) handleSetup(pending);
     else skipWizardRef.current = false;
-  }, [handleSetup]);
+  }, [handleSetup, phase]);
 
   // ── Start live session (creation handled by start-session edge via useLiveCopilot) ──
   useEffect(() => {
+    if (didEndRef.current || phase === "ending" || phase === "ended") return;
     if (phase !== "starting" || hasStartedRef.current) return;
 
     hasStartedRef.current = true;
@@ -196,6 +210,11 @@ function LiveOverlaySession() {
       .then(() => {
         setLastSessionId(useSessionStore.getState().session_id);
         setPhase("active");
+        if (sessionRestoredRef.current) {
+          toast.info("Session restored — reconnect your microphone to continue transcription.");
+          setSessionWasRestored(true);
+          sessionRestoredRef.current = false;
+        }
       })
       .catch((err: unknown) => {
         if (handleSessionStartError(err)) {
@@ -225,13 +244,14 @@ function LiveOverlaySession() {
   }, []);
 
   useEffect(() => {
+    if (didEndRef.current || phase === "ending" || phase === "ended") return;
     if (!authUserId || phase === "starting") return;
     if (restoreAttemptedRef.current) return;
     restoreAttemptedRef.current = true;
     let cancelled = false;
     void restoreOwnedSession({ session_type: "rehearsal" })
       .then((restored) => {
-        if (cancelled) return;
+        if (cancelled || didEndRef.current) return;
         if (restored.reason === "SESSION_EXPIRED" || restored.lifecycle_status === "EXPIRED") {
           setLastSessionId(restored.session_id ?? null);
           setTerminalReason(restored.terminal_reason ?? "SESSION_TIMEOUT");
@@ -243,6 +263,7 @@ function LiveOverlaySession() {
           // Refresh: re-bind existing session — do not create a new server session.
           setRestoreSessionId(restored.session_id);
           setLastSessionId(restored.session_id);
+          sessionRestoredRef.current = true;
           hasStartedRef.current = false;
           setPhase("starting");
         }
@@ -287,7 +308,11 @@ function LiveOverlaySession() {
 
   // ── Stop session ─────────────────────────────────────────────────────────
   const handleStop = useCallback(async () => {
+    if (endingRef.current) return;
+    endingRef.current = true;
     didEndRef.current = true;
+    setPhase("ending");
+    clearPendingPracticeSetup();
 
     // Snapshot ids/duration before ending — store reset may clear them.
     // Answer count comes from persist so the summary does not offer a dead scorecard.
@@ -307,6 +332,7 @@ function LiveOverlaySession() {
       });
     }
     setLastSessionId(sessionId);
+    setPhase("ended");
 
     // Return to /app/live summary (never leave users on an empty mid-session page)
     if (sessionId) {
@@ -499,6 +525,7 @@ function LiveOverlaySession() {
           isPreparingSession={copilot.isPreparingSession}
           prepStepIndex={copilot.prepStepIndex}
           interviewType={config.interview_type}
+          sessionRestored={sessionWasRestored}
         />
       )}
 

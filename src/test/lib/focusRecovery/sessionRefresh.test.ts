@@ -116,6 +116,38 @@ describe("ensureAuthSession", () => {
     expect(result.probeFailed).toBe(true);
     expect(reset).not.toHaveBeenCalled();
   });
+
+  it("forceRefresh does not join a soft in-flight that skips refresh", async () => {
+    const far = {
+      access_token: "stale-jwt",
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      user: { id: "u1" },
+    };
+    const next = {
+      access_token: "rotated-jwt",
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      user: { id: "u1" },
+    };
+    let releaseGet!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseGet = resolve;
+    });
+    getSession.mockImplementation(async () => {
+      await gate;
+      return { data: { session: far }, error: null };
+    });
+    refreshSession.mockResolvedValue({ data: { session: next }, error: null });
+
+    const soft = ensureAuthSession();
+    const forced = ensureAuthSession({ forceRefresh: true });
+    releaseGet();
+    const [softResult, forcedResult] = await Promise.all([soft, forced]);
+
+    expect(refreshSession).toHaveBeenCalled();
+    expect(forcedResult.refreshed).toBe(true);
+    expect(forcedResult.session?.access_token).toBe("rotated-jwt");
+    expect(softResult.session?.access_token).toBe("stale-jwt");
+  });
 });
 
 describe("isSessionNearExpiry", () => {

@@ -109,6 +109,26 @@ export function formatGovExamOperationError(err: unknown): string {
     return inventoryShortageMessage(details?.available);
   }
 
+  if (
+    code === "GENERATION_CONFLICT" ||
+    code === "EXAM_NOT_AVAILABLE" ||
+    code === "EXAM_VERSION_NOT_APPROVED" ||
+    code === "INVALID_CONFIGURATION" ||
+    code === "PATTERN_NOT_AVAILABLE" ||
+    code === "SYLLABUS_NOT_AVAILABLE"
+  ) {
+    const msg = err instanceof ApiClientError ? err.message : str(asRecord(err)?.error);
+    return sanitizeGovFacingMessage(msg ?? "This exam configuration is not available.");
+  }
+
+  if (code === "INVALID_QUESTION_COUNT") {
+    return "Enter a whole number between 5 and 100 questions.";
+  }
+
+  if (code === "RATE_LIMITED") {
+    return "Too many requests. Please wait a moment and try again.";
+  }
+
   if (code === "ACCOUNT_RESTRICTED") {
     return "This account cannot perform that action. Contact support if you need help.";
   }

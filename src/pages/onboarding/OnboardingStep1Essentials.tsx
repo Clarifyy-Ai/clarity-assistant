@@ -21,6 +21,13 @@ import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { normalizeRefCode } from "@/lib/referrals";
 import type { StepProps } from "@/types/onboarding.types";
@@ -273,15 +280,16 @@ export default function OnboardingStep1Essentials({ data, onNext, onChange }: St
       </div>
       <label className="text-xs font-medium text-muted-foreground block">
         Difficulty
-        <select
-          value={difficulty}
-          onChange={(e) => setDifficulty(e.target.value)}
-          className="mt-1 w-full rounded-xl border border-border bg-secondary/50 px-3 py-2 text-sm text-foreground"
-        >
-          <option value="easy">Easy</option>
-          <option value="medium">Medium</option>
-          <option value="hard">Hard</option>
-        </select>
+        <Select value={difficulty} onValueChange={setDifficulty}>
+          <SelectTrigger className="mt-1 w-full rounded-xl border-border bg-secondary/50">
+            <SelectValue placeholder="Select difficulty" />
+          </SelectTrigger>
+          <SelectContent position="popper" className="z-[200]">
+            <SelectItem value="easy">Easy</SelectItem>
+            <SelectItem value="medium">Medium</SelectItem>
+            <SelectItem value="hard">Hard</SelectItem>
+          </SelectContent>
+        </Select>
       </label>
       <label className="text-xs font-medium text-muted-foreground block">
         Improvement goals

@@ -113,6 +113,7 @@ def run_practice_coach(
     message = _str(payload, "message", "user_message")
     transcript = _str(payload, "transcript", "recent_transcript", "user_answer")
     resume_context = _str(payload, "resume_context")
+    target_company = _str(payload, "target_company", "company")
     interview_type = _str(payload, "interview_type", default="behavioral")
 
     if operation_type in {"hint", "structure", "checklist", "star", "concepts", "followups", "answer"}:
@@ -131,14 +132,19 @@ def run_practice_coach(
     )
 
     if operation_type == "hint":
-        if not keywords:
-            raise EngineError("INSUFFICIENT_INPUT", retryable=False)
-        themes = ", ".join(keywords[:5])
+        if not question:
+            raise EngineError("QUESTION_REQUIRED", retryable=False)
+        themes = ", ".join(keywords[:4]) if keywords else interview_type
+        # Useful coaching scaffold — never invent employer facts or metrics.
         hints = [
-            f"Anchor on themes: {themes}.",
-            "Use one concrete example from your own experience only.",
-            "Close with a result you can substantiate — never invent metrics.",
+            f"Clarify the ask in one sentence before diving into {themes or 'your example'}.",
+            "Pick one real situation: your role, the constraint, and the decision you owned.",
+            "End with a verifiable outcome or lesson — use placeholders if you lack numbers.",
         ]
+        if transcript:
+            hints[1] = (
+                "Build on what you already said — deepen actions and ownership, not new claims."
+            )
         reply = "\n".join(f"• {h}" for h in hints)
         result = _envelope(operation_type, reply, hints=hints, question=question)
         log.info("[PRACTICE_COACH] completed", operation_id=operation_id, correlation_id=correlation_id)
@@ -204,6 +210,8 @@ def run_practice_coach(
             f"Interview type: {interview_type or 'behavioral'}.",
             f"Question: {question}",
         ]
+        if target_company:
+            lines.insert(1, f"Target company: {target_company} (use only if this matches your real context).")
         if has_answer:
             lines.append(
                 "You already started an answer — tighten it: lead with a one-line thesis, "

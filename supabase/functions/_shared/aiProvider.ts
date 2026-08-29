@@ -276,12 +276,30 @@ export async function generateWithFallback(
         };
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
-        if (isGemini && isQuotaOrRateLimitError(lastError)) {
-          // Gemini project quota is shared across models — jump to OpenAI/Anthropic.
+        console.warn(
+          JSON.stringify({
+            phase: "AI_PROVIDER_ATTEMPT_FAIL",
+            model,
+            attempt,
+            message: lastError.message.slice(0, 240),
+          }),
+        );
+        // Gemini project issues (quota, 404, empty/safety, invalid arg) are shared —
+        // jump to OpenAI/Anthropic instead of burning the full Gemini chain.
+        if (
+          isGemini &&
+          (isQuotaOrRateLimitError(lastError) ||
+            /empty response|404|not found|INVALID_ARGUMENT|deprecated|API key|403/i.test(
+              lastError.message,
+            ))
+        ) {
           skipGeminiFamily = true;
           break;
         }
         if (attempt < attempts) continue;
+        if (isGemini) {
+          skipGeminiFamily = true;
+        }
         break;
       }
     }

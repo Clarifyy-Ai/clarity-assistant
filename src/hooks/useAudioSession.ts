@@ -186,6 +186,8 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     const store = useAudioStore.getState();
     store.setIsCapturing(false);
     store.setStreamError(null);
+    store.setMicState("requesting_permission");
+    store.setTokenState("connecting");
     store.setPipelineStatus("requesting_permission");
     store.setDeepgramStatus("connecting");
     useOverlayStore.getState().setSessionPipelineState("connecting");
@@ -196,6 +198,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
         autoGainControl: opts.autoGainControl ?? true,
       });
       store.setMicStream(micStream);
+      store.setMicState("ready");
 
       let sysStream: MediaStream | null = null;
       if (opts.enableSystemAudio && isSystemAudioSupported()) {
@@ -387,6 +390,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
         }
 
         store.setDeepgramStatus("connected");
+        store.setTokenState("ready");
         if (hasInterviewerChannelRef.current) {
           store.setPipelineStatus("listening");
         } else {
@@ -397,8 +401,10 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
         useOverlayStore.getState().setSessionPipelineState("listening");
       } catch (dgErr) {
         console.warn("[useAudioSession] Deepgram unavailable — mic-only mode:", dgErr);
-        store.setDeepgramStatus("disconnected");
+        store.setDeepgramStatus("error");
+        store.setTokenState("failed");
         store.setPipelineStatus("microphone_only");
+        store.setMicState("ready");
         markInterviewerChannel(false);
         if (!opts.micOptional) {
           useOverlayStore.getState().setSessionPipelineState("audio_unavailable");
@@ -431,6 +437,8 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       if (opts.micOptional) {
         store.setStreamError(null);
         store.setDeepgramStatus("disconnected");
+        store.setTokenState("idle");
+        store.setMicState("not_checked");
         store.setIsCapturing(false);
         store.setPipelineStatus("text_only");
         toast.message("Mic unavailable — continue with text chat and AI hints.");
@@ -444,8 +452,10 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
         suggestion: "Allow microphone access in browser settings, then retry.",
       });
       store.setDeepgramStatus("error");
+      store.setTokenState("failed");
       store.setPipelineStatus("unavailable");
       const denied = /permission|denied|notallowed|not allowed/i.test(message);
+      store.setMicState(denied ? "permission_denied" : "error");
       useOverlayStore
         .getState()
         .setSessionPipelineState(denied ? "permission_denied" : "audio_unavailable");

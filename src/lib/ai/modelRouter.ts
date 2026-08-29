@@ -120,15 +120,24 @@ async function callModel(
   };
 
   if (model.startsWith("gpt")) {
-    return streamOpenAIHint({ ...base, model: apiModel });
+    return streamOpenAIHint({
+      ...base,
+      model: apiModel,
+      mode: opts.isLive ? "rehearsal" : "practice",
+    });
   }
 
   if (model.startsWith("claude")) {
-    return streamClaudeHint({ ...base, model: apiModel });
+    return streamClaudeHint({
+      ...base,
+      model: apiModel,
+      mode: opts.isLive ? "rehearsal" : "practice",
+    });
   }
 
   return streamGeminiHint({
     ...opts,
+    mode: opts.isLive ? "rehearsal" : "practice",
     model: toGeminiApiModel(model),
   });
 }
@@ -199,8 +208,9 @@ export async function routeHint(opts: RouteHintOptions): Promise<void> {
         modelHint: opts.preferredModel,
         context: opts.context,
         sessionId: opts.sessionId,
-        mode: opts.isLive ? "rehearsal" : "mock",
-        idempotencyKey: opts.questionId,
+      mode: opts.isLive ? "rehearsal" : "mock",
+      // Keep full-answer mode aligned with Live vs Mock sessionless rules.
+      idempotencyKey: opts.questionId,
         onToken: opts.onChunk,
         onDone: (fullText) => void opts.onDone(fullText),
         onError: (err) => opts.onError(err),

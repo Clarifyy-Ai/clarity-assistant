@@ -65,6 +65,8 @@ export type ExamSearchComboboxProps = {
   initialQuery?: string;
   /** When this changes, the input query is replaced (e.g. recent chips). */
   syncQuery?: string;
+  /** Increment to force a re-search for the current query (e.g. hub retry). */
+  searchNonce?: number;
 };
 
 function examOptionId(listId: string, examId: string): string {
@@ -111,6 +113,7 @@ export function ExamSearchCombobox({
   browseWhenEmpty = true,
   initialQuery = "",
   syncQuery,
+  searchNonce = 0,
 }: ExamSearchComboboxProps): React.ReactElement {
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -290,6 +293,11 @@ export function ExamSearchCombobox({
     },
     [browseWhenEmpty],
   );
+
+  useEffect(() => {
+    if (searchNonce <= 0) return;
+    void runSearch(typeof syncQuery === "string" ? syncQuery : query);
+  }, [searchNonce, syncQuery, query, runSearch]);
 
   useEffect(() => {
     const t = window.setTimeout(() => {

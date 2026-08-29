@@ -101,6 +101,10 @@ describe("hybridExecute / operationRouter source contracts", () => {
     expect(router).toMatch(
       /prep_rephrase:[\s\S]*?preferredOrder:\s*\["ai",\s*"python",\s*"deterministic"\][\s\S]*?pythonFallbackOnAiFailure:\s*true[\s\S]*?canCompleteDeterministically:\s*true/,
     );
+    // system_design: AI preferred for Prep Lab breakdown; python/deterministic fallback only
+    expect(router).toMatch(
+      /system_design:[\s\S]*?preferredOrder:\s*\["ai",\s*"python",\s*"deterministic"\][\s\S]*?pythonFallbackOnAiFailure:\s*true/,
+    );
     // gap / debrief / scorecard: deterministic → python → ai
     for (const op of ["gap_analysis", "session_debrief", "session_scorecard"] as const) {
       expect(router).toMatch(

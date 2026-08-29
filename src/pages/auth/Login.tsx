@@ -48,8 +48,8 @@ import {
   SIGNED_OUT_ELSEWHERE_MESSAGE,
   SIGNED_OUT_ELSEWHERE_REASON,
 } from "@/lib/auth/sessionErrors";
+import { resolveMfaGateFromAal } from "@/lib/auth/mfaGate";
 import {
-  evaluateMfaAssurance,
   MFA_AAL_START_FAILED_MESSAGE,
   MFA_REQUIRED_REASON,
 } from "@/hooks/useAuth";
@@ -266,21 +266,13 @@ export default function Login(): JSX.Element {
         const { data: aal, error: aalError } =
           await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
         if (cancelled) return;
-        const decision = evaluateMfaAssurance({ error: aalError, aal });
-        if (decision === "allow") {
+        const gate = await resolveMfaGateFromAal({ error: aalError, aal });
+        if (gate.decision === "allow") {
           setMfaGateResolved(true);
           return;
         }
-        if (decision === "challenge") {
-          const { data: factors, error: factorsError } =
-            await supabase.auth.mfa.listFactors();
-          if (factorsError) throw factorsError;
-          const totp = factors?.totp?.find((f) => f.status === "verified");
-          if (!totp?.id) {
-            throw new Error("MFA enrolled but no verified authenticator was found.");
-          }
-          if (cancelled) return;
-          setMfaFactorId(totp.id);
+        if (gate.decision === "challenge" && gate.factorId) {
+          setMfaFactorId(gate.factorId);
           setMfaCode("");
           setMfaPending(true);
           setAuthError(null);

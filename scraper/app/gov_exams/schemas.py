@@ -16,6 +16,7 @@ class AvailabilityRequest(BaseModel):
     difficulty: Literal["EASY", "MEDIUM", "HARD"] | None = None
     correlation_id: str | None = Field(default=None, max_length=128)
     job_id: str | None = Field(default=None, max_length=80)
+    bank_type_keys: list[str] = Field(default_factory=list, max_length=40)
 
 
 class AvailabilityResponse(BaseModel):

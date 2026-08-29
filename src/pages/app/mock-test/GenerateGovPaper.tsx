@@ -54,26 +54,17 @@ import {
   mapProgressToUserStage,
   saveActivePaperJob,
 } from "@/lib/gov-exam/paperJobStatus";
+import {
+  parseGovQuestionCount,
+  GOV_QUESTION_COUNT_ABS_MAX,
+  GOV_QUESTION_COUNT_MIN,
+} from "@/lib/gov-exam/questionCount";
 import { toast } from "sonner";
 
 const STEPS = ["Exam", "Paper basis", "Customize", "Review"] as const;
 
-const QUESTION_COUNT_MIN = 5;
-const QUESTION_COUNT_ABS_MAX = 100;
-
-function clampQuestionCount(raw: unknown, max: number): number {
-  // Reject scientific notation / signed junk so typing "5e55" cannot overflow the UI.
-  if (typeof raw === "string") {
-    const trimmed = raw.trim();
-    if (!trimmed || /[eE.+-]/.test(trimmed)) return QUESTION_COUNT_MIN;
-    const n = Number.parseInt(trimmed, 10);
-    if (!Number.isFinite(n)) return QUESTION_COUNT_MIN;
-    return Math.min(Math.max(QUESTION_COUNT_MIN, n), Math.max(QUESTION_COUNT_MIN, max));
-  }
-  const n = typeof raw === "number" ? raw : Number(raw);
-  if (!Number.isFinite(n) || !Number.isInteger(n)) return QUESTION_COUNT_MIN;
-  return Math.min(Math.max(QUESTION_COUNT_MIN, Math.floor(n)), Math.max(QUESTION_COUNT_MIN, max));
-}
+const QUESTION_COUNT_MIN = GOV_QUESTION_COUNT_MIN;
+const QUESTION_COUNT_ABS_MAX = GOV_QUESTION_COUNT_ABS_MAX;
 
 const DURATION_MIN = 5;
 const DURATION_MAX = 360;
@@ -145,6 +136,9 @@ export default function GenerateGovPaper(): React.ReactElement {
   >((params.get("basis") as "latest_pattern" | "topic" | "quick" | "full_sim") || "quick");
   const [language, setLanguage] = useState("en");
   const [questionCount, setQuestionCount] = useState(25);
+  const [questionCountInput, setQuestionCountInput] = useState("25");
+  const [questionCountError, setQuestionCountError] = useState<string | null>(null);
+  const [patternLoadError, setPatternLoadError] = useState<string | null>(null);
   const [durationMinutes, setDurationMinutes] = useState(30);
   const [topicChoices, setTopicChoices] = useState<string[]>([]);
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
@@ -157,6 +151,7 @@ export default function GenerateGovPaper(): React.ReactElement {
   const generatingRef = useRef(false);
   const idempotencyKeyRef = useRef<string | null>(null);
   const profile = useAuthStore((s) => s.profile);
+  const user = useAuthStore((s) => s.user);
   const storeCredits = useAuthStore((s) => (s as { credits?: number }).credits);
   const isProfileLoaded = useAuthStore((s) => (s as { isProfileLoaded?: boolean }).isProfileLoaded);
   const creditBalance = resolveCreditBalance({
@@ -194,10 +189,16 @@ export default function GenerateGovPaper(): React.ReactElement {
           QUESTION_COUNT_ABS_MAX,
           selected?.pattern?.totalQuestions ?? QUESTION_COUNT_ABS_MAX,
         );
+  const parsedQuestionCount = useMemo(
+    () => parseGovQuestionCount(questionCountInput, questionCountMax),
+    [questionCountInput, questionCountMax],
+  );
   const requestedForConfig =
     basis === "full_sim"
       ? selected?.pattern?.totalQuestions ?? questionCount
-      : clampQuestionCount(questionCount, questionCountMax);
+      : parsedQuestionCount.valid
+        ? parsedQuestionCount.value
+        : questionCount;
   // AI generation of missing questions is a Pro-and-above capability (rank >= 2).
   // Short banks fail closed to Custom Practice — never unlock Full Mock via
   // fragile Python/hybrid heuristics (P0-02 inventory honesty).
@@ -389,12 +390,15 @@ export default function GenerateGovPaper(): React.ReactElement {
 
   // Resume an in-flight job after refresh — never auto-restart generation.
   useEffect(() => {
-    const userId = profile?.id;
+    const userId = user?.id ?? profile?.id;
     if (!userId) return;
     const fromUrl = params.get("jobId");
     const stored = loadActivePaperJob(userId);
     const jobId = fromUrl || stored?.jobId;
     if (!jobId) return;
+    if (stored?.idempotencyKey) {
+      idempotencyKeyRef.current = stored.idempotencyKey;
+    }
     if (!fromUrl) {
       syncJobIdInUrl(jobId);
     }
@@ -440,8 +444,9 @@ export default function GenerateGovPaper(): React.ReactElement {
           clearActivePaperJob();
           syncJobIdInUrl(null);
         }
-      } catch {
-        /* leave UI; user can retry */
+      } catch (err) {
+        setBusy(false);
+        toast.error(formatGovExamOperationError(err));
       } finally {
         if (!cancelled) setBusy(false);
       }
@@ -450,7 +455,7 @@ export default function GenerateGovPaper(): React.ReactElement {
       cancelled = true;
       pollAbortRef.current = true;
     };
-  }, [profile?.id, params]);
+  }, [user?.id, profile?.id, params]);
 
   useEffect(() => {
     if (!selected) return;
@@ -472,6 +477,7 @@ export default function GenerateGovPaper(): React.ReactElement {
     void getExamPattern({ examId, stageId })
       .then((res) => {
         if (cancelled) return;
+        setPatternLoadError(null);
         setSelectedExam((prev) => {
           if (!prev || prev.examId !== examId) return prev;
           const langs =
@@ -503,8 +509,13 @@ export default function GenerateGovPaper(): React.ReactElement {
           );
         }
       })
-      .catch(() => {
-        /* keep selection from search/details */
+      .catch((err) => {
+        if (cancelled) return;
+        setPatternLoadError(
+          err instanceof ApiClientError && err.code === "PATTERN_NOT_AVAILABLE"
+            ? "Approved exam pattern is not configured yet. Choose another stage or contact support."
+            : "Could not load exam pattern.",
+        );
       });
     return () => {
       cancelled = true;
@@ -515,6 +526,7 @@ export default function GenerateGovPaper(): React.ReactElement {
   // Server-authoritative availability before charge — also keep bank counts honest.
   useEffect(() => {
     if (!examId || !stageId || step < 2) return;
+    if (basis !== "full_sim" && !parsedQuestionCount.valid) return;
     let cancelled = false;
     const mode =
       basis === "full_sim" ? ("generated_mock" as const) : ("custom_mock" as const);
@@ -525,7 +537,9 @@ export default function GenerateGovPaper(): React.ReactElement {
             QUESTION_COUNT_ABS_MAX,
             selected?.pattern?.totalQuestions ?? QUESTION_COUNT_ABS_MAX,
           );
-    const safeRequested = clampQuestionCount(requestedForConfig, maxQ);
+    const safeRequested = parsedQuestionCount.valid
+      ? parsedQuestionCount.value
+      : requestedForConfig;
     const timer = window.setTimeout(() => {
       void checkExamPaperAvailability({
         examId,
@@ -585,7 +599,7 @@ export default function GenerateGovPaper(): React.ReactElement {
       window.clearTimeout(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [examId, stageId, basis, language, questionCount, difficulty, step]);
+  }, [examId, stageId, basis, language, questionCountInput, parsedQuestionCount.valid, difficulty, step]);
 
   function resolvedTopicsSafe(): string[] {
     const fromDraft = topicDraft
@@ -636,11 +650,42 @@ export default function GenerateGovPaper(): React.ReactElement {
       !pollAbortRef.current &&
       polls < maxPolls
     ) {
-      await new Promise((r) => setTimeout(r, 1500));
+      const delayMs = polls < 5 ? 1500 : polls < 20 ? 3000 : 5000;
+      await new Promise((r) => setTimeout(r, delayMs));
       if (pollAbortRef.current) break;
-      current = await getPaperGenerationJob(jobId);
-      setJob(current);
+      try {
+        current = await getPaperGenerationJob(jobId);
+        setJob(current);
+      } catch (err) {
+        const terminal =
+          err instanceof ApiClientError &&
+          (err.status === 404 ||
+            err.status === 409 ||
+            err.status === 429 ||
+            err.code === "RATE_LIMITED" ||
+            err.code === "GENERATION_CONFLICT");
+        if (terminal) {
+          current = {
+            ...current,
+            status: "failed_retryable",
+            errorCode: err instanceof ApiClientError ? err.code : undefined,
+            errorMessage: formatGovExamOperationError(err),
+          };
+          setJob(current);
+          break;
+        }
+        throw err;
+      }
       polls += 1;
+    }
+    if (!isPaperJobTerminal(current.status) && polls >= maxPolls) {
+      current = {
+        ...current,
+        status: "failed_retryable",
+        errorMessage:
+          "Paper generation is taking longer than expected. Refresh this page to resume.",
+      };
+      setJob(current);
     }
     return current;
   }
@@ -665,6 +710,14 @@ export default function GenerateGovPaper(): React.ReactElement {
   async function handleGenerate(overrideCount?: number) {
     if (!examId || !stageId) {
       toast.error("Select an exam and stage");
+      return;
+    }
+    if (patternLoadError) {
+      toast.error(patternLoadError);
+      return;
+    }
+    if (basis !== "full_sim" && !parsedQuestionCount.valid) {
+      toast.error(questionCountError ?? "Enter a valid question count.");
       return;
     }
     if (generatingRef.current) return;
@@ -812,8 +865,14 @@ export default function GenerateGovPaper(): React.ReactElement {
         }),
       });
       setJob(result);
-      if (profile?.id && result.jobId) {
-        saveActivePaperJob({ jobId: result.jobId, examId, userId: profile.id });
+      const resumeUserId = user?.id ?? profile?.id;
+      if (resumeUserId && result.jobId) {
+        saveActivePaperJob({
+          jobId: result.jobId,
+          examId,
+          userId: resumeUserId,
+          idempotencyKey: idempotencyKeyRef.current ?? undefined,
+        });
         syncJobIdInUrl(result.jobId);
       }
 
@@ -1102,6 +1161,12 @@ export default function GenerateGovPaper(): React.ReactElement {
             </fieldset>
           )}
 
+          {step === 2 && patternLoadError && (
+            <p className="text-sm text-destructive" role="alert">
+              {patternLoadError}
+            </p>
+          )}
+
           {step === 2 && (
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="text-sm space-y-1">
@@ -1121,20 +1186,15 @@ export default function GenerateGovPaper(): React.ReactElement {
               <label className="text-sm space-y-1">
                 <span className="font-medium">Questions</span>
                 <input
-                  type="number"
-                  min={QUESTION_COUNT_MIN}
-                  max={
-                    basis === "topic"
-                      ? QUESTION_COUNT_ABS_MAX
-                      : Math.min(
-                          QUESTION_COUNT_ABS_MAX,
-                          selected?.pattern?.totalQuestions ?? QUESTION_COUNT_ABS_MAX,
-                        )
-                  }
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   disabled={basis === "full_sim"}
                   className="w-full rounded-lg border border-border bg-background px-3 py-2"
-                  value={questionCount}
+                  value={questionCountInput}
                   onChange={(e) => {
+                    const raw = e.target.value;
+                    setQuestionCountInput(raw);
                     const max =
                       basis === "topic"
                         ? QUESTION_COUNT_ABS_MAX
@@ -1142,14 +1202,38 @@ export default function GenerateGovPaper(): React.ReactElement {
                             QUESTION_COUNT_ABS_MAX,
                             selected?.pattern?.totalQuestions ?? QUESTION_COUNT_ABS_MAX,
                           );
-                    const raw = e.target.value;
-                    if (raw === "") {
-                      setQuestionCount(QUESTION_COUNT_MIN);
+                    const parsed = parseGovQuestionCount(raw, max);
+                    if (!parsed.valid) {
+                      setQuestionCountError("error" in parsed ? parsed.error : "Invalid question count.");
                       return;
                     }
-                    setQuestionCount(clampQuestionCount(raw, max));
+                    setQuestionCountError(null);
+                    setQuestionCount(parsed.value);
+                  }}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    const pasted = e.clipboardData.getData("text");
+                    const max =
+                      basis === "topic"
+                        ? QUESTION_COUNT_ABS_MAX
+                        : Math.min(
+                            QUESTION_COUNT_ABS_MAX,
+                            selected?.pattern?.totalQuestions ?? QUESTION_COUNT_ABS_MAX,
+                          );
+                    setQuestionCountInput(pasted.trim());
+                    const parsed = parseGovQuestionCount(pasted.trim(), max);
+                    if (!parsed.valid) {
+                      setQuestionCountError("error" in parsed ? parsed.error : "Invalid question count.");
+                      return;
+                    }
+                    setQuestionCountError(null);
+                    setQuestionCount(parsed.value);
+                    setQuestionCountInput(String(parsed.value));
                   }}
                 />
+                {questionCountError ? (
+                  <p className="text-xs text-destructive">{questionCountError}</p>
+                ) : null}
               </label>
               {basis !== "topic" && (
                 <label className="text-sm space-y-1">

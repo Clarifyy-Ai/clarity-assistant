@@ -56,6 +56,19 @@ export async function getOwnedDocument(
   return data;
 }
 
+function mimeFromStoragePath(storagePath: string): string {
+  const name = storagePath.split("/").pop() ?? storagePath;
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  const map: Record<string, string> = {
+    pdf: "application/pdf",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    txt: "text/plain",
+    csv: "text/csv",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  };
+  return map[ext] ?? "";
+}
+
 export function validateDocumentRecord(document: Record<string, unknown>, userId: string) {
   const storagePath = typeof document.storage_path === "string"
     ? document.storage_path
@@ -64,7 +77,11 @@ export function validateDocumentRecord(document: Record<string, unknown>, userId
       storagePath.includes("..") || storagePath.startsWith("/")) {
     return { ok: false as const, code: "INVALID_STORAGE_REFERENCE", message: "Document storage reference is invalid." };
   }
-  const mime = validateUploadMime(String(document.mime_type ?? ""));
+  const rawMime = String(document.mime_type ?? "").trim();
+  const inferred = rawMime && rawMime !== "application/octet-stream"
+    ? rawMime
+    : mimeFromStoragePath(storagePath);
+  const mime = validateUploadMime(inferred);
   if (!mime.ok) {
     return { ok: false as const, code: "UNSUPPORTED_DOCUMENT_TYPE", message: "Document type is not supported." };
   }

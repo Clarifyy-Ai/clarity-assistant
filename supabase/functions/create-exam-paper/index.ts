@@ -1,7 +1,7 @@
 // create-exam-paper — validate, reserve credits, enqueue job; process async when possible.
 import { handleCors, getCorsHeaders, withBrowserCors, applyCors } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
-import { createServiceClient, deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
+import { createServiceClient, deductCreditsAtomic, refundCreditsBestEffort } from "../_shared/supabase.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import {
   checkRateLimitAsync,
@@ -44,6 +44,7 @@ import { isPythonForceUnavailable } from "../_shared/pythonClient.ts";
 import {
   clampGovQuestionCount,
   GOV_QUESTION_COUNT_ABS_MAX,
+  validateGovQuestionCount,
 } from "../_shared/govQuestionCount.ts";
 
 const COST = creditCost("create_mock_test");
@@ -75,6 +76,9 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
 
   const db = createServiceClient();
   const correlationId = req.headers.get("x-request-id")?.trim() || crypto.randomUUID();
+  let creditsChargedForJob = false;
+  let chargeUserId: string | null = null;
+  let chargeIdempotencyKey: string | null = null;
 
   try {
     const auth = await authenticateRequest(req);
@@ -241,10 +245,16 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
     }
 
     const requestedCountRaw = (body as Record<string, unknown>).questionCount;
-    const requestedCount =
-      mode === "custom_mock"
-        ? clampGovQuestionCount(requestedCountRaw, GOV_QUESTION_COUNT_ABS_MAX)
-        : Number(pattern.total_questions) || 0;
+    let requestedCount: number;
+    if (mode === "custom_mock") {
+      const qc = validateGovQuestionCount(requestedCountRaw, GOV_QUESTION_COUNT_ABS_MAX);
+      if (!qc.ok) {
+        return json(req, { error: qc.error, code: qc.code }, 400);
+      }
+      requestedCount = qc.value;
+    } else {
+      requestedCount = Number(pattern.total_questions) || 0;
+    }
 
     const topics = Array.isArray((body as Record<string, unknown>).topics)
       ? ((body as Record<string, unknown>).topics as unknown[])
@@ -260,7 +270,27 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
         : null;
 
     let available = 0;
-    let usedPythonInventory = false;
+    let inventorySnapshot: Record<string, unknown> | null = null;
+    let inventoryVersion: string | null = null;
+
+    const inventory = await countEligibleGovQuestions(db, {
+      examId,
+      exam: {
+        code: exam.code as string | null,
+        name: exam.name as string | null,
+        legacy_exam_type: exam.legacy_exam_type as string | null,
+      },
+      language,
+      topics: topics.length ? topics : null,
+      difficulty,
+    });
+    available = inventory.available;
+    inventorySnapshot = inventory.inventorySnapshot ?? {
+      available: inventory.available,
+      exam_type_keys: inventory.examTypeKeys,
+    };
+    inventoryVersion = inventory.inventoryVersion ?? "gov_inventory_v1";
+
     if (isPythonGovExamConfigured()) {
       const py = await pythonGovAvailability({
         exam_id: examId,
@@ -270,36 +300,23 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
         topics,
         difficulty,
         correlation_id: correlationId,
+        bank_type_keys: inventory.examTypeKeys,
       });
       if (py.ok) {
-        available = py.data.available;
-        usedPythonInventory = true;
         console.log(JSON.stringify({
-          tag: "[GOV_EXAM] create_availability_python",
+          tag: "[GOV_EXAM] create_availability_python_enriched",
           correlation_id: correlationId,
-          available,
+          canonical_available: available,
+          python_available: py.data.available,
           requested: requestedCount,
         }));
       } else {
         console.warn(JSON.stringify({
-          tag: "[GOV_EXAM] create_availability_python_fallback",
+          tag: "[GOV_EXAM] create_availability_python_skipped",
           correlation_id: correlationId,
           code: py.error.code,
         }));
       }
-    }
-    if (!usedPythonInventory) {
-      const inventory = await countEligibleGovQuestions(db, {
-        exam: {
-          code: exam.code as string | null,
-          name: exam.name as string | null,
-          legacy_exam_type: exam.legacy_exam_type as string | null,
-        },
-        language,
-        topics: topics.length ? topics : null,
-        difficulty,
-      });
-      available = inventory.available;
     }
 
     const pythonConfigured = isPythonGovExamConfigured();
@@ -376,6 +393,10 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
       return creditDenialResponse(req, creditResult, COST);
     }
 
+    creditsChargedForJob = true;
+    chargeUserId = user.id;
+    chargeIdempotencyKey = idempotencyKey;
+
     // Tag for Python poller whenever preferred/configured — even if HTTP dispatch
     // is unavailable (PAPER_FACTORY_WORKER DB claim path).
     const usePythonFactory = wantsPythonPaperFactoryGenerator({
@@ -424,6 +445,8 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
         credits_charged: COST,
         credit_reservation: `gov_paper:${idempotencyKey}`,
         random_seed: randomSeed,
+        inventory_snapshot: inventorySnapshot,
+        inventory_version: inventoryVersion,
         attempt_count: 0,
         retryable: true,
         worker_id: null,
@@ -455,12 +478,16 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
         }
       }
       console.error("[create-exam-paper] job insert:", jobErr);
-      await refundCredits({
-        userId: user.id,
-        cost: COST,
-        reason: "refund_create_exam_paper_job",
-        idempotencyKey: `refund_create_exam_paper_job:${idempotencyKey}`,
-      }).catch(() => {});
+      await refundCreditsBestEffort(
+        {
+          userId: user.id,
+          cost: COST,
+          reason: "refund_create_exam_paper_job",
+          idempotencyKey: `refund_create_exam_paper_job:${idempotencyKey}`,
+        },
+        { job_id: null, idempotency_key: idempotencyKey },
+      );
+      creditsChargedForJob = false;
       return json(req, {
         success: false,
         error: "Failed to create paper generation job. Your credits were refunded — please try again.",
@@ -605,6 +632,17 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
     }, result.httpStatus ?? 500);
   } catch (err) {
     console.error("[create-exam-paper] Error:", err);
+    if (creditsChargedForJob && chargeUserId && chargeIdempotencyKey) {
+      await refundCreditsBestEffort(
+        {
+          userId: chargeUserId,
+          cost: COST,
+          reason: "refund_create_exam_paper_unhandled",
+          idempotencyKey: `refund_create_exam_paper_unhandled:${chargeIdempotencyKey}`,
+        },
+        { correlation_id: correlationId },
+      );
+    }
     return json(req, {
       error: "Internal server error",
       code: "INTERNAL_ERROR",

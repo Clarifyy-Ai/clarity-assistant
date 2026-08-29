@@ -123,6 +123,13 @@ export class DeepgramStreamClient {
 
   async connect(): Promise<void> {
     if (this.destroyed) return;
+    if (
+      this.ws &&
+      (this.ws.readyState === WebSocket.OPEN ||
+        this.ws.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
 
     this.callbacks.onStatusChange("connecting");
 
@@ -258,10 +265,17 @@ export class DeepgramStreamClient {
     }
 
     // Mint via fetchEdge (attaches a fresh JWT at call time).
-    const tokenData = await fetchDeepgramTokenBounded({ force: opts?.force === true });
-    this.currentToken = tokenData.token;
-    this.tokenExpiresAt = tokenData.expires_at_ms;
-    this.tokenExpiresInSec = tokenData.expires_in;
+    useAudioStore.getState().setTokenState("connecting");
+    try {
+      const tokenData = await fetchDeepgramTokenBounded({ force: opts?.force === true });
+      this.currentToken = tokenData.token;
+      this.tokenExpiresAt = tokenData.expires_at_ms;
+      this.tokenExpiresInSec = tokenData.expires_in;
+      useAudioStore.getState().setTokenState("ready");
+    } catch (err) {
+      useAudioStore.getState().setTokenState("failed");
+      throw err;
+    }
   }
 
   private handleOpen(): void {

@@ -25,6 +25,13 @@ import {
 } from "@/lib/ai/modelOptions";
 import { normalizeToDisplayTier } from "@/lib/constants/pricing";
 import { Button } from "@/components/ui/Button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import {
   Accordion,
@@ -118,6 +125,12 @@ export default function OnboardingStep2OptionalSetup({
   const [storedPath, setStoredPath] = useState<string | null>(null);
   const [extractPreview, setExtractPreview] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setResumeId(data.resumeFileId);
+    setResumeDone(Boolean(data.resumeFileId));
+    setResumeSkipped(data.skipResume);
+  }, [data.resumeFileId, data.skipResume]);
 
   // ── Preferences state ─────────────────────────────────────────────────────
   const existingStyles = (() => {
@@ -566,37 +579,37 @@ export default function OnboardingStep2OptionalSetup({
             {audioInputs.length > 0 && (
               <label className="block space-y-1">
                 <span className="text-xs font-medium text-muted-foreground">Microphone</span>
-                <select
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                  value={selectedDeviceId}
-                  onChange={(e) => setSelectedDeviceId(e.target.value)}
-                  aria-label="Microphone device"
-                >
-                  <option value="default">Browser default</option>
-                  {audioInputs.map((d) => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `Microphone ${d.deviceId.slice(0, 6)}`}
-                    </option>
-                  ))}
-                </select>
+                <Select value={selectedDeviceId} onValueChange={setSelectedDeviceId}>
+                  <SelectTrigger className="w-full rounded-lg border-border bg-background" aria-label="Microphone device">
+                    <SelectValue placeholder="Browser default" />
+                  </SelectTrigger>
+                  <SelectContent position="popper" className="z-[200]">
+                    <SelectItem value="default">Browser default</SelectItem>
+                    {audioInputs.map((d) => (
+                      <SelectItem key={d.deviceId} value={d.deviceId}>
+                        {d.label || `Microphone ${d.deviceId.slice(0, 6)}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </label>
             )}
             {audioOutputs.length > 0 && (
               <label className="block space-y-1">
                 <span className="text-xs font-medium text-muted-foreground">Speakers</span>
-                <select
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                  value={outputDeviceId}
-                  onChange={(e) => setOutputDeviceId(e.target.value)}
-                  aria-label="Speaker device"
-                >
-                  <option value="default">Browser default</option>
-                  {audioOutputs.map((d) => (
-                    <option key={d.deviceId} value={d.deviceId}>
-                      {d.label || `Speaker ${d.deviceId.slice(0, 6)}`}
-                    </option>
-                  ))}
-                </select>
+                <Select value={outputDeviceId} onValueChange={setOutputDeviceId}>
+                  <SelectTrigger className="w-full rounded-lg border-border bg-background" aria-label="Speaker device">
+                    <SelectValue placeholder="Browser default" />
+                  </SelectTrigger>
+                  <SelectContent position="popper" className="z-[200]">
+                    <SelectItem value="default">Browser default</SelectItem>
+                    {audioOutputs.map((d) => (
+                      <SelectItem key={d.deviceId} value={d.deviceId}>
+                        {d.label || `Speaker ${d.deviceId.slice(0, 6)}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </label>
             )}
             {deviceFallbackNote && (

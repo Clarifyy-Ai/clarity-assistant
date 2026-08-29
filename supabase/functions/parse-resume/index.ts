@@ -104,7 +104,54 @@ function isThinResumeStructured(parsed: Record<string, unknown> | null): boolean
   const experience = Array.isArray(parsed.experience) ? parsed.experience : [];
   const summary = typeof parsed.summary === "string" ? parsed.summary.trim() : "";
   const name = typeof parsed.name === "string" ? parsed.name.trim() : "";
-  return !name || skills.length < 2 || experience.length < 1 || summary.length < 40;
+  // Long extracted text is usable for coach context even without structured fields.
+  if (summary.length >= 120) return false;
+  if (name && summary.length >= 40) return false;
+  if (skills.length >= 2 && experience.length >= 1 && summary.length >= 40) return false;
+  return true;
+}
+
+function isUsableResumeParsed(parsed: Record<string, unknown> | null): boolean {
+  if (!parsed) return false;
+  const summary = typeof parsed.summary === "string" ? parsed.summary.trim() : "";
+  const name = typeof parsed.name === "string" ? parsed.name.trim() : "";
+  const skills = Array.isArray(parsed.skills) ? parsed.skills.length : 0;
+  const experience = Array.isArray(parsed.experience) ? parsed.experience.length : 0;
+  if (summary.length >= 60) return true;
+  if (name && (summary.length >= 20 || skills >= 1 || experience >= 1)) return true;
+  return !isThinResumeStructured(parsed);
+}
+
+function buildTextFallbackResume(text: string): Record<string, unknown> | null {
+  const clipped = text.trim();
+  if (clipped.length < 40) return null;
+  const firstLine = clipped.split(/\n+/).map((l) => l.trim()).find(Boolean) ?? "";
+  return normalizeResumeParsed({
+    name: firstLine.slice(0, 200),
+    summary: clipped.slice(0, 4000),
+    skills: [],
+    experience: [],
+    education: [],
+    projects: [],
+  });
+}
+
+/** Best-effort text extraction from text-based PDFs when Python is unavailable. */
+function extractPdfTextBasic(bytes: Uint8Array): string | null {
+  const raw = bytesToUtf8(bytes);
+  const chunks: string[] = [];
+  const re = /\(([^()\\]*(?:\\.[^()\\]*)*)\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(raw)) !== null) {
+    const piece = match[1]!
+      .replace(/\\n/g, "\n")
+      .replace(/\\r/g, "\r")
+      .replace(/\\\(/g, "(")
+      .replace(/\\\)/g, ")");
+    if (piece.trim().length >= 2) chunks.push(piece);
+  }
+  const text = chunks.join(" ").replace(/\s+/g, " ").trim();
+  return text.length >= 40 ? text : null;
 }
 
 function mapPythonStructuredResume(structured: Record<string, unknown>): Record<string, unknown> | null {
@@ -330,6 +377,7 @@ async function parseResumeHybrid(opts: {
   | { ok: false; response: Response }
 > {
   const clippedText = (opts.text ?? "").slice(0, 80_000);
+  let lastExtractedText = clippedText;
   const hybrid = await executeHybridOperation<Record<string, unknown>>({
     req: opts.req,
     auth: { userId: opts.userId },
@@ -353,8 +401,9 @@ async function parseResumeHybrid(opts: {
         education: [],
         projects: [],
       });
-      // Prefer richer python/AI when deterministic is thin.
-      if (!normalized || isThinResumeStructured(normalized)) return null;
+      if (!normalized || !isUsableResumeParsed(normalized)) return null;
+      // Prefer richer python/AI when deterministic output is thin but still usable.
+      if (isThinResumeStructured(normalized) && clippedText.trim().length < 200) return null;
       return normalized;
     },
     runPython: async (ctx) => {
@@ -379,10 +428,13 @@ async function parseResumeHybrid(opts: {
           const raw = pythonResult.data as Record<string, unknown> | null;
           if (typeof raw?.extracted_text === "string" && raw.extracted_text.trim()) {
             textHint = String(raw.extracted_text);
+            lastExtractedText = textHint;
           } else if (typeof raw?.full_text === "string" && raw.full_text.trim()) {
             textHint = String(raw.full_text);
+            lastExtractedText = textHint;
           } else if (typeof raw?.text === "string" && raw.text.trim()) {
             textHint = String(raw.text);
+            lastExtractedText = textHint;
           }
         }
       }
@@ -400,6 +452,9 @@ async function parseResumeHybrid(opts: {
         if (pythonResult.ok) {
           pythonParsed = extractPythonResume(pythonResult.data);
         }
+      }
+      if (!pythonParsed && textHint.trim().length >= 40) {
+        pythonParsed = buildTextFallbackResume(textHint);
       }
       if (!pythonParsed) return null;
 
@@ -463,12 +518,18 @@ async function parseResumeHybrid(opts: {
     },
     validate: async (data) => {
       const normalized = normalizeResumeParsed(data);
-      if (!normalized) throw new Error("Resume schema invalid");
+      if (!normalized || !isUsableResumeParsed(normalized)) {
+        throw new Error("Resume schema invalid");
+      }
       return normalized;
     },
   });
 
   if (!hybrid.ok) {
+    const fallback = buildTextFallbackResume(lastExtractedText);
+    if (fallback) {
+      return { ok: true, data: fallback, source: "text-extract" };
+    }
     return { ok: false, response: hybrid.response };
   }
   return { ok: true, data: hybrid.data, source: hybrid.source };
@@ -650,8 +711,26 @@ Deno.serve(async (req) => {
     }
 
     const buf = await fileData.arrayBuffer();
-    if (!buf.byteLength || buf.byteLength > MAX_FILE_BYTES) {
-      return new Response(JSON.stringify({ error: "File empty or too large", code: "BAD_REQUEST" }), { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } });
+    if (!buf.byteLength) {
+      return new Response(
+        JSON.stringify({
+          error: "File is empty.",
+          code: "PARSER_FAILED",
+          message: "File is empty.",
+        }),
+        { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+      );
+    }
+    if (buf.byteLength > MAX_FILE_BYTES) {
+      return new Response(
+        JSON.stringify({
+          error: "File is too large.",
+          code: "FILE_TOO_LARGE",
+          message: `File exceeds the ${Math.floor(MAX_FILE_BYTES / (1024 * 1024))} MB limit.`,
+          max_bytes: MAX_FILE_BYTES,
+        }),
+        { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+      );
     }
 
     const fileBytes = new Uint8Array(buf);
@@ -783,6 +862,8 @@ Deno.serve(async (req) => {
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     ) {
       extractedText = await extractDocxText(fileBytes);
+    } else if (resolvedMime === "application/pdf") {
+      extractedText = extractPdfTextBasic(fileBytes);
     }
 
     const hybrid = await parseResumeHybrid({
@@ -818,9 +899,12 @@ Deno.serve(async (req) => {
     }
 
     // Total failure — hybrid already refunded reserved credits.
-    const failMsg = "All extraction methods failed";
+    const failMsg = "We could not extract readable content from this resume.";
     await db.from("resumes").update({
-      content: JSON.stringify({ _parse_error: failMsg }),
+      content: JSON.stringify({
+        _parse_error: failMsg,
+        _error_code: "PARSER_FAILED",
+      }),
     }).eq("id", resume_id);
     if (effectiveVersionId) {
       await db.from("resume_versions").update({
@@ -828,7 +912,23 @@ Deno.serve(async (req) => {
         parse_error: failMsg,
       }).eq("id", effectiveVersionId);
     }
-    return hybrid.response;
+    let correlationId = "";
+    try {
+      const failBody = await hybrid.response.clone().json() as { correlation_id?: string };
+      correlationId = failBody.correlation_id ?? "";
+    } catch {
+      /* ignore */
+    }
+    return new Response(
+      JSON.stringify({
+        success: false,
+        code: "PARSER_FAILED",
+        message: failMsg,
+        retryable: true,
+        correlation_id: correlationId,
+      }),
+      { status: 422, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+    );
 
   } catch (err) {
     if (err instanceof Response) return err;

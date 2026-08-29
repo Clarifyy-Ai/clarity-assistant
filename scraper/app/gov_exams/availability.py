@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Sequence
 
 from app.document_intelligence.deduplication import (
@@ -93,14 +93,17 @@ def load_eligible_bank(
         .select(
             "id, question_text, options, correct_answer, subject, topic, "
             "difficulty, exam_type, source, source_type, is_public, is_verified, "
-            "metadata, publish_status"
+            "metadata, publish_status, review_status"
         )
         .in_("exam_type", keys)
         .eq("is_public", True)
+        .eq("publish_status", "published")
+        .eq("review_status", "approved")
         .limit(limit)
     )
     if verified_only:
-        query = query.eq("is_verified", True)
+        # Assembly-aligned: published+approved rows; PYP may be unverified.
+        pass
     if difficulty:
         query = query.eq("difficulty", difficulty.upper())
 
@@ -190,6 +193,8 @@ def compute_availability(
     )
 
     exam = repo.resolve_exam(request.exam_id, request.stage_id)
+    if request.bank_type_keys:
+        exam = replace(exam, bank_type_keys=tuple(request.bank_type_keys))
     rows, keys = load_eligible_bank(
         repo,
         exam,

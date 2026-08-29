@@ -168,6 +168,9 @@ async function getAccessToken(options?: {
     const ensured = await ensureAuthSession({
       forceRefresh: options?.forceRefresh === true,
     });
+    if (ensured.expired) {
+      return null;
+    }
     const ensuredToken = ensured.session?.access_token;
     if (typeof ensuredToken === "string" && ensuredToken.trim()) {
       return ensuredToken.trim();
@@ -176,20 +179,17 @@ async function getAccessToken(options?: {
     logger.warn("auth.session.recovery.failed", {
       error: error instanceof Error ? error.message : String(error),
     });
+    return null;
   }
 
   const { data, error } = await supabase.auth.getSession();
   if (error) {
     logger.warn("auth.session.recovery.failed", { error: error.message });
+    return null;
   }
   const fresh = data?.session?.access_token;
   if (typeof fresh === "string" && fresh.trim().length > 0) {
     return fresh.trim();
-  }
-
-  const storeToken = useAuthStore.getState().session?.access_token;
-  if (typeof storeToken === "string" && storeToken.trim().length > 0) {
-    return storeToken.trim();
   }
 
   return null;
@@ -201,13 +201,16 @@ function isAuthRetryableError(error: ApiClientError): boolean {
     return false;
   }
   const normalized = `${error.code ?? ""} ${error.message ?? ""}`.toUpperCase();
+  if (!normalized.trim()) return true;
   return (
     normalized.includes("AUTH_EXPIRED") ||
     normalized.includes("AUTH_INVALID") ||
     normalized.includes("AUTH_REQUIRED") ||
     normalized.includes("UNAUTHORIZED") ||
     normalized.includes("EXPIRED") ||
-    normalized.includes("INVALID OR EXPIRED")
+    normalized.includes("INVALID OR EXPIRED") ||
+    normalized.includes("INVALID JWT") ||
+    normalized.includes("JWT")
   );
 }
 

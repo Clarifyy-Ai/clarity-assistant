@@ -13,6 +13,7 @@ import { callGemini } from "@/lib/ai/geminiClient";
 import { generateId } from "@/lib/utils";
 import { getMimeType } from "@/lib/utils/fileUtils";
 import { sha256, sha256Buffer } from "@/lib/utils/hashUtils";
+import { validateDocumentFile } from "@/lib/documents/uploadValidation";
 import { toast } from "sonner";
 import type {
   ResumeDocument,
@@ -102,7 +103,7 @@ export function useDocuments(options?: UseDocumentsOptions) {
           title: r.name ?? "Untitled",
           resume_versions: [],
           active_version_id: null,
-          updated_at: r.created_at,
+          updated_at: r.updated_at ?? r.created_at,
         }));
         docStore.setResumes(mapped as ResumeDocument[]);
         const activeId = docStore.active_resume_id;
@@ -158,6 +159,9 @@ export function useDocuments(options?: UseDocumentsOptions) {
     title?: string
   ): Promise<{ resumeId: string | null; error: string | null }> => {
     if (!user) return { resumeId: null, error: "Not authenticated" };
+
+    const validationError = validateDocumentFile(file, "resume");
+    if (validationError) return { resumeId: null, error: validationError };
 
     const resumeId = generateId();
     const ext      = (file.name.split(".").pop() ?? "pdf").toLowerCase();
@@ -361,7 +365,9 @@ export function useDocuments(options?: UseDocumentsOptions) {
       const isProvider =
         code === "PROVIDER_UNAVAILABLE" ||
         code === "AI_PROVIDER_UNAVAILABLE" ||
+        code === "PYTHON_SERVICE_UNAVAILABLE" ||
         code === "PARSER_UNAVAILABLE" ||
+        code === "FILE_TOO_LARGE" ||
         (err as { status?: number })?.status === 502 ||
         (err as { status?: number })?.status === 503;
 
@@ -378,7 +384,9 @@ export function useDocuments(options?: UseDocumentsOptions) {
       }
 
       // Only persist parse/provider failures as document parse status — never credit failures.
-      const parseLabel = isProvider
+      const parseLabel = code === "FILE_TOO_LARGE"
+        ? "This file is too large. Maximum size is 10 MB."
+        : isProvider
         ? "Parser temporarily unavailable. Please retry."
         : code === "PARSE_FAILED" || code === "PARSER_FAILED"
           ? "We could not read this resume. Try PDF, DOCX, or TXT."

@@ -14,6 +14,25 @@ import {
 } from "@/lib/auth/mfaFactors";
 import { getPasswordStrength, validatePassword } from "@/lib/validators/emailValidator";
 
+type MfaUiState =
+  | "NOT_CONFIGURED"
+  | "ENROLLING"
+  | "PENDING_VERIFICATION"
+  | "ENABLED";
+
+function deriveMfaUiState(
+  verifiedTotp: ListedMfaFactor | undefined,
+  unverifiedTotp: ListedMfaFactor[],
+  enrollingQr: boolean,
+  enrollFactorId: string | null,
+): MfaUiState {
+  if (verifiedTotp) return "ENABLED";
+  if (enrollFactorId) return "PENDING_VERIFICATION";
+  if (enrollingQr || unverifiedTotp.length > 0) return "ENROLLING";
+  return "NOT_CONFIGURED";
+}
+import { agentDebugIngest } from "@/lib/debug/agentIngest";
+
 export default function SettingsSecurity() {
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -54,6 +73,12 @@ export default function SettingsSecurity() {
 
   const verifiedTotp = findVerifiedTotp(factors);
   const unverifiedTotp = findUnverifiedTotp(factors);
+  const mfaUiState = deriveMfaUiState(
+    verifiedTotp,
+    unverifiedTotp,
+    enrolling,
+    enrollFactorId,
+  );
 
   async function clearUnverifiedTotpFactors(list: ListedMfaFactor[]): Promise<number> {
     const stale = findUnverifiedTotp(list);
@@ -77,10 +102,16 @@ export default function SettingsSecurity() {
       return;
     }
     const strength = getPasswordStrength(newPw);
-    if (!strength.isAcceptable || !/[0-9]/.test(newPw) || !/[^a-zA-Z0-9]/.test(newPw)) {
+    if (
+      !strength.isAcceptable ||
+      !/[0-9]/.test(newPw) ||
+      !/[^a-zA-Z0-9]/.test(newPw) ||
+      !/[A-Z]/.test(newPw) ||
+      !/[a-z]/.test(newPw)
+    ) {
       toast.error(
         strength.feedback[0] ??
-          "Password must include a number and a special character.",
+          "Password must include uppercase, lowercase, a number, and a special character.",
       );
       return;
     }
@@ -130,6 +161,12 @@ export default function SettingsSecurity() {
       // Stale unverified enrollments reserve the friendly name and block setup (422)
       // while leaving login without an MFA challenge (only verified factors raise AAL2).
       const latest = await loadFactors();
+      const alreadyVerified = findVerifiedTotp(latest);
+      if (alreadyVerified) {
+        toast.message("Authenticator already configured. Use Verify or Disable below.");
+        setFactors(latest);
+        return;
+      }
       const cleared = await clearUnverifiedTotpFactors(latest);
       if (cleared > 0) {
         await loadFactors();
@@ -314,11 +351,11 @@ export default function SettingsSecurity() {
               </p>
             </div>
           </div>
-          {verifiedTotp ? (
+          {mfaUiState === "ENABLED" ? (
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 font-medium">
               Enabled
             </span>
-          ) : unverifiedTotp.length > 0 ? (
+          ) : mfaUiState === "ENROLLING" || mfaUiState === "PENDING_VERIFICATION" ? (
             <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 font-medium">
               Setup incomplete
             </span>
@@ -329,7 +366,7 @@ export default function SettingsSecurity() {
           <p className="text-xs text-muted-foreground mt-4 flex items-center gap-2">
             <Loader2 className="w-3 h-3 animate-spin" /> Checking 2FA status…
           </p>
-        ) : verifiedTotp ? (
+        ) : mfaUiState === "ENABLED" && verifiedTotp ? (
           <div className="mt-4 flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={() => void unenrollMfa(verifiedTotp.id)}>
               Disable 2FA

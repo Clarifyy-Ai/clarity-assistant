@@ -69,7 +69,12 @@ import {
   reduceMockSessionLifecycle,
   type MockSessionLifecycle,
 } from "@/lib/mock/mockSessionLifecycle";
-import { speakQuestionText, stopBrowserTts } from "@/lib/mock/mockTts";
+import { speakQuestionText, stopBrowserTts, unlockBrowserTts } from "@/lib/mock/mockTts";
+import type { TtsOutcomeStatus } from "@/lib/mock/mockTts";
+import {
+  isDuplicateQuestionText,
+  normalizeQuestionText,
+} from "@/lib/mock/validateGeneratedQuestion";
 import { getAiUserFacingError } from "@/lib/network/aiErrorUx";
 import { isOverlayGhostClickSuppressed } from "@/lib/overlay/ghostClickGuard";
 import {
@@ -325,6 +330,8 @@ export default function MockSession() {
   );
   const [nextQuestionError, setNextQuestionError] = useState<string | null>(null);
   const [overlayInitState, setOverlayInitState] = useState<OverlayInitState>("waiting_session");
+  const [ttsState, setTtsState] = useState<TtsOutcomeStatus | "idle">("idle");
+  const pendingTtsQuestionRef = useRef<{ qId: string; qText: string } | null>(null);
 
   const questionsCacheRef = useRef<SessionQuestion[] | null>(null);
   const isStartingRef = useRef(false);
@@ -508,8 +515,12 @@ export default function MockSession() {
         return;
       }
       interviewerAudioActiveRef.current = false;
+      setTtsState("idle");
       audio.resumeCandidateCapture();
       listeningStartedAtRef.current = Date.now();
+      if (getOverlaySessionAuthority().canAcceptSessionMutations()) {
+        useOverlayStore.getState().setSessionPipelineState("candidate_answering");
+      }
       setAnswerNextState((s) => reduceAnswerNext(s, { type: "SPEAKING_DONE" }));
       setAnswerNextState((s) => reduceAnswerNext(s, { type: "START_LISTENING" }));
     },
@@ -536,6 +547,55 @@ export default function MockSession() {
     return () => setGenerateAnswerHandler(null);
   }, [phase, handleRequestHint]);
 
+  const playInterviewerVoice = useCallback(
+    (qText: string, qId: string, fromGesture = false) => {
+      if (!isMockSessionMutable(lifecycleRef.current)) return;
+      if (fromGesture) unlockBrowserTts();
+      pendingTtsQuestionRef.current = { qId, qText };
+      setTtsState("playing");
+      speakingQuestionIdRef.current = qId;
+      interviewerAudioActiveRef.current = true;
+      audio.suspendCandidateCapture();
+
+      void speakQuestionText(qText, {
+        questionId: qId,
+        isCurrent: (id) =>
+          speakingQuestionIdRef.current === id &&
+          isMockSessionMutable(lifecycleRef.current) &&
+          getOverlaySessionAuthority().canAcceptSessionMutations(),
+        onStart: () => {
+          interviewerAudioActiveRef.current = true;
+          setTtsState("playing");
+          audio.suspendCandidateCapture();
+          if (getOverlaySessionAuthority().canAcceptSessionMutations()) {
+            useOverlayStore.getState().setSessionPipelineState("question_spoken");
+          }
+        },
+        onEnd: () => {
+          /* beginCandidateListening handles pipeline transition */
+        },
+      }).then((outcome) => {
+        if (speakingQuestionIdRef.current !== qId) return;
+        if (outcome.status === "blocked") {
+          setTtsState("blocked");
+          interviewerAudioActiveRef.current = false;
+          return;
+        }
+        if (outcome.status === "unavailable" || outcome.status === "error") {
+          setTtsState("unavailable");
+          toast.message("Interviewer voice unavailable — read the question on screen.");
+          beginCandidateListening(qId);
+          return;
+        }
+        if (outcome.status === "ended") {
+          setTtsState("idle");
+          beginCandidateListening(qId);
+        }
+      });
+    },
+    [audio, beginCandidateListening],
+  );
+
   useEffect(() => {
     if (phase !== "active" || !question) return;
     if (!isMockSessionMutable(lifecycleRef.current)) return;
@@ -552,6 +612,8 @@ export default function MockSession() {
     stopBrowserTts();
     interviewerAudioActiveRef.current = false;
     listeningStartedAtRef.current = null;
+    setTtsState("idle");
+    pendingTtsQuestionRef.current = null;
 
     injectInterviewerQuestion(qText, qIndex);
     const overlay = useOverlayStore.getState();
@@ -565,46 +627,13 @@ export default function MockSession() {
 
     speakingQuestionIdRef.current = qId;
     setAnswerNextState((s) => reduceAnswerNext(s, { type: "START_SPEAKING" }));
-    interviewerAudioActiveRef.current = true;
-    audio.suspendCandidateCapture();
-
-    speakQuestionText(qText, {
-      questionId: qId,
-      isCurrent: (id) =>
-        speakingQuestionIdRef.current === id &&
-        isMockSessionMutable(lifecycleRef.current) &&
-        getOverlaySessionAuthority().canAcceptSessionMutations(),
-      onStart: () => {
-        interviewerAudioActiveRef.current = true;
-        audio.suspendCandidateCapture();
-        if (getOverlaySessionAuthority().canAcceptSessionMutations()) {
-          useOverlayStore.getState().setSessionPipelineState("question_spoken");
-        }
-      },
-      onEnd: () => {
-        if (getOverlaySessionAuthority().canAcceptSessionMutations()) {
-          useOverlayStore.getState().setSessionPipelineState("candidate_answering");
-        }
-        beginCandidateListening(qId);
-      },
-    });
-
-    // If TTS is unavailable, open listening after a short beat.
-    const fallbackTimer = window.setTimeout(() => {
-      if (
-        speakingQuestionIdRef.current === qId &&
-        interviewerAudioActiveRef.current &&
-        isMockSessionMutable(lifecycleRef.current)
-      ) {
-        beginCandidateListening(qId);
-      }
-    }, 12_000);
+    playInterviewerVoice(qText, qId);
 
     return () => {
-      window.clearTimeout(fallbackTimer);
+      stopBrowserTts();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, question, qIndex, injectInterviewerQuestion, beginCandidateListening]);
+  }, [phase, question, qIndex, injectInterviewerQuestion, playInterviewerVoice]);
 
   const timeColor =
     timerMode === "countup"
@@ -1003,11 +1032,13 @@ export default function MockSession() {
         throw new DOMException("Aborted", "AbortError");
       }
 
-      setUsedLocalQuestions(result.source === "fallback");
+      setUsedLocalQuestions(
+        result.source === "fallback" || result.questionSource === "fallback_bank",
+      );
       setGenerationSnap((s) =>
         reduceQuestionGeneration(s, {
           type: "SUCCESS",
-          source: result.source,
+          source: result.source === "python" ? "python" : result.source,
         }),
       );
       return result.question;
@@ -1386,6 +1417,8 @@ export default function MockSession() {
     }
 
     cleanupQuestionAudio();
+    setTtsState("idle");
+    pendingTtsQuestionRef.current = null;
 
     const startedMs = startTimeRef.current
       ? new Date(startTimeRef.current).getTime()
@@ -1537,7 +1570,11 @@ export default function MockSession() {
       if (nextQ.id && usedIds.has(nextQ.id)) {
         throw new Error("Duplicate question id returned for next question.");
       }
+      if (isDuplicateQuestionText(nextQ.question_text, usedTexts)) {
+        throw new Error("Duplicate question text returned for next question.");
+      }
 
+      setGenerationSnap(createQuestionGenerationSnapshot());
       orchestrator.appendAndActivateQuestion(nextQ);
       questionsCacheRef.current = useSessionStore.getState().questions;
       questionStartRef.current = Date.now();
@@ -1579,6 +1616,7 @@ export default function MockSession() {
     if (!isMockSessionMutable(lifecycleRef.current)) return;
     if (generationInFlight || nextOpLockRef.current) return;
     setNextQuestionError(null);
+    setGenerationSnap(createQuestionGenerationSnapshot());
     // Recover from failed / stuck pending so Next can run again.
     setAnswerNextState((s) => reduceAnswerNext(s, { type: "READY" }));
     // Answer already captured on the failed Next — do not double-capture.
@@ -2100,6 +2138,30 @@ export default function MockSession() {
                 Generating next question…
               </p>
             )}
+            {ttsState === "blocked" && pendingTtsQuestionRef.current && (
+              <div className="mt-3">
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  data-testid="mock-play-interviewer-voice"
+                  onClick={() => {
+                    const pending = pendingTtsQuestionRef.current;
+                    if (!pending) return;
+                    playInterviewerVoice(pending.qText, pending.qId, true);
+                  }}
+                >
+                  Play interviewer voice
+                </Button>
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Browser blocked autoplay — tap to hear the question.
+                </p>
+              </div>
+            )}
+            {ttsState === "unavailable" && (
+              <p className="mt-2 text-[10px] text-muted-foreground">
+                Interviewer voice unavailable — read the question above.
+              </p>
+            )}
             {nextQuestionError && (
               <div className="mt-3 space-y-2" data-testid="mock-generation-error">
                 <p className="text-xs text-amber-600 dark:text-amber-400">
@@ -2287,9 +2349,6 @@ export default function MockSession() {
         description="This question will be marked as skipped. No AI answer will be created."
         size="sm"
       >
-        <p className="text-sm text-muted-foreground mb-5">
-          This question will be marked as skipped. No AI answer will be created.
-        </p>
         <div className="flex gap-3">
           <Button variant="secondary" size="sm" fullWidth onClick={() => setSkipConfirm(false)}>
             Cancel
@@ -2317,7 +2376,6 @@ export default function MockSession() {
         description="Your progress will be saved."
         size="sm"
       >
-        <p className="text-sm text-muted-foreground mb-5">Your progress will be saved.</p>
         <div className="flex gap-3">
           <Button variant="secondary" size="sm" fullWidth onClick={() => setEndConfirm(false)}>
             Continue

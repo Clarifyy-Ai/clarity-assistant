@@ -3,7 +3,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { refundCredits } from "./supabase.ts";
+import { refundCreditsBestEffort } from "./supabase.ts";
 import { claimJobCreditsForRefund } from "./claimJobCredits.ts";
 import { isPythonPaperFactoryGenerator } from "./govGeneratorRouting.ts";
 
@@ -196,12 +196,15 @@ export async function claimPaperGenerationJob(
       .eq("id", candidate.id)
       .filter("status", "not.in", "(completed,cancelled,expired,failed_permanent)");
     if (creditsCharged > 0 && candidate.user_id) {
-      await refundCredits({
-        userId: String(candidate.user_id),
-        cost: creditsCharged,
-        reason: "refund_paper_gen_max_attempts",
-        idempotencyKey: `refund_paper_job:${candidate.id}`,
-      }).catch(() => {});
+      await refundCreditsBestEffort(
+        {
+          userId: String(candidate.user_id),
+          cost: creditsCharged,
+          reason: "refund_paper_gen_max_attempts",
+          idempotencyKey: `refund_paper_job:${candidate.id}`,
+        },
+        { job_id: candidate.id, reason: "max_attempts" },
+      );
     }
     return { ok: false, reason: "max_attempts" };
   }
@@ -351,12 +354,15 @@ export async function reclaimExpiredPaperJobs(
         .eq("id", row.id)
         .in("status", [...PAPER_JOB_IN_FLIGHT]);
       if (creditsCharged > 0 && row.user_id) {
-        await refundCredits({
-          userId: String(row.user_id),
-          cost: creditsCharged,
-          reason: "refund_paper_gen_lease_timeout",
-          idempotencyKey: `refund_paper_job:${row.id}`,
-        }).catch(() => {});
+        await refundCreditsBestEffort(
+          {
+            userId: String(row.user_id),
+            cost: creditsCharged,
+            reason: "refund_paper_gen_lease_timeout",
+            idempotencyKey: `refund_paper_job:${row.id}`,
+          },
+          { job_id: row.id, reason: "lease_timeout" },
+        );
       }
       permanentlyFailed += 1;
     } else {

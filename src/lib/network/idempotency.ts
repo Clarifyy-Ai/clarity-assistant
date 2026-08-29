@@ -34,6 +34,28 @@ export function prepToolIdempotencyKey(toolId: string): string {
   }
 }
 
+/** Stable key so double-click / refresh-during-start replays the same session row. */
+export function practiceCoachStartIdempotencyKey(
+  userId: string,
+  cfg: {
+    practice_context_id?: string | null;
+    resume_id?: string | null;
+    role?: string | null;
+    company?: string | null;
+    interview_type?: string | null;
+  },
+): string {
+  if (cfg.practice_context_id) {
+    return clampKey(`start-session:ctx:${cfg.practice_context_id}`);
+  }
+  const uid = userId.replace(/[^A-Za-z0-9._:-]/g, "").slice(0, 36);
+  const resume = (cfg.resume_id ?? "no-resume").replace(/[^A-Za-z0-9._:-]/g, "").slice(0, 36);
+  const role = (cfg.role ?? "no-role").replace(/[^A-Za-z0-9._:-]/g, "").slice(0, 32);
+  const company = (cfg.company ?? "no-co").replace(/[^A-Za-z0-9._:-]/g, "").slice(0, 32);
+  const interview = (cfg.interview_type ?? "behavioral").replace(/[^A-Za-z0-9._:-]/g, "").slice(0, 24);
+  return clampKey(`start-session:${uid}:${resume}:${role}:${company}:${interview}`);
+}
+
 /** Fresh key for a mutating Edge call (send as `x-idempotency-key`). */
 export function createIdempotencyKey(prefix: string): string {
   const p = prefix.replace(/[^A-Za-z0-9._:-]/g, "").slice(0, 48) || "op";

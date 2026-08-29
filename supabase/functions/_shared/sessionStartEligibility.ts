@@ -79,6 +79,33 @@ export function isAiProviderConfigured(): boolean {
   }
 }
 
+/** Python FastAPI fallback (Edge → /v1/process). */
+export function isPythonServiceConfigured(): boolean {
+  try {
+    const url = (
+      Deno.env.get("PYTHON_SERVICE_URL") ??
+      Deno.env.get("SCRAPER_URL") ??
+      ""
+    ).trim();
+    const secret = (
+      Deno.env.get("DOCUMENT_INTELLIGENCE_AUTH_SECRET") ??
+      Deno.env.get("PYTHON_SERVICE_AUTH_SECRET") ??
+      ""
+    ).trim();
+    return Boolean(url && secret);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Session start is allowed when any coaching path can serve AI Help:
+ * primary AI, Python fallback, or deterministic scaffold (always available server-side).
+ */
+export function isCoachingServiceConfigured(): boolean {
+  return isAiProviderConfigured() || isPythonServiceConfigured() || true;
+}
+
 export function isSttProviderConfigured(): boolean {
   try {
     return Boolean((Deno.env.get("DEEPGRAM_API_KEY") ?? "").trim());
@@ -91,10 +118,14 @@ export function isSttProviderConfigured(): boolean {
 export function sessionServiceReadiness(): {
   ai: boolean;
   transcription: boolean;
+  python: boolean;
+  coaching: boolean;
 } {
   return {
     ai: isAiProviderConfigured(),
     transcription: isSttProviderConfigured(),
+    python: isPythonServiceConfigured(),
+    coaching: isCoachingServiceConfigured(),
   };
 }
 

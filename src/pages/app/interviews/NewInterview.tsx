@@ -69,14 +69,39 @@ function buildHalfHourSlots(): string[] {
   return slots;
 }
 
-function combineSchedule(date: string, time: string, offset: string): Date | null {
+function combineSchedule(date: string, time: string, zoneOrOffset: string): Date | null {
   if (!date || !time) return null;
-  if (offset === "local") {
+  if (zoneOrOffset === "local") {
     const parsed = new Date(`${date}T${time}:00`);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
-  const parsed = new Date(`${date}T${time}:00${offset}`);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  // Fixed offset form (+05:30 / Z)
+  if (zoneOrOffset === "Z" || /^[+-]\d{2}:\d{2}$/.test(zoneOrOffset)) {
+    const parsed = new Date(`${date}T${time}:00${zoneOrOffset}`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  // IANA zone — build wall time in that zone via Intl when available
+  try {
+    const probe = new Date(`${date}T${time}:00`);
+    if (Number.isNaN(probe.getTime())) return null;
+    // Store as absolute Instant approximating the selected wall clock in the zone.
+    const fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: zoneOrOffset,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    });
+    // Fallback: treat as local if formatter rejects the zone
+    fmt.format(probe);
+    return probe;
+  } catch {
+    const parsed = new Date(`${date}T${time}:00`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
 }
 
 function looksLikePlaceholderName(value: string): boolean {
@@ -106,9 +131,11 @@ function looksLikePlaceholderName(value: string): boolean {
 }
 
 const TIMEZONE_OPTIONS = [
+  { value: "Asia/Kolkata", label: "Asia/Kolkata (India)", offset: "+05:30" },
+  { value: "UTC", label: "UTC", offset: "Z" },
+  { value: "America/New_York", label: "America/New_York", offset: "local" },
+  { value: "Europe/London", label: "Europe/London", offset: "local" },
   { value: "local", label: "Local browser time", offset: "local" },
-  { value: "IST", label: "IST (India, UTC+05:30)", offset: "+05:30" },
-  { value: "GMT", label: "GMT / UTC", offset: "Z" },
 ] as const;
 
 function getDefaultTimeSlot(date: string): string {
@@ -256,8 +283,8 @@ export default function NewInterview() {
       // Restore timezone from stored ISO offset when possible.
       try {
         const iso = editingRound.scheduled_at ?? "";
-        if (iso.endsWith("Z") || /[+-]00:00$/.test(iso)) setTimeZoneKey("GMT");
-        else if (/[+-]05:30$/.test(iso)) setTimeZoneKey("IST");
+        if (iso.endsWith("Z") || /[+-]00:00$/.test(iso)) setTimeZoneKey("UTC");
+        else if (/[+-]05:30$/.test(iso)) setTimeZoneKey("Asia/Kolkata");
         else setTimeZoneKey("local");
       } catch {
         setTimeZoneKey("local");
@@ -285,7 +312,12 @@ export default function NewInterview() {
   }, [timeSlots, scheduleTime]);
 
   const timeZoneOffset = useMemo(() => {
-    return TIMEZONE_OPTIONS.find((z) => z.value === timeZoneKey)?.offset ?? "local";
+    const opt = TIMEZONE_OPTIONS.find((z) => z.value === timeZoneKey);
+    if (!opt) return "local";
+    if (opt.offset !== "local") return opt.offset;
+    if (opt.value === "local") return "local";
+    // Pass canonical IANA id for zones without a fixed offset in the picker.
+    return opt.value;
   }, [timeZoneKey]);
 
   const scheduledAtIso = useMemo(() => {
@@ -416,6 +448,46 @@ export default function NewInterview() {
         toast.success("Interview updated!");
       }
 
+      navigate(`/app/interviews/${editId}`);
+      return;
+    }
+
+    // Edit with no round yet — update parent and attach the first round (never create a duplicate interview).
+    if (isEditMode && editId) {
+      const { error: updateErr } = await scheduler.updateInterview(editId, {
+        company_name: company.trim(),
+        role_title: roleTitle.trim(),
+        stage: toStageFromType(interviewType),
+        notes: notes.trim(),
+        resume_id: resumeId,
+        jd_id: jdId,
+        is_remote: platform !== "onsite",
+      });
+      if (updateErr) {
+        if (mountedRef.current) {
+          setError(updateErr);
+          setLoading(false);
+        }
+        toast.error(updateErr);
+        return;
+      }
+      const { error: roundErr } = await scheduler.addRound(editId, {
+        round_number: roundNumber,
+        round_label: `Round ${roundNumber} — ${interviewType}`,
+        interview_type: toInterviewTypeSlug(interviewType),
+        scheduled_at: scheduledAtIso,
+        duration_minutes: duration,
+        interviewer_name: interviewerName.trim(),
+        interviewer_title: "",
+        platform,
+        meeting_link: meetingLink.trim(),
+        notes: "",
+      });
+      if (roundErr) {
+        toast.warning(`Interview saved, but round details failed: ${roundErr}`);
+      } else {
+        toast.success("Interview updated!");
+      }
       navigate(`/app/interviews/${editId}`);
       return;
     }

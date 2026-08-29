@@ -67,11 +67,39 @@ export default function AdminHelpArticles() {
     void load();
   }, [load]);
 
+  function normalizeQuestion(q: string) {
+    return q.trim().toLowerCase().replace(/\s+/g, " ");
+  }
+
+  /** One published canonical FAQ per question text. */
+  async function assertNoPublishedQuestionConflict(
+    question: string,
+    exceptId?: string,
+  ): Promise<string | null> {
+    const needle = normalizeQuestion(question);
+    if (!needle) return "Question is required";
+    const { data, error } = await supabase
+      .from("help_articles")
+      .select("id, slug, question")
+      .eq("published", true);
+    if (error) return toAdminUserMessage(error, undefined, "AdminHelp.dupCheck");
+    const clash = (data ?? []).find(
+      (row) =>
+        row.id !== exceptId &&
+        normalizeQuestion(row.question || "") === needle,
+    );
+    if (clash) {
+      return `A published article already uses this question (/${clash.slug}). Unpublish it first or edit that article.`;
+    }
+    return null;
+  }
+
   async function save() {
     if (!editing?.question.trim() || !editing.slug.trim()) {
       toast.error("Question and slug are required");
       return;
     }
+    if (saving) return;
     setSaving(true);
     try {
       const payload = {
@@ -84,6 +112,16 @@ export default function AdminHelpArticles() {
         sort_order: editing.sort_order,
         published: editing.published,
       };
+      if (payload.published) {
+        const conflict = await assertNoPublishedQuestionConflict(
+          payload.question,
+          editing.id,
+        );
+        if (conflict) {
+          toast.error(conflict);
+          return;
+        }
+      }
       if (editing.id) {
         const { error: err } = await supabase.from("help_articles").update(payload).eq("id", editing.id);
         if (err) throw err;
@@ -114,22 +152,37 @@ export default function AdminHelpArticles() {
   }
 
   async function setPublished(article: HelpArticle, published: boolean) {
-    const { error: err } = await supabase
-      .from("help_articles")
-      .update({ published })
-      .eq("id", article.id);
-    if (err) {
-      toast.error(adminActionFailedMessage(err));
-      return;
+    if (saving) return;
+    setSaving(true);
+    try {
+      if (published) {
+        const conflict = await assertNoPublishedQuestionConflict(
+          article.question,
+          article.id,
+        );
+        if (conflict) {
+          toast.error(conflict);
+          return;
+        }
+      }
+      const { error: err } = await supabase
+        .from("help_articles")
+        .update({ published })
+        .eq("id", article.id);
+      if (err) throw err;
+      await writeAdminAudit({
+        action: published ? "publish" : "unpublish",
+        targetType: "help_article",
+        targetId: article.id,
+        newValue: { published },
+      });
+      toast.success(published ? "Published" : "Unpublished");
+      await load();
+    } catch (e) {
+      toast.error(adminActionFailedMessage(e, "AdminHelp.publish"));
+    } finally {
+      setSaving(false);
     }
-    await writeAdminAudit({
-      action: published ? "publish" : "unpublish",
-      targetType: "help_article",
-      targetId: article.id,
-      newValue: { published },
-    });
-    toast.success(published ? "Published" : "Unpublished");
-    await load();
   }
 
   return (
@@ -168,6 +221,18 @@ export default function AdminHelpArticles() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="secondary">{a.published ? "published" : "draft"}</Badge>
+                  {!a.published &&
+                    articles.some(
+                      (other) =>
+                        other.published &&
+                        other.id !== a.id &&
+                        normalizeQuestion(other.question) ===
+                          normalizeQuestion(a.question),
+                    ) && (
+                      <Badge variant="outline" className="text-amber-600 border-amber-500/40">
+                        duplicate of published
+                      </Badge>
+                    )}
                   <Button size="xs" variant="outline" onClick={() => setEditing(a)}>Edit</Button>
                   <a
                     href={`/help/${a.slug}`}

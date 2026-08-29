@@ -160,7 +160,10 @@ Deno.serve(async (req: Request) => {
 
   const parsed = schema.safeParse(await parseJsonBody(req));
   if (!parsed.success) {
-    return json(req, { error: "Invalid request" }, 400);
+    return json(req, {
+      error: "Invalid product_type. Use a supported plan or credit pack.",
+      code: "VALIDATION_ERROR",
+    }, 400);
   }
 
   const { data: settingsRow } = await db
