@@ -82,8 +82,9 @@ export function BillingHistory({
   const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
 
   useEffect(() => {
-    setCurrentPage((page) => (totalPages > 0 ? Math.min(page, totalPages) : 1));
-  }, [filteredTransactions.length, itemsPerPage, totalPages]);
+    const nextTotalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
+    setCurrentPage((page) => (nextTotalPages > 0 ? Math.min(page, nextTotalPages) : 1));
+  }, [filteredTransactions.length, itemsPerPage]);
 
   useEffect(() => {
     const loadTransactions = async () => {
@@ -183,7 +184,6 @@ export function BillingHistory({
   }, [profile?.id]);
 
   // Paginate
-  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
   const startIdx = (currentPage - 1) * itemsPerPage;
   const endIdx = startIdx + itemsPerPage;
   const displayedTransactions = filteredTransactions.slice(startIdx, endIdx);
