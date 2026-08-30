@@ -70,7 +70,7 @@ interface OfficialSetting {
 /**
  * Testbook-style readiness: a paper is launchable only if the bank already has
  * questions for it. AI gap-fill is disabled by policy, so cards with bank=0
- * are surfaced as "Coming soon" and the launch buttons are disabled.
+ * are surfaced as "No approved papers yet" and official launch buttons stay disabled.
  */
 
 
@@ -719,7 +719,7 @@ export default function ExamPapers() {
                     </div>
                   )}
 
-                                    {/* Coming soon message */}
+                                    {/* Empty approved bank — not a fake paper */}
                   {isComingSoon && (
                     <p className="text-xs text-muted-foreground mb-4">
                       Question bank is empty for {paper.year}.
@@ -743,7 +743,7 @@ export default function ExamPapers() {
                   {/* Action Buttons */}
                   <div className="flex gap-2 mt-auto pt-2 border-t border-border">
                     {isComingSoon ? (
-                      // Coming soon — only offer AI custom test
+                      // Empty bank — do not invent official papers
                       <Button
                         size="sm"
                         variant="outline"

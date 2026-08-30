@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { usePageMeta } from "@/hooks/usePageMeta";
+import { debugLog161d95 } from "@/lib/debug/debugLog161d95";
 import { cn } from "@/lib/utils";
 import {
   Mic,
@@ -429,6 +430,14 @@ function SwipeSessionRow({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
+              // #region agent log
+              debugLog161d95({
+                hypothesisId: "H5",
+                location: "CallSessions.tsx:eyeClick",
+                message: "session_view_details_click",
+                data: { sessionId: s.id, status: s.status ?? null },
+              });
+              // #endregion
               navigate(`/app/sessions/${s.id}`);
             }}
             className="inline-flex items-center gap-1.5 px-2 py-2 hover:bg-muted/20 rounded-lg transition-colors min-h-11 text-xs text-muted-foreground hover:text-foreground"

@@ -34,6 +34,7 @@ import type { HintStyle } from "@/types/user.types";
 
 export type { OnboardingData } from "@/types/onboarding.types";
 import type { OnboardingData } from "@/types/onboarding.types";
+import { debugLog161d95 } from "@/lib/debug/debugLog161d95";
 
 const INITIAL_ONBOARDING_DATA: OnboardingData = {
   targetRole:         "",
@@ -160,6 +161,22 @@ export default function OnboardingIndex() {
       return next;
     });
     setHydratedFromProfile(true);
+    // #region agent log
+    debugLog161d95({
+      hypothesisId: "H7",
+      location: "OnboardingIndex.tsx:hydrate",
+      message: "onboarding_hydrate",
+      data: {
+        restoredStep: restored?.step ?? null,
+        profileStep: (profile as { onboarding_step?: number }).onboarding_step ?? null,
+        appliedStep: step,
+        hasResumeFileId: Boolean(
+          restored?.data?.resumeFileId || (profile as { resume_id?: string }).resume_id,
+        ),
+        hasTargetRole: Boolean(profile.target_role || restored?.data?.targetRole),
+      },
+    });
+    // #endregion
   }, [isRerun, isProfileLoaded, profile, hydratedFromProfile]);
 
   useEffect(() => {
@@ -306,8 +323,21 @@ export default function OnboardingIndex() {
   }, [currentStep, mergeData, goToStep, finishOnboarding]);
 
   const handleBack = useCallback(() => {
+    // #region agent log
+    debugLog161d95({
+      hypothesisId: "H7",
+      location: "OnboardingIndex.tsx:handleBack",
+      message: "onboarding_inwizard_back",
+      data: {
+        fromStep: currentStep,
+        resumeFileId: data.resumeFileId ?? null,
+        skipResume: data.skipResume,
+        industry: data.industry || null,
+      },
+    });
+    // #endregion
     if (currentStep > 1) goToStep(currentStep - 1);
-  }, [currentStep, goToStep]);
+  }, [currentStep, goToStep, data.resumeFileId, data.skipResume, data.industry]);
 
   const handleSkipRerun = useCallback(() => {
     navigate(ONBOARDING_COMPLETION_PATH, { replace: true });
@@ -338,6 +368,25 @@ export default function OnboardingIndex() {
   };
 
   const [slideDirection, setSlideDirection] = useState(1);
+
+  useEffect(() => {
+    const onPopState = () => {
+      // #region agent log
+      debugLog161d95({
+        hypothesisId: "H7",
+        location: "OnboardingIndex.tsx:popstate",
+        message: "onboarding_browser_back",
+        data: {
+          currentStep,
+          path: window.location.pathname,
+          resumeFileId: data.resumeFileId ?? null,
+        },
+      });
+      // #endregion
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [currentStep, data.resumeFileId]);
 
   const goNext = useCallback((stepData?: Partial<OnboardingData>) => {
     setSlideDirection(1);

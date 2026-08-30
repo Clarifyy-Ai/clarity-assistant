@@ -9,18 +9,19 @@ ALTER TABLE public.interview_practice_plan_items
 
 DO $$
 BEGIN
-  IF to_regclass('public.company_research') IS NOT NULL
-     AND NOT EXISTS (
+  IF to_regclass('public.company_research') IS NOT NULL THEN
+    IF NOT EXISTS (
        SELECT 1 FROM pg_constraint
        WHERE conrelid = 'public.company_research'::regclass
          AND conname = 'company_research_user_company_unique'
      ) THEN
     ALTER TABLE public.company_research
       ADD CONSTRAINT company_research_user_company_unique UNIQUE (user_id, company_name);
+    END IF;
   END IF;
 
-  IF to_regclass('public.session_questions') IS NOT NULL
-     AND NOT EXISTS (
+  IF to_regclass('public.session_questions') IS NOT NULL THEN
+    IF NOT EXISTS (
        SELECT 1 FROM pg_constraint
        WHERE conrelid = 'public.session_questions'::regclass
          AND conname = 'session_questions_session_id_fkey'
@@ -28,6 +29,7 @@ BEGIN
     ALTER TABLE public.session_questions
       ADD CONSTRAINT session_questions_session_id_fkey
       FOREIGN KEY (session_id) REFERENCES public.sessions(id) ON DELETE CASCADE NOT VALID;
+    END IF;
   END IF;
 END $$;
 

@@ -8,6 +8,7 @@ import { logger } from "@/lib/logger";
 import { isTabLocalLogout } from "@/lib/auth/tabLocalLogout";
 import { ApiClientError } from "@/lib/api/apiClient";
 import { ensureAuthSession } from "@/lib/focusRecovery/sessionRefresh";
+import { debugLog161d95 } from "@/lib/debug/debugLog161d95";
 
 /** Functions that may run without a user JWT (gateway still gets apikey + anon Bearer). */
 const ANON_OK_EDGE_FNS = new Set([
@@ -481,6 +482,34 @@ export async function fetchEdgeJson<T>(
   // read text first so we never lose the body
   const text = await response.text().catch(() => "");
   const payload = text ? safeJsonParse(text) ?? { error: text } : {};
+
+  // #region agent log
+  {
+    const code =
+      typeof (payload as { code?: unknown })?.code === "string"
+        ? (payload as { code: string }).code
+        : typeof (payload as { error?: { code?: unknown } })?.error?.code === "string"
+          ? (payload as { error: { code: string } }).error.code
+          : null;
+    debugLog161d95({
+      hypothesisId: "H1-H4",
+      location: "fetchEdge.ts:fetchEdgeJson",
+      message: "edge_response",
+      data: {
+        fnName,
+        status: response.status,
+        ok: response.ok,
+        code,
+        message:
+          typeof (payload as { message?: unknown })?.message === "string"
+            ? String((payload as { message: string }).message).slice(0, 160)
+            : typeof (payload as { error?: unknown })?.error === "string"
+              ? String((payload as { error: string }).error).slice(0, 160)
+              : null,
+      },
+    });
+  }
+  // #endregion
 
   if (!response.ok) {
     const fallback =

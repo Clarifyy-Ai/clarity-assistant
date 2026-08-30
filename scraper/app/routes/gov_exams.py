@@ -206,9 +206,10 @@ async def build_paper(
     """
     Deterministic paper construction entrypoint.
 
-    Delegates to the hybrid job processor for the given job_id. Edge may call
-    this after enqueueing a gov_paper_generation_jobs row. AI is optional;
-    bank + Python deterministic fill are preferred when permitted by mode.
+    Product-authoritative path remains process-job + the embedded paper-factory
+    worker. This HTTP route is a real claim/process helper for the same durable
+    job row — it is not a second paper factory. Edge should prefer
+    process-paper-generation-job / PYTHON_FACTORY_OWNED worker polling.
     """
     correlation = body.correlation_id or request.request_id
     settings = get_factory_settings()

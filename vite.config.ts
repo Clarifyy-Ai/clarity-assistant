@@ -46,6 +46,38 @@ export default defineConfig(({ mode }) => {
         ? [{
             name: "local-desktop-installer",
             configureServer(server) {
+              // Same-origin debug NDJSON sink (CSP-safe) for session 161d95.
+              server.middlewares.use("/__agent_debug_161d95", (req, res, next) => {
+                if (req.method !== "POST") {
+                  next();
+                  return;
+                }
+                const chunks: Buffer[] = [];
+                req.on("data", (c) => chunks.push(Buffer.from(c)));
+                req.on("end", () => {
+                  try {
+                    const raw = Buffer.concat(chunks).toString("utf8");
+                    const logPath = path.join(__dirname, "debug-161d95.log");
+                    fs.appendFileSync(logPath, raw.trim() + "\n", "utf8");
+                    void fetch(
+                      "http://127.0.0.1:7572/ingest/ea82b87b-41ef-4cec-a41d-f9c122e76fc2",
+                      {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          "X-Debug-Session-Id": "161d95",
+                        },
+                        body: raw,
+                      },
+                    ).catch(() => undefined);
+                    res.statusCode = 204;
+                    res.end();
+                  } catch {
+                    res.statusCode = 500;
+                    res.end("log write failed");
+                  }
+                });
+              });
               // Same-origin debug NDJSON sink (CSP-safe) for session 70dd4b.
               server.middlewares.use("/__agent_debug_70dd4b", (req, res, next) => {
                 if (req.method !== "POST") {

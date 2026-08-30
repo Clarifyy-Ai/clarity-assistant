@@ -20,7 +20,7 @@ async function parseEdgeJson<T>(res: Response): Promise<T> {
 }
 
 const CALENDAR_UNAVAILABLE_MSG =
-  "Google Calendar sync isn't available yet — server sync is not configured.";
+  "Google Calendar sync is not configured on this environment.";
 
 function isCalendarUnavailableError(err: Error & { code?: string; status?: number }): boolean {
   if (err.status === 501 || err.code === "NOT_CONFIGURED") return true;

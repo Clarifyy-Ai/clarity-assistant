@@ -30,6 +30,7 @@ import {
 import { loginSchema, type LoginInput } from "@/lib/validators";
 import { getCSRFHiddenInputProps, validateCSRFToken } from "@/lib/security";
 import { usePageMeta } from "@/hooks/usePageMeta";
+import { debugLog161d95 } from "@/lib/debug/debugLog161d95";
 import { AuthShell } from "@/components/layout/AuthShell";
 import { sanitizeReturnTo } from "@/lib/auth/safeReturnTo";
 import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
@@ -267,6 +268,22 @@ export default function Login(): JSX.Element {
           await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
         if (cancelled) return;
         const gate = await resolveMfaGateFromAal({ error: aalError, aal });
+        // #region agent log
+        debugLog161d95({
+          hypothesisId: "H6",
+          location: "Login.tsx:mfaGate",
+          message: "mfa_login_gate",
+          data: {
+            decision: gate.decision,
+            hasFactorId: Boolean(gate.factorId),
+            current: aal?.currentLevel ?? null,
+            next: aal?.nextLevel ?? null,
+            aalError: aalError
+              ? String((aalError as { message?: string }).message ?? aalError).slice(0, 120)
+              : null,
+          },
+        });
+        // #endregion
         if (gate.decision === "allow") {
           setMfaGateResolved(true);
           return;

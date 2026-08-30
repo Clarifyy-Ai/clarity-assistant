@@ -101,7 +101,7 @@ const PROFILE_SAFE_COLUMNS = [
   "privacy_prefs","profile_visibility","referral_code","referred_by",
   "response_style","role_type","session_reminders","stealth_mode","streak_days",
   "subscription_status","target_companies","target_role","timezone","ui_preferences","overlay_settings",
-  "total_practice_minutes","total_sessions","updated_at","website_url","xp",
+  "total_practice_minutes","total_sessions","updated_at","website_url","portfolio_url","xp",
   "hint_style","coach_tone","stt_language","custom_filler_words","auto_gain",
   "years_of_exp",
 ].join(", ");
@@ -114,6 +114,7 @@ const PROFILE_BOOT_COLUMNS = [
   "avatar_url",
   "bio",
   "website_url",
+  "portfolio_url",
   "experience_years",
   "credits",
   "plan_id",
@@ -1019,6 +1020,11 @@ export const documentsDB = {
     }
 
     return data;
+  },
+
+  async listPortfolios(userId: string): Promise<Tables<"documents">[]> {
+    const rows = await documentsDB.getByUserId(userId);
+    return rows.filter((row) => (row.keywords ?? []).includes("portfolio"));
   },
 };
 
@@ -1958,6 +1964,20 @@ export const notificationsDB = {
         operation: "delete",
       });
     }
+  },
+
+  async createOwn(title: string, body?: string | null): Promise<string> {
+    const { data, error } = await supabase.rpc("create_own_in_app_notification", {
+      p_title: title,
+      p_body: body ?? null,
+    });
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "notifications",
+        operation: "createOwn",
+      });
+    }
+    return String(data);
   },
 };
 

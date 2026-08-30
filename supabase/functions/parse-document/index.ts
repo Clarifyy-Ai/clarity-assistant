@@ -82,6 +82,9 @@ async function extractWithGemini(
     docType === "cover_letter"
       ? `Extract the full cover letter text from this document. Return JSON only:
 {"full_text":"complete letter text","summary":"2-3 sentence summary for interview coaching"}`
+      : docType === "portfolio"
+      ? `Extract only text that appears in this portfolio document. Do not invent companies, titles, dates, skills, metrics, or achievements. If a field is not in the source, omit it. Return JSON only:
+{"full_text":"source text only","summary":"2-3 sentence summary of what the document actually says"}`
       : `Extract all readable text. Return JSON only:
 {"full_text":"...","summary":"brief summary"}`;
 
@@ -517,7 +520,7 @@ Deno.serve(async (req) => {
 
     const { data: doc } = await db
       .from("documents")
-      .select("id, user_id, type, title")
+      .select("id, user_id, type, title, keywords")
       .eq("id", documentId)
       .single();
 
@@ -634,7 +637,9 @@ Deno.serve(async (req) => {
       bytes: fileBytes,
       filename: match.name,
       mimeType: mimeCheck.mimeType,
-      documentKind: doc.type ?? "other",
+      documentKind: Array.isArray(doc.keywords) && doc.keywords.includes("portfolio")
+        ? "portfolio"
+        : (doc.type ?? "other"),
     });
 
     if (!hybrid.ok) {

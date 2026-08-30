@@ -32,6 +32,7 @@ function deriveMfaUiState(
   return "NOT_CONFIGURED";
 }
 import { agentDebugIngest } from "@/lib/debug/agentIngest";
+import { debugLog161d95 } from "@/lib/debug/debugLog161d95";
 
 export default function SettingsSecurity() {
   const [currentPw, setCurrentPw] = useState("");
@@ -57,6 +58,19 @@ export default function SettingsSecurity() {
       if (error) throw error;
       const all = collectMfaFactors(data);
       setFactors(all);
+      // #region agent log
+      debugLog161d95({
+        hypothesisId: "H6",
+        location: "SettingsSecurity.tsx:loadFactors",
+        message: "mfa_factors_loaded",
+        data: {
+          total: all.length,
+          verified: all.filter((f) => f.factor_type === "totp" && f.status === "verified").length,
+          unverified: all.filter((f) => f.factor_type === "totp" && f.status === "unverified").length,
+          statuses: all.map((f) => ({ type: f.factor_type, status: f.status })),
+        },
+      });
+      // #endregion
       return all;
     } catch (err) {
       console.warn("[SettingsSecurity] MFA list:", err);

@@ -8,6 +8,7 @@ import {
 import { formatBankCoverage } from "@/lib/gov-exam/bankReadiness";
 import { Button } from "@/components/ui/Button";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { debugLog161d95 } from "@/lib/debug/debugLog161d95";
 
 const DEBOUNCE_MS = 280;
 const SEARCH_CACHE_TTL_MS = 60_000;
@@ -251,6 +252,14 @@ export function ExamSearchCombobox({
         writeSearchCache(cacheKey, familyRef.current, data.results);
         setResults(data.results);
         const nextState = data.results.length === 0 ? "empty" : "idle";
+        // #region agent log
+        debugLog161d95({
+          hypothesisId: "H1",
+          location: "ExamSearchCombobox.tsx:runSearch:ok",
+          message: "gov_search_terminal",
+          data: { query: trimmed.slice(0, 80), resultCount: data.results.length, nextState },
+        });
+        // #endregion
         setState(nextState);
         setActiveIndex(data.results.length > 0 ? 0 : -1);
         notify?.(data.results, {
@@ -284,6 +293,19 @@ export function ExamSearchCombobox({
         }
         setState("error");
         setError(mapped.message);
+        // #region agent log
+        debugLog161d95({
+          hypothesisId: "H1",
+          location: "ExamSearchCombobox.tsx:runSearch:error",
+          message: "gov_search_error",
+          data: {
+            query: trimmed.slice(0, 80),
+            code: mapped.code,
+            status: (err as { status?: number })?.status ?? null,
+            message: mapped.message.slice(0, 160),
+          },
+        });
+        // #endregion
         notify?.([], {
           state: "error",
           error: mapped.message,

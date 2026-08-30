@@ -28,7 +28,7 @@ export function useStreakTracker() {
   const recordActivity = useCallback(async (): Promise<void> => {
     if (!user) return;
 
-    const { data, error } = await supabase.rpc("record_practice_activity" as any, {
+    const { data, error } = await supabase.rpc("record_practice_activity", {
       p_user_id: user.id,
     });
 

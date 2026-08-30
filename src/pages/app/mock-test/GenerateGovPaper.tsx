@@ -37,6 +37,7 @@ import {
 import { planRank } from "@/lib/billing/planCatalog";
 import { formatGovExamOperationError } from "@/lib/gov-exam/examOperationErrors";
 import { ApiClientError } from "@/lib/api/apiClient";
+import { debugLog161d95 } from "@/lib/debug/debugLog161d95";
 import { useAuthStore } from "@/store/userStore";
 import { resolveCreditBalance } from "@/lib/billing/resolveCreditBalance";
 import { fetchSpendableCredits } from "@/lib/billing/fetchSpendableCredits";
@@ -54,6 +55,7 @@ import {
   mapProgressToUserStage,
   saveActivePaperJob,
 } from "@/lib/gov-exam/paperJobStatus";
+import { pollPaperJobUntilTerminal } from "@/lib/gov-exam/pollPaperJob";
 import {
   parseGovQuestionCount,
   GOV_QUESTION_COUNT_ABS_MAX,
@@ -408,6 +410,14 @@ export default function GenerateGovPaper(): React.ReactElement {
     setStep(3);
     void (async () => {
       try {
+        // #region agent log
+        debugLog161d95({
+          hypothesisId: "H2",
+          location: "GenerateGovPaper.tsx:resumePoll:start",
+          message: "gov_resume_poll_start",
+          data: { jobId, fromUrl: Boolean(fromUrl), hasStored: Boolean(stored) },
+        });
+        // #endregion
         let current = await getPaperGenerationJob(jobId);
         if (cancelled) return;
         setJob(current);
@@ -422,20 +432,11 @@ export default function GenerateGovPaper(): React.ReactElement {
           }
           return;
         }
-        let polls = 0;
-        const maxPolls = 400;
-        while (
-          !pollAbortRef.current &&
-          !cancelled &&
-          !isPaperJobTerminal(current.status) &&
-          polls < maxPolls
-        ) {
-          await new Promise((r) => setTimeout(r, 1500));
-          if (pollAbortRef.current || cancelled) return;
-          current = await getPaperGenerationJob(jobId);
-          setJob(current);
-          polls += 1;
-        }
+        current = await pollPaperJobUntilTerminal(jobId, current, {
+          setJob,
+          shouldAbort: () => pollAbortRef.current || cancelled,
+        });
+        const publicStatus = mapPaperJobPublicStatus(current.status);
         if (current.status === "completed" && current.mockTestId) {
           clearActivePaperJob();
           syncJobIdInUrl(null);
@@ -443,8 +444,52 @@ export default function GenerateGovPaper(): React.ReactElement {
         } else if (isPaperJobTerminal(current.status)) {
           clearActivePaperJob();
           syncJobIdInUrl(null);
+          if (publicStatus === "failed_retryable" || publicStatus === "failed_permanent" || publicStatus === "failed") {
+            toast.error(current.errorMessage || "We couldn't generate this paper. Try again.");
+          }
         }
+        // #region agent log
+        debugLog161d95({
+          hypothesisId: "H2",
+          location: "GenerateGovPaper.tsx:resumePoll:exit",
+          message: "gov_resume_poll_exit",
+          runId: "post-fix",
+          data: {
+            jobId,
+            polls: null,
+            status: current.status,
+            publicStatus,
+            terminal: isPaperJobTerminal(current.status),
+            mockTestId: current.mockTestId ?? null,
+            usedSharedPoller: true,
+          },
+        });
+        // #endregion
       } catch (err) {
+        // #region agent log
+        debugLog161d95({
+          hypothesisId: "H2",
+          location: "GenerateGovPaper.tsx:resumePoll:error",
+          message: "gov_resume_poll_error",
+          runId: "post-fix",
+          data: {
+            jobId,
+            status: (err as { status?: number })?.status ?? null,
+            code: (err as { code?: string })?.code ?? null,
+            message: err instanceof Error ? err.message.slice(0, 160) : String(err).slice(0, 160),
+          },
+        });
+        // #endregion
+        const status = (err as { status?: number })?.status;
+        if (status === 404 || status === 409 || status === 429) {
+          setJob({
+            jobId,
+            status: "failed_retryable",
+            errorMessage: formatGovExamOperationError(err),
+          });
+          clearActivePaperJob();
+          syncJobIdInUrl(null);
+        }
         setBusy(false);
         toast.error(formatGovExamOperationError(err));
       } finally {
@@ -641,53 +686,11 @@ export default function GenerateGovPaper(): React.ReactElement {
   }, [selectedTopics, topicDraft]);
 
   async function pollJobUntilTerminal(jobId: string, seed: PaperJobResult): Promise<PaperJobResult> {
-    let current = seed;
-    let polls = 0;
-    const maxPolls = 400;
     pollAbortRef.current = false;
-    while (
-      !isPaperJobTerminal(current.status) &&
-      !pollAbortRef.current &&
-      polls < maxPolls
-    ) {
-      const delayMs = polls < 5 ? 1500 : polls < 20 ? 3000 : 5000;
-      await new Promise((r) => setTimeout(r, delayMs));
-      if (pollAbortRef.current) break;
-      try {
-        current = await getPaperGenerationJob(jobId);
-        setJob(current);
-      } catch (err) {
-        const terminal =
-          err instanceof ApiClientError &&
-          (err.status === 404 ||
-            err.status === 409 ||
-            err.status === 429 ||
-            err.code === "RATE_LIMITED" ||
-            err.code === "GENERATION_CONFLICT");
-        if (terminal) {
-          current = {
-            ...current,
-            status: "failed_retryable",
-            errorCode: err instanceof ApiClientError ? err.code : undefined,
-            errorMessage: formatGovExamOperationError(err),
-          };
-          setJob(current);
-          break;
-        }
-        throw err;
-      }
-      polls += 1;
-    }
-    if (!isPaperJobTerminal(current.status) && polls >= maxPolls) {
-      current = {
-        ...current,
-        status: "failed_retryable",
-        errorMessage:
-          "Paper generation is taking longer than expected. Refresh this page to resume.",
-      };
-      setJob(current);
-    }
-    return current;
+    return pollPaperJobUntilTerminal(jobId, seed, {
+      setJob,
+      shouldAbort: () => pollAbortRef.current,
+    });
   }
 
   async function handleCancelJob() {
@@ -887,6 +890,22 @@ export default function GenerateGovPaper(): React.ReactElement {
 
       const current = await pollJobUntilTerminal(result.jobId, result);
       const terminal = mapPaperJobPublicStatus(current.status);
+      // #region agent log
+      debugLog161d95({
+        hypothesisId: "H2",
+        location: "GenerateGovPaper.tsx:generate:terminal",
+        message: "gov_generate_terminal",
+        data: {
+          jobId: current.jobId ?? result.jobId,
+          createStatus: result.status,
+          pollStatus: current.status,
+          terminal,
+          mockTestId: current.mockTestId ?? null,
+          questionCount: current.questionCount ?? null,
+          hasError: Boolean(current.error || current.errorMessage),
+        },
+      });
+      // #endregion
 
       if (terminal === "completed" && current.mockTestId) {
         clearActivePaperJob();

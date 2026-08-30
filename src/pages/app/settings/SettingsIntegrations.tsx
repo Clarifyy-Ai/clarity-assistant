@@ -223,7 +223,7 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
       if (isCalendarNotConfiguredMessage(result.error)) {
         // 501 / NOT_CONFIGURED — calm “coming soon” UI, never a scary error toast.
         toast.info(
-          "Google Calendar sync isn't available yet — coming soon / not configured on the server.",
+          "Google Calendar sync is not configured on the server (missing Google OAuth secrets).",
         );
         return;
       }
@@ -250,7 +250,7 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
             <p className="text-sm font-semibold text-foreground">{integration.label}</p>
             {isConnected && <Badge variant="emerald" size="sm" dot>Connected</Badge>}
             {!syncAvailable && (
-              <Badge variant="amber" size="sm">Coming Soon / Not configured</Badge>
+              <Badge variant="amber" size="sm">Not configured</Badge>
             )}
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
@@ -260,7 +260,7 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
                 : "Your Google account may be linked, but event import is not configured on the server yet."
               : syncAvailable
                 ? integration.desc
-                : "Google Calendar sync is Coming Soon / Not configured. Connect will appear here only when the server is ready."}
+                : "Google Calendar sync is not configured. Connect appears here only when GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set."}
           </p>
           {lastSynced && (
             <p className="text-[10px] text-muted-foreground mt-0.5">
@@ -297,7 +297,7 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
               </Button>
             ) : (
               <Button variant="ghost" size="sm" disabled title="Calendar sync is not configured">
-                Coming Soon
+                Not configured
               </Button>
             )
           ) : (
@@ -317,7 +317,7 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
       <div className="mt-3 pt-3 border-t border-border">
         {!syncAvailable ? (
           <p className="text-[10px] text-muted-foreground leading-relaxed">
-            Calendar event import is Coming Soon / Not configured on the server. There is no active Connect until sync is enabled — schedule interviews manually in Clarify for now.
+            Calendar event import is not configured on the server. There is no active Connect until Google OAuth secrets are set — schedule interviews manually in Clarify for now.
           </p>
         ) : isConnected ? (
           <>

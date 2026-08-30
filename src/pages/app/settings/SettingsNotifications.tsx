@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { CheckCircle, Bell, Mail, Send } from "lucide-react";
 import { toast } from "sonner";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
+import { notificationsDB } from "@/lib/supabase/database";
 
 type NotificationPrefs = {
   session_complete?: boolean;
@@ -110,10 +111,19 @@ export default function SettingsNotifications() {
     }
   }
 
-  function sendTestNotification() {
-    toast.success("Test notification", {
-      description: "If notifications are enabled, you'll receive alerts like this.",
-    });
+  async function sendTestNotification() {
+    if (!user) return;
+    try {
+      await notificationsDB.createOwn(
+        "Test notification",
+        "In-app alerts are working. Push delivery is not configured on this environment.",
+      );
+      toast.success("Test notification saved", {
+        description: "Open Notifications to see it. It persists after refresh.",
+      });
+    } catch (err) {
+      toast.error(err?.message ?? "Could not create a test notification.");
+    }
   }
 
   return (
@@ -124,7 +134,8 @@ export default function SettingsNotifications() {
           <span className="font-medium text-foreground">Email enforcement: </span>
           Category toggles and the master email switch are checked by the{" "}
           <code className="text-[11px]">send-email</code> edge function before Resend sends.
-          Push reminders and email digests are <span className="font-medium text-foreground">coming soon</span>.
+          Push delivery is <span className="font-medium text-foreground">Not configured</span> (no VAPID keys).
+          Email send uses Resend when that secret is present; otherwise interview reminders return Not configured.
         </p>
       </Card>
 
@@ -171,11 +182,11 @@ export default function SettingsNotifications() {
         <div className="flex items-center gap-2 mb-2">
           <h3 className="text-sm font-semibold text-foreground">Push &amp; digest</h3>
           <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-muted text-muted-foreground">
-            Coming soon
+            Not configured
           </span>
         </div>
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Push reminders and scheduled email digests are not available yet. In-app toasts and browser notifications (when permitted) are the only real-time alerts; email covers the categories above.
+          Preferences on this page are saved to your account. Push subscriptions require VAPID secrets that are not configured. Scheduled email digests require Resend; in-app notifications and category email gates are the live channels.
         </p>
       </Card>
 

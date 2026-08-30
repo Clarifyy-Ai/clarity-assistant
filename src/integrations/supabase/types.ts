@@ -5031,6 +5031,7 @@ export type Database = {
           total_sessions: number
           updated_at: string
           website_url: string | null
+          portfolio_url: string | null
           xp: number
           years_of_exp: number | null
         }
@@ -5124,6 +5125,7 @@ export type Database = {
           total_sessions?: number
           updated_at?: string
           website_url?: string | null
+          portfolio_url?: string | null
           xp?: number
           years_of_exp?: number | null
         }
@@ -5217,6 +5219,7 @@ export type Database = {
           total_sessions?: number
           updated_at?: string
           website_url?: string | null
+          portfolio_url?: string | null
           xp?: number
           years_of_exp?: number | null
         }
@@ -7959,6 +7962,18 @@ export type Database = {
       mark_notifications_read: {
         Args: { p_user_id: string }
         Returns: undefined
+      }
+      create_own_in_app_notification: {
+        Args: { p_title: string; p_body?: string | null }
+        Returns: string
+      }
+      record_practice_activity: {
+        Args: { p_user_id?: string | null }
+        Returns: Json
+      }
+      apply_razorpay_refund: {
+        Args: { p_order_id: string; p_refund_key: string; p_credits_granted: number }
+        Returns: Json
       }
       mask_email: { Args: { p_email: string }; Returns: string }
       plan_monthly_credits: { Args: { p_plan: string }; Returns: number }

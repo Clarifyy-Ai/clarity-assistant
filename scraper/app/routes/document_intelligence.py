@@ -40,9 +40,19 @@ def _is_uuid(value: str) -> bool:
     return True
 
 
-def _enqueue_admin_job(operation: str, request: InternalRequest) -> JobResponse:
-    """In-memory queue for admin/ingest jobs not yet on the durable product path."""
-    return registry.create(operation, request.request_id)
+def _retired_admin_job(code: str, message: str, request: InternalRequest) -> None:
+    """In-memory exam-source/validate-paper enqueue is retired — no silent success."""
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail={
+            "code": "FUNCTION_RETIRED",
+            "message": message,
+            "retryable": False,
+            "stage": "retired",
+            "correlation_id": request.request_id,
+            "replacement": code,
+        },
+    )
 
 
 @router.post("/jobs/document", response_model=JobResponse, status_code=status.HTTP_202_ACCEPTED)
@@ -78,7 +88,12 @@ async def exam_source_job(
     request: InternalRequest = Depends(require_internal_auth),
     _body: ExamSourceJobRequest | None = None,
 ) -> JobResponse:
-    return _enqueue_admin_job("exam-source", request)
+    _retired_admin_job(
+        "POST /scrape/start or Edge extract-question-paper",
+        "In-memory exam-source enqueue is retired. Use the scrape pipeline or extract-question-paper.",
+        request,
+    )
+    raise AssertionError("unreachable")
 
 
 @router.post("/jobs/validate-paper", response_model=JobResponse, status_code=status.HTTP_202_ACCEPTED)
@@ -86,7 +101,12 @@ async def validate_paper_job(
     request: InternalRequest = Depends(require_internal_auth),
     _body: ValidatePaperJobRequest | None = None,
 ) -> JobResponse:
-    return _enqueue_admin_job("validate-paper", request)
+    _retired_admin_job(
+        "POST /internal/gov-exams/validate-questions",
+        "In-memory validate-paper enqueue is retired. Use /internal/gov-exams/validate-questions.",
+        request,
+    )
+    raise AssertionError("unreachable")
 
 
 @router.get("/jobs/{job_id}", response_model=JobResponse)

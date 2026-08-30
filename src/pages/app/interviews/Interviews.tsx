@@ -114,7 +114,7 @@ export default function Interviews() {
               }
             >
               {!calendar.syncAvailable
-                ? "Calendar: Coming soon"
+                ? "Calendar: Not configured"
                 : calendar.isConnected
                   ? "Sync calendar"
                   : "Connect calendar"}

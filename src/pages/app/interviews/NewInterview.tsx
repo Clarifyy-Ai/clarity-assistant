@@ -648,7 +648,7 @@ export default function NewInterview() {
               <AlertCircle className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" aria-hidden="true" />
               <div>
                 <p className="text-xs font-semibold text-foreground">
-                  Google Calendar — Coming soon
+                  Google Calendar — Not configured
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Calendar sync is not configured on this environment yet. You can still schedule interviews in Clarify.

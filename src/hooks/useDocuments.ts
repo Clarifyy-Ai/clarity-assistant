@@ -307,6 +307,82 @@ export function useDocuments(options?: UseDocumentsOptions) {
     [user]
   );
 
+  const uploadPortfolio = useCallback(
+    async (file: File): Promise<{ documentId: string | null; error: string | null }> => {
+      if (!user) return { documentId: null, error: "Not authenticated" };
+
+      const documentId = generateId();
+      const ext = (file.name.split(".").pop() ?? "pdf").toLowerCase();
+      const path = `${user.id}/portfolios/${documentId}.${ext}`;
+      const mimeType =
+        (file.type && file.type !== "application/octet-stream"
+          ? file.type
+          : getMimeType(file.name)) || "application/octet-stream";
+
+      docStore.setUploadProgress(0);
+      try {
+        const uploaded = await uploadFile(
+          STORAGE_BUCKETS.DOCUMENTS,
+          path,
+          file,
+          (pct) => docStore.setUploadProgress(pct)
+        );
+        if (!uploaded) throw new Error("Upload failed");
+
+        await documentsDB.create({
+          id: documentId,
+          user_id: user.id,
+          type: "other",
+          title: file.name.replace(/\.[^/.]+$/, "") || "Portfolio",
+          file_name: file.name,
+          file_url: uploaded.url,
+          file_size: file.size,
+          mime_type: mimeType,
+          keywords: ["portfolio"],
+          content: null,
+          parsed_summary: null,
+          is_primary: false,
+          is_active: true,
+        });
+
+        let parseError: string | null = null;
+        try {
+          await fetchEdgeJson(
+            "parse-document",
+            {
+              document_id: documentId,
+              file_path: path,
+              mime_type: mimeType,
+            },
+            {
+              headers: {
+                "x-idempotency-key": documentParseIdempotencyKey(
+                  "parse-document",
+                  documentId,
+                  path,
+                ),
+              },
+            },
+          );
+        } catch (parseErr) {
+          console.warn("[useDocuments] parse-document portfolio:", parseErr);
+          parseError =
+            "File saved but text extraction failed. You can retry from Documents.";
+        }
+
+        return { documentId, error: parseError };
+      } catch (err) {
+        return {
+          documentId: null,
+          error: err instanceof Error ? err.message : "Upload failed",
+        };
+      } finally {
+        docStore.setUploadProgress(0);
+      }
+    },
+    [user]
+  );
+
   // ── Parse resume via Edge Function ────────────────────────────
 
   async function parseResume(
@@ -755,6 +831,7 @@ ${rawText.slice(0, 4000)}`;
 
     uploadResume,
     uploadCoverLetter,
+    uploadPortfolio,
     deleteResume,
     setActiveResume,
 

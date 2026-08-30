@@ -1430,34 +1430,110 @@ function CoverLetterManager() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PortfolioManager — preview only (no API persistence yet)
+// PortfolioManager — persist file + URL through documents + profiles
 // ─────────────────────────────────────────────────────────────────────────────
 
 function PortfolioManager() {
-  const [mode,         setMode]         = useState<"file" | "url">("file");
-  const [file,         setFile]         = useState<File | null>(null);
-  const [portfolioUrl, setPortfolioUrl] = useState("");
+  const user = useAuthStore((s) => s.user);
+  const profile = useAuthStore((s) => s.profile);
+  const updateProfile = useAuthStore((s) => s.updateProfile);
+  const docMgr = useDocumentManager({ skipInitialLoad: true });
 
-  function handleFile(f: File) {
+  const [mode, setMode] = useState<"file" | "url">("file");
+  const [uploading, setUploading] = useState(false);
+  const [savingUrl, setSavingUrl] = useState(false);
+  const [portfolioUrl, setPortfolioUrl] = useState("");
+  const [items, setItems] = useState<Array<{
+    id: string;
+    title: string;
+    file_name: string | null;
+    parsed_summary: string | null;
+    content: string | null;
+    updated_at: string;
+  }>>([]);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const savedUrl = (profile as { portfolio_url?: string | null } | null)?.portfolio_url ?? "";
+
+  useEffect(() => {
+    setPortfolioUrl(savedUrl);
+  }, [savedUrl]);
+
+  const reloadPortfolios = useCallback(async () => {
+    if (!user?.id) return;
+    const rows = await documentsDB.listPortfolios(user.id);
+    setItems(rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      file_name: row.file_name,
+      parsed_summary: row.parsed_summary,
+      content: row.content,
+      updated_at: row.updated_at,
+    })));
+  }, [user?.id]);
+
+  useEffect(() => {
+    void reloadPortfolios();
+  }, [reloadPortfolios]);
+
+  async function handleFile(f: File) {
     const error = validateFile(f, "portfolio");
     if (error) {
       toast.error(error);
       return;
     }
-    setFile(f);
-    toast.info("File preview only — portfolio upload is not saved yet.");
+    setUploading(true);
+    const { documentId, error: uploadError } = await docMgr.uploadPortfolio(f);
+    setUploading(false);
+    if (uploadError && !documentId) {
+      toast.error(uploadError);
+      return;
+    }
+    if (uploadError) toast.message(uploadError);
+    else toast.success("Portfolio saved to your account.");
+    await reloadPortfolios();
+  }
+
+  async function handleSaveUrl() {
+    if (!portfolioUrl.trim()) {
+      try {
+        setSavingUrl(true);
+        await updateProfile({ portfolio_url: null });
+        toast.success("Portfolio URL cleared.");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not save portfolio URL.");
+      } finally {
+        setSavingUrl(false);
+      }
+      return;
+    }
+    if (!isValidUrl(portfolioUrl)) {
+      toast.error("Enter a valid URL including https://");
+      return;
+    }
+    try {
+      setSavingUrl(true);
+      await updateProfile({ portfolio_url: portfolioUrl.trim() });
+      toast.success("Portfolio URL saved.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not save portfolio URL.");
+    } finally {
+      setSavingUrl(false);
+    }
   }
 
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        Portfolio linking is Coming soon / Not configured — selections stay on this page only and are not saved to your account.
+        Upload a PDF/DOCX/TXT or save a public URL. Files are stored on your account and extracted text-only — we do not invent companies, titles, or metrics.
       </p>
-      {/* Mode toggle */}
-      <div className="flex gap-2">
+      <div className="flex gap-2" role="tablist" aria-label="Portfolio input mode">
         {(["file", "url"] as const).map((m) => (
           <button
             key={m}
+            type="button"
+            role="tab"
+            aria-selected={mode === m}
             onClick={() => setMode(m)}
             className={cn(
               "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
@@ -1466,68 +1542,138 @@ function PortfolioManager() {
                 : "bg-secondary border-border text-muted-foreground hover:text-foreground"
             )}
           >
-            {m === "file" ? "📁 Upload file" : "🔗 URL"}
+            {m === "file" ? "Upload file" : "URL"}
           </button>
         ))}
       </div>
 
       {mode === "file" ? (
-        <>
-          <UploadZone
-            title="Drop portfolio PDF/DOCX/TXT or browse"
-            description={`PDF, DOCX, or TXT · Max ${DOCUMENT_MAX_MB} MB · Preview only`}
-            accept={RESUME_ACCEPT}
-            onFileSelect={(files) => {
-              const f = files[0];
-              if (f) handleFile(f);
-            }}
-          />
-          {file && (
-            <Card padding="sm">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-primary/10 rounded-xl flex items-center justify-center shrink-0">
-                  <FileText className="w-4 h-4 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-foreground truncate">{file.name}</p>
-                  <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB · not saved</p>
-                </div>
-                <Badge variant="amber" size="sm">Preview only</Badge>
-                <button
-                  onClick={() => setFile(null)}
-                  className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-accent/5 transition-all"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </Card>
-          )}
-        </>
+        <UploadZone
+          title="Drop portfolio PDF/DOCX/TXT or browse"
+          description={`PDF, DOCX, or TXT · Max ${DOCUMENT_MAX_MB} MB · Saved to your account`}
+          accept={RESUME_ACCEPT}
+          loading={uploading}
+          loadingContent={
+            <div className="flex flex-col items-center gap-2">
+              <RefreshCw className="w-8 h-8 text-primary animate-spin" aria-hidden="true" />
+              <p className="text-sm text-muted-foreground">Saving portfolio…</p>
+            </div>
+          }
+          onFileSelect={(files) => {
+            const f = files[0];
+            if (f) void handleFile(f);
+          }}
+        />
       ) : (
         <div className="space-y-2">
-          <p className="text-xs text-muted-foreground">Portfolio URL (not saved)</p>
+          <label htmlFor="portfolio-url" className="text-xs text-muted-foreground">
+            Portfolio URL
+          </label>
           <div className="flex gap-2">
             <div className="flex-1 relative">
-              <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
               <input
+                id="portfolio-url"
                 value={portfolioUrl}
                 onChange={(e) => setPortfolioUrl(e.target.value)}
                 placeholder="https://yourportfolio.com"
+                aria-invalid={Boolean(portfolioUrl) && !isValidUrl(portfolioUrl)}
+                aria-describedby={portfolioUrl && !isValidUrl(portfolioUrl) ? "portfolio-url-error" : undefined}
                 className={cn(
                   "w-full bg-background border text-foreground placeholder:text-muted-foreground rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors",
                   portfolioUrl && !isValidUrl(portfolioUrl) ? "border-red-500/60" : "border-input"
                 )}
               />
             </div>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={savingUrl}
+              onClick={() => void handleSaveUrl()}
+            >
+              Save URL
+            </Button>
           </div>
           {portfolioUrl && !isValidUrl(portfolioUrl) && (
-            <p className="text-xs text-red-400">Please enter a valid URL (including https://)</p>
+            <p id="portfolio-url-error" className="text-xs text-red-400">
+              Please enter a valid URL (including https://)
+            </p>
           )}
-          {portfolioUrl && isValidUrl(portfolioUrl) && (
-            <p className="text-xs text-amber-400">Valid format — not saved (Coming soon / Not configured)</p>
+          {savedUrl && (
+            <p className="text-xs text-muted-foreground">
+              Saved: <a href={savedUrl} className="text-primary underline underline-offset-2" target="_blank" rel="noreferrer">{savedUrl}</a>
+            </p>
           )}
         </div>
       )}
+
+      {items.length > 0 ? (
+        <div className="space-y-2">
+          {items.map((item) => (
+            <Card key={item.id} padding="sm" className="space-y-2">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-primary/10 rounded-xl flex items-center justify-center shrink-0">
+                  <FileText className="w-4 h-4 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-foreground truncate">{item.title}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {item.file_name ?? "Saved file"} · {format(new Date(item.updated_at), "MMM d, yyyy")}
+                  </p>
+                </div>
+                <Badge variant="emerald" size="sm">Saved</Badge>
+                <button
+                  type="button"
+                  onClick={() => setDeleteId(item.id)}
+                  className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-accent/5 transition-all"
+                  aria-label={`Delete ${item.title}`}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              {(item.parsed_summary || item.content) && (
+                <p className="text-xs text-muted-foreground line-clamp-3">
+                  {item.parsed_summary ?? item.content?.slice(0, 280)}
+                </p>
+              )}
+            </Card>
+          ))}
+        </div>
+      ) : (
+        <Card className="bg-secondary/30">
+          <EmptyState
+            icon={FileText}
+            title="No portfolio file saved"
+            description="Upload a file or save a URL. Both persist after refresh."
+            compact
+          />
+        </Card>
+      )}
+
+      <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Delete portfolio file?" size="sm">
+        <p className="text-sm text-muted-foreground mb-5">
+          This permanently removes the saved file from your account.
+        </p>
+        <div className="flex gap-3">
+          <Button variant="secondary" size="sm" fullWidth onClick={() => setDeleteId(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            fullWidth
+            onClick={async () => {
+              if (!deleteId) return;
+              await documentsDB.delete(deleteId);
+              setDeleteId(null);
+              await reloadPortfolios();
+              toast.success("Portfolio file removed.");
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }
