@@ -30,6 +30,7 @@ import {
 import {
   clearPendingPracticeSetup,
   consumePendingPracticeSetup,
+  loadLastPracticeSetup,
   peekPendingPracticeSetup,
   saveLastPracticeSetup,
 } from "@/lib/session/lastPracticeSetup";
@@ -219,6 +220,7 @@ function LiveOverlaySession() {
       .catch((err: unknown) => {
         if (handleSessionStartError(err)) {
           hasStartedRef.current = false;
+          skipWizardRef.current = false;
           setPhase("setup");
           return;
         }
@@ -226,6 +228,7 @@ function LiveOverlaySession() {
         toast.error(message);
         setStartError(message);
         hasStartedRef.current = false;
+        skipWizardRef.current = false;
         resetTransientOverlaySessionStores({
           hideOverlay: true,
           stopTts: true,
@@ -607,7 +610,19 @@ function LiveOverlaySession() {
                   size="sm"
                   leftIcon={<RefreshCw className="w-4 h-4" />}
                   onClick={() => {
+                    didEndRef.current = false;
+                    endingRef.current = false;
+                    skipWizardRef.current = false;
+                    hasStartedRef.current = false;
+                    restoreAttemptedRef.current = true;
+                    setRestoreSessionId(null);
                     setTerminalReason(null);
+                    setStartError(null);
+                    const last = loadLastPracticeSetup();
+                    if (last) {
+                      handleSetup(last);
+                      return;
+                    }
                     setPhase("setup");
                   }}
                 >

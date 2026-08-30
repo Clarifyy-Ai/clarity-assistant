@@ -217,6 +217,11 @@ export async function activateSession(sessionId: string): Promise<void> {
     throw new Error("This session expired after 24 hours; please start a new one.");
   }
 
+  const status = String((existing as { status?: string }).status ?? "").toLowerCase();
+  if (status === "completed" || status === "abandoned" || status === "cancelled") {
+    throw new Error("This practice session is no longer active.");
+  }
+
   const update: TablesUpdate<"sessions"> & { lifecycle_status?: string } = {
     status: "active",
     lifecycle_status: "IN_PROGRESS",

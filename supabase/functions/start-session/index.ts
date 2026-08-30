@@ -716,7 +716,10 @@ Deno.serve(async (req: Request) => {
 
   const body = validation.data;
   const action = body.check_only ? "eligibility" : (body.action ?? "start");
-  const idempotencyKey = req.headers.get("Idempotency-Key")?.trim() || null;
+  const idempotencyKey =
+    req.headers.get("Idempotency-Key")?.trim() ||
+    req.headers.get("x-idempotency-key")?.trim() ||
+    null;
 
   if (await isUserBanned(db, user.id)) {
     return eligibilityHttp(corsHeaders, {}, "ACCOUNT_RESTRICTED");
@@ -932,6 +935,23 @@ Deno.serve(async (req: Request) => {
     return json(corsHeaders, 500, {
       error: "Could not create session.",
       code: "SESSION_CREATE_FAILED",
+    });
+  }
+
+  const reusedStatus = String(started.status ?? "").toLowerCase();
+  const reusedLife = String(started.lifecycle_status ?? "").toUpperCase();
+  if (
+    started.reused === true &&
+    (reusedStatus === "completed" ||
+      reusedStatus === "abandoned" ||
+      reusedStatus === "cancelled" ||
+      reusedLife === "COMPLETED" ||
+      reusedLife === "EXPIRED" ||
+      reusedLife === "CANCELLED")
+  ) {
+    return json(corsHeaders, 409, {
+      error: "That practice session already ended. Start a new one.",
+      code: "SESSION_NOT_AVAILABLE",
     });
   }
 

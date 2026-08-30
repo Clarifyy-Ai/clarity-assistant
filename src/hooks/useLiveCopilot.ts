@@ -55,7 +55,7 @@ import {
   type SessionType,
 } from "@/lib/session/sessionLifecycle";
 import { startSession as startSessionApi, finalizeSession as finalizeSessionApi } from "@/lib/api/sessions";
-import { handleSessionStartError } from "@/lib/billing/sessionStartErrors";
+import { ApiClientError } from "@/lib/api/apiClient";
 import { toDbModel } from "@/lib/ai/modelMapping";
 import { markFirstListening } from "@/lib/analytics/uxMetrics";
 import { toast } from "sonner";
@@ -119,6 +119,8 @@ export function useLiveCopilot({
 
   const existingSessionIdRef = useRef(existingSessionId ?? null);
   existingSessionIdRef.current = existingSessionId ?? null;
+  /** Shared across double-click; cleared when the session ends so Start New Session is a new row. */
+  const startAttemptKeyRef = useRef<string | null>(null);
 
   const [isPreparingSession, setIsPreparingSession] = useState(false);
   const [prepStepIndex, setPrepStepIndex] = useState(0);
@@ -855,6 +857,13 @@ export function useLiveCopilot({
         await activateSession(reusableSessionId);
       } else if (!privateMode) {
         const apiSessionType = sessionType === "live" ? "rehearsal" : sessionType;
+        if (!startAttemptKeyRef.current) {
+          try {
+            startAttemptKeyRef.current = crypto.randomUUID().slice(0, 8);
+          } catch {
+            startAttemptKeyRef.current = `${Date.now().toString(36)}`.slice(0, 8);
+          }
+        }
 
         const result = await startSessionApi(
           {
@@ -879,9 +888,25 @@ export function useLiveCopilot({
               role: cfg.role,
               company: cfg.company,
               interview_type: cfg.interview_type,
+              attemptNonce: startAttemptKeyRef.current,
             }),
           },
         );
+        const reusedTerminal =
+          result.reused === true &&
+          (result.status === "completed" ||
+            result.status === "abandoned" ||
+            result.lifecycle_status === "COMPLETED" ||
+            result.lifecycle_status === "EXPIRED" ||
+            result.lifecycle_status === "CANCELLED");
+        if (reusedTerminal || !result.session_id) {
+          startAttemptKeyRef.current = null;
+          throw new ApiClientError({
+            message: "Could not start your session. Please try again in a moment.",
+            status: 409,
+            code: "SESSION_NOT_AVAILABLE",
+          });
+        }
         sessionIdRef.current = result.session_id;
       } else {
         sessionIdRef.current = generateId();
@@ -970,9 +995,7 @@ export function useLiveCopilot({
       audio.stop();
       markOverlayProductSessionTerminal(generation, "FAILED");
       teardownOverlayProductSession(generation);
-      if (!handleSessionStartError(err)) {
-        throw err instanceof Error ? err : new Error("Failed to start live session");
-      }
+      throw err instanceof Error ? err : new Error("Failed to start live session");
     } finally {
       setIsPreparingSession(false);
       setPrepStepIndex(0);
@@ -982,6 +1005,7 @@ export function useLiveCopilot({
   const endLiveSession = useCallback(async (): Promise<{ answersRecorded: number }> => {
     const gen = overlayGenerationRef.current;
     sessionEndedRef.current = true;
+    startAttemptKeyRef.current = null;
     hintOperationIdRef.current = null;
     startAbortRef.current?.abort();
     startAbortRef.current = null;

@@ -5,6 +5,7 @@ import {
   prepToolContentIdempotencyKey,
   nextPrepToolIdempotencyKey,
   isValidClientIdempotencyKey,
+  practiceCoachStartIdempotencyKey,
 } from "@/lib/network/idempotency";
 import { sanitizeReturnTo, buildLoginUrl } from "@/lib/auth/safeReturnTo";
 
@@ -48,6 +49,28 @@ describe("prepToolIdempotencyKey", () => {
     expect(a).toBe(b);
     expect(isValidClientIdempotencyKey(a)).toBe(true);
     expect(a).not.toBe(prepToolContentIdempotencyKey("rephrase", "b".repeat(64)));
+  });
+});
+
+describe("practiceCoachStartIdempotencyKey", () => {
+  const cfg = {
+    resume_id: "res-1",
+    role: "SWE",
+    company: "Acme",
+    interview_type: "behavioral",
+  };
+
+  it("is stable for the same setup without a nonce (in-flight replay)", () => {
+    const a = practiceCoachStartIdempotencyKey("user-1", cfg);
+    const b = practiceCoachStartIdempotencyKey("user-1", cfg);
+    expect(a).toBe(b);
+    expect(isValidClientIdempotencyKey(a)).toBe(true);
+  });
+
+  it("differs after End when a new attempt nonce is supplied", () => {
+    const first = practiceCoachStartIdempotencyKey("user-1", { ...cfg, attemptNonce: "aaaa1111" });
+    const second = practiceCoachStartIdempotencyKey("user-1", { ...cfg, attemptNonce: "bbbb2222" });
+    expect(first).not.toBe(second);
   });
 });
 

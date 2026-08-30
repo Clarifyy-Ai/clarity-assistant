@@ -34,7 +34,8 @@ export function prepToolIdempotencyKey(toolId: string): string {
   }
 }
 
-/** Stable key so double-click / refresh-during-start replays the same session row. */
+/** Stable key so double-click / refresh-during-start replays the same session row.
+ * Pass `attemptNonce` so a new session after End does not collide with the ended row. */
 export function practiceCoachStartIdempotencyKey(
   userId: string,
   cfg: {
@@ -43,6 +44,7 @@ export function practiceCoachStartIdempotencyKey(
     role?: string | null;
     company?: string | null;
     interview_type?: string | null;
+    attemptNonce?: string | null;
   },
 ): string {
   if (cfg.practice_context_id) {
@@ -53,7 +55,9 @@ export function practiceCoachStartIdempotencyKey(
   const role = (cfg.role ?? "no-role").replace(/[^A-Za-z0-9._:-]/g, "").slice(0, 32);
   const company = (cfg.company ?? "no-co").replace(/[^A-Za-z0-9._:-]/g, "").slice(0, 32);
   const interview = (cfg.interview_type ?? "behavioral").replace(/[^A-Za-z0-9._:-]/g, "").slice(0, 24);
-  return clampKey(`start-session:${uid}:${resume}:${role}:${company}:${interview}`);
+  const nonce = (cfg.attemptNonce ?? "").replace(/[^A-Za-z0-9._:-]/g, "").slice(0, 12);
+  const base = `start-session:${uid}:${resume}:${role}:${company}:${interview}`;
+  return clampKey(nonce ? `${base}:${nonce}` : base);
 }
 
 /** Fresh key for a mutating Edge call (send as `x-idempotency-key`). */
