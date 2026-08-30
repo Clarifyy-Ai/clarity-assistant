@@ -5,6 +5,12 @@ import {
 } from "@/hooks/useAuth";
 import { collectMfaFactors, findVerifiedTotp } from "@/lib/auth/mfaFactors";
 
+/**
+ * Temporary: skip login / route 2FA challenges. Flip to false to restore
+ * fail-closed AAL enforcement. Authenticator factors in Settings are unchanged.
+ */
+export const MFA_ENFORCEMENT_PAUSED = true;
+
 export type MfaGateDecision = "allow" | "challenge" | "block";
 
 export type MfaGateResult = {
@@ -23,6 +29,8 @@ export async function resolveMfaGateFromAal(input: {
   error?: unknown;
   aal?: AuthenticatorAssuranceSnapshot;
 }): Promise<MfaGateResult> {
+  if (MFA_ENFORCEMENT_PAUSED) return { decision: "allow" };
+
   const assurance = evaluateMfaAssurance(input);
   if (assurance === "fail_closed") return { decision: "block" };
 
@@ -43,6 +51,8 @@ export async function resolveMfaGateFromAal(input: {
 
 /** Fetch AAL and resolve MFA gate (ProtectedRoute, session refresh paths). */
 export async function resolveMfaGateDecision(): Promise<MfaGateResult> {
+  if (MFA_ENFORCEMENT_PAUSED) return { decision: "allow" };
+
   const { data: aal, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
   return resolveMfaGateFromAal({ error, aal });
 }

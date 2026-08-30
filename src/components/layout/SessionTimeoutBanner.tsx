@@ -10,6 +10,20 @@ import { cn } from "@/lib/utils";
 const WARN_BEFORE_MS = 5 * 60 * 1000;
 const TICK_MS = 30_000;
 
+/**
+ * Access-token expiry is not a logout. Refresh first; only sign out if the
+ * refresh token is actually dead (`expired`) or missing with no probe error.
+ */
+export function shouldSignOutAfterRefreshAttempt(result: {
+  expired: boolean;
+  session: unknown;
+  probeFailed: boolean;
+}): boolean {
+  if (result.expired) return true;
+  if (result.probeFailed) return false;
+  return !result.session;
+}
+
 function formatRemaining(ms: number): string {
   const totalSec = Math.max(0, Math.ceil(ms / 1000));
   const min = Math.floor(totalSec / 60);
@@ -28,6 +42,7 @@ export function SessionTimeoutBanner() {
   const [extending, setExtending] = useState(false);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const forcedSignOutRef = useRef(false);
+  const recoveringRef = useRef(false);
 
   const clearTick = useCallback(() => {
     if (tickRef.current) {
@@ -48,6 +63,28 @@ export function SessionTimeoutBanner() {
     }
   }, [clearTick, signOut, location]);
 
+  const recoverSession = useCallback(async () => {
+    if (recoveringRef.current || forcedSignOutRef.current) return;
+    recoveringRef.current = true;
+    try {
+      const result = await ensureAuthSession({ forceRefresh: true });
+      if (shouldSignOutAfterRefreshAttempt(result)) {
+        await forceSignOut();
+        return;
+      }
+      if (result.session) {
+        setSession(result.session as Parameters<typeof setSession>[0]);
+        setShowWarning(false);
+        setRemainingMs(null);
+      }
+    } catch (err) {
+      console.error("[SessionTimeoutBanner] refresh failed:", err);
+      // Network / probe failures must not log the user out. Keep the warning.
+    } finally {
+      recoveringRef.current = false;
+    }
+  }, [forceSignOut, setSession]);
+
   const evaluateExpiry = useCallback(() => {
     const expiresAt = session?.expires_at;
     if (!expiresAt) {
@@ -62,7 +99,7 @@ export function SessionTimeoutBanner() {
     if (msLeft <= 0) {
       setShowWarning(true);
       setRemainingMs(0);
-      void forceSignOut();
+      void recoverSession();
       return;
     }
 
@@ -73,7 +110,7 @@ export function SessionTimeoutBanner() {
       setShowWarning(false);
       setRemainingMs(null);
     }
-  }, [session?.expires_at, forceSignOut]);
+  }, [session?.expires_at, recoverSession]);
 
   useEffect(() => {
     forcedSignOutRef.current = false;
@@ -90,13 +127,19 @@ export function SessionTimeoutBanner() {
     setExtending(true);
     try {
       const result = await ensureAuthSession({ forceRefresh: true });
-      if (!result.session) throw new Error("Session refresh returned no session");
+      if (shouldSignOutAfterRefreshAttempt(result)) {
+        await forceSignOut();
+        return;
+      }
+      if (!result.session) {
+        console.error("[SessionTimeoutBanner] refresh returned no session");
+        return;
+      }
       setSession(result.session as Parameters<typeof setSession>[0]);
       setShowWarning(false);
       setRemainingMs(null);
     } catch (err) {
       console.error("[SessionTimeoutBanner] refresh failed:", err);
-      await forceSignOut();
     } finally {
       setExtending(false);
     }
@@ -127,23 +170,21 @@ export function SessionTimeoutBanner() {
           </p>
           <p className="text-xs opacity-80">
             {expired
-              ? "Signing you out — please sign in again to continue."
+              ? "Refreshing your sign-in — stay on this page."
               : `You'll be signed out in ${formatRemaining(remainingMs)} unless you extend.`}
           </p>
         </div>
 
-        {!expired && (
-          <Button
-            variant="secondary"
-            size="sm"
-            loading={extending}
-            onClick={() => void handleExtend()}
-            leftIcon={<RefreshCw className="h-3.5 w-3.5" aria-hidden />}
-            aria-label="Extend session to stay signed in"
-          >
-            Extend session
-          </Button>
-        )}
+        <Button
+          variant="secondary"
+          size="sm"
+          loading={extending}
+          onClick={() => void handleExtend()}
+          leftIcon={<RefreshCw className="h-3.5 w-3.5" aria-hidden />}
+          aria-label="Extend session to stay signed in"
+        >
+          {expired ? "Stay signed in" : "Extend session"}
+        </Button>
       </div>
     </div>
   );

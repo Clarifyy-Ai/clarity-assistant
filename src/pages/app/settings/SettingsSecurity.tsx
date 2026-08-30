@@ -12,6 +12,7 @@ import {
   isFriendlyNameConflictError,
   type ListedMfaFactor,
 } from "@/lib/auth/mfaFactors";
+import { MFA_ENFORCEMENT_PAUSED } from "@/lib/auth/mfaGate";
 import { getPasswordStrength, validatePassword } from "@/lib/validators/emailValidator";
 
 type MfaUiState =
@@ -363,6 +364,11 @@ export default function SettingsSecurity() {
               <p className="text-xs text-muted-foreground mt-1">
                 Use an authenticator app (Google Authenticator, Authy, etc.) for an extra login step.
               </p>
+              {MFA_ENFORCEMENT_PAUSED ? (
+                <p className="text-xs text-amber-800 dark:text-amber-200 mt-2">
+                  Login 2FA is paused for now. You will not be asked for a code at sign-in.
+                </p>
+              ) : null}
             </div>
           </div>
           {mfaUiState === "ENABLED" ? (

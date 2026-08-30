@@ -49,7 +49,7 @@ import {
   SIGNED_OUT_ELSEWHERE_MESSAGE,
   SIGNED_OUT_ELSEWHERE_REASON,
 } from "@/lib/auth/sessionErrors";
-import { resolveMfaGateFromAal } from "@/lib/auth/mfaGate";
+import { MFA_ENFORCEMENT_PAUSED, resolveMfaGateFromAal } from "@/lib/auth/mfaGate";
 import {
   MFA_AAL_START_FAILED_MESSAGE,
   MFA_REQUIRED_REASON,
@@ -255,6 +255,11 @@ export default function Login(): JSX.Element {
       return;
     }
     if (authStatus !== "authenticated" || accountSuspended) {
+      setMfaGateResolved(true);
+      return;
+    }
+    if (MFA_ENFORCEMENT_PAUSED) {
+      setMfaPending(false);
       setMfaGateResolved(true);
       return;
     }

@@ -21,7 +21,7 @@ import { canRetryAccountRecovery } from "@/lib/auth/accountBootstrap";
 import { SUPPORT_EMAIL } from "@/lib/constants/contact";
 import { useClaimStoredReferral } from "@/hooks/useClaimStoredReferral";
 import { MFA_REQUIRED_REASON } from "@/hooks/useAuth";
-import { resolveMfaGateDecision } from "@/lib/auth/mfaGate";
+import { MFA_ENFORCEMENT_PAUSED, resolveMfaGateDecision } from "@/lib/auth/mfaGate";
 import { canBrowseGovExamsBeforeProfileReady } from "@/lib/gov-exam/govExamRoutes";
 
 interface ProtectedRouteProps {
@@ -150,6 +150,12 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     }
 
     if (mfaVerifiedUserId === userId) {
+      setMfaAal("ok");
+      return;
+    }
+
+    if (MFA_ENFORCEMENT_PAUSED) {
+      setMfaVerifiedUserId(userId);
       setMfaAal("ok");
       return;
     }

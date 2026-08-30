@@ -103,7 +103,9 @@ async function runEnsure(options?: {
 
     if (!session) {
       if (prior.status === "authenticated" && prior.session) {
-        return expireLocalSession();
+        // getSession() can return null mid-refresh or while the access JWT is
+        // expired. The refresh token is still valid — try it before logout.
+        return recoverFromMissingSession(prior.session as unknown as Session);
       }
       return toResult(null, { expired: prior.status === "authenticated" });
     }
@@ -139,6 +141,42 @@ async function runEnsure(options?: {
     return toResult(prior.session as unknown as Session | null, {
       probeFailed: true,
     });
+  }
+}
+
+async function recoverFromMissingSession(
+  priorSession: Session,
+): Promise<SessionRefreshResult> {
+  try {
+    const refreshed = await supabase.auth.refreshSession();
+    if (refreshed.error) {
+      if (isInvalidRefreshTokenError(refreshed.error)) {
+        return expireLocalSession();
+      }
+      return toResult(priorSession, { probeFailed: true });
+    }
+    if (refreshed.data.session) {
+      applySession(refreshed.data.session, true);
+      return toResult(refreshed.data.session, { refreshed: true });
+    }
+
+    const retry = await supabase.auth.getSession();
+    if (retry.data.session) {
+      applySession(retry.data.session, false);
+      return toResult(retry.data.session);
+    }
+    if (retry.error && isInvalidRefreshTokenError(retry.error)) {
+      return expireLocalSession();
+    }
+    if (retry.error) {
+      return toResult(priorSession, { probeFailed: true });
+    }
+    return expireLocalSession();
+  } catch (err) {
+    if (isInvalidRefreshTokenError(err)) {
+      return expireLocalSession();
+    }
+    return toResult(priorSession, { probeFailed: true });
   }
 }
 
