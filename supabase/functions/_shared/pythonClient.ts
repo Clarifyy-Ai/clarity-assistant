@@ -116,6 +116,17 @@ function normalizePath(path: string): string {
   return path.startsWith("/") ? path : `/${path}`;
 }
 
+/** Canonical HMAC message shared with pythonGovExamClient and FastAPI internal_auth. */
+export function canonicalInternalAuthMessage(
+  method: string,
+  path: string,
+  timestamp: string,
+  requestId: string,
+  bodyDigest: string,
+): string {
+  return [method.toUpperCase(), normalizePath(path), timestamp, requestId, bodyDigest].join("\n");
+}
+
 function getAuthSecret(): string | null {
   const secret = (
     Deno.env.get("DOCUMENT_INTELLIGENCE_AUTH_SECRET") ??
@@ -175,13 +186,13 @@ export async function signInternalRequest(
 
   const timestamp = String(Math.floor(Date.now() / 1000));
   const bodyDigest = await sha256Hex(bodyBytes);
-  const message = [
-    method.toUpperCase(),
-    normalizePath(path),
+  const message = canonicalInternalAuthMessage(
+    method,
+    path,
     timestamp,
     requestId,
     bodyDigest,
-  ].join("\n");
+  );
   const signature = await hmacSha256Hex(secret, message);
 
   return {

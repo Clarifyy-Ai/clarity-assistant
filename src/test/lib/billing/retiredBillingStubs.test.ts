@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { EDGE_FUNCTIONS, RETIRED_EDGE_FUNCTIONS } from "@/lib/constants/apiEndpoints";
 
 /** Mirrors supabase/functions/_shared/retired.ts envelope. */
 function retiredBillingEnvelope() {
@@ -22,6 +23,17 @@ function stripeWebhookRetiredEnvelope() {
     replacement: "razorpay-create-order",
   };
 }
+
+describe("live billing constants", () => {
+  it("exposes Razorpay as the live checkout path and keeps Stripe names retired", () => {
+    expect(EDGE_FUNCTIONS.RAZORPAY_CREATE_ORDER).toBe("razorpay-create-order");
+    expect(EDGE_FUNCTIONS.RAZORPAY_VERIFY_PAYMENT).toBe("razorpay-verify-payment");
+    expect(RETIRED_EDGE_FUNCTIONS.CREATE_CHECKOUT).toBe("create-checkout");
+    expect(RETIRED_EDGE_FUNCTIONS.CREATE_BILLING_PORTAL).toBe("create-billing-portal");
+    expect(RETIRED_EDGE_FUNCTIONS.WEBHOOK_STRIPE).toBe("stripe-webhook");
+    expect(JSON.stringify(EDGE_FUNCTIONS)).not.toContain("create-portal-session");
+  });
+});
 
 describe("retired billing edge envelopes", () => {
   it("Stripe portal/checkout stubs return FUNCTION_RETIRED with Razorpay replacement", () => {

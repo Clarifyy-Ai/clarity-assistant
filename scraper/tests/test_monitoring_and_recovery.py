@@ -30,6 +30,14 @@ def test_ready_endpoint(client):
     assert response.status_code == 200
     data = response.json()
     assert data["status"] in ("ready", "not_ready")
+    checks = data.get("checks") or {}
+    assert "config" in checks
+    assert "hybrid" in checks
+    assert checks.get("ai_optional") is True
+    assert "hmac_configured" in checks
+    assert "document_worker_embedded" in checks
+    assert "paper_factory_embedded_worker" in checks
+    assert "ai_provider_present" in checks
 
 
 def test_metrics_endpoint(client):

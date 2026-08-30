@@ -1,4 +1,7 @@
 // fetchEdge — private-mode blocking, RPC/edge error handling, credit-refresh sync
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const mockGetSession = vi.fn();
@@ -243,5 +246,16 @@ describe("fetchEdgeJson — credit balance sync after edge calls", () => {
 
     await expect(fetchEdgeJson("deduct-credits", { action: "generate_hint" })).rejects.toThrow();
     expect(mockRefreshCredits).not.toHaveBeenCalled();
+  });
+});
+
+describe("fetchEdge allowlists", () => {
+  it("does not reference the ghost create-portal-session slug", () => {
+    const source = readFileSync(
+      path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../lib/network/fetchEdge.ts"),
+      "utf8",
+    );
+    expect(source).not.toContain("create-portal-session");
+    expect(source).toContain("create-billing-portal");
   });
 });

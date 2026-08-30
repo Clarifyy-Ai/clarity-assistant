@@ -2,9 +2,11 @@
  * Edge → Python FastAPI HMAC client for government exam hybrid orchestration.
  * Never import from browser code — secrets stay on the Edge runtime only.
  *
- * Signature: HMAC-SHA256 of `METHOD\nPATH\ntimestamp\nrequestId\nsha256(body)`
- * Headers: X-Internal-Timestamp, X-Request-ID, X-Internal-Signature: sha256=<hex>
+ * Signing is delegated to pythonClient.signInternalRequest
+ * (METHOD, path, timestamp, requestId, sha256(body) — same as FastAPI).
  */
+
+import { signInternalRequest } from "./pythonClient.ts";
 
 const DEFAULT_TIMEOUT_MS = 25_000;
 const PROCESS_JOB_TIMEOUT_MS = 8_000;
@@ -184,28 +186,6 @@ export function wantsPythonPaperFactoryGenerator(input: {
   return false;
 }
 
-function bytesToHex(buf: ArrayBuffer): string {
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function sha256Hex(data: Uint8Array | string): Promise<string> {
-  const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data;
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return bytesToHex(digest);
-}
-
-async function hmacSha256Hex(secret: string, message: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message));
-  return bytesToHex(sig);
-}
-
 function newRequestId(): string {
   return `edge-${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`;
 }
@@ -243,11 +223,21 @@ async function signedFetch(
 
   const bodyText = bodyObj == null ? "" : JSON.stringify(bodyObj);
   const bodyBytes = new TextEncoder().encode(bodyText);
-  const timestamp = String(Math.floor(Date.now() / 1000));
   const requestId = newRequestId();
-  const bodyDigest = await sha256Hex(bodyBytes);
-  const canonical = [method, path, timestamp, requestId, bodyDigest].join("\n");
-  const signature = await hmacSha256Hex(secret, canonical);
+  let authHeaders: Record<string, string>;
+  try {
+    authHeaders = await signInternalRequest(method, path, bodyBytes, requestId);
+  } catch {
+    return {
+      ok: false,
+      error: {
+        code: "PYTHON_NOT_CONFIGURED",
+        message: "Python internal auth secret is not configured.",
+        retryable: false,
+        correlationId: opts.correlationId,
+      },
+    };
+  }
 
   logDispatch(opts.operation, opts.correlationId, {
     path,
@@ -262,9 +252,7 @@ async function signedFetch(
       method,
       headers: {
         "Content-Type": "application/json",
-        "X-Internal-Timestamp": timestamp,
-        "X-Request-ID": requestId,
-        "X-Internal-Signature": `sha256=${signature}`,
+        ...authHeaders,
       },
       body: method === "GET" ? undefined : bodyText,
       signal: controller.signal,

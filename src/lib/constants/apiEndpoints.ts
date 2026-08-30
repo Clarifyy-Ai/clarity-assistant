@@ -34,14 +34,11 @@ export const EDGE_FUNCTIONS = {
   DEEPGRAM_TOKEN:         "deepgram-token",
   PROCESS_SPRINT_TRANSCRIPT: "process-sprint-transcript",
 
-  // Billing
-  CREATE_CHECKOUT:        "create-checkout",
-  CREATE_BILLING_PORTAL:  "create-billing-portal",
-  CANCEL_SUBSCRIPTION:    "cancel-subscription",
-  RESUME_SUBSCRIPTION:    "resume-subscription",
-  DEDUCT_CREDITS:         "deduct-credits",
-  WEBHOOK_STRIPE:         "stripe-webhook",
-  RECORD_REFERRAL:        "record-referral",
+  // Billing (live — Razorpay)
+  RAZORPAY_CREATE_ORDER:     "razorpay-create-order",
+  RAZORPAY_VERIFY_PAYMENT:   "razorpay-verify-payment",
+  DEDUCT_CREDITS:            "deduct-credits",
+  RECORD_REFERRAL:           "record-referral",
 
   // Auth & User / GDPR
   DELETE_ACCOUNT:         "delete-account",
@@ -57,6 +54,15 @@ export const EDGE_FUNCTIONS = {
 } as const;
 
 export type EdgeFunctionName = (typeof EDGE_FUNCTIONS)[keyof typeof EDGE_FUNCTIONS];
+
+/** Retired 410 Stripe stubs — do not invoke from product paths. */
+export const RETIRED_EDGE_FUNCTIONS = {
+  CREATE_CHECKOUT:       "create-checkout",
+  CREATE_BILLING_PORTAL: "create-billing-portal",
+  CANCEL_SUBSCRIPTION:   "cancel-subscription",
+  RESUME_SUBSCRIPTION:   "resume-subscription",
+  WEBHOOK_STRIPE:        "stripe-webhook",
+} as const;
 
 // ─── External AI API Endpoints ────────────────────────────────────────────────
 
@@ -103,7 +109,7 @@ export const DEEPGRAM_WS_PARAMS = {
   CHANNELS:       1,
 } as const;
 
-// ─── Stripe ───────────────────────────────────────────────────────────────────
+// ─── Stripe (retired — Razorpay is the live checkout path) ────────────────────
 
 export const STRIPE_ENDPOINTS = {
   CHECKOUT:       "https://api.stripe.com/v1/checkout/sessions",

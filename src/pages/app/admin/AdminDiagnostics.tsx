@@ -93,6 +93,18 @@ function presenceCheck(
   };
 }
 
+/** Cron is scheduled in repo; live send needs Resend + Vault (not verifiable from git). */
+export function interviewReminderWorkerCheck(resendConfigured: boolean): HealthCheck {
+  return {
+    id: "interview_reminders",
+    label: "Interview reminder worker",
+    status: resendConfigured ? "WARNING" : "NOT_CONFIGURED",
+    detail: resendConfigured
+      ? "pg_cron send-interview-reminders-every-15m is scheduled in repo; emails also need Vault interview_reminder_cron_secret (runtime not verified from git)."
+      : "Cron is scheduled in repo; emails require Resend + vault secret (runtime not verified from git).",
+  };
+}
+
 async function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -352,6 +364,9 @@ export async function runAdminHealthChecks(): Promise<HealthCheck[]> {
 
     checks.push(presenceCheck("deepgram", "Deepgram", hybrid.integrations?.deepgram));
     checks.push(presenceCheck("resend", "Email (Resend)", hybrid.integrations?.resend));
+    checks.push(
+      interviewReminderWorkerCheck(hybrid.integrations?.resend?.configured === true),
+    );
     checks.push(presenceCheck("calendar", "Google Calendar", hybrid.integrations?.calendar));
     checks.push(presenceCheck("sentry", "Sentry", hybrid.integrations?.sentry));
     checks.push(presenceCheck("posthog", "PostHog", hybrid.integrations?.posthog));

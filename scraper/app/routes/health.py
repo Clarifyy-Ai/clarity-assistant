@@ -32,6 +32,15 @@ async def ready(settings: Settings = Depends(get_settings)) -> dict[str, Any]:
     except Exception:  # noqa: BLE001 — readiness must not raise
         hybrid_ok = False
 
+    hmac_configured = bool(settings.internal_auth_secret)
+    ai_provider_present = False
+    try:
+        from app.paper_factory.config import get_factory_settings
+
+        ai_provider_present = get_factory_settings().has_ai_provider
+    except Exception:  # noqa: BLE001 — readiness must not raise
+        ai_provider_present = False
+
     status = "ready" if config_ok and hybrid_ok else "not_ready"
     return {
         "status": status,
@@ -39,6 +48,12 @@ async def ready(settings: Settings = Depends(get_settings)) -> dict[str, Any]:
         "checks": {
             "config": config_ok,
             "hybrid": hybrid_ok,
+            # Informational only — must not flip ready/not_ready.
+            "hmac_configured": hmac_configured,
+            "document_worker_embedded": bool(settings.document_worker_embedded),
+            "paper_factory_embedded_worker": bool(settings.paper_factory_embedded_worker),
+            "ai_optional": True,
+            "ai_provider_present": ai_provider_present,
         },
     }
 
