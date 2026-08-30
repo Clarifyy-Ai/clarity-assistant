@@ -49,6 +49,7 @@ export interface ProfileRow {
   location?:          string | null;
   website?:           string | null;
   website_url?:       string | null;
+  portfolio_url?:     string | null;
   headline?:          string | null;
   current_title?:     string | null;
   current_company?:   string | null;

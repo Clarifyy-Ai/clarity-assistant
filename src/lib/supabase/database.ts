@@ -1516,21 +1516,28 @@ export type CreditTransactionRow = Pick<
 >;
 
 // ─── Credits ──────────────────────────────────────────────────────────────────
+// Canonical spendable balance is profiles.credits via get_spendable_credits.
+// The legacy `credits` table is SELECT-only for clients; never upsert it.
+// Deductions go through Edge deductCreditsAtomic → deduct_credits_service.
 
 export const creditsDB = {
-  async getByUserId(userId: string): Promise<Tables<"credits"> | null> {
-    const { data } = await supabase
-      .from("credits")
-      .select("*")
-      .eq("user_id", userId)
-      .maybeSingle();
-    return data ?? null;
+  async getByUserId(userId: string): Promise<{ user_id: string; balance: number } | null> {
+    const { data, error } = await supabase.rpc("get_spendable_credits", {
+      p_user_id: userId,
+    });
+    if (error || data == null) return null;
+    const payload = typeof data === "object" ? (data as Record<string, unknown>) : null;
+    if (!payload || payload.success === false) return null;
+    const balance = Number(payload.balance);
+    if (!Number.isFinite(balance)) return null;
+    return { user_id: userId, balance: Math.max(0, Math.floor(balance)) };
   },
 
-  async upsert(record: TablesInsert<"credits">): Promise<Tables<"credits">> {
-    return query(
-      () => supabase.from("credits").upsert(record).select().single(),
-      { table: "credits", operation: "upsert" }
+  async upsert(_record: TablesInsert<"credits">): Promise<Tables<"credits">> {
+    throw new DatabaseError(
+      "Client credit upsert is disabled. Spendable balance is profiles.credits via Edge/RPC.",
+      ErrorCode.DB_QUERY_FAILED,
+      { table: "credits", operation: "upsert" },
     );
   },
 
@@ -1542,13 +1549,12 @@ export const creditsDB = {
     );
   },
 
-  async add(userId: string, amount: number): Promise<void> {
-    const { error } = await supabase.rpc("add_credits", {
-      p_user_id: userId,
-      p_amount:  amount,
-    });
-    if (error) throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED,
-      { table: "credits", operation: "add" });
+  async add(_userId: string, _amount: number): Promise<void> {
+    throw new DatabaseError(
+      "Client add_credits is disabled. Grants go through Edge/service_role only.",
+      ErrorCode.DB_QUERY_FAILED,
+      { table: "credits", operation: "add" },
+    );
   },
 
   async listByUserId(userId: string, limit = 50): Promise<CreditTransactionRow[]> {
@@ -1725,6 +1731,7 @@ export const subscriptionsDB = {
 };
 
 // ─── Answer bank ──────────────────────────────────────────────────────────────
+// Canonical table is public.answer_bank. Do not query `answers` / `saved_answers`.
 
 export const answerBankDB = {
   async listByUserId(userId: string): Promise<Tables<"answer_bank">[]> {

@@ -7,9 +7,10 @@ import {
 } from "../_shared/utils.ts";
 import { deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
-import { geminiGenerateWithPdf, parseJSON } from "../_shared/gemini.ts";
+import { geminiGenerate, geminiGenerateWithPdf, parseJSON } from "../_shared/gemini.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
+import { callPythonProcess, isPythonConfigured } from "../_shared/pythonClient.ts";
 import {
   PDF_QUESTION_EXTRACT_PROMPT,
   bufferToBase64,
@@ -31,6 +32,37 @@ async function extractPdf(req: Request) {
     fileName: file.name,
     base64: bufferToBase64(await file.arrayBuffer()),
   };
+}
+
+/** Prefer Python OCR/text extract when configured; never invent paper content. */
+async function tryPythonPdfText(
+  pdfBase64: string,
+  fileName: string,
+  correlationId: string,
+): Promise<string | null> {
+  if (!isPythonConfigured()) return null;
+  const result = await callPythonProcess({
+    operation: "document_extract",
+    operationId: correlationId,
+    correlationId,
+    payload: {
+      base64: pdfBase64,
+      filename: fileName || "questions.pdf",
+      mime_type: "application/pdf",
+      document_kind: "exam_paper",
+      category_hint: "exam_paper",
+    },
+  });
+  if (!result.ok) {
+    console.warn("[parse-question-pdf] python document_extract failed:", result.message);
+    return null;
+  }
+  const data = result.data as Record<string, unknown>;
+  const text =
+    (typeof data.full_text === "string" && data.full_text) ||
+    (typeof data.text === "string" && data.text) ||
+    "";
+  return text.trim() ? text : null;
 }
 
 Deno.serve(async (req) => {
@@ -70,16 +102,27 @@ Deno.serve(async (req) => {
     }
     charged = true;
 
+    const correlationId = req.headers.get("x-request-id")?.trim() || crypto.randomUUID();
     let rawText: string;
     try {
-      rawText = await geminiGenerateWithPdf(
-        PDF_QUESTION_EXTRACT_PROMPT,
-        pdf.base64,
-        {
-          temperature: 0.2,
-          maxTokens: 4096,
-        },
-      );
+      const pythonText = await tryPythonPdfText(pdf.base64, pdf.fileName, correlationId);
+      if (pythonText) {
+        rawText = await geminiGenerate(
+          `${PDF_QUESTION_EXTRACT_PROMPT}\n\n--- Extracted PDF text ---\n${pythonText.slice(0, 80000)}`,
+          undefined,
+          0.2,
+          4096,
+        );
+      } else {
+        rawText = await geminiGenerateWithPdf(
+          PDF_QUESTION_EXTRACT_PROMPT,
+          pdf.base64,
+          {
+            temperature: 0.2,
+            maxTokens: 4096,
+          },
+        );
+      }
     } catch (err) {
       if (charged) {
         await refundCredits({
@@ -88,8 +131,8 @@ Deno.serve(async (req) => {
           reason: "parse-question-pdf AI call failure",
         });
       }
-      const msg = err instanceof Error ? err.message : "Gemini PDF parse failed";
-      console.error("[parse-question-pdf] Gemini error:", msg);
+      const msg = err instanceof Error ? err.message : "PDF parse failed";
+      console.error("[parse-question-pdf] extract error:", msg);
       return errorResponse(
         "PDF parsing failed. Credits refunded.",
         "AI_ERROR",

@@ -767,7 +767,8 @@ Deno.serve(async (req: Request) => {
     const { data, error } = await rpcJson(db, "restore_owned_session", {
       p_user_id: user.id,
       p_session_id: body.session_id ?? null,
-      p_type: sessionType,
+      // sessions.type has no 'practice' value — always map before the RPC.
+      p_type: toDbSessionType(sessionType),
     });
     if (error) {
       console.error("[start-session] restore rpc:", error);
@@ -901,7 +902,8 @@ Deno.serve(async (req: Request) => {
 
   const { data: started, error: startErr } = await rpcJson(db, "start_owned_session", {
     p_user_id: user.id,
-    p_type: sessionType,
+    // sessions.type has no 'practice' value — always map before the RPC.
+    p_type: toDbSessionType(sessionType),
     p_title: buildSessionTitle({ sessionType, company }),
     p_document_id: documentId,
     p_jd_id: jdId,

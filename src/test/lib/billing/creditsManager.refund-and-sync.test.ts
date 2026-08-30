@@ -57,6 +57,14 @@ vi.mock("@/lib/supabase/client", () => ({
   },
 }));
 
+vi.mock("@/lib/billing/fetchSpendableCredits", () => ({
+  fetchSpendableCredits: async () => {
+    if (supabaseResult.error) return null;
+    const credits = supabaseResult.data?.credits;
+    return typeof credits === "number" ? credits : null;
+  },
+}));
+
 beforeEach(() => {
   vi.clearAllMocks();
   authState = makeAuthState();

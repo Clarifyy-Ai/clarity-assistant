@@ -158,6 +158,10 @@ export default function CodingAssessmentPage() {
       toast.error(`This problem requires ${question?.language ?? "javascript"}.`);
       return;
     }
+    if (!autoScore) {
+      setSampleOut("Sample runs are only available for JavaScript solve() assessments. This language is not executed.");
+      return;
+    }
     setSampleBusy(true);
     setSampleOut("");
     try {
@@ -296,8 +300,11 @@ export default function CodingAssessmentPage() {
                 <select
                   id="coding-language"
                   value={language}
+                  disabled
+                  aria-disabled="true"
+                  title="Language is set by the problem. Only JavaScript is auto-scored."
                   onChange={(e) => setLanguage(e.target.value)}
-                  className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs"
+                  className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs disabled:opacity-80"
                 >
                   {APPROVED_CODING_LANGUAGES.map((lang) => (
                     <option key={lang} value={lang}>

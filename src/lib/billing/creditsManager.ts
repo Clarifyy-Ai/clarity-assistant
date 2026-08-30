@@ -330,17 +330,23 @@ export async function refreshCredits(): Promise<number | null> {
   const { user } = useAuthStore.getState();
   if (!user) return null;
 
-  // SELECT-only sync — never PATCH privileged profile columns.
   const { supabase } = await import("@/lib/supabase/client");
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("credits, plan_id, subscription_status")
-    .eq("id", user.id)
-    .maybeSingle();
+  const { fetchSpendableCredits } = await import("@/lib/billing/fetchSpendableCredits");
 
-  if (error || !data) return null;
+  const [spendable, profileRes] = await Promise.all([
+    fetchSpendableCredits(user.id),
+    supabase
+      .from("profiles")
+      .select("credits, plan_id, subscription_status")
+      .eq("id", user.id)
+      .maybeSingle(),
+  ]);
 
-  const credits = Number((data as { credits?: number }).credits ?? 0);
+  const { data, error } = profileRes;
+  if (error || !data) return spendable;
+
+  const credits =
+    spendable ?? Number((data as { credits?: number }).credits ?? 0);
   const planId = String((data as { plan_id?: string }).plan_id ?? "free");
   const rawStatus = (data as { subscription_status?: string | null }).subscription_status;
   const subscriptionStatus =

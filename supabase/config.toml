@@ -249,3 +249,20 @@ verify_jwt = true
 
 [functions.moderate-content]
 verify_jwt = true
+
+# Session finalize persists answers/transcript; gateway JWT matches in-function auth.
+[functions.finalize-session]
+verify_jwt = true
+
+# Document processing jobs — user JWT; workers use process-paper-generation-job style secrets elsewhere.
+[functions.create-document-processing-job]
+verify_jwt = true
+
+[functions.get-document-processing-job]
+verify_jwt = true
+
+[functions.cancel-document-processing-job]
+verify_jwt = true
+
+[functions.retry-document-processing-job]
+verify_jwt = true
