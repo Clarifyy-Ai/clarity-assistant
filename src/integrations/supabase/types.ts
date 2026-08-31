@@ -8738,6 +8738,10 @@ export type Database = {
         Args: { p_code: string; p_hint?: Json; p_message: string }
         Returns: undefined
       }
+      reap_stuck_gov_paper_jobs: {
+        Args: { p_max_age_minutes?: number }
+        Returns: Json
+      }
       record_practice_activity: { Args: { p_user_id?: string }; Returns: Json }
       record_referral_reward: {
         Args: { p_referral_code: string; p_referred_id: string }
