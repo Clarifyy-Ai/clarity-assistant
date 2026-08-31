@@ -35,13 +35,35 @@ EXAM_DIFFICULTY_MIX: dict[str, dict[Difficulty, int]] = {
     "NEET UG": {"EASY": 30, "MEDIUM": 45, "HARD": 25},
 }
 DEFAULT_DIFFICULTY_MIX: dict[Difficulty, int] = {"EASY": 30, "MEDIUM": 50, "HARD": 20}
+FAMILY_DIFFICULTY_MIX: dict[str, dict[Difficulty, int]] = {
+    "ssc": {"EASY": 35, "MEDIUM": 45, "HARD": 20},
+    "banking": {"EASY": 30, "MEDIUM": 50, "HARD": 20},
+    "upsc": {"EASY": 20, "MEDIUM": 45, "HARD": 35},
+    "railways": {"EASY": 40, "MEDIUM": 45, "HARD": 15},
+    "academic": {"EASY": 20, "MEDIUM": 45, "HARD": 35},
+    "state_psc": {"EASY": 30, "MEDIUM": 50, "HARD": 20},
+    "professional": {"EASY": 30, "MEDIUM": 50, "HARD": 20},
+    "defence": {"EASY": 35, "MEDIUM": 45, "HARD": 20},
+    "teaching": {"EASY": 35, "MEDIUM": 50, "HARD": 15},
+}
+
+
+def difficulty_mix_for(profile_key: str, family: str | None = None) -> dict[Difficulty, int]:
+    key = (profile_key or "").strip()
+    if key in EXAM_DIFFICULTY_MIX:
+        return EXAM_DIFFICULTY_MIX[key]
+    lowered = key.lower()
+    for candidate, mix in EXAM_DIFFICULTY_MIX.items():
+        if candidate.lower() in lowered or lowered in candidate.lower():
+            return mix
+    fam = (family or "").strip().lower()
+    if fam in FAMILY_DIFFICULTY_MIX:
+        return FAMILY_DIFFICULTY_MIX[fam]
+    return DEFAULT_DIFFICULTY_MIX
+
 
 VALID_MODES = ("official_previous", "generated_mock", "custom_mock", "adaptive")
 EXACT_MODES = ("official_previous", "generated_mock")
-
-
-def difficulty_mix_for(profile_key: str) -> dict[Difficulty, int]:
-    return EXAM_DIFFICULTY_MIX.get((profile_key or "").strip(), DEFAULT_DIFFICULTY_MIX)
 
 
 def humanize(slug: str) -> str:
@@ -174,7 +196,7 @@ def build_blueprint(
     scaled = scale_sections(pattern.sections, total_questions)
     topics_map = syllabus_topics or {}
     weights = {str(k).lower(): float(v) for k, v in (topic_weights or {}).items()}
-    mix = difficulty_mix_for(exam.profile_key)
+    mix = difficulty_mix_for(exam.profile_key, exam.family)
     rng = random.Random(f"{random_seed}::{exam.exam_id}::{total_questions}")
 
     section_blueprints: list[SectionBlueprint] = []

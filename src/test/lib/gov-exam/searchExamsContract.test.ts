@@ -35,8 +35,12 @@ describe("gov exam family allowlist", () => {
     for (const family of GOV_EXAM_FAMILIES) {
       expect(resolveFamily(family)).toEqual({ ok: true, family });
     }
+    expect(GOV_EXAM_FAMILIES).toContain("academic");
+    expect(GOV_EXAM_FAMILIES).toContain("professional");
     expect(resolveFamily("UPSC")).toEqual({ ok: true, family: "upsc" });
     expect(resolveFamily("  banking  ")).toEqual({ ok: true, family: "banking" });
+    expect(resolveFamily("academic")).toEqual({ ok: true, family: "academic" });
+    expect(resolveFamily("Professional")).toEqual({ ok: true, family: "professional" });
   });
 
   it("treats missing or empty family as all families", () => {

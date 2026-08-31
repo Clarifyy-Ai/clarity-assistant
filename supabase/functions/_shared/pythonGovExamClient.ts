@@ -467,7 +467,7 @@ export async function pythonGovProcessJob(
       return {
         ok: true,
         data: {
-          success: true,
+          success: false,
           job_id: input.job_id,
           status: "queued",
           accepted: true,
@@ -477,13 +477,14 @@ export async function pythonGovProcessJob(
     return result;
   }
 
+  const paperId = (result.json.paper_id as string | null | undefined) ?? null;
   return {
     ok: true,
     data: {
-      success: result.json.success !== false,
+      success: Boolean(paperId) && result.json.success === true,
       job_id: String(result.json.job_id ?? input.job_id),
       status: result.json.status != null ? String(result.json.status) : "queued",
-      paper_id: (result.json.paper_id as string | null | undefined) ?? null,
+      paper_id: paperId,
       mock_test_id: (result.json.mock_test_id as string | null | undefined) ?? null,
       accepted: result.json.accepted !== false,
     },

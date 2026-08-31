@@ -325,44 +325,50 @@ def resume_structure(payload: dict[str, Any]) -> dict[str, Any]:
 # ── Company research ─────────────────────────────────────────────────────────
 
 def company_research_skeleton(payload: dict[str, Any]) -> dict[str, Any]:
+    """Extract only caller-supplied facts. Never invent company data.
+
+    Edge AI may polish this skeleton. Empty sections stay empty.
+    """
     company = _str(payload, "company", "company_name", "companyName", "name")
-    label = company or "[company name]"
-    placeholder = (
-        f"Fill with verified public sources for {label}. "
-        "Do not invent financials, headcount, or funding."
-    )
+    role = _str(payload, "role", "job_title", "jobTitle", "title")
+    website = _str(payload, "website", "company_url", "url")
+    notes = _str(payload, "notes", "known_facts", "context")
+    provided_products = _list(payload, "products", "product_names")
+    provided_culture = _list(payload, "culture", "culture_themes", "values")
+
+    overview_bits = [part for part in (company, role, website, notes) if part]
     return {
         "company": company or None,
+        "role": role or None,
+        "website": website or None,
         "sections": {
             "overview": {
-                "summary": placeholder,
+                "summary": " ".join(overview_bits) if overview_bits else None,
                 "founded": None,
                 "hq": None,
-                "source": "python_template",
+                "source": "payload",
             },
             "products": {
-                "items": [],
-                "notes": f"List known products/services for {label} from public materials only.",
-                "source": "python_template",
+                "items": provided_products,
+                "notes": None,
+                "source": "payload",
             },
             "culture": {
-                "themes": [],
-                "notes": "Capture culture signals from careers pages / engineering blogs — no speculation.",
-                "source": "python_template",
+                "themes": provided_culture,
+                "notes": None,
+                "source": "payload",
             },
             "interview_tips": {
-                "tips": [
-                    "Clarify role level and interview loop stages with the recruiter.",
-                    "Map your STAR stories to the company's published values.",
-                    "Prepare questions about the team’s current priorities (not fabricated metrics).",
-                ],
-                "source": "python_template",
+                "tips": [],
+                "source": "payload",
             },
         },
         "financials": None,
         "fabricated_data": False,
-        "source": "python_template",
-        "needs_ai_polish": not bool(company),
+        "invented_facts": False,
+        "source": "python_extract",
+        "needs_ai_polish": True,
+        "insufficient_public_facts": not bool(company),
     }
 
 

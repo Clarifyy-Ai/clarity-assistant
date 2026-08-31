@@ -24,8 +24,16 @@ import {
   attemptLimitPayload,
   checkGovExamAttemptLimit,
 } from "../_shared/govAttemptLimits.ts";
-import { conflictsWithSelected } from "../_shared/govMcqValidator.ts";
+import {
+  conflictsWithSelected,
+  normalizeMcqOptions,
+  resolveCorrectIndex,
+} from "../_shared/govMcqValidator.ts";
 import { DEDUP_POLICY } from "../_shared/algorithmCatalog.ts";
+import {
+  isPythonGovExamConfigured,
+  pythonGovValidateQuestions,
+} from "../_shared/pythonGovExamClient.ts";
 /* ─── SANITIZATION ───────────────────────────────────────────────────────── */
 //
 // REGEX ESCAPING RULE for RegExp constructor strings:
@@ -522,6 +530,91 @@ Deno.serve(async (req: Request) => {
     }
     /* ── FINAL DEDUP, SHUFFLE & TRIM ─────────────────────────────────── */
     finalIds = shuffle([...new Set(finalIds)]).slice(0, question_count);
+
+    /* ── Python validation (drop rejected; never pad) ───────────────── */
+    if (isPythonGovExamConfigured() && finalIds.length > 0) {
+      const { data: validateRows, error: validateErr } = await db
+        .from("questions")
+        .select(
+          "id, question_text, options, correct_answer, subject, topic, difficulty, source",
+        )
+        .in("id", finalIds);
+
+      if (validateErr) {
+        console.warn(JSON.stringify({
+          tag: "[GOV_EXAM] select_test_python_validate_fetch_failed",
+          message: validateErr.message,
+        }));
+      } else {
+        const byId = new Map(
+          ((validateRows ?? []) as Array<{
+            id: string;
+            question_text?: string | null;
+            options?: unknown;
+            correct_answer?: unknown;
+            subject?: string | null;
+            topic?: string | null;
+            difficulty?: string | null;
+            source?: string | null;
+          }>).map((row) => [row.id, row]),
+        );
+        const ordered = finalIds
+          .map((id) => byId.get(id))
+          .filter((row): row is NonNullable<typeof row> => Boolean(row));
+
+        if (ordered.length === 0) {
+          finalIds = [];
+        } else {
+          const payloads = ordered.map((row) => {
+            const options = normalizeMcqOptions(row.options);
+            const correctIndex = resolveCorrectIndex(row.correct_answer, options.length);
+            return {
+              id: String(row.id ?? ""),
+              question_text: String(row.question_text ?? ""),
+              options,
+              correct_index: correctIndex,
+              correct_answer: correctIndex != null ? String.fromCharCode(65 + correctIndex) : null,
+              subject: row.subject != null ? String(row.subject) : null,
+              topic: row.topic != null ? String(row.topic) : null,
+              difficulty: row.difficulty != null ? String(row.difficulty) : null,
+              language: "en",
+              source: row.source != null ? String(row.source) : null,
+            };
+          });
+          const pyVal = await pythonGovValidateQuestions({
+            questions: payloads,
+            correlation_id: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+            language: "en",
+            reject_near_duplicates: true,
+          });
+          if (pyVal.ok && pyVal.data.rejected_indices.length > 0) {
+            const drop = new Set(pyVal.data.rejected_indices);
+            finalIds = ordered.filter((_, idx) => !drop.has(idx)).map((row) => row.id);
+          } else if (pyVal.ok) {
+            finalIds = ordered.map((row) => row.id);
+          } else {
+            console.warn(JSON.stringify({
+              tag: "[GOV_EXAM] select_test_python_validate_failed",
+              code: pyVal.error.code,
+            }));
+          }
+        }
+      }
+
+      if (finalIds.length === 0) {
+        return new Response(
+          JSON.stringify({
+            question_ids: [],
+            count: 0,
+            required: question_count,
+            code: "CONTENT_INSUFFICIENT",
+            error: "No questions passed validation for this configuration.",
+          }),
+          { status: 422, headers },
+        );
+      }
+      generatedCount = Math.min(generatedCount, finalIds.length);
+    }
 
     if (finalIds.length === 0) {
       console.warn(

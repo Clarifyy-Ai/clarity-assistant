@@ -1,10 +1,5 @@
-/** Server-approved coding languages. Only javascript is auto-executed. */
-export const APPROVED_CODING_LANGUAGES = [
-  "javascript",
-  "typescript",
-  "python",
-  "java",
-] as const;
+/** Languages the secure judge actually executes. Do not advertise others. */
+export const APPROVED_CODING_LANGUAGES = ["javascript"] as const;
 
 export type ApprovedCodingLanguage = (typeof APPROVED_CODING_LANGUAGES)[number];
 
@@ -17,12 +12,6 @@ export function languageLabel(lang: string): string {
   switch (lang) {
     case "javascript":
       return "JavaScript";
-    case "typescript":
-      return "TypeScript";
-    case "python":
-      return "Python";
-    case "java":
-      return "Java";
     default:
       return lang;
   }
@@ -33,7 +22,7 @@ export function languageOptionLabel(lang: string): string {
   if (isAutoExecutedLanguage(lang)) {
     return `${languageLabel(lang)} (auto-scored on server)`;
   }
-  return `${languageLabel(lang)} (not executed — pending review)`;
+  return `${languageLabel(lang)} (not configured — not executed)`;
 }
 
 export function evaluationModeLabel(mode: string): string {

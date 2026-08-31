@@ -7,7 +7,7 @@ import {
   Flag, Shield, ChevronRight, DollarSign, Cpu, Bot,
   MessageSquare, FileText, Database, ScrollText, LifeBuoy,
   ExternalLink, Upload, Menu, Tag, Settings2,
-  Link2, BookOpen, ListChecks, FileStack, Languages, FileUp, Factory,
+  Link2, BookOpen, ListChecks, FileStack, Languages, FileUp, Factory, ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AppLoadingFallback } from "@/components/layout/AppLoadingFallback";
@@ -64,6 +64,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { to: "/app/admin/gov/paper-review",     icon: FileStack,  label: "Paper Review"  },
       { to: "/app/admin/gov/paper-factory",    icon: Factory,    label: "Paper Factory" },
       { to: "/app/admin/gov/translations",     icon: Languages,  label: "Translations"  },
+      { to: "/app/admin/gov/auto-approval",    icon: ShieldCheck, label: "Auto-Approval" },
     ],
   },
   {

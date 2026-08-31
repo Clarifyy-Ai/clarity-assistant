@@ -26,6 +26,7 @@ import {
   PDF_QUESTION_EXTRACT_PROMPT,
   bufferToBase64,
   buildOcrConfidenceFlags,
+  classifyAnswerKeyStatus,
   normalizePdfExtractedQuestions,
   parsePlainTextMcqs,
   validateExtractQuestionPaperPayload,
@@ -84,6 +85,15 @@ async function setJob(
     .eq("id", jobId);
 }
 
+/** "none" only when status is omitted AND no questions were processed. */
+function defaultAnswerKeyStatus(
+  status: "mapped" | "needs_review" | "none" | undefined,
+  questionsProcessed: number | null | undefined,
+): "mapped" | "needs_review" | "none" {
+  if (status) return status;
+  return (questionsProcessed ?? 0) > 0 ? "needs_review" : "none";
+}
+
 async function findOrCreatePaperShell(
   db: ReturnType<typeof createServiceClient>,
   args: {
@@ -99,6 +109,7 @@ async function findOrCreatePaperShell(
     officialStatus: string;
     questionCount: number | null;
     metadata: Record<string, unknown>;
+    answerKeyStatus?: "mapped" | "needs_review" | "none";
   },
 ): Promise<string | null> {
   let q = db
@@ -122,6 +133,7 @@ async function findOrCreatePaperShell(
         official_status: args.officialStatus,
         question_count: args.questionCount ?? undefined,
         review_status: "in_review",
+        answer_key_status: defaultAnswerKeyStatus(args.answerKeyStatus, args.questionCount),
         metadata: args.metadata,
         updated_at: new Date().toISOString(),
       })
@@ -141,7 +153,7 @@ async function findOrCreatePaperShell(
       language: args.language,
       source_id: args.sourceId,
       official_status: args.officialStatus,
-      answer_key_status: "none",
+      answer_key_status: defaultAnswerKeyStatus(args.answerKeyStatus, args.questionCount),
       review_status: "in_review",
       title: args.title,
       question_count: args.questionCount,
@@ -464,10 +476,19 @@ Deno.serve(async (req) => {
             rejected: validatedQs.rejected,
             confidence,
             raw_ocr_preview: rawOcrText ? rawOcrText.slice(0, 4000) : null,
+            answer_key_status: "needs_review",
           },
         });
         return errorResponse(validatedQs.message, validatedQs.code, 400, req);
       }
+
+      const answerKeyStatus = classifyAnswerKeyStatus({
+        raw: normalizedRaw,
+        acceptedCount: validatedQs.questions.length,
+        rejected: validatedQs.rejected,
+        confidence,
+      });
+      const answerUncertain = answerKeyStatus === "needs_review";
 
       await setJob(db, jobId, {
         status: "inserting_questions" satisfies JobStatus,
@@ -505,6 +526,8 @@ Deno.serve(async (req) => {
           latex_present: /[=+\-*/^$\\]/.test(q.question_text),
           metadata: {
             needs_review: true,
+            answer_key_uncertain: answerUncertain,
+            answer_key_status: answerKeyStatus,
             provenance: "pdf_extract",
             parser_version: EXTRACT_PARSER_VERSION,
             license_class: payload.licenseClass,
@@ -561,6 +584,7 @@ Deno.serve(async (req) => {
           title: payload.title || `${exam.code} ${payload.year}`,
           officialStatus: "admin_attested",
           questionCount: insertedQs.length,
+          answerKeyStatus,
           metadata: {
             parser_version: EXTRACT_PARSER_VERSION,
             extract_mode: payload.mode,

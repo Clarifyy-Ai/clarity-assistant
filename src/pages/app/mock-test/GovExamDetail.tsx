@@ -28,6 +28,7 @@ import {
   type TopicMasterySummary,
 } from "@/lib/gov-exam/api";
 import { formatGovExamOperationError } from "@/lib/gov-exam/examOperationErrors";
+import { pollPaperJobUntilTerminal } from "@/lib/gov-exam/pollPaperJob";
 import {
   bankReadinessLabel,
   formatBankCoverage,
@@ -371,10 +372,18 @@ export default function GovExamDetail(): React.ReactElement {
       }
       if (result.jobId) {
         toast.message("Assembling topic practice…");
-        navigate(
-          `${generateBase}&basis=topic&topics=${encodeURIComponent(selectedTopics.join(","))}`,
+        const terminal = await pollPaperJobUntilTerminal(result.jobId, result, {
+          setJob: () => undefined,
+          shouldAbort: () => false,
+        });
+        if (terminal.mockTestId) {
+          toast.success("Topic practice set ready.");
+          navigate(`/app/mock-test/session/${terminal.mockTestId}`);
+          return;
+        }
+        throw new Error(
+          terminal.errorMessage ?? terminal.error ?? "Topic practice failed.",
         );
-        return;
       }
       throw new Error(result.errorMessage ?? result.error ?? "Topic practice failed.");
     } catch (e) {

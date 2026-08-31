@@ -16,6 +16,7 @@ import {
   type PaperFactoryMode,
 } from "@/lib/scraper/client";
 import { toAdminUserMessage } from "@/lib/admin/adminErrors";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 
 function examQuery(row: PaperFactoryExamRow): string {
   return String(row.code || row.prompt_label || row.name || row.id || "").trim();
@@ -38,7 +39,7 @@ export default function AdminGovPaperFactory() {
   const [language, setLanguage] = useState("en");
   const [questionCount, setQuestionCount] = useState(25);
   const [jobId, setJobId] = useState("");
-  const [busy, setBusy] = useState<"plan" | "process" | "generate" | null>(null);
+  const [busy, setBusy] = useState<"plan" | "process" | null>(null);
   const [plan, setPlan] = useState<Record<string, unknown> | null>(null);
   const [lastResult, setLastResult] = useState<Record<string, unknown> | null>(null);
 
@@ -101,38 +102,16 @@ export default function AdminGovPaperFactory() {
     setBusy("process");
     setLastResult(null);
     try {
-      const res = await scraperApi.paperFactoryProcessJob(id);
-      setLastResult(res as unknown as Record<string, unknown>);
-      toast.success(res.already_completed ? "Job was already completed." : "Job processed.");
-    } catch (err) {
-      toast.error(toAdminUserMessage(err, undefined, "paper_factory.process"));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function handleGenerate() {
-    if (!exam.trim()) {
-      toast.error("Select an exam before generating.");
-      return;
-    }
-    setBusy("generate");
-    setLastResult(null);
-    try {
-      const res = await scraperApi.paperFactoryGenerate({
-        ...planBody(),
-        publish: true,
-        use_bank: true,
-        include_questions: false,
-      });
-      setLastResult(res as unknown as Record<string, unknown>);
+      const res = await fetchEdgeJson<Record<string, unknown>>(
+        "process-paper-generation-job",
+        { jobId: id },
+      );
+      setLastResult(res);
       toast.success(
-        res.complete
-          ? `Generated ${res.question_count ?? 0} questions.`
-          : "Generate finished incomplete — check quality_score.",
+        res.already_completed ? "Job was already completed." : "Job processed via Edge.",
       );
     } catch (err) {
-      toast.error(toAdminUserMessage(err, undefined, "paper_factory.generate"));
+      toast.error(toAdminUserMessage(err, undefined, "paper_factory.process"));
     } finally {
       setBusy(null);
     }
@@ -264,19 +243,11 @@ export default function AdminGovPaperFactory() {
 
           <Card>
             <CardContent className="space-y-4 py-4">
-              <p className="text-sm font-medium">Lab generate</p>
+              <p className="text-sm font-medium">Generate</p>
               <p className="text-xs text-muted-foreground">
-                Synchronous HTTP generate (90s timeout). Do not use this for 100-question AI papers.
-                Prefer Process job.
+                Direct FastAPI generate is disabled in production. Create a durable job from
+                Mock Test → Generate, then process it here if the worker needs a nudge.
               </p>
-              <Button
-                variant="outline"
-                onClick={() => void handleGenerate()}
-                disabled={busy !== null || !exam}
-              >
-                {busy === "generate" ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                Generate {questionCount} questions
-              </Button>
               {lastResult ? (
                 <pre className="text-[11px] overflow-x-auto max-h-48 p-2 rounded-lg bg-muted/20 whitespace-pre-wrap break-all">
                   {JSON.stringify(lastResult, null, 2)}

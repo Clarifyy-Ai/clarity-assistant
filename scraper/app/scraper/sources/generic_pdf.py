@@ -29,6 +29,7 @@ from app.models.schemas import (
     ParsedPaper,
     ParsedQuestion,
 )
+from app.scraper.answer_map import apply_answer_map, parse_answer_grid
 from app.scraper.base import BaseScraper
 
 log = get_logger(__name__)
@@ -40,9 +41,6 @@ QUESTION_BLOCK_RE = re.compile(
     r"(?:^|\n)\s*(\d{1,3})\.\s+(.+?)(?=\n\s*\d{1,3}\.\s+|\Z)", re.DOTALL
 )
 OPTION_RE = re.compile(r"\(\s*([abcdABCD])\s*\)\s*([^\n(]+)")
-ANSWER_GRID_RE = re.compile(
-    r"(\d{1,3})\s*[.\)]?\s*\(?\s*([abcdABCD])\s*\)?", re.MULTILINE
-)
 
 
 class GenericPdfScraper(BaseScraper):
@@ -122,15 +120,11 @@ class GenericPdfScraper(BaseScraper):
                     paper.answer_key_url, expect_binary=True
                 )
                 key_text = self._extract_text(key_bytes)
-                answer_map = self._answers_from_key(key_text)
-                if answer_map:
-                    matched = 0
-                    for idx, q in enumerate(questions, start=1):
-                        a = answer_map.get(idx)
-                        if a:
-                            q.correct_answer = a
-                            matched += 1
-                    answers_partial = matched < len(questions)
+                answer_map, conflicts = parse_answer_grid(key_text)
+                if answer_map or conflicts:
+                    _matched, answers_partial = apply_answer_map(
+                        questions, answer_map, conflicts
+                    )
             except Exception as exc:
                 log.warning(
                     "generic_answer_key_failed",
@@ -203,18 +197,6 @@ class GenericPdfScraper(BaseScraper):
                     latex_present=False,
                 )
             )
-        return out
-
-    @staticmethod
-    def _answers_from_key(text: str) -> dict[int, str]:
-        out: dict[int, str] = {}
-        for num, letter in ANSWER_GRID_RE.findall(text):
-            try:
-                n = int(num)
-            except ValueError:
-                continue
-            if 1 <= n <= 300 and n not in out:
-                out[n] = letter.upper()
         return out
 
     def _extract_images(self, pdf_bytes: bytes) -> list[ParsedImage]:

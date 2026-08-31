@@ -69,19 +69,67 @@ export function mapProgressToUserStage(
   progressStage: string | null | undefined,
   status: string | null | undefined,
 ): PaperJobUserStage | "failed" | "cancelled" {
-  const publicStatus = mapPaperJobPublicStatus(status);
-  if (publicStatus === "completed") return "completed";
-  if (publicStatus === "cancelled") return "cancelled";
-  if (
-    publicStatus === "failed" ||
-    publicStatus === "failed_retryable" ||
-    publicStatus === "failed_permanent" ||
-    publicStatus === "expired"
-  ) {
-    return "failed";
+  const ui = mapProgressToUiState(progressStage, status);
+  if (ui === "READY") return "completed";
+  if (ui === "CANCELLED") return "cancelled";
+  if (ui === "FAILED_RETRYABLE" || ui === "FAILED_PERMANENT") return "failed";
+  if (ui === "VALIDATING") return "validating_paper";
+  if (ui === "CHECKING" || ui === "QUEUED") return "generating_paper";
+  if (ui === "GENERATING") {
+    const stage = String(progressStage ?? status ?? "").trim();
+    if (stage === "selecting" || stage === "selecting_questions") return "selecting_questions";
+    return "generating_paper";
+  }
+  return "generating_paper";
+}
+
+/** Public generation UI: IDLE → CHECKING → QUEUED → GENERATING → VALIDATING → READY. */
+export const PAPER_JOB_UI_STATES = [
+  "CHECKING",
+  "QUEUED",
+  "GENERATING",
+  "VALIDATING",
+  "READY",
+] as const;
+
+export type PaperJobUiState =
+  | "IDLE"
+  | (typeof PAPER_JOB_UI_STATES)[number]
+  | "FAILED_RETRYABLE"
+  | "FAILED_PERMANENT"
+  | "CANCELLED";
+
+export const PAPER_JOB_UI_LABEL: Record<PaperJobUiState, string> = {
+  IDLE: "Idle",
+  CHECKING: "Checking availability…",
+  QUEUED: "Queued…",
+  GENERATING: "Generating paper…",
+  VALIDATING: "Validating paper…",
+  READY: "Ready",
+  FAILED_RETRYABLE: "We couldn't generate this paper. Try again.",
+  FAILED_PERMANENT: "We couldn't generate this paper. Try again.",
+  CANCELLED: "Cancelled",
+};
+
+export function mapProgressToUiState(
+  progressStage: string | null | undefined,
+  status: string | null | undefined,
+): PaperJobUiState {
+  const rawStatus = String(status ?? "").trim();
+  const rawStage = String(progressStage ?? "").trim();
+  if (!rawStatus && !rawStage) return "IDLE";
+  const publicStatus = mapPaperJobPublicStatus(rawStatus || rawStage);
+  if (publicStatus === "completed") return "READY";
+  if (publicStatus === "cancelled") return "CANCELLED";
+  if (publicStatus === "failed_permanent" || publicStatus === "expired") {
+    return "FAILED_PERMANENT";
+  }
+  if (publicStatus === "failed_retryable" || publicStatus === "failed") {
+    return "FAILED_RETRYABLE";
   }
   const stage = String(progressStage ?? status ?? "").trim();
-  if (stage === "selecting" || stage === "selecting_questions") return "selecting_questions";
+  if (stage === "checking_availability") return "CHECKING";
+  if (stage === "queued") return "QUEUED";
   if (
     stage === "validating" ||
     stage === "validating_questions" ||
@@ -89,10 +137,9 @@ export function mapProgressToUserStage(
     stage === "assembling" ||
     stage === "validating_paper"
   ) {
-    return "validating_paper";
+    return "VALIDATING";
   }
-  if (stage === "completed") return "completed";
-  return "generating_paper";
+  return "GENERATING";
 }
 
 export function paperJobStageLabel(

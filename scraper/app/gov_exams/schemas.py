@@ -120,6 +120,14 @@ class ProcessJobResponse(BaseModel):
     error_code: str | None = None
     error_message: str | None = None
     retryable: bool | None = None
+    sections: list[Any] | None = None
+    marks: float | None = None
+    negative_marking: float | None = None
+    duration: int | None = None
+    language: str | None = None
+    blueprint_version: str | None = None
+    source_summary: dict[str, int] | None = None
+    validation_result: str | None = None
 
 
 class BuildPaperRequest(BaseModel):
@@ -152,3 +160,82 @@ class BuildPaperResponse(BaseModel):
     error_code: str | None = None
     error_message: str | None = None
     retryable: bool | None = None
+    sections: list[Any] | None = None
+    marks: float | None = None
+    negative_marking: float | None = None
+    duration: int | None = None
+    language: str | None = None
+    blueprint_version: str | None = None
+    source_summary: dict[str, int] | None = None
+    validation_result: str | None = None
+
+
+def fields_from_job_row(job: dict[str, Any]) -> dict[str, Any]:
+    """Exam-structure fields persisted on a completed generation job."""
+    bp = job.get("blueprint_json") if isinstance(job.get("blueprint_json"), dict) else {}
+    mix = job.get("source_mix") if isinstance(job.get("source_mix"), dict) else {}
+    return {
+        "question_count": bp.get("total_questions"),
+        "sections": bp.get("sections"),
+        "marks": bp.get("total_marks"),
+        "negative_marking": bp.get("negative_mark"),
+        "duration": bp.get("duration_minutes"),
+        "language": bp.get("language") or job.get("language"),
+        "blueprint_version": bp.get("algorithm_version")
+        or bp.get("generation_policy_version")
+        or bp.get("paper_blueprint_version"),
+        "source_mix": mix or None,
+        "source_summary": mix or None,
+        "validation_result": "passed" if str(job.get("status") or "") == "completed" else None,
+        "paper_source": bp.get("paper_class"),
+    }
+
+
+def paper_mix_from_result(result: ProcessJobResponse) -> dict[str, int]:
+    """Prefer granular engine mix; never collapse official/verified into approved_bank."""
+    granular = result.source_mix or result.source_summary or {}
+    if isinstance(granular, dict) and granular:
+        out: dict[str, int] = {}
+        for key, value in granular.items():
+            try:
+                count = int(value)
+            except (TypeError, ValueError):
+                continue
+            if count:
+                out[str(key)] = count
+        if out:
+            return out
+    return {
+        k: v
+        for k, v in {
+            "approved_bank": result.bank_count or 0,
+            "ai_generated_practice": result.ai_count or 0,
+            "generated_practice": result.deterministic_count or 0,
+        }.items()
+        if v
+    }
+
+
+def paper_mix_from_result(result: ProcessJobResponse) -> dict[str, int]:
+    """Prefer granular engine mix; never collapse official/verified into approved_bank."""
+    granular = result.source_mix or result.source_summary or {}
+    if isinstance(granular, dict) and granular:
+        out: dict[str, int] = {}
+        for key, value in granular.items():
+            try:
+                count = int(value)
+            except (TypeError, ValueError):
+                continue
+            if count > 0:
+                out[str(key)] = count
+        if out:
+            return out
+    return {
+        k: v
+        for k, v in {
+            "approved_bank": result.bank_count or 0,
+            "ai_generated_practice": result.ai_count or 0,
+            "generated_practice": result.deterministic_count or 0,
+        }.items()
+        if v
+    }

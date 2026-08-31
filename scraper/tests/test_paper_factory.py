@@ -415,6 +415,19 @@ def test_prompt_marks_no_negative_marking_clearly(exam) -> None:
 def test_exam_profile_resolution_is_fuzzy() -> None:
     assert "SSC" in resolve_profile("SSC Exams (CGL/CHSL)")["pattern"]
     assert resolve_profile("Totally Unknown Exam")["pattern"]
+    assert "State Public Service" in resolve_profile("Unknown PSC", "state_psc")["pattern"]
+    assert "JEE" in resolve_profile("JEE_MAIN", "academic")["pattern"]
+
+
+def test_difficulty_mix_falls_back_to_family() -> None:
+    from app.paper_factory.blueprint import difficulty_mix_for
+
+    ssc = difficulty_mix_for("SSC Exams (CGL/CHSL)")
+    assert ssc["EASY"] == 35
+    family = difficulty_mix_for("Brand New Exam", "academic")
+    assert family["HARD"] == 35
+    unknown = difficulty_mix_for("Brand New Exam", "not-a-family")
+    assert unknown["HARD"] == 20
 
 
 # ── AI response parsing ───────────────────────────────────────────────────────

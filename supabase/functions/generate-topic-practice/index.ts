@@ -45,6 +45,12 @@ import {
 } from "../_shared/govQuestionCount.ts";
 import { examBankTypeKeys, mapExamType } from "../_shared/examTypeMap.ts";
 import { type GapFillRow } from "../_shared/govAiGapFill.ts";
+import {
+  isPythonGovExamConfigured,
+  pythonGovAvailability,
+  pythonGovProcessJob,
+  pythonGovValidateQuestions,
+} from "../_shared/pythonGovExamClient.ts";
 
 const COST = creditCost("create_mock_test");
 
@@ -252,8 +258,26 @@ Deno.serve(async (req) => {
       difficulty,
     });
 
-    if (inventory.available < questionCount) {
-      return json(req, inventoryInsufficientPayload(inventory.available, questionCount), 409);
+    let available = inventory.available;
+    if (isPythonGovExamConfigured()) {
+      const py = await pythonGovAvailability({
+        exam_id: examId,
+        stage_id: stageId ?? "",
+        language,
+        question_count: questionCount,
+        topics,
+        difficulty,
+        correlation_id: req.headers.get("x-request-id")?.trim() || crypto.randomUUID(),
+        bank_type_keys: inventory.examTypeKeys,
+        mode: "custom_mock",
+      });
+      if (py.ok) {
+        available = py.data.available;
+      }
+    }
+
+    if (available < questionCount) {
+      return json(req, inventoryInsufficientPayload(available, questionCount), 409);
     }
 
     const { data: job, error: jobErr } = await db
@@ -265,9 +289,17 @@ Deno.serve(async (req) => {
         pattern_version_id: patternId,
         mode: "custom_mock",
         language,
-        request_json: { ...b, topics, questionCount, difficulty, skipAiFill: true },
-        status: "selecting",
-        progress_stage: "selecting_questions",
+        request_json: {
+          ...b,
+          topics,
+          questionCount,
+          difficulty,
+          skipAiFill: true,
+          allowDeterministicFill: true,
+          generator: isPythonGovExamConfigured() ? "python_paper_factory" : "edge_assembler",
+        },
+        status: isPythonGovExamConfigured() ? "queued" : "selecting",
+        progress_stage: isPythonGovExamConfigured() ? "queued" : "selecting_questions",
         idempotency_key: idempotencyKey,
         credits_charged: 0,
         credits_reserved: 0,
@@ -327,6 +359,63 @@ Deno.serve(async (req) => {
     }
 
     const jobId = job.id as string;
+
+    if (isPythonGovExamConfigured()) {
+      const correlationId = req.headers.get("x-request-id")?.trim() || crypto.randomUUID();
+      const dispatch = await pythonGovProcessJob({
+        job_id: jobId,
+        correlation_id: correlationId,
+      }).catch((err) => ({
+        ok: false as const,
+        error: {
+          code: "PYTHON_NETWORK_ERROR",
+          message: err instanceof Error ? err.message : String(err),
+          retryable: true,
+        },
+      }));
+
+      if (dispatch.ok) {
+        if (dispatch.data.status === "completed" && dispatch.data.mock_test_id) {
+          await finalizePaperJobCredits(db, jobId);
+          return json(req, {
+            jobId,
+            status: "completed",
+            mockTestId: dispatch.data.mock_test_id,
+            paperId: dispatch.data.paper_id,
+            paperClass: "custom_practice",
+            creditsCharged: COST,
+            async: false,
+          }, 200);
+        }
+        return json(req, {
+          jobId,
+          status: dispatch.data.status || "queued",
+          progressStage: dispatch.data.status || "queued",
+          paperClass: "custom_practice",
+          creditsCharged: COST,
+          async: true,
+        }, 202);
+      }
+
+      await db
+        .from("gov_paper_generation_jobs")
+        .update({
+          status: "selecting",
+          progress_stage: "selecting_questions",
+          request_json: {
+            ...b,
+            topics,
+            questionCount,
+            difficulty,
+            skipAiFill: true,
+            allowDeterministicFill: true,
+            generator: "edge_assembler",
+            pythonFallback: dispatch.error.code,
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", jobId);
+    }
 
     try {
       const examTypeKeys = examBankTypeKeys({
@@ -389,6 +478,44 @@ Deno.serve(async (req) => {
 
         seenFp.add(fp);
         selected.push(row);
+      }
+
+      if (isPythonGovExamConfigured() && selected.length > 0) {
+        const payloads = selected.map((row) => {
+          const options = normalizeMcqOptions(row.options);
+          const correctIndex = resolveCorrectIndex(row.correct_answer, options.length);
+          return {
+            id: String(row.id ?? ""),
+            question_text: String(row.question_text ?? ""),
+            options,
+            correct_index: correctIndex,
+            correct_answer: correctIndex != null ? String.fromCharCode(65 + correctIndex) : null,
+            subject: row.subject != null ? String(row.subject) : null,
+            topic: row.topic != null ? String(row.topic) : null,
+            difficulty: row.difficulty != null ? String(row.difficulty) : null,
+            language,
+            source: row.source != null ? String(row.source) : null,
+          };
+        });
+        const pyVal = await pythonGovValidateQuestions({
+          questions: payloads,
+          correlation_id: idempotencyKey,
+          job_id: jobId,
+          language,
+          reject_near_duplicates: true,
+        });
+        if (pyVal.ok && pyVal.data.rejected_indices.length > 0) {
+          const drop = new Set(pyVal.data.rejected_indices);
+          const filtered = selected.filter((_, idx) => !drop.has(idx));
+          selected.length = 0;
+          selected.push(...filtered);
+        } else if (!pyVal.ok) {
+          console.warn(JSON.stringify({
+            tag: "[GOV_EXAM] topic_practice_python_validate_failed",
+            job_id: jobId,
+            code: pyVal.error.code,
+          }));
+        }
       }
 
       if (selected.length < questionCount) {

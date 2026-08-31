@@ -22,7 +22,9 @@ from openpyxl.formatting.rule import CellIsRule
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "Clarify_AI_BlackBox_Manual_QA_Workbook.xlsx"
 OUT_ALT = ROOT / "Clarify_AI_BlackBox_Manual_QA_Workbook_ASSIGNED.xlsx"
+OUT_DATED = ROOT / "Clarify_AI_BlackBox_Manual_QA_Workbook_ASSIGNED_2026-08-31.xlsx"
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from blackbox_qa.common import (  # noqa: E402
@@ -67,6 +69,7 @@ from blackbox_qa.cases_b import (  # noqa: E402
     ai_coach_cases,
     documents_cases,
     gov_exam_cases,
+    gov_exam_live_cases,
     live_copilot_cases,
     mock_interview_cases,
     practice_coach_cases,
@@ -104,15 +107,16 @@ from blackbox_qa.staffing import (  # noqa: E402
     SHEET_OWNER,
     TESTER_LIST,
     TESTERS,
-    TIME_SLOT_LIST,
-    TIME_SLOTS,
     SECTION_STATUS_LIST,
+    WINDOW_LABEL,
+    WINDOW_STATUS_LIST,
     assign_all,
     build_credential_rows,
-    calendar_rows,
+    execution_window_rows,
     load_qa_env,
     stripe_sandbox_note,
 )
+from blackbox_qa.retest_wave import DEFECT_SEEDS, RETEST_WAVE  # noqa: E402
 
 # Populated during build() for Section Completion Gate formulas
 SHEET_META: dict[str, dict] = {}
@@ -125,23 +129,44 @@ def sheet_cover(wb: Workbook) -> None:
     start = write_title_block(
         ws,
         "Clarify AI — Black-Box Manual QA Workbook",
-        "CREDENTIALS PRE-FILLED | TESTERS PRE-ASSIGNED | CALENDAR + SECTION GATE | UPDATE PEACH COLUMNS ONLY",
+        "CYCLE 31 AUG 2026 | COMPLETE WITHIN 2 DAYS | 3 TESTERS PRE-ASSIGNED | UPDATE PEACH COLUMNS ONLY",
         cols=6,
     )
     lines = [
         "⚠ CONFIDENTIAL — This workbook contains QA test account passwords for closed-beta testers only. Do not forward outside the QA team. Do not commit to a public repo.",
         "",
-        "TEAM (High → Low priority ownership)",
-        "1. Raj Balani — Auth, Onboarding, Security, Admin, Billing, Credits, Gov Exams, AI Fallback, API, Regression, Journeys 3–5",
-        "2. Anushka — Practice Coach, Live Overlay, Mock Interview, Documents, Resume/JD, AI Chat, Module smoke, Journey 2",
-        "3. Sultana — Dashboard, Prep Lab, Sessions, Reports, Analytics, Answer Bank, Learning/Community/Coding, Journeys 1–2",
-        "4. Venkat — Public pages, Settings, Integrations, Scheduler, Accessibility, Responsive / Cross-Browser",
+        "CYCLE",
+        "Wave 2 — Retest after 30-08 remediation + live Gov exam proof.",
+        "Window: complete within 2 days (31 Aug – 1 Sep 2026, IST). Testers pick their own hours.",
+        "App: https://clarify.ai.sltfinanceindia.com",
+        "",
+        "TEAM (3 testers — every case is pre-assigned)",
+        "1. Anushka — Government Exams + live proof, AI Fallback, Practice Coach, Live Overlay, Mock Interview, Documents, Resume/JD, AI Chat, Module smoke, Journey 2, Admin gov ingest/review (TC-ADM-019–024)",
+        "2. Sultana — Billing, Credits, Dashboard, Prep Lab, Sessions, Reports, Analytics, Answer Bank, Learning/Community/Coding, Admin (non-gov), API, Regression, Journeys 1 and 4–5",
+        "3. Venkat — Authentication, Onboarding, Security, Public pages, Settings, Integrations, Scheduler, Accessibility, Responsive / Cross-Browser",
+        "",
+        "ENGINEERING STATUS (as of 31 Aug 2026) — NOT LIVE-PROVEN",
+        "- 30-08 remediation pack = NO_GO (unit/contract only).",
+        "- Government exam stack = RELEASE_BLOCKED / PARTIALLY_COMPLETE.",
+        "- Migrations not applied; Edge deploy failed; Python/Render paper factory not shipped.",
+        "- No live SEARCH → GENERATE → SIT → SUBMIT paper yet.",
+        "Execute everything user-visible TODAY. If a case needs undeployed backend, mark Blocked (not Fail) with a blocker code.",
+        "",
+        "BLOCKER CODES",
+        "BLK-MIG = migrations not on live DB",
+        "BLK-EDGE = Edge function 404 / not redeployed",
+        "BLK-PY = Python/Render worker not shipped",
+        "BLK-CFG = OAuth / Calendar / Resend / Stripe-Razorpay config",
+        "BLK-BANK = Official/PYQ bank empty (accepted only AFTER one Custom/Full Mock paper exists)",
+        "BLK-CRED = fixture account missing / wrong credit balance",
         "",
         "WHAT IS ALREADY FILLED FOR YOU",
         "- Test Accounts (email + password from .env.qa.local)",
         "- Test Environment URL, browsers, resolutions, sandbox card",
         "- Every test case: steps, expected results, Account ID, Tester, Priority",
-        "- Calendar with date + default time slots (you may change Time Slot dropdown)",
+        "- Sheet 00a: one row per tester, 2-day window (no day-by-day calendar)",
+        "- Sheet 00c: remediations to retest",
+        "- Sheet 00d: live Gov exam proof (Anushka)",
         "",
         "WHAT YOU UPDATE (peach / orange columns only)",
         "- Actual Result",
@@ -156,44 +181,56 @@ def sheet_cover(wb: Workbook) -> None:
         "3. ONLY then set Section Status = ALL FILLED — READY TO CLOSE.",
         "4. Do not mark ALL FILLED early — the Ready? formula will still show NO.",
         "",
-        "CALENDAR (sheet 00a)",
-        "Pick/adjust Time Slot for each row. Work your assigned focus for that slot.",
+        "EXECUTION WINDOW (sheet 00a)",
+        "Three rows only (one per tester). Status: Not Started / In Progress / Done / Blocked.",
+        "P0/P1 first; P2+ if time remains inside the same 2-day window.",
         "",
         f"APP URL: {SITE}",
         "PASS RULE: Opening a page/button alone is NOT Pass.",
+        "DEAD CTA RULE: A visible broken button is Fail. Hidden or labeled “Not configured” is Pass.",
+        "RELEASE: Stay RELEASE BLOCKED until 00d TC-GOV-LIVE-06 (or Full Mock equivalent) produces a real completed paper on the live URL.",
     ]
     r = start
+    headings = {
+        "CYCLE",
+        "TEAM (3 testers — every case is pre-assigned)",
+        "ENGINEERING STATUS (as of 31 Aug 2026) — NOT LIVE-PROVEN",
+        "BLOCKER CODES",
+        "WHAT IS ALREADY FILLED FOR YOU",
+        "WHAT YOU UPDATE (peach / orange columns only)",
+        "SECTION COMPLETION GATE (sheet 00b)",
+        "EXECUTION WINDOW (sheet 00a)",
+    }
     for line in lines:
         cell = ws.cell(row=r, column=1, value=line)
         cell.alignment = WRAP
         if line.startswith("⚠"):
             cell.fill = FAIL_F
             cell.font = Font(bold=True, color="7F1D1D")
-        elif line in {
-            "TEAM (High → Low priority ownership)",
-            "WHAT IS ALREADY FILLED FOR YOU",
-            "WHAT YOU UPDATE (peach / orange columns only)",
-            "SECTION COMPLETION GATE (sheet 00b)",
-            "CALENDAR (sheet 00a)",
-        }:
+        elif line in headings:
             cell.font = SECTION_FONT
         else:
             cell.font = BODY_FONT
+        ws.row_dimensions[r].height = 18 if line else 10
         r += 1
-    ws.column_dimensions["A"].width = 120
+    ws.column_dimensions["A"].width = 130
     ws.sheet_properties.tabColor = "0F766E"
 
 
 def _inventory_tester(area: str) -> str:
     area_l = area.lower()
-    if area_l in {"auth", "onboarding", "admin", "billing", "government exams", "security"}:
-        return "Raj Balani"
+    if area_l in {"government exams"}:
+        return "Anushka"
     if area_l in {"practice coach", "mock interview", "documents"}:
         return "Anushka"
+    if area_l in {"admin"}:
+        return "Sultana"
+    if area_l in {"billing"}:
+        return "Sultana"
     if area_l in {"dashboard", "prep lab", "sessions", "reports", "analytics", "answer bank",
                   "learning hub", "community", "coding lab", "practice", "company research", "assessments"}:
         return "Sultana"
-    if area_l in {"public", "settings", "scheduler", "retired", "guide"}:
+    if area_l in {"auth", "onboarding", "security", "public", "settings", "scheduler", "retired", "guide"}:
         return "Venkat"
     return "Venkat"
 
@@ -204,7 +241,7 @@ def sheet_inventory(wb: Workbook) -> None:
         ws,
         "01 — Application Inventory (user-observable)",
         "Classify ONLY after manual execution. Opening a route ≠ Fully Working. "
-        f"All rows start as {PENDING}. Tester pre-assigned high→low.",
+        f"All rows start as {PENDING}. Tester pre-assigned (Anushka / Sultana / Venkat).",
         cols=10,
     )
     headers = [
@@ -367,8 +404,8 @@ def sheet_environment(wb: Workbook) -> None:
         "File upload test folder": "Use approved QA fixtures (PDF/DOCX/TXT/corrupt/oversized) from QA lead share",
         "Supported languages": "English (primary); exam languages as shown in Gov Exam UI",
         "Timezone": "Asia/Kolkata (IST)",
-        "Test date": "2026-08-24 (update if cycle shifts)",
-        "Tester name": "Raj Balani | Anushka | Sultana | Venkat (see Calendar + case Tester column)",
+        "Test date": "2026-08-31 (cycle start; complete by 2026-09-01)",
+        "Tester name": "Anushka | Sultana | Venkat (see 00a Execution Window + case Tester column)",
         "Credential location": "Sheet 03 Test Accounts (from .env.qa.local)",
         "DevTools policy": "Network + Console for evidence; do not forge auth",
         "Secrets policy": "Do not screenshot full passwords in evidence; redact in defect attachments",
@@ -394,23 +431,21 @@ def sheet_environment(wb: Workbook) -> None:
         ws.cell(row=r + 1 + i, column=2, value=text).alignment = WRAP
 
 
-def sheet_calendar(wb: Workbook) -> None:
-    ws = wb.create_sheet("00a QA Calendar Schedule", 1)
+def sheet_execution_window(wb: Workbook) -> None:
+    ws = wb.create_sheet("00a Execution Window", 1)
     start = write_title_block(
         ws,
-        "00a — QA Calendar & Time Selection",
-        "Pre-scheduled 5-day plan (starts 2026-08-24, IST). Change Time Slot via dropdown. "
-        "Optional Custom Start/End if you need a different window. Update Status as you go.",
-        cols=13,
+        "00a — Execution Window (2 days)",
+        f"{WINDOW_LABEL}. One row per tester. No day-by-day calendar and no time slots. "
+        "Update Status as you go. Testers choose their own hours.",
+        cols=11,
     )
     headers = [
-        "Date",
-        "Weekday",
         "Tester",
-        "Assigned Focus (sheets / work)",
-        "Time Slot (select)",
-        "Custom Start Time",
-        "Custom End Time",
+        "Assigned sheets / work",
+        "Window",
+        "Cycle start",
+        "Cycle end",
         "Location / URL",
         "Status",
         "Section Gate Link",
@@ -425,25 +460,13 @@ def sheet_calendar(wb: Workbook) -> None:
         cell.border = THIN
         cell.alignment = CENTER
     ws.freeze_panes = f"A{start + 1}"
-    rows = calendar_rows()
-    dv_slot = DataValidation(type="list", formula1=TIME_SLOT_LIST, allow_blank=True)
-    dv_status = DataValidation(
-        type="list",
-        formula1='"Scheduled,In Progress,Done,Blocked,Rescheduled"',
-        allow_blank=True,
-    )
-    dv_tester = DataValidation(type="list", formula1=TESTER_LIST + ',"All"', allow_blank=True)
-    ws.add_data_validation(dv_slot)
+    rows = execution_window_rows()
+    dv_status = DataValidation(type="list", formula1=WINDOW_STATUS_LIST, allow_blank=True)
+    dv_tester = DataValidation(type="list", formula1=TESTER_LIST, allow_blank=True)
     ws.add_data_validation(dv_status)
     ws.add_data_validation(dv_tester)
-    # Custom time suggestions
-    time_opts = ",".join(
-        [f"{h:02d}:{m:02d}" for h in range(9, 19) for m in (0, 30)]
-    )
-    dv_time = DataValidation(type="list", formula1=f'"{time_opts}"', allow_blank=True)
-    ws.add_data_validation(dv_time)
-
-    edit_cols = {5, 6, 7, 9, 11, 12, 13}  # slot, custom times, status, notes, updated*
+    edit_cols = {7, 9, 10, 11}
+    peach = PatternFill("solid", fgColor="FFF7ED")
     for i, row in enumerate(rows):
         r = start + 1 + i
         for c, h in enumerate(headers, 1):
@@ -451,24 +474,118 @@ def sheet_calendar(wb: Workbook) -> None:
             cell.border = THIN
             cell.alignment = WRAP
             if c in edit_cols:
-                cell.fill = PatternFill("solid", fgColor="FFF7ED")
-        dv_slot.add(ws.cell(row=r, column=5))
-        dv_time.add(ws.cell(row=r, column=6))
-        dv_time.add(ws.cell(row=r, column=7))
-        dv_status.add(ws.cell(row=r, column=9))
-        dv_tester.add(ws.cell(row=r, column=3))
-        ws.row_dimensions[r].height = 36
-    # Legend
+                cell.fill = peach
+        dv_tester.add(ws.cell(row=r, column=1))
+        dv_status.add(ws.cell(row=r, column=7))
+        ws.row_dimensions[r].height = 72
     r = start + len(rows) + 3
-    ws.cell(row=r, column=1, value="Available time slots").font = SECTION_FONT
-    for i, slot in enumerate(TIME_SLOTS):
-        ws.cell(row=r + 1 + i, column=1, value=slot).border = THIN
-    ws.cell(row=r, column=3, value="Ownership order").font = SECTION_FONT
+    ws.cell(row=r, column=1, value="Testers").font = SECTION_FONT
     for i, name in enumerate(TESTERS):
-        ws.cell(row=r + 1 + i, column=3, value=f"{i + 1}. {name}").border = THIN
-    for i, w in enumerate([12, 12, 14, 48, 14, 14, 14, 36, 14, 28, 24, 14, 14], 1):
+        ws.cell(row=r + 1 + i, column=1, value=f"{i + 1}. {name}").border = THIN
+    ws.cell(row=r, column=3, value="Rule").font = SECTION_FONT
+    ws.cell(row=r + 1, column=3, value="P0/P1 first. P2+ if time remains in the same 2-day window.").alignment = WRAP
+    for i, w in enumerate([14, 72, 42, 14, 14, 42, 14, 28, 28, 14, 14], 1):
         ws.column_dimensions[get_column_letter(i)].width = w
     ws.sheet_properties.tabColor = "2563EB"
+
+
+def sheet_retest_wave(wb: Workbook) -> None:
+    ws = wb.create_sheet("00c Retest Wave")
+    start = write_title_block(
+        ws,
+        "00c — Retest Wave (31 Aug 2026)",
+        "Retest engineering remediations from qa-evidence/30-08-2026-remediation.md. "
+        "Opening a page is NOT Pass. Undeployed backend = Blocked + blocker code, not Fail.",
+        cols=14,
+    )
+    headers = [
+        "Test Case ID",
+        "Module",
+        "Tester",
+        "Priority",
+        "Previous result (if known)",
+        "Fix claimed by eng",
+        "Live proof required?",
+        "Runnable now? (Yes / Blocked)",
+        "Blocker",
+        "Pass / Fail",
+        "Actual Result",
+        "Defect ID",
+        "Evidence",
+        "Notes",
+    ]
+    for c, h in enumerate(headers, 1):
+        cell = ws.cell(row=start, column=c, value=h)
+        cell.fill = HEADER_FILL if h not in {"Pass / Fail", "Actual Result", "Defect ID", "Evidence", "Notes"} else PatternFill("solid", fgColor="C2410C")
+        cell.font = HEADER_FONT
+        cell.border = THIN
+        cell.alignment = CENTER
+    ws.freeze_panes = f"A{start + 1}"
+    peach = PatternFill("solid", fgColor="FFF7ED")
+    edit_headers = {"Pass / Fail", "Actual Result", "Defect ID", "Evidence", "Notes", "Blocker", "Runnable now? (Yes / Blocked)"}
+    dv_pf = DataValidation(type="list", formula1='"Pass,Fail,Blocked,Not Run,N/A,Partial"', allow_blank=True)
+    dv_run = DataValidation(type="list", formula1='"Yes,Blocked"', allow_blank=True)
+    dv_tester = DataValidation(type="list", formula1=TESTER_LIST, allow_blank=True)
+    dv_pri = DataValidation(type="list", formula1='"P0,P1,P2,P3,P4"', allow_blank=True)
+    ws.add_data_validation(dv_pf)
+    ws.add_data_validation(dv_run)
+    ws.add_data_validation(dv_tester)
+    ws.add_data_validation(dv_pri)
+    last = start
+    for i, row in enumerate(RETEST_WAVE):
+        r = start + 1 + i
+        last = r
+        vals = [
+            row.get("Test Case ID", ""),
+            row.get("Module", ""),
+            row.get("Tester", ""),
+            row.get("Priority", ""),
+            row.get("Previous result", ""),
+            row.get("Fix claimed by eng", ""),
+            row.get("Live proof required?", ""),
+            row.get("Runnable now?", ""),
+            row.get("Blocker", ""),
+            "Not Run",
+            "",
+            "",
+            "",
+            row.get("Notes", ""),
+        ]
+        for c, v in enumerate(vals, 1):
+            cell = ws.cell(row=r, column=c, value=v)
+            cell.border = THIN
+            cell.alignment = WRAP
+            cell.font = BODY_FONT
+            if headers[c - 1] in edit_headers:
+                cell.fill = peach
+            elif headers[c - 1] == "Priority":
+                if v == "P0":
+                    cell.fill = P0_F
+                elif v == "P1":
+                    cell.fill = P1_F
+            elif r % 2 == 0:
+                cell.fill = ALT_F
+        dv_tester.add(ws.cell(row=r, column=3))
+        dv_pri.add(ws.cell(row=r, column=4))
+        dv_run.add(ws.cell(row=r, column=8))
+        dv_pf.add(ws.cell(row=r, column=10))
+        ws.row_dimensions[r].height = 48
+    ws.conditional_formatting.add(
+        f"J{start + 1}:J{last}",
+        CellIsRule(operator="equal", formula=['"Pass"'], fill=PASS_F),
+    )
+    ws.conditional_formatting.add(
+        f"J{start + 1}:J{last}",
+        CellIsRule(operator="equal", formula=['"Fail"'], fill=FAIL_F),
+    )
+    ws.conditional_formatting.add(
+        f"J{start + 1}:J{last}",
+        CellIsRule(operator="equal", formula=['"Blocked"'], fill=WARN_F),
+    )
+    for i, w in enumerate([22, 22, 12, 10, 28, 36, 18, 16, 28, 12, 24, 14, 20, 36], 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    ws.auto_filter.ref = f"A{start}:{get_column_letter(len(headers))}{last}"
+    ws.sheet_properties.tabColor = "C2410C"
 
 
 def sheet_section_gate(wb: Workbook) -> None:
@@ -508,6 +625,7 @@ def sheet_section_gate(wb: Workbook) -> None:
 
     # Sheet names in workbook are truncated to 31 chars — use exact titles we create
     order = [
+        "00d Live Gov Exam Proof",
         "05 Module Test Cases",
         "06 Public Pages",
         "07 Authentication",
@@ -636,8 +754,9 @@ def sheet_defect_log(wb: Workbook) -> None:
     start = write_title_block(
         ws,
         "39 — Defect Log",
-        "Every Fail must have a defect row with evidence. No passwords/secrets in attachments descriptions.",
-        cols=14,
+        "Every Fail must have a defect row with evidence. No passwords/secrets in attachments descriptions. "
+        "Open items from the prior cycle are pre-seeded — retest, do not mark Pass without evidence.",
+        cols=15,
     )
     headers = [
         "Defect ID",
@@ -645,6 +764,7 @@ def sheet_defect_log(wb: Workbook) -> None:
         "Module",
         "Test Case ID",
         "Severity (P0-P4)",
+        "Assigned Tester",
         "Business Impact",
         "Reproducibility",
         "Environment",
@@ -661,14 +781,22 @@ def sheet_defect_log(wb: Workbook) -> None:
         cell.font = HEADER_FONT
         cell.border = THIN
     ws.freeze_panes = f"A{start + 1}"
-    # seed empty rows for data entry
-    for i in range(50):
+    seeds = list(DEFECT_SEEDS)
+    total_rows = max(50, len(seeds))
+    peach = PatternFill("solid", fgColor="FFF7ED")
+    for i in range(total_rows):
         r = start + 1 + i
-        for c in range(1, len(headers) + 1):
-            cell = ws.cell(row=r, column=c, value="")
+        seed = seeds[i] if i < len(seeds) else {}
+        for c, h in enumerate(headers, 1):
+            cell = ws.cell(row=r, column=c, value=seed.get(h, ""))
             cell.border = THIN
-            if i % 2 == 0:
+            cell.alignment = WRAP
+            if h in {"Title", "Steps to Reproduce", "Expected", "Actual", "Evidence Links", "Status", "Assigned Tester"}:
+                cell.fill = peach
+            elif i % 2 == 0:
                 cell.fill = ALT_F
+        if seed:
+            ws.row_dimensions[r].height = 48
     from openpyxl.worksheet.datavalidation import DataValidation
 
     dv_sev = DataValidation(type="list", formula1='"P0,P1,P2,P3,P4"', allow_blank=True)
@@ -678,13 +806,17 @@ def sheet_defect_log(wb: Workbook) -> None:
         formula1='"New,Open,In Progress,Fixed,Verified,Wont Fix,Duplicate"',
         allow_blank=True,
     )
+    dv_tester = DataValidation(type="list", formula1=TESTER_LIST, allow_blank=True)
     ws.add_data_validation(dv_sev)
     ws.add_data_validation(dv_rep)
     ws.add_data_validation(dv_st)
-    dv_sev.add(f"E{start + 1}:E{start + 50}")
-    dv_rep.add(f"G{start + 1}:G{start + 50}")
-    dv_st.add(f"N{start + 1}:N{start + 50}")
-    for i, w in enumerate([12, 28, 16, 14, 12, 20, 14, 16, 14, 36, 24, 24, 24, 12], 1):
+    ws.add_data_validation(dv_tester)
+    last = start + total_rows
+    dv_sev.add(f"E{start + 1}:E{last}")
+    dv_tester.add(f"F{start + 1}:F{last}")
+    dv_rep.add(f"H{start + 1}:H{last}")
+    dv_st.add(f"O{start + 1}:O{last}")
+    for i, w in enumerate([12, 36, 18, 18, 12, 14, 18, 14, 16, 14, 40, 28, 28, 20, 12], 1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
 
@@ -703,6 +835,7 @@ def sheet_execution_summary(wb: Workbook) -> None:
         cell.font = HEADER_FONT
         cell.border = THIN
     modules = [
+        "00d Live Gov Exam Proof",
         "05 Module Test Cases",
         "06 Public Pages",
         "07 Authentication",
@@ -821,7 +954,7 @@ def sheet_release(wb: Workbook) -> None:
         ("Security result", "TC-SEC-* + Admin gate"),
         ("Accessibility result", "TC-A11Y-*"),
         ("Payment/sandbox result", "TC-BILL-*"),
-        ("Government Exam result", "Journey 3 + TC-GOV P0"),
+        ("Government Exam result", "Journey 3 + TC-GOV P0 + 00d live proof"),
         ("Admin result", "TC-ADM-* + non-admin block"),
         ("Journey 1 Signup→Reports", "Pass/Fail"),
         ("Journey 2 Resume→Coach", "Pass/Fail"),
@@ -857,7 +990,12 @@ def sheet_release(wb: Workbook) -> None:
     dv.add(cell)
     ws.cell(row=r + 2, column=1, value="Justification / known limitations:").font = BODY_FONT
     ws.merge_cells(start_row=r + 3, start_column=1, end_row=r + 6, end_column=3)
-    ws.cell(row=r + 3, column=1, value="").border = THIN
+    ws.cell(row=r + 3, column=1, value=(
+        "NO_GO / RELEASE BLOCKED until a real Custom or Full Mock paper completes on "
+        "https://clarify.ai.sltfinanceindia.com (00d TC-GOV-LIVE-06). Official-empty is an accepted "
+        "limitation only after that paper exists. Migrations + Edge + Python worker were not live "
+        "as of 31 Aug 2026."
+    )).alignment = WRAP
     for i, w in enumerate([40, 48, 16], 1):
         ws.column_dimensions[get_column_letter(i)].width = w
     ws.sheet_properties.tabColor = "DC2626"
@@ -872,9 +1010,8 @@ def build() -> Path:
 
     wb = Workbook()
     sheet_cover(wb)
-    sheet_calendar(wb)
-    # Section gate created AFTER cases so formulas know row ranges — placeholder first? 
-    # We'll build cases then insert gate at index 2.
+    sheet_execution_window(wb)
+    # Section gate created AFTER cases so formulas know row ranges.
     sheet_inventory(wb)
     sheet_roles(wb)
     sheet_accounts(wb)
@@ -914,23 +1051,35 @@ def build() -> Path:
     add_cases(wb, "36 AI Fallback", ai_fallback_cases())
     add_cases(wb, "37 Regression", regression_cases())
     add_cases(wb, "38 Cross-Module Journeys", journey_cases())
+    add_cases(wb, "00d Live Gov Exam Proof", gov_exam_live_cases())
+    sheet_retest_wave(wb)
 
     sheet_section_gate(wb)
-    # Move section gate to index 2 (after cover + calendar)
-    wb.move_sheet("00b Section Completion Gate", offset=2 - wb.sheetnames.index("00b Section Completion Gate"))
+
+    def _move_to(name: str, idx: int) -> None:
+        cur = wb.sheetnames.index(name)
+        if cur != idx:
+            wb.move_sheet(name, offset=idx - cur)
+
+    _move_to("00b Section Completion Gate", 2)
+    _move_to("00c Retest Wave", 3)
+    _move_to("00d Live Gov Exam Proof", 4)
 
     sheet_defect_log(wb)
     sheet_execution_summary(wb)
     sheet_traceability(wb)
     sheet_release(wb)
 
-    try:
-        wb.save(OUT)
-        return OUT
-    except PermissionError:
-        wb.save(OUT_ALT)
-        print(f"NOTE: Primary file locked; saved as {OUT_ALT.name}")
-        return OUT_ALT
+    saved: list[Path] = []
+    for dest in (OUT_DATED, OUT_ALT, OUT):
+        try:
+            wb.save(dest)
+            saved.append(dest)
+        except PermissionError:
+            print(f"NOTE: {dest.name} locked; skipped")
+    if not saved:
+        raise PermissionError("Could not write any workbook copy — close Excel and retry")
+    return saved[0]
 
 
 if __name__ == "__main__":
@@ -958,8 +1107,27 @@ if __name__ == "__main__":
         print(f"  - {name}" + (f" ({n} cases)" if n else ""))
     print(f"Total atomic test cases: {total}")
     print("Assignment counts:")
-    for t in ["Raj Balani", "Anushka", "Sultana", "Venkat"]:
+    for t in TESTERS:
         print(f"  {t}: {by_tester.get(t, 0)}")
+    unexpected = [t for t in by_tester if t not in TESTERS]
+    if unexpected:
+        print(f"UNEXPECTED TESTERS: {unexpected}")
+    # 00c tester is column C
+    ws_retest = wb2["00c Retest Wave"]
+    retest_by: Counter[str] = Counter()
+    for row in ws_retest.iter_rows(min_row=5, max_col=3, values_only=True):
+        if row[0] and row[2] in TESTERS:
+            retest_by[str(row[2])] += 1
+    print("00c Retest Wave rows:")
+    for t in TESTERS:
+        print(f"  {t}: {retest_by.get(t, 0)}")
+    cover = "\n".join(
+        str(c[0] or "") for c in wb2["00 Cover & Instructions"].iter_rows(max_col=1, values_only=True)
+    )
+    if "Raj Balani" in cover or "Raj Balani" in "".join(wb2.sheetnames):
+        print("ERROR: Raj Balani still present")
+    else:
+        print("Raj Balani: not present on cover or sheet names")
     # Spot-check credentials sheet has emails
     ws_acc = wb2["03 Test Accounts"]
     emails = []

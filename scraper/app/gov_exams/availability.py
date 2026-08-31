@@ -17,6 +17,7 @@ from app.paper_factory.repository import (
     PaperRepository,
     _letter_to_index,
     _options_to_texts,
+    _row_provenance,
 )
 
 # Minimum unique bank items for a honest custom practice set.
@@ -39,6 +40,14 @@ class EligibleQuestion:
     source_type: str = ""
     is_verified: bool = False
     language: str = ""
+    explanation: str = ""
+    source_id: str | None = None
+    source_document: str | None = None
+    source_page: Any = None
+    source_year: Any = None
+    ingestion_job_id: str | None = None
+    python_generated: bool = False
+    metadata: dict[str, Any] | None = None
 
 
 def _topic_needles(topics: Sequence[str]) -> list[str]:
@@ -108,7 +117,7 @@ def load_eligible_bank(
         .select(
             "id, question_text, options, correct_answer, subject, topic, "
             "difficulty, exam_type, source, source_type, is_public, is_verified, "
-            "metadata, publish_status, review_status"
+            "metadata, publish_status, review_status, source_year, source_paper, explanation"
         )
         .in_("exam_type", keys)
         .eq("is_public", True)
@@ -160,6 +169,7 @@ def load_eligible_bank(
 
         seen_hashes.add(fingerprint)
         fingerprints.append((stem, options))
+        prov = _row_provenance(row)
         kept.append(
             EligibleQuestion(
                 id=str(row["id"]),
@@ -174,6 +184,14 @@ def load_eligible_bank(
                 source_type=str(row.get("source_type") or ""),
                 is_verified=bool(row.get("is_verified")),
                 language=_row_language(row),
+                explanation=str(row.get("explanation") or ""),
+                source_id=prov["source_id"],
+                source_document=prov["source_document"],
+                source_page=prov["source_page"],
+                source_year=prov["source_year"],
+                ingestion_job_id=prov["ingestion_job_id"],
+                python_generated=bool(prov["python_generated"]),
+                metadata=prov["metadata"],
             )
         )
 

@@ -48,12 +48,13 @@ import {
 } from "@/lib/gov-exam/disclaimers";
 import { flattenSyllabusTopicLabels } from "@/lib/gov-exam/topicFilter";
 import {
-  PAPER_JOB_STAGE_LABEL,
-  PAPER_JOB_USER_STAGES,
+  PAPER_JOB_UI_LABEL,
+  PAPER_JOB_UI_STATES,
   clearActivePaperJob,
   isPaperJobTerminal,
   loadActivePaperJob,
   mapPaperJobPublicStatus,
+  mapProgressToUiState,
   mapProgressToUserStage,
   saveActivePaperJob,
 } from "@/lib/gov-exam/paperJobStatus";
@@ -350,10 +351,12 @@ export default function GenerateGovPaper(): React.ReactElement {
   }
 
   // Hydrate selection from deep-link: prefer getExamDetails for truthful bankReadiness.
+  // Hub chips pass `code` only; TestConfigure / search pass examId (+ optional stageId).
   useEffect(() => {
     const linkedExamId = params.get("examId");
     const linkedStageId = params.get("stageId");
-    if (!linkedExamId || selectedExam) return;
+    const linkedCode = params.get("code")?.trim() ?? "";
+    if ((!linkedExamId && !linkedCode) || selectedExam) return;
     let cancelled = false;
 
     function mapDetailsToSearchResult(
@@ -413,8 +416,10 @@ export default function GenerateGovPaper(): React.ReactElement {
     }
 
     void import("@/lib/gov-exam/api").then(({ getExamDetails, searchGovExams }) => {
-      const detailsPromise = getExamDetails({ examId: linkedExamId });
-      const searchPromise = searchGovExams({ q: params.get("code") ?? "" });
+      const detailsPromise = getExamDetails(
+        linkedExamId ? { examId: linkedExamId } : { code: linkedCode },
+      );
+      const searchPromise = searchGovExams({ q: linkedCode || linkedExamId || "" });
 
       void Promise.allSettled([detailsPromise, searchPromise]).then(([detailsResult, searchResult]) => {
         if (cancelled) return;
@@ -434,9 +439,12 @@ export default function GenerateGovPaper(): React.ReactElement {
 
         if (searchResult.status === "fulfilled") {
           const hit =
-            searchResult.value.results.find((r) => r.examId === linkedExamId) ??
+            searchResult.value.results.find((r) => linkedExamId && r.examId === linkedExamId) ??
+            searchResult.value.results.find(
+              (r) => linkedCode && r.code?.toUpperCase() === linkedCode.toUpperCase(),
+            ) ??
             null;
-          if (hit && hit.examId === linkedExamId) {
+          if (hit) {
             applyExamSelection(hit);
             if (linkedStageId) setStageId(linkedStageId);
           }
@@ -948,55 +956,40 @@ export default function GenerateGovPaper(): React.ReactElement {
     });
     // #endregion
     try {
-      if (basis === "topic") {
-        const result = await generateTopicPractice({
-          examId,
-          stageId,
-          topics: resolvedTopics,
-          questionCount: Math.min(100, Math.max(5, requested)),
-          language,
-          difficulty: difficulty || null,
-          idempotencyKey,
-        });
-        setJob(result);
-        if (result.status === "failed" || result.status === "failed_permanent" || !result.mockTestId) {
-          idempotencyKeyRef.current = null;
-          toast.error(paperJobErrorMessage(result));
-          return;
-        }
-        toast.success(
-          result.shrunk
-            ? `Custom Practice Set ready (${result.questionCount} questions)`
-            : "Topic practice set ready",
-        );
-        navigate(`/app/mock-test/session/${result.mockTestId}`);
-        return;
-      }
-
-      const result = await createExamPaper({
-        examId,
-        stageId,
-        mode: overrideCount != null ? "custom_mock" : mode,
-        language,
-        sourceYears: [2024, 2023, 2022],
-        questionCount:
-          overrideCount != null || mode === "custom_mock" ? requested : undefined,
-        durationMinutes:
-          overrideCount != null || mode === "custom_mock" ? durationMinutes : undefined,
-        idempotencyKey,
-        generator: pickPaperGeneratorPreference({
-          mode: overrideCount != null ? "custom_mock" : mode,
-          questionCount: requested,
-          available: serverAvailability?.available,
-          // topic basis returns earlier via generateTopicPractice
-          basis:
-            basis === "full_sim" || basis === "hybrid"
-              ? "full_sim"
-              : basis === "official_previous"
-                ? "official_previous"
-                : "custom",
-        }),
-      });
+      const result =
+        basis === "topic"
+          ? await generateTopicPractice({
+              examId,
+              stageId,
+              topics: resolvedTopics,
+              questionCount: Math.min(100, Math.max(5, requested)),
+              language,
+              difficulty: difficulty || null,
+              idempotencyKey,
+            })
+          : await createExamPaper({
+              examId,
+              stageId,
+              mode: overrideCount != null ? "custom_mock" : mode,
+              language,
+              sourceYears: [2024, 2023, 2022],
+              questionCount:
+                overrideCount != null || mode === "custom_mock" ? requested : undefined,
+              durationMinutes:
+                overrideCount != null || mode === "custom_mock" ? durationMinutes : undefined,
+              idempotencyKey,
+              generator: pickPaperGeneratorPreference({
+                mode: overrideCount != null ? "custom_mock" : mode,
+                questionCount: requested,
+                available: serverAvailability?.available,
+                basis:
+                  basis === "full_sim" || basis === "hybrid"
+                    ? "full_sim"
+                    : basis === "official_previous"
+                      ? "official_previous"
+                      : "custom",
+              }),
+            });
       setJob(result);
       const resumeUserId = user?.id ?? profile?.id;
       if (resumeUserId && result.jobId) {
@@ -1199,8 +1192,8 @@ export default function GenerateGovPaper(): React.ReactElement {
         jobTerminal: job ? isPaperJobTerminal(job.status) : null,
         generateDisabled,
         currentUserStage: job
-          ? mapProgressToUserStage(job.progressStage, job.status)
-          : null,
+          ? mapProgressToUiState(job.progressStage, job.status)
+          : "IDLE",
         hasRetryUi: job ? isPaperJobTerminal(job.status) && job.status !== "completed" : false,
         displayCredits,
       },
@@ -1208,14 +1201,15 @@ export default function GenerateGovPaper(): React.ReactElement {
   }, [busy, job?.status, job?.progressStage, generateDisabled, displayCredits, stageId]);
   // #endregion
 
+  const currentUiState = job
+    ? mapProgressToUiState(job.progressStage, job.status)
+    : "IDLE";
   const currentUserStage = job
     ? mapProgressToUserStage(job.progressStage, job.status)
     : null;
-  const currentStageIdx = currentUserStage
-    ? PAPER_JOB_USER_STAGES.indexOf(
-        currentUserStage as (typeof PAPER_JOB_USER_STAGES)[number],
-      )
-    : -1;
+  const currentStageIdx = PAPER_JOB_UI_STATES.indexOf(
+    currentUiState as (typeof PAPER_JOB_UI_STATES)[number],
+  );
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -1719,14 +1713,17 @@ export default function GenerateGovPaper(): React.ReactElement {
               {job && (
                 <div className="space-y-2 mt-4">
                   <ul className="space-y-1.5" aria-live="polite">
-                    {PAPER_JOB_USER_STAGES.map((s, i) => {
+                    {PAPER_JOB_UI_STATES.map((s, i) => {
                       const done =
                         currentStageIdx > i ||
                         job.status === "completed" ||
-                        currentUserStage === "completed";
+                        currentUiState === "READY";
                       const active =
-                        currentUserStage === s ||
-                        (currentUserStage === "failed" && s === "generating_paper" && i === 0);
+                        currentUiState === s ||
+                        ((currentUiState === "FAILED_RETRYABLE" ||
+                          currentUiState === "FAILED_PERMANENT") &&
+                          s === "GENERATING" &&
+                          i === 2);
                       return (
                         <li key={s} className="flex items-center gap-2 text-xs">
                           {done ? (
@@ -1736,7 +1733,7 @@ export default function GenerateGovPaper(): React.ReactElement {
                           ) : (
                             <span className="h-3.5 w-3.5 rounded-full border border-border" />
                           )}
-                          {PAPER_JOB_STAGE_LABEL[s] ?? s}
+                          {PAPER_JOB_UI_LABEL[s]}
                         </li>
                       );
                     })}

@@ -25,6 +25,7 @@ from app.paper_factory.models import (
     PatternSection,
     PatternVersion,
 )
+from app.gov_exams.auto_approval import initial_paper_review_state
 from app.shared.algorithm_catalog import (
     dedup_algorithm_version,
     quality_algorithm_version,
@@ -54,6 +55,14 @@ class BankQuestion:
     is_verified: bool
     source: str = ""
     source_type: str = ""
+    explanation: str = ""
+    source_id: str | None = None
+    source_document: str | None = None
+    source_page: Any = None
+    source_year: Any = None
+    ingestion_job_id: str | None = None
+    python_generated: bool = False
+    metadata: dict[str, Any] | None = None
 
 
 def _uuid_or_none(value: str | None) -> str | None:
@@ -80,6 +89,47 @@ def _options_to_texts(raw: Any) -> list[str]:
         else:
             texts.append(str(item).strip())
     return texts
+
+
+def _as_metadata(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _row_provenance(row: dict[str, Any]) -> dict[str, Any]:
+    meta = _as_metadata(row.get("metadata"))
+    generated = bool(
+        meta.get("ai_generated")
+        or meta.get("generated_by") == "deterministic_python"
+        or str(row.get("source_type") or "").lower()
+        in {"generated_practice", "ai_generated_practice"}
+        or str(row.get("source") or "").upper() in {"AI_GENERATED", "INTERNAL"}
+    )
+    if generated:
+        return {
+            "source_id": None,
+            "source_document": None,
+            "source_page": None,
+            "source_year": None,
+            "ingestion_job_id": None,
+            "python_generated": meta.get("generated_by") == "deterministic_python",
+            "metadata": meta,
+        }
+    return {
+        "source_id": meta.get("source_id") or meta.get("sourceId"),
+        "source_document": meta.get("source_document")
+        or meta.get("source_paper")
+        or row.get("source_paper"),
+        "source_page": meta.get("source_page") or meta.get("page") or meta.get("page_ref"),
+        "source_year": row.get("source_year") or meta.get("source_year") or meta.get("year"),
+        "ingestion_job_id": meta.get("ingestion_job_id") or meta.get("job_id"),
+        "python_generated": False,
+        "metadata": meta,
+    }
 
 
 def _letter_to_index(value: Any, option_count: int) -> int:
@@ -371,7 +421,8 @@ class PaperRepository:
             self.db.table("questions")
             .select(
                 "id, question_text, options, correct_answer, subject, topic, "
-                "difficulty, is_verified, source, source_type"
+                "difficulty, is_verified, source, source_type, source_year, "
+                "source_paper, explanation, metadata"
             )
             .in_("exam_type", list(exam.bank_type_keys))
             .eq("is_public", True)
@@ -388,6 +439,7 @@ class PaperRepository:
             correct_index = _letter_to_index(row.get("correct_answer"), len(options))
             if correct_index < 0:
                 continue
+            prov = _row_provenance(row)
             bank.append(
                 BankQuestion(
                     id=row["id"],
@@ -400,6 +452,14 @@ class PaperRepository:
                     is_verified=bool(row.get("is_verified")),
                     source=str(row.get("source") or ""),
                     source_type=str(row.get("source_type") or ""),
+                    explanation=str(row.get("explanation") or ""),
+                    source_id=prov["source_id"],
+                    source_document=prov["source_document"],
+                    source_page=prov["source_page"],
+                    source_year=prov["source_year"],
+                    ingestion_job_id=prov["ingestion_job_id"],
+                    python_generated=bool(prov["python_generated"]),
+                    metadata=prov["metadata"],
                 )
             )
         return bank
@@ -466,9 +526,16 @@ class PaperRepository:
                         "quality_algorithm_version": quality_algorithm_version(),
                         "duplicate_algorithm_version": dedup_algorithm_version(),
                         "ai_generated": not deterministic,
+                        "python_generated": deterministic,
+                        "generated_practice": True,
                         "generated_by": "deterministic_python" if deterministic else "python_paper_factory",
                         "generation_method": "template_variant" if deterministic else "ai",
                         "official_pyq": False,
+                        "source_id": None,
+                        "source_document": None,
+                        "source_page": None,
+                        "source_year": None,
+                        "ingestion_job_id": None,
                         "disclaimer": (
                             "Deterministic practice variant generated by Python templates. "
                             "Not an official previous-year question."
@@ -578,6 +645,13 @@ class PaperRepository:
             )
         mock_test_id = str(mock_rows[0]["id"])
 
+        hard_fail_count = int(provenance.get("quality_hard_fail_count") or 0)
+        review_queue = provenance.get("review_queue")
+        review_queue_len = len(review_queue) if isinstance(review_queue, list) else 0
+        paper_review_state = initial_paper_review_state(
+            quality_score, hard_fail_count, review_queue_len
+        )
+
         paper = (
             self.db.table("gov_generated_papers")
             .insert(
@@ -600,7 +674,8 @@ class PaperRepository:
                     "quality_score": quality_score,
                     "quality_algorithm_version": quality_algorithm_version(),
                     "duplicate_algorithm_version": dedup_algorithm_version(),
-                    "review_state": "machine_validated",
+                    "review_state": paper_review_state,
+                    "publish_status": "draft",
                     "disclaimer": blueprint.label,
                     "mock_test_id": mock_test_id,
                     "paper_source": paper_source,
@@ -662,6 +737,22 @@ class PaperRepository:
                     "explanation": question.explanation,
                     "source_type": getattr(question, "source_type", None),
                     "source_class": question.source_class,
+                    "source_id": question.source_id,
+                    "source_document": question.source_document,
+                    "source_page": question.source_page,
+                    "source_year": question.source_year,
+                    "ingestion_job_id": question.ingestion_job_id,
+                    "python_generated": bool(question.python_generated),
+                    "ai_generated": bool(question.ai_generated),
+                    "generated_practice": bool(question.generated_practice)
+                    or question.source_type
+                    in {"generated_practice", "ai_generated_practice"},
+                    "official_pyq": (
+                        not question.generated_practice
+                        and not question.python_generated
+                        and not question.ai_generated
+                        and question.source_type == "official_verified"
+                    ),
                 },
             }
             for index, question in enumerate(questions)
@@ -765,6 +856,18 @@ class PaperRepository:
         )
         rows = list(update.data or [])
         return rows[0] if rows else None
+
+    def heartbeat(self, job_id: str) -> None:
+        """Extend lease without changing the progress stage (long AI rounds)."""
+        now = datetime.now(timezone.utc)
+        lease = now + timedelta(seconds=self.settings.lease_seconds)
+        self.db.table("gov_paper_generation_jobs").update(
+            {
+                "heartbeat_at": now.isoformat(),
+                "lease_expires_at": lease.isoformat(),
+                "updated_at": now.isoformat(),
+            }
+        ).eq("id", job_id).execute()
 
     def set_stage(self, job_id: str, stage: str) -> None:
         now = datetime.now(timezone.utc)

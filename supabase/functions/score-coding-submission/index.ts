@@ -10,13 +10,8 @@ function json(req: Request, payload: unknown, status = 200) {
   });
 }
 
-/** Languages the product accepts. Only javascript is auto-executed. */
-export const APPROVED_CODING_LANGUAGES = [
-  "javascript",
-  "typescript",
-  "python",
-  "java",
-] as const;
+/** Languages the product executes. Only javascript is auto-executed. */
+export const APPROVED_CODING_LANGUAGES = ["javascript"] as const;
 
 type VisibleTestCase = { id: string; name: string; input: unknown; expected: unknown };
 
@@ -146,10 +141,11 @@ Deno.serve(async (req) => {
 
   if (!(APPROVED_CODING_LANGUAGES as readonly string[]).includes(languageRaw)) {
     return json(req, {
-      error: "Selected language is not supported.",
+      error: "This language is not configured for secure execution.",
+      code: "NOT_CONFIGURED",
       execution_status: "unsupported",
       approved_languages: APPROVED_CODING_LANGUAGES,
-    }, 400);
+    }, 501);
   }
   const language = languageRaw;
 

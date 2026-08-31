@@ -405,11 +405,19 @@ export async function getAccessToken(): Promise<string | null> {
   return session?.access_token ?? null;
 }
 
+let refreshInFlight: Promise<Session | null> | null = null;
+
 /**
  * Force a session refresh — use when token is close to expiry.
+ * Concurrent callers share one in-flight refresh (no stampede).
  */
 export async function refreshSession(): Promise<Session | null> {
-  const { data, error } = await supabase.auth.refreshSession();
-  if (error) return null;
-  return data.session;
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = supabase.auth
+    .refreshSession()
+    .then(({ data, error }) => (error ? null : data.session))
+    .finally(() => {
+      refreshInFlight = null;
+    });
+  return refreshInFlight;
 }

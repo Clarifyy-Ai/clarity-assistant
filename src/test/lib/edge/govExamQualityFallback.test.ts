@@ -37,6 +37,17 @@ describe("gov exam quality + fallback contracts", () => {
     expect(client).toContain("accepted: true");
   });
 
+  it("select-test-questions validates selected payloads via Python and does not pad", () => {
+    const src = fs.readFileSync(
+      path.join(root, "supabase/functions/select-test-questions/index.ts"),
+      "utf8",
+    );
+    expect(src).toContain("pythonGovValidateQuestions");
+    expect(src).toContain("isPythonGovExamConfigured");
+    expect(src).toContain("CONTENT_INSUFFICIENT");
+    expect(src).not.toMatch(/pad.*fake|fake.*question/i);
+  });
+
   it("extract-question-paper queues heavy PDFs and never auto-publishes", () => {
     const src = fs.readFileSync(
       path.join(root, "supabase/functions/extract-question-paper/index.ts"),

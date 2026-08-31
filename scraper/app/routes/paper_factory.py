@@ -6,6 +6,7 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.core.config import get_settings
 from app.core.security import get_admin_user
 from app.paper_factory.blueprint import blueprint_summary
 from app.paper_factory.config import FactorySettings, get_factory_settings
@@ -108,11 +109,26 @@ async def plan(
     return {"success": True, "plan": blueprint_summary(blueprint)}
 
 
+def _require_non_production_lab() -> None:
+    """User-facing generation must go through Edge create-exam-paper."""
+    if get_settings().app_env.lower() == "production":
+        raise HTTPException(
+            status_code=410,
+            detail={
+                "code": "USE_EDGE_CREATE_EXAM_PAPER",
+                "message": "Direct paper generation is disabled. Create a durable job via Edge create-exam-paper.",
+                "retryable": False,
+                "stage": "paper_generation",
+            },
+        )
+
+
 @router.post("/generate")
 async def generate(
     body: GenerateRequest, admin: dict = Depends(get_admin_user)
 ) -> dict[str, object]:
-    """Generate a complete paper. Long-running: expect tens of seconds for 100 items."""
+    """Lab-only generate. Production requires Edge create-exam-paper."""
+    _require_non_production_lab()
     settings = _settings()
     owner = body.user_id or admin.get("id")
     request = _to_request(
@@ -152,7 +168,17 @@ async def generate(
 async def process_queued_job(
     job_id: str, _admin: dict = Depends(get_admin_user)
 ) -> dict[str, object]:
-    """Run one queued `gov_paper_generation_jobs` row through the factory."""
+    """Run one queued job. Production browsers must use Edge process-paper-generation-job."""
+    if get_settings().app_env.lower() == "production":
+        raise HTTPException(
+            status_code=410,
+            detail={
+                "code": "USE_EDGE_PROCESS_PAPER_JOB",
+                "message": "Direct job processing is disabled. Use Edge process-paper-generation-job.",
+                "retryable": False,
+                "stage": "paper_generation",
+            },
+        )
     settings = _settings()
     repo = PaperRepository(settings)
 

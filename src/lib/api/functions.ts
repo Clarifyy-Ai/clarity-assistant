@@ -51,6 +51,7 @@ export type EdgeFunctionName =
   | "delete-account"
   | "disconnect-calendar"
   | "end-session"
+  | "evaluate-auto-approval"
   | "export-user-data"
   | "extract-question-paper"
   | "finalize-session"

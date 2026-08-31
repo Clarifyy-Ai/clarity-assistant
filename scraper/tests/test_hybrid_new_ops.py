@@ -159,6 +159,7 @@ class TestRunOperationDispatch:
             "prep_rephrase",
             "prep_coding",
             "prep_project",
+            "company_research_skeleton",
         ],
     )
     def test_registered_ops_accept_empty_payload(self, op: str) -> None:

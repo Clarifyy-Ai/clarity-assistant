@@ -94,8 +94,8 @@ export default function CodingLabPage() {
         breadcrumbs={[{ label: "Dashboard", href: "/app/dashboard" }, { label: "Coding Assessment" }]}
         description={
           isPreview
-            ? "JavaScript solve(input) is auto-scored on the server. TypeScript, Python, and Java are stored for review and are not executed. Hidden tests stay server-side."
-            : "JavaScript solve() is auto-scored on the server. Other languages are not executed — submissions are stored for pending review. Hidden tests stay server-side."
+            ? "Only JavaScript solve(input) is auto-scored. Other languages are not configured for execution."
+            : "Only JavaScript solve() is auto-scored on the server. Hidden tests stay server-side."
         }
       />
       {isPreview && !isAdmin ? (

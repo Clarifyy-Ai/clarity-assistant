@@ -53,6 +53,39 @@ _EXAM_PROFILES: dict[str, dict[str, str]] = {
         "focus": "NCERT lines, clinical application and assertion-reason reasoning",
         "style": "Anchor facts to NCERT terminology.",
     },
+    "JEE Advanced": {
+        "pattern": "JEE Advanced — Physics, Chemistry and Mathematics",
+        "focus": "multi-concept linkage, careful options, and exact numeric answers",
+        "style": "Keep stems self-contained; numeric answers must be dimensionally consistent.",
+    },
+}
+
+_FAMILY_PROFILES: dict[str, dict[str, str]] = {
+    "ssc": _EXAM_PROFILES["SSC Exams (CGL/CHSL)"],
+    "banking": _EXAM_PROFILES["Banking (IBPS/SBI/RBI)"],
+    "upsc": _EXAM_PROFILES["UPSC CSE"],
+    "railways": _EXAM_PROFILES["RRB NTPC"],
+    "academic": _EXAM_PROFILES["JEE Main"],
+    "state_psc": {
+        "pattern": "State Public Service Commission screening — GS and mental ability MCQs",
+        "focus": "polity, economy, state GK, reasoning and quantitative aptitude",
+        "style": "Self-contained factual and application items. Verify durable facts.",
+    },
+    "professional": {
+        "pattern": "Professional / PSU computer-based test MCQs",
+        "focus": "domain knowledge, English, quantitative aptitude and reasoning",
+        "style": "Short, unambiguous single-correct items suitable for timed CBT.",
+    },
+    "defence": {
+        "pattern": "Defence recruitment objective paper",
+        "focus": "general awareness, reasoning, mathematics and elementary science",
+        "style": "Self-contained, unambiguous single-correct MCQs.",
+    },
+    "teaching": {
+        "pattern": "Teaching eligibility / recruitment objective paper",
+        "focus": "pedagogy, child development, language and subject knowledge",
+        "style": "Self-contained, unambiguous single-correct MCQs.",
+    },
 }
 
 _DEFAULT_PROFILE = {
@@ -125,7 +158,7 @@ RESPONSE_SCHEMA_EXAMPLE = {
 }
 
 
-def resolve_profile(profile_key: str) -> dict[str, str]:
+def resolve_profile(profile_key: str, family: str | None = None) -> dict[str, str]:
     key = (profile_key or "").strip()
     if key in _EXAM_PROFILES:
         return _EXAM_PROFILES[key]
@@ -133,6 +166,9 @@ def resolve_profile(profile_key: str) -> dict[str, str]:
     for candidate, profile in _EXAM_PROFILES.items():
         if candidate.lower() in lowered or lowered in candidate.lower():
             return profile
+    fam = (family or "").strip().lower()
+    if fam in _FAMILY_PROFILES:
+        return _FAMILY_PROFILES[fam]
     return _DEFAULT_PROFILE
 
 
@@ -162,7 +198,7 @@ def build_generation_prompt(
     attempt: int = 1,
 ) -> str:
     """Build the prompt for one section/topic/difficulty batch."""
-    profile = resolve_profile(exam.profile_key)
+    profile = resolve_profile(exam.profile_key, exam.family)
     lang = language_name(language)
 
     avoid_block = ""

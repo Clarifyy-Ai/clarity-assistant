@@ -48,6 +48,8 @@ describe("gov exam credit/inventory contracts", () => {
     expect(insertIdx).toBeGreaterThan(inventoryIdx);
     expect(creditIdx).toBeGreaterThan(insertIdx);
     expect(src).toContain("creditDenialResponse");
+    expect(src).toContain("pythonGovAvailability");
+    expect(src).toContain("pythonGovProcessJob");
     expect(src).not.toContain("fillUntilCount");
   });
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import re
 import uuid
-from collections import Counter, defaultdict
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Sequence
 
@@ -18,8 +18,11 @@ from app.gov_exams.deterministic_generate import (
     PRACTICE_DISCLAIMER,
     generate_practice_variants,
 )
+from app.gov_exams.repair import repair_paper
+from app.gov_exams.slot_fill import fill_bank_into_slots, match_bank_to_sections
 from app.paper_factory.ai import MCQGenerator
 from app.paper_factory.blueprint import (
+    EXACT_MODES,
     build_blueprint,
     split_slots_for_batching,
     validate_assembled_paper,
@@ -47,6 +50,15 @@ StageHook = Callable[[str], Awaitable[None] | None]
 
 _NO_ROTATE = re.compile(r"all of the above|none of the above|both\s+\(?[a-d]\)?\s+and", re.I)
 
+# Re-export so existing tests keep importing from factory.
+__all__ = [
+    "GenerationRequest",
+    "PaperFactory",
+    "balance_answer_keys",
+    "match_bank_to_sections",
+    "fill_bank_into_slots",
+]
+
 
 @dataclass
 class GenerationRequest:
@@ -66,50 +78,6 @@ class GenerationRequest:
     make_questions_public: bool = False
     title: str | None = None
     allow_deterministic_fill: bool = False
-
-
-def _normalize(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", str(text or "").lower()).strip()
-
-
-def match_bank_to_sections(
-    bank: Sequence[BankQuestion], blueprint: PaperBlueprint
-) -> dict[str, list[BankQuestion]]:
-    """Assign approved bank questions to the section they belong to.
-
-    Matching is by subject, then by section topic overlap, then by section code, which
-    covers the bank's inconsistent labelling without ever placing an item in a section
-    it has no relationship to.
-    """
-    buckets: dict[str, list[BankQuestion]] = {s.code: [] for s in blueprint.sections}
-    used: set[str] = set()
-
-    for section in blueprint.sections:
-        section_name = _normalize(section.name)
-        section_code = _normalize(section.code)
-        topic_tokens = {_normalize(topic) for topic in section.topics if topic}
-
-        for question in bank:
-            if question.id in used:
-                continue
-            subject = _normalize(question.subject)
-            topic = _normalize(question.topic)
-
-            matched = False
-            if subject and (subject == section_name or subject == section_code):
-                matched = True
-            elif subject and (subject in section_name or section_name in subject):
-                matched = True
-            elif topic and any(
-                token and (token in topic or topic in token) for token in topic_tokens
-            ):
-                matched = True
-
-            if matched:
-                buckets[section.code].append(question)
-                used.add(question.id)
-
-    return buckets
 
 
 def balance_answer_keys(questions: Sequence[PaperQuestion], seed: str) -> None:
@@ -195,87 +163,15 @@ class PaperFactory:
         # ── Bank-first: reuse approved verified items where they exist ──────────
         await self._stage(on_stage, "selecting_questions")
         bank_selected: dict[str, list[PaperQuestion]] = defaultdict(list)
+        leftovers: list[BankQuestion] = []
         bank_count = 0
         if request.use_bank:
             bank = await asyncio.to_thread(self.repo.load_bank_questions, exam)
             validator.seed_existing((q.question_text, q.options) for q in bank)
-            buckets = match_bank_to_sections(bank, blueprint)
-            for section in blueprint.sections:
-                available = buckets.get(section.code, [])
-                for item in available:
-                    if len(bank_selected[section.code]) >= section.question_count:
-                        break
-                    item_source = item.source_type.strip().lower()
-                    if not item_source:
-                        legacy_source = item.source.strip().lower()
-                        item_source = (
-                            "official_verified"
-                            if legacy_source in {"official", "official_pyp", "pyp", "previous_year", "pyq"}
-                            else "approved_bank"
-                        )
-                    if "ai" in item_source or item_source in {
-                        "generated_practice",
-                        "ai_generated_practice",
-                        "generated",
-                    }:
-                        item_source = (
-                            "ai_generated_practice"
-                            if "ai" in item_source
-                            else "generated_practice"
-                        )
-                    if request.mode == "official_previous" and item_source not in {
-                        "official_verified",
-                        "verified_public_source",
-                        "approved_bank",
-                        "internal_question_bank",
-                        "admin_uploaded",
-                    }:
-                        continue
-                    # Content validators own the score — never invent verified=100 from provenance.
-                    quality = score_assembled_question(
-                        stem=item.question_text,
-                        options=list(item.options),
-                        correct_index=item.correct_index,
-                        source_confidence=0.7,
-                    )
-                    if quality < MIN_QUALITY_SCORE:
-                        continue
-                    legacy_class = (
-                        "previous_year"
-                        if item_source == "official_verified"
-                        else "generated"
-                        if item_source in {"generated_practice", "ai_generated_practice"}
-                        else "bank"
-                    )
-                    bank_selected[section.code].append(
-                        PaperQuestion(
-                            question_text=item.question_text,
-                            options=list(item.options),
-                            correct_index=item.correct_index,
-                            section_code=section.code,
-                            subject=item.subject or section.name,
-                            topic=item.topic or section.name,
-                            difficulty=item.difficulty or "MEDIUM",
-                            marks_positive=blueprint.marks_per_question,
-                            marks_negative=blueprint.negative_mark,
-                            source_class=legacy_class,  # type: ignore[arg-type]
-                            source_type=(
-                                item_source
-                                if item_source in {
-                                    "official_verified",
-                                    "verified_public_source",
-                                    "approved_bank",
-                                    "generated_practice",
-                                    "ai_generated_practice",
-                                }
-                                else "approved_bank"
-                            ),
-                            language=blueprint.language,
-                            question_id=item.id,
-                            quality_score=quality,
-                        )
-                    )
-                bank_count += len(bank_selected[section.code])
+            bank_selected, leftovers = fill_bank_into_slots(
+                bank, blueprint, mode=request.mode
+            )
+            bank_count = sum(len(items) for items in bank_selected.values())
 
         # ── Reduce the plan by what the bank already covers ────────────────────
         outstanding = self._subtract_bank_coverage(blueprint, bank_selected)
@@ -358,10 +254,40 @@ class PaperFactory:
         # ── Assemble in section order ─────────────────────────────────────────
         await self._stage(on_stage, "validating_questions")
         questions = self._assemble(blueprint, bank_selected, report)
+        used_ids = {q.question_id for q in questions if q.question_id}
+        leftovers = [item for item in leftovers if item.id not in used_ids]
         balance_answer_keys(questions, blueprint.random_seed)
 
         errors = validate_assembled_paper(blueprint, questions)
+        if errors or len(questions) < blueprint.total_questions:
+            questions, leftovers, _det_added = repair_paper(
+                blueprint,
+                questions,
+                leftovers,
+                mode=request.mode,
+                allow_det=request.allow_deterministic_fill,
+                seed=request.random_seed or request.job_id or "paper",
+                max_rounds=self.settings.max_repair_rounds,
+            )
+            balance_answer_keys(questions, blueprint.random_seed)
+            errors = validate_assembled_paper(blueprint, questions)
+            bank_count = sum(
+                1
+                for q in questions
+                if q.source_class in {"bank", "previous_year"} and not q.generated_practice
+            )
+
         if errors:
+            shortfall = any(
+                "Exact question count" in e or e.startswith("Section ") for e in errors
+            )
+            if shortfall and request.mode in EXACT_MODES:
+                raise PaperFactoryError(
+                    "CONTENT_INSUFFICIENT",
+                    "Assembled paper failed hard constraints after repair: "
+                    + "; ".join(errors[:5]),
+                    retryable=False,
+                )
             raise PaperFactoryError(
                 "PAPER_VALIDATION_FAILED",
                 "Assembled paper failed hard constraints: " + "; ".join(errors[:5]),
@@ -487,6 +413,10 @@ class PaperFactory:
                         source_type="generated_practice",
                         language=blueprint.language,
                         quality_score=score,
+                        python_generated=True,
+                        ai_generated=False,
+                        generated_practice=True,
+                        question_source_type="generated_practice",
                     )
                 )
         return report

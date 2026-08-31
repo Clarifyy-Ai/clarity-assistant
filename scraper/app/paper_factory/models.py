@@ -215,6 +215,15 @@ class PaperQuestion:
     language: str = "en"
     question_id: str | None = None
     quality_score: float = 0.0
+    source_id: str | None = None
+    source_document: str | None = None
+    source_page: Any = None
+    source_year: Any = None
+    ingestion_job_id: str | None = None
+    python_generated: bool = False
+    ai_generated: bool = False
+    generated_practice: bool = False
+    question_source_type: str | None = None
 
     @property
     def correct_answer_letter(self) -> str:
@@ -249,19 +258,23 @@ class PaperResult:
         return len(self.questions) == self.blueprint.total_questions
 
     def provenance_json(self) -> dict[str, Any]:
+        from app.gov_exams.source_priority import normalize_source_type, summarize_source_mix
+
         deterministic_questions = sum(
-            1 for question in self.questions if question.source_class == "deterministic"
+            1
+            for question in self.questions
+            if question.source_class == "deterministic" or question.python_generated
         )
-        source_mix: dict[str, int] = {}
+        types: list[str] = []
         for question in self.questions:
-            source = (
-                "approved_bank"
-                if question.source_class == "bank"
-                else "generated_practice"
-                if question.source_class == "deterministic"
-                else "ai_generated_practice"
+            types.append(
+                str(
+                    question.question_source_type
+                    or question.source_type
+                    or normalize_source_type(source_class=question.source_class)
+                )
             )
-            source_mix[source] = source_mix.get(source, 0) + 1
+        source_mix = summarize_source_mix(types)
         return {
             "generator": "python_paper_factory",
             "generation_policy_version": GENERATION_POLICY_VERSION,

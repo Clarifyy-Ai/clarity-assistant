@@ -294,14 +294,15 @@ def write_tc_sheet(
     title: str,
     cases: list[dict],
     na_note: str | None = None,
-    tester_list: str = '"Raj Balani,Anushka,Sultana,Venkat"',
+    tester_list: str = '"Anushka,Sultana,Venkat"',
 ) -> dict:
     """Write a standard test-case sheet. Returns {header_row, first_data, last, count}."""
     subtitle = (
         "PRE-FILLED for you. ONLY update peach columns: Actual Result | Pass/Fail | Defect ID | "
-        "Execution Date | Notes. Tester is pre-assigned (Raj→Anushka→Sultana→Venkat by priority). "
-        "Mark section ALL FILLED on '00b Section Completion Gate' ONLY when every case has Pass/Fail "
-        "≠ Not Run AND Actual Result filled. Black-box only — no source/DB/server access."
+        "Execution Date | Notes. Tester is pre-assigned (Anushka / Sultana / Venkat). "
+        "Complete assigned work within 2 days. Mark section ALL FILLED on '00b Section Completion Gate' "
+        "ONLY when every case has Pass/Fail ≠ Not Run AND Actual Result filled. "
+        "Black-box only — no source/DB/server access. Opening a page is NOT Pass."
     )
     if na_note:
         subtitle = f"NOT APPLICABLE — {na_note}\n{subtitle}"

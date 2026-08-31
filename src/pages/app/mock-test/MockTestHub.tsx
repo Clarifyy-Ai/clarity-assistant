@@ -46,6 +46,8 @@ const FAMILY_FILTERS = [
   { id: "state_psc", label: "State PSC" },
   { id: "defence", label: "Defence" },
   { id: "teaching", label: "Teaching" },
+  { id: "academic", label: "Academic" },
+  { id: "professional", label: "Professional" },
   { id: "other", label: "Other" },
 ] as const;
 
@@ -65,8 +67,8 @@ interface HubStats {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Legacy bank exams (non-registry) — JEE/NEET/PSU stay on configure path.
-// Government registry exams are discovered only via search above.
+// Registry exams using the same generate engine as SSC/IBPS/UPSC.
+// CUSTOM remains the configure wizard.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const LEGACY_BANK_EXAMS = [
@@ -78,6 +80,15 @@ const LEGACY_BANK_EXAMS = [
     border: "border-blue-500/30",
     badge: "Engineering",
     badgeColor: "bg-blue-500/10 text-blue-600",
+  },
+  {
+    id: "JEE_ADV",
+    name: "JEE Advanced",
+    description: "Physics · Chemistry · Mathematics",
+    color: "from-indigo-500/20 to-indigo-600/10",
+    border: "border-indigo-500/30",
+    badge: "Engineering",
+    badgeColor: "bg-indigo-500/10 text-indigo-600",
   },
   {
     id: "NEET",
@@ -273,7 +284,11 @@ export default function MockTestHub(): React.ReactElement {
   }
 
   function handleExamStart(examType: string) {
-    navigate(`/app/mock-test/configure?exam=${examType}`);
+    if (examType === "CUSTOM") {
+      navigate(`/app/mock-test/configure?exam=${examType}`);
+      return;
+    }
+    navigate(`/app/mock-test/generate?code=${encodeURIComponent(examType)}`);
   }
 
   function handleQuickDrill() {
@@ -647,13 +662,13 @@ export default function MockTestHub(): React.ReactElement {
         </CardContent>
       </Card>
 
-      {/* ── Legacy bank exams (non-registry) ───────────────── */}
+      {/* ── Academic / professional registry exams ─────────── */}
       <section>
         <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-3">
-          Other bank exams
+          Academic & professional
         </h2>
         <p className="text-xs text-muted-foreground mb-3">
-          Engineering, medical, and PSU banks use the classic configure flow. Government exams are searched above from the live registry.
+          JEE, NEET, and PSU exams use the same generate engine as SSC and other registry exams. Custom tests still use the configure wizard.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 items-stretch gap-4">
           {LEGACY_BANK_EXAMS.map((exam) => (
@@ -674,7 +689,7 @@ export default function MockTestHub(): React.ReactElement {
                   onClick={() => handleExamStart(exam.id)}
                   className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-background/80 border border-border hover:bg-background transition-colors"
                 >
-                  Configure
+                  {exam.id === "CUSTOM" ? "Configure" : "Generate mock"}
                 </button>
                 {exam.id !== "CUSTOM" && (
                   <Link

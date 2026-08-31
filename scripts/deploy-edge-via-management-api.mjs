@@ -107,4 +107,6 @@ const res = await fetch(url, {
 });
 const text = await res.text();
 console.log(JSON.stringify({ slug, status: res.status, body: text.slice(0, 800) }));
-process.exit(res.ok ? 0 : 1);
+// Avoid process.exit() — Node 24 on Windows can abort after a successful
+// FormData fetch with UV_HANDLE_CLOSING even when status is 201.
+process.exitCode = res.ok ? 0 : 1;

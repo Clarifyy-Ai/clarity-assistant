@@ -21,6 +21,8 @@ from app.gov_exams.schemas import (
     SelectResponse,
     ValidateQuestionsRequest,
     ValidateQuestionsResponse,
+    fields_from_job_row,
+    paper_mix_from_result,
 )
 from app.gov_exams.selection import select_questions
 from app.gov_exams.validator import validate_question_payloads
@@ -165,15 +167,17 @@ async def process_job(
     if not claimed:
         current = await asyncio.to_thread(repo.get_job, body.job_id)
         if current and str(current.get("status") or "") in {"completed", "cancelled"}:
+            extra = fields_from_job_row(current) if current["status"] == "completed" else {}
             return ProcessJobResponse(
                 success=current["status"] == "completed",
+                accepted=True,
                 job_id=body.job_id,
                 status=str(current["status"]),
-                accepted=True,
                 paper_id=current.get("generated_paper_id"),
                 mock_test_id=current.get("mock_test_id"),
                 error_code=current.get("error_code"),
                 error_message=current.get("error_message"),
+                **extra,
             )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -204,7 +208,7 @@ async def process_job(
 
     _spawn_process(_run_claimed())
     return ProcessJobResponse(
-        success=True,
+        success=False,
         job_id=body.job_id,
         status=str(claimed.get("status") or "leased"),
         accepted=True,
@@ -258,15 +262,20 @@ async def build_paper(
     if not claimed:
         current = await asyncio.to_thread(repo.get_job, body.job_id)
         if current and str(current.get("status") or "") in {"completed", "cancelled"}:
+            extra = fields_from_job_row(current) if current["status"] == "completed" else {}
             return BuildPaperResponse(
                 success=current["status"] == "completed",
                 job_id=body.job_id,
                 status=str(current["status"]),
                 validation_status="completed" if current["status"] == "completed" else "cancelled",
                 missing_slots=0,
+                paper_id=current.get("generated_paper_id"),
+                mock_test_id=current.get("mock_test_id"),
                 error_code=current.get("error_code"),
                 error_message=current.get("error_message"),
                 retryable=False,
+                validation_result="passed" if current["status"] == "completed" else "cancelled",
+                **{k: v for k, v in extra.items() if k != "paper_source"},
             )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -286,15 +295,7 @@ async def build_paper(
         correlation_id=correlation,
     )
 
-    mix = {
-        k: v
-        for k, v in {
-            "approved_bank": result.bank_count or 0,
-            "ai_generated_practice": result.ai_count or 0,
-            "generated_practice": result.deterministic_count or 0,
-        }.items()
-        if v
-    }
+    mix = paper_mix_from_result(result)
 
     if not result.success:
         return BuildPaperResponse(
@@ -349,5 +350,18 @@ async def build_paper(
             "source_mix": mix,
             "mode": body.mode,
             "language": body.language,
+            "blueprint_version": result.blueprint_version,
+            "marks": result.marks,
+            "negative_marking": result.negative_marking,
+            "duration": result.duration,
+            "sections": result.sections,
         },
+        sections=result.sections,
+        marks=result.marks,
+        negative_marking=result.negative_marking,
+        duration=result.duration,
+        language=result.language or body.language,
+        blueprint_version=result.blueprint_version,
+        source_summary=mix or result.source_summary,
+        validation_result="passed",
     )

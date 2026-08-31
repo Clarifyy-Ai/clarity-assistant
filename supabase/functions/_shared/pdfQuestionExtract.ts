@@ -255,6 +255,14 @@ export function buildOcrConfidenceFlags(questions: unknown[]): ConfidenceFlag[] 
       flags.push("missing_answer");
       score -= 0.4;
     }
+    if (Number.isInteger(q.correct_index) && q.correct_answer) {
+      const letter = String(q.correct_answer).trim().toUpperCase();
+      const fromIndex = String.fromCharCode(65 + Number(q.correct_index));
+      if (letter.length === 1 && letter !== fromIndex) {
+        flags.push("conflicting_answer");
+        score -= 0.4;
+      }
+    }
     if (!q.subject && !q.topic) {
       flags.push("missing_taxonomy");
       score -= 0.05;
@@ -266,6 +274,33 @@ export function buildOcrConfidenceFlags(questions: unknown[]): ConfidenceFlag[] 
       score: Math.max(0, Math.min(1, Math.round(score * 100) / 100)),
     };
   });
+}
+
+export type AnswerKeyStatus = "mapped" | "needs_review" | "none";
+
+/** Classify answer-key mapping. Never guess: uncertain maps flag for review. */
+export function classifyAnswerKeyStatus(input: {
+  raw: unknown[];
+  acceptedCount: number;
+  rejected: Array<{ code?: string }>;
+  confidence: ConfidenceFlag[];
+}): AnswerKeyStatus {
+  const conflicting = input.confidence.some((c) => c.flags.includes("conflicting_answer"))
+    || input.raw.some((item) => {
+      if (!item || typeof item !== "object") return false;
+      const q = item as Record<string, unknown>;
+      if (!Number.isInteger(q.correct_index) || q.correct_answer == null || q.correct_answer === "") {
+        return false;
+      }
+      const letter = String(q.correct_answer).trim().toUpperCase();
+      const fromIndex = String.fromCharCode(65 + Number(q.correct_index));
+      return letter.length === 1 && letter !== fromIndex;
+    });
+  const missing = input.confidence.some((c) => c.flags.includes("missing_answer"));
+  const answerRejected = input.rejected.some((r) => r.code === "ANSWER_VERIFICATION_FAILED");
+  if (conflicting || missing || answerRejected) return "needs_review";
+  if (input.acceptedCount > 0) return "mapped";
+  return "none";
 }
 
 export const PDF_QUESTION_EXTRACT_PROMPT = `
@@ -357,7 +392,8 @@ export function parsePlainTextMcqs(text: string): unknown[] {
     out.push({
       question_text: stemLine,
       options,
-      correct_answer: answerLetter ?? "A",
+      // Never guess a missing key — empty answer flags needs_review.
+      correct_answer: answerLetter ?? "",
       explanation: "",
       subject: "General",
       topic: "Extracted",

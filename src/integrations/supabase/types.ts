@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.4"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -22,9 +22,10 @@ export type Database = {
           current_step: string | null
           error_code: string | null
           id: string
+          idempotency_key: string | null
           status: string
           updated_at: string
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           completed_at?: string | null
@@ -33,9 +34,10 @@ export type Database = {
           current_step?: string | null
           error_code?: string | null
           id?: string
+          idempotency_key?: string | null
           status?: string
           updated_at?: string
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           completed_at?: string | null
@@ -44,9 +46,10 @@ export type Database = {
           current_step?: string | null
           error_code?: string | null
           id?: string
+          idempotency_key?: string | null
           status?: string
           updated_at?: string
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -1527,7 +1530,7 @@ export type Database = {
         }
         Insert: {
           company_name: string
-          company_name_normalized?: string
+          company_name_normalized: string
           created_at?: string
           culture?: string | null
           id?: string
@@ -1708,7 +1711,7 @@ export type Database = {
           metadata: Json | null
           session_id: string | null
           stripe_payment_id: string | null
-          user_id: string
+          user_id: string | null
         }
         Insert: {
           action: Database["public"]["Enums"]["credit_action"]
@@ -1720,7 +1723,7 @@ export type Database = {
           metadata?: Json | null
           session_id?: string | null
           stripe_payment_id?: string | null
-          user_id: string
+          user_id?: string | null
         }
         Update: {
           action?: Database["public"]["Enums"]["credit_action"]
@@ -1732,7 +1735,7 @@ export type Database = {
           metadata?: Json | null
           session_id?: string | null
           stripe_payment_id?: string | null
-          user_id?: string
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -1740,13 +1743,6 @@ export type Database = {
             columns: ["session_id"]
             isOneToOne: false
             referencedRelation: "sessions"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "credit_transactions_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1952,101 +1948,6 @@ export type Database = {
           },
         ]
       }
-      documents: {
-        Row: {
-          company_name: string | null
-          content: string | null
-          content_hash: string | null
-          created_at: string
-          deleted_at: string | null
-          file_name: string | null
-          file_size: number | null
-          file_url: string | null
-          id: string
-          is_active: boolean
-          is_primary: boolean
-          is_remote: boolean | null
-          job_location: string | null
-          job_title: string | null
-          keywords: string[] | null
-          mime_type: string | null
-          parsed_education: Json | null
-          parsed_experience: Json | null
-          parsed_skills: string[] | null
-          parsed_summary: string | null
-          requirements: string[] | null
-          salary_range: string | null
-          title: string
-          type: Database["public"]["Enums"]["document_type"]
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          company_name?: string | null
-          content?: string | null
-          content_hash?: string | null
-          created_at?: string
-          deleted_at?: string | null
-          file_name?: string | null
-          file_size?: number | null
-          file_url?: string | null
-          id?: string
-          is_active?: boolean
-          is_primary?: boolean
-          is_remote?: boolean | null
-          job_location?: string | null
-          job_title?: string | null
-          keywords?: string[] | null
-          mime_type?: string | null
-          parsed_education?: Json | null
-          parsed_experience?: Json | null
-          parsed_skills?: string[] | null
-          parsed_summary?: string | null
-          requirements?: string[] | null
-          salary_range?: string | null
-          title: string
-          type: Database["public"]["Enums"]["document_type"]
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          company_name?: string | null
-          content?: string | null
-          content_hash?: string | null
-          created_at?: string
-          deleted_at?: string | null
-          file_name?: string | null
-          file_size?: number | null
-          file_url?: string | null
-          id?: string
-          is_active?: boolean
-          is_primary?: boolean
-          is_remote?: boolean | null
-          job_location?: string | null
-          job_title?: string | null
-          keywords?: string[] | null
-          mime_type?: string | null
-          parsed_education?: Json | null
-          parsed_experience?: Json | null
-          parsed_skills?: string[] | null
-          parsed_summary?: string | null
-          requirements?: string[] | null
-          salary_range?: string | null
-          title?: string
-          type?: Database["public"]["Enums"]["document_type"]
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "documents_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       document_processing_job_attempts: {
         Row: {
           attempt_number: number
@@ -2194,6 +2095,101 @@ export type Database = {
             columns: ["document_id"]
             isOneToOne: false
             referencedRelation: "personal_library_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      documents: {
+        Row: {
+          company_name: string | null
+          content: string | null
+          content_hash: string | null
+          created_at: string
+          deleted_at: string | null
+          file_name: string | null
+          file_size: number | null
+          file_url: string | null
+          id: string
+          is_active: boolean
+          is_primary: boolean
+          is_remote: boolean | null
+          job_location: string | null
+          job_title: string | null
+          keywords: string[] | null
+          mime_type: string | null
+          parsed_education: Json | null
+          parsed_experience: Json | null
+          parsed_skills: string[] | null
+          parsed_summary: string | null
+          requirements: string[] | null
+          salary_range: string | null
+          title: string
+          type: Database["public"]["Enums"]["document_type"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company_name?: string | null
+          content?: string | null
+          content_hash?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          file_url?: string | null
+          id?: string
+          is_active?: boolean
+          is_primary?: boolean
+          is_remote?: boolean | null
+          job_location?: string | null
+          job_title?: string | null
+          keywords?: string[] | null
+          mime_type?: string | null
+          parsed_education?: Json | null
+          parsed_experience?: Json | null
+          parsed_skills?: string[] | null
+          parsed_summary?: string | null
+          requirements?: string[] | null
+          salary_range?: string | null
+          title: string
+          type: Database["public"]["Enums"]["document_type"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          company_name?: string | null
+          content?: string | null
+          content_hash?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          file_url?: string | null
+          id?: string
+          is_active?: boolean
+          is_primary?: boolean
+          is_remote?: boolean | null
+          job_location?: string | null
+          job_title?: string | null
+          keywords?: string[] | null
+          mime_type?: string | null
+          parsed_education?: Json | null
+          parsed_experience?: Json | null
+          parsed_skills?: string[] | null
+          parsed_summary?: string | null
+          requirements?: string[] | null
+          salary_range?: string | null
+          title?: string
+          type?: Database["public"]["Enums"]["document_type"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documents_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -2617,41 +2613,145 @@ export type Database = {
       gap_analyses: {
         Row: {
           created_at: string
+          error_code: string | null
+          error_message: string | null
           id: string
+          jd_content_hash: string | null
           jd_id: string
           jd_updated_at: string | null
+          jd_version: string | null
+          metadata: Json
           result: Json
+          resume_content_hash: string | null
           resume_id: string
           resume_updated_at: string | null
+          resume_version: string | null
           stale: boolean
+          status: string
           updated_at: string
           user_id: string
         }
         Insert: {
           created_at?: string
+          error_code?: string | null
+          error_message?: string | null
           id?: string
+          jd_content_hash?: string | null
           jd_id: string
           jd_updated_at?: string | null
+          jd_version?: string | null
+          metadata?: Json
           result: Json
+          resume_content_hash?: string | null
           resume_id: string
           resume_updated_at?: string | null
+          resume_version?: string | null
           stale?: boolean
+          status?: string
           updated_at?: string
           user_id: string
         }
         Update: {
           created_at?: string
+          error_code?: string | null
+          error_message?: string | null
           id?: string
+          jd_content_hash?: string | null
           jd_id?: string
           jd_updated_at?: string | null
+          jd_version?: string | null
+          metadata?: Json
           result?: Json
+          resume_content_hash?: string | null
           resume_id?: string
           resume_updated_at?: string | null
+          resume_version?: string | null
           stale?: boolean
+          status?: string
           updated_at?: string
           user_id?: string
         }
         Relationships: []
+      }
+      google_calendar_refresh_tokens: {
+        Row: {
+          created_at: string
+          refresh_token: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          refresh_token?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          refresh_token?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      gov_domain_allowlist: {
+        Row: {
+          allow_subdomains: boolean
+          allowed_schemes: string[]
+          created_at: string
+          created_by: string | null
+          display_name: string
+          document_types: string[]
+          domain: string
+          id: string
+          is_active: boolean
+          is_official: boolean
+          notes: string | null
+          recruiting_body_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          allow_subdomains?: boolean
+          allowed_schemes?: string[]
+          created_at?: string
+          created_by?: string | null
+          display_name: string
+          document_types?: string[]
+          domain: string
+          id?: string
+          is_active?: boolean
+          is_official?: boolean
+          notes?: string | null
+          recruiting_body_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          allow_subdomains?: boolean
+          allowed_schemes?: string[]
+          created_at?: string
+          created_by?: string | null
+          display_name?: string
+          document_types?: string[]
+          domain?: string
+          id?: string
+          is_active?: boolean
+          is_official?: boolean
+          notes?: string | null
+          recruiting_body_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gov_domain_allowlist_recruiting_body_id_fkey"
+            columns: ["recruiting_body_id"]
+            isOneToOne: false
+            referencedRelation: "recruiting_bodies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       gov_exam_aliases: {
         Row: {
@@ -2840,6 +2940,36 @@ export type Database = {
           },
         ]
       }
+      gov_exam_requests: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          query_text: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          query_text: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          query_text?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       gov_exam_rules: {
         Row: {
           created_at: string
@@ -2999,36 +3129,6 @@ export type Database = {
           },
         ]
       }
-      gov_exam_requests: {
-        Row: {
-          created_at: string
-          id: string
-          notes: string | null
-          query_text: string
-          status: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          notes?: string | null
-          query_text: string
-          status?: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          notes?: string | null
-          query_text?: string
-          status?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       gov_exam_topics: {
         Row: {
           created_at: string
@@ -3098,11 +3198,17 @@ export type Database = {
           family: string
           id: string
           is_public: boolean
+          jurisdiction: string | null
           legacy_exam_type: string | null
           name: string
+          publication_notes: string | null
           recruiting_body_id: string
+          region: string | null
           review_state: string
+          short_name: string | null
+          state_code: string | null
           updated_at: string
+          verified_at: string | null
         }
         Insert: {
           code: string
@@ -3111,11 +3217,17 @@ export type Database = {
           family: string
           id?: string
           is_public?: boolean
+          jurisdiction?: string | null
           legacy_exam_type?: string | null
           name: string
+          publication_notes?: string | null
           recruiting_body_id: string
+          region?: string | null
           review_state?: string
+          short_name?: string | null
+          state_code?: string | null
           updated_at?: string
+          verified_at?: string | null
         }
         Update: {
           code?: string
@@ -3124,11 +3236,17 @@ export type Database = {
           family?: string
           id?: string
           is_public?: boolean
+          jurisdiction?: string | null
           legacy_exam_type?: string | null
           name?: string
+          publication_notes?: string | null
           recruiting_body_id?: string
+          region?: string | null
           review_state?: string
+          short_name?: string | null
+          state_code?: string | null
           updated_at?: string
+          verified_at?: string | null
         }
         Relationships: [
           {
@@ -3149,31 +3267,49 @@ export type Database = {
       }
       gov_generated_paper_questions: {
         Row: {
+          duplicate_algorithm_version: string | null
+          duplicate_status: string
           id: string
           paper_id: string
+          quality_algorithm_version: string | null
+          quality_score: number | null
           question_id: string
+          question_source_type: string | null
           section_code: string | null
           snapshot_json: Json | null
           sort_order: number
           source_class: string
+          validation_status: string
         }
         Insert: {
+          duplicate_algorithm_version?: string | null
+          duplicate_status?: string
           id?: string
           paper_id: string
+          quality_algorithm_version?: string | null
+          quality_score?: number | null
           question_id: string
+          question_source_type?: string | null
           section_code?: string | null
           snapshot_json?: Json | null
           sort_order?: number
           source_class?: string
+          validation_status?: string
         }
         Update: {
+          duplicate_algorithm_version?: string | null
+          duplicate_status?: string
           id?: string
           paper_id?: string
+          quality_algorithm_version?: string | null
+          quality_score?: number | null
           question_id?: string
+          question_source_type?: string | null
           section_code?: string | null
           snapshot_json?: Json | null
           sort_order?: number
           source_class?: string
+          validation_status?: string
         }
         Relationships: [
           {
@@ -3205,6 +3341,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           disclaimer: string
+          duplicate_algorithm_version: string | null
           duration_minutes: number
           exam_id: string
           id: string
@@ -3213,11 +3350,14 @@ export type Database = {
           mock_test_id: string | null
           negative_mark: number
           paper_class: string
+          paper_source: string | null
           pattern_version_id: string | null
           provenance_json: Json
+          quality_algorithm_version: string | null
           quality_score: number | null
           question_count: number
           review_state: string
+          source_mix: Json
           stage_id: string | null
           syllabus_version_id: string | null
           title: string
@@ -3228,6 +3368,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           disclaimer?: string
+          duplicate_algorithm_version?: string | null
           duration_minutes: number
           exam_id: string
           id?: string
@@ -3236,11 +3377,14 @@ export type Database = {
           mock_test_id?: string | null
           negative_mark?: number
           paper_class?: string
+          paper_source?: string | null
           pattern_version_id?: string | null
           provenance_json?: Json
+          quality_algorithm_version?: string | null
           quality_score?: number | null
           question_count: number
           review_state?: string
+          source_mix?: Json
           stage_id?: string | null
           syllabus_version_id?: string | null
           title: string
@@ -3251,6 +3395,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           disclaimer?: string
+          duplicate_algorithm_version?: string | null
           duration_minutes?: number
           exam_id?: string
           id?: string
@@ -3259,11 +3404,14 @@ export type Database = {
           mock_test_id?: string | null
           negative_mark?: number
           paper_class?: string
+          paper_source?: string | null
           pattern_version_id?: string | null
           provenance_json?: Json
+          quality_algorithm_version?: string | null
           quality_score?: number | null
           question_count?: number
           review_state?: string
+          source_mix?: Json
           stage_id?: string | null
           syllabus_version_id?: string | null
           title?: string
@@ -3309,69 +3457,118 @@ export type Database = {
       }
       gov_official_sources: {
         Row: {
+          approved_domain: string | null
+          classification: string
           created_at: string
+          cycle_id: string | null
           document_type: string
           effective_date: string | null
           exam_id: string | null
+          failure_count: number
           file_hash: string | null
           id: string
           is_official: boolean
           language: string | null
+          last_collection_attempt_at: string | null
+          last_error_code: string | null
+          last_successful_collection_at: string | null
           license_class: string
           metadata: Json
           mime_type: string | null
+          paper_id: string | null
+          paper_name: string | null
+          parser_version: string | null
           publication_date: string | null
           recruiting_body_id: string | null
           retrieved_at: string
           review_state: string
+          shift: string | null
+          source_state: string
           source_url: string | null
+          stage_id: string | null
           storage_path: string | null
           superseded_by: string | null
           title: string
+          updated_at: string
         }
         Insert: {
+          approved_domain?: string | null
+          classification?: string
           created_at?: string
+          cycle_id?: string | null
           document_type: string
           effective_date?: string | null
           exam_id?: string | null
+          failure_count?: number
           file_hash?: string | null
           id?: string
           is_official?: boolean
           language?: string | null
+          last_collection_attempt_at?: string | null
+          last_error_code?: string | null
+          last_successful_collection_at?: string | null
           license_class?: string
           metadata?: Json
           mime_type?: string | null
+          paper_id?: string | null
+          paper_name?: string | null
+          parser_version?: string | null
           publication_date?: string | null
           recruiting_body_id?: string | null
           retrieved_at?: string
           review_state?: string
+          shift?: string | null
+          source_state?: string
           source_url?: string | null
+          stage_id?: string | null
           storage_path?: string | null
           superseded_by?: string | null
           title: string
+          updated_at?: string
         }
         Update: {
+          approved_domain?: string | null
+          classification?: string
           created_at?: string
+          cycle_id?: string | null
           document_type?: string
           effective_date?: string | null
           exam_id?: string | null
+          failure_count?: number
           file_hash?: string | null
           id?: string
           is_official?: boolean
           language?: string | null
+          last_collection_attempt_at?: string | null
+          last_error_code?: string | null
+          last_successful_collection_at?: string | null
           license_class?: string
           metadata?: Json
           mime_type?: string | null
+          paper_id?: string | null
+          paper_name?: string | null
+          parser_version?: string | null
           publication_date?: string | null
           recruiting_body_id?: string | null
           retrieved_at?: string
           review_state?: string
+          shift?: string | null
+          source_state?: string
           source_url?: string | null
+          stage_id?: string | null
           storage_path?: string | null
           superseded_by?: string | null
           title?: string
+          updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "gov_official_sources_cycle_id_fkey"
+            columns: ["cycle_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exam_cycles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "gov_official_sources_exam_id_fkey"
             columns: ["exam_id"]
@@ -3384,6 +3581,13 @@ export type Database = {
             columns: ["recruiting_body_id"]
             isOneToOne: false
             referencedRelation: "recruiting_bodies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gov_official_sources_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exam_stages"
             referencedColumns: ["id"]
           },
           {
@@ -3403,9 +3607,9 @@ export type Database = {
           created_at: string
           credit_reservation: string | null
           credits_charged: number
-          credits_reserved: number
           credits_finalized_at: string | null
           credits_released_at: string | null
+          credits_reserved: number
           error_code: string | null
           error_message: string | null
           exam_id: string
@@ -3413,8 +3617,11 @@ export type Database = {
           heartbeat_at: string | null
           id: string
           idempotency_key: string | null
+          inventory_snapshot: Json | null
+          inventory_version: string | null
           language: string
           lease_expires_at: string | null
+          missing_count: number | null
           mock_test_id: string | null
           mode: string
           pattern_version_id: string | null
@@ -3422,6 +3629,7 @@ export type Database = {
           random_seed: string | null
           request_json: Json
           retryable: boolean
+          source_mix: Json
           stage_id: string | null
           started_at: string | null
           status: string
@@ -3437,9 +3645,9 @@ export type Database = {
           created_at?: string
           credit_reservation?: string | null
           credits_charged?: number
-          credits_reserved?: number
           credits_finalized_at?: string | null
           credits_released_at?: string | null
+          credits_reserved?: number
           error_code?: string | null
           error_message?: string | null
           exam_id: string
@@ -3447,8 +3655,11 @@ export type Database = {
           heartbeat_at?: string | null
           id?: string
           idempotency_key?: string | null
+          inventory_snapshot?: Json | null
+          inventory_version?: string | null
           language?: string
           lease_expires_at?: string | null
+          missing_count?: number | null
           mock_test_id?: string | null
           mode: string
           pattern_version_id?: string | null
@@ -3456,6 +3667,7 @@ export type Database = {
           random_seed?: string | null
           request_json?: Json
           retryable?: boolean
+          source_mix?: Json
           stage_id?: string | null
           started_at?: string | null
           status?: string
@@ -3471,9 +3683,9 @@ export type Database = {
           created_at?: string
           credit_reservation?: string | null
           credits_charged?: number
-          credits_reserved?: number
           credits_finalized_at?: string | null
           credits_released_at?: string | null
+          credits_reserved?: number
           error_code?: string | null
           error_message?: string | null
           exam_id?: string
@@ -3481,8 +3693,11 @@ export type Database = {
           heartbeat_at?: string | null
           id?: string
           idempotency_key?: string | null
+          inventory_snapshot?: Json | null
+          inventory_version?: string | null
           language?: string
           lease_expires_at?: string | null
+          missing_count?: number | null
           mock_test_id?: string | null
           mode?: string
           pattern_version_id?: string | null
@@ -3490,6 +3705,7 @@ export type Database = {
           random_seed?: string | null
           request_json?: Json
           retryable?: boolean
+          source_mix?: Json
           stage_id?: string | null
           started_at?: string | null
           status?: string
@@ -3716,6 +3932,53 @@ export type Database = {
         }
         Relationships: []
       }
+      interview_reminders: {
+        Row: {
+          created_at: string
+          error: string | null
+          id: string
+          interview_id: string
+          kind: string
+          remind_at: string
+          sent_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          interview_id: string
+          kind: string
+          remind_at: string
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          interview_id?: string
+          kind?: string
+          remind_at?: string
+          sent_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interview_reminders_interview_id_fkey"
+            columns: ["interview_id"]
+            isOneToOne: false
+            referencedRelation: "scheduled_interviews"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       interview_rounds: {
         Row: {
           created_at: string
@@ -3736,6 +3999,7 @@ export type Database = {
           scheduled_interview_id: string
           session_id: string | null
           status: string | null
+          timezone: string | null
           updated_at: string | null
         }
         Insert: {
@@ -3757,6 +4021,7 @@ export type Database = {
           scheduled_interview_id: string
           session_id?: string | null
           status?: string | null
+          timezone?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -3778,6 +4043,7 @@ export type Database = {
           scheduled_interview_id?: string
           session_id?: string | null
           status?: string | null
+          timezone?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -4217,12 +4483,12 @@ export type Database = {
           config: Json
           created_at: string | null
           evaluation_version: number
+          expires_at: string | null
           id: string
           overall_score: number | null
           question_ids: string[]
           rank_status: string
           started_at: string | null
-          expires_at: string | null
           status: string
           submitted_at: string | null
           test_name: string
@@ -4236,12 +4502,12 @@ export type Database = {
           config?: Json
           created_at?: string | null
           evaluation_version?: number
+          expires_at?: string | null
           id?: string
           overall_score?: number | null
           question_ids?: string[]
           rank_status?: string
           started_at?: string | null
-          expires_at?: string | null
           status?: string
           submitted_at?: string | null
           test_name: string
@@ -4255,12 +4521,12 @@ export type Database = {
           config?: Json
           created_at?: string | null
           evaluation_version?: number
+          expires_at?: string | null
           id?: string
           overall_score?: number | null
           question_ids?: string[]
           rank_status?: string
           started_at?: string | null
-          expires_at?: string | null
           status?: string
           submitted_at?: string | null
           test_name?: string
@@ -4602,7 +4868,15 @@ export type Database = {
           uploaded_by?: string
           version_number?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "personal_library_documents_supersedes_id_fkey"
+            columns: ["supersedes_id"]
+            isOneToOne: false
+            referencedRelation: "personal_library_documents"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       practice_contexts: {
         Row: {
@@ -4757,6 +5031,48 @@ export type Database = {
           status?: string
           user_id?: string
           version?: number
+        }
+        Relationships: []
+      }
+      prep_rephrase_history: {
+        Row: {
+          alternatives: Json
+          created_at: string
+          credit_op_id: string | null
+          id: string
+          input_hash: string
+          model: string | null
+          original_text: string
+          provider: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          alternatives?: Json
+          created_at?: string
+          credit_op_id?: string | null
+          id?: string
+          input_hash: string
+          model?: string | null
+          original_text: string
+          provider?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          alternatives?: Json
+          created_at?: string
+          credit_op_id?: string | null
+          id?: string
+          input_hash?: string
+          model?: string | null
+          original_text?: string
+          provider?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -4956,8 +5272,8 @@ export type Database = {
         Row: {
           audio_input_device: string | null
           audio_output_device: string | null
-          auto_gain: boolean
           auto_deduct_credits: boolean
+          auto_gain: boolean
           auto_transcript: boolean
           avatar_url: string | null
           ban_reason: string | null
@@ -4965,13 +5281,13 @@ export type Database = {
           byok_anthropic: boolean | null
           byok_gemini: boolean | null
           byok_openai: boolean | null
+          coach_tone: string
           created_at: string
           credits: number
           credits_reset_at: string | null
           credits_used_this_month: number
           current_company: string | null
           current_title: string | null
-          coach_tone: string
           custom_filler_words: string[]
           data_collection: boolean
           data_retention_days: number
@@ -5002,8 +5318,8 @@ export type Database = {
           locale: string | null
           longest_streak: number
           marketing_emails: boolean
+          metadata: Json
           noise_suppression: boolean
-          stt_language: string
           notice_period: string | null
           notification_prefs: Json | null
           onboarding_completed: boolean
@@ -5012,16 +5328,16 @@ export type Database = {
           overlay_hotkey: string
           overlay_opacity: number
           overlay_position: string
+          overlay_settings: Json
           payment_failed_at: string | null
           pending_promo_code: string | null
           phone: string | null
           plan_id: Database["public"]["Enums"]["plan_tier"]
+          portfolio_url: string | null
           preferred_language: string
           preferred_model: Database["public"]["Enums"]["ai_model"]
           preferred_salary: string | null
           privacy_prefs: Json | null
-          ui_preferences: Json
-          overlay_settings: Json
           profile_visibility: string
           referral_code: string | null
           referred_by: string | null
@@ -5032,6 +5348,7 @@ export type Database = {
           stealth_mode: boolean
           streak_days: number
           stripe_customer_id: string | null
+          stt_language: string
           subscription_id: string | null
           subscription_status:
             | Database["public"]["Enums"]["subscription_status"]
@@ -5041,17 +5358,17 @@ export type Database = {
           timezone: string | null
           total_practice_minutes: number
           total_sessions: number
+          ui_preferences: Json
           updated_at: string
           website_url: string | null
-          portfolio_url: string | null
           xp: number
           years_of_exp: number | null
         }
         Insert: {
           audio_input_device?: string | null
           audio_output_device?: string | null
-          auto_gain?: boolean
           auto_deduct_credits?: boolean
+          auto_gain?: boolean
           auto_transcript?: boolean
           avatar_url?: string | null
           ban_reason?: string | null
@@ -5059,13 +5376,13 @@ export type Database = {
           byok_anthropic?: boolean | null
           byok_gemini?: boolean | null
           byok_openai?: boolean | null
+          coach_tone?: string
           created_at?: string
           credits?: number
           credits_reset_at?: string | null
           credits_used_this_month?: number
           current_company?: string | null
           current_title?: string | null
-          coach_tone?: string
           custom_filler_words?: string[]
           data_collection?: boolean
           data_retention_days?: number
@@ -5096,8 +5413,8 @@ export type Database = {
           locale?: string | null
           longest_streak?: number
           marketing_emails?: boolean
+          metadata?: Json
           noise_suppression?: boolean
-          stt_language?: string
           notice_period?: string | null
           notification_prefs?: Json | null
           onboarding_completed?: boolean
@@ -5106,16 +5423,16 @@ export type Database = {
           overlay_hotkey?: string
           overlay_opacity?: number
           overlay_position?: string
+          overlay_settings?: Json
           payment_failed_at?: string | null
           pending_promo_code?: string | null
           phone?: string | null
           plan_id?: Database["public"]["Enums"]["plan_tier"]
+          portfolio_url?: string | null
           preferred_language?: string
           preferred_model?: Database["public"]["Enums"]["ai_model"]
           preferred_salary?: string | null
           privacy_prefs?: Json | null
-          ui_preferences?: Json
-          overlay_settings?: Json
           profile_visibility?: string
           referral_code?: string | null
           referred_by?: string | null
@@ -5126,6 +5443,7 @@ export type Database = {
           stealth_mode?: boolean
           streak_days?: number
           stripe_customer_id?: string | null
+          stt_language?: string
           subscription_id?: string | null
           subscription_status?:
             | Database["public"]["Enums"]["subscription_status"]
@@ -5135,17 +5453,17 @@ export type Database = {
           timezone?: string | null
           total_practice_minutes?: number
           total_sessions?: number
+          ui_preferences?: Json
           updated_at?: string
           website_url?: string | null
-          portfolio_url?: string | null
           xp?: number
           years_of_exp?: number | null
         }
         Update: {
           audio_input_device?: string | null
           audio_output_device?: string | null
-          auto_gain?: boolean
           auto_deduct_credits?: boolean
+          auto_gain?: boolean
           auto_transcript?: boolean
           avatar_url?: string | null
           ban_reason?: string | null
@@ -5153,13 +5471,13 @@ export type Database = {
           byok_anthropic?: boolean | null
           byok_gemini?: boolean | null
           byok_openai?: boolean | null
+          coach_tone?: string
           created_at?: string
           credits?: number
           credits_reset_at?: string | null
           credits_used_this_month?: number
           current_company?: string | null
           current_title?: string | null
-          coach_tone?: string
           custom_filler_words?: string[]
           data_collection?: boolean
           data_retention_days?: number
@@ -5190,8 +5508,8 @@ export type Database = {
           locale?: string | null
           longest_streak?: number
           marketing_emails?: boolean
+          metadata?: Json
           noise_suppression?: boolean
-          stt_language?: string
           notice_period?: string | null
           notification_prefs?: Json | null
           onboarding_completed?: boolean
@@ -5200,16 +5518,16 @@ export type Database = {
           overlay_hotkey?: string
           overlay_opacity?: number
           overlay_position?: string
+          overlay_settings?: Json
           payment_failed_at?: string | null
           pending_promo_code?: string | null
           phone?: string | null
           plan_id?: Database["public"]["Enums"]["plan_tier"]
+          portfolio_url?: string | null
           preferred_language?: string
           preferred_model?: Database["public"]["Enums"]["ai_model"]
           preferred_salary?: string | null
           privacy_prefs?: Json | null
-          ui_preferences?: Json
-          overlay_settings?: Json
           profile_visibility?: string
           referral_code?: string | null
           referred_by?: string | null
@@ -5220,6 +5538,7 @@ export type Database = {
           stealth_mode?: boolean
           streak_days?: number
           stripe_customer_id?: string | null
+          stt_language?: string
           subscription_id?: string | null
           subscription_status?:
             | Database["public"]["Enums"]["subscription_status"]
@@ -5229,9 +5548,9 @@ export type Database = {
           timezone?: string | null
           total_practice_minutes?: number
           total_sessions?: number
+          ui_preferences?: Json
           updated_at?: string
           website_url?: string | null
-          portfolio_url?: string | null
           xp?: number
           years_of_exp?: number | null
         }
@@ -5407,6 +5726,86 @@ export type Database = {
           },
         ]
       }
+      question_similarity_matches: {
+        Row: {
+          created_at: string
+          decision: string
+          fingerprint_match: boolean
+          id: string
+          matching_question_id: string
+          metadata: Json
+          ngram_jaccard: number | null
+          question_id: string
+          reviewer_id: string | null
+          reviewer_notes: string | null
+          reviewer_override: string | null
+          similarity_score: number
+          token_jaccard: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          decision: string
+          fingerprint_match?: boolean
+          id?: string
+          matching_question_id: string
+          metadata?: Json
+          ngram_jaccard?: number | null
+          question_id: string
+          reviewer_id?: string | null
+          reviewer_notes?: string | null
+          reviewer_override?: string | null
+          similarity_score: number
+          token_jaccard?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          decision?: string
+          fingerprint_match?: boolean
+          id?: string
+          matching_question_id?: string
+          metadata?: Json
+          ngram_jaccard?: number | null
+          question_id?: string
+          reviewer_id?: string | null
+          reviewer_notes?: string | null
+          reviewer_override?: string | null
+          similarity_score?: number
+          token_jaccard?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "question_similarity_matches_matching_question_id_fkey"
+            columns: ["matching_question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "question_similarity_matches_matching_question_id_fkey"
+            columns: ["matching_question_id"]
+            isOneToOne: false
+            referencedRelation: "questions_playable"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "question_similarity_matches_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "question_similarity_matches_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions_playable"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       question_translations: {
         Row: {
           created_at: string
@@ -5467,22 +5866,34 @@ export type Database = {
       questions: {
         Row: {
           bank_id: string | null
+          ca_applicable_date: string | null
+          ca_cutoff_date: string | null
+          ca_expiry_date: string | null
+          ca_is_stale: boolean
+          ca_primary_source: string | null
+          ca_source_date: string | null
+          ca_stale_flagged_at: string | null
           category: string | null
           content_owner: string | null
           copyright_status: string | null
           correct_answer: string
           created_at: string | null
           created_by: string | null
+          cross_functional: boolean
           difficulty: string | null
           downvotes: number | null
+          duplicate_algorithm_version: string | null
           eligible_roles: string[]
           exam_type: string | null
           explanation: string | null
           explanation_blocks: Json | null
           explanation_html: string | null
+          generation_method: string | null
+          generator_version: string | null
           has_image: boolean | null
           id: string
           image_url: string | null
+          is_current_affairs: boolean
           is_public: boolean | null
           is_verified: boolean | null
           latex_present: boolean | null
@@ -5494,6 +5905,8 @@ export type Database = {
           option_blocks: Json | null
           options: Json | null
           publish_status: string
+          quality_algorithm_version: string | null
+          quality_score: number | null
           question_blocks: Json | null
           question_html: string | null
           question_text: string
@@ -5501,6 +5914,9 @@ export type Database = {
           review_status: string
           source: string | null
           source_paper: string | null
+          source_question_id: string | null
+          source_template: string | null
+          source_type: string | null
           source_year: number | null
           subject: string
           subtopic: string | null
@@ -5510,10 +5926,18 @@ export type Database = {
           updated_at: string | null
           uploaded_by: string | null
           upvotes: number | null
-          cross_functional: boolean
+          validation_errors: Json
+          validation_status: string
         }
         Insert: {
           bank_id?: string | null
+          ca_applicable_date?: string | null
+          ca_cutoff_date?: string | null
+          ca_expiry_date?: string | null
+          ca_is_stale?: boolean
+          ca_primary_source?: string | null
+          ca_source_date?: string | null
+          ca_stale_flagged_at?: string | null
           category?: string | null
           content_owner?: string | null
           copyright_status?: string | null
@@ -5523,14 +5947,18 @@ export type Database = {
           cross_functional?: boolean
           difficulty?: string | null
           downvotes?: number | null
+          duplicate_algorithm_version?: string | null
           eligible_roles?: string[]
           exam_type?: string | null
           explanation?: string | null
           explanation_blocks?: Json | null
           explanation_html?: string | null
+          generation_method?: string | null
+          generator_version?: string | null
           has_image?: boolean | null
           id?: string
           image_url?: string | null
+          is_current_affairs?: boolean
           is_public?: boolean | null
           is_verified?: boolean | null
           latex_present?: boolean | null
@@ -5542,6 +5970,8 @@ export type Database = {
           option_blocks?: Json | null
           options?: Json | null
           publish_status?: string
+          quality_algorithm_version?: string | null
+          quality_score?: number | null
           question_blocks?: Json | null
           question_html?: string | null
           question_text: string
@@ -5549,6 +5979,9 @@ export type Database = {
           review_status?: string
           source?: string | null
           source_paper?: string | null
+          source_question_id?: string | null
+          source_template?: string | null
+          source_type?: string | null
           source_year?: number | null
           subject: string
           subtopic?: string | null
@@ -5558,9 +5991,18 @@ export type Database = {
           updated_at?: string | null
           uploaded_by?: string | null
           upvotes?: number | null
+          validation_errors?: Json
+          validation_status?: string
         }
         Update: {
           bank_id?: string | null
+          ca_applicable_date?: string | null
+          ca_cutoff_date?: string | null
+          ca_expiry_date?: string | null
+          ca_is_stale?: boolean
+          ca_primary_source?: string | null
+          ca_source_date?: string | null
+          ca_stale_flagged_at?: string | null
           category?: string | null
           content_owner?: string | null
           copyright_status?: string | null
@@ -5570,14 +6012,18 @@ export type Database = {
           cross_functional?: boolean
           difficulty?: string | null
           downvotes?: number | null
+          duplicate_algorithm_version?: string | null
           eligible_roles?: string[]
           exam_type?: string | null
           explanation?: string | null
           explanation_blocks?: Json | null
           explanation_html?: string | null
+          generation_method?: string | null
+          generator_version?: string | null
           has_image?: boolean | null
           id?: string
           image_url?: string | null
+          is_current_affairs?: boolean
           is_public?: boolean | null
           is_verified?: boolean | null
           latex_present?: boolean | null
@@ -5589,6 +6035,8 @@ export type Database = {
           option_blocks?: Json | null
           options?: Json | null
           publish_status?: string
+          quality_algorithm_version?: string | null
+          quality_score?: number | null
           question_blocks?: Json | null
           question_html?: string | null
           question_text?: string
@@ -5596,6 +6044,9 @@ export type Database = {
           review_status?: string
           source?: string | null
           source_paper?: string | null
+          source_question_id?: string | null
+          source_template?: string | null
+          source_type?: string | null
           source_year?: number | null
           subject?: string
           subtopic?: string | null
@@ -5605,8 +6056,25 @@ export type Database = {
           updated_at?: string | null
           uploaded_by?: string | null
           upvotes?: number | null
+          validation_errors?: Json
+          validation_status?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "questions_source_question_id_fkey"
+            columns: ["source_question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "questions_source_question_id_fkey"
+            columns: ["source_question_id"]
+            isOneToOne: false
+            referencedRelation: "questions_playable"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       quiz_progress: {
         Row: {
@@ -6117,6 +6585,7 @@ export type Database = {
           salary_range: string | null
           stage: string
           status: string
+          timezone: string | null
           updated_at: string
           user_id: string
         }
@@ -6138,6 +6607,7 @@ export type Database = {
           salary_range?: string | null
           stage?: string
           status?: string
+          timezone?: string | null
           updated_at?: string
           user_id: string
         }
@@ -6159,6 +6629,7 @@ export type Database = {
           salary_range?: string | null
           stage?: string
           status?: string
+          timezone?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -6530,9 +7001,12 @@ export type Database = {
           offset_ms: number | null
           sentiment: string | null
           sentiment_score: number | null
+          sequence: number | null
           session_id: string
           speaker: string
+          timestamp_ms: number | null
           user_id: string
+          utterances: Json | null
           wpm: number | null
         }
         Insert: {
@@ -6547,9 +7021,12 @@ export type Database = {
           offset_ms?: number | null
           sentiment?: string | null
           sentiment_score?: number | null
+          sequence?: number | null
           session_id: string
           speaker?: string
+          timestamp_ms?: number | null
           user_id: string
+          utterances?: Json | null
           wpm?: number | null
         }
         Update: {
@@ -6564,9 +7041,12 @@ export type Database = {
           offset_ms?: number | null
           sentiment?: string | null
           sentiment_score?: number | null
+          sequence?: number | null
           session_id?: string
           speaker?: string
+          timestamp_ms?: number | null
           user_id?: string
+          utterances?: Json | null
           wpm?: number | null
         }
         Relationships: [
@@ -6597,11 +7077,9 @@ export type Database = {
           credits_used: number | null
           deleted_at: string | null
           document_id: string | null
+          duration_seconds: number | null
           ended_at: string | null
           expires_at: string | null
-          terminal_reason: string | null
-          duration_seconds: number | null
-          start_idempotency_key: string | null
           filler_words: number | null
           hints_used: number | null
           id: string
@@ -6615,9 +7093,11 @@ export type Database = {
           questions_asked: number | null
           session_type: string | null
           source_type: string | null
+          start_idempotency_key: string | null
           started_at: string | null
           status: Database["public"]["Enums"]["session_status"]
           tags: string[] | null
+          terminal_reason: string | null
           title: string | null
           type: Database["public"]["Enums"]["session_type"]
           updated_at: string
@@ -6633,11 +7113,9 @@ export type Database = {
           credits_used?: number | null
           deleted_at?: string | null
           document_id?: string | null
+          duration_seconds?: number | null
           ended_at?: string | null
           expires_at?: string | null
-          terminal_reason?: string | null
-          duration_seconds?: number | null
-          start_idempotency_key?: string | null
           filler_words?: number | null
           hints_used?: number | null
           id?: string
@@ -6651,9 +7129,11 @@ export type Database = {
           questions_asked?: number | null
           session_type?: string | null
           source_type?: string | null
+          start_idempotency_key?: string | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["session_status"]
           tags?: string[] | null
+          terminal_reason?: string | null
           title?: string | null
           type?: Database["public"]["Enums"]["session_type"]
           updated_at?: string
@@ -6669,11 +7149,9 @@ export type Database = {
           credits_used?: number | null
           deleted_at?: string | null
           document_id?: string | null
+          duration_seconds?: number | null
           ended_at?: string | null
           expires_at?: string | null
-          terminal_reason?: string | null
-          duration_seconds?: number | null
-          start_idempotency_key?: string | null
           filler_words?: number | null
           hints_used?: number | null
           id?: string
@@ -6687,9 +7165,11 @@ export type Database = {
           questions_asked?: number | null
           session_type?: string | null
           source_type?: string | null
+          start_idempotency_key?: string | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["session_status"]
           tags?: string[] | null
+          terminal_reason?: string | null
           title?: string | null
           type?: Database["public"]["Enums"]["session_type"]
           updated_at?: string
@@ -7155,8 +7635,8 @@ export type Database = {
       }
       test_responses: {
         Row: {
+          answer_version: number
           answered_at: string | null
-          answer_version: number | null
           client_updated_at: string | null
           created_at: string | null
           id: string
@@ -7171,8 +7651,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          answer_version?: number
           answered_at?: string | null
-          answer_version?: number | null
           client_updated_at?: string | null
           created_at?: string | null
           id?: string
@@ -7187,8 +7667,8 @@ export type Database = {
           user_id: string
         }
         Update: {
+          answer_version?: number
           answered_at?: string | null
-          answer_version?: number | null
           client_updated_at?: string | null
           created_at?: string | null
           id?: string
@@ -7605,6 +8085,61 @@ export type Database = {
         }
         Relationships: []
       }
+      gov_paper_questions_playable: {
+        Row: {
+          id: string | null
+          paper_id: string | null
+          question_id: string | null
+          question_source_type: string | null
+          section_code: string | null
+          snapshot_json: Json | null
+          sort_order: number | null
+          source_class: string | null
+        }
+        Insert: {
+          id?: string | null
+          paper_id?: string | null
+          question_id?: string | null
+          question_source_type?: string | null
+          section_code?: string | null
+          snapshot_json?: never
+          sort_order?: number | null
+          source_class?: string | null
+        }
+        Update: {
+          id?: string | null
+          paper_id?: string | null
+          question_id?: string | null
+          question_source_type?: string | null
+          section_code?: string | null
+          snapshot_json?: never
+          sort_order?: number | null
+          source_class?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gov_generated_paper_questions_paper_id_fkey"
+            columns: ["paper_id"]
+            isOneToOne: false
+            referencedRelation: "gov_generated_papers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gov_generated_paper_questions_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gov_generated_paper_questions_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions_playable"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       questions_playable: {
         Row: {
           category: string | null
@@ -7623,9 +8158,6 @@ export type Database = {
           question_html: string | null
           question_text: string | null
           question_type: string | null
-          source: string | null
-          source_paper: string | null
-          source_year: number | null
           subject: string | null
           subtopic: string | null
           tags: string[] | null
@@ -7650,9 +8182,6 @@ export type Database = {
           question_html?: string | null
           question_text?: string | null
           question_type?: string | null
-          source?: string | null
-          source_paper?: string | null
-          source_year?: number | null
           subject?: string | null
           subtopic?: string | null
           tags?: string[] | null
@@ -7677,27 +8206,12 @@ export type Database = {
           question_html?: string | null
           question_text?: string | null
           question_type?: string | null
-          source?: string | null
-          source_paper?: string | null
-          source_year?: number | null
           subject?: string | null
           subtopic?: string | null
           tags?: string[] | null
           time_limit_seconds?: number | null
           topic?: string | null
           uploaded_by?: string | null
-        }
-        Relationships: []
-      }
-      gov_paper_questions_playable: {
-        Row: {
-          id: string | null
-          paper_id: string | null
-          question_id: string | null
-          section_code: string | null
-          snapshot_json: Json | null
-          sort_order: number | null
-          source_class: string | null
         }
         Relationships: []
       }
@@ -7713,10 +8227,29 @@ export type Database = {
         }
         Returns: number
       }
-      assemble_assessment_from_template: {
-        Args: { p_idempotency_key?: string; p_template_id: string }
+      apply_razorpay_refund: {
+        Args: {
+          p_credits_granted: number
+          p_order_id: string
+          p_refund_key: string
+        }
         Returns: Json
       }
+      assemble_assessment_from_template:
+        | { Args: { p_template_id: string }; Returns: Json }
+        | {
+            Args: { p_idempotency_key?: string; p_template_id: string }
+            Returns: Json
+          }
+      assert_owned_session_rpc: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
+      assessment_default_roles: {
+        Args: { p_category: string }
+        Returns: string[]
+      }
+      assessment_option_labels: { Args: { p_options: Json }; Returns: string[] }
       bulk_update_users: {
         Args: { p_patch: Json; p_user_ids: string[] }
         Returns: number
@@ -7725,74 +8258,7 @@ export type Database = {
         Args: { p_action: string; p_user_id: string }
         Returns: Json
       }
-      session_start_eligibility: {
-        Args: { p_user_id: string }
-        Returns: Json
-      }
-      start_owned_session: {
-        Args: {
-          p_user_id: string
-          p_type: string
-          p_title?: string | null
-          p_document_id?: string | null
-          p_jd_id?: string | null
-          p_model_used?: string | null
-          p_tags?: string[] | null
-          p_practice_context_id?: string | null
-          p_source_type?: string | null
-          p_duration_minutes?: number
-          p_idempotency_key?: string | null
-        }
-        Returns: Json
-      }
-      start_owned_mock_test: {
-        Args: { p_test_id: string }
-        Returns: Json
-      }
-      save_owned_test_answer: {
-        Args: {
-          p_test_id: string
-          p_question_id: string
-          p_user_answer: string | null
-          p_is_attempted: boolean
-          p_is_marked_review: boolean
-          p_time_spent_seconds: number
-          p_client_updated_at: string
-        }
-        Returns: Json
-      }
-      end_owned_session: {
-        Args: {
-          p_user_id: string
-          p_session_id: string
-          p_terminal_reason?: string
-          p_lifecycle_status?: string | null
-        }
-        Returns: Json
-      }
-      get_owned_session_detail: {
-        Args: { p_session_id: string }
-        Returns: Json
-      }
-      finalize_owned_session: {
-        Args: {
-          p_user_id: string
-          p_session_id: string
-          p_terminal_reason?: string
-          p_answers?: Json
-          p_transcript?: Json | null
-          p_metrics?: Json
-        }
-        Returns: Json
-      }
-      restore_owned_session: {
-        Args: {
-          p_user_id: string
-          p_session_id?: string | null
-          p_type?: string | null
-        }
-        Returns: Json
-      }
+      check_is_domain_allowed: { Args: { p_domain: string }; Returns: boolean }
       check_rate_limit: {
         Args: { p_key: string; p_limit: number; p_window_ms: number }
         Returns: {
@@ -7821,7 +8287,15 @@ export type Database = {
         }
         Returns: Json
       }
+      claim_document_processing_job: {
+        Args: { p_lease_seconds?: number; p_worker_id: string }
+        Returns: Json
+      }
       cleanup_expired_documents: { Args: never; Returns: number }
+      clear_google_refresh_token: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
       coding_hidden_cases_for_scoring: {
         Args: { p_question_id: string }
         Returns: {
@@ -7833,8 +8307,37 @@ export type Database = {
           weight: number
         }[]
       }
+      complete_learning_lesson: { Args: { p_lesson_id: string }; Returns: Json }
+      complete_onboarding: {
+        Args: {
+          p_audio_input_device?: string
+          p_experience_level: string
+          p_experience_years?: number
+          p_improvement_goals?: string[]
+          p_industry?: string
+          p_interview_date?: string
+          p_notification_prefs?: Json
+          p_preferred_model?: string
+          p_target_role: string
+        }
+        Returns: undefined
+      }
       compute_gov_bank_readiness_status: {
         Args: { p_approved_count: number; p_required: number }
+        Returns: string
+      }
+      count_gov_exam_eligible_questions: {
+        Args: {
+          p_difficulty?: string
+          p_exam_id: string
+          p_language?: string
+          p_source_policy?: string
+          p_topics?: string[]
+        }
+        Returns: Json
+      }
+      create_own_in_app_notification: {
+        Args: { p_body?: string; p_title: string }
         Returns: string
       }
       create_test_atomic: {
@@ -7854,17 +8357,40 @@ export type Database = {
       }
       deduct_credits_service: {
         Args: {
-          p_user_id: string
           p_action: string
           p_cost: number
-          p_session_id?: string
           p_idempotency_key?: string
           p_request_hash?: string
+          p_session_id?: string
+          p_user_id: string
         }
         Returns: Json
       }
       delete_expired_session_data: { Args: never; Returns: Json }
+      demote_admin: { Args: { p_user_id: string }; Returns: undefined }
+      end_owned_session: {
+        Args: {
+          p_lifecycle_status?: string
+          p_session_id: string
+          p_terminal_reason?: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       ensure_my_referral_code: { Args: never; Returns: string }
+      finalize_gov_paper_credits: { Args: { p_job_id: string }; Returns: Json }
+      finalize_owned_session: {
+        Args: {
+          p_answers?: Json
+          p_metrics?: Json
+          p_session_id: string
+          p_terminal_reason?: string
+          p_transcript?: Json
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      flag_stale_current_affairs: { Args: never; Returns: number }
       get_admin_dau_mau: {
         Args: { p_days?: number }
         Returns: {
@@ -7885,6 +8411,7 @@ export type Database = {
           p99_ms: number
         }[]
       }
+      get_google_refresh_token: { Args: { p_user_id: string }; Returns: Json }
       get_gov_exam_bank_readiness: {
         Args: { p_exam_id?: string }
         Returns: {
@@ -7904,10 +8431,6 @@ export type Database = {
           status: string
         }[]
       }
-      get_spendable_credits: {
-        Args: { p_user_id: string }
-        Returns: Json
-      }
       get_my_referrals: {
         Args: never
         Returns: {
@@ -7920,6 +8443,18 @@ export type Database = {
           rewarded_at: string
           signed_up_at: string
           status: Database["public"]["Enums"]["referral_status"]
+        }[]
+      }
+      get_onboarding_state: { Args: never; Returns: string }
+      get_owned_session_detail: {
+        Args: { p_session_id: string }
+        Returns: Json
+      }
+      get_public_feature_flags: {
+        Args: never
+        Returns: {
+          is_enabled: boolean
+          key: string
         }[]
       }
       get_shared_debrief: {
@@ -7975,6 +8510,15 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      get_spendable_credits: { Args: { p_user_id: string }; Returns: Json }
+      has_google_calendar_grant: {
+        Args: { p_user_id: string }
+        Returns: boolean
+      }
+      has_own_role: {
+        Args: { _role: Database["public"]["Enums"]["app_role"] }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -7982,78 +8526,58 @@ export type Database = {
         }
         Returns: boolean
       }
-      has_own_role: {
+      heartbeat_document_processing_job: {
         Args: {
-          _role: Database["public"]["Enums"]["app_role"]
+          p_job_id: string
+          p_lease_seconds?: number
+          p_worker_id: string
         }
         Returns: boolean
-      }
-      claim_document_processing_job: {
-        Args: { p_lease_seconds?: number; p_worker_id: string }
-        Returns: Json
-      }
-      heartbeat_document_processing_job: {
-        Args: { p_job_id: string; p_lease_seconds?: number; p_worker_id: string }
-        Returns: Json
       }
       increment_profile_credits: {
         Args: { p_credits: number; p_customer_id: string; p_user_id: string }
         Returns: undefined
       }
       is_admin: { Args: never; Returns: boolean }
-      is_moderator: { Args: never; Returns: boolean }
-      get_public_feature_flags: {
-        Args: never
-        Returns: { key: string; is_enabled: boolean }[]
+      is_frontend_only_category: {
+        Args: { p_category: string }
+        Returns: boolean
       }
-      demote_admin: { Args: { p_user_id: string }; Returns: undefined }
+      is_moderator: { Args: never; Returns: boolean }
+      is_service_role_request: { Args: never; Returns: boolean }
       issue_course_certificate: { Args: { p_course_id: string }; Returns: Json }
-      complete_learning_lesson: { Args: { p_lesson_id: string }; Returns: Json }
       mark_notifications_read: {
         Args: { p_user_id: string }
         Returns: undefined
       }
-      create_own_in_app_notification: {
-        Args: { p_title: string; p_body?: string | null }
-        Returns: string
-      }
-      record_practice_activity: {
-        Args: { p_user_id?: string | null }
-        Returns: Json
-      }
-      apply_razorpay_refund: {
-        Args: { p_order_id: string; p_refund_key: string; p_credits_granted: number }
-        Returns: Json
-      }
       mask_email: { Args: { p_email: string }; Returns: string }
+      normalize_company_name: { Args: { p_name: string }; Returns: string }
       plan_monthly_credits: { Args: { p_plan: string }; Returns: number }
       profiles_own_update_allowed: {
         Args: { proposed: Database["public"]["Tables"]["profiles"]["Row"] }
         Returns: boolean
       }
       purge_expired_idempotency_log: { Args: never; Returns: number }
+      question_is_assessment_ready: {
+        Args: { q: Database["public"]["Tables"]["questions"]["Row"] }
+        Returns: boolean
+      }
+      question_matches_template_taxonomy: {
+        Args: {
+          p_categories: string[]
+          p_slug: string
+          p_strict: boolean
+          q: Database["public"]["Tables"]["questions"]["Row"]
+        }
+        Returns: boolean
+      }
+      raise_assessment_start_error: {
+        Args: { p_code: string; p_hint?: Json; p_message: string }
+        Returns: undefined
+      }
+      record_practice_activity: { Args: { p_user_id?: string }; Returns: Json }
       record_referral_reward: {
         Args: { p_referral_code: string; p_referred_id: string }
-        Returns: Json
-      }
-      refund_document_processing_job: {
-        Args: { p_job_id: string; p_reason?: string }
-        Returns: Json
-      }
-      settle_document_processing_job: {
-        Args: { p_job_id: string }
-        Returns: Json
-      }
-      transition_document_processing_job: {
-        Args: {
-          p_error_code?: string
-          p_error_message?: string
-          p_error_stage?: string
-          p_job_id: string
-          p_result_reference?: string
-          p_status: string
-          p_warnings?: Json
-        }
         Returns: Json
       }
       refund_credits: {
@@ -8065,21 +8589,87 @@ export type Database = {
         }
         Returns: Json
       }
-      reserve_gov_paper_credits: {
-        Args: {
-          p_job_id: string
-          p_user_id: string
-          p_cost: number
-          p_idempotency_key: string
-        }
-        Returns: Json
-      }
-      finalize_gov_paper_credits: {
-        Args: { p_job_id: string }
+      refund_document_processing_job: {
+        Args: { p_job_id: string; p_reason?: string }
         Returns: Json
       }
       release_gov_paper_credits: {
         Args: { p_job_id: string; p_reason?: string }
+        Returns: Json
+      }
+      reserve_gov_paper_credits: {
+        Args: {
+          p_cost: number
+          p_idempotency_key: string
+          p_job_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      resolve_gov_exam_bank_type_keys: {
+        Args: { p_exam_id: string }
+        Returns: string[]
+      }
+      restore_owned_session: {
+        Args: { p_session_id?: string; p_type?: string; p_user_id: string }
+        Returns: Json
+      }
+      save_owned_test_answer: {
+        Args: {
+          p_client_updated_at: string
+          p_is_attempted: boolean
+          p_is_marked_review: boolean
+          p_question_id: string
+          p_test_id: string
+          p_time_spent_seconds: number
+          p_user_answer: string
+        }
+        Returns: Json
+      }
+      session_duration_seconds: {
+        Args: { p_ended_at: string; p_started_at: string }
+        Returns: number
+      }
+      session_start_eligibility: { Args: { p_user_id: string }; Returns: Json }
+      session_utc_day_start: { Args: { p_now?: string }; Returns: string }
+      settle_document_processing_job: {
+        Args: { p_job_id: string }
+        Returns: Json
+      }
+      start_owned_mock_test: { Args: { p_test_id: string }; Returns: Json }
+      start_owned_session: {
+        Args: {
+          p_document_id?: string
+          p_duration_minutes?: number
+          p_idempotency_key?: string
+          p_jd_id?: string
+          p_model_used?: string
+          p_practice_context_id?: string
+          p_source_type?: string
+          p_tags?: string[]
+          p_title?: string
+          p_type: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      terminate_stuck_gov_paper_jobs: {
+        Args: { p_max_age_minutes?: number }
+        Returns: number
+      }
+      transition_document_processing_job: {
+        Args: {
+          p_backoff_seconds?: number
+          p_error_code?: string
+          p_error_message?: string
+          p_job_id: string
+          p_result_reference?: string
+          p_retryable?: boolean
+          p_stage?: string
+          p_status: string
+          p_warnings?: Json
+          p_worker_id: string
+        }
         Returns: Json
       }
       update_topic_performance: {
@@ -8093,23 +8683,9 @@ export type Database = {
         }
         Returns: undefined
       }
-      complete_onboarding: {
-        Args: {
-          p_target_role: string
-          p_experience_level: string
-          p_preferred_model?: string | null
-          p_experience_years?: number | null
-          p_notification_prefs?: Json | null
-          p_audio_input_device?: string | null
-          p_industry?: string | null
-          p_interview_date?: string | null
-          p_improvement_goals?: string[] | null
-        }
+      upsert_google_refresh_token: {
+        Args: { p_refresh_token: string; p_user_id: string }
         Returns: undefined
-      }
-      get_onboarding_state: {
-        Args: Record<PropertyKey, never>
-        Returns: string
       }
       verify_course_certificate: { Args: { p_code: string }; Returns: Json }
     }

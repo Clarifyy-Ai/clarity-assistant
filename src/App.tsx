@@ -333,6 +333,9 @@ const AdminGovPaperFactory = lazy(
 const AdminGovTranslationReview = lazy(
   () => import("@/pages/app/admin/AdminGovTranslationReview"),
 );
+const AdminGovAutoApproval = lazy(
+  () => import("@/pages/app/admin/AdminGovAutoApproval"),
+);
 const AdminLayout = lazy(() => import("@/pages/app/admin/AdminLayout"));
 const Scorecard = lazy(() => import("@/pages/Scorecard"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
@@ -1001,6 +1004,10 @@ const routes = [
           {
             path: "gov/translations",
             element: <Page component={AdminGovTranslationReview} />,
+          },
+          {
+            path: "gov/auto-approval",
+            element: <Page component={AdminGovAutoApproval} />,
           },
           { path: "community", element: <Page component={AdminCommunity} /> },
           { path: "learning", element: <Page component={AdminLearning} /> },

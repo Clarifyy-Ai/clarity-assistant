@@ -32,6 +32,13 @@ import {
   scorePaperQuality,
   scoreQuestionQuality,
 } from "./govQualityScore.ts";
+import {
+  evaluateAutoApproval,
+  parseRuleRow,
+  buildIdempotencyKey,
+  DEFAULT_PAPER_RULE,
+  type PaperValidationInput,
+} from "./govAutoApproval.ts";
 import { clampGovQuestionCount, GOV_QUESTION_COUNT_ABS_MAX } from "./govQuestionCount.ts";
 import { DEDUP_ALGORITHM_VERSION } from "./algorithmCatalog.ts";
 import {
@@ -1271,6 +1278,68 @@ export async function assembleClaimedPaperJob(
 
     if (linkRows.length) {
       await db.from("gov_generated_paper_questions").insert(linkRows);
+    }
+
+    // Auto-approval rule engine (deterministic; separate APPROVED from PUBLISHED)
+    try {
+      const { data: ruleRow } = await db
+        .from("gov_auto_approval_rules")
+        .select("*")
+        .eq("entity_type", "paper")
+        .order("rule_version", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const rule = ruleRow
+        ? parseRuleRow(ruleRow as Record<string, unknown>)
+        : DEFAULT_PAPER_RULE;
+
+      const paperValidation: PaperValidationInput = {
+        entityType: "paper",
+        paperId: paper.id,
+        sourceType: paperSource,
+        qualityScore: paperQuality.score,
+        qualityHardFail: paperQuality.hardFailCount > 0,
+        hardFailCodes: [],
+        duplicateStatus: "unique",
+        hasProvenance: true,
+        blueprintValid: true,
+        questionCountMatch: questionIds.length >= requestedQuestionCount,
+        sectionQuotasMet: true,
+        topicQuotasMet: true,
+        difficultyValid: true,
+        languageValid: Boolean(blueprint.language),
+        marksValid: blueprint.total_marks > 0,
+        negativeMarkingValid: blueprint.negative_mark >= 0,
+        allQuestionsValidated: paperQuality.hardFailCount === 0,
+        hardFailCount: paperQuality.hardFailCount,
+        reviewQueueLength: reviewQueue.length,
+        examId: job.exam_id,
+        language: blueprint.language,
+        processingJobId: job.id,
+      };
+
+      const evaluation = evaluateAutoApproval(paperValidation, rule);
+      await db.rpc("apply_auto_approval_event", {
+        p_entity_type: "paper",
+        p_entity_id: paper.id,
+        p_outcome: evaluation.outcome,
+        p_approval_mode: evaluation.approvalMode,
+        p_rule_version: evaluation.ruleVersion,
+        p_rule_evaluation: { flags: evaluation.flags, ruleResults: evaluation.ruleResults },
+        p_source_type: evaluation.sourceType,
+        p_quality_score: evaluation.qualityScore,
+        p_duplicate_result: evaluation.duplicateResult,
+        p_provenance: { assembly: aiFilledCount > 0 ? "bank_plus_ai_fill_v1" : "bank_select_v1" },
+        p_processing_job_id: job.id,
+        p_previous_status: evaluation.previousStatus,
+        p_new_status: evaluation.newStatus,
+        p_publish_status: evaluation.publishStatus,
+        p_idempotency_key: buildIdempotencyKey("paper", paper.id, job.id, rule.ruleVersion),
+        p_auto_publish: evaluation.autoPublish,
+      });
+    } catch (aaErr) {
+      console.error("[govPaperAssembly] auto-approval failed (fail-closed):", aaErr);
     }
 
     await db

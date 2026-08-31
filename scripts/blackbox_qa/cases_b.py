@@ -211,20 +211,38 @@ def gov_exam_cases() -> list[dict]:
            "Exam configuration options apply correctly.",
            priority="P0", severity="Critical", account="PRO_USER_01", sub="Configure"),
         tc("TC-GOV-006", "Government Exams", "Availability / approved question count",
-           "1. On availability panel, read approved/available counts.\n2. Attempt generate when count insufficient.\n3. Attempt when sufficient.",
-           "1. Counts visible.\n2. Insufficient blocked with clear message.\n3. Sufficient allows generate.",
-           "Availability gates generation honestly.",
-           priority="P0", severity="Critical", account="PRO_USER_01", sub="Availability"),
+           "1. On Review/availability panel, record the available/approved count.\n"
+           "2. Open Generate for the same exam/config.\n"
+           "3. Compare the available number on Generate with Review.\n"
+           "4. Attempt generate when count insufficient.\n5. Attempt when sufficient.",
+           "1. Counts visible.\n2. Generate screen loads.\n"
+           "3. Review available == Generate available (same snapshot).\n"
+           "4. Insufficient blocked with CONTENT_INSUFFICIENT or clear message — not infinite Generating.\n"
+           "5. Sufficient allows generate.",
+           "Availability gates generation honestly and Review matches Generate.",
+           priority="P0", severity="Critical", account="PRO_USER_01", sub="Availability",
+           notes="Disagreeing Review vs Generate counts is Fail. If Edge 404 mark Blocked BLK-EDGE."),
         tc("TC-GOV-007", "Government Exams", "Full Mock generation",
-           "1. Choose Full Mock mode.\n2. Click Generate.\n3. Wait for completion (note time).\n4. Confirm paper ready to start.",
-           "1. Mode selected.\n2. Generating progress shown.\n3. Completes or clear failure ≤ timeout.\n4. Start enabled with question count > 0.",
+           "1. Note credit balance.\n2. Choose Full Mock mode.\n3. Click Generate once.\n"
+           "4. Wait for completion (note time) or honest failure.\n"
+           "5. If completed, confirm Start Exam is enabled even if count is short of pattern (toast OK).\n"
+           "6. If Edge 404 / never completes, stop and classify Blocked — do not Fail for undeployed stack.",
+           "1. Balance recorded.\n2. Mode selected.\n3. Generating progress shown.\n"
+           "4. Completes or clear failure ≤ timeout (CONTENT_INSUFFICIENT is Pass if bank is short).\n"
+           "5. Start enabled when status=completed and mock_test_id exists.\n"
+           "6. BLK-EDGE / BLK-PY recorded if functions/worker not live.",
            "Full Mock generates a startable paper or fails honestly.",
-           priority="P0", severity="Critical", account="SUFFICIENT_CREDIT_01", sub="Generate"),
+           priority="P0", severity="Critical", account="SUFFICIENT_CREDIT_01", sub="Generate",
+           notes="Credits reserved on create, finalized only when paper exists. Undeployed Edge/Python = Blocked."),
         tc("TC-GOV-008", "Government Exams", "Custom Practice generation",
-           "1. Choose Custom Practice; set question count within allowed min/max.\n2. Generate.\n3. Verify count roughly matches request.",
-           "1. Custom settings accepted.\n2. Generation completes.\n3. Paper size matches config (or explains adjustment).",
+           "1. Choose Custom Practice; set question count within allowed min/max.\n"
+           "2. Generate.\n3. Verify count roughly matches request (Custom may reduce; Full Mock must not clamp this).\n"
+           "4. Confirm paper is startable. This is the P0 live-proof path.",
+           "1. Custom settings accepted.\n2. Generation completes or honest fail.\n"
+           "3. Paper size matches config (or explains adjustment).\n4. Start Exam available.",
            "Custom Practice generation respects configured count.",
-           priority="P0", severity="Critical", account="SUFFICIENT_CREDIT_01", sub="Generate"),
+           priority="P0", severity="Critical", account="SUFFICIENT_CREDIT_01", sub="Generate",
+           notes="Release gate: one completed Custom/Full Mock paper on live URL. Else RELEASE BLOCKED."),
         tc("TC-GOV-009", "Government Exams", "Boundary — below min / above max questions",
            "1. Enter question count below minimum.\n2. Enter above maximum.\n3. Enter zero/empty.",
            "1. Blocked with validation.\n2. Blocked with validation.\n3. Blocked with validation.",
@@ -258,20 +276,29 @@ def gov_exam_cases() -> list[dict]:
            "Marks and negative marking are visible and consistent.",
            priority="P1", severity="Major", account="SUFFICIENT_CREDIT_01", sub="Scoring"),
         tc("TC-GOV-015", "Government Exams", "Timer",
-           "1. Start test; note timer.\n2. Wait or fast-forward if test mode allows; else observe countdown.\n3. On expiry, observe auto-submit/lock behavior.",
-           "1. Timer running.\n2. Decrements.\n3. Expiry handled (auto-submit or lock) — not editable forever.",
+           "1. Start test; note timer and that Start Exam succeeded.\n"
+           "2. Observe countdown (server clock — client must not let you add time).\n"
+           "3. On expiry, observe auto-submit/lock behavior.",
+           "1. Timer running from server started_at/expires_at.\n2. Decrements; refresh does not extend time.\n"
+           "3. Expiry handled (auto-submit or lock) — not editable forever.",
            "Exam timer enforces time boundaries.",
-           priority="P0", severity="Critical", account="SUFFICIENT_CREDIT_01", sub="Runner"),
+           priority="P0", severity="Critical", account="SUFFICIENT_CREDIT_01", sub="Runner",
+           notes="If start-exam 404, Blocked BLK-EDGE."),
         tc("TC-GOV-016", "Government Exams", "Navigation palette",
-           "1. Use question palette to jump.\n2. Mark for review.\n3. Return to marked question.",
-           "1. Jump works.\n2. Marked state visible.\n3. Return works.",
+           "1. Use question palette to jump.\n2. Mark for review.\n3. Return to marked question.\n"
+           "4. Confirm palette states: unanswered / answered / marked / answered+marked / current.",
+           "1. Jump works.\n2. Marked state visible.\n3. Return works.\n4. All five states distinguishable.",
            "Palette navigation and mark-for-review work.",
            priority="P0", severity="Critical", account="SUFFICIENT_CREDIT_01", sub="Runner"),
         tc("TC-GOV-017", "Government Exams", "Answer autosave",
-           "1. Select an answer.\n2. Navigate away to another question and back.\n3. Refresh if safe mid-test and confirm restore guidance.",
-           "1. Answer selected.\n2. Answer retained on navigate.\n3. Refresh either restores answers or warns — document actual.",
+           "1. Select an answer.\n2. Navigate away to another question and back.\n"
+           "3. Mark for review on the same save.\n4. Refresh mid-test and confirm restore.",
+           "1. Answer selected.\n2. Answer retained on navigate.\n"
+           "3. Marked state saved with the answer.\n"
+           "4. Refresh restores answers or warns — never silent loss. Stale save skipped honestly.",
            "Answers autosave across question navigation.",
-           priority="P0", severity="Critical", test_type="Persistence", account="SUFFICIENT_CREDIT_01", sub="Runner"),
+           priority="P0", severity="Critical", test_type="Persistence", account="SUFFICIENT_CREDIT_01", sub="Runner",
+           notes="Versioned save-test-answer. ATTEMPT_EXPIRED / SUBMISSION_CONFLICT must be readable."),
         tc("TC-GOV-018", "Government Exams", "Partial vs final submission",
            "1. Leave some unanswered.\n2. Attempt submit; confirm warning if any.\n3. Final submit.\n4. Confirm cannot quietly resubmit altering score.",
            "1. Partial paper.\n2. Warning or allowed per product rules.\n3. Submitted.\n4. Result stable; no silent double-submit corruption.",
@@ -283,15 +310,25 @@ def gov_exam_cases() -> list[dict]:
            "Results persist across logout/login.",
            priority="P0", severity="Critical", test_type="Persistence", account="SUFFICIENT_CREDIT_01", sub="Results"),
         tc("TC-GOV-020", "Government Exams", "Credits deducted only on success path",
-           "1. Note credit balance.\n2. Generate successfully.\n3. Note new balance.\n4. Force a failed generate; confirm no wrongful deduction if product promises that.",
-           "1. Balance recorded.\n2. Success path.\n3. Deduction matches UI messaging.\n4. Failed generate does not falsely claim credit errors inconsistently.",
-           "Credit behavior around generation is truthful.",
-           priority="P0", severity="Critical", account="SUFFICIENT_CREDIT_01", sub="Credits"),
+           "1. Note credit balance.\n2. Generate successfully; wait until paper exists.\n"
+           "3. Note new balance (finalize only on completed paper).\n"
+           "4. Start a generate then Cancel OR wait for fail; confirm reserved credits return.\n"
+           "5. Failed generate must not show insufficient credits if balance was enough.",
+           "1. Balance recorded.\n2. Success path completes.\n3. Charge matches UI only after paper exists.\n"
+           "4. Fail/cancel releases reservation.\n5. No false credit error.",
+           "Credit behavior around generation is truthful (reserve → finalize / release).",
+           priority="P0", severity="Critical", account="SUFFICIENT_CREDIT_01", sub="Credits",
+           notes="BLK-MIG if reserve RPCs not on live DB."),
         tc("TC-GOV-021", "Government Exams", "Official paper vs realistic mock modes",
-           "1. If both modes exist, run one of each (short custom).\n2. Compare UI labels and resulting paper behavior.",
-           "1. Modes selectable.\n2. Labels match behavior; differences observable or documented in UI.",
-           "Paper modes are distinguishable and functional.",
-           priority="P1", severity="Major", account="SUFFICIENT_CREDIT_01", sub="Modes"),
+           "1. If Official/Previous Year is offered, attempt generate.\n"
+           "2. Confirm fail-closed empty OR licensed PYQ — never AI-written questions labeled Official.\n"
+           "3. Run Realistic or Custom and confirm it is not labeled Official PYQ.",
+           "1. Mode selectable or hidden honestly.\n"
+           "2. Official empty/fail-closed is Pass; AI fill labeled Official is Fail.\n"
+           "3. Realistic/Custom labels match behavior.",
+           "Paper modes are distinguishable; Official is never AI-filled.",
+           priority="P1", severity="Major", account="SUFFICIENT_CREDIT_01", sub="Modes",
+           notes="BLK-BANK is accepted for empty Official AFTER a Custom/Full Mock paper exists."),
         tc("TC-GOV-022", "Government Exams", "My questions / upload / revision / analytics pages",
            f"1. Visit {B}/app/mock-test/my-questions, /upload, /revision, /analytics.\n"
            "2. Perform one smoke action on each (list load / upload UI / revision item / chart).",
@@ -317,7 +354,178 @@ def gov_exam_cases() -> list[dict]:
     return cases
 
 
+def gov_exam_live_cases() -> list[dict]:
+    """P0 live-proof journey. Opening hub ≠ Pass. Tester = Anushka."""
+    blk = (
+        "If Edge 404 / Python worker down / migrations missing: Pass/Fail = Blocked with "
+        "BLK-EDGE, BLK-PY, or BLK-MIG. Do not Fail undeployed stack."
+    )
+    live = [
+        tc("TC-GOV-LIVE-01", "Government Exams", "Hub loads, no infinite Searching…",
+           f"1. Login PRO_USER_01.\n2. Open {B}/app/mock-test.\n3. Wait ≤15s.\n"
+           "4. Type a letter in search; confirm spinner ends.",
+           "1. Auth ok.\n2. Hub renders.\n3. No infinite spinner/blank.\n4. Search idle or results — not stuck Searching…",
+           "Gov hub is usable without infinite search.",
+           priority="P0", severity="Critical", account="PRO_USER_01", sub="Live proof",
+           notes="Runnable now. DEF-001 retest."),
+        tc("TC-GOV-LIVE-02", "Government Exams", "Search valid exam (SSC/IBPS/UPSC alias)",
+           "1. Search a known exam/alias (SSC, IBPS, UPSC if listed).\n2. Select a result.\n3. Open exam detail.",
+           "1. Suggestions appear (latest-wins; no stale overwrite).\n2. Selection sticks.\n3. Detail loads.",
+           "Valid exam search returns a selectable exam.",
+           priority="P0", severity="Critical", account="PRO_USER_01", sub="Live proof"),
+        tc("TC-GOV-LIVE-03", "Government Exams", "Nonsense search empty, no crash",
+           "1. Search 'zzzz-not-an-exam-qqq'.\n2. Observe empty state.",
+           "1. Query entered.\n2. Empty/no-result; no crash; no random exam auto-selected.",
+           "Nonsense search is safe.",
+           priority="P1", severity="Major", test_type="Negative", account="PRO_USER_01", sub="Live proof"),
+        tc("TC-GOV-LIVE-04", "Government Exams", "Detail + pattern + syllabus",
+           "1. Open exam detail.\n2. Confirm pattern (sections/marks) visible.\n"
+           "3. Confirm syllabus OR honest SYLLABUS_NOT_AVAILABLE (no charge).",
+           "1. Detail loads.\n2. Pattern shown.\n3. Syllabus present or honest unavailable — not a silent charge.",
+           "Pattern/syllabus are honest.",
+           priority="P0", severity="Critical", account="PRO_USER_01", sub="Live proof"),
+        tc("TC-GOV-LIVE-05", "Government Exams", "Review availability == Generate availability",
+           "1. Record available count on Review.\n2. Open Generate for same config.\n3. Compare numbers.",
+           "1. Review number recorded.\n2. Generate loads.\n3. Same available count. Disagree = Fail.",
+           "Review and Generate share one availability snapshot.",
+           priority="P0", severity="Critical", account="PRO_USER_01", sub="Live proof",
+           notes=blk),
+        tc("TC-GOV-LIVE-06", "Government Exams", "Custom Practice generate → completed paper",
+           "1. Note credits.\n2. Custom Practice within min/max.\n3. Generate once.\n"
+           "4. Wait until completed with mock_test_id.\n5. Start Exam.",
+           "1. Balance recorded.\n2. Config accepted.\n3. Progress shown.\n"
+           "4. Terminal completed (not infinite Generating).\n5. Runner opens.",
+           "P0 release gate: a real Custom Practice paper exists on the live URL.",
+           priority="P0", severity="Critical", account="SUFFICIENT_CREDIT_01", sub="Live proof",
+           notes="GO requires this Pass (or Full Mock equivalent). " + blk),
+        tc("TC-GOV-LIVE-07", "Government Exams", "Full Mock startable or honest CONTENT_INSUFFICIENT",
+           "1. Choose Full Mock.\n2. Generate.\n3. If bank short, confirm fail-closed message.\n"
+           "4. If completed, Start Exam works even if count is short of pattern (toast OK).",
+           "1. Mode selected.\n2. Job runs.\n3. Honest CONTENT_INSUFFICIENT is Pass.\n"
+           "4. Infinite Generating is Fail. Completed+short still startable.",
+           "Full Mock does not trap the user.",
+           priority="P0", severity="Critical", account="SUFFICIENT_CREDIT_01", sub="Live proof",
+           notes=blk),
+        tc("TC-GOV-LIVE-08", "Government Exams", "Official/PYQ fail-closed, never AI-labeled Official",
+           "1. Choose Official / Previous Year if offered.\n2. Generate or observe empty.\n"
+           "3. Confirm questions are not AI-written labeled Official.",
+           "1. Mode visible or hidden honestly.\n2. Empty/fail-closed OR licensed PYQ.\n"
+           "3. AI fill labeled Official = Fail.",
+           "Official stays fail-closed.",
+           priority="P0", severity="Critical", test_type="Negative", account="SUFFICIENT_CREDIT_01",
+           sub="Live proof", notes="BLK-BANK accepted only AFTER LIVE-06 Pass."),
+        tc("TC-GOV-LIVE-09", "Government Exams", "Duplicate Generate = one job, no double charge",
+           "1. Note credits.\n2. Click Generate.\n3. Immediately click Generate again.\n4. Observe jobs and credits.",
+           "1. Baseline.\n2. First job starts.\n3. Second click does not create a second reservation.\n"
+           "4. One in-flight paper or 409 replay.",
+           "Duplicate Generate is safe.",
+           priority="P0", severity="Critical", test_type="Negative", account="SUFFICIENT_CREDIT_01",
+           sub="Live proof", notes=blk),
+        tc("TC-GOV-LIVE-10", "Government Exams", "Refresh during Generating = restore, not trap",
+           "1. Start Generate.\n2. Refresh while Generating.\n3. Confirm restore or truthful fail/retry — not infinite Generating.",
+           "1. In-flight.\n2. Refresh.\n3. Recoverable truthful status.",
+           "Refresh does not trap generation.",
+           priority="P0", severity="Critical", test_type="Negative", account="SUFFICIENT_CREDIT_01",
+           sub="Live proof", notes=blk),
+        tc("TC-GOV-LIVE-11", "Government Exams", "Retry after fail; no false insufficient-credits",
+           "1. If job fails (or after cancel), read error.\n2. Click Retry.\n3. Confirm credit message matches real balance.",
+           "1. Clear failure.\n2. Retry re-attempts.\n3. No false insufficient credits.",
+           "Failures are retryable and truthful.",
+           priority="P0", severity="Critical", test_type="Negative", account="SUFFICIENT_CREDIT_01",
+           sub="Live proof", notes=blk),
+        tc("TC-GOV-LIVE-12", "Government Exams", "Failed/cancelled generate refunds reserved credits",
+           "1. Note balance.\n2. Start generate then Cancel, or wait for fail.\n3. Refresh balance.",
+           "1. Baseline.\n2. Cancel/fail terminal.\n3. Reserved credits released — balance restored.",
+           "Fail/cancel releases reservation.",
+           priority="P0", severity="Critical", account="SUFFICIENT_CREDIT_01", sub="Live proof",
+           notes=blk),
+        tc("TC-GOV-LIVE-13", "Government Exams", "Successful generate finalizes credits only when paper exists",
+           "1. Note balance.\n2. Complete a paper (LIVE-06).\n3. Confirm deduction happens after completed+mock_test_id, not at click.",
+           "1. Baseline.\n2. Paper exists.\n3. Charge matches UI only on success path.",
+           "Credits finalize only on completed paper.",
+           priority="P0", severity="Critical", account="SUFFICIENT_CREDIT_01", sub="Live proof",
+           notes=blk),
+        tc("TC-GOV-LIVE-14", "Government Exams", "Start Exam uses server timer",
+           "1. Start Exam on a completed paper.\n2. Note timer.\n3. Refresh.\n4. Confirm time did not reset/extend.",
+           "1. Runner starts.\n2. Countdown visible.\n3. Refresh.\n4. Server started_at/expires_at honored.",
+           "Client cannot forever-extend the exam clock.",
+           priority="P0", severity="Critical", account="SUFFICIENT_CREDIT_01", sub="Live proof",
+           notes="start-exam 404 = BLK-EDGE."),
+        tc("TC-GOV-LIVE-15", "Government Exams", "Palette states",
+           "1. Leave one unanswered.\n2. Answer one.\n3. Mark one unanswered.\n4. Answer+mark one.\n5. Observe current highlight.",
+           "1–5. Palette shows unanswered / answered / marked / answered+marked / current.",
+           "Palette states are complete and visible.",
+           priority="P0", severity="Critical", account="SUFFICIENT_CREDIT_01", sub="Live proof"),
+        tc("TC-GOV-LIVE-16", "Government Exams", "Autosave + mark-for-review persist",
+           "1. Answer Q1 and mark for review.\n2. Jump to Q2 and back.\n3. Refresh.\n4. Confirm answer + marked restored.",
+           "1. Saved.\n2. Retained on navigate.\n3. Refresh.\n4. Both answer and mark persist (or honest warning).",
+           "Autosave and mark-for-review survive navigate and refresh.",
+           priority="P0", severity="Critical", test_type="Persistence", account="SUFFICIENT_CREDIT_01",
+           sub="Live proof", notes="BLK-EDGE if save-test-answer missing."),
+        tc("TC-GOV-LIVE-17", "Government Exams", "Submit + expiry + no corrupt double-submit",
+           "1. Leave some unanswered.\n2. Submit (warning OK).\n3. Try submit again.\n"
+           "4. On a second attempt, let timer expire if a short paper exists.",
+           "1. Partial paper.\n2. Submitted; score shown.\n3. Second submit does not change score.\n"
+           "4. Expiry auto-submits or locks.",
+           "Submit is stable; expiry is enforced.",
+           priority="P0", severity="Critical", account="SUFFICIENT_CREDIT_01", sub="Live proof"),
+        tc("TC-GOV-LIVE-18", "Government Exams", "Result in history after logout/login",
+           "1. After submit, open results.\n2. Logout.\n3. Login same user.\n4. Open history/results.",
+           "1. Score visible.\n2. Logged out.\n3. Re-auth.\n4. Same result still available to owner.",
+           "Results persist across sessions.",
+           priority="P0", severity="Critical", test_type="Persistence", account="SUFFICIENT_CREDIT_01",
+           sub="Live proof"),
+        tc("TC-GOV-LIVE-19", "Government Exams", "USER_B cannot open USER_A paper/result URL",
+           "1. As USER_A copy results or session URL.\n2. Login USER_B.\n3. Paste URL.",
+           "1. A has URL.\n2. B session.\n3. Denied/not found — no A questions or scores.",
+           "Gov papers/results are owner-isolated.",
+           priority="P0", severity="Critical", test_type="Security", account="USER_A_01", sub="Live proof"),
+        tc("TC-GOV-LIVE-20", "Government Exams", "Free user plan gate",
+           "1. As FREE_USER_01 open generate for a gated action.\n2. Observe upgrade/gate.",
+           "1. Attempt.\n2. Clear gate — no unauthorized full generate.",
+           "Free users cannot bypass paid gov-exam generate.",
+           priority="P0", severity="Critical", test_type="Security", account="FREE_USER_01", sub="Live proof"),
+        tc("TC-GOV-LIVE-21", "Government Exams", "Zero-credit / low-credit truthful",
+           "1. As ZERO_CREDIT_01 attempt generate.\n2. As LOW_CREDIT_01 (qa.lowcredit@) observe warning.\n"
+           "3. Confirm neither is the past-due account.",
+           "1. Zero blocked with buy/upgrade — not unknown tool.\n2. Low-credit warning if product has threshold.\n"
+           "3. Fixtures are qa.zero@ / qa.lowcredit@ / qa.exactcredit@.",
+           "Credit fixtures are truthful and distinct from past-due.",
+           priority="P0", severity="Critical", test_type="Negative", account="ZERO_CREDIT_01",
+           sub="Live proof", notes="BLK-CRED if fixtures missing."),
+        tc("TC-GOV-LIVE-22", "Government Exams", "AI-down fallback; Official stays fail-closed",
+           "1. If QA lead marks AI-impaired, generate Realistic/Custom.\n"
+           "2. Observe fallback paper OR honest fail.\n3. Official must still fail-closed.",
+           "1. Scenario started.\n2. Not infinite Generating; no false credit error.\n"
+           "3. Official never AI-filled.",
+           "AI-down is honest; Official never uses AI.",
+           priority="P1", severity="Major", test_type="Negative", account="SUFFICIENT_CREDIT_01",
+           sub="Live proof", notes="Coordinate AI-down with QA lead. " + blk),
+        tc("TC-GOV-LIVE-23", "Government Exams", "429/409 during poll stays in-flight",
+           "1. Start Generate.\n2. Watch Network for poll 429/409/5xx.\n"
+           "3. Confirm UI stays Generating (backoff) and is not SESSION_ACTION 20/min trapped.",
+           "1. Job in-flight.\n2. Transient errors observed or documented as not seen.\n"
+           "3. Job recovers or fails honestly — not a 20/min session trap.",
+           "Poll uses JOB_POLL backoff; transient errors stay in-flight.",
+           priority="P0", severity="Critical", test_type="API Observation", account="SUFFICIENT_CREDIT_01",
+           sub="Live proof", notes=blk),
+        tc("TC-GOV-LIVE-24", "Government Exams", "Admin ingest never auto-publishes",
+           f"1. Login ADMIN_USER_01.\n2. Open {B}/app/admin/gov/ingest.\n"
+           "3. Upload a small PDF if allowed.\n4. Confirm queued/needs_review — questions not live on hub.\n"
+           "5. On question-review, APPROVE/REJECT required before publish.",
+           "1. Admin auth.\n2. Ingest UI loads.\n3. 202 queued or honest size limit.\n"
+           "4. OCR/unpublished.\n5. No auto-publish.",
+           "Ingest stays unpublished until review.",
+           priority="P1", severity="Major", account="ADMIN_USER_01", role="admin", sub="Live proof",
+           notes="Heavy PDF 502 with no refund is Fail if credits charged."),
+    ]
+    for c in live:
+        c["Tester"] = "Anushka"
+    return live
+
+
 def ai_coach_cases() -> list[dict]:
+
     return [
         tc("TC-AI-001", "AI Coach / Chatbot", "Open chat",
            "1. From supported surface (overlay/dashboard/support widget), open AI chat.\n2. Confirm input visible.",

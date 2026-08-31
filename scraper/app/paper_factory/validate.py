@@ -430,6 +430,10 @@ class CandidateValidator:
             source_type="ai_generated_practice",
             language=language,
             quality_score=score,
+            python_generated=False,
+            ai_generated=True,
+            generated_practice=True,
+            question_source_type="ai_generated_practice",
         )
         self.register(question)
         return ValidationOutcome(question)

@@ -81,6 +81,10 @@ verify_jwt = false
 [functions.reconcile-paper-quality]
 verify_jwt = true
 
+[functions.evaluate-auto-approval]
+# Auth: x-ingest-key (pipelines) or admin JWT (manual re-evaluation).
+verify_jwt = false
+
 [functions.get-paper-generation-job]
 verify_jwt = true
 

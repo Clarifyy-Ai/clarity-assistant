@@ -14,6 +14,8 @@ export const GOV_EXAM_FAMILIES = [
   "state_psc",
   "defence",
   "teaching",
+  "academic",
+  "professional",
   "other",
 ] as const;
 
