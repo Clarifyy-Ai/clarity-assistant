@@ -22,6 +22,7 @@ import { AdminGovDisclaimer } from "./AdminGovDisclaimer";
 import { QUESTION_EXAM_TYPE_OPTIONS } from "@/lib/mock-test/examTypes";
 import { TRANSLATION_LANGUAGES } from "@/lib/gov-exam/questionTranslations";
 import {
+  adminOverrideQuestion,
   applyQuestionVerifyAction,
   bulkApplyQuestionVerifyAction,
   bulkRequestQuestionTranslation,
@@ -30,11 +31,28 @@ import {
   listVerificationRunway,
   questionMissingSource,
   setQuestionReviewStatus,
+  type AdminOverrideAction,
   type QuestionQueueStatus,
   type QuestionReviewFilterStatus,
   type QuestionReviewRow,
   type VerificationRunwayRow,
 } from "@/lib/gov-exam/adminOps";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+
+const OVERRIDE_LABELS: Record<string, string> = {
+  approve: "Approve",
+  reject: "Reject",
+  send_to_review: "Send to review",
+};
+
 
 const STATUS_OPTIONS: Array<QuestionReviewFilterStatus> = [
   "public_unverified",
