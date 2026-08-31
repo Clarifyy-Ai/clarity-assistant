@@ -2697,6 +2697,138 @@ export type Database = {
         }
         Relationships: []
       }
+      gov_auto_approval_events: {
+        Row: {
+          approval_mode: string | null
+          created_at: string
+          duplicate_result: string | null
+          entity_id: string
+          entity_type: string
+          id: string
+          idempotency_key: string | null
+          new_status: string | null
+          outcome: string
+          paper_id: string | null
+          previous_status: string | null
+          processing_job_id: string | null
+          provenance: Json | null
+          publish_status: string | null
+          quality_score: number | null
+          rule_evaluation: Json
+          rule_version: number | null
+          source_type: string | null
+        }
+        Insert: {
+          approval_mode?: string | null
+          created_at?: string
+          duplicate_result?: string | null
+          entity_id: string
+          entity_type: string
+          id?: string
+          idempotency_key?: string | null
+          new_status?: string | null
+          outcome: string
+          paper_id?: string | null
+          previous_status?: string | null
+          processing_job_id?: string | null
+          provenance?: Json | null
+          publish_status?: string | null
+          quality_score?: number | null
+          rule_evaluation?: Json
+          rule_version?: number | null
+          source_type?: string | null
+        }
+        Update: {
+          approval_mode?: string | null
+          created_at?: string
+          duplicate_result?: string | null
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          idempotency_key?: string | null
+          new_status?: string | null
+          outcome?: string
+          paper_id?: string | null
+          previous_status?: string | null
+          processing_job_id?: string | null
+          provenance?: Json | null
+          publish_status?: string | null
+          quality_score?: number | null
+          rule_evaluation?: Json
+          rule_version?: number | null
+          source_type?: string | null
+        }
+        Relationships: []
+      }
+      gov_auto_approval_rules: {
+        Row: {
+          allow_ai_generated_practice: boolean
+          allow_generated_practice: boolean
+          allow_internal_bank: boolean
+          allow_verified_public: boolean
+          allowed_exam_ids: string[] | null
+          allowed_languages: string[] | null
+          allowed_source_types: string[]
+          auto_publish: boolean
+          created_at: string
+          created_by: string | null
+          duplicate_threshold: number
+          enabled: boolean
+          entity_type: string
+          id: string
+          manual_review_flags: string[]
+          min_quality_score: number
+          notes: string | null
+          require_provenance: boolean
+          rule_version: number
+          updated_at: string
+        }
+        Insert: {
+          allow_ai_generated_practice?: boolean
+          allow_generated_practice?: boolean
+          allow_internal_bank?: boolean
+          allow_verified_public?: boolean
+          allowed_exam_ids?: string[] | null
+          allowed_languages?: string[] | null
+          allowed_source_types?: string[]
+          auto_publish?: boolean
+          created_at?: string
+          created_by?: string | null
+          duplicate_threshold?: number
+          enabled?: boolean
+          entity_type: string
+          id?: string
+          manual_review_flags?: string[]
+          min_quality_score?: number
+          notes?: string | null
+          require_provenance?: boolean
+          rule_version?: number
+          updated_at?: string
+        }
+        Update: {
+          allow_ai_generated_practice?: boolean
+          allow_generated_practice?: boolean
+          allow_internal_bank?: boolean
+          allow_verified_public?: boolean
+          allowed_exam_ids?: string[] | null
+          allowed_languages?: string[] | null
+          allowed_source_types?: string[]
+          auto_publish?: boolean
+          created_at?: string
+          created_by?: string | null
+          duplicate_threshold?: number
+          enabled?: boolean
+          entity_type?: string
+          id?: string
+          manual_review_flags?: string[]
+          min_quality_score?: number
+          notes?: string | null
+          require_provenance?: boolean
+          rule_version?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       gov_domain_allowlist: {
         Row: {
           allow_subdomains: boolean
@@ -3337,6 +3469,7 @@ export type Database = {
       }
       gov_generated_papers: {
         Row: {
+          approval_mode: string | null
           blueprint_json: Json
           created_at: string
           created_by: string | null
@@ -3353,6 +3486,7 @@ export type Database = {
           paper_source: string | null
           pattern_version_id: string | null
           provenance_json: Json
+          publish_status: string
           quality_algorithm_version: string | null
           quality_score: number | null
           question_count: number
@@ -3364,6 +3498,7 @@ export type Database = {
           total_marks: number
         }
         Insert: {
+          approval_mode?: string | null
           blueprint_json?: Json
           created_at?: string
           created_by?: string | null
@@ -3380,6 +3515,7 @@ export type Database = {
           paper_source?: string | null
           pattern_version_id?: string | null
           provenance_json?: Json
+          publish_status?: string
           quality_algorithm_version?: string | null
           quality_score?: number | null
           question_count: number
@@ -3391,6 +3527,7 @@ export type Database = {
           total_marks: number
         }
         Update: {
+          approval_mode?: string | null
           blueprint_json?: Json
           created_at?: string
           created_by?: string | null
@@ -3407,6 +3544,7 @@ export type Database = {
           paper_source?: string | null
           pattern_version_id?: string | null
           provenance_json?: Json
+          publish_status?: string
           quality_algorithm_version?: string | null
           quality_score?: number | null
           question_count?: number
@@ -5865,6 +6003,7 @@ export type Database = {
       }
       questions: {
         Row: {
+          approval_mode: string | null
           bank_id: string | null
           ca_applicable_date: string | null
           ca_cutoff_date: string | null
@@ -5930,6 +6069,7 @@ export type Database = {
           validation_status: string
         }
         Insert: {
+          approval_mode?: string | null
           bank_id?: string | null
           ca_applicable_date?: string | null
           ca_cutoff_date?: string | null
@@ -5995,6 +6135,7 @@ export type Database = {
           validation_status?: string
         }
         Update: {
+          approval_mode?: string | null
           bank_id?: string | null
           ca_applicable_date?: string | null
           ca_cutoff_date?: string | null
@@ -8226,6 +8367,28 @@ export type Database = {
           p_user_id: string
         }
         Returns: number
+      }
+      apply_auto_approval_event: {
+        Args: {
+          p_approval_mode?: string
+          p_auto_publish?: boolean
+          p_duplicate_result?: string
+          p_entity_id: string
+          p_entity_type: string
+          p_idempotency_key?: string
+          p_new_status?: string
+          p_outcome: string
+          p_paper_id?: string
+          p_previous_status?: string
+          p_processing_job_id?: string
+          p_provenance?: Json
+          p_publish_status?: string
+          p_quality_score?: number
+          p_rule_evaluation?: Json
+          p_rule_version?: number
+          p_source_type?: string
+        }
+        Returns: Json
       }
       apply_razorpay_refund: {
         Args: {
