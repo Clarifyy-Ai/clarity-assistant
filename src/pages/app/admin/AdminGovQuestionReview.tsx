@@ -509,9 +509,25 @@ export default function AdminGovQuestionReview() {
                           variant="outline"
                           disabled={busyId === row.id}
                           leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
-                          onClick={() => void act(row, "approved")}
+                          onClick={() => {
+                            setOverrideReason("");
+                            setOverride({ row, action: "approve" });
+                          }}
                         >
                           Approve
+                        </Button>
+                      )}
+                      {qs !== "pending" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busyId === row.id}
+                          onClick={() => {
+                            setOverrideReason("");
+                            setOverride({ row, action: "send_to_review" });
+                          }}
+                        >
+                          Review
                         </Button>
                       )}
                       {qs !== "rejected" && (
@@ -520,11 +536,15 @@ export default function AdminGovQuestionReview() {
                           variant="ghost"
                           disabled={busyId === row.id}
                           leftIcon={<Ban className="w-3.5 h-3.5" />}
-                          onClick={() => void act(row, "rejected")}
+                          onClick={() => {
+                            setOverrideReason("");
+                            setOverride({ row, action: "reject" });
+                          }}
                         >
                           Reject
                         </Button>
                       )}
+
                       {qs !== "retired" && (
                         <Button
                           size="sm"
