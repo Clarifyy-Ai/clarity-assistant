@@ -54,7 +54,8 @@
     "publish:desktop-installer": "node scripts/publish-desktop-installer.mjs",
     "install:desktop": "powershell -ExecutionPolicy Bypass -File scripts/install-desktop-local.ps1",
     "supabase:gen": "npx supabase gen types typescript --project-id qzgvjrvtkwlzxpmlddkx --schema public > src/integrations/supabase/types.ts",
-    "supabase:gen:api": "node --use-system-ca scripts/gen-types-via-management-api.mjs"
+    "supabase:gen:api": "node --use-system-ca scripts/gen-types-via-management-api.mjs",
+    "electron:check-config": "node scripts/electron-check-config.mjs"
   },
   "build": {
     "appId": "com.clarify.coach",
