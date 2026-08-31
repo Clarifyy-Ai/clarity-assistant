@@ -39,6 +39,7 @@
     "feature-copies",
     "e2e",
     "scraper",
-    "electron"
+    "electron",
+    "src/test"
   ]
 }
