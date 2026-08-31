@@ -22,6 +22,7 @@ import { AdminGovDisclaimer } from "./AdminGovDisclaimer";
 import { QUESTION_EXAM_TYPE_OPTIONS } from "@/lib/mock-test/examTypes";
 import { TRANSLATION_LANGUAGES } from "@/lib/gov-exam/questionTranslations";
 import {
+  adminOverrideQuestion,
   applyQuestionVerifyAction,
   bulkApplyQuestionVerifyAction,
   bulkRequestQuestionTranslation,
@@ -30,11 +31,28 @@ import {
   listVerificationRunway,
   questionMissingSource,
   setQuestionReviewStatus,
+  type AdminOverrideAction,
   type QuestionQueueStatus,
   type QuestionReviewFilterStatus,
   type QuestionReviewRow,
   type VerificationRunwayRow,
 } from "@/lib/gov-exam/adminOps";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+
+const OVERRIDE_LABELS: Record<string, string> = {
+  approve: "Approve",
+  reject: "Reject",
+  send_to_review: "Send to review",
+};
+
 
 const STATUS_OPTIONS: Array<QuestionReviewFilterStatus> = [
   "public_unverified",
@@ -69,6 +87,11 @@ export default function AdminGovQuestionReview() {
   const [missingSourceOnly, setMissingSourceOnly] = useState(false);
   const [status, setStatus] = useState<QuestionReviewFilterStatus>("public_unverified");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [override, setOverride] = useState<
+    { row: QuestionReviewRow; action: AdminOverrideAction } | null
+  >(null);
+  const [overrideReason, setOverrideReason] = useState("");
+
   const [bulkBusy, setBulkBusy] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [translationLang, setTranslationLang] = useState("hi");
@@ -148,6 +171,38 @@ export default function AdminGovQuestionReview() {
       void load();
     }
   }
+
+  async function runOverride() {
+    if (!override) return;
+    const reason = overrideReason.trim();
+    if (!reason) {
+      toast.error("Override reason is required");
+      return;
+    }
+    setBusyId(override.row.id);
+    const { error } = await adminOverrideQuestion(
+      override.row.id,
+      override.action,
+      reason,
+      {
+        is_verified: override.row.is_verified,
+        is_public: override.row.is_public,
+        review_status: deriveQuestionQueueStatus(override.row),
+        metadata: override.row.metadata,
+      },
+    );
+    setBusyId(null);
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    toast.success(`${OVERRIDE_LABELS[override.action] ?? override.action} recorded with audit entry`);
+    setOverride(null);
+    setOverrideReason("");
+    void load();
+  }
+
+
 
   async function verifyOne(row: QuestionReviewRow) {
     setBusyId(row.id);
@@ -454,9 +509,25 @@ export default function AdminGovQuestionReview() {
                           variant="outline"
                           disabled={busyId === row.id}
                           leftIcon={<CheckCircle2 className="w-3.5 h-3.5" />}
-                          onClick={() => void act(row, "approved")}
+                          onClick={() => {
+                            setOverrideReason("");
+                            setOverride({ row, action: "approve" });
+                          }}
                         >
                           Approve
+                        </Button>
+                      )}
+                      {qs !== "pending" && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          disabled={busyId === row.id}
+                          onClick={() => {
+                            setOverrideReason("");
+                            setOverride({ row, action: "send_to_review" });
+                          }}
+                        >
+                          Review
                         </Button>
                       )}
                       {qs !== "rejected" && (
@@ -465,11 +536,15 @@ export default function AdminGovQuestionReview() {
                           variant="ghost"
                           disabled={busyId === row.id}
                           leftIcon={<Ban className="w-3.5 h-3.5" />}
-                          onClick={() => void act(row, "rejected")}
+                          onClick={() => {
+                            setOverrideReason("");
+                            setOverride({ row, action: "reject" });
+                          }}
                         >
                           Reject
                         </Button>
                       )}
+
                       {qs !== "retired" && (
                         <Button
                           size="sm"
@@ -502,6 +577,52 @@ export default function AdminGovQuestionReview() {
         isLoading={bulkBusy}
         onConfirm={() => void runBulkConfirm()}
       />
+
+      <Dialog
+        open={override !== null}
+        onOpenChange={(open) => {
+          if (!open && busyId === null) {
+            setOverride(null);
+            setOverrideReason("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {OVERRIDE_LABELS[override?.action ?? ""] ?? "Override"} question
+            </DialogTitle>
+            <DialogDescription>
+              Manual overrides are recorded in the admin audit log with your identity,
+              timestamp, previous status and reason. Approval does not publish content.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={overrideReason}
+            onChange={(e) => setOverrideReason(e.target.value)}
+            placeholder="Reason for this override (required)"
+            rows={3}
+          />
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setOverride(null);
+                setOverrideReason("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={busyId !== null || overrideReason.trim().length === 0}
+              onClick={() => void runOverride()}
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
