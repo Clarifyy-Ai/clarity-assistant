@@ -22,8 +22,9 @@ function isGonePollError(err: unknown): err is ApiClientError {
 
 function isTransientPollError(err: unknown): err is ApiClientError {
   if (!(err instanceof ApiClientError)) return false;
-  if (isRateLimitPollError(err) || err.status === 409) return true;
-  return [500, 502, 503, 504].includes(err.status);
+  const status = (err as ApiClientError).status;
+  if (isRateLimitPollError(err) || status === 409) return true;
+  return [500, 502, 503, 504].includes(status);
 }
 
 function pollDelayMs(polls: number, transientHits: number): number {
