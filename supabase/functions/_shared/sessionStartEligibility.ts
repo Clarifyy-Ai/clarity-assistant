@@ -1,3 +1,4 @@
+// @ts-nocheck -- Deno runtime file, not typechecked by the app tsconfig
 export const SESSION_ELIGIBILITY_REASONS = [
   "ALLOWED",
   "DAILY_LIMIT_REACHED",
