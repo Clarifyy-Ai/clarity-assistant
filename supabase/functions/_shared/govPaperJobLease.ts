@@ -3,8 +3,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { refundCreditsBestEffort } from "./supabase.ts";
-import { claimJobCreditsForRefund } from "./claimJobCredits.ts";
+import { refundClaimedPaperCredits } from "./claimJobCredits.ts";
 import { isPythonPaperFactoryGenerator } from "./govGeneratorRouting.ts";
 
 export const PAPER_JOB_LEASE_MS = 180_000;
@@ -26,7 +25,11 @@ export const PAPER_JOB_HARD_TERMINAL = new Set([
 
 export const PAPER_JOB_IN_FLIGHT = new Set([
   "queued",
+  "leased",
+  "selecting",
+  "generating",
   "validating",
+  "assembling",
   "retrieving_sources",
   "analyzing_pattern",
   "planning_blueprint",
@@ -36,7 +39,7 @@ export const PAPER_JOB_IN_FLIGHT = new Set([
   "generating_missing_slots",
   "validating_questions",
   "checking_similarity",
-  "assembling",
+  "validating_paper",
 ]);
 
 export type ServiceDb = SupabaseClient;
@@ -179,7 +182,6 @@ export async function claimPaperGenerationJob(
 
   const priorAttempts = Number(candidate.attempt_count) || 0;
   if (priorAttempts >= maxAttempts) {
-    const creditsCharged = await claimJobCreditsForRefund(db, String(candidate.id));
     await db
       .from("gov_paper_generation_jobs")
       .update({
@@ -195,15 +197,12 @@ export async function claimPaperGenerationJob(
       })
       .eq("id", candidate.id)
       .filter("status", "not.in", "(completed,cancelled,expired,failed_permanent)");
-    if (creditsCharged > 0 && candidate.user_id) {
-      await refundCreditsBestEffort(
-        {
-          userId: String(candidate.user_id),
-          cost: creditsCharged,
-          reason: "refund_paper_gen_max_attempts",
-          idempotencyKey: `refund_paper_job:${candidate.id}`,
-        },
-        { job_id: candidate.id, reason: "max_attempts" },
+    if (candidate.user_id) {
+      await refundClaimedPaperCredits(
+        db,
+        String(candidate.id),
+        String(candidate.user_id),
+        "refund_paper_gen_max_attempts",
       );
     }
     return { ok: false, reason: "max_attempts" };
@@ -215,7 +214,7 @@ export async function claimPaperGenerationJob(
     candidate.status === "queued" ||
     candidate.status === "failed" ||
     candidate.status === "failed_retryable"
-      ? "validating"
+      ? "leased"
       : String(candidate.status);
 
   // Optimistic claim: only if still claimable (same lease window / still non-terminal).
@@ -337,7 +336,6 @@ export async function reclaimExpiredPaperJobs(
   for (const row of rows) {
     const attempts = Number(row.attempt_count) || 0;
     if (attempts >= maxAttempts) {
-      const creditsCharged = await claimJobCreditsForRefund(db, String(row.id));
       await db
         .from("gov_paper_generation_jobs")
         .update({
@@ -353,15 +351,12 @@ export async function reclaimExpiredPaperJobs(
         })
         .eq("id", row.id)
         .in("status", [...PAPER_JOB_IN_FLIGHT]);
-      if (creditsCharged > 0 && row.user_id) {
-        await refundCreditsBestEffort(
-          {
-            userId: String(row.user_id),
-            cost: creditsCharged,
-            reason: "refund_paper_gen_lease_timeout",
-            idempotencyKey: `refund_paper_job:${row.id}`,
-          },
-          { job_id: row.id, reason: "lease_timeout" },
+      if (row.user_id) {
+        await refundClaimedPaperCredits(
+          db,
+          String(row.id),
+          String(row.user_id),
+          "refund_paper_gen_lease_timeout",
         );
       }
       permanentlyFailed += 1;
@@ -380,6 +375,14 @@ export async function reclaimExpiredPaperJobs(
         })
         .eq("id", row.id)
         .in("status", [...PAPER_JOB_IN_FLIGHT]);
+      if (row.user_id) {
+        await refundClaimedPaperCredits(
+          db,
+          String(row.id),
+          String(row.user_id),
+          "refund_paper_gen_failed_retryable",
+        );
+      }
       reclaimed += 1;
     }
   }

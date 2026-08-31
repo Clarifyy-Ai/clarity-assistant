@@ -37,6 +37,7 @@ EXAM_DIFFICULTY_MIX: dict[str, dict[Difficulty, int]] = {
 DEFAULT_DIFFICULTY_MIX: dict[Difficulty, int] = {"EASY": 30, "MEDIUM": 50, "HARD": 20}
 
 VALID_MODES = ("official_previous", "generated_mock", "custom_mock", "adaptive")
+EXACT_MODES = ("official_previous", "generated_mock")
 
 
 def difficulty_mix_for(profile_key: str) -> dict[Difficulty, int]:
@@ -410,7 +411,7 @@ def validate_assembled_paper(
     # Exact full-paper modes must hit section quotas + topic coverage.
     # Custom/adaptive practice is bank-sampled to a smaller N and must not
     # fail just because syllabus topic labels don't match slot names.
-    exact_mode = blueprint.mode in ("official_previous", "generated_mock")
+    exact_mode = blueprint.mode in EXACT_MODES
     for section in blueprint.sections:
         actual = per_section.get(section.code, 0)
         if exact_mode and actual != section.question_count:

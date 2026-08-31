@@ -24,7 +24,7 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile";
 
 import { cn } from "@/lib/utils";
-import { AlertCircle, Loader2, Mic, MicOff, RefreshCw, Sparkles, Square } from "lucide-react";
+import { AlertCircle, GripVertical, Loader2, Mic, MicOff, RefreshCw, Sparkles, Square } from "lucide-react";
 
 import type { LiveSessionConfig } from "@/types/session.types";
 import { OverlayComplianceBanner } from "./OverlayComplianceBanner";
@@ -508,6 +508,7 @@ export function OverlayWindow({
         )}
         style={{ touchAction: "none" }}
         title="Drag header to move overlay"
+        aria-label="Drag overlay to move"
         onDoubleClick={() => {
           if (isPeekActive && !isVisible && useOverlayStore.getState().toggleMinimize) {
             useOverlayStore.getState().toggleMinimize();
@@ -516,11 +517,10 @@ export function OverlayWindow({
           useOverlayStore.getState().setMinimalMode(!isMinimalMode);
         }}
       >
-        <div className="flex items-center gap-1 shrink-0 text-white/30 mr-0.5" aria-hidden>
-          <span className="block w-1 h-1 rounded-full bg-current" />
-          <span className="block w-1 h-1 rounded-full bg-current" />
-          <span className="block w-1 h-1 rounded-full bg-current" />
-        </div>
+        <GripVertical
+          className="w-3.5 h-3.5 shrink-0 text-white/35 mr-0.5"
+          aria-hidden
+        />
         <div className="flex items-center gap-2 shrink-0 min-w-0 flex-1">
           <div className="w-5 h-5 rounded-md bg-gradient-to-br from-indigo-500 to-primary flex items-center justify-center shadow-lg shadow-indigo-500/30 shrink-0">
             <Sparkles className="w-3 h-3 text-white" />

@@ -1145,8 +1145,31 @@ Deno.serve(async (req: Request) => {
       },
     });
 
+    if (error instanceof DomainError) {
+      return json(corsHeaders, error.status, {
+        error: error.message,
+        code: error.code,
+        request_id: requestId,
+      });
+    }
+
+    const code =
+      error && typeof error === "object" && "code" in error
+        ? String((error as { code?: unknown }).code ?? "")
+        : "";
+    if (code) {
+      const status = httpStatusForDomainCode(code);
+      if (status !== 500) {
+        return json(corsHeaders, status, {
+          error: message,
+          code,
+          request_id: requestId,
+        });
+      }
+    }
+
     return json(corsHeaders, 500, {
-      error: "Internal server error.",
+      error: "Debrief generation failed. Please try again.",
       code: "INTERNAL_ERROR",
       request_id: requestId,
     });

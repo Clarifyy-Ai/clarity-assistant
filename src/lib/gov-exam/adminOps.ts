@@ -599,10 +599,19 @@ export type QuestionReviewFilterStatus =
   | "all"
   | "public_unverified";
 
+export function questionMissingSource(row: Pick<QuestionReviewRow, "source" | "source_type" | "metadata">): boolean {
+  const source = String(row.source ?? "").trim();
+  const sourceType = String(row.source_type ?? "").trim();
+  const meta = row.metadata ?? {};
+  const metaSource = String(meta.source ?? meta.source_url ?? "").trim();
+  return !source && !sourceType && !metaSource;
+}
+
 export async function listQuestionsForReview(filters: {
   examType?: string;
   topic?: string;
   status?: QuestionReviewFilterStatus;
+  missingSourceOnly?: boolean;
   /** When true, forces is_public=true AND is_verified=false (certification runway). */
   publicUnverifiedOnly?: boolean;
   limit?: number;
@@ -647,6 +656,9 @@ export async function listQuestionsForReview(filters: {
     rows = rows.filter((r) => deriveQuestionQueueStatus(r) === "pending");
   } else if (!publicUnverified && status === "rejected") {
     rows = rows.filter((r) => deriveQuestionQueueStatus(r) === "rejected");
+  }
+  if (filters.missingSourceOnly) {
+    rows = rows.filter((r) => questionMissingSource(r));
   }
   rows = rows.slice(0, filters.limit ?? 100);
 
@@ -859,6 +871,7 @@ export type ExtractQuestionPaperResult = {
   sourceId?: string;
   paperId?: string | null;
   status?: string;
+  async?: boolean;
   questionsImported?: number;
   confidenceFlags?: Array<{ index: number; flags: string[]; score: number }>;
   lowConfidenceCount?: number;

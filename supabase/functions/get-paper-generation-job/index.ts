@@ -1,13 +1,13 @@
 import { handleCors, getCorsHeaders, withBrowserCors, applyCors } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
-import { reclaimExpiredPaperJobs } from "../_shared/govPaperJobLease.ts";
 import {
   checkRateLimitAsync,
   createRateLimitKey,
   rateLimitResponse,
   RATE_LIMIT_PRESETS,
 } from "../_shared/rateLimit.ts";
+import { finalizePaperJobCredits, releasePaperJobCredits } from "../_shared/claimJobCredits.ts";
 
 /** Map DB status + retryable flag to the public job contract. */
 function mapPublicStatus(
@@ -41,15 +41,9 @@ Deno.serve(withBrowserCors("get-paper-generation-job", async (req) => {
     if (auth.error) return applyCors(req, auth.error);
     const user = auth.context.user;
 
-    // Polling is also a recovery opportunity when no background worker is
-    // running. Reclaim only expired leases; active workers remain untouched.
-    await reclaimExpiredPaperJobs(db, { limit: 10 }).catch((err) => {
-      console.warn("[get-paper-generation-job] reclaim:", err);
-    });
-
     const rateLimitResult = await checkRateLimitAsync(db, {
       key: createRateLimitKey("get-paper-generation-job", user.id),
-      ...RATE_LIMIT_PRESETS.SESSION_ACTION,
+      ...RATE_LIMIT_PRESETS.JOB_POLL,
     });
     if (!rateLimitResult.allowed) {
       return rateLimitResponse(rateLimitResult, req);
@@ -81,6 +75,18 @@ Deno.serve(withBrowserCors("get-paper-generation-job", async (req) => {
     }
 
     const publicStatus = mapPublicStatus(job.status, job.retryable as boolean | null);
+
+    if (publicStatus === "completed") {
+      await finalizePaperJobCredits(db, job.id).catch(() => undefined);
+    } else if (
+      publicStatus === "failed_retryable" ||
+      publicStatus === "failed_permanent" ||
+      publicStatus === "failed" ||
+      publicStatus === "cancelled" ||
+      publicStatus === "expired"
+    ) {
+      await releasePaperJobCredits(db, job.id, `refund_paper_job:${publicStatus}`).catch(() => undefined);
+    }
 
     return json(req, {
       jobId: job.id,

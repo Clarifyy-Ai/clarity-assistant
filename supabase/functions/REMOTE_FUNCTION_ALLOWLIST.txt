@@ -9,6 +9,7 @@ compare-sessions
 analyze-paper-trends
 analyze-test-performance
 assemble-assessment
+billing-catalog
 billing-status
 bulk-import-questions
 cancel-paper-generation-job
@@ -16,6 +17,7 @@ cancel-subscription
 check-exam-paper-availability
 collect-exam-papers
 company-research
+contact-sales
 create-billing-portal
 create-checkout
 create-exam-paper
@@ -61,12 +63,17 @@ report-question
 resume-subscription
 run-daily-exam-scrape
 save-answer
+save-attempt-answer
+save-test-answer
 save-transcript
 schedule-interview
 score-coding-submission
 search-exams
 select-test-questions
 send-email
+send-interview-reminders
+start-exam
+start-exam-attempt
 start-session
 stripe-webhook
 submit-test

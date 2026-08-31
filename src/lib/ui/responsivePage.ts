@@ -14,7 +14,14 @@ export const PAGE_SHELL_NARROW =
 
 /** Mixed content pages (lists + filters) that benefit from a soft cap. */
 export const PAGE_SHELL_STANDARD =
-  "w-full min-w-0 max-w-5xl overflow-x-hidden";
+  "w-full min-w-0 max-w-5xl xl:max-w-6xl 2xl:max-w-7xl overflow-x-hidden";
+
+/** Marketing / pricing shells — wider at 1440 and 1920. */
+export const MARKETING_SHELL =
+  "w-full min-w-0 max-w-6xl xl:max-w-7xl 2xl:max-w-[90rem] mx-auto overflow-x-hidden";
+
+/** Extra bottom space so the Support FAB cannot cover auth primary actions. */
+export const PAGE_SAFE_AUTH = "pb-28 sm:pb-10";
 
 export const STACK_GRID = "grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3";
 

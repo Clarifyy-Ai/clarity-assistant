@@ -9,8 +9,8 @@
  * `allowDeterministicFill`).
  */
 
-import { createServiceClient, refundCreditsBestEffort } from "./supabase.ts";
-import { claimJobCreditsForRefund } from "./claimJobCredits.ts";
+import { createServiceClient } from "./supabase.ts";
+import { finalizePaperJobCredits, refundClaimedPaperCredits } from "./claimJobCredits.ts";
 import {
   buildBlueprint,
   seededShuffle,
@@ -248,17 +248,23 @@ async function failJob(
       db,
       job.id,
       {
-        status: "queued",
-        progress_stage: "queued",
+        status: "failed_retryable",
+        progress_stage: "failed_retryable",
         error_code: errorCode,
         error_message: errorMessage,
         retryable: true,
-        completed_at: null,
+        completed_at: new Date().toISOString(),
         worker_id: null,
         lease_expires_at: null,
         ...extra,
       },
       { workerId },
+    );
+    await refundClaimedPaperCredits(
+      db,
+      job.id,
+      job.user_id,
+      `refund_paper_gen_${errorCode.toLowerCase()}`,
     );
     return;
   }
@@ -279,18 +285,12 @@ async function failJob(
     },
     { workerId },
   );
-  const cost = await claimJobCreditsForRefund(db, job.id);
-  if (cost > 0) {
-    await refundCreditsBestEffort(
-      {
-        userId: job.user_id,
-        cost,
-        reason: `refund_paper_gen_${errorCode.toLowerCase()}`,
-        idempotencyKey: `refund_paper_job:${job.id}`,
-      },
-      { job_id: job.id, error_code: errorCode },
-    );
-  }
+  await refundClaimedPaperCredits(
+    db,
+    job.id,
+    job.user_id,
+    `refund_paper_gen_${errorCode.toLowerCase()}`,
+  );
 }
 
 /**
@@ -333,6 +333,7 @@ export async function assembleClaimedPaperJob(
       },
       { workerId },
     );
+    await finalizePaperJobCredits(db, job.id);
     return {
       ok: true,
       status: "completed",
@@ -1162,6 +1163,8 @@ export async function assembleClaimedPaperJob(
           requested_question_count: requestedQuestionCount,
           source_mix: sourceMix,
           paper_source: paperSource,
+          scoring_version: "gov_exam_snapshot_v1",
+          sections: blueprint.sections,
         },
         status: "DRAFT",
       })
@@ -1232,25 +1235,75 @@ export async function assembleClaimedPaperJob(
       throw new Error(paperErr?.message ?? "gov_generated_papers insert failed");
     }
 
-    const linkRows = questionIds.map((qid, idx) => ({
-      paper_id: paper.id,
-      question_id: qid,
-      section_code: blueprint.slots[idx]?.section_code ?? null,
-      sort_order: idx,
-      source_class: mapToLegacySourceClass(questionSourceTypes[idx] ?? "approved_bank"),
-      question_source_type: questionSourceTypes[idx],
-      quality_score: paperQuality.perQuestion[idx]?.score ?? null,
-      validation_status: paperQuality.perQuestion[idx]?.hardFail ? "invalid" : "valid",
-      duplicate_status: paperQuality.perQuestion[idx]?.hardFailCodes.includes("NEAR_DUPLICATE")
-        ? "near_duplicate"
-        : "unique",
-      quality_algorithm_version: QUALITY_ALGORITHM_VERSION,
-      duplicate_algorithm_version: DEDUP_ALGORITHM_VERSION,
-    }));
+    const linkRows = questionIds.map((qid, idx) => {
+      const row = selectedRows[idx] as Record<string, unknown> | undefined;
+      const options = normalizeMcqOptions(row?.options);
+      return {
+        paper_id: paper.id,
+        question_id: qid,
+        section_code: blueprint.slots[idx]?.section_code ?? null,
+        sort_order: idx,
+        source_class: mapToLegacySourceClass(questionSourceTypes[idx] ?? "approved_bank"),
+        question_source_type: questionSourceTypes[idx],
+        quality_score: paperQuality.perQuestion[idx]?.score ?? null,
+        validation_status: paperQuality.perQuestion[idx]?.hardFail ? "invalid" : "valid",
+        duplicate_status: paperQuality.perQuestion[idx]?.hardFailCodes.includes("NEAR_DUPLICATE")
+          ? "near_duplicate"
+          : "unique",
+        quality_algorithm_version: QUALITY_ALGORITHM_VERSION,
+        duplicate_algorithm_version: DEDUP_ALGORITHM_VERSION,
+        snapshot_json: {
+          question_text: String(row?.question_text ?? ""),
+          options: options.map((text, i) => ({ label: String.fromCharCode(65 + i), text })),
+          correct_answer: row?.correct_answer ?? null,
+          question_type: String(row?.question_type ?? "MCQ"),
+          subject: String(row?.subject ?? ""),
+          topic: String(row?.topic ?? ""),
+          difficulty: String(row?.difficulty ?? "MEDIUM"),
+          language: blueprint.language,
+          marks_positive: Number(row?.marks_positive ?? blueprint.marks_per_question),
+          marks_negative: Number(row?.marks_negative ?? blueprint.negative_mark),
+          section_code: blueprint.slots[idx]?.section_code ?? null,
+          source_type: questionSourceTypes[idx],
+        },
+      };
+    });
 
     if (linkRows.length) {
       await db.from("gov_generated_paper_questions").insert(linkRows);
     }
+
+    await db
+      .from("mock_tests")
+      .update({
+        config: {
+          exam_type: exam.code,
+          gov_exam_id: job.exam_id,
+          gov_stage_id: job.stage_id,
+          gov_paper_id: paper.id,
+          pattern_version: blueprint.pattern_version,
+          syllabus_version: blueprint.syllabus_version,
+          paper_class: blueprint.paper_class,
+          marks_positive: blueprint.marks_per_question,
+          marks_negative: blueprint.negative_mark,
+          duration_minutes: blueprint.duration_minutes,
+          language: blueprint.language,
+          source_years: blueprint.source_years,
+          disclaimer: blueprint.label,
+          generation_job_id: job.id,
+          shuffle_questions: false,
+          shuffle_options: false,
+          quality_score: paperQuality.score,
+          quality_algorithm_version: QUALITY_ALGORITHM_VERSION,
+          dedup_algorithm_version: DEDUP_ALGORITHM_VERSION,
+          requested_question_count: requestedQuestionCount,
+          source_mix: sourceMix,
+          paper_source: paperSource,
+          scoring_version: "gov_exam_snapshot_v1",
+          sections: blueprint.sections,
+        },
+      })
+      .eq("id", mockTest.id);
 
     await setJobIfActive(
       db,
@@ -1270,6 +1323,7 @@ export async function assembleClaimedPaperJob(
       },
       { workerId },
     );
+    await finalizePaperJobCredits(db, job.id);
 
     const opSource =
       usedPythonFallback || (aiFillError && aiFilledCount === 0)

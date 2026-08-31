@@ -1,6 +1,11 @@
 // Sprint C: Hotkey customization UI
 import { useEffect, useState } from "react";
 import { DEFAULT_HOTKEYS, type HotkeyId, isMac } from "@/lib/constants/hotkeys";
+import {
+  captureCombo,
+  comboHasRequiredModifier,
+  isBrowserReservedCombo,
+} from "@/lib/overlay/hotkeyCapture";
 import { RotateCcw, Check, X, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -44,56 +49,6 @@ function findConflicts(overrides: Overrides): Map<string, HotkeyId[]> {
   return conflicts;
 }
 
-/** Combos the browser often intercepts before the app can handle them. */
-const BROWSER_RESERVED = new Set([
-  "ctrl+w",
-  "ctrl+shift+w",
-  "ctrl+t",
-  "ctrl+n",
-  "ctrl+shift+n",
-  "ctrl+tab",
-  "ctrl+shift+tab",
-  "alt+f4",
-  "⌘+w",
-  "⌘+shift+w",
-  "⌘+t",
-  "⌘+n",
-  "⌘+shift+n",
-]);
-
-function isBrowserReservedCombo(combo: string): boolean {
-  return BROWSER_RESERVED.has(combo.trim().toLowerCase());
-}
-
-function isAllowedHotkeyKey(key: string): boolean {
-  if (!key || key.length === 0) return false;
-  if (["Tab", "CapsLock", "Escape", "Enter", "Backspace", "Delete", "Insert", "Home", "End",
-    "PageUp", "PageDown", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "ContextMenu",
-    "PrintScreen", "Pause", "ScrollLock", "NumLock", "Space", "Spacebar"].includes(key)) {
-    return false;
-  }
-  if (/^F\d{1,2}$/.test(key)) return false;
-  return key.length === 1 || /^[A-Za-z0-9!@#$%^&*()_+\-=\[\]{};':",./<>?\\|`~]$/.test(key);
-}
-
-function captureCombo(e: KeyboardEvent): string | null {
-  const rawKey = e.key;
-  if (["Control", "Shift", "Alt", "Meta", "Dead"].includes(rawKey)) return null;
-  if (!isAllowedHotkeyKey(rawKey)) return null;
-
-  const parts: string[] = [];
-  if (e.ctrlKey) parts.push("Ctrl");
-  if (e.metaKey) parts.push(isMac() ? "⌘" : "Meta");
-  if (e.altKey) parts.push("Alt");
-  if (e.shiftKey) parts.push("Shift");
-
-  const key = rawKey.length === 1 ? rawKey.toUpperCase() : rawKey;
-  parts.push(key);
-
-  const combo = parts.join("+");
-  return combo.trim() && combo.length <= 32 ? combo : null;
-}
-
 export default function SettingsHotkeys() {
   const isMobile = useIsMobile();
   const [overrides, setOverrides] = useState<Overrides>(() => loadOverrides());
@@ -110,11 +65,16 @@ export default function SettingsHotkeys() {
       }
       const combo = captureCombo(e);
       if (!combo) return;
+      if (!comboHasRequiredModifier(combo)) {
+        toast.warning(
+          "Shortcuts must include Ctrl, Cmd, or Alt. Letter keys alone are not allowed.",
+        );
+        return;
+      }
       if (isBrowserReservedCombo(combo)) {
         toast.warning(
-          `${combo} is reserved by the browser (e.g. closes a tab/window). Choose a different shortcut.`,
+          `${combo} is reserved by the browser (e.g. paste, copy, or closes a tab). Choose a different shortcut.`,
         );
-        setRecordingId(null);
         return;
       }
       const next = { ...overrides, [recordingId]: combo };

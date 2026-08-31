@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Modal } from "@/components/ui/Modal"
 import { useUIStore } from "@/store/uiStore"
 import { useAuthStore } from "@/store/userStore"
@@ -13,7 +13,7 @@ import {
   razorpayPaiseForPack,
   razorpayPaiseForPlan,
 } from "@/lib/billing/priceCalculator"
-import { Check, Zap } from "lucide-react"
+import { Check, Crown, Sparkles, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
   openRazorpayCheckout,
@@ -23,6 +23,7 @@ import {
   type RazorpayProductType,
 } from "@/lib/billing/razorpayCheckout"
 import { toast } from "sonner"
+import { hydrateBillingCatalog } from "@/lib/billing/liveCatalog"
 
 const MODAL_PLANS: Array<{
   id: PlanId
@@ -31,7 +32,7 @@ const MODAL_PLANS: Array<{
   color: "violet" | "amber"
 }> = [
   { id: "pro", productType: "pro_monthly", icon: Zap, color: "violet" },
-  { id: "enterprise", productType: "enterprise_monthly", icon: Zap, color: "amber" },
+  { id: "enterprise", productType: "enterprise_monthly", icon: Crown, color: "amber" },
 ]
 
 type CheckoutPhase = "creating" | "processing"
@@ -50,6 +51,10 @@ export function UpgradeModal() {
   const { planId, user, profile, refreshCredits, loadProfile } = useAuthStore()
   const [loading, setLoading] = useState<string | null>(null)
   const [checkoutPhase, setCheckoutPhase] = useState<CheckoutPhase | null>(null)
+
+  useEffect(() => {
+    if (uiStore.upgrade_modal_open) void hydrateBillingCatalog()
+  }, [uiStore.upgrade_modal_open])
 
   const handleRazorpay = async (
     loadingKey: string,
@@ -85,21 +90,28 @@ export function UpgradeModal() {
     await handleRazorpay(targetPlanId, productType)
   }
 
-  const defaultPack = CREDIT_PACKS[0]
-
-  const handleBuyCredits = async () => {
-    await handleRazorpay("credits", "credits_50")
+  const handleBuyCredits = async (packId: RazorpayProductType) => {
+    await handleRazorpay(packId, packId)
   }
+
+  const isMax = planId === "enterprise"
+  const heading = isMax
+    ? "Add credits"
+    : planId === "pro"
+      ? "Upgrade or add credits"
+      : "Upgrade Clarify AI"
 
   return (
     <Modal
       open={uiStore.upgrade_modal_open}
       onClose={() => uiStore.setUpgradeModalOpen(false)}
-      title="Upgrade Clarify AI"
+      title={heading}
       size="lg"
     >
       <p className="mb-4 text-xs text-muted-foreground">
-        One-time Pro or Max access and credit packs. Razorpay does not auto-renew.
+        {isMax
+          ? "You already have Max. Buy a credit pack — Razorpay does not auto-renew."
+          : "One-time Pro or Max access and credit packs. Razorpay does not auto-renew."}
       </p>
       {showRazorpayQaSandboxHint() ? (
         <p className="mb-4 text-xs text-sky-800 dark:text-sky-300 bg-sky-500/10 border border-sky-500/20 rounded-lg px-3 py-2">
@@ -198,25 +210,36 @@ export function UpgradeModal() {
         })}
       </div>
 
-      <div className="mt-4 flex items-center justify-between rounded-xl border border-border bg-secondary/50 p-4">
-        <div>
-          <p className="text-sm font-medium text-foreground">Credit pack</p>
-          <p className="text-xs text-muted-foreground">
-            {defaultPack
-              ? `${defaultPack.credits} credits for ${formatInrPaise(razorpayPaiseForPack(defaultPack.id) ?? 0)} — one-time, no auto-renew`
-              : "Credit packs — one-time, no auto-renew"}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void handleBuyCredits()}
-          disabled={Boolean(loading)}
-          className="rounded-xl border border-border bg-secondary px-4 py-2 text-xs font-medium text-foreground transition-all hover:bg-secondary/80 focus:outline-none focus:ring-2 focus:ring-white/30"
-        >
-          {loading === "credits"
-            ? checkoutBusyLabel(checkoutPhase, "Buy credits")
-            : "Buy credits"}
-        </button>
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+        {CREDIT_PACKS.map((pack) => {
+          const productType = pack.id as RazorpayProductType
+          const busy = loading === pack.id
+          return (
+            <div
+              key={pack.id}
+              className="flex flex-col gap-2 rounded-xl border border-border bg-secondary/50 p-3"
+            >
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" aria-hidden />
+                <p className="text-sm font-medium text-foreground">{pack.credits} credits</p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {formatInrPaise(razorpayPaiseForPack(pack.id) ?? 0)} · one-time
+              </p>
+              <button
+                type="button"
+                onClick={() => void handleBuyCredits(productType)}
+                disabled={Boolean(loading)}
+                title={`Buy ${pack.credits} credits`}
+                className="mt-auto rounded-xl border border-border bg-secondary px-3 py-2 text-xs font-medium text-foreground transition-all hover:bg-secondary/80 focus:outline-none focus:ring-2 focus:ring-white/30 disabled:opacity-50"
+              >
+                {busy
+                  ? checkoutBusyLabel(checkoutPhase, `Buy ${pack.credits}`)
+                  : `Buy ${pack.credits}`}
+              </button>
+            </div>
+          )
+        })}
       </div>
     </Modal>
   )

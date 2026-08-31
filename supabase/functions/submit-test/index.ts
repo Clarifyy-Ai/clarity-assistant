@@ -203,10 +203,11 @@ function compareNumbers(a: unknown, b: unknown, tolerance = 1e-6): boolean {
 
 function scoreQuestion(
   question: QuestionRow,
-  response: ResponseRow
+  response: ResponseRow,
+  defaults: { positive: number; negative: number },
 ): { correct: boolean; score: number } {
-  const positive = safeNumber(question.marks_positive, 4);
-  const negative = safeNumber(question.marks_negative, 1);
+  const positive = safeNumber(question.marks_positive, defaults.positive);
+  const negative = safeNumber(question.marks_negative, defaults.negative);
 
   const attempted = Boolean(response.is_attempted) && !isEmptyAnswer(response.user_answer);
   if (!attempted) {
@@ -453,6 +454,15 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
       testRaw.expires_at as string | null,
     );
 
+    if (testRaw.status === "DRAFT" || !testRaw.started_at) {
+      return errorResponse(
+        "Start the exam before submitting.",
+        "ATTEMPT_NOT_STARTED",
+        409,
+        req,
+      );
+    }
+
     if (testRaw.status === "COMPLETED") {
       const { data: existing } = await db
         .from("test_analyses")
@@ -487,7 +497,18 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
     }
 
     /* -------------------- FETCH QUESTIONS & RESPONSES -------------------- */
-    const [responseResult, questionResult] = await Promise.all([
+    const config = (testRaw.config && typeof testRaw.config === "object")
+      ? testRaw.config as Record<string, unknown>
+      : {};
+    const paperId = typeof config.gov_paper_id === "string" ? config.gov_paper_id : null;
+    const defaultPositive = safeNumber(config.marks_positive ?? config.marks_per_question, 0);
+    const defaultNegative = safeNumber(config.marks_negative ?? config.negative_mark, 0);
+    const scoringDefaults = {
+      positive: defaultPositive > 0 ? defaultPositive : 0,
+      negative: defaultNegative >= 0 ? defaultNegative : 0,
+    };
+
+    const [responseResult, questionResult, snapshotResult] = await Promise.all([
       db
         .from("test_responses")
         .select("question_id, user_answer, is_attempted, time_spent_seconds")
@@ -499,6 +520,12 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
           "id, question_type, correct_answer, marks_positive, marks_negative, subject, topic, difficulty, exam_type"
         )
         .in("id", questionIds),
+      paperId
+        ? db
+          .from("gov_generated_paper_questions")
+          .select("question_id, section_code, snapshot_json")
+          .eq("paper_id", paperId)
+        : Promise.resolve({ data: [] as Record<string, unknown>[], error: null }),
     ]);
 
     if (responseResult.error) {
@@ -515,6 +542,25 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
       questionMap[question.id] = question;
     }
 
+    for (const link of snapshotResult.data ?? []) {
+      const rec = link as { question_id?: string; section_code?: string; snapshot_json?: Record<string, unknown> };
+      const qid = safeString(rec.question_id);
+      const snap = rec.snapshot_json && typeof rec.snapshot_json === "object" ? rec.snapshot_json : null;
+      if (!qid || !snap) continue;
+      const existing = questionMap[qid];
+      questionMap[qid] = {
+        id: qid,
+        question_type: safeString(snap.question_type, existing?.question_type ?? "MCQ"),
+        correct_answer: snap.correct_answer ?? existing?.correct_answer ?? null,
+        marks_positive: snap.marks_positive != null ? Number(snap.marks_positive) : existing?.marks_positive ?? null,
+        marks_negative: snap.marks_negative != null ? Number(snap.marks_negative) : existing?.marks_negative ?? null,
+        subject: safeString(snap.subject, existing?.subject ?? rec.section_code ?? "General"),
+        topic: safeString(snap.topic, existing?.topic ?? "General"),
+        difficulty: safeString(snap.difficulty, existing?.difficulty ?? "MEDIUM"),
+        exam_type: existing?.exam_type ?? null,
+      };
+    }
+
     const responseMap: Record<string, ResponseRow> = {};
     for (const row of responseResult.data ?? []) {
       const response = row as ResponseRow;
@@ -529,6 +575,10 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
     let maxScore = 0;
     let attempted = 0;
     let correct = 0;
+    let incorrect = 0;
+    let unanswered = 0;
+    let positiveMarks = 0;
+    let negativeMarks = 0;
 
     const subjectBreakdown: Record<string, SubjectBreakdown> = {};
     const topicBreakdownRaw: Record<
@@ -553,8 +603,8 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
 
       const subject = safeString(question.subject, "General");
       const topic = safeString(question.topic, "General");
-      const marksPositive = safeNumber(question.marks_positive, 4);
-      const marksNegative = safeNumber(question.marks_negative, 1);
+      const marksPositive = safeNumber(question.marks_positive, scoringDefaults.positive);
+      const marksNegative = safeNumber(question.marks_negative, scoringDefaults.negative);
       const timeSpent = Math.max(0, safeNumber(response.time_spent_seconds, 0));
 
       maxScore += marksPositive;
@@ -586,21 +636,26 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
       }
       topicBreakdownRaw[topic].total += 1;
 
-      const { correct: isCorrect, score } = scoreQuestion(question, response);
+      const { correct: isCorrect, score } = scoreQuestion(question, response, scoringDefaults);
       const isAttempted = Boolean(response.is_attempted) && !isEmptyAnswer(response.user_answer);
 
       if (isAttempted) {
         attempted += 1;
         subjectBreakdown[subject].attempted += 1;
         topicBreakdownRaw[topic].attempted += 1;
+      } else {
+        unanswered += 1;
       }
 
       if (isCorrect) {
         correct += 1;
+        positiveMarks += marksPositive;
         subjectBreakdown[subject].correct += 1;
         topicBreakdownRaw[topic].correct += 1;
         subjectBreakdown[subject].marks += marksPositive;
       } else if (isAttempted) {
+        incorrect += 1;
+        negativeMarks += marksNegative;
         wrongQuestionIds.push(questionId);
         subjectBreakdown[subject].wrong += 1;
         topicBreakdownRaw[topic].wrong += 1;
@@ -698,7 +753,16 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
       time_analysis: {
         avg_seconds: avgTime,
         time_traps: timeTraps,
+        score_summary: {
+          correct,
+          incorrect,
+          unanswered,
+          positive_marks: positiveMarks,
+          negative_marks: negativeMarks,
+          scoring_version: safeString(config.scoring_version, "gov_exam_snapshot_v1"),
+        },
       },
+      algorithm_version: safeString(config.scoring_version, "gov_exam_snapshot_v1"),
       predicted_percentile: predictedPercentile,
       rank_status: rankStatus,
     };

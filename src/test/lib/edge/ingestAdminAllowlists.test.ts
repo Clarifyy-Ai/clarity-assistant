@@ -59,6 +59,22 @@ describe("ingest-admin scraper client JWT paths", () => {
     expect(client).toContain('"/paper-factory/exams"');
     expect(client).toContain("paperFactoryExams");
   });
+
+  it("exposes paper-factory plan, generate, and processJob JWT methods", () => {
+    expect(client).toContain('"/paper-factory/plan"');
+    expect(client).toContain('"/paper-factory/generate"');
+    expect(client).toContain("paperFactoryPlan");
+    expect(client).toContain("paperFactoryGenerate");
+    expect(client).toContain("paperFactoryProcessJob");
+    expect(client).toContain("/paper-factory/jobs/");
+  });
+
+  it("does not put HMAC internal paths in the browser client", () => {
+    expect(client).not.toContain("/internal/operations");
+    expect(client).not.toContain("/internal/gov-exams");
+    expect(client).not.toContain("X-Internal-Signature");
+    expect(client).not.toContain("DOCUMENT_INTELLIGENCE_AUTH_SECRET =");
+  });
 });
 
 describe("hybrid-health HMAC probe (no secret leak)", () => {
@@ -69,5 +85,29 @@ describe("hybrid-health HMAC probe (no secret leak)", () => {
     expect(hybridHealth).toContain("hmac_ok: hmacOk");
     expect(hybridHealth).toContain("Does NOT expose");
     expect(hybridHealth).not.toMatch(/DOCUMENT_INTELLIGENCE_AUTH_SECRET.*JSON\.stringify\(body\)/);
+  });
+
+  it("probes supported operations, alerts, and metrics without dumping payloads", () => {
+    expect(hybridHealth).toContain("/internal/operations/supported");
+    expect(hybridHealth).toContain('"/alerts"');
+    expect(hybridHealth).toContain('"/metrics"');
+    expect(hybridHealth).toContain("supported: pythonSupported");
+    expect(hybridHealth).toContain("alerts: pythonAlerts");
+    expect(hybridHealth).toContain("metrics: pythonMetrics");
+    expect(hybridHealth).toContain("Counts only");
+    expect(hybridHealth).not.toMatch(/DOCUMENT_INTELLIGENCE_AUTH_SECRET.*JSON\.stringify\(body\)/);
+    expect(hybridHealth).not.toMatch(/json:\s*supported\.json/);
+    expect(hybridHealth).not.toMatch(/json:\s*metrics\.json/);
+  });
+});
+
+describe("parse-document document_classify wiring", () => {
+  const parseDocument = read("supabase/functions/parse-document/index.ts");
+
+  it("classifies extracted text via document_classify and fail-closes high-confidence UNRELATED", () => {
+    expect(parseDocument).toContain('operation: "document_classify"');
+    expect(parseDocument).toContain("DOCUMENT_UNRELATED");
+    expect(parseDocument).toContain("UNRELATED_REJECT_CONFIDENCE");
+    expect(parseDocument).toContain("classifyOrReject");
   });
 });

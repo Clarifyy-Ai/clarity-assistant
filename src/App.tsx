@@ -65,6 +65,11 @@ import Terms from "@/pages/marketing/Terms";
 import Privacy from "@/pages/marketing/Privacy";
 import Careers from "@/pages/marketing/Careers";
 import GovExams from "@/pages/marketing/GovExams";
+import ContactSales from "@/pages/marketing/ContactSales";
+import About from "@/pages/marketing/About";
+import Industries from "@/pages/marketing/Industries";
+import Cookies from "@/pages/marketing/Cookies";
+import Faq from "@/pages/marketing/Faq";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Electron typing
@@ -322,6 +327,9 @@ const AdminGovQuestionReview = lazy(
 const AdminGovPaperReview = lazy(
   () => import("@/pages/app/admin/AdminGovPaperReview"),
 );
+const AdminGovPaperFactory = lazy(
+  () => import("@/pages/app/admin/AdminGovPaperFactory"),
+);
 const AdminGovTranslationReview = lazy(
   () => import("@/pages/app/admin/AdminGovTranslationReview"),
 );
@@ -564,6 +572,11 @@ const routes = [
   { path: "/terms", element: <MarketingPage component={Terms} /> },
   { path: "/privacy", element: <MarketingPage component={Privacy} /> },
   { path: "/careers", element: <MarketingPage component={Careers} /> },
+  { path: "/contact-sales", element: <MarketingPage component={ContactSales} /> },
+  { path: "/about", element: <MarketingPage component={About} /> },
+  { path: "/industries", element: <MarketingPage component={Industries} /> },
+  { path: "/cookies", element: <MarketingPage component={Cookies} /> },
+  { path: "/faq", element: <MarketingPage component={Faq} /> },
   { path: "/share/:token", element: <Page component={SharedDebrief} /> },
   { path: "/verify-certificate", element: <Page component={VerifyCertificate} /> },
   { path: "/verify-certificate/:certificateId", element: <Page component={VerifyCertificate} /> },
@@ -980,6 +993,10 @@ const routes = [
           {
             path: "gov/paper-review",
             element: <Page component={AdminGovPaperReview} />,
+          },
+          {
+            path: "gov/paper-factory",
+            element: <Page component={AdminGovPaperFactory} />,
           },
           {
             path: "gov/translations",

@@ -62,7 +62,7 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
 
     const rateLimitResult = await checkRateLimitAsync(db, {
       key: createRateLimitKey("check-exam-paper-availability", user.id),
-      ...RATE_LIMIT_PRESETS.SESSION_ACTION,
+      ...RATE_LIMIT_PRESETS.SEARCH_BROWSE,
     });
     if (!rateLimitResult.allowed) {
       return rateLimitResponse(rateLimitResult, req);
@@ -129,9 +129,9 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
     const langs: string[] = Array.isArray(pattern.languages) ? pattern.languages : ["en"];
     if (!langs.includes(language) && language !== "en") {
       return json(req, {
-        error: "Language not supported for this pattern",
-        code: "INVALID_CONFIGURATION",
-      }, 400);
+        error: "This exam paper is not available in the selected language.",
+        code: "LANGUAGE_UNAVAILABLE",
+      }, 409);
     }
 
     const requestedCountRaw = (body as Record<string, unknown>).questionCount;
@@ -180,7 +180,7 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
     });
     let available = inventory.available;
     let examTypeKeys = inventory.examTypeKeys;
-    let inventorySource: "canonical_rpc" | "python_enriched" = "canonical_rpc";
+    let inventorySource: "canonical_rpc" | "python_authoritative" = "canonical_rpc";
 
     if (isPythonGovExamConfigured()) {
       const py = await pythonGovAvailability({
@@ -192,13 +192,15 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
         difficulty,
         correlation_id: correlationId,
         bank_type_keys: examTypeKeys,
+        mode,
       });
       if (py.ok) {
-        inventorySource = "python_enriched";
+        available = py.data.available;
+        inventorySource = "python_authoritative";
         console.log(JSON.stringify({
-          tag: "[GOV_EXAM] availability_python_enriched",
+          tag: "[GOV_EXAM] availability_python_authoritative",
           correlation_id: correlationId,
-          canonical_available: available,
+          canonical_available: inventory.available,
           python_available: py.data.available,
           requested: py.data.requested,
         }));
@@ -209,6 +211,16 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
           code: py.error.code,
           message: py.error.message.slice(0, 160),
         }));
+        if (py.error.code === "LANGUAGE_UNAVAILABLE") {
+          return json(req, {
+            error: "This exam paper is not available in the selected language.",
+            code: "LANGUAGE_UNAVAILABLE",
+            requested,
+            available: 0,
+            eligible: 0,
+            correlationId,
+          }, 409);
+        }
       }
     }
 
@@ -281,6 +293,7 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
       language,
       mode,
       requested,
+      eligible: available,
       available,
       missing,
       examTypeKeys,

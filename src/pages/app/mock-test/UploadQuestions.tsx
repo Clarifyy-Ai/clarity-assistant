@@ -19,6 +19,11 @@ import { normalizeExamTypeForStorage } from "@/lib/mock-test/examTypes";
 import { supabase } from "@/lib/supabase/client";
 import { questionsDB } from "@/lib/supabase/database";
 import { SUPABASE_URL } from "@/lib/env";
+import { unwrapEdgePayload } from "@/lib/network/edgeResult";
+import {
+  isParseQuestionPdfQueuedPayload,
+  pollParseQuestionPdfJob,
+} from "@/lib/gov-exam/parseQuestionPdfJob";
 import { useAuthStore } from "@/store/userStore";
 
 import { Button } from "@/components/ui/Button";
@@ -700,6 +705,7 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
 
   const [dragging, setDragging] = useState(false);
   const [parsing, setParsing] = useState(false);
+  const [backgroundParse, setBackgroundParse] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [reviewItems, setReviewItems] = useState<ReviewItem[] | null>(null);
   const [saving, setSaving] = useState(false);
@@ -734,6 +740,7 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
     }
 
     setParsing(true);
+    setBackgroundParse(false);
     setParseError(null);
     setSummary(null);
 
@@ -756,19 +763,63 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
 
       const responseJson = await response.json().catch(() => ({}));
 
-      if (!response.ok) {
+      if (response.status === 504 || response.status === 502) {
+        const message =
+          responseJson?.error ||
+          responseJson?.message ||
+          "PDF parsing failed. Credits refunded.";
+        throw new Error(message);
+      }
+
+      if (!response.ok && response.status !== 202) {
         const message =
           responseJson?.error || responseJson?.message || "Parse failed";
         throw new Error(message);
       }
 
-      if (responseJson?.success === false || responseJson?.error) {
+      if (responseJson?.success === false || (response.status !== 202 && responseJson?.error)) {
         throw new Error(responseJson?.error ?? "Parse failed");
       }
 
-      const payload = responseJson?.data ?? responseJson;
+      let payload = unwrapEdgePayload<{
+        questions?: unknown[];
+        summary?: string;
+        accepted?: boolean;
+        jobId?: string;
+        status?: string;
+        persistedToBank?: boolean;
+        count?: number;
+        message?: string;
+      }>(responseJson);
+
+      if (response.status === 202 || isParseQuestionPdfQueuedPayload(payload)) {
+        const jobId = payload.jobId;
+        if (!jobId) {
+          throw new Error("PDF queued but no job id was returned. Please retry.");
+        }
+        setBackgroundParse(true);
+        const job = await pollParseQuestionPdfJob(jobId);
+        if (job.status === "failed") {
+          throw new Error(job.error || job.message || "PDF parsing failed. Credits refunded.");
+        }
+        payload = {
+          questions: job.questions,
+          count: job.count,
+          persistedToBank: job.persistedToBank,
+          summary: job.message,
+        };
+      }
+
       const questions = Array.isArray(payload?.questions) ? payload.questions : [];
       const parseSummary = payload?.summary;
+
+      if (payload?.persistedToBank && (payload.count ?? questions.length) > 0) {
+        const saved = payload.count ?? questions.length;
+        toast.success(`${saved} questions saved to your bank.`);
+        setSummary(`${saved} questions saved to your bank.`);
+        onImported(saved);
+        return;
+      }
 
       if (questions.length === 0) {
         throw new Error("No questions found in this PDF.");
@@ -789,6 +840,7 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
       toast.error(message);
     } finally {
       setParsing(false);
+      setBackgroundParse(false);
       if (fileRef.current) fileRef.current.value = "";
     }
   }
@@ -866,8 +918,14 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
         {parsing ? (
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
-            <p className="font-medium text-foreground">Parsing PDF with AI…</p>
-            <p className="text-sm text-muted-foreground">This may take 15–30 seconds.</p>
+            <p className="font-medium text-foreground">
+              {backgroundParse ? "Parsing in background…" : "Parsing PDF with AI…"}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {backgroundParse
+                ? "Large PDFs keep processing after upload. Credits stay reserved until parsing finishes."
+                : "This may take 15–30 seconds."}
+            </p>
           </div>
         ) : (
           <>

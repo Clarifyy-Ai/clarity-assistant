@@ -20,12 +20,17 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuthStore } from "@/store/authStore";
 import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
-import { isOAuthCancelledError } from "@/lib/auth/oauthProviders";
+import {
+  isOAuthCancelledError,
+  isOAuthNotConfiguredError,
+  OAUTH_NOT_CONFIGURED_MESSAGE,
+} from "@/lib/auth/oauthProviders";
+import { formatSupabaseAuthError } from "@/lib/errors";
 
 type CallbackError = {
   message: string;
   description?: string;
-  code: "cancelled" | "auth_failed";
+  code: "cancelled" | "auth_failed" | "not_configured";
 };
 
 const AUTH_CALLBACK_TIMEOUT_MS = 12_000;
@@ -58,13 +63,20 @@ function getCallbackError(search: string, hash: string): CallbackError | null {
     };
   }
 
+  if (isOAuthNotConfiguredError(error, errorDescription, errorCode)) {
+    return {
+      message: OAUTH_NOT_CONFIGURED_MESSAGE,
+      description: OAUTH_NOT_CONFIGURED_MESSAGE,
+      code: "not_configured",
+    };
+  }
+
   return {
     message: "Authentication failed.",
-    description:
-      errorDescription ||
-      errorCode ||
-      error ||
-      "Please try signing in again.",
+    description: formatSupabaseAuthError({
+      message: errorDescription || error || "Please try signing in again.",
+      code: errorCode || error || undefined,
+    }),
     code: "auth_failed",
   };
 }
@@ -106,6 +118,11 @@ export default function AuthCallback(): JSX.Element {
     if (callbackError) {
       if (callbackError.code === "cancelled") {
         navigate("/login?error=cancelled", { replace: true });
+        return;
+      }
+
+      if (callbackError.code === "not_configured") {
+        navigate("/login?error=not_configured", { replace: true });
         return;
       }
 

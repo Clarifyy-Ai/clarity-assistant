@@ -369,6 +369,7 @@ const USER_MESSAGES: Partial<Record<ErrorCode, string>> = {
   [ErrorCode.AUTH_SESSION_EXPIRED]:         "Your session has expired. Please sign in again.",
   [ErrorCode.AUTH_INVALID_CREDENTIALS]:     "Incorrect email or password.",
   [ErrorCode.AUTH_EMAIL_NOT_VERIFIED]:      "Please verify your email before continuing.",
+  [ErrorCode.AUTH_OAUTH_FAILED]:            "That sign-in provider is not configured. Use email and password, or contact support.",
   [ErrorCode.AUTH_INSUFFICIENT_PERMISSIONS]:"You don't have permission to do that.",
   [ErrorCode.AI_RATE_LIMITED]:              "AI is busy. Please wait a moment and try again.",
   [ErrorCode.AI_QUOTA_EXCEEDED]:            "Your AI usage limit has been reached. Please upgrade.",
@@ -407,9 +408,35 @@ export function getUserMessage(error: unknown): string {
 
 type SupabaseAuthErrorShape = {
   message?: string;
+  msg?: string;
   code?: string;
+  error_code?: string;
+  error_description?: string;
   status?: number;
 };
+
+function collectAuthErrorHaystack(error: unknown): { code: string; haystack: string } {
+  if (typeof error === "string") {
+    const trimmed = error.trim().toLowerCase();
+    return { code: "", haystack: trimmed };
+  }
+  if (!error || typeof error !== "object") {
+    return { code: "", haystack: "" };
+  }
+  const err = error as SupabaseAuthErrorShape;
+  const code = (err.code ?? err.error_code ?? "").toString().toLowerCase();
+  const haystack = [
+    err.message,
+    err.msg,
+    err.error_description,
+    err.code,
+    err.error_code,
+  ]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" ")
+    .toLowerCase();
+  return { code, haystack };
+}
 
 /** Shown for banned / Auth-disabled accounts (never raw SQL or "wrong password"). */
 export const ACCOUNT_SUSPENDED_MESSAGE =
@@ -465,36 +492,49 @@ export function formatSupabaseAuthError(error: unknown): string {
     return ACCOUNT_SUSPENDED_MESSAGE;
   }
 
-  if (typeof error === "string" && error.trim()) {
-    return error.trim();
-  }
-
-  if (!error || typeof error !== "object") {
-    return USER_MESSAGES[ErrorCode.AUTH_INVALID_CREDENTIALS]!;
-  }
-
-  const err = error as SupabaseAuthErrorShape;
-  const message = err.message?.trim() ?? "";
-  const code = err.code?.toLowerCase() ?? "";
+  const { code, haystack } = collectAuthErrorHaystack(error);
+  const message =
+    typeof error === "string"
+      ? error.trim()
+      : error && typeof error === "object"
+        ? ((error as SupabaseAuthErrorShape).message?.trim() ?? "")
+        : "";
 
   if (
-    message.includes("Failed to fetch") ||
-    message.includes("NetworkError") ||
-    message.includes("Load failed")
+    haystack.includes("failed to fetch") ||
+    haystack.includes("networkerror") ||
+    haystack.includes("load failed")
   ) {
     return "Cannot reach the sign-in service. Check your internet connection, or verify Supabase URL/keys are set correctly for this deployment.";
   }
 
-  if (message.toLowerCase().includes("invalid api key")) {
+  if (haystack.includes("invalid api key")) {
     return "Sign-in is misconfigured (invalid Supabase API key). Redeploy with correct VITE_SUPABASE_ANON_KEY.";
+  }
+
+  if (
+    code === "email_not_confirmed" ||
+    haystack.includes("email_not_confirmed") ||
+    haystack.includes("email not confirmed") ||
+    haystack.includes("email not verified")
+  ) {
+    return USER_MESSAGES[ErrorCode.AUTH_EMAIL_NOT_VERIFIED]!;
+  }
+
+  if (
+    code === "provider_disabled" ||
+    code === "oauth_provider_not_found" ||
+    haystack.includes("provider is not enabled") ||
+    haystack.includes("unsupported provider") ||
+    haystack.includes("oauth_provider_not_found")
+  ) {
+    return USER_MESSAGES[ErrorCode.AUTH_OAUTH_FAILED]!;
   }
 
   switch (code) {
     case "invalid_credentials":
     case "invalid_grant":
       return USER_MESSAGES[ErrorCode.AUTH_INVALID_CREDENTIALS]!;
-    case "email_not_confirmed":
-      return USER_MESSAGES[ErrorCode.AUTH_EMAIL_NOT_VERIFIED]!;
     case "user_banned":
     case "user_disabled":
       return ACCOUNT_SUSPENDED_MESSAGE;
@@ -505,12 +545,29 @@ export function formatSupabaseAuthError(error: unknown): string {
       break;
   }
 
-  if (/invalid login credentials/i.test(message)) {
+  if (/invalid login credentials/i.test(message) || haystack.includes("invalid login credentials")) {
     return USER_MESSAGES[ErrorCode.AUTH_INVALID_CREDENTIALS]!;
   }
 
   // Never surface raw GoTrue / PostgREST / Postgres text to the user.
   return USER_MESSAGES[ErrorCode.AUTH_INVALID_CREDENTIALS]!;
+}
+
+/** Transport / config failures that must not be shown as a fake success. */
+export function isHardAuthTransportError(error: unknown): boolean {
+  const { haystack, code } = collectAuthErrorHaystack(error);
+  if (
+    haystack.includes("failed to fetch") ||
+    haystack.includes("networkerror") ||
+    haystack.includes("load failed") ||
+    haystack.includes("invalid api key") ||
+    haystack.includes("smtp") ||
+    haystack.includes("error sending") ||
+    haystack.includes("unexpected_failure")
+  ) {
+    return true;
+  }
+  return code === "unexpected_failure" || code === "over_request_rate_limit" || code === "too_many_requests";
 }
 
 /** True when Supabase rejected the client API key (deployment misconfiguration). */

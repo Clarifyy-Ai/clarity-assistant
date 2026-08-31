@@ -100,12 +100,30 @@ export const profileUpdateSchema = z.object({
     .nullable()
     .optional(),
   
-  avatar_url: z
-    .string()
-    .trim()
-    .url("Avatar URL must be a valid URL.")
-    .nullable()
-    .optional(),
+  avatar_url: z.preprocess(
+    (value) => {
+      if (value == null) return null;
+      if (typeof value === "string" && value.trim() === "") return null;
+      return value;
+    },
+    z
+      .string()
+      .trim()
+      .url("Avatar URL must be a valid http(s) URL.")
+      .refine(
+        (value) => {
+          try {
+            const parsed = new URL(value);
+            return parsed.protocol === "http:" || parsed.protocol === "https:";
+          } catch {
+            return false;
+          }
+        },
+        "Avatar URL must use http or https.",
+      )
+      .nullable()
+      .optional(),
+  ),
 });
 
 export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;

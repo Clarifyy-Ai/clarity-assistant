@@ -22,7 +22,10 @@ import { SUPPORT_EMAIL } from "@/lib/constants/contact";
 import { useClaimStoredReferral } from "@/hooks/useClaimStoredReferral";
 import { MFA_REQUIRED_REASON } from "@/hooks/useAuth";
 import { MFA_ENFORCEMENT_PAUSED, resolveMfaGateDecision } from "@/lib/auth/mfaGate";
-import { canBrowseGovExamsBeforeProfileReady } from "@/lib/gov-exam/govExamRoutes";
+import {
+  canBrowseGovExamsBeforeProfileReady,
+  canBrowseGovExamsDuringAccountRecovery,
+} from "@/lib/gov-exam/govExamRoutes";
 
 interface ProtectedRouteProps {
   requireOnboarding?: boolean;
@@ -195,11 +198,19 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     return () => window.clearTimeout(t);
   }, [needsStaffGate, isProfileLoaded, isAdminResolved]);
 
+  const mfaBlocked = mfaAal === "pending" || mfaAal === "block";
   const govBrowseBeforeProfile = canBrowseGovExamsBeforeProfileReady({
     pathname: location.pathname,
     status,
+    accountPhase,
     hasUser: Boolean(user),
-    mfaBlocked: mfaAal === "pending" || mfaAal === "block",
+    mfaBlocked,
+  });
+  const govBrowseDuringRecovery = canBrowseGovExamsDuringAccountRecovery({
+    pathname: location.pathname,
+    status,
+    hasUser: Boolean(user),
+    mfaBlocked,
   });
 
   // Wait for authoritative account context. Government Exam search may render
@@ -212,7 +223,10 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     return <AppLoadingFallback />;
   }
 
-  if (accountPhase === "RECOVERY_REQUIRED" || status === "error") {
+  if (
+    (accountPhase === "RECOVERY_REQUIRED" || status === "error") &&
+    !govBrowseDuringRecovery
+  ) {
     return (
       <AccountLoadErrorCard
         message={error || PROFILE_FRIENDLY_ERROR}
@@ -415,11 +429,11 @@ export const ProtectedRoute = memo(function ProtectedRoute({
   // Source of truth is profiles.onboarding_completed (not persisted isOnboarded alone),
   // so a stale local true cannot bypass the gate for incomplete accounts.
   if (requireOnboarded || requireOnboarding) {
-    if (!isProfileLoaded && !govBrowseBeforeProfile) {
+    if (!isProfileLoaded && !govBrowseBeforeProfile && !govBrowseDuringRecovery) {
       return <AppLoadingFallback />;
     }
     const completed =
-      !isProfileLoaded && govBrowseBeforeProfile
+      !isProfileLoaded && (govBrowseBeforeProfile || govBrowseDuringRecovery)
         ? true
         : profile?.onboarding_completed === true;
     if (!completed) {

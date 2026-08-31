@@ -17,10 +17,12 @@ class AvailabilityRequest(BaseModel):
     correlation_id: str | None = Field(default=None, max_length=128)
     job_id: str | None = Field(default=None, max_length=80)
     bank_type_keys: list[str] = Field(default_factory=list, max_length=40)
+    mode: str = Field(default="generated_mock", max_length=40)
 
 
 class AvailabilityResponse(BaseModel):
     requested: int
+    eligible: int = 0
     available: int
     missing: int
     can_full_mock: bool
@@ -28,6 +30,9 @@ class AvailabilityResponse(BaseModel):
     custom_practice_max: int
     exam_type_keys: list[str] = Field(default_factory=list)
     section_coverage: dict[str, int] = Field(default_factory=dict)
+    language_available: bool = True
+    blocked_reason: str | None = None
+    mode: str = "generated_mock"
 
 
 class SelectRequest(BaseModel):
@@ -103,6 +108,7 @@ class ProcessJobResponse(BaseModel):
     success: bool
     job_id: str
     status: str
+    accepted: bool = False
     paper_id: str | None = None
     mock_test_id: str | None = None
     question_count: int | None = None

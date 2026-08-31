@@ -9,6 +9,7 @@ import { isTabLocalLogout } from "@/lib/auth/tabLocalLogout";
 import { ApiClientError } from "@/lib/api/apiClient";
 import { ensureAuthSession } from "@/lib/focusRecovery/sessionRefresh";
 import { debugLog161d95 } from "@/lib/debug/debugLog161d95";
+import { debugLog4a9592 } from "@/lib/debug/debugLog4a9592";
 
 /** Functions that may run without a user JWT (gateway still gets apikey + anon Bearer). */
 const ANON_OK_EDGE_FNS = new Set([
@@ -16,6 +17,8 @@ const ANON_OK_EDGE_FNS = new Set([
   "hybrid-health",
   "hybrid-ping",
   "ai-key-check",
+  "billing-catalog",
+  "contact-sales",
 ]);
 
 /** Edge calls blocked while private mode is on (no cloud AI / analysis). */
@@ -40,11 +43,21 @@ const PRIVATE_MODE_ALLOWLIST = new Set([
   "issue-course-certificate",
   "create-test",
   "submit-test",
+  "start-exam",
+  "start-exam-attempt",
+  "save-test-answer",
+  "save-attempt-answer",
+  "billing-catalog",
+  "contact-sales",
 ]);
 
 /** Edge functions that do not deduct credits — skip balance refresh. */
 const CREDIT_REFRESH_SKIP = new Set([
   "ping",
+  "billing-catalog",
+  "contact-sales",
+  "schedule-interview",
+  "sync-calendar",
   "deepgram-token",
   "stripe-webhook",
   "create-checkout",
@@ -72,14 +85,24 @@ const CREDIT_REFRESH_SKIP = new Set([
   "get-exam-syllabus",
   "list-previous-papers",
   "check-exam-paper-availability",
+  "get-paper-generation-job",
+  "cancel-paper-generation-job",
   "score-coding-submission",
   "issue-course-certificate",
   "submit-test",
+  "save-attempt-answer",
+  "save-test-answer",
+  "start-exam-attempt",
+  "start-exam",
 ]);
 
 /** Non-AI functions should not blame an "AI request" on CORS / network failure. */
 const OPERATIONAL_EDGE_FNS = new Set([
   "submit-test",
+  "save-attempt-answer",
+  "save-test-answer",
+  "start-exam-attempt",
+  "start-exam",
   "create-test",
   "create-exam-paper",
   "generate-topic-practice",
@@ -141,6 +164,7 @@ const NO_NETWORK_RETRY_FNS = new Set([
   // Typeahead / availability: retries are kept to a single attempt to avoid
   // spinner storms while still recovering from transient network blips.
   "check-exam-paper-availability",
+  "get-paper-generation-job",
 ]);
 
 function unreachableUserMessage(fnName: string): string {
@@ -508,6 +532,31 @@ export async function fetchEdgeJson<T>(
               : null,
       },
     });
+    if (
+      fnName === "create-exam-paper" ||
+      fnName === "get-paper-generation-job" ||
+      fnName === "check-exam-paper-availability" ||
+      fnName === "generate-topic-practice" ||
+      fnName === "cancel-paper-generation-job"
+    ) {
+      const rec = payload as Record<string, unknown>;
+      debugLog4a9592({
+        hypothesisId: response.status === 429 ? "H-A" : "H-B",
+        location: "fetchEdge.ts:fetchEdgeJson",
+        message: "gov_edge_response",
+        data: {
+          fnName,
+          status: response.status,
+          ok: response.ok,
+          code,
+          jobId: typeof rec.jobId === "string" ? rec.jobId.slice(0, 8) : null,
+          jobStatus: typeof rec.status === "string" ? rec.status : null,
+          creditsCharged: typeof rec.creditsCharged === "number" ? rec.creditsCharged : null,
+          async: rec.async === true,
+          idempotentReplay: rec.idempotentReplay === true,
+        },
+      });
+    }
   }
   // #endregion
 

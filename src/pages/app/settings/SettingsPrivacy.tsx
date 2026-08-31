@@ -4,10 +4,11 @@ import { useAuthStore } from "@/store/userStore";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/switch";
-import { CheckCircle, Shield, Eye, Database, Lock, WifiOff } from "lucide-react";
+import { CheckCircle, Check, Minus, Shield, Eye, Database, Lock, Wifi, WifiOff } from "lucide-react";
 import { toast } from "sonner";
 import { usePrivateMode } from "@/hooks/usePrivateMode";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
+import { SettingsSaveBar } from "@/components/settings/SettingsSaveBar";
 import {
   PRIVACY_ENFORCEMENT,
   parsePrivacyPrefs,
@@ -124,7 +125,9 @@ export default function SettingsPrivacy() {
         <div className="flex items-start justify-between gap-4">
           <div className="flex gap-3">
             <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-              <WifiOff className="w-4 h-4 text-primary" />
+              {privateMode
+                ? <WifiOff className="w-4 h-4 text-primary" aria-hidden="true" />
+                : <Wifi className="w-4 h-4 text-primary" aria-hidden="true" />}
             </div>
             <div>
               <p className="text-sm font-semibold text-foreground">Private mode</p>
@@ -134,7 +137,11 @@ export default function SettingsPrivacy() {
               </p>
             </div>
           </div>
-          <Switch checked={privateMode} onCheckedChange={togglePrivateMode} />
+          <Switch
+            checked={privateMode}
+            onCheckedChange={togglePrivateMode}
+            aria-label="Private mode"
+          />
         </div>
       </Card>
 
@@ -154,11 +161,27 @@ export default function SettingsPrivacy() {
                     {item.desc}
                   </p>
                 </div>
-                <Switch
-                  checked={prefs[item.key]}
-                  onCheckedChange={() => toggle(item.key)}
-                  aria-label={item.label}
-                />
+                <div className="flex items-center gap-2 shrink-0">
+                  {prefs[item.key] ? (
+                    <Check
+                      className="w-3.5 h-3.5 text-emerald-500"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <Minus
+                      className="w-3.5 h-3.5 text-muted-foreground"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <span className="sr-only">
+                    {prefs[item.key] ? "Enabled" : "Disabled"}
+                  </span>
+                  <Switch
+                    checked={prefs[item.key]}
+                    onCheckedChange={() => toggle(item.key)}
+                    aria-label={item.label}
+                  />
+                </div>
               </div>
             ))}
           </div>
@@ -198,6 +221,7 @@ export default function SettingsPrivacy() {
         </p>
       </Card>
 
+      <SettingsSaveBar>
       <Button
         variant={saved ? "success" : "primary"}
         size="md"
@@ -207,6 +231,7 @@ export default function SettingsPrivacy() {
       >
         {saved ? "Saved!" : "Save privacy settings"}
       </Button>
+      </SettingsSaveBar>
     </SettingsPageShell>
   );
 }

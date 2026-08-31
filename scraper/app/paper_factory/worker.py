@@ -1,4 +1,9 @@
-"""Job worker: drains `gov_paper_generation_jobs` rows routed to the Python factory."""
+"""Job worker: drains `gov_paper_generation_jobs` rows routed to the Python factory.
+
+Uses the same hybrid pipeline as HTTP `/internal/gov-exams/process-job`
+(`process_gov_exam_job`). Does not mutate user credit balances — Edge/DB
+owns reserve / finalize / release.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -8,10 +13,11 @@ import uuid
 from typing import Any
 
 from app.core.logger import get_logger
+from app.gov_exams.engine import process_gov_exam_job
 from app.gov_exams.observability import gov_exam_log
 from app.paper_factory.config import FactorySettings, get_factory_settings
-from app.paper_factory.factory import GenerationRequest, PaperFactory
-from app.paper_factory.models import PaperFactoryError, PaperResult
+from app.paper_factory.factory import GenerationRequest
+from app.paper_factory.models import PaperFactoryError
 from app.paper_factory.repository import PaperRepository
 
 log = get_logger("paper_factory.worker")
@@ -22,7 +28,7 @@ def worker_id() -> str:
 
 
 def request_from_job(job: dict[str, Any]) -> GenerationRequest:
-    """Translate a job row into a generation request."""
+    """Translate a job row into a generation request (tests + diagnostics)."""
     payload = job.get("request_json") or {}
 
     def optional_int(key: str) -> int | None:
@@ -55,8 +61,8 @@ async def process_job(
     *,
     settings: FactorySettings,
     repo: PaperRepository,
-) -> PaperResult | None:
-    """Generate and publish one job, updating its state machine throughout."""
+) -> Any:
+    """Run the hybrid engine for one already-claimed job row."""
     job_id = str(job["id"])
     correlation_id = str(
         ((job.get("request_json") or {}) or {}).get("correlationId") or job_id
@@ -72,55 +78,14 @@ async def process_job(
         mode=job.get("mode"),
     )
 
-    factory = PaperFactory(settings, repo)
-    request = request_from_job(job)
-
-    async def on_stage(stage: str) -> None:
-        await asyncio.to_thread(repo.set_stage, job_id, stage)
-        event_map = {
-            "selecting_questions": "selection_started",
-            "validating_questions": "validation_started",
-            "generating_questions": "ai_generation_started",
-            "generating_missing_slots": "ai_generation_started",
-            "assembling": "assembly_started",
-        }
-        event = event_map.get(stage)
-        if event:
-            gov_exam_log(
-                event,
-                operation_id=operation_id,
-                job_id=job_id,
-                correlation_id=correlation_id,
-                stage=stage,
-            )
-
-    async def on_progress(_completed: int, _total: int) -> None:
-        # Long provider calls can outlive the lease; stage writes renew it.
-        await asyncio.to_thread(repo.set_stage, job_id, "generating_missing_slots")
-
     try:
-        result = await factory.generate(
-            request,
-            on_stage=on_stage,
-            on_progress=on_progress,
+        result = await process_gov_exam_job(
+            job,
+            settings=settings,
+            repo=repo,
+            correlation_id=correlation_id,
         )
     except PaperFactoryError as exc:
-        if exc.code in {"AI_PROVIDER_UNCONFIGURED", "GENERATION_INCOMPLETE", "CONTENT_INSUFFICIENT"}:
-            gov_exam_log(
-                "ai_generation_failed",
-                operation_id=operation_id,
-                job_id=job_id,
-                correlation_id=correlation_id,
-                error_code=exc.code,
-                error=exc.message[:300],
-            )
-            gov_exam_log(
-                "python_fallback_started",
-                operation_id=operation_id,
-                job_id=job_id,
-                correlation_id=correlation_id,
-                reason=exc.code,
-            )
         log.error(
             "paper_factory_job_failed",
             job_id=job_id,
@@ -135,7 +100,6 @@ async def process_job(
             message=exc.message,
             retryable=exc.retryable,
         )
-        await _compensate(job, repo, permanent=not exc.retryable)
         gov_exam_log(
             "completed",
             operation_id=operation_id,
@@ -154,7 +118,6 @@ async def process_job(
             message=str(exc),
             retryable=True,
         )
-        # Retryable crash: re-queue only — never refund (matches Edge failJob).
         gov_exam_log(
             "completed",
             operation_id=operation_id,
@@ -165,47 +128,19 @@ async def process_job(
         )
         return None
 
-    await asyncio.to_thread(
-        repo.complete_job,
-        job_id,
-        paper_id=str(result.paper_id),
-        mock_test_id=str(result.mock_test_id),
-    )
     gov_exam_log(
         "completed",
         operation_id=operation_id,
         job_id=job_id,
         correlation_id=correlation_id,
-        success=True,
+        success=bool(result.success),
         paper_id=result.paper_id,
         mock_test_id=result.mock_test_id,
         bank_count=result.bank_count,
-        generated_count=result.generated_count,
+        generated_count=(result.ai_count or 0) + (result.deterministic_count or 0),
+        error_code=result.error_code,
     )
     return result
-
-
-async def _compensate(
-    job: dict[str, Any], repo: PaperRepository, *, permanent: bool
-) -> None:
-    """Refund only on permanent failure after atomically claiming credits_charged."""
-    if not permanent:
-        return
-    user_id = job.get("user_id")
-    job_id = str(job.get("id") or "")
-    if not user_id or not job_id:
-        return
-    claimed = await asyncio.to_thread(repo.claim_credits_for_refund, job_id)
-    if claimed <= 0:
-        return
-    idem_key = f"refund_paper_job:{job_id}"
-    await asyncio.to_thread(
-        repo.refund_credits,
-        str(user_id),
-        claimed,
-        idem_key,
-        idempotency_key=idem_key,
-    )
 
 
 async def worker_loop(

@@ -188,11 +188,23 @@ verify_jwt = true
 [functions.submit-test]
 verify_jwt = true
 
+[functions.start-exam]
+verify_jwt = true
+
+[functions.save-test-answer]
+verify_jwt = true
+
 [functions.recompute-topic-mastery]
 verify_jwt = true
 
 [functions.sync-calendar]
 verify_jwt = true
+
+[functions.billing-catalog]
+verify_jwt = false
+
+[functions.contact-sales]
+verify_jwt = false
 
 [functions.razorpay-create-order]
 verify_jwt = true
@@ -265,4 +277,10 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.retry-document-processing-job]
+verify_jwt = true
+
+[functions.save-attempt-answer]
+verify_jwt = true
+
+[functions.start-exam-attempt]
 verify_jwt = true

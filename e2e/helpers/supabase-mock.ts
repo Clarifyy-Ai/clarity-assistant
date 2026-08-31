@@ -8,13 +8,31 @@ export const E2E_TEST_USER = {
   fullName: "E2E Test User",
 } as const;
 
+export const E2E_USER_A_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
+export const E2E_USER_B_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2";
+export const E2E_COMPLETED_SESSION_ID = "11111111-2222-4333-8444-555555555555";
+
 export type MockAuthOptions = {
   onboarded?: boolean;
   emailConfirmed?: boolean;
+  /** When emailConfirmed is false, reject password login with email_not_confirmed (GoTrue 400). */
+  rejectUnconfirmedLogin?: boolean;
   /** Emails that should trigger duplicate-registration errors on signup. */
   registeredEmails?: Set<string>;
   /** Plan on the mocked profile — Pro-gated pages need "pro" or above. */
   planId?: string;
+  /** Spendable credit balance. Default 500. */
+  credits?: number;
+  /** Distinct user id for isolation fixtures (User A / User B). */
+  userId?: string;
+  /** Verified TOTP enrolled — login must challenge. */
+  mfaEnrolled?: boolean;
+  /** Owner of the completed session fixture. Defaults to the logged-in user. */
+  sessionOwnerId?: string;
+  /** When false (default), sync-calendar returns honest 501 NOT_CONFIGURED. */
+  calendarConfigured?: boolean;
+  /** Profile/subscription billing status for PAST_DUE fixtures. */
+  subscriptionStatus?: "active" | "past_due" | "canceled" | "trialing";
 };
 
 type ResumeRow = Record<string, unknown>;
@@ -62,10 +80,10 @@ function makeAccessToken(userId: string): string {
   ].join(".");
 }
 
-function makeUser(email: string, confirmed: boolean) {
+function makeUser(email: string, confirmed: boolean, id = E2E_TEST_USER.id) {
   const now = new Date().toISOString();
   return {
-    id: E2E_TEST_USER.id,
+    id,
     aud: "authenticated",
     role: "authenticated",
     email,
@@ -98,7 +116,9 @@ function makeProfile(
   userId: string,
   email: string,
   onboardingCompleted: boolean,
-  planId = "free"
+  planId = "free",
+  credits = 500,
+  subscriptionStatus = "active",
 ) {
   const now = new Date().toISOString();
   return {
@@ -106,15 +126,21 @@ function makeProfile(
     email,
     full_name: E2E_TEST_USER.fullName,
     plan_id: planId,
-    credits: 500,
+    credits,
     onboarding_completed: onboardingCompleted,
-    target_role: "Software Engineer",
+    onboarding_step: onboardingCompleted ? 2 : 1,
+    target_role: onboardingCompleted ? "Software Engineer" : "",
     region: "IN",
     timezone: "Asia/Kolkata",
     locale: "en-IN",
     created_at: now,
     updated_at: now,
     is_banned: false,
+    subscription_status: subscriptionStatus,
+    payment_failed_at:
+      subscriptionStatus === "past_due"
+        ? new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
+        : null,
   };
 }
 
@@ -269,7 +295,15 @@ export async function setupSupabaseMocks(
   const practicePlanItems: Record<string, unknown>[] = [];
   const onboarded = options.onboarded !== false;
   const emailConfirmed = options.emailConfirmed !== false;
+  const rejectUnconfirmedLogin = options.rejectUnconfirmedLogin ?? !emailConfirmed;
   const planId = options.planId ?? "free";
+  const credits = options.credits ?? 500;
+  const userId = options.userId ?? E2E_TEST_USER.id;
+  const sessionOwnerId = options.sessionOwnerId ?? userId;
+  const mfaEnrolled = options.mfaEnrolled === true;
+  const calendarConfigured = options.calendarConfigured === true;
+  const subscriptionStatus = options.subscriptionStatus ?? "active";
+  let spendableCredits = credits;
 
   await page.route("**/*supabase.co/**", async (route) => {
     const url = route.request().url();
@@ -340,12 +374,21 @@ export async function setupSupabaseMocks(
         });
       }
 
-      const user = makeUser(email, emailConfirmed);
+      if (!emailConfirmed && rejectUnconfirmedLogin) {
+        return fulfillJson(route, 400, {
+          error: "invalid_grant",
+          error_code: "email_not_confirmed",
+          msg: "Email not confirmed",
+          error_description: "Email not confirmed",
+        });
+      }
+
+      const user = makeUser(email, emailConfirmed, userId);
       return fulfillJson(route, 200, makeSession(user));
     }
 
     if (url.includes("/auth/v1/user") && method === "GET") {
-      const user = makeUser(E2E_TEST_USER.email, emailConfirmed);
+      const user = makeUser(E2E_TEST_USER.email, emailConfirmed, userId);
       return fulfillJson(route, 200, user);
     }
 
@@ -361,7 +404,39 @@ export async function setupSupabaseMocks(
       });
     }
 
-    if (url.includes("/auth/v1/factors") || url.includes("/auth/v1/aal")) {
+    if (url.includes("/auth/v1/recover") && method === "POST") {
+      return fulfillJson(route, 200, {});
+    }
+
+    if (url.includes("/auth/v1/aal")) {
+      return fulfillJson(route, 200, {
+        currentLevel: mfaEnrolled ? "aal1" : "aal1",
+        nextLevel: mfaEnrolled ? "aal2" : "aal1",
+      });
+    }
+
+    if (url.includes("/auth/v1/factors")) {
+      if (mfaEnrolled) {
+        return fulfillJson(route, 200, {
+          totp: [
+            {
+              id: "e2e-totp-factor",
+              factor_type: "totp",
+              status: "verified",
+              friendly_name: "Authenticator app",
+            },
+          ],
+          phone: [],
+          all: [
+            {
+              id: "e2e-totp-factor",
+              factor_type: "totp",
+              status: "verified",
+              friendly_name: "Authenticator app",
+            },
+          ],
+        });
+      }
       return fulfillJson(route, 200, {
         currentLevel: "aal1",
         nextLevel: "aal1",
@@ -374,20 +449,24 @@ export async function setupSupabaseMocks(
     // ── Profiles & roles ──────────────────────────────────────────────────
     if (url.includes("/rest/v1/profiles") && method === "GET") {
       const profile = makeProfile(
-        E2E_TEST_USER.id,
+        userId,
         E2E_TEST_USER.email,
         onboarded,
-        planId
+        planId,
+        credits,
+        subscriptionStatus,
       );
       return fulfillJson(route, 200, [profile]);
     }
 
     if (url.includes("/rest/v1/profiles") && (method === "PATCH" || method === "POST")) {
       const profile = makeProfile(
-        E2E_TEST_USER.id,
+        userId,
         E2E_TEST_USER.email,
         onboarded,
-        planId
+        planId,
+        credits,
+        subscriptionStatus,
       );
       return fulfillJson(route, 200, [profile]);
     }
@@ -404,9 +483,13 @@ export async function setupSupabaseMocks(
     if (url.includes("/rest/v1/rpc/get_spendable_credits")) {
       return fulfillJson(route, 200, {
         success: true,
-        balance: 500,
+        balance: credits,
         plan_id: planId,
       });
+    }
+
+    if (url.includes("/rest/v1/rpc/complete_onboarding")) {
+      return fulfillJson(route, 200, { success: true });
     }
 
     // ── Practice plan ─────────────────────────────────────────────────────
@@ -719,6 +802,14 @@ export async function setupSupabaseMocks(
       } catch {
         // ignore
       }
+      const toolCost = toolId === "system_design" ? 8 : toolId === "star_method" ? 10 : 3;
+      if (spendableCredits < toolCost) {
+        return fulfillJson(route, 402, {
+          error: "You have no credits remaining. Upgrade to continue practicing.",
+          code: "INSUFFICIENT_CREDITS",
+        });
+      }
+      spendableCredits -= toolCost;
       if (toolId === "system_design") {
         return fulfillJson(route, 200, {
           success: true,
@@ -780,6 +871,162 @@ Result: Checkout failures dropped using the metrics already in my draft.`,
           fullAnswer: "Situation: From draft. Task: From draft. Action: From draft. Result: From draft.",
         },
         meta: { creditsCharged: 10 },
+      });
+    }
+
+    if (url.includes("/rest/v1/sessions")) {
+      const sessionRow = {
+        id: E2E_COMPLETED_SESSION_ID,
+        user_id: sessionOwnerId,
+        type: "mock",
+        title: "Completed mock interview",
+        overall_score: null,
+        created_at: "2026-08-30T10:00:00.000Z",
+        started_at: "2026-08-30T10:00:00.000Z",
+        ended_at: "2026-08-30T10:18:00.000Z",
+        duration_seconds: 1080,
+        questions_asked: 3,
+        status: "completed",
+        lifecycle_status: "completed",
+        tags: [],
+        credits_used: 15,
+        source_type: "mock",
+      };
+      const accept = route.request().headers()["accept"] ?? "";
+      const wantObject = accept.includes("object");
+      const asksForCompleted = url.includes(E2E_COMPLETED_SESSION_ID);
+      const owned = userId === sessionOwnerId;
+      if (method === "GET") {
+        if (asksForCompleted) {
+          if (!owned) return fulfillJson(route, 200, wantObject ? null : []);
+          return fulfillJson(route, 200, wantObject ? sessionRow : [sessionRow]);
+        }
+        return fulfillJson(route, 200, owned ? [sessionRow] : []);
+      }
+      return fulfillJson(route, 200, wantObject ? sessionRow : [sessionRow]);
+    }
+
+    if (url.includes("/rest/v1/session_answers")) {
+      if (userId !== sessionOwnerId) return fulfillJson(route, 200, []);
+      const answers = [
+        {
+          id: "ans-1",
+          session_id: E2E_COMPLETED_SESSION_ID,
+          user_id: userId,
+          question: "Tell me about yourself",
+          answer: "I am a software engineer with eight years of experience.",
+          score: 82,
+          question_index: 0,
+          created_at: "2026-08-30T10:05:00.000Z",
+        },
+      ];
+      return fulfillJson(route, 200, answers);
+    }
+
+    if (url.includes("/rest/v1/scorecards")) {
+      if (userId !== sessionOwnerId) {
+        const accept = route.request().headers()["accept"] ?? "";
+        return fulfillJson(route, 200, accept.includes("object") ? null : []);
+      }
+      const card = {
+        id: "score-1",
+        session_id: E2E_COMPLETED_SESSION_ID,
+        user_id: userId,
+        overall_score: 81,
+        details: {},
+        created_at: "2026-08-30T10:20:00.000Z",
+      };
+      const accept = route.request().headers()["accept"] ?? "";
+      return fulfillJson(route, 200, accept.includes("object") ? card : [card]);
+    }
+
+    if (url.includes("/rest/v1/subscriptions")) {
+      if (subscriptionStatus === "past_due") {
+        return fulfillJson(route, 200, [
+          {
+            id: "sub-e2e-past-due",
+            user_id: userId,
+            status: "past_due",
+            plan_id: planId,
+            payment_failed_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+          },
+        ]);
+      }
+      return fulfillJson(route, 200, []);
+    }
+
+    if (url.includes("/functions/v1/generate-questions")) {
+      const cost = 12;
+      if (spendableCredits < cost) {
+        return fulfillJson(route, 402, {
+          error: "You have no credits remaining. Upgrade to continue practicing.",
+          code: "INSUFFICIENT_CREDITS",
+        });
+      }
+      spendableCredits -= cost;
+      return fulfillJson(route, 200, {
+        success: true,
+        questions: [{ id: "q1", question: "Tell me about a hard problem you solved." }],
+        meta: { creditsCharged: cost },
+      });
+    }
+
+    if (url.includes("/functions/v1/billing-catalog")) {
+      return fulfillJson(route, 200, {
+        source: "billing_settings",
+        paise: {
+          pro_monthly: 249_900,
+          enterprise_monthly: 679_900,
+          credits_50: 69_900,
+          credits_150: 189_900,
+          credits_500: 599_900,
+        },
+      });
+    }
+
+    if (url.includes("/functions/v1/contact-sales")) {
+      return fulfillJson(route, 200, { success: true });
+    }
+
+    if (url.includes("/functions/v1/schedule-interview")) {
+      return fulfillJson(route, 200, {
+        success: true,
+        email_configured: false,
+        reminders_queued: 2,
+      });
+    }
+
+    if (url.includes("/functions/v1/sync-calendar")) {
+      if (!calendarConfigured) {
+        return fulfillJson(route, 501, {
+          error: "Calendar sync is not available yet.",
+          code: "NOT_CONFIGURED",
+          message: "Google Calendar is not configured on this deployment.",
+        });
+      }
+      let action = "";
+      try {
+        action = String((route.request().postDataJSON() as { action?: string }).action ?? "");
+      } catch {
+        // ignore
+      }
+      if (action === "write_event") {
+        return fulfillJson(route, 200, { event_id: "gcal-e2e-1", written: true });
+      }
+      if (action === "delete_event") {
+        return fulfillJson(route, 200, { deleted: true });
+      }
+      return fulfillJson(route, 200, { imported: 0, available: true, configured: true });
+    }
+
+    if (url.includes("/functions/v1/delete-account")) {
+      if (method === "OPTIONS") {
+        return fulfillJson(route, 200, {});
+      }
+      return fulfillJson(route, 200, {
+        success: true,
+        status: "completed",
+        operationId: "e2e-delete-op",
       });
     }
 

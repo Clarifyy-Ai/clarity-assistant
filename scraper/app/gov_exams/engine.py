@@ -24,7 +24,7 @@ from app.gov_exams.source_priority import (
     summarize_source_mix,
 )
 from app.paper_factory.ai import MCQGenerator
-from app.paper_factory.blueprint import validate_assembled_paper
+from app.paper_factory.blueprint import EXACT_MODES, validate_assembled_paper
 from app.paper_factory.config import FactorySettings
 from app.paper_factory.factory import (
     GenerationRequest,
@@ -134,6 +134,7 @@ async def process_gov_exam_job(
 
     try:
         await set_stage("validating")
+        await set_stage("checking_availability")
         await set_stage("building_blueprint")
 
         raw_count = _optional_int(payload, "questionCount", "question_count")
@@ -177,7 +178,18 @@ async def process_gov_exam_job(
             language=language,
             topics=topics,
             difficulty=str(difficulty).upper() if difficulty else None,
-            verified_only=True,
+            verified_only=(mode == "official_previous"),
+        )
+
+        eligible_any_lang, _ = await asyncio.to_thread(
+            load_eligible_bank,
+            repo,
+            exam,
+            language="",
+            topics=topics,
+            difficulty=str(difficulty).upper() if difficulty else None,
+            verified_only=(mode == "official_previous"),
+            skip_language=True,
         )
 
         gov_exam_log(
@@ -186,8 +198,21 @@ async def process_gov_exam_job(
             job_id=job_id,
             correlation_id=correlation,
             available=len(bank_rows),
+            eligible=len(eligible_any_lang),
             requested=blueprint.total_questions,
         )
+
+        wanted_lang = (language or "en").strip().lower()
+        if (
+            wanted_lang not in ("", "en", "eng", "english")
+            and len(bank_rows) == 0
+            and len(eligible_any_lang) > 0
+        ):
+            raise PaperFactoryError(
+                "LANGUAGE_UNAVAILABLE",
+                f"No approved questions are available in language '{language}'.",
+                retryable=False,
+            )
 
         await set_stage("selecting_questions")
         gov_exam_log(
@@ -679,7 +704,6 @@ async def process_gov_exam_job(
             message=exc.message,
             retryable=exc.retryable,
         )
-        await _compensate(job, repo, permanent=not exc.retryable)
         gov_exam_log(
             "completed",
             operation_id=operation_id,
@@ -723,26 +747,3 @@ async def process_gov_exam_job(
             error_message=str(exc),
             retryable=True,
         )
-
-
-async def _compensate(
-    job: dict[str, Any], repo: PaperRepository, *, permanent: bool
-) -> None:
-    """Refund only on permanent failure after atomically claiming credits_charged."""
-    if not permanent:
-        return
-    user_id = job.get("user_id")
-    job_id = str(job.get("id") or "")
-    if not user_id or not job_id:
-        return
-    claimed = await asyncio.to_thread(repo.claim_credits_for_refund, job_id)
-    if claimed <= 0:
-        return
-    idem_key = f"refund_paper_job:{job_id}"
-    await asyncio.to_thread(
-        repo.refund_credits,
-        str(user_id),
-        claimed,
-        idem_key,
-        idempotency_key=idem_key,
-    )

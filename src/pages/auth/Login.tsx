@@ -19,7 +19,7 @@ import {
   LinkedInOAuthButton,
   AzureOAuthButton,
 } from "@/components/auth/OAuthButton";
-import { isOAuthProviderEnabled } from "@/lib/auth/oauthProviders";
+import { isOAuthProviderEnabled, OAUTH_NOT_CONFIGURED_MESSAGE } from "@/lib/auth/oauthProviders";
 
 import {
   ACCOUNT_SUSPENDED_MESSAGE,
@@ -209,16 +209,18 @@ export default function Login(): JSX.Element {
       setAuthError(MFA_AAL_START_FAILED_MESSAGE);
     } else if (errorCode === "cancelled") {
       setAuthError("Sign-in was cancelled. You can try again whenever you are ready.");
+    } else if (errorCode === "not_configured") {
+      setAuthError(OAUTH_NOT_CONFIGURED_MESSAGE);
     } else if (message) {
       const decoded = decodeURIComponent(message.replace(/\+/g, " "));
       if (isAccountSuspendedAuthError(decoded)) {
         setAccountSuspended(true);
         setAuthError(ACCOUNT_SUSPENDED_MESSAGE);
       } else {
-        setAuthError(decoded);
+        setAuthError(formatSupabaseAuthError({ message: decoded, code: errorCode ?? undefined }));
       }
     } else if (errorCode) {
-      setAuthError(`Sign-in failed (${errorCode}). Please try again.`);
+      setAuthError(formatSupabaseAuthError({ code: errorCode, message: errorCode }));
     } else {
       try {
         const banMessage = sessionStorage.getItem("clarify_auth_ban_message");

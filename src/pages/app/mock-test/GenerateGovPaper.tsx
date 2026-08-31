@@ -13,6 +13,7 @@ import {
   getExamPattern,
   getExamSyllabus,
   getPaperGenerationJob,
+  processPaperGenerationJob,
   requestGovExam,
   type ExamPaperAvailability,
   type GovExamSearchResult,
@@ -38,6 +39,7 @@ import { planRank } from "@/lib/billing/planCatalog";
 import { formatGovExamOperationError } from "@/lib/gov-exam/examOperationErrors";
 import { ApiClientError } from "@/lib/api/apiClient";
 import { debugLog161d95 } from "@/lib/debug/debugLog161d95";
+import { debugLog4a9592 } from "@/lib/debug/debugLog4a9592";
 import { useAuthStore } from "@/store/userStore";
 import { resolveCreditBalance } from "@/lib/billing/resolveCreditBalance";
 import { fetchSpendableCredits } from "@/lib/billing/fetchSpendableCredits";
@@ -58,6 +60,8 @@ import {
 import { pollPaperJobUntilTerminal } from "@/lib/gov-exam/pollPaperJob";
 import {
   parseGovQuestionCount,
+  syncQuestionCountForBasis,
+  isGovExactPatternBasis,
   GOV_QUESTION_COUNT_ABS_MAX,
   GOV_QUESTION_COUNT_MIN,
 } from "@/lib/gov-exam/questionCount";
@@ -126,16 +130,51 @@ function examVerificationLabel(exam: GovExamSearchResult): string | null {
   return String(raw).slice(0, 10) || null;
 }
 
+type PaperBasis =
+  | "latest_pattern"
+  | "topic"
+  | "quick"
+  | "full_sim"
+  | "official_previous"
+  | "hybrid";
+
+const PAPER_BASIS_VALUES: readonly PaperBasis[] = [
+  "latest_pattern",
+  "topic",
+  "quick",
+  "full_sim",
+  "official_previous",
+  "hybrid",
+];
+
+function parsePaperBasis(raw: string | null): PaperBasis {
+  if (raw && (PAPER_BASIS_VALUES as readonly string[]).includes(raw)) {
+    return raw as PaperBasis;
+  }
+  return "quick";
+}
+
+function isExactPatternBasis(basis: PaperBasis): boolean {
+  return isGovExactPatternBasis(basis);
+}
+
+function modeFromBasis(
+  basis: PaperBasis,
+): "official_previous" | "generated_mock" | "custom_mock" {
+  if (basis === "official_previous") return "official_previous";
+  if (basis === "full_sim" || basis === "hybrid") return "generated_mock";
+  return "custom_mock";
+}
+
 export default function GenerateGovPaper(): React.ReactElement {
   const [params] = useSearchParams();
+  const urlJobId = params.get("jobId");
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [selectedExam, setSelectedExam] = useState<GovExamSearchResult | null>(null);
   const [examId, setExamId] = useState(params.get("examId") ?? "");
   const [stageId, setStageId] = useState(params.get("stageId") ?? "");
-  const [basis, setBasis] = useState<
-    "latest_pattern" | "topic" | "quick" | "full_sim"
-  >((params.get("basis") as "latest_pattern" | "topic" | "quick" | "full_sim") || "quick");
+  const [basis, setBasis] = useState<PaperBasis>(parsePaperBasis(params.get("basis")));
   const [language, setLanguage] = useState("en");
   const [questionCount, setQuestionCount] = useState(25);
   const [questionCountInput, setQuestionCountInput] = useState("25");
@@ -196,7 +235,7 @@ export default function GenerateGovPaper(): React.ReactElement {
     [questionCountInput, questionCountMax],
   );
   const requestedForConfig =
-    basis === "full_sim"
+    isExactPatternBasis(basis)
       ? selected?.pattern?.totalQuestions ?? questionCount
       : parsedQuestionCount.valid
         ? parsedQuestionCount.value
@@ -226,15 +265,35 @@ export default function GenerateGovPaper(): React.ReactElement {
           serverAvailability.aiFillAllowed === true);
   const canGenerateRequested =
     inventory.canGenerateRequested &&
-    (basis !== "full_sim" || fullMockAllowedByServer);
+    (!isExactPatternBasis(basis) || fullMockAllowedByServer);
   const fullSimSelectable =
     fullSimAvailable || effectiveAiFill || fullMockAllowedByServer;
+
+  function applyQuestionCountForBasis(
+    nextBasis: PaperBasis,
+    patternTotal: number | null | undefined,
+    currentInput: string,
+  ) {
+    const next = syncQuestionCountForBasis(nextBasis, patternTotal, currentInput);
+    setQuestionCount(next.count);
+    setQuestionCountInput(next.input);
+    if (next.input === String(next.count)) {
+      setQuestionCountError(null);
+    }
+  }
 
   // Deep-link / stale selection: never keep Full Mock selected when inventory blocks it.
   useEffect(() => {
     if (basis === "full_sim" && !fullSimSelectable) {
       setBasis("latest_pattern");
+      applyQuestionCountForBasis(
+        "latest_pattern",
+        selected?.pattern?.totalQuestions,
+        questionCountInput,
+      );
     }
+    // Sync on basis/inventory only — not on every keystroke in the count field.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [basis, fullSimSelectable]);
 
   const showInventoryShortage =
@@ -394,15 +453,13 @@ export default function GenerateGovPaper(): React.ReactElement {
   useEffect(() => {
     const userId = user?.id ?? profile?.id;
     if (!userId) return;
-    const fromUrl = params.get("jobId");
+    if (generatingRef.current) return;
+    const fromUrl = urlJobId;
     const stored = loadActivePaperJob(userId);
     const jobId = fromUrl || stored?.jobId;
     if (!jobId) return;
     if (stored?.idempotencyKey) {
       idempotencyKeyRef.current = stored.idempotencyKey;
-    }
-    if (!fromUrl) {
-      syncJobIdInUrl(jobId);
     }
     let cancelled = false;
     pollAbortRef.current = false;
@@ -417,8 +474,32 @@ export default function GenerateGovPaper(): React.ReactElement {
           message: "gov_resume_poll_start",
           data: { jobId, fromUrl: Boolean(fromUrl), hasStored: Boolean(stored) },
         });
+        debugLog4a9592({
+          hypothesisId: "H-F",
+          location: "GenerateGovPaper.tsx:resumePoll:start",
+          message: "gov_resume_poll_start",
+          runId: "post-fix",
+          data: {
+            jobId: jobId.slice(0, 8),
+            fromUrl: Boolean(fromUrl),
+            hasStored: Boolean(stored),
+            hasUser: Boolean(user?.id),
+            hasProfile: Boolean(profile?.id),
+            generatingLocked: generatingRef.current,
+          },
+        });
         // #endregion
-        let current = await getPaperGenerationJob(jobId);
+        let current: PaperJobResult;
+        try {
+          current = await getPaperGenerationJob(jobId);
+        } catch (firstErr) {
+          const status = (firstErr as { status?: number })?.status;
+          if (status === 429 || status === 409) {
+            current = { jobId, status: "queued" };
+          } else {
+            throw firstErr;
+          }
+        }
         if (cancelled) return;
         setJob(current);
         if (stored?.examId) setExamId(stored.examId);
@@ -435,6 +516,7 @@ export default function GenerateGovPaper(): React.ReactElement {
         current = await pollPaperJobUntilTerminal(jobId, current, {
           setJob,
           shouldAbort: () => pollAbortRef.current || cancelled,
+          nudge: (id) => processPaperGenerationJob(id).then(() => undefined),
         });
         const publicStatus = mapPaperJobPublicStatus(current.status);
         if (current.status === "completed" && current.mockTestId) {
@@ -481,7 +563,7 @@ export default function GenerateGovPaper(): React.ReactElement {
         });
         // #endregion
         const status = (err as { status?: number })?.status;
-        if (status === 404 || status === 409 || status === 429) {
+        if (status === 404) {
           setJob({
             jobId,
             status: "failed_retryable",
@@ -500,19 +582,30 @@ export default function GenerateGovPaper(): React.ReactElement {
       cancelled = true;
       pollAbortRef.current = true;
     };
-  }, [user?.id, profile?.id, params]);
+  }, [user?.id, profile?.id, urlJobId]);
 
   useEffect(() => {
     if (!selected) return;
     const st = selected.stage ?? selected.stages[0];
     if (st && !stageId) setStageId(st.id);
-    if (selected.pattern && basis === "full_sim") {
-      setQuestionCount(selected.pattern.totalQuestions);
-      setDurationMinutes(selected.pattern.durationMinutes);
+    if (isExactPatternBasis(basis)) {
+      applyQuestionCountForBasis(
+        basis,
+        selected.pattern?.totalQuestions,
+        questionCountInput,
+      );
+      if (selected.pattern) {
+        setDurationMinutes(selected.pattern.durationMinutes);
+      }
     }
-    if (basis === "topic" && questionCount > 100) {
-      setQuestionCount(20);
+    if (basis === "topic" && questionCount > QUESTION_COUNT_ABS_MAX) {
+      const next = syncQuestionCountForBasis("topic", selected.pattern?.totalQuestions, String(questionCount));
+      setQuestionCount(next.count);
+      setQuestionCountInput(next.input);
+      setQuestionCountError(null);
     }
+    // Intentionally omit questionCountInput so typing custom counts does not re-sync.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, basis]);
 
   // Refresh pattern/languages from the server when exam + stage are known.
@@ -544,13 +637,13 @@ export default function GenerateGovPaper(): React.ReactElement {
             },
           };
         });
-        if (basis === "full_sim") {
-          setQuestionCount(res.pattern.totalQuestions);
+        if (isExactPatternBasis(basis)) {
+          applyQuestionCountForBasis(basis, res.pattern.totalQuestions, questionCountInput);
           setDurationMinutes(res.pattern.durationMinutes);
         }
         if (res.pattern.languages?.length) {
           setLanguage((prev) =>
-            res.pattern.languages.includes(prev) ? prev : res.pattern.languages[0],
+            res.pattern.languages.includes(prev) ? prev : prev,
           );
         }
       })
@@ -571,10 +664,9 @@ export default function GenerateGovPaper(): React.ReactElement {
   // Server-authoritative availability before charge — also keep bank counts honest.
   useEffect(() => {
     if (!examId || !stageId || step < 2) return;
-    if (basis !== "full_sim" && !parsedQuestionCount.valid) return;
+    if (isExactPatternBasis(basis) && !parsedQuestionCount.valid) return;
     let cancelled = false;
-    const mode =
-      basis === "full_sim" ? ("generated_mock" as const) : ("custom_mock" as const);
+    const mode = modeFromBasis(basis);
     const maxQ =
       basis === "topic"
         ? QUESTION_COUNT_ABS_MAX
@@ -599,11 +691,13 @@ export default function GenerateGovPaper(): React.ReactElement {
           questionCount: safeRequested,
           available: inventoryAvailable,
           basis:
-            basis === "full_sim"
+            basis === "full_sim" || basis === "hybrid"
               ? "full_sim"
-              : basis === "topic"
-                ? "topic"
-                : "custom",
+              : basis === "official_previous"
+                ? "official_previous"
+                : basis === "topic"
+                  ? "topic"
+                  : "custom",
         }),
       })
         .then((avail) => {
@@ -672,10 +766,7 @@ export default function GenerateGovPaper(): React.ReactElement {
     };
   }, [basis, examId, stageId]);
 
-  const mode =
-    basis === "full_sim"
-      ? ("generated_mock" as const)
-      : ("custom_mock" as const);
+  const mode = modeFromBasis(basis);
 
   const resolvedTopics = useMemo(() => {
     const fromDraft = topicDraft
@@ -690,6 +781,7 @@ export default function GenerateGovPaper(): React.ReactElement {
     return pollPaperJobUntilTerminal(jobId, seed, {
       setJob,
       shouldAbort: () => pollAbortRef.current,
+      nudge: (id) => processPaperGenerationJob(id).then(() => undefined),
     });
   }
 
@@ -711,6 +803,25 @@ export default function GenerateGovPaper(): React.ReactElement {
   }
 
   async function handleGenerate(overrideCount?: number) {
+    if (generatingRef.current) return;
+    // #region agent log
+    debugLog4a9592({
+      hypothesisId: "H-E",
+      location: "GenerateGovPaper.tsx:handleGenerate:entry",
+      message: "gov_generate_click",
+      data: {
+        generatingLocked: generatingRef.current,
+        busy,
+        jobStatus: job?.status ?? null,
+        jobTerminal: job ? isPaperJobTerminal(job.status) : null,
+        hasIdempotencyKey: Boolean(idempotencyKeyRef.current),
+        basis,
+        overrideCount: overrideCount ?? null,
+        examId: examId.slice(0, 8),
+        displayCredits,
+      },
+    });
+    // #endregion
     if (!examId || !stageId) {
       toast.error("Select an exam and stage");
       return;
@@ -719,11 +830,10 @@ export default function GenerateGovPaper(): React.ReactElement {
       toast.error(patternLoadError);
       return;
     }
-    if (basis !== "full_sim" && !parsedQuestionCount.valid) {
+    if (!isExactPatternBasis(basis) && !parsedQuestionCount.valid) {
       toast.error(questionCountError ?? "Enter a valid question count.");
       return;
     }
-    if (generatingRef.current) return;
     if (basis === "topic" && resolvedTopics.length === 0) {
       toast.error("Select or enter at least one topic");
       return;
@@ -746,12 +856,14 @@ export default function GenerateGovPaper(): React.ReactElement {
         difficulty: difficulty || null,
       });
       setServerAvailability(avail);
-      if (avail.blocked && (overrideCount != null ? false : mode === "generated_mock")) {
+      if (avail.blocked && overrideCount == null && (mode === "generated_mock" || mode === "official_previous")) {
         toast.error(
-          inventoryAvailabilityMessage(avail.available) +
-            (avail.customPracticeMax > 0
-              ? " Try Custom Practice Set."
-              : ""),
+          avail.blockCode === "LANGUAGE_UNAVAILABLE"
+            ? "This exam paper is not available in the selected language."
+            : inventoryAvailabilityMessage(avail.available) +
+              (avail.customPracticeMax > 0
+                ? " Try Custom Practice Set."
+                : ""),
         );
         generatingRef.current = false;
         setBusy(false);
@@ -759,7 +871,7 @@ export default function GenerateGovPaper(): React.ReactElement {
       }
       if (
         overrideCount == null &&
-        mode === "generated_mock" &&
+        (mode === "generated_mock" || mode === "official_previous") &&
         (!avail.fullMockAllowed || avail.blocked)
       ) {
         toast.error(
@@ -822,6 +934,19 @@ export default function GenerateGovPaper(): React.ReactElement {
       idempotencyKeyRef.current = crypto.randomUUID();
     }
     const idempotencyKey = idempotencyKeyRef.current;
+    // #region agent log
+    debugLog4a9592({
+      hypothesisId: "H-E",
+      location: "GenerateGovPaper.tsx:handleGenerate:create",
+      message: "gov_generate_create_start",
+      data: {
+        idempotencyKeyPrefix: idempotencyKey.slice(0, 8),
+        mode: overrideCount != null ? "custom_mock" : mode,
+        requested,
+        displayCredits,
+      },
+    });
+    // #endregion
     try {
       if (basis === "topic") {
         const result = await generateTopicPractice({
@@ -864,7 +989,12 @@ export default function GenerateGovPaper(): React.ReactElement {
           questionCount: requested,
           available: serverAvailability?.available,
           // topic basis returns earlier via generateTopicPractice
-          basis: basis === "full_sim" ? "full_sim" : "custom",
+          basis:
+            basis === "full_sim" || basis === "hybrid"
+              ? "full_sim"
+              : basis === "official_previous"
+                ? "official_previous"
+                : "custom",
         }),
       });
       setJob(result);
@@ -880,10 +1010,30 @@ export default function GenerateGovPaper(): React.ReactElement {
       }
 
       const publicStatus = mapPaperJobPublicStatus(result.status);
-      if (publicStatus === "failed_permanent" || publicStatus === "failed_retryable") {
+      // #region agent log
+      debugLog4a9592({
+        hypothesisId: "H-C",
+        location: "GenerateGovPaper.tsx:handleGenerate:created",
+        message: "gov_generate_created",
+        data: {
+          jobId: result.jobId?.slice(0, 8) ?? null,
+          status: result.status,
+          publicStatus,
+          creditsCharged: result.creditsCharged ?? null,
+          mockTestId: result.mockTestId ? true : false,
+          errorCode: result.errorCode ?? null,
+          displayCredits,
+        },
+      });
+      // #endregion
+      if (publicStatus === "failed_permanent") {
         idempotencyKeyRef.current = null;
         clearActivePaperJob();
         syncJobIdInUrl(null);
+        toast.error(paperJobErrorMessage(result));
+        return;
+      }
+      if (publicStatus === "failed_retryable") {
         toast.error(paperJobErrorMessage(result));
         return;
       }
@@ -905,34 +1055,57 @@ export default function GenerateGovPaper(): React.ReactElement {
           hasError: Boolean(current.error || current.errorMessage),
         },
       });
+      debugLog4a9592({
+        hypothesisId: "H-C",
+        location: "GenerateGovPaper.tsx:generate:terminal",
+        message: "gov_generate_terminal",
+        data: {
+          jobId: (current.jobId ?? result.jobId)?.slice(0, 8) ?? null,
+          createStatus: result.status,
+          pollStatus: current.status,
+          terminal,
+          mockTestId: Boolean(current.mockTestId),
+          errorCode: current.errorCode ?? null,
+          creditsCharged: current.creditsCharged ?? result.creditsCharged ?? null,
+          displayCredits,
+        },
+      });
       // #endregion
 
       if (terminal === "completed" && current.mockTestId) {
         clearActivePaperJob();
         syncJobIdInUrl(null);
         const expected =
-          basis === "full_sim" ? selected?.pattern?.totalQuestions : questionCount;
+          isExactPatternBasis(basis) ? selected?.pattern?.totalQuestions : questionCount;
         const actual = current.questionCount;
         const short =
           typeof actual === "number" &&
           typeof expected === "number" &&
           actual < expected;
-        const custom = current.paperClass === "custom_practice" || (basis !== "full_sim" && short);
-        if (basis === "full_sim" && short) {
+        const custom = current.paperClass === "custom_practice" || (!isExactPatternBasis(basis) && short);
+        if (basis === "official_previous" && short) {
           toast.error(
-            `Only ${actual ?? 0} approved questions are available. Try Custom Practice Set.`,
+            "Official paper coverage is incomplete. No generated questions were added. Try Custom Practice Set.",
           );
           return;
         }
-        toast.success(
-          custom
-            ? `Custom Practice Set ready (${actual ?? "available"} questions)`
-            : actual
-              ? `Practice paper ready (${actual} questions)`
-              : "Practice paper ready",
-        );
+        if (basis === "full_sim" && short) {
+          toast.message(
+            `Paper ready with ${actual ?? 0} questions (pattern asked for ${expected}). You can still start.`,
+          );
+        } else {
+          toast.success(
+            custom
+              ? `Custom Practice Set ready (${actual ?? "available"} questions)`
+              : actual
+                ? `Practice paper ready (${actual} questions)`
+                : "Practice paper ready",
+          );
+        }
         navigate(`/app/mock-test/session/${current.mockTestId}`);
-      } else if (terminal === "failed_retryable" || terminal === "failed_permanent" || terminal === "failed") {
+      } else if (terminal === "failed_retryable") {
+        toast.error(paperJobErrorMessage(current));
+      } else if (terminal === "failed_permanent" || terminal === "failed") {
         idempotencyKeyRef.current = null;
         clearActivePaperJob();
         syncJobIdInUrl(null);
@@ -947,15 +1120,93 @@ export default function GenerateGovPaper(): React.ReactElement {
         );
       }
     } catch (e) {
-      if (e instanceof ApiClientError) {
-        idempotencyKeyRef.current = null;
-      }
+      // #region agent log
+      debugLog4a9592({
+        hypothesisId: "H-D",
+        location: "GenerateGovPaper.tsx:handleGenerate:catch",
+        message: "gov_generate_catch",
+        runId: "post-fix",
+        data: {
+          status: e instanceof ApiClientError ? e.status : null,
+          code: e instanceof ApiClientError ? e.code : null,
+          nulledIdempotency: false,
+          jobStatusAfter: job?.status ?? null,
+        },
+      });
+      // #endregion
       toast.error(formatGovExamOperationError(e));
     } finally {
       generatingRef.current = false;
       setBusy(false);
     }
   }
+
+  async function handleRetry() {
+    if (generatingRef.current) return;
+    const jobId = job?.jobId;
+    if (jobId) {
+      generatingRef.current = true;
+      setBusy(true);
+      pollAbortRef.current = false;
+      try {
+        const latest = await getPaperGenerationJob(jobId).catch(() => null);
+        if (latest && latest.status === "completed" && latest.mockTestId) {
+          setJob(latest);
+          clearActivePaperJob();
+          syncJobIdInUrl(null);
+          navigate(`/app/mock-test/session/${latest.mockTestId}`);
+          return;
+        }
+        if (latest && !isPaperJobTerminal(latest.status)) {
+          setJob(latest);
+          await processPaperGenerationJob(jobId).catch(() => undefined);
+          const current = await pollJobUntilTerminal(jobId, latest);
+          const terminal = mapPaperJobPublicStatus(current.status);
+          if (terminal === "completed" && current.mockTestId) {
+            clearActivePaperJob();
+            syncJobIdInUrl(null);
+            navigate(`/app/mock-test/session/${current.mockTestId}`);
+          } else if (isPaperJobTerminal(current.status)) {
+            toast.error(paperJobErrorMessage(current));
+          }
+          return;
+        }
+      } catch (e) {
+        toast.error(formatGovExamOperationError(e));
+        return;
+      } finally {
+        generatingRef.current = false;
+        setBusy(false);
+      }
+    }
+    idempotencyKeyRef.current = null;
+    clearActivePaperJob();
+    syncJobIdInUrl(null);
+    void handleGenerate();
+  }
+
+  const generateDisabled =
+    busy || (job != null && !isPaperJobTerminal(job.status)) || !stageId;
+  // #region agent log
+  useEffect(() => {
+    debugLog4a9592({
+      hypothesisId: "H-D",
+      location: "GenerateGovPaper.tsx:buttonState",
+      message: "gov_generate_button_state",
+      data: {
+        busy,
+        jobStatus: job?.status ?? null,
+        jobTerminal: job ? isPaperJobTerminal(job.status) : null,
+        generateDisabled,
+        currentUserStage: job
+          ? mapProgressToUserStage(job.progressStage, job.status)
+          : null,
+        hasRetryUi: job ? isPaperJobTerminal(job.status) && job.status !== "completed" : false,
+        displayCredits,
+      },
+    });
+  }, [busy, job?.status, job?.progressStage, generateDisabled, displayCredits, stageId]);
+  // #endregion
 
   const currentUserStage = job
     ? mapProgressToUserStage(job.progressStage, job.status)
@@ -1109,6 +1360,23 @@ export default function GenerateGovPaper(): React.ReactElement {
                   hint: "Only when the approved bank covers the full pattern, or AI fill is available on your plan. Otherwise choose Custom Practice.",
                   disabled: !fullSimSelectable,
                 },
+                {
+                  id: "hybrid" as const,
+                  label: "Hybrid Realistic Mock",
+                  hint: "Approved real questions plus generated practice where permitted. Faithful to the exam structure — never labeled as Official PYQ.",
+                  disabled: !fullSimSelectable,
+                },
+                {
+                  id: "official_previous" as const,
+                  label: "Official / Previous Year",
+                  hint: "Verified official content only. No AI or generated replacements.",
+                  disabled: Boolean(
+                    serverAvailability &&
+                      (serverAvailability.blocked ||
+                        serverAvailability.available < serverAvailability.requested) &&
+                      basis !== "official_previous",
+                  ),
+                },
               ].map((opt) => (
                 <label
                   key={opt.id}
@@ -1126,16 +1394,18 @@ export default function GenerateGovPaper(): React.ReactElement {
                     onChange={() => {
                       if (opt.disabled) return;
                       setBasis(opt.id);
+                      applyQuestionCountForBasis(
+                        opt.id,
+                        selected?.pattern?.totalQuestions,
+                        questionCountInput,
+                      );
                       if (opt.id === "quick") {
-                        setQuestionCount(25);
                         setDurationMinutes(30);
                       }
                       if (opt.id === "topic") {
-                        setQuestionCount(20);
                         setDurationMinutes(25);
                       }
-                      if (opt.id === "full_sim" && selected?.pattern) {
-                        setQuestionCount(selected.pattern.totalQuestions);
+                      if (isExactPatternBasis(opt.id) && selected?.pattern) {
                         setDurationMinutes(selected.pattern.durationMinutes);
                       }
                     }}
@@ -1162,6 +1432,18 @@ export default function GenerateGovPaper(): React.ReactElement {
                 <p className="text-xs text-muted-foreground">
                   Topic practice uses verified bank items only. If coverage is short, generate a
                   smaller Custom Practice Set — we do not invent missing questions. Not an official paper.
+                </p>
+              )}
+              {basis === "hybrid" && (
+                <p className="text-xs text-muted-foreground">
+                  Hybrid Realistic Mock keeps the official section structure. Generated items are
+                  practice questions, not previous-year papers.
+                </p>
+              )}
+              {basis === "official_previous" && (
+                <p className="text-xs text-muted-foreground">
+                  Official / Previous Year uses only verified official content. If coverage is
+                  short, generation will not invent questions.
                 </p>
               )}
               {basis === "full_sim" && (
@@ -1208,7 +1490,7 @@ export default function GenerateGovPaper(): React.ReactElement {
                   type="text"
                   inputMode="numeric"
                   pattern="[0-9]*"
-                  disabled={basis === "full_sim"}
+                  disabled={isExactPatternBasis(basis)}
                   className="w-full rounded-lg border border-border bg-background px-3 py-2"
                   value={questionCountInput}
                   onChange={(e) => {
@@ -1250,6 +1532,11 @@ export default function GenerateGovPaper(): React.ReactElement {
                     setQuestionCountInput(String(parsed.value));
                   }}
                 />
+                <p className="text-xs text-muted-foreground">
+                  {isExactPatternBasis(basis)
+                    ? `Locked to exam pattern (${requestedForConfig} questions)`
+                    : `Allowed: ${QUESTION_COUNT_MIN}–${questionCountMax}`}
+                </p>
                 {questionCountError ? (
                   <p className="text-xs text-destructive">{questionCountError}</p>
                 ) : null}
@@ -1261,7 +1548,7 @@ export default function GenerateGovPaper(): React.ReactElement {
                     type="number"
                     min={5}
                     max={360}
-                    disabled={basis === "full_sim"}
+                    disabled={isExactPatternBasis(basis)}
                     className="w-full rounded-lg border border-border bg-background px-3 py-2"
                     value={durationMinutes}
                     onChange={(e) => setDurationMinutes(clampDurationMinutes(e.target.value))}
@@ -1459,6 +1746,16 @@ export default function GenerateGovPaper(): React.ReactElement {
                       {paperJobErrorMessage(job)}
                     </p>
                   )}
+                  {currentUserStage === "failed" && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => void handleRetry()}
+                      disabled={busy}
+                    >
+                      Retry
+                    </Button>
+                  )}
                   {!isPaperJobTerminal(job.status) && (
                     <Button
                       type="button"
@@ -1488,7 +1785,13 @@ export default function GenerateGovPaper(): React.ReactElement {
               </Button>
             ) : canGenerateRequested ? (
               <Button
-                onClick={() => void handleGenerate()}
+                onClick={() =>
+                  void (job &&
+                  (mapPaperJobPublicStatus(job.status) === "failed_retryable" ||
+                    mapPaperJobPublicStatus(job.status) === "failed")
+                    ? handleRetry()
+                    : handleGenerate())
+                }
                 disabled={busy || (job != null && !isPaperJobTerminal(job.status)) || !stageId}
               >
                 {busy ? (
@@ -1496,6 +1799,14 @@ export default function GenerateGovPaper(): React.ReactElement {
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Generating…
                   </>
+                ) : job &&
+                  (mapPaperJobPublicStatus(job.status) === "failed_retryable" ||
+                    mapPaperJobPublicStatus(job.status) === "failed") ? (
+                  "Retry"
+                ) : basis === "official_previous" ? (
+                  "Generate Official Paper"
+                ) : basis === "hybrid" ? (
+                  "Generate Hybrid Mock"
                 ) : basis === "full_sim" ? (
                   generateButtonLabel(inventory)
                 ) : (

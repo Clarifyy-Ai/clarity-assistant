@@ -198,7 +198,7 @@ export function useCalendarSync() {
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        scopes:      "https://www.googleapis.com/auth/calendar.readonly",
+        scopes:      "https://www.googleapis.com/auth/calendar.events",
         redirectTo:  `${window.location.origin}/app/settings/integrations?calendar=connected`,
         // offline + consent so Google returns a refresh_token we can persist server-side
         queryParams: { access_type: "offline", prompt: "consent" },
@@ -325,9 +325,74 @@ export function useCalendarSync() {
     }
   }, [user]);
 
+  const writeEvent = useCallback(async (input: {
+    interviewId: string;
+    summary: string;
+    description?: string;
+    startIso: string;
+    endIso: string;
+    timeZone?: string;
+    location?: string;
+    eventId?: string;
+  }): Promise<{ eventId: string | null; error: string | null }> => {
+    if (!syncAvailable) {
+      return { eventId: null, error: CALENDAR_UNAVAILABLE_MSG };
+    }
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const providerToken = sessionData?.session?.provider_token;
+      const data = await fetchEdgeJson<{ event_id?: string; error?: string; code?: string }>(
+        "sync-calendar",
+        {
+          action: "write_event",
+          interview_id: input.interviewId,
+          summary: input.summary,
+          description: input.description,
+          start: input.startIso,
+          end: input.endIso,
+          time_zone: input.timeZone,
+          location: input.location,
+          event_id: input.eventId,
+          provider_token: providerToken,
+        },
+      );
+      if (data?.error) return { eventId: null, error: data.error };
+      return { eventId: data?.event_id ?? null, error: null };
+    } catch (err) {
+      const e = err as Error & { code?: string };
+      if (isCalendarUnavailableError(e)) {
+        setSyncAvailable(false);
+        return { eventId: null, error: CALENDAR_UNAVAILABLE_MSG };
+      }
+      return { eventId: null, error: err instanceof Error ? err.message : "Calendar write failed" };
+    }
+  }, [syncAvailable]);
+
+  const deleteEvent = useCallback(async (input: {
+    interviewId: string;
+    eventId?: string;
+  }): Promise<{ error: string | null }> => {
+    if (!syncAvailable) return { error: null };
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const providerToken = sessionData?.session?.provider_token;
+      await fetchEdgeJson("sync-calendar", {
+        action: "delete_event",
+        interview_id: input.interviewId,
+        event_id: input.eventId,
+        provider_token: providerToken,
+      });
+      return { error: null };
+    } catch {
+      return { error: null };
+    }
+  }, [syncAvailable]);
+
   return {
     connectGoogle,
     syncNow,
+    writeEvent,
+    deleteEvent,
     disconnect,
     checkConnection,
     probeSyncAvailability,

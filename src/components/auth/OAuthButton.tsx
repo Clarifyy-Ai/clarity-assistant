@@ -111,20 +111,6 @@ function extractErrorDescription(error: unknown): string {
   return "Unknown error";
 }
 
-function extractErrorCode(error: unknown): string | null {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    typeof (error as { code?: unknown }).code === "string"
-  ) {
-    return (error as { code: string }).code;
-  }
-
-  return null;
-}
-
-
 function assertAllowedProvider(provider: OAuthProviderName): boolean {
   return isOAuthProviderEnabled(provider) && ALLOWED_OAUTH_PROVIDERS.has(provider);
 }
@@ -202,14 +188,11 @@ export const OAuthButton = ({
       }
     } catch (caughtError: unknown) {
       const rawMessage = extractErrorDescription(caughtError);
-      const code = extractErrorCode(caughtError);
-
       const message = getOAuthErrorMessage(rawMessage, provider.label);
 
       setLastError(message);
 
       toast.error(message, {
-        description: code ? `Error code: ${code}` : undefined,
         duration: 6000,
       });
     } finally {

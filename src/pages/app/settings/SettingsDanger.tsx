@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 import { isTerminalDeletionStatus } from "@/lib/account/deletionStates";
+import { messageFromDeleteAccountResponse } from "@/lib/account/deleteAccountErrors";
 import {
   createExportIdempotencyKey,
   messageFromExportCaught,
@@ -121,6 +122,7 @@ export default function SettingsDanger() {
   }
 
   async function handleDelete() {
+    if (deleting) return;
     if (!user?.email) return;
 
     if (usePasswordConfirm) {
@@ -155,13 +157,21 @@ export default function SettingsDanger() {
         headers: { "Idempotency-Key": idempotencyKey },
       });
 
-      if (!res.ok) {
-        throw new Error(`delete_failed_${res.status}`);
-      }
-
       const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(
+          messageFromDeleteAccountResponse(
+            res.status,
+            typeof payload?.code === "string" ? payload.code : undefined,
+          ),
+        );
+        setDeleting(false);
+        return;
+      }
       if (payload?.success !== true || payload?.status !== "completed") {
-        throw new Error("delete_incomplete");
+        toast.error(messageFromDeleteAccountResponse(500, "INTERNAL_ERROR"));
+        setDeleting(false);
+        return;
       }
       setDeleteOpen(false);
       if (payload?.status && !isTerminalDeletionStatus(String(payload.status))) {
@@ -354,7 +364,7 @@ export default function SettingsDanger() {
             size="sm"
             fullWidth
             loading={deleting}
-            disabled={usePasswordConfirm ? !deletePassword.trim() : confirm !== user?.email}
+            disabled={deleting || (usePasswordConfirm ? !deletePassword.trim() : confirm !== user?.email)}
             onClick={handleDelete}
           >
             Delete account

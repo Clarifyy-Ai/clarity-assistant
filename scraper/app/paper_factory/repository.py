@@ -565,6 +565,7 @@ class PaperRepository:
                         "generator": "python_paper_factory",
                         "generation_job_id": job_id,
                         "disclaimer": blueprint.label,
+                        "scoring_version": "gov_exam_snapshot_v1",
                     },
                 }
             )
@@ -646,6 +647,22 @@ class PaperRepository:
                         else "approved_bank"
                     )
                 ),
+                "snapshot_json": {
+                    "question_text": question.question_text,
+                    "options": question.options_json(),
+                    "correct_answer": question.correct_answer_letter,
+                    "question_type": "MCQ",
+                    "subject": question.subject,
+                    "topic": question.topic,
+                    "difficulty": question.difficulty,
+                    "language": question.language,
+                    "marks_positive": question.marks_positive,
+                    "marks_negative": question.marks_negative,
+                    "section_code": question.section_code,
+                    "explanation": question.explanation,
+                    "source_type": getattr(question, "source_type", None),
+                    "source_class": question.source_class,
+                },
             }
             for index, question in enumerate(questions)
         ]
@@ -848,7 +865,7 @@ class PaperRepository:
         """
         result = (
             self.db.table("gov_paper_generation_jobs")
-            .select("credits_charged")
+            .select("credits_charged, credits_reserved, credits_released_at, credits_finalized_at")
             .eq("id", job_id)
             .limit(1)
             .execute()
@@ -856,7 +873,13 @@ class PaperRepository:
         row = (result.data or [None])[0]
         if not row:
             return 0
-        amount = max(0, int(row.get("credits_charged") or 0))
+        if row.get("credits_released_at") or row.get("credits_finalized_at"):
+            return 0
+        amount = max(
+            0,
+            int(row.get("credits_reserved") or 0),
+            int(row.get("credits_charged") or 0),
+        )
         if amount <= 0:
             return 0
 
@@ -865,11 +888,13 @@ class PaperRepository:
             .update(
                 {
                     "credits_charged": 0,
+                    "credits_reserved": 0,
+                    "credits_released_at": datetime.now(timezone.utc).isoformat(),
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 }
             )
             .eq("id", job_id)
-            .eq("credits_charged", amount)
+            .is_("credits_released_at", "null")
             .execute()
         )
         if not (claimed.data or []):

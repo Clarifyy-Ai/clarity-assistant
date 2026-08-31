@@ -18,7 +18,15 @@ function errorText(err: unknown): string {
   }
   if (err instanceof Error) return err.message;
   if (typeof err === "string") return err;
-  return String(err ?? "");
+  if (err && typeof err === "object") {
+    const rec = err as Record<string, unknown>;
+    for (const key of ["message", "error", "detail", "msg"] as const) {
+      const v = rec[key];
+      if (typeof v === "string" && v.trim() && v !== "[object Object]") return v.trim();
+    }
+  }
+  const fallback = String(err ?? "");
+  return fallback === "[object Object]" ? "" : fallback;
 }
 
 function errorStatus(err: unknown): number | null {

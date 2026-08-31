@@ -998,12 +998,13 @@ export const useAuthStore = create<AuthStore>()(
             });
 
             if (error) {
+              const friendly = formatSupabaseAuthError(error);
               dset((state) => {
                 state.status = "error";
-                state.error = error.message;
+                state.error = friendly;
               });
 
-              throw error;
+              throw new Error(friendly);
             }
           },
 

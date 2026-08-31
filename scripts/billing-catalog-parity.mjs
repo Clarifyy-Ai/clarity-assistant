@@ -66,5 +66,23 @@ if (JSON.stringify(bePacks) !== JSON.stringify(expected)) {
   failed = true;
 }
 
+const feCalc = fs.readFileSync(
+  path.join(root, "src/lib/billing/liveCatalog.ts"),
+  "utf8",
+);
+const requiredPaise = [
+  "pro_monthly",
+  "enterprise_monthly",
+  "credits_50",
+  "credits_150",
+  "credits_500",
+];
+for (const key of requiredPaise) {
+  if (!feCalc.includes(`${key}:`)) {
+    console.error(`FAIL: liveCatalog missing ${key} paise`);
+    failed = true;
+  }
+}
+
 if (failed) process.exit(1);
-console.log("OK: billing catalog parity passed (ranks + credit packs)");
+console.log("OK: billing catalog parity passed (ranks + credit packs + INR paise)");

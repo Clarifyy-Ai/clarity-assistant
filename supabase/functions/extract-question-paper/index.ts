@@ -191,6 +191,27 @@ async function resolvePdfBase64(
   return { base64: bufferToBase64(buf) };
 }
 
+const ASYNC_PDF_B64_CHARS = 500_000;
+
+function scheduleWaitUntil(task: Promise<unknown>): boolean {
+  try {
+    const er = (globalThis as unknown as {
+      EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void };
+    }).EdgeRuntime;
+    if (er && typeof er.waitUntil === "function") {
+      er.waitUntil(
+        task.catch((err) => {
+          console.error("[extract-question-paper] background:", err);
+        }),
+      );
+      return true;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
 Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
@@ -308,6 +329,12 @@ Deno.serve(async (req) => {
     }
 
     const jobId = job.id as string;
+    const pdfChars = typeof payload.pdfBase64 === "string" ? payload.pdfBase64.length : 0;
+    const heavyPdf =
+      pdfChars > ASYNC_PDF_B64_CHARS ||
+      Boolean(payload.storagePath && !payload.hasQuestionsArray && !payload.textPayload);
+
+    const runProcess = async (): Promise<Response> => {
     let rawOcrText: string | null = null;
     let rawQuestions: unknown[] = [];
 
@@ -641,6 +668,36 @@ Deno.serve(async (req) => {
         req,
       );
     }
+    };
+
+    if (heavyPdf) {
+      const background = runProcess().then((res) => {
+        if (!res.ok) {
+          console.warn("[extract-question-paper] async finished", jobId, res.status);
+        }
+      });
+      if (!scheduleWaitUntil(background)) {
+        void background;
+      }
+      return successResponse(
+        {
+          jobId,
+          sourceId,
+          paperId: null,
+          status: "queued",
+          async: true,
+          questionsImported: 0,
+          autoPublish: false,
+          message:
+            "Ingestion queued. Poll Recent jobs for completion. Questions stay unpublished until review.",
+        },
+        undefined,
+        202,
+        req,
+      );
+    }
+
+    return await runProcess();
   } catch (err) {
     console.error("[extract-question-paper]", err);
     const message = err instanceof Error ? err.message : "Internal error";

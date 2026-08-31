@@ -454,6 +454,28 @@ const VALID_IANA_TIMEZONES = new Set([
   "UTC",
 ]);
 
+const SCHEDULER_PLACEHOLDERS = new Set([
+  "test",
+  "testing",
+  "asdf",
+  "qwerty",
+  "xxx",
+  "xyz",
+  "abc",
+  "n/a",
+  "na",
+  "none",
+  "null",
+  "company",
+  "role",
+  "5555",
+  "tttttt",
+]);
+
+export function isSchedulerPlaceholderName(value: string): boolean {
+  return SCHEDULER_PLACEHOLDERS.has(value.trim().toLowerCase());
+}
+
 export const schedulerCompanyNameSchema = z
   .string()
   .trim()
@@ -464,6 +486,9 @@ export const schedulerCompanyNameSchema = z
   })
   .refine((value) => /[a-zA-Z]/.test(value), {
     message: "Company name must contain at least one letter.",
+  })
+  .refine((value) => !isSchedulerPlaceholderName(value), {
+    message: "Company name must be a meaningful value, not a placeholder.",
   })
   .transform((value) => sanitizeText(value));
 
@@ -477,6 +502,9 @@ export const schedulerRoleTitleSchema = z
   })
   .refine((value) => /[a-zA-Z]/.test(value), {
     message: "Role title must contain at least one letter.",
+  })
+  .refine((value) => !isSchedulerPlaceholderName(value), {
+    message: "Role title must be a meaningful value, not a placeholder.",
   })
   .transform((value) => sanitizeText(value));
 

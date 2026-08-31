@@ -253,7 +253,7 @@ def test_assembled_paper_rejects_duplicate_stems(exam, pattern) -> None:
 
 
 def test_assembled_paper_checks_section_totals(exam, pattern) -> None:
-    blueprint = make_blueprint(exam, pattern, mode="custom_mock", custom_question_count=5)
+    blueprint = make_blueprint(exam, pattern, mode="generated_mock")
     questions = [make_question(i, section="quant") for i in range(5)]
     errors = validate_assembled_paper(blueprint, questions)
     assert any("expected" in e for e in errors)

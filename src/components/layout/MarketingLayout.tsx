@@ -13,6 +13,8 @@ import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { cn } from "@/lib/utils";
 import { SupportChatWidget } from "@/components/support/SupportChatWidget";
+import { MARKETING_SHELL } from "@/lib/ui/responsivePage";
+import { hydrateBillingCatalog } from "@/lib/billing/liveCatalog";
 
 type NavItem =
   | { to: string; label: string; hash?: string }
@@ -56,8 +58,12 @@ const FOOTER_COLUMNS: Array<{
   {
     heading: "Company",
     links: [
-      { href: `mailto:${SALES_EMAIL}`, label: "Contact Sales" },
+      { to: "/about", label: "About" },
+      { to: "/industries", label: "Industries" },
+      { to: "/contact-sales", label: "Contact Sales" },
       { to: "/careers", label: "Careers" },
+      { to: "/cookies", label: "Cookies" },
+      { to: "/faq", label: "FAQ" },
       { to: "/terms", label: "Terms of Service" },
       { to: "/privacy", label: "Privacy Policy" },
       { to: "/signup", label: "Sign up free" },
@@ -137,6 +143,10 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
   }, [pathname]);
 
   useEffect(() => {
+    void hydrateBillingCatalog();
+  }, []);
+
+  useEffect(() => {
     if (!menuOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") setMenuOpen(false);
@@ -166,7 +176,7 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
         aria-label="Main navigation"
         className="fixed top-0 inset-x-0 z-[110] border-b border-border bg-background/80 backdrop-blur-xl"
       >
-        <div className="max-w-6xl mx-auto flex items-center justify-between px-4 sm:px-6 h-16">
+        <div className={`${MARKETING_SHELL} flex items-center justify-between px-4 sm:px-6 h-16`}>
           <Link
             to="/"
             className="flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -285,7 +295,7 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
       </main>
 
       <footer className="border-t border-border bg-background">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 pb-8">
+        <div className={`${MARKETING_SHELL} px-4 sm:px-6 pt-12 pb-8`}>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-6 gap-y-10 mb-10 text-left items-start">
             <div className="col-span-2 sm:col-span-3 lg:col-span-1">
               <Link

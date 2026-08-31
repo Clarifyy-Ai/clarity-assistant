@@ -64,4 +64,38 @@ test.describe("Settings billing history pagination", () => {
     await next.click();
     await expect(pageLabel).toContainText(/Page\s+2\s+of\s+\d+/i);
   });
+
+  test("refund ledger rows appear when present", async ({ page }) => {
+    await loginAsTestUser(page);
+    await page.route("**/rest/v1/payment_orders**", async (route) => {
+      if (route.request().method() === "OPTIONS") {
+        return route.fulfill({ status: 204, body: "" });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-allow-headers": "*",
+        },
+        body: JSON.stringify([
+          {
+            id: "po-refund-1",
+            user_id: E2E_TEST_USER.id,
+            status: "refunded",
+            amount: 69900,
+            currency: "INR",
+            product_type: "credits_50",
+            created_at: new Date().toISOString(),
+          },
+        ]),
+      });
+    });
+    await page.goto("/app/settings/billing", { waitUntil: "domcontentloaded" });
+    const refundFilter = page.locator("select, [role='combobox']").filter({ hasText: /Refund/i }).first();
+    if (await refundFilter.count()) {
+      await refundFilter.selectOption("refund").catch(() => undefined);
+    }
+    await expect(page.getByText(/Refund|refunded/i).first()).toBeVisible({ timeout: 20_000 });
+  });
 });

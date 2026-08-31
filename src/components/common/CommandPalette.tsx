@@ -163,6 +163,7 @@ const COMMANDS: NavCommand[] = [
   { label: "Admin gov exams", path: "/app/admin/gov/exams", icon: Brain, group: "Admin", keywords: "admin gov exam registry", adminOnly: true },
   { label: "Admin gov sources", path: "/app/admin/gov/sources", icon: FileText, group: "Admin", keywords: "admin gov sources", adminOnly: true },
   { label: "Admin PDF ingest", path: "/app/admin/gov/ingest", icon: FileText, group: "Admin", keywords: "admin gov pdf ocr ingest", adminOnly: true },
+  { label: "Admin paper factory", path: "/app/admin/gov/paper-factory", icon: FileText, group: "Admin", keywords: "admin gov paper factory plan generate", adminOnly: true },
 
 ];
 

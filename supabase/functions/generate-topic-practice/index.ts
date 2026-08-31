@@ -7,9 +7,10 @@
 
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
-import { createServiceClient, deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
+import { createServiceClient } from "../_shared/supabase.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { creditDenialResponse } from "../_shared/creditAuthority.ts";
+import { reservePaperJobCredits, releasePaperJobCredits, finalizePaperJobCredits } from "../_shared/claimJobCredits.ts";
 import {
   countEligibleGovQuestions,
   inventoryInsufficientPayload,
@@ -21,7 +22,7 @@ import {
 import { isUniqueViolation } from "../_shared/postgresErrors.ts";
 import { isUserBanned, bannedResponse } from "../_shared/banCheck.ts";
 import {
-  checkRateLimitAsync,
+  checkRateLimitAsyncWithLocalFallback,
   createRateLimitKey,
   rateLimitResponse,
   RATE_LIMIT_PRESETS,
@@ -102,7 +103,7 @@ Deno.serve(async (req) => {
       return bannedResponse(getCorsHeaders(req));
     }
 
-    const rateLimitResult = await checkRateLimitAsync(db, {
+    const rateLimitResult = await checkRateLimitAsyncWithLocalFallback(db, {
       key: createRateLimitKey("generate-topic-practice", user.id),
       ...RATE_LIMIT_PRESETS.SESSION_ACTION,
     });
@@ -255,17 +256,6 @@ Deno.serve(async (req) => {
       return json(req, inventoryInsufficientPayload(inventory.available, questionCount), 409);
     }
 
-    const creditResult = await deductCreditsAtomic({
-      userId: user.id,
-      action: "create_mock_test",
-      cost: COST,
-      idempotencyKey: `gov_topic_practice:${idempotencyKey}`,
-    });
-
-    if (!creditResult?.success) {
-      return creditDenialResponse(req, creditResult, COST);
-    }
-
     const { data: job, error: jobErr } = await db
       .from("gov_paper_generation_jobs")
       .insert({
@@ -276,10 +266,11 @@ Deno.serve(async (req) => {
         mode: "custom_mock",
         language,
         request_json: { ...b, topics, questionCount, difficulty, skipAiFill: true },
-        status: "selecting_questions",
+        status: "selecting",
         progress_stage: "selecting_questions",
         idempotency_key: idempotencyKey,
-        credits_charged: COST,
+        credits_charged: 0,
+        credits_reserved: 0,
         random_seed: randomSeed,
         started_at: new Date().toISOString(),
       })
@@ -308,12 +299,31 @@ Deno.serve(async (req) => {
         }
       }
       console.error("[generate-topic-practice] job:", jobErr);
-      await refundCredits({
-        userId: user.id,
-        cost: COST,
-        reason: "refund_topic_practice_job",
-      }).catch(() => {});
       return json(req, { error: "Failed to create job", code: "PAPER_GENERATION_FAILED" }, 500);
+    }
+
+    const reserved = await reservePaperJobCredits(
+      db,
+      job.id as string,
+      user.id,
+      COST,
+      `gov_topic_practice:${idempotencyKey}`,
+    );
+
+    if (!reserved.success) {
+      await db
+        .from("gov_paper_generation_jobs")
+        .update({
+          status: "failed_permanent",
+          progress_stage: "failed_permanent",
+          retryable: false,
+          error_code: String(reserved.denial?.code ?? "INSUFFICIENT_CREDITS"),
+          error_message: "Could not reserve credits for this paper.",
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", job.id);
+      return creditDenialResponse(req, reserved.denial ?? { success: false }, COST);
     }
 
     const jobId = job.id as string;
@@ -336,7 +346,8 @@ Deno.serve(async (req) => {
             "id, question_text, options, correct_answer, subject, topic, difficulty, source, source_year, is_public, is_verified",
           )
           .eq("is_public", true)
-          .eq("is_verified", true)
+          .eq("publish_status", "published")
+          .eq("review_status", "approved")
           .in("exam_type", examTypeKeys)
           .limit(800);
         if (difficulty) {
@@ -393,11 +404,7 @@ Deno.serve(async (req) => {
           })
           .eq("id", jobId);
 
-        await refundCredits({
-          userId: user.id,
-          cost: COST,
-          reason: "refund_topic_practice_insufficient",
-        }).catch(() => {});
+        await releasePaperJobCredits(db, jobId, "refund_topic_practice_insufficient");
 
         return json(req, {
           jobId,
@@ -528,6 +535,7 @@ Deno.serve(async (req) => {
           updated_at: new Date().toISOString(),
         })
         .eq("id", jobId);
+      await finalizePaperJobCredits(db, jobId);
 
       return json(req, {
         jobId,
@@ -555,11 +563,7 @@ Deno.serve(async (req) => {
           updated_at: new Date().toISOString(),
         })
         .eq("id", jobId);
-      await refundCredits({
-        userId: user.id,
-        cost: COST,
-        reason: "refund_topic_practice_failed",
-      }).catch(() => {});
+      await releasePaperJobCredits(db, jobId, "refund_topic_practice_failed");
       return json(req, {
         jobId,
         status: "failed",

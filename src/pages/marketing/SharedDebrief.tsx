@@ -33,7 +33,7 @@ function SharedShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </header>
-      <div className="flex-1">{children}</div>
+      <div className="flex-1 min-h-0">{children}</div>
       <footer className="border-t border-border py-8 px-4 text-center space-y-3">
         <p className="text-sm text-muted-foreground">
           Shared via {PRODUCT_NAMES.brand} — practice-only interview coaching

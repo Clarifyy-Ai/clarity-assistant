@@ -106,27 +106,77 @@ Deno.serve(async (req) => {
     latency_ms: number;
     code?: string;
   } | null = null;
+  let pythonSupported: { ok: boolean; count?: number } | null = null;
+  let pythonAlerts: { ok: boolean; count?: number } | null = null;
+  let pythonMetrics: { ok: boolean } | null = null;
 
   if (configured) {
-    const [h, r] = await Promise.all([pythonHealth(), pythonReady()]);
+    const probeId = (correlationId.replace(/[^A-Za-z0-9._:-]/g, "").slice(0, 20) || "x0000000");
+    const [h, r, signed, supported, alerts, metrics] = await Promise.all([
+      pythonHealth(),
+      pythonReady(),
+      pythonFetch("/internal/gov-exams/health", {
+        method: "GET",
+        timeoutMs: 8_000,
+        requestId: `hh-gov-${probeId}`,
+      }),
+      pythonFetch("/internal/operations/supported", {
+        method: "GET",
+        timeoutMs: 8_000,
+        requestId: `hh-ops-${probeId}`,
+      }),
+      pythonFetch("/alerts", {
+        method: "GET",
+        timeoutMs: 8_000,
+        requestId: `hh-alerts-${probeId}`,
+      }),
+      pythonFetch("/metrics", {
+        method: "GET",
+        timeoutMs: 8_000,
+        requestId: `hh-metrics-${probeId}`,
+      }),
+    ]);
     health = { ok: h.ok, status: h.status, latency_ms: h.latencyMs };
     ready = { ok: r.ok, status: r.status, latency_ms: r.latencyMs };
 
     // Public /health can be green while HMAC is wrong — probe a signed route.
-    const signedStarted = Date.now();
-    const signed = await pythonFetch("/internal/gov-exams/health", {
-      method: "GET",
-      timeoutMs: 8_000,
-      requestId: `hybrid-health-${correlationId.slice(0, 24)}`,
-    });
     signedInternal = {
       ok: signed.ok,
       status: signed.status,
-      latency_ms: Date.now() - signedStarted,
+      latency_ms: signed.latencyMs,
       code: signed.ok
         ? undefined
         : String(signed.errorCode ?? "PYTHON_HMAC_FAILED"),
     };
+
+    const supportedJson =
+      supported.json && typeof supported.json === "object"
+        ? (supported.json as Record<string, unknown>)
+        : null;
+    const supportedOps = Array.isArray(supportedJson?.operations)
+      ? supportedJson.operations
+      : [];
+    pythonSupported = {
+      ok: supported.ok,
+      count: supported.ok ? supportedOps.length : undefined,
+    };
+
+    const alertsJson =
+      alerts.json && typeof alerts.json === "object"
+        ? (alerts.json as Record<string, unknown>)
+        : null;
+    const alertCount =
+      typeof alertsJson?.total_active === "number"
+        ? alertsJson.total_active
+        : Array.isArray(alertsJson?.alerts)
+          ? alertsJson.alerts.length
+          : undefined;
+    pythonAlerts = {
+      ok: alerts.ok,
+      count: alerts.ok ? alertCount ?? 0 : undefined,
+    };
+
+    pythonMetrics = { ok: metrics.ok };
   }
 
   const publicOk = Boolean(health?.ok && ready?.ok);
@@ -180,6 +230,10 @@ Deno.serve(async (req) => {
       health,
       ready,
       signed_internal: signedInternal,
+      /** Counts only — never dump operation names, alert bodies, or Prometheus text. */
+      supported: pythonSupported,
+      alerts: pythonAlerts,
+      metrics: pythonMetrics,
     },
     ai: {
       gemini: classifyOptional(present("GEMINI_API_KEY") || present("GOOGLE_AI_API_KEY")),

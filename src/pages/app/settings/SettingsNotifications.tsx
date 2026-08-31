@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { CheckCircle, Bell, Mail, Send } from "lucide-react";
 import { toast } from "sonner";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
+import { SettingsSaveBar } from "@/components/settings/SettingsSaveBar";
 import { notificationsDB } from "@/lib/supabase/database";
 
 type NotificationPrefs = {
@@ -190,6 +191,7 @@ export default function SettingsNotifications() {
         </p>
       </Card>
 
+      <SettingsSaveBar>
       <div className="flex flex-wrap gap-2">
         <Button
           variant={saved ? "success" : saveFailed ? "danger" : "primary"}
@@ -212,6 +214,7 @@ export default function SettingsNotifications() {
           Unsubscribe all
         </Button>
       </div>
+      </SettingsSaveBar>
     </SettingsPageShell>
   );
 }

@@ -110,7 +110,7 @@ export default function DebriefDetail() {
             const [sess, ans, sc, segments] = await Promise.all([
               sessionsDB.getByIdForUser(db.session_id, user.id),
               sessionAnswersDB.listBySessionIdForUser(db.session_id, user.id),
-              scorecardsDB.getBySessionId(db.session_id).catch(() => null),
+              scorecardsDB.getBySessionIdForUser(db.session_id, user.id).catch(() => null),
               sessionTranscriptsDB.listSegmentsBySessionId(db.session_id).catch(() => []),
             ]);
             setSession(sess);
@@ -132,8 +132,30 @@ export default function DebriefDetail() {
           }
         }
       } else {
-        // No debrief found by debrief ID — treat `id` as a session_id
-        // and generate a new debrief for that session
+        const sess = await sessionsDB.getByIdForUser(id, user.id);
+        if (!sess) {
+          setFetchError("Session not found.");
+          return;
+        }
+        setSession(sess);
+        try {
+          const [ans, sc, segments] = await Promise.all([
+            sessionAnswersDB.listBySessionIdForUser(id, user.id),
+            scorecardsDB.getBySessionIdForUser(id, user.id).catch(() => null),
+            sessionTranscriptsDB.listSegmentsBySessionId(id).catch(() => []),
+          ]);
+          setAnswers(ans);
+          setScorecard(sc);
+          setTranscriptSegments(segments);
+          try {
+            const tx = await sessionTranscriptsDB.getBySessionId(id);
+            setTranscript(tx ?? sess?.notes ?? null);
+          } catch {
+            setTranscript(sess?.notes ?? null);
+          }
+        } catch {
+          // Artifacts are optional; report generation still runs.
+        }
         await generateDebrief(id);
       }
     } catch (err: unknown) {

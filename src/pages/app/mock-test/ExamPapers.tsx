@@ -266,7 +266,10 @@ export default function ExamPapers() {
 
   const normalised      = (examType ?? "").toUpperCase();
   const examLabel       = EXAM_LABELS[normalised] ?? examType ?? "Exam";
-  const officialSetting = OFFICIAL_SETTINGS[normalised] as OfficialSetting | undefined;
+  const registryCode    = REGISTRY_EXAM_CODES[normalised];
+  const officialSetting = registryCode
+    ? undefined
+    : (OFFICIAL_SETTINGS[normalised] as OfficialSetting | undefined);
   const years           = [...new Set(papers.map((p) => p.year))].sort((a, b) => b - a);
 
   const filtered = papers.filter((p) => {
@@ -289,6 +292,15 @@ export default function ExamPapers() {
   async function launchDirectTest(paper: ExamPaper, isPractice: boolean) {
     if (!user?.id) return;
 
+    if (registryCode) {
+      navigate(
+        `/app/mock-test/generate?code=${encodeURIComponent(registryCode)}&basis=${
+          isPractice ? "quick" : "official_previous"
+        }`,
+      );
+      return;
+    }
+
     // Guard: bank has no questions for this paper (Testbook-style readiness)
     if ((questionCounts[paper.id] ?? 0) === 0) {
       toast.error(
@@ -310,8 +322,8 @@ export default function ExamPapers() {
       const s = officialSetting ?? {
         questions: paper.total_questions ?? 30,
         duration:  paper.duration_minutes ?? 60,
-        positive:  4,
-        negative:  1,
+        positive:  Number((paper as { marks_positive?: number }).marks_positive ?? 0),
+        negative:  Number((paper as { marks_negative?: number }).marks_negative ?? 0),
       };
 
       const questionCount = Math.max(1, Math.min(s.questions, available));
@@ -404,7 +416,7 @@ export default function ExamPapers() {
                         {p.shift ? ` · ${p.shift}` : ""}
                         {p.questionCount != null ? ` · ${p.questionCount} Qs` : ""}
                       </p>
-                      <div className="mt-2">
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
                         <Badge
                           variant="outline"
                           className={
@@ -415,6 +427,22 @@ export default function ExamPapers() {
                         >
                           {p.label === "official" ? "Official" : "Practice"}
                         </Badge>
+                        {registryCode && (
+                          <Button
+                            size="sm"
+                            variant={p.label === "official" ? "primary" : "outline"}
+                            className="h-7 text-[11px]"
+                            onClick={() =>
+                              navigate(
+                                `/app/mock-test/generate?code=${encodeURIComponent(registryCode)}&basis=${
+                                  p.label === "official" ? "official_previous" : "quick"
+                                }`,
+                              )
+                            }
+                          >
+                            {p.label === "official" ? "Start official paper" : "Start practice"}
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </CardContent>
@@ -588,7 +616,11 @@ export default function ExamPapers() {
                 <Button
                   size="sm"
                   onClick={() =>
-                    navigate(`/app/mock-test/configure?exam=${normalised}`)
+                    navigate(
+                      registryCode
+                        ? `/app/mock-test/generate?code=${encodeURIComponent(registryCode)}&basis=quick`
+                        : `/app/mock-test/configure?exam=${normalised}`,
+                    )
                   }
                 >
                   Create Custom AI Test <ChevronRight className="h-4 w-4 ml-1.5" />
@@ -704,7 +736,7 @@ export default function ExamPapers() {
                   </div>
 
                   {/* Subject chips */}
-                  {officialSetting && !isComingSoon && (
+                  {officialSetting && !isComingSoon && !registryCode && (
                     <div className="flex gap-1.5 mb-5 flex-wrap">
                       {(EXAM_SUBJECT_LABELS[normalised] ?? ["Section A", "Section B", "Section C"]).map(
                         (label, idx, arr) => (
@@ -750,9 +782,12 @@ export default function ExamPapers() {
                         className="flex-1 text-xs"
                         onClick={() =>
                           navigate(
-                            `/app/mock-test/configure?exam=${encodeURIComponent(
-          EXAM_ROUTE_FROM_PAPER[paper.exam_type] ?? paper.exam_type.replace(/\s+/g, "_").toUpperCase()
-        )}&year_min=${paper.year}&year_max=${paper.year}`,
+                            registryCode
+                              ? `/app/mock-test/generate?code=${encodeURIComponent(registryCode)}&basis=quick`
+                              : `/app/mock-test/configure?exam=${encodeURIComponent(
+                                  EXAM_ROUTE_FROM_PAPER[paper.exam_type] ??
+                                    paper.exam_type.replace(/\s+/g, "_").toUpperCase(),
+                                )}&year_min=${paper.year}&year_max=${paper.year}`,
                           )
                         }
                       >

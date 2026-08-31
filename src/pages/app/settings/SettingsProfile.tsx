@@ -18,6 +18,7 @@ import { getPasswordStrength } from "@/lib/validators/emailValidator";
 import { changePasswordSchema } from "@/lib/validators/authSchemas";
 import { profileUpdateSchema } from "@/lib/validators/profileSchemas";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
+import { SettingsSaveBar } from "@/components/settings/SettingsSaveBar";
 
 function normalizeWebsiteUrl(raw: string): string | null {
   const trimmed = raw.trim();
@@ -91,6 +92,7 @@ export default function SettingsProfile() {
   const [timezone,   setTimezone]   = useState(profile?.timezone ?? "UTC");
   const [website,    setWebsite]    = useState(profile?.website_url ?? "");
   const [websiteError, setWebsiteError] = useState<string | null>(null);
+  const [nameTried,  setNameTried]  = useState(false);
   const [experience, setExperience] = useState<string>(yearsToLabel(profile?.experience_years));
   const [targetRole, setTargetRole] = useState(profile?.target_role ?? "");
   const [saving,     setSaving]     = useState(false);
@@ -107,6 +109,7 @@ export default function SettingsProfile() {
     setTimezone(profile.timezone ?? "UTC");
     setWebsite(profile.website_url ?? "");
     setWebsiteError(null);
+    setNameTried(false);
     setExperience(yearsToLabel(profile.experience_years));
     setTargetRole(profile.target_role ?? "");
     setAvatarUrl(profile.avatar_url ?? "");
@@ -247,11 +250,8 @@ export default function SettingsProfile() {
     setSaving(true);
     setSaved(false);
     setSaveFailed(false);
+    setNameTried(true);
 
-    // ✅ FIX: Validate using profileUpdateSchema
-    // - Full Name is required and min 2 chars
-    // - Website URL must be valid
-    // - All fields are validated before sending to server
     const trimmedName = name.trim();
     const yearsNum = EXPERIENCE_LEVELS.find((l) => l.label === experience)?.years ?? null;
     const tz =
@@ -266,7 +266,7 @@ export default function SettingsProfile() {
       website_url: website.trim() || null,
       experience_years: yearsNum,
       target_role: targetRole || null,
-      avatar_url: avatarUrl,
+      avatar_url: avatarUrl.trim() || null,
     };
 
     // Validate payload with schema
@@ -298,6 +298,18 @@ export default function SettingsProfile() {
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() ?? "")
     .join("");
+
+  const trimmedNameLen = name.trim().length;
+  const nameError =
+    nameTried || trimmedNameLen > 0
+      ? trimmedNameLen === 0
+        ? "Full name is required."
+        : trimmedNameLen < 2
+          ? "Full name must be at least 2 characters long."
+          : trimmedNameLen > 200
+            ? "Full name must be 200 characters or less."
+            : null
+      : null;
 
   return (
     <SettingsPageShell title="Profile">
@@ -352,25 +364,17 @@ export default function SettingsProfile() {
         <div className="space-y-4">
           <div>
             <Input
+              id="profile-full-name"
               label="Full name"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              onBlur={() => setNameTried(true)}
               placeholder="Your name"
-              aria-invalid={name.trim().length > 0 && name.trim().length < 2}
+              error={nameError ?? undefined}
+              aria-invalid={Boolean(nameError)}
+              aria-describedby={nameError ? "profile-full-name-error" : undefined}
+              required
             />
-            {name.trim().length > 0 && name.trim().length < 2 && (
-              <p className="mt-1 text-xs text-destructive" role="alert">
-                Full name must be at least 2 characters long.
-              </p>
-            )}
-            {name.trim().length > 200 && (
-              <p className="mt-1 text-xs text-destructive" role="alert">
-                Full name must be 200 characters or less.
-              </p>
-            )}
-            {name.trim().length > 0 && name.trim().length >= 2 && name.trim().length <= 200 && (
-              <p className="mt-1 text-xs text-emerald-500">✓ Full name looks good</p>
-            )}
           </div>
           <div>
             <p className="text-xs font-medium text-foreground mb-1.5">Bio</p>
@@ -409,6 +413,7 @@ export default function SettingsProfile() {
             </div>
             <div>
               <Input
+                id="profile-website"
                 label="Website"
                 value={website}
                 onChange={(e) => {
@@ -429,13 +434,10 @@ export default function SettingsProfile() {
                 }}
                 placeholder="https://example.com"
                 leftIcon={<Globe className="w-3.5 h-3.5" />}
+                error={websiteError ?? undefined}
                 aria-invalid={Boolean(websiteError)}
+                aria-describedby={websiteError ? "profile-website-error" : undefined}
               />
-              {websiteError && (
-                <p className="mt-1 text-xs text-destructive" role="alert">
-                  {websiteError}
-                </p>
-              )}
             </div>
           </div>
         </div>
@@ -516,13 +518,15 @@ export default function SettingsProfile() {
               value={emailPassword}
               onChange={(e) => setEmailPassword(e.target.value)}
               placeholder="Current password"
+              autoComplete="current-password"
+              className="pr-10"
             />
             <button
               type="button"
               onClick={() => setShowEmailPw((v) => !v)}
               aria-label={showEmailPw ? "Hide email confirmation password" : "Show email confirmation password"}
               aria-pressed={showEmailPw}
-              className="absolute right-2.5 bottom-2.5 text-muted-foreground hover:text-foreground"
+              className="absolute right-2 bottom-2.5 text-muted-foreground hover:text-foreground"
             >
               {showEmailPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
@@ -540,102 +544,19 @@ export default function SettingsProfile() {
       </Card>
 
       <Card>
-        <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
           <Lock className="w-4 h-4 text-primary" />
           Password
         </h3>
-        <div className="space-y-3 max-w-md">
-          <div className="relative">
-            <Input
-              label="Current password"
-              type={showCurrentPw ? "text" : "password"}
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-            />
-            <button
-              type="button"
-              onClick={() => setShowCurrentPw((v) => !v)}
-              aria-label={showCurrentPw ? "Hide current password" : "Show current password"}
-              aria-pressed={showCurrentPw}
-              className="absolute right-2.5 bottom-2.5 text-muted-foreground hover:text-foreground"
-            >
-              {showCurrentPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-          <div>
-            <div className="relative">
-              <Input
-                label="New password"
-                type={showNewPw ? "text" : "password"}
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
-              <button
-                type="button"
-                onClick={() => setShowNewPw((v) => !v)}
-                aria-label={showNewPw ? "Hide new password" : "Show new password"}
-                aria-pressed={showNewPw}
-                className="absolute right-2.5 bottom-2.5 text-muted-foreground hover:text-foreground"
-              >
-                {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-            {newPassword && (
-              <div className="mt-2 space-y-1">
-                <div className="flex gap-1">
-                  {[0, 1, 2, 3, 4].map((i) => (
-                    <span
-                      key={i}
-                      className={cn(
-                        "h-1 flex-1 rounded-full",
-                        i <= passwordStrength.score
-                          ? passwordStrength.color === "red"
-                            ? "bg-red-500"
-                            : passwordStrength.color === "orange"
-                              ? "bg-orange-400"
-                              : passwordStrength.color === "yellow"
-                                ? "bg-amber-400"
-                                : passwordStrength.color === "blue"
-                                  ? "bg-blue-400"
-                                  : "bg-emerald-500"
-                          : "bg-muted",
-                      )}
-                    />
-                  ))}
-                </div>
-                <p className="text-[10px] text-muted-foreground">
-                  Strength: {passwordStrength.label}
-                </p>
-              </div>
-            )}
-          </div>
-          <div className="relative">
-            <Input
-              label="Confirm new password"
-              type={showConfirmPw ? "text" : "password"}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-            />
-            <button
-              type="button"
-              onClick={() => setShowConfirmPw((v) => !v)}
-              aria-label={showConfirmPw ? "Hide confirm password" : "Show confirm password"}
-              aria-pressed={showConfirmPw}
-              className="absolute right-2.5 bottom-2.5 text-muted-foreground hover:text-foreground"
-            >
-              {showConfirmPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            loading={passwordSaving}
-            onClick={handlePasswordChange}
-            disabled={!currentPassword || !newPassword || !confirmPassword}
-          >
-            Update password
-          </Button>
-        </div>
+        <p className="text-xs text-muted-foreground mb-3">
+          Password changes live on Security so credentials are not updated from this page.
+        </p>
+        <Link
+          to="/app/settings/security"
+          className="inline-flex text-xs font-semibold text-primary hover:text-primary/80"
+        >
+          Change password on Security →
+        </Link>
       </Card>
 
       <Card>
@@ -653,6 +574,7 @@ export default function SettingsProfile() {
         </Link>
       </Card>
 
+      <SettingsSaveBar>
       <Button
         variant={saved ? "success" : saveFailed ? "danger" : "primary"}
         size="md"
@@ -665,6 +587,7 @@ export default function SettingsProfile() {
       >
         {saving ? "Saving…" : saved ? "Saved!" : saveFailed ? "Failed — retry" : "Save changes"}
       </Button>
+      </SettingsSaveBar>
     </SettingsPageShell>
   );
 }

@@ -148,11 +148,24 @@ Deno.serve(async (req) => {
     if (rateLimited) return withCorsHeaders(req, rateLimited);
 
     const body = await req.json().catch(() => ({}));
+    const action = sanitize(body?.action, 20).toLowerCase();
 
     const interviewId = sanitize(body?.interview_id, 64);
     const company = sanitize(body?.company_name, 150);
     const role = sanitize(body?.role_title, 150);
     const scheduledAt = sanitize(body?.scheduled_at, 64);
+    const timezone = sanitize(body?.timezone, 64);
+    const ianaOk =
+      !timezone ||
+      timezone === "local" ||
+      timezone === "UTC" ||
+      /^[A-Za-z_]+(?:\/[A-Za-z0-9_+-]+)+$/.test(timezone);
+    if (!ianaOk) {
+      return new Response(
+        JSON.stringify({ error: "timezone must be a valid IANA zone (e.g. Asia/Kolkata)." }),
+        { status: 400, headers },
+      );
+    }
     // Immediate confirmation email is optional (default true when RESEND configured).
     const sendConfirmation =
       body?.send_confirmation === undefined
@@ -217,6 +230,19 @@ Deno.serve(async (req) => {
         status: 404,
         headers,
       });
+    }
+
+    if (action === "cancel") {
+      await db
+        .from("interview_reminders")
+        .delete()
+        .eq("interview_id", interviewId)
+        .eq("user_id", userId)
+        .eq("status", "pending");
+      return new Response(
+        JSON.stringify({ success: true, cancelled: true, reminders_cleared: true }),
+        { headers },
+      );
     }
 
     const when = new Date(scheduledAt);

@@ -166,6 +166,15 @@ export default function AdminGovIngest() {
       return;
     }
 
+    if (data?.async || data?.status === "queued") {
+      toast.success(
+        data?.message ??
+          "Ingestion queued. Watch Recent jobs — questions stay unpublished until review.",
+      );
+      void loadJobs();
+      return;
+    }
+
     toast.success(data?.message ?? `Imported ${data?.questionsImported ?? 0} questions (needs review)`);
     setLastConfidence(data?.confidenceFlags ?? []);
     setPdfFile(null);

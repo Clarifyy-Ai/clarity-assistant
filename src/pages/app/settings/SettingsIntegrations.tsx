@@ -329,7 +329,7 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
           </>
         ) : (
           <p className="text-[10px] text-muted-foreground leading-relaxed">
-            Connects via Google OAuth. Only upcoming events with interview-related keywords are imported. Read-only access — Clarify AI never modifies your calendar.
+            Connects via Google OAuth. Upcoming interview-related events are imported. When connected, Clarify AI can add, update, or delete interview events you schedule here.
           </p>
         )}
       </div>

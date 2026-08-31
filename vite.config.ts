@@ -112,6 +112,38 @@ export default defineConfig(({ mode }) => {
                   }
                 });
               });
+              // Same-origin debug NDJSON sink (CSP-safe) for session 4a9592.
+              server.middlewares.use("/__agent_debug_4a9592", (req, res, next) => {
+                if (req.method !== "POST") {
+                  next();
+                  return;
+                }
+                const chunks: Buffer[] = [];
+                req.on("data", (c) => chunks.push(Buffer.from(c)));
+                req.on("end", () => {
+                  try {
+                    const raw = Buffer.concat(chunks).toString("utf8");
+                    const logPath = path.join(__dirname, "debug-4a9592.log");
+                    fs.appendFileSync(logPath, raw.trim() + "\n", "utf8");
+                    void fetch(
+                      "http://127.0.0.1:7572/ingest/ea82b87b-41ef-4cec-a41d-f9c122e76fc2",
+                      {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          "X-Debug-Session-Id": "4a9592",
+                        },
+                        body: raw,
+                      },
+                    ).catch(() => undefined);
+                    res.statusCode = 204;
+                    res.end();
+                  } catch {
+                    res.statusCode = 500;
+                    res.end("log write failed");
+                  }
+                });
+              });
               server.middlewares.use("/dev-downloads/clarify-ai-setup.exe", (_req, res, next) => {
                 const candidates = [
                   path.join(__dirname, "release-new", "Clarify AI Setup 1.0.0.exe"),

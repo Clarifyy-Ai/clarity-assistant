@@ -1174,8 +1174,29 @@ Deno.serve(async (req: Request) => {
       "[generate-scorecard] Error:",
       error instanceof Error ? error.message : "unknown",
     );
+    if (error instanceof DomainError) {
+      return json(corsHeaders, error.status, {
+        error: error.message,
+        code: error.code,
+        request_id: requestId,
+      });
+    }
+    const code =
+      error && typeof error === "object" && "code" in error
+        ? String((error as { code?: unknown }).code ?? "")
+        : "";
+    if (code) {
+      const status = httpStatusForDomainCode(code);
+      if (status !== 500) {
+        return json(corsHeaders, status, {
+          error: error instanceof Error ? error.message : "Scorecard generation failed.",
+          code,
+          request_id: requestId,
+        });
+      }
+    }
     return json(corsHeaders, 500, {
-      error: "Internal server error.",
+      error: "Scorecard generation failed. Please try again.",
       code: "INTERNAL_ERROR",
       request_id: requestId,
     });

@@ -252,8 +252,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         error:   "Calendar sync is not available yet.",
         code:    "NOT_CONFIGURED",
-        message: "Google Calendar integration is coming soon. " +
-                 "Join the waitlist to be notified when it launches.",
+        message: "Google Calendar is not configured on this deployment. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.",
       }),
       {
         status:  501,
@@ -287,6 +286,15 @@ Deno.serve(async (req) => {
       probe?:                   boolean;
       /** Persist refresh token only (connect callback); skip Calendar API. */
       store_token_only?:        boolean;
+      action?:                  string;
+      interview_id?:            string;
+      summary?:                 string;
+      description?:             string;
+      start?:                   string;
+      end?:                     string;
+      time_zone?:               string;
+      location?:                string;
+      event_id?:                string;
     }>(req);
 
     // Availability probe — auth + plan/capability only; skip Google API.
@@ -323,6 +331,111 @@ Deno.serve(async (req) => {
         tokenStored ? 200 : 502,
         req,
       );
+    }
+
+    const action = typeof body?.action === "string" ? body.action.trim() : "";
+    if (action === "write_event" || action === "delete_event") {
+      let accessToken = typeof body?.provider_token === "string" ? body.provider_token.trim() : "";
+      if (!accessToken) {
+        accessToken = (await refreshGoogleAccessToken(userId)) ?? "";
+      }
+      if (!accessToken) {
+        return errorResponse(
+          "Google Calendar not connected. Please connect it first.",
+          "NO_TOKEN",
+          401,
+          req,
+        );
+      }
+
+      const interviewId = typeof body?.interview_id === "string" ? body.interview_id.trim() : "";
+      if (!/^[0-9a-f-]{36}$/i.test(interviewId)) {
+        return errorResponse("interview_id is required.", "INVALID_INTERVIEW", 400, req);
+      }
+
+      const { data: owned } = await db
+        .from("scheduled_interviews")
+        .select("id, calendar_event_id")
+        .eq("id", interviewId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (!owned) {
+        return errorResponse("Interview not found.", "NOT_FOUND", 404, req);
+      }
+
+      if (action === "delete_event") {
+        const eventId =
+          (typeof body?.event_id === "string" && body.event_id.trim()) ||
+          owned.calendar_event_id ||
+          "";
+        if (eventId) {
+          await fetch(
+            `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`,
+            { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } },
+          );
+        }
+        await db
+          .from("scheduled_interviews")
+          .update({ calendar_event_id: null, calendar_provider: null, updated_at: new Date().toISOString() })
+          .eq("id", interviewId)
+          .eq("user_id", userId);
+        return successResponse({ deleted: true }, undefined, 200, req);
+      }
+
+      const summary = safe(body?.summary ?? "Interview", 200);
+      const description = safe(body?.description ?? "", 2000);
+      const startIso = typeof body?.start === "string" ? body.start : "";
+      const endIso = typeof body?.end === "string" ? body.end : "";
+      const timeZone = typeof body?.time_zone === "string" && body.time_zone !== "local"
+        ? body.time_zone
+        : "UTC";
+      const location = typeof body?.location === "string" ? safe(body.location, 500) : "";
+      if (!startIso || !endIso) {
+        return errorResponse("start and end are required.", "INVALID_EVENT", 400, req);
+      }
+
+      const payload = {
+        summary,
+        description,
+        location: location || undefined,
+        start: { dateTime: startIso, timeZone },
+        end: { dateTime: endIso, timeZone },
+      };
+      const existingId =
+        (typeof body?.event_id === "string" && body.event_id.trim()) ||
+        owned.calendar_event_id ||
+        "";
+      const url = existingId
+        ? `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(existingId)}`
+        : "https://www.googleapis.com/calendar/v3/calendars/primary/events";
+      const googleRes = await fetch(url, {
+        method: existingId ? "PATCH" : "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!googleRes.ok) {
+        return errorResponse(
+          "Failed to write Google Calendar event.",
+          "GOOGLE_API_ERROR",
+          502,
+          req,
+        );
+      }
+      const created = await googleRes.json().catch(() => null);
+      const eventId = created?.id ?? existingId;
+      await db
+        .from("scheduled_interviews")
+        .update({
+          calendar_event_id: eventId,
+          calendar_provider: "google",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", interviewId)
+        .eq("user_id", userId);
+      return successResponse({ event_id: eventId, written: true }, undefined, 200, req);
     }
 
     let providerToken  = body?.provider_token;

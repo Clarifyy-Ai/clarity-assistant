@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { Bell, Zap, AlertTriangle, Shield, ShieldOff, LogOut, Settings, User, Search, X } from "lucide-react";
+import { Bell, Zap, AlertTriangle, Eye, EyeOff, LogOut, Settings, User, Search, X } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { useCreditBalance } from "@/components/billing/useCreditState";
 import { useNotificationStore } from "@/store/notificationStore";
@@ -154,9 +154,9 @@ export function AppTopBar() {
           )}
         >
           {stealthMode ? (
-            <Shield className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+            <EyeOff className="w-3 h-3 sm:w-3.5 sm:h-3.5" aria-hidden="true" />
           ) : (
-            <ShieldOff className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+            <Eye className="w-3 h-3 sm:w-3.5 sm:h-3.5" aria-hidden="true" />
           )}
           <span className="hidden sm:inline">Discrete UI</span>
         </button>

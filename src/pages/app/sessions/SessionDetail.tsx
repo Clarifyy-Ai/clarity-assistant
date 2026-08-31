@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { answerBankDB, sessionsDB, sessionAnswersDB } from "@/lib/supabase/database";
+import { answerBankDB, sessionsDB, sessionAnswersDB, scorecardsDB } from "@/lib/supabase/database";
+import { supabase } from "@/lib/supabase/client";
 import { exportSessionPdf } from "@/lib/export/sessionPdf";
 import { useAuthStore } from "@/store/userStore";
 import { Card } from "@/components/ui/Card";
@@ -23,6 +24,11 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { messageFromExportCaught } from "@/lib/export/exportUserFacingError";
 import { agentDebugIngest } from "@/lib/debug/agentIngest";
+import {
+  formatSessionDuration,
+  resolveOverallScore,
+  sessionStatusLabel,
+} from "@/lib/session/sessionDisplay";
 
 export default function SessionDetail() {
   const { id }   = useParams<{ id: string }>();
@@ -31,6 +37,7 @@ export default function SessionDetail() {
 
   const [session,     setSession]     = useState<any>(null);
   const [answers,     setAnswers]     = useState<any[]>([]);
+  const [scorecard,   setScorecard]   = useState<{ overall_score?: number | null } | null>(null);
   const [loading,     setLoading]     = useState(true);
   const [fetchError,  setFetchError]  = useState<string | null>(null);
   const [expanded,    setExpanded]    = useState<Record<string, boolean>>({});
@@ -56,10 +63,28 @@ export default function SessionDetail() {
     setFetchError(null);
 
     try {
-      const [sess, ans] = await Promise.all([
-        sessionsDB.getByIdForUser(id, user.id),
-        sessionAnswersDB.listBySessionIdForUser(id, user.id),
-      ]);
+      let sess: Awaited<ReturnType<typeof sessionsDB.getByIdForUser>> = null;
+      let ans: Awaited<ReturnType<typeof sessionAnswersDB.listBySessionIdForUser>> = [];
+      let sc: Awaited<ReturnType<typeof scorecardsDB.getBySessionIdForUser>> = null;
+      const { data: bundled, error: rpcErr } = await supabase.rpc(
+        "get_owned_session_detail",
+        { p_session_id: id },
+      );
+      if (!rpcErr && bundled && typeof bundled === "object" && (bundled as { found?: boolean }).found) {
+        const payload = bundled as { session?: typeof sess; answers?: typeof ans };
+        sess = (payload.session as typeof sess) ?? null;
+        ans = Array.isArray(payload.answers) ? payload.answers : [];
+        sc = await scorecardsDB.getBySessionIdForUser(id, user.id).catch(() => null);
+      } else {
+        const pair = await Promise.all([
+          sessionsDB.getByIdForUser(id, user.id),
+          sessionAnswersDB.listBySessionIdForUser(id, user.id),
+          scorecardsDB.getBySessionIdForUser(id, user.id).catch(() => null),
+        ]);
+        sess = pair[0];
+        ans = pair[1];
+        sc = pair[2];
+      }
       if (requestId !== fetchRequestRef.current) return;
 
       agentDebugIngest({
@@ -77,6 +102,7 @@ export default function SessionDetail() {
       });
 
       setSession(sess);
+      setScorecard(sc);
       setAnswers(
         [...ans]
           .sort((a, b) => {
@@ -117,6 +143,7 @@ export default function SessionDetail() {
             : "Failed to load session",
       );
       setSession(null);
+      setScorecard(null);
       setAnswers([]);
     } finally {
       if (requestId === fetchRequestRef.current) setLoading(false);
@@ -129,9 +156,8 @@ export default function SessionDetail() {
 
   // ── Derived values ────────────────────────────────────────────
 
-  const rawOverall = session?.overall_score;
-  const hasOverallScore = rawOverall !== null && rawOverall !== undefined;
-  const score = hasOverallScore ? Number(rawOverall) : null;
+  const score = resolveOverallScore(session, scorecard);
+  const hasOverallScore = score !== null;
   const scoreColor =
     score === null ? "gray" :
     score >= 80 ? "emerald" :
@@ -143,9 +169,8 @@ export default function SessionDetail() {
     score >= 70 ? "Good" :
     score >= 55 ? "Fair" : "Needs work";
 
-  const duration = session?.duration_seconds
-    ? `${Math.floor(session.duration_seconds / 60)}m ${session.duration_seconds % 60}s`
-    : "—";
+  const duration = formatSessionDuration(session ?? {});
+  const statusLabel = sessionStatusLabel(session ?? {});
 
   // ── Loading state ─────────────────────────────────────────────
 
@@ -329,9 +354,10 @@ export default function SessionDetail() {
       </div>
 
       {/* ── Session stats row ──────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {[
           { icon: <Clock className="w-4 h-4 text-blue-400" />,         label: "Duration",     value: duration },
+          { icon: <CheckCircle className="w-4 h-4 text-emerald-400" />, label: "Status",      value: statusLabel },
           { icon: <MessageSquare className="w-4 h-4 text-primary" />,label: "Questions",    value: `${answers.length} / ${session.question_count ?? answers.length}` },
           { icon: <Volume2 className="w-4 h-4 text-emerald-400" />,    label: "Avg WPM",      value: typeof session.avg_wpm === "number" ? `${session.avg_wpm}` : "—" },
           { icon: <Mic className="w-4 h-4 text-amber-400" />, label: "Total fillers",value: typeof session.filler_words === "number" ? session.filler_words : (typeof session.total_filler_words === "number" ? session.total_filler_words : "—") },

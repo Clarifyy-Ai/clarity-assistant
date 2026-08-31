@@ -25,7 +25,7 @@ export function PublicErrorState({
     <div
       role="alert"
       className={cn(
-        "max-w-md mx-auto px-4 py-16 text-center space-y-4",
+        "mx-auto flex min-h-0 max-w-md flex-col items-center justify-center px-4 py-8 text-center space-y-4",
         className,
       )}
     >

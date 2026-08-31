@@ -13,23 +13,18 @@ from app.paper_factory.models import (
     ExamContext,
     SectionBlueprint,
 )
-from app.paper_factory.worker import request_from_job
 
 
-def test_request_from_job_allow_deterministic_only_when_flagged() -> None:
-    job = {
-        "id": "job-1",
-        "exam_id": "exam-1",
-        "stage_id": "stage-1",
-        "mode": "generated_mock",
-        "request_json": {"allowDeterministicFill": True},
-    }
-    req = request_from_job(job)
-    assert req.allow_deterministic_fill is True
+def test_worker_routes_through_hybrid_engine() -> None:
+    """Embedded worker must call process_gov_exam_job, not PaperFactory.generate."""
+    import inspect
 
-    job["request_json"] = {}
-    req2 = request_from_job(job)
-    assert req2.allow_deterministic_fill is False
+    from app.paper_factory import worker as paper_worker
+
+    source = inspect.getsource(paper_worker.process_job)
+    assert "process_gov_exam_job" in source
+    assert "PaperFactory.generate" not in source
+    assert "factory.generate" not in source
 
 
 def test_factory_fail_closed_without_deterministic_permission() -> None:

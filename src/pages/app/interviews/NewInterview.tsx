@@ -32,6 +32,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { zonedWallTimeToUtc } from "@/lib/interviews/scheduleTime";
 
 /* ─── CONSTANTS ─────────────────────────────────────────────────────────── */
 
@@ -70,38 +71,7 @@ function buildHalfHourSlots(): string[] {
 }
 
 function combineSchedule(date: string, time: string, zoneOrOffset: string): Date | null {
-  if (!date || !time) return null;
-  if (zoneOrOffset === "local") {
-    const parsed = new Date(`${date}T${time}:00`);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-  // Fixed offset form (+05:30 / Z)
-  if (zoneOrOffset === "Z" || /^[+-]\d{2}:\d{2}$/.test(zoneOrOffset)) {
-    const parsed = new Date(`${date}T${time}:00${zoneOrOffset}`);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-  // IANA zone — build wall time in that zone via Intl when available
-  try {
-    const probe = new Date(`${date}T${time}:00`);
-    if (Number.isNaN(probe.getTime())) return null;
-    // Store as absolute Instant approximating the selected wall clock in the zone.
-    const fmt = new Intl.DateTimeFormat("en-US", {
-      timeZone: zoneOrOffset,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hourCycle: "h23",
-    });
-    // Fallback: treat as local if formatter rejects the zone
-    fmt.format(probe);
-    return probe;
-  } catch {
-    const parsed = new Date(`${date}T${time}:00`);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
+  return zonedWallTimeToUtc(date, time, zoneOrOffset);
 }
 
 function looksLikePlaceholderName(value: string): boolean {
@@ -207,6 +177,63 @@ export default function NewInterview() {
   const scheduler = useInterviewScheduler();
   const interviewStore = useInterviewSchedulerStore();
   const calendar  = useCalendarSync();
+
+  async function upsertRemindersAndCalendar(input: {
+    interviewId: string;
+    company: string;
+    role: string;
+    scheduledAt: string;
+    timezone: string;
+    durationMinutes: number;
+    meetingLink: string;
+    calendarEventId?: string | null;
+  }) {
+    try {
+      const reminder = await fetchEdgeJson<{
+        success?: boolean;
+        email_sent?: boolean;
+        email_configured?: boolean;
+      }>("schedule-interview", {
+        interview_id: input.interviewId,
+        company_name: input.company,
+        role_title: input.role,
+        scheduled_at: input.scheduledAt,
+      });
+      if (reminder?.email_sent) {
+        toast.message("Email reminder sent to your account address.");
+      } else if (reminder?.email_configured === false) {
+        toast.message(
+          "In-app reminder created. Email reminders are not configured on this environment (requires Resend).",
+        );
+      }
+    } catch (remErr) {
+      console.warn("[NewInterview] schedule-interview:", remErr);
+      toast.message("Interview saved. In-app reminder setup failed; email was not sent.");
+    }
+
+    if (calendar.syncAvailable && calendar.isConnected && calendar.writeEvent) {
+      try {
+        const start = new Date(input.scheduledAt);
+        const end = new Date(start.getTime() + input.durationMinutes * 60_000);
+        const wrote = await calendar.writeEvent({
+          interviewId: input.interviewId,
+          summary: `Interview: ${input.company}`,
+          description: input.role,
+          startIso: start.toISOString(),
+          endIso: end.toISOString(),
+          timeZone: input.timezone === "local" ? undefined : input.timezone,
+          location: input.meetingLink || undefined,
+          eventId: input.calendarEventId || undefined,
+        });
+        if (wrote.error) {
+          toast.error(`Calendar write failed: ${wrote.error}`);
+        }
+      } catch {
+        toast.error("Calendar write failed.");
+      }
+    }
+  }
+
   useDocuments();
   const resumes = useDocumentStore((s) => s.resumes);
   const jds = useDocumentStore((s) => s.jds);
@@ -420,6 +447,7 @@ export default function NewInterview() {
         resume_id: resumeId,
         jd_id: jdId,
         is_remote: platform !== "onsite",
+        timezone: timeZoneKey,
       });
 
       if (updateErr) {
@@ -440,6 +468,7 @@ export default function NewInterview() {
         interviewer_name: interviewerName.trim(),
         platform,
         meeting_link: meetingLink.trim(),
+        timezone: timeZoneKey,
       });
 
       if (roundErr) {
@@ -447,6 +476,16 @@ export default function NewInterview() {
       } else {
         toast.success("Interview updated!");
       }
+
+      await upsertRemindersAndCalendar({
+        interviewId: editId,
+        company: company.trim(),
+        role: roleTitle.trim(),
+        scheduledAt: scheduledAtIso,
+        timezone: timeZoneKey,
+        durationMinutes: duration,
+        meetingLink: meetingLink.trim(),
+      });
 
       navigate(`/app/interviews/${editId}`);
       return;
@@ -462,6 +501,7 @@ export default function NewInterview() {
         resume_id: resumeId,
         jd_id: jdId,
         is_remote: platform !== "onsite",
+        timezone: timeZoneKey,
       });
       if (updateErr) {
         if (mountedRef.current) {
@@ -482,12 +522,22 @@ export default function NewInterview() {
         platform,
         meeting_link: meetingLink.trim(),
         notes: "",
+        timezone: timeZoneKey,
       });
       if (roundErr) {
         toast.warning(`Interview saved, but round details failed: ${roundErr}`);
       } else {
         toast.success("Interview updated!");
       }
+      await upsertRemindersAndCalendar({
+        interviewId: editId,
+        company: company.trim(),
+        role: roleTitle.trim(),
+        scheduledAt: scheduledAtIso,
+        timezone: timeZoneKey,
+        durationMinutes: duration,
+        meetingLink: meetingLink.trim(),
+      });
       navigate(`/app/interviews/${editId}`);
       return;
     }
@@ -505,6 +555,7 @@ export default function NewInterview() {
       notes:           notes.trim(),
       resume_id:       resumeId,
       jd_id:           jdId,
+      timezone:        timeZoneKey,
     });
 
     if (createErr || !id) {
@@ -529,6 +580,7 @@ export default function NewInterview() {
       platform,
       meeting_link:      meetingLink.trim(),
       notes:             "",
+      timezone:          timeZoneKey,
     });
 
     if (roundErr) {
@@ -536,59 +588,17 @@ export default function NewInterview() {
       toast.warning(`Interview saved, but round details failed: ${roundErr}`);
     } else {
       toast.success("Interview scheduled!");
-
-      try {
-        const reminder = await fetchEdgeJson<{
-          success?: boolean;
-          email_sent?: boolean;
-          email_configured?: boolean;
-        }>(
-          "schedule-interview",
-          {
-            interview_id: id,
-            company_name: company.trim(),
-            role_title: roleTitle.trim(),
-            scheduled_at: scheduledAtIso,
-          }
-        );
-        if (reminder?.email_sent) {
-          toast.message("Email reminder sent to your account address.");
-        } else if (reminder?.email_configured === false) {
-          toast.message(
-            "In-app reminder created. Email reminders are not configured on this environment (requires Resend).",
-          );
-        } else {
-          toast.message(
-            "In-app reminder created. Email reminder could not be sent — check notification email preferences.",
-          );
-        }
-      } catch (remErr) {
-        console.warn("[NewInterview] schedule-interview:", remErr);
-        toast.message("Interview saved. In-app reminder setup failed; email was not sent.");
-      }
     }
 
-    // ── Step 3: Calendar sync ─────────────────────────────────────────────
-    // ✅ FIX: Await sync BEFORE navigate() so the component is still mounted
-    // when we call toast. Previously syncNow() was called after navigate(),
-    // which unmounted the component, causing React's "setState on unmounted
-    // component" warning and silently dropping the sync result toast.
-    if (calendar.syncAvailable && calendar.isConnected) {
-      try {
-        const { imported, error: syncError } = await calendar.syncNow();
-        // Component is still mounted here — safe to toast
-        if (syncError) {
-          toast.error(`Calendar sync failed: ${syncError}`);
-        } else if (imported > 0) {
-          toast.message(
-            `Synced ${imported} calendar event${imported === 1 ? "" : "s"}`,
-          );
-        }
-      } catch {
-        // syncNow() rejection — non-fatal, don't block navigation
-        toast.error("Calendar sync failed.");
-      }
-    }
+    await upsertRemindersAndCalendar({
+      interviewId: id,
+      company: company.trim(),
+      role: roleTitle.trim(),
+      scheduledAt: scheduledAtIso,
+      timezone: timeZoneKey,
+      durationMinutes: duration,
+      meetingLink: meetingLink.trim(),
+    });
 
     // Refresh store before leave so /app/interviews isn't stale.
     await scheduler.reload();

@@ -12,7 +12,7 @@ from app.document_intelligence.deduplication import (
 )
 from app.gov_exams.observability import gov_exam_log
 from app.gov_exams.schemas import AvailabilityRequest, AvailabilityResponse
-from app.paper_factory.models import ExamContext
+from app.paper_factory.models import ExamContext, PaperFactoryError
 from app.paper_factory.repository import (
     PaperRepository,
     _letter_to_index,
@@ -21,6 +21,8 @@ from app.paper_factory.repository import (
 
 # Minimum unique bank items for a honest custom practice set.
 MIN_CUSTOM_PRACTICE = 5
+
+_ENGLISH_ALIASES = frozenset({"", "en", "eng", "english"})
 
 
 @dataclass(frozen=True)
@@ -36,6 +38,7 @@ class EligibleQuestion:
     source: str
     source_type: str = ""
     is_verified: bool = False
+    language: str = ""
 
 
 def _topic_needles(topics: Sequence[str]) -> list[str]:
@@ -56,21 +59,32 @@ def _matches_topics(row: dict[str, Any], needles: Sequence[str]) -> bool:
     )
 
 
-def _language_ok(row: dict[str, Any], language: str) -> bool:
-    """Soft language filter via metadata when present; otherwise include the row."""
-    wanted = (language or "en").strip().lower()
-    if not wanted:
-        return True
+def _row_language(row: dict[str, Any]) -> str:
+    stored = str(row.get("language") or "").strip().lower()
+    if stored:
+        return stored
     meta = row.get("metadata")
     if isinstance(meta, str):
         try:
             meta = json.loads(meta)
         except json.JSONDecodeError:
             meta = None
-    if not isinstance(meta, dict):
+    if isinstance(meta, dict):
+        return str(meta.get("language") or "").strip().lower()
+    return ""
+
+
+def _language_ok(row: dict[str, Any], language: str, *, skip_language: bool) -> bool:
+    """Never silently switch language. English may include untagged bank rows."""
+    if skip_language:
         return True
-    stored = str(meta.get("language") or "").strip().lower()
-    return not stored or stored == wanted or stored.startswith(wanted)
+    wanted = (language or "en").strip().lower()
+    stored = _row_language(row)
+    if wanted in _ENGLISH_ALIASES:
+        return stored in _ENGLISH_ALIASES or stored.startswith("en")
+    if not stored:
+        return False
+    return stored == wanted or stored.startswith(wanted)
 
 
 def load_eligible_bank(
@@ -82,6 +96,7 @@ def load_eligible_bank(
     difficulty: str | None = None,
     limit: int = 2500,
     verified_only: bool = True,
+    skip_language: bool = False,
 ) -> tuple[list[EligibleQuestion], list[str]]:
     """Load approved public bank rows matching exam type keys + filters."""
     keys = list(exam.bank_type_keys)
@@ -102,8 +117,7 @@ def load_eligible_bank(
         .limit(limit)
     )
     if verified_only:
-        # Assembly-aligned: published+approved rows; PYP may be unverified.
-        pass
+        query = query.eq("is_verified", True)
     if difficulty:
         query = query.eq("difficulty", difficulty.upper())
 
@@ -117,9 +131,8 @@ def load_eligible_bank(
     for row in result.data or []:
         if not _matches_topics(row, needles):
             continue
-        if not _language_ok(row, language):
+        if not _language_ok(row, language, skip_language=skip_language):
             continue
-        # Prefer published / active when status is present.
         publish = str(row.get("publish_status") or "published").lower()
         if publish in ("archived", "rejected", "draft", "hidden"):
             continue
@@ -160,6 +173,7 @@ def load_eligible_bank(
                 source=str(row.get("source") or ""),
                 source_type=str(row.get("source_type") or ""),
                 is_verified=bool(row.get("is_verified")),
+                language=_row_language(row),
             )
         )
 
@@ -183,6 +197,8 @@ def compute_availability(
     """Count unique eligible bank questions for the requested configuration."""
     correlation_id = request.correlation_id
     job_id = request.job_id
+    mode = str(request.mode or "generated_mock")
+    verified_only = mode == "official_previous"
     gov_exam_log(
         "availability_started",
         operation_id=operation_id or correlation_id,
@@ -190,27 +206,56 @@ def compute_availability(
         correlation_id=correlation_id,
         exam_id=request.exam_id,
         question_count=request.question_count,
+        language=request.language,
+        mode=mode,
     )
 
     exam = repo.resolve_exam(request.exam_id, request.stage_id)
     if request.bank_type_keys:
         exam = replace(exam, bank_type_keys=tuple(request.bank_type_keys))
-    rows, keys = load_eligible_bank(
+
+    eligible_rows, keys = load_eligible_bank(
         repo,
         exam,
         language=request.language,
         topics=request.topics,
         difficulty=request.difficulty,
+        verified_only=verified_only,
+        skip_language=True,
     )
-    available = len(rows)
+    available_rows, _ = load_eligible_bank(
+        repo,
+        exam,
+        language=request.language,
+        topics=request.topics,
+        difficulty=request.difficulty,
+        verified_only=verified_only,
+        skip_language=False,
+    )
+
+    eligible = len(eligible_rows)
+    available = len(available_rows)
     requested = request.question_count
     missing = max(0, requested - available)
     can_full = available >= requested
     can_custom = available >= MIN_CUSTOM_PRACTICE
-    coverage = section_coverage(rows)
+    coverage = section_coverage(available_rows)
+
+    wanted = (request.language or "en").strip().lower()
+    language_available = True
+    blocked_reason: str | None = None
+    if wanted not in _ENGLISH_ALIASES and available == 0 and eligible > 0:
+        language_available = False
+        blocked_reason = "LANGUAGE_UNAVAILABLE"
+        raise PaperFactoryError(
+            "LANGUAGE_UNAVAILABLE",
+            f"No approved questions are available in language '{request.language}'.",
+            retryable=False,
+        )
 
     response = AvailabilityResponse(
         requested=requested,
+        eligible=eligible,
         available=available,
         missing=missing,
         can_full_mock=can_full,
@@ -218,6 +263,9 @@ def compute_availability(
         custom_practice_max=available,
         exam_type_keys=keys,
         section_coverage=coverage,
+        language_available=language_available,
+        blocked_reason=blocked_reason,
+        mode=mode,
     )
 
     gov_exam_log(
@@ -226,8 +274,10 @@ def compute_availability(
         job_id=job_id,
         correlation_id=correlation_id,
         available=available,
+        eligible=eligible,
         missing=missing,
         can_full_mock=can_full,
         can_custom_practice=can_custom,
+        language_available=language_available,
     )
     return response

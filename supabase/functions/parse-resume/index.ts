@@ -15,6 +15,7 @@ import {
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { callPythonProcess } from "../_shared/pythonClient.ts";
 import { executeHybridOperation } from "../_shared/hybridExecute.ts";
+import { isUndefinedColumn } from "../_shared/postgresErrors.ts";
 import JSZip from "https://esm.sh/jszip@3.10.1";
 
 const RESUME_PARSE_COST = creditCost("resume_analysis");
@@ -26,6 +27,51 @@ const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const GEMINI_MODEL = "gemini-2.5-flash";
 const CLAUDE_MODEL = "claude-3-5-sonnet-20241022";
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
+
+/** `created_at` always exists; `updated_at` is migration-gated (20260828130000). */
+const RESUME_DEDUPE_ORDER_COLUMN = "created_at";
+
+function omitUpdatedAt<T extends Record<string, unknown>>(patch: T): Omit<T, "updated_at"> {
+  const { updated_at: _ignored, ...rest } = patch;
+  return rest;
+}
+
+/** Writes resume rows without requiring `updated_at`; retries if the column is absent. */
+async function updateResumeRow(
+  db: ReturnType<typeof createServiceClient>,
+  id: string,
+  patch: Record<string, unknown>,
+) {
+  const safe = omitUpdatedAt(patch);
+  const first = await db.from("resumes").update(safe).eq("id", id);
+  if (first.error && isUndefinedColumn(first.error, "updated_at")) {
+    return await db.from("resumes").update(omitUpdatedAt(safe)).eq("id", id);
+  }
+  return first;
+}
+
+async function findResumeByContentHash(
+  db: ReturnType<typeof createServiceClient>,
+  userId: string,
+  contentHash: string,
+) {
+  const run = (orderColumn: string) =>
+    db
+      .from("resumes")
+      .select("id, content, content_hash")
+      .eq("user_id", userId)
+      .eq("content_hash", contentHash)
+      .not("content", "is", null)
+      .order(orderColumn, { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+  let result = await run(RESUME_DEDUPE_ORDER_COLUMN);
+  if (result.error && isUndefinedColumn(result.error, "updated_at")) {
+    result = await run("created_at");
+  }
+  return result;
+}
 
 function sanitizeAI(resp: string): string {
   return resp.replace(/```json/gi, "").replace(/```/g, "").replace(/^[^\{\[]+/, "").trim();
@@ -671,7 +717,7 @@ Deno.serve(async (req) => {
         text: inlineText.trim(),
       });
       if (hybrid.ok) {
-        await db.from("resumes").update({ content: JSON.stringify(hybrid.data) }).eq("id", resume_id);
+        await updateResumeRow(db, resume_id, { content: JSON.stringify(hybrid.data) });
         await fanOutResume(db, userId, hybrid.data);
         return new Response(
           JSON.stringify(buildParseSuccess(`hybrid-${hybrid.source}`, hybrid.data)),
@@ -743,15 +789,7 @@ Deno.serve(async (req) => {
 
     // Same user + same bytes already parsed → return existing without re-charge
     // (other resume row OR this resume already has content for this hash).
-    const { data: dupRow } = await db
-      .from("resumes")
-      .select("id, content, content_hash")
-      .eq("user_id", userId)
-      .eq("content_hash", contentHash)
-      .not("content", "is", null)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const { data: dupRow } = await findResumeByContentHash(db, userId, contentHash);
 
     if (dupRow?.content) {
       let parsed: unknown = null;
@@ -768,10 +806,10 @@ Deno.serve(async (req) => {
         "_parse_error" in (parsed as Record<string, unknown>);
       if (!isErrorStub) {
         if (dupRow.id !== resume_id) {
-          await db
-            .from("resumes")
-            .update({ content: dupRow.content, content_hash: contentHash })
-            .eq("id", resume_id);
+          await updateResumeRow(db, resume_id, {
+            content: dupRow.content,
+            content_hash: contentHash,
+          });
         }
         if (effectiveVersionId) {
           await db
@@ -796,7 +834,7 @@ Deno.serve(async (req) => {
     }
 
     // Store hash on current resume for future dedupe
-    await db.from("resumes").update({ content_hash: contentHash }).eq("id", resume_id);
+    await updateResumeRow(db, resume_id, { content_hash: contentHash });
 
     const mimeCheck = resolveUploadMime(mime_type ?? null, {
       filePath: file_path,
@@ -883,7 +921,7 @@ Deno.serve(async (req) => {
 
     if (hybrid.ok) {
       const normalized = normalizeResumeParsed(hybrid.data) ?? hybrid.data;
-      await db.from("resumes").update({ content: JSON.stringify(normalized) }).eq("id", resume_id);
+      await updateResumeRow(db, resume_id, { content: JSON.stringify(normalized) });
       if (effectiveVersionId) {
         await db.from("resume_versions").update({
           parsed_data: normalized,
@@ -900,12 +938,12 @@ Deno.serve(async (req) => {
 
     // Total failure — hybrid already refunded reserved credits.
     const failMsg = "We could not extract readable content from this resume.";
-    await db.from("resumes").update({
+    await updateResumeRow(db, resume_id, {
       content: JSON.stringify({
         _parse_error: failMsg,
         _error_code: "PARSER_FAILED",
       }),
-    }).eq("id", resume_id);
+    });
     if (effectiveVersionId) {
       await db.from("resume_versions").update({
         parse_status: "error",

@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { supabase } from "@/lib/supabase/client";
-import { AuthError, ErrorCode, tryCatch } from "@/lib/errors";
+import { AuthError, ErrorCode, formatSupabaseAuthError, tryCatch } from "@/lib/errors";
 import { buildAuthRedirectUrl } from "@/lib/auth/redirectUrl";
 import type { User, Session, AuthChangeEvent } from "@supabase/supabase-js";
 
@@ -183,7 +183,7 @@ export async function signInWithOAuth(provider: OAuthProvider): Promise<void> {
 
   if (err) {
     throw new AuthError(
-      `OAuth sign in with ${provider} failed.`,
+      formatSupabaseAuthError(err),
       ErrorCode.AUTH_OAUTH_FAILED,
       { provider }
     );

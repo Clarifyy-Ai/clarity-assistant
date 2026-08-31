@@ -9,8 +9,8 @@ import {
   applyCors,
 } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
-import { createServiceClient, refundCredits } from "../_shared/supabase.ts";
-import { claimJobCreditsForRefund } from "../_shared/claimJobCredits.ts";
+import { createServiceClient } from "../_shared/supabase.ts";
+import { releasePaperJobCredits } from "../_shared/claimJobCredits.ts";
 import { isUserBanned, bannedResponse } from "../_shared/banCheck.ts";
 import {
   checkRateLimitAsync,
@@ -127,22 +127,11 @@ Deno.serve(withBrowserCors("cancel-paper-generation-job", async (req) => {
       return json(req, { error: "Cancel failed", code: "INTERNAL_ERROR" }, 500);
     }
 
-    let creditsRefunded = 0;
-    const claimed = await claimJobCreditsForRefund(db, jobId);
-    if (claimed > 0) {
-      const refund = await refundCredits({
-        userId: user.id,
-        cost: claimed,
-        reason: "refund_cancel_paper_generation_job",
-        idempotencyKey: `refund_paper_job:${jobId}`,
-      }).catch((e) => {
-        console.warn("[cancel-paper-generation-job] refund:", e);
-        return { success: false as const };
-      });
-      if (refund?.success) {
-        creditsRefunded = claimed;
-      }
-    }
+    const creditsRefunded = await releasePaperJobCredits(
+      db,
+      jobId,
+      "refund_cancel_paper_generation_job",
+    );
 
     return json(req, {
       jobId,

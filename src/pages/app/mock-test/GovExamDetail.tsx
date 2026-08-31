@@ -735,6 +735,16 @@ export default function GovExamDetail(): React.ReactElement {
                       >
                         {p.label === "official" ? "Official" : "Practice"}
                       </Badge>
+                      {p.label === "official" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-1 h-7 text-[11px]"
+                          onClick={() => navigate(`${generateBase}&basis=official_previous`)}
+                        >
+                          Start official paper
+                        </Button>
+                      )}
                     </li>
                   ))}
                 </ul>

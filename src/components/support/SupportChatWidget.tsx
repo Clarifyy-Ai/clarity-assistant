@@ -92,6 +92,14 @@ export function SupportChatWidget() {
 
   const hide = shouldHideWidget(location.pathname);
   const offsetMobileNav = location.pathname.startsWith("/app");
+  const onAuthShell = [
+    "/login",
+    "/signup",
+    "/forgot-password",
+    "/reset-password",
+    "/verify-email",
+    "/auth/",
+  ].some((p) => location.pathname.startsWith(p));
   const showGuestFields = (!isAuthed || forceGuestFields) && !threadId;
 
   const resolvedGuestName =
@@ -232,8 +240,11 @@ export function SupportChatWidget() {
   return (
     <div
       className={cn(
-        "fixed right-4 z-[80] flex flex-col items-end gap-3 pointer-events-none",
-        offsetMobileNav ? "bottom-20 md:bottom-4" : "bottom-4",
+        "fixed z-[80] flex flex-col items-end gap-3 pointer-events-none",
+        onAuthShell
+          ? "left-4 right-auto bottom-28 sm:bottom-8"
+          : "right-4",
+        !onAuthShell && (offsetMobileNav ? "bottom-20 md:bottom-4" : "bottom-20 md:bottom-6"),
       )}
     >
       {open && (

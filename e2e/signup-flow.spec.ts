@@ -16,6 +16,7 @@ import {
   fillSignupForm,
   fillLoginForm,
   dismissCookieBanner,
+  loginAsTestUser,
 } from "../playwright-fixture";
 
 test.describe("Signup page (public)", () => {
@@ -70,10 +71,12 @@ test.describe("Signup → email verification [T-0893]", () => {
   });
 });
 
-test.describe.skip("Onboarding wizard (requires authenticated session)", () => {
-  test("completes onboarding steps after signup", async ({ page }) => {
-    // TODO: seed session via storageState after email verification mock
-    await page.goto("/onboarding");
+test.describe("Onboarding wizard (incomplete account fixture)", () => {
+  test("lands on onboarding and cannot skip to dashboard", async ({ page }) => {
+    await loginAsTestUser(page, { onboarded: false, emailConfirmed: true });
+    await expect(page).toHaveURL(/\/onboarding/, { timeout: 20_000 });
+    await page.goto("/app/sessions", { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/onboarding/, { timeout: 15_000 });
   });
 });
 

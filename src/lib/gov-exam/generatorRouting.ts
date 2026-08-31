@@ -10,7 +10,7 @@ export function pickPaperGeneratorPreference(input: {
   questionCount: number;
   available?: number;
   /** UI basis from GenerateGovPaper */
-  basis?: "full_sim" | "custom" | "topic";
+  basis?: "full_sim" | "custom" | "topic" | "official_previous" | "hybrid";
 }): PaperGeneratorPreference {
   if (input.basis === "topic") return "edge";
 
@@ -18,11 +18,11 @@ export function pickPaperGeneratorPreference(input: {
   const available = Math.max(0, Math.floor(input.available ?? 0));
   const aiNeeded = Math.max(0, requested - available);
 
-  if (input.mode === "official_previous" || aiNeeded === 0) {
+  if (input.mode === "official_previous" || input.basis === "official_previous" || aiNeeded === 0) {
     return "edge";
   }
 
-  if (input.basis === "full_sim" || requested >= 50 || aiNeeded >= 15) {
+  if (input.basis === "full_sim" || input.basis === "hybrid" || requested >= 50 || aiNeeded >= 15) {
     return "auto";
   }
 

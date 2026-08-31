@@ -86,7 +86,7 @@ export default function VerifyCertificatePage() {
   return (
     <div
       data-testid="dd-layout-root"
-      className={`${PAGE_SHELL_STANDARD} mx-auto flex min-h-[100dvh] w-full flex-col px-4 py-8 sm:px-6 sm:py-10`}
+      className={`${PAGE_SHELL_STANDARD} mx-auto flex min-h-0 w-full flex-col px-4 py-8 sm:px-6 sm:py-10`}
     >
       <a
         href="#main-content"
@@ -137,18 +137,20 @@ export default function VerifyCertificatePage() {
         )}
 
         {status === "invalid" && (
-          <EmptyState
-            icon={AlertTriangle}
-            title="Invalid certificate code"
-            description={
-              certificateId?.trim()
-                ? "No matching certificate was found for this ID. No learner or course details are shown."
-                : "This verification link is missing a certificate code."
-            }
-            actionLabel="Try another code"
-            onAction={() => navigate("/verify-certificate")}
-            compact
-          />
+          <div className="flex flex-1 min-h-[40vh] items-center justify-center">
+            <EmptyState
+              icon={AlertTriangle}
+              title="Invalid certificate code"
+              description={
+                certificateId?.trim()
+                  ? "No matching certificate was found for this ID. No learner or course details are shown."
+                  : "This verification link is missing a certificate code."
+              }
+              actionLabel="Try another code"
+              onAction={() => navigate("/verify-certificate")}
+              compact
+            />
+          </div>
         )}
 
         {status === "valid" && result?.valid && (

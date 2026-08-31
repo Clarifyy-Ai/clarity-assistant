@@ -126,6 +126,108 @@ async function extractWithGemini(
   };
 }
 
+const UNRELATED_REJECT_CONFIDENCE = 0.7;
+const UNKNOWN_REVIEW_REJECT_CONFIDENCE = 0.8;
+
+type DocumentClassification = {
+  document_type: string;
+  confidence: number;
+  warnings: string[];
+};
+
+function parseClassification(data: unknown): DocumentClassification | null {
+  if (!data || typeof data !== "object") return null;
+  const obj = data as Record<string, unknown>;
+  const documentType =
+    (typeof obj.detected_document_type === "string" && obj.detected_document_type) ||
+    (typeof obj.document_type === "string" && obj.document_type) ||
+    "";
+  const confidence =
+    typeof obj.confidence === "number" ? obj.confidence : Number(obj.confidence);
+  if (!documentType || !Number.isFinite(confidence)) return null;
+  const warnings = Array.isArray(obj.warnings)
+    ? obj.warnings.map((item) => String(item))
+    : [];
+  return { document_type: documentType, confidence, warnings };
+}
+
+function shouldRejectClassification(c: DocumentClassification): boolean {
+  const type = c.document_type.toUpperCase();
+  if (type === "UNRELATED" && c.confidence >= UNRELATED_REJECT_CONFIDENCE) return true;
+  if (type === "UNKNOWN_REVIEW" && c.confidence >= UNKNOWN_REVIEW_REJECT_CONFIDENCE) {
+    return true;
+  }
+  return false;
+}
+
+function classificationPayload(c: DocumentClassification | null): Record<string, unknown> {
+  if (!c) return {};
+  return {
+    document_type: c.document_type,
+    confidence: c.confidence,
+    classification_warnings: c.warnings,
+  };
+}
+
+async function classifyExtractedText(opts: {
+  text: string;
+  categoryHint: string;
+  operationId: string;
+  correlationId?: string;
+}): Promise<DocumentClassification | null> {
+  try {
+    const result = await callPythonProcess({
+      operation: "document_classify",
+      operationId: `${opts.operationId}-classify`.slice(0, 128),
+      correlationId: opts.correlationId ?? crypto.randomUUID(),
+      payload: {
+        text: opts.text.slice(0, 50_000),
+        category_hint: opts.categoryHint,
+        document_kind: opts.categoryHint,
+      },
+    });
+    if (!result.ok) {
+      console.warn("[parse-document] python document_classify failed", {
+        code: result.code,
+        message: result.message,
+      });
+      return null;
+    }
+    return parseClassification(result.data);
+  } catch (err) {
+    console.warn("[parse-document] python document_classify threw", err);
+    return null;
+  }
+}
+
+async function classifyOrReject(
+  req: Request,
+  extracted: DocumentExtractPayload,
+  documentKind: string,
+): Promise<
+  | { ok: true; classification: DocumentClassification | null }
+  | { ok: false; response: Response }
+> {
+  const classification = await classifyExtractedText({
+    text: extracted.full_text,
+    categoryHint: documentKind,
+    operationId: `parse-document-${documentKind}`,
+  });
+  if (!classification) return { ok: true, classification: null };
+  if (shouldRejectClassification(classification)) {
+    return {
+      ok: false,
+      response: response(req, {
+        error:
+          "This file does not look like a resume, job description, or personal document.",
+        code: "DOCUMENT_UNRELATED",
+        ...classificationPayload(classification),
+      }, 422),
+    };
+  }
+  return { ok: true, classification };
+}
+
 function extractPythonDocument(data: unknown): { full_text: string; summary: string } | null {
   if (!data || typeof data !== "object") return null;
   const obj = data as Record<string, unknown>;
@@ -401,13 +503,26 @@ Deno.serve(async (req) => {
         }, 422);
       }
       const extracted = hybrid.data;
+      const classified = await classifyOrReject(req, extracted, "library");
+      if (!classified.ok) {
+        await db.from("personal_library_documents").update({
+          processing_status: "rejected",
+          processing_error: "This file does not look like a supported document type.",
+          content_hash: hash,
+        }).eq("id", libraryDocumentId);
+        return classified.response;
+      }
       await db.from("personal_library_documents").update({
-        content_hash: hash, parsed_content: extracted.full_text, parsed_metadata: { summary: extracted.summary },
+        content_hash: hash, parsed_content: extracted.full_text, parsed_metadata: {
+          summary: extracted.summary,
+          ...classificationPayload(classified.classification),
+        },
         processing_status: "completed", processing_error: null, parser_version: PARSER_VERSION,
       }).eq("id", libraryDocumentId).eq("owner_id", userId);
       return response(req, {
         success: true, content: extracted.full_text, parsed_summary: extracted.summary,
         content_length: extracted.full_text.length,
+        ...classificationPayload(classified.classification),
       });
     }
 
@@ -489,6 +604,10 @@ Deno.serve(async (req) => {
       }
 
       const extracted = hybrid.data;
+      const classified = await classifyOrReject(req, extracted, "job_description");
+      if (!classified.ok) {
+        return classified.response;
+      }
 
       await db
         .from("job_descriptions")
@@ -506,6 +625,7 @@ Deno.serve(async (req) => {
           content: extracted.full_text,
           parsed_summary: extracted.summary,
           content_length: extracted.full_text.length,
+          ...classificationPayload(classified.classification),
         }),
         { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
       );
@@ -647,6 +767,16 @@ Deno.serve(async (req) => {
     }
 
     const extracted = hybrid.data;
+    const classified = await classifyOrReject(
+      req,
+      extracted,
+      Array.isArray(doc.keywords) && doc.keywords.includes("portfolio")
+        ? "portfolio"
+        : (doc.type ?? "other"),
+    );
+    if (!classified.ok) {
+      return classified.response;
+    }
 
     await db
       .from("documents")
@@ -664,6 +794,7 @@ Deno.serve(async (req) => {
         content: extracted.full_text,
         parsed_summary: extracted.summary,
         content_length: extracted.full_text.length,
+        ...classificationPayload(classified.classification),
       }),
       { headers: getCorsHeaders(req) }
     );

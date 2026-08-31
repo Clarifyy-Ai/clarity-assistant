@@ -65,6 +65,103 @@ test.describe("UI visual regression @1280px", () => {
   });
 });
 
+test.describe("Public + auth visual regression (plan viewports)", () => {
+  test("login and help at every required width", async ({ page }) => {
+    await setupSupabaseMocks(page);
+    const routes = [
+      { path: "/login", heading: /Welcome back/i },
+      { path: "/forgot-password", heading: /Reset|Forgot|password/i },
+      { path: "/help", heading: /Help Center/i },
+      { path: "/", heading: /.+/ },
+      { path: "/pricing", heading: /Pricing|Plans|Clarify/i },
+      { path: "/contact-sales", heading: /Contact Sales/i },
+      { path: "/share/invalid-token", heading: /unavailable|invalid|expired/i },
+    ] as const;
+    for (const route of routes) {
+      for (const vp of DD_VIEWPORTS) {
+        await page.setViewportSize(vp);
+        await page.goto(route.path, { waitUntil: "domcontentloaded" });
+        await dismissCookieBanner(page);
+        await expect(page.getByRole("heading", { name: route.heading })).toBeVisible({
+          timeout: 20_000,
+        });
+        if (vp.width === 360 || vp.width === 768 || vp.width === 1920) {
+          await expect(page).toHaveScreenshot(
+            `plan-${route.path.replace("/", "")}-${vp.width}.png`,
+            SCREENSHOT_OPTS,
+          );
+        }
+      }
+    }
+  });
+
+  test("TC-PUB-014 company marketing pages render from footer routes", async ({ page }) => {
+    await setupSupabaseMocks(page);
+    await page.setViewportSize(DESKTOP_VIEWPORT);
+    const routes = [
+      { path: "/about", heading: /^About$/i },
+      { path: "/industries", heading: /^Industries$/i },
+      { path: "/cookies", heading: /^Cookies$/i },
+      { path: "/faq", heading: /^FAQ$/i },
+    ] as const;
+    for (const route of routes) {
+      await page.goto(route.path, { waitUntil: "domcontentloaded" });
+      await dismissCookieBanner(page);
+      await expect(page.getByRole("heading", { name: route.heading, level: 1 })).toBeVisible({
+        timeout: 20_000,
+      });
+      await expect(page.getByRole("contentinfo").getByRole("link", { name: "About" })).toBeVisible();
+      await expect(page.getByRole("contentinfo").getByRole("link", { name: "Industries" })).toBeVisible();
+      await expect(page.getByRole("contentinfo").getByRole("link", { name: "Cookies" })).toBeVisible();
+      await expect(page.getByRole("contentinfo").getByRole("link", { name: "FAQ" })).toBeVisible();
+    }
+  });
+
+  test("Login Support FAB does not cover Sign in at 360px", async ({ page }) => {
+    await setupSupabaseMocks(page);
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
+    await dismissCookieBanner(page);
+    const signIn = page.getByRole("button", { name: "Sign in" });
+    const fab = page.getByRole("button", { name: /support|help|chat/i }).last();
+    await expect(signIn).toBeVisible({ timeout: 15_000 });
+    if (await fab.count()) {
+      const signBox = await signIn.boundingBox();
+      const fabBox = await fab.boundingBox();
+      if (signBox && fabBox) {
+        const overlap =
+          signBox.x < fabBox.x + fabBox.width &&
+          signBox.x + signBox.width > fabBox.x &&
+          signBox.y < fabBox.y + fabBox.height &&
+          signBox.y + signBox.height > fabBox.y;
+        expect(overlap).toBe(false);
+      }
+    }
+  });
+
+  test("Help Support FAB does not overlap footer Login", async ({ page }) => {
+    await setupSupabaseMocks(page);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto("/help", { waitUntil: "domcontentloaded" });
+    await dismissCookieBanner(page);
+    const login = page.getByRole("link", { name: /^Login$/i }).last();
+    const fab = page.locator("[class*='fixed']").filter({ has: page.getByRole("button") }).last();
+    await expect(login).toBeVisible({ timeout: 15_000 });
+    if (await fab.count()) {
+      const loginBox = await login.boundingBox();
+      const fabBox = await fab.boundingBox();
+      if (loginBox && fabBox) {
+        const overlap =
+          loginBox.x < fabBox.x + fabBox.width &&
+          loginBox.x + loginBox.width > fabBox.x &&
+          loginBox.y < fabBox.y + fabBox.height &&
+          loginBox.y + loginBox.height > fabBox.y;
+        expect(overlap).toBe(false);
+      }
+    }
+  });
+});
+
 test.describe("DD layout visual regression (multi-width)", () => {
   test("verify-certificate (public) landmarks + screenshots", async ({ page }) => {
     await setupSupabaseMocks(page);

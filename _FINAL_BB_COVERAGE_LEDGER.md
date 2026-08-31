@@ -333,3 +333,29 @@ Total IDs: **314**
 | DEF-001 | New | FIXED_IN_CODE | RC-PROFILE-TIMEOUT | - |
 | DEF-002 | New | FIXED_IN_CODE | RC-DIALOG-TITLE | - |
 | DEF-003 | New | FIXED_IN_CODE | RC-RAZORPAY-BILLING | - |
+
+## Remaining workstreams (2026-08-31)
+
+N/A from missing fixtures is **not** pass. Cases below were reclassified after fixtures and code landed in `src/` + `supabase/`. Live smoke remains **RELEASE_BLOCKED** until Phase 10 secrets/deploy are verified.
+
+| ID | Root cause | Files | Edge / migration | Tests | Status |
+|----|------------|-------|------------------|-------|--------|
+| AUTH-UNVERIFIED | GoTrue `email_not_confirmed` not mapped | `src/lib/errors.ts`, Login/Signup | Auth SMTP | unit + `e2e/auth-onboarding.spec.ts` | FIXED_IN_CODE — live inbox unverified |
+| AUTH-MFA | `MFA_ENFORCEMENT_PAUSED` | `src/lib/auth/mfaGate.ts` | — | `mfaGate.test.ts` | FIXED_IN_CODE — live TOTP unverified |
+| AUTH-OAUTH | provider not enabled shown as raw 400 | `oauthProviders.ts`, AuthCallback | Google OAuth secrets | e2e mock | FIXED_IN_CODE — live OAuth unverified |
+| SESS-500 | debrief/scorecard catch-all 500 | generate-debrief/scorecard | same | session display unit | FIXED_IN_CODE |
+| SESS-AB | unused USER_A/B | e2e mock isolation | RLS | `e2e/session-ownership.spec.ts` | FIXED_IN_CODE |
+| DEL-429 | completed replay consumed quota | `delete-account` | same | SettingsDanger | FIXED_IN_CODE |
+| SCH-TZ | IANA treated as local | `zonedWallTime`, timezone migration | `20260831140000_interview_timezone.sql` | `upcomingInterviews.test.ts` | FIXED_IN_CODE — live calendar unverified |
+| SCH-CAL | read-only + 501 as product | `sync-calendar` write/delete | GOOGLE_CLIENT_* | e2e 501 vs write mock | FIXED_IN_CODE — live write unverified |
+| CRED-RAW | `raw_prompt` 400 vs 402 | `prep-tool` allowlist + cost | prep-tool | `e2e/credit-states.spec.ts` | FIXED_IN_CODE |
+| CRED-FIXTURE | mock hardcoded 500 | seed LOW/EXACT + mock `credits` | — | credit-states e2e | FIXED_IN_CODE |
+| GOV-REVIEW | topic/missing-source | `AdminGovQuestionReview`, `adminOps` | — | unit helper | FIXED_IN_CODE |
+| PUB-SALES | no `/contact-sales` | ContactSales + `contact-sales` | Resend | visual + regression | FIXED_IN_CODE — live mail unverified |
+| PUB-FAB | Support over Login | `SupportChatWidget` auth offset | — | visual 360 | FIXED_IN_CODE |
+| CAT-INR | hardcoded paise | `liveCatalog` + `billing-catalog` | billing-catalog | parity script | FIXED_IN_CODE |
+| REL-10 | deploy/secrets not run here | `scripts/release-gate.mjs` | — | gate prints RELEASE_BLOCKED | RELEASE_BLOCKED |
+| SESS-LIST-SCORE | list ignored scorecards | `CallSessions.tsx` + `scorecardsDB.listScoresByUserId` | — | session-ownership expects 81 on list | FIXED_IN_CODE |
+| CRED-MATRIX | PAST_DUE/SUFFICIENT/EXACT second call | `e2e/credit-states.spec.ts` + mock `subscriptionStatus` | — | five-account matrix | FIXED_IN_CODE |
+| SCH-CAL-WRITE | write/delete e2e missing | `e2e/scheduler-calendar.spec.ts` | sync-calendar | mock write+delete 200 | FIXED_IN_CODE — live unverified |
+| PUB-LOGIN-360 | FAB overlap only tested on Help | `e2e/ui-visual-regression.spec.ts` | — | Login@360 | FIXED_IN_CODE |

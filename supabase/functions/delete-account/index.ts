@@ -169,8 +169,6 @@ Deno.serve(async (req) => {
     const userEmail = auth.context.user.email;
 
     const db = createServiceClient();
-    const rateLimited = await enforceAccountDeletionRateLimitAsync(db, authenticatedUserId);
-    if (rateLimited) return withCorsHeaders(req, rateLimited);
 
     const body = await req.json().catch(() => ({}));
     const confirmation = typeof body?.confirmation === "string"
@@ -205,7 +203,7 @@ Deno.serve(async (req) => {
       existingQuery = existingQuery.order("created_at", { ascending: false }).limit(1);
     }
     const { data: existingOp, error: existingOpError } = await existingQuery.maybeSingle();
-    if (existingOpError) throw existingOpError;
+    if (existingOpError && !isMissingRelation(existingOpError)) throw existingOpError;
 
     if (existingOp?.status === "completed") {
       return jsonWithCors(req, {
@@ -215,6 +213,11 @@ Deno.serve(async (req) => {
         correlationId,
       });
     }
+
+    const rateLimited = existingOp?.id
+      ? null
+      : await enforceAccountDeletionRateLimitAsync(db, authenticatedUserId);
+    if (rateLimited) return withCorsHeaders(req, rateLimited);
 
     let operationId = existingOp?.id as string | undefined;
     if (!operationId) {

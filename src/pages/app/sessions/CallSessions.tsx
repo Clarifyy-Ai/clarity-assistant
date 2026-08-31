@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { sessionsDB } from "@/lib/supabase/database";
+import { sessionsDB, scorecardsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/userStore";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -38,6 +38,7 @@ import {
 } from "@/lib/session/sessionHistoryFilters";
 import { SESSIONS_CHANGED_EVENT } from "@/lib/session/sessionReuse";
 import { subscribeFocusRecovery } from "@/lib/focusRecovery";
+import { formatSessionDuration, resolveOverallScore } from "@/lib/session/sessionDisplay";
 
 const SESSION_TYPES: SessionHistoryTypeFilter[] = ["all", "live", "mock", "practice"];
 
@@ -53,7 +54,7 @@ type SessionRow = Pick<
   | "questions_asked"
   | "status"
   | "tags"
-> & { source_type?: string | null };
+> & { source_type?: string | null; duration_seconds?: number | null; lifecycle_status?: string | null };
 
 const SESSION_TABS = ["recent", "all"] as const;
 type SessionTab = (typeof SESSION_TABS)[number];
@@ -90,7 +91,23 @@ export default function CallSessions() {
     try {
       const limit = tab === "all" ? 500 : 20;
       const data = await sessionsDB.listSummariesByUserId(user.id, limit);
-      setSessions(data);
+      let scoreBySession = new Map<string, number>();
+      try {
+        scoreBySession = await scorecardsDB.listScoresByUserId(
+          user.id,
+          data.map((row) => row.id),
+        );
+      } catch {
+        scoreBySession = new Map();
+      }
+      setSessions(
+        data.map((row) => ({
+          ...row,
+          overall_score: resolveOverallScore(row, {
+            overall_score: scoreBySession.get(row.id) ?? null,
+          }),
+        })),
+      );
     } catch (err) {
       console.error("[CallSessions] fetch error:", err);
       setError(true);
@@ -246,14 +263,7 @@ export default function CallSessions() {
           </div>
 
           {filtered.map((s) => {
-            let duration: string | null = null;
-            if (s.started_at && s.ended_at) {
-              const ms =
-                new Date(s.ended_at).getTime() - new Date(s.started_at).getTime();
-              if (ms > 0) duration = `${Math.floor(ms / 60000)}m`;
-            } else if (s.status === "active" && !s.ended_at) {
-              duration = "In progress";
-            }
+            const duration = formatSessionDuration(s);
 
             const typeLabel = sessionTypeLabel(s);
             const typeColor =
@@ -418,7 +428,7 @@ function SwipeSessionRow({
 
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <Sparkles className="w-3 h-3" />
-          {s.questions_asked ?? 0} Qs
+          {s.overall_score != null ? `${Math.round(s.overall_score)}` : "—"} · {s.questions_asked ?? 0} Qs
         </div>
 
         <div className="text-xs text-muted-foreground">

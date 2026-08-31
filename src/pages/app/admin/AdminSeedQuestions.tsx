@@ -15,6 +15,10 @@ import { cn } from "@/lib/utils";
 import { unwrapEdgePayload } from "@/lib/network/edgeResult";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { normalizeExamTypeForStorage } from "@/lib/mock-test/examTypes";
+import {
+  isParseQuestionPdfQueuedPayload,
+  pollParseQuestionPdfJob,
+} from "@/lib/gov-exam/parseQuestionPdfJob";
 import { scraperApi, ScraperNotConfiguredError } from "@/lib/scraper/client";
 import { useScrapeJob } from "@/hooks/useScrapeJob";
 
@@ -169,15 +173,53 @@ export default function AdminSeedQuestions() {
         body: formData,
       });
 
-      if (!response.ok) {
-        const errBody = await response.json().catch(() => ({}));
+      const json = await response.json().catch(() => ({}));
+
+      if (response.status === 504 || response.status === 502) {
         throw new Error(
-          (errBody as { error?: string }).error ?? "Failed to process PDF via AI."
+          (json as { error?: string }).error ?? "PDF parsing failed. Credits refunded.",
         );
       }
-      const json = await response.json();
-      const inner = unwrapEdgePayload<{ questions?: unknown[] }>(json);
+
+      if (!response.ok && response.status !== 202) {
+        throw new Error(
+          (json as { error?: string }).error ?? "Failed to process PDF via AI.",
+        );
+      }
+
+      let inner = unwrapEdgePayload<{
+        questions?: unknown[];
+        accepted?: boolean;
+        jobId?: string;
+        persistedToBank?: boolean;
+        count?: number;
+      }>(json);
+
+      if (response.status === 202 || isParseQuestionPdfQueuedPayload(inner)) {
+        if (!inner.jobId) throw new Error("PDF queued but no job id was returned.");
+        toast.info("Parsing in background…");
+        const parsedJob = await pollParseQuestionPdfJob(inner.jobId);
+        if (parsedJob.status === "failed") {
+          throw new Error(
+            parsedJob.error || parsedJob.message || "PDF parsing failed. Credits refunded.",
+          );
+        }
+        inner = {
+          questions: parsedJob.questions,
+          count: parsedJob.count,
+          persistedToBank: parsedJob.persistedToBank,
+        };
+      }
+
       const questions = Array.isArray(inner.questions) ? inner.questions : [];
+
+      if (inner.persistedToBank && (inner.count ?? questions.length) > 0) {
+        toast.success(`Saved ${inner.count ?? questions.length} questions to your bank.`);
+        setPdfFile(null);
+        if (fileRef.current) fileRef.current.value = "";
+        void loadStats();
+        return;
+      }
 
       if (questions.length === 0) throw new Error("No questions extracted.");
 

@@ -28,6 +28,7 @@ import {
   deriveQuestionQueueStatus,
   listQuestionsForReview,
   listVerificationRunway,
+  questionMissingSource,
   setQuestionReviewStatus,
   type QuestionQueueStatus,
   type QuestionReviewFilterStatus,
@@ -64,6 +65,8 @@ export default function AdminGovQuestionReview() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [examType, setExamType] = useState("all");
   const [topic, setTopic] = useState("");
+  const [topicQuery, setTopicQuery] = useState("");
+  const [missingSourceOnly, setMissingSourceOnly] = useState(false);
   const [status, setStatus] = useState<QuestionReviewFilterStatus>("public_unverified");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -80,7 +83,7 @@ export default function AdminGovQuestionReview() {
     setLoading(true);
     setLoadError(null);
     const [qRes, rRes] = await Promise.all([
-      listQuestionsForReview({ examType, topic, status }),
+      listQuestionsForReview({ examType, topic: topicQuery, status, missingSourceOnly }),
       listVerificationRunway(),
     ]);
     if (qRes.error) {
@@ -97,8 +100,13 @@ export default function AdminGovQuestionReview() {
   }
 
   useEffect(() => {
+    const t = window.setTimeout(() => setTopicQuery(topic), 300);
+    return () => window.clearTimeout(t);
+  }, [topic]);
+
+  useEffect(() => {
     void load();
-  }, [examType, status]);
+  }, [examType, status, topicQuery, missingSourceOnly]);
 
   const rowsById = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
 
@@ -265,7 +273,22 @@ export default function AdminGovQuestionReview() {
             onChange={(e) => setTopic(e.target.value)}
             fullWidth={false}
           />
-          <Button size="sm" variant="outline" onClick={() => void load()}>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground h-8 px-2">
+            <Checkbox
+              checked={missingSourceOnly}
+              onCheckedChange={(v) => setMissingSourceOnly(v === true)}
+              aria-label="Missing source only"
+            />
+            Missing source
+          </label>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setTopicQuery(topic);
+              void load();
+            }}
+          >
             Apply
           </Button>
           <Link
@@ -378,13 +401,7 @@ export default function AdminGovQuestionReview() {
                   <Loader2 className="w-4 h-4 inline animate-spin mr-2" /> Loading…
                 </TableCell>
               </TableRow>
-            ) : rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="text-muted-foreground">
-                  No questions match these filters.
-                </TableCell>
-              </TableRow>
-            ) : (
+            ) : rows.length === 0 ? null : (
               rows.map((row) => {
                 const qs = deriveQuestionQueueStatus(row);
                 const isPublicUnverified = row.is_public === true && row.is_verified !== true;
@@ -412,7 +429,12 @@ export default function AdminGovQuestionReview() {
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">{row.topic}</TableCell>
                     <TableCell>
-                      <Badge variant={statusBadge(qs)} size="sm">{qs}</Badge>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge variant={statusBadge(qs)} size="sm">{qs}</Badge>
+                        {questionMissingSource(row) && (
+                          <Badge variant="amber" size="sm">missing source</Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right space-x-1">
                       {isPublicUnverified && (

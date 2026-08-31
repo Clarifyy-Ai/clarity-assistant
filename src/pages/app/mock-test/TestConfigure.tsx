@@ -74,12 +74,17 @@ const EXAM_SUBJECTS: Record<string, string[]> = {
   JEE_MAIN: ["Physics", "Chemistry", "Mathematics"],
   JEE_ADV: ["Physics", "Chemistry", "Mathematics"],
   NEET: ["Biology", "Physics", "Chemistry"],
-  UPSC: ["General Studies", "Current Affairs"],
-  SSC_CGL: ["Reasoning", "Quantitative Aptitude", "English", "General Awareness"],
-  IBPS_PO: ["Reasoning", "Quantitative Aptitude", "English", "Banking Awareness"],
   HPCL_ENGINEER: ["Technical", "English", "Quantitative Aptitude", "Reasoning"],
   PSU: ["General Awareness", "English", "Quantitative Aptitude", "Reasoning"],
   CUSTOM: [],
+};
+
+/** Registry government exams use GenerateGovPaper (pattern from get-exam-pattern), not this wizard. */
+const REGISTRY_GENERATE_CODES: Record<string, string> = {
+  SSC_CGL: "SSC_CGL",
+  IBPS_PO: "IBPS_PO",
+  UPSC: "UPSC_CSE_PRELIMS",
+  RRB_NTPC: "RRB_NTPC",
 };
 
 const EXAM_TOPICS: Record<string, string[]> = {
@@ -223,6 +228,14 @@ export default function TestConfigure() {
 
   const examFromURL = resolveExamConfigId(searchParams.get("exam"));
   const isQuick = searchParams.get("quick") === "true";
+  const registryGenerateCode = REGISTRY_GENERATE_CODES[examFromURL];
+
+  useEffect(() => {
+    if (isQuick || !registryGenerateCode) return;
+    navigate(`/app/mock-test/generate?code=${encodeURIComponent(registryGenerateCode)}`, {
+      replace: true,
+    });
+  }, [isQuick, registryGenerateCode, navigate]);
   const yearMinFromURL = searchParams.get("year_min")
     ? Number(searchParams.get("year_min"))
     : null;

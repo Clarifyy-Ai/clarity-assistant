@@ -269,6 +269,13 @@ export const RATE_LIMIT_PRESETS = {
     windowMs: 60_000,
   },
 
+  /** Job status polling — must stay above the frontend poll cadence (1.5–5s). */
+  JOB_POLL: {
+    limit: 120,
+    windowMs: 60_000,
+    failOpenOnBackendFailure: true,
+  },
+
   /** Typeahead / browse — higher than SESSION_ACTION so debounce storms don't 429.
    * Fail-open on rate-limit RPC outage: a 503 here was misread as "Too many searches". */
   SEARCH_BROWSE: {
@@ -535,6 +542,27 @@ export async function checkRateLimitAsync(
     );
     return failOpenOnBackendFailure ? allowOnBackendFailure : deny;
   }
+}
+
+/**
+ * Distributed rate limit with in-process fallback when the RPC is down.
+ * Real 429 quota denials are still enforced. Used for generation so a
+ * check_rate_limit outage cannot freeze Government Exam paper creation.
+ */
+export async function checkRateLimitAsyncWithLocalFallback(
+  adminClient: {
+    rpc: (
+      fn: string,
+      args: Record<string, unknown>
+    ) => Promise<{ data: unknown; error: { message: string } | null }>;
+  },
+  options: RateLimitOptions,
+): Promise<RateLimitResult> {
+  const distributed = await checkRateLimitAsync(adminClient, options);
+  if (distributed.allowed || !distributed.backendFailure) {
+    return distributed;
+  }
+  return checkRateLimit(options);
 }
 
 export async function enforceRateLimitAsync(

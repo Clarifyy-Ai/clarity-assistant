@@ -9,6 +9,7 @@
 import { signInternalRequest } from "./pythonClient.ts";
 
 const DEFAULT_TIMEOUT_MS = 25_000;
+/** Ack-only: Python claims (or worker already owns) and continues in background. */
 const PROCESS_JOB_TIMEOUT_MS = 8_000;
 
 export type PythonGovExamError = {
@@ -30,10 +31,12 @@ export type PythonAvailabilityRequest = {
   correlation_id: string;
   job_id?: string | null;
   bank_type_keys?: string[];
+  mode?: string;
 };
 
 export type PythonAvailabilityResult = {
   requested: number;
+  eligible?: number;
   available: number;
   missing: number;
   can_full_mock: boolean;
@@ -41,6 +44,9 @@ export type PythonAvailabilityResult = {
   custom_practice_max: number;
   exam_type_keys?: string[];
   section_coverage?: Record<string, unknown>;
+  language_available?: boolean;
+  blocked_reason?: string | null;
+  mode?: string;
 };
 
 export type PythonSelectRequest = {
@@ -177,12 +183,12 @@ export function wantsPythonPaperFactoryGenerator(input: {
   const pythonAvailable =
     input.pythonHttpConfigured || input.paperFactoryWorkerEnabled === true;
 
+  // Never tag python_paper_factory when no worker or HTTP can claim the job.
+  if (!pythonAvailable || pref === "edge") return false;
+  if (input.planKind === "bank_only") return false;
   if (input.planGenerator === "python_paper_factory") return true;
   if (input.planKind === "hybrid_deterministic") return true;
-  if (preferPython && pythonAvailable) return true;
-  // Honor explicit Edge preference for bank-only (client pickPaperGeneratorPreference).
-  if (pref === "edge") return false;
-  if (input.planKind === "bank_only" && pythonAvailable) return true;
+  if (preferPython) return true;
   return false;
 }
 
@@ -338,6 +344,7 @@ export async function pythonGovAvailability(
       correlation_id: correlationId,
       job_id: input.job_id ?? null,
       bank_type_keys: input.bank_type_keys ?? [],
+      mode: input.mode ?? "generated_mock",
     },
     {
       timeoutMs: DEFAULT_TIMEOUT_MS,
@@ -424,9 +431,19 @@ export async function pythonGovSelect(
 }
 
 /**
- * Fire-and-forget friendly: short timeout so Edge can return 202 quickly.
- * Python continues processing after accepting the request.
+ * Fire-and-forget: short timeout so Edge can return 202 quickly.
+ * PYTHON_TIMEOUT / JOB_NOT_CLAIMABLE mean Python (or the worker) still owns the job.
  */
+export function pythonDispatchKeepsPythonOwner(error: PythonGovExamError): boolean {
+  if (error.code === "PYTHON_NOT_CONFIGURED" || error.code === "PYTHON_NETWORK_ERROR") {
+    return false;
+  }
+  if (error.code === "PYTHON_TIMEOUT" || error.code === "JOB_NOT_CLAIMABLE") {
+    return true;
+  }
+  return Boolean(error.retryable);
+}
+
 export async function pythonGovProcessJob(
   input: PythonProcessJobRequest,
 ): Promise<{ ok: true; data: PythonProcessJobResult } | { ok: false; error: PythonGovExamError }> {
@@ -445,17 +462,30 @@ export async function pythonGovProcessJob(
     },
   );
 
-  if (!result.ok) return result;
+  if (!result.ok) {
+    if (pythonDispatchKeepsPythonOwner(result.error)) {
+      return {
+        ok: true,
+        data: {
+          success: true,
+          job_id: input.job_id,
+          status: "queued",
+          accepted: true,
+        },
+      };
+    }
+    return result;
+  }
 
   return {
     ok: true,
     data: {
       success: result.json.success !== false,
       job_id: String(result.json.job_id ?? input.job_id),
-      status: result.json.status != null ? String(result.json.status) : undefined,
+      status: result.json.status != null ? String(result.json.status) : "queued",
       paper_id: (result.json.paper_id as string | null | undefined) ?? null,
       mock_test_id: (result.json.mock_test_id as string | null | undefined) ?? null,
-      accepted: true,
+      accepted: result.json.accepted !== false,
     },
   };
 }

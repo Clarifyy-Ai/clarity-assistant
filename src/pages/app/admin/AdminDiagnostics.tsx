@@ -54,16 +54,19 @@ type HybridHealthPayload = {
     force_ai_unavailable?: boolean;
     force_python_unavailable?: boolean;
   };
-  python?: {
-    configured?: boolean;
-    hmac_ok?: boolean;
-    up?: boolean;
-    down?: boolean;
-    status?: string;
-    health?: { ok: boolean; latency_ms?: number } | null;
-    ready?: { ok: boolean; latency_ms?: number } | null;
-    signed_internal?: { ok: boolean; latency_ms?: number; code?: string } | null;
-  };
+    python?: {
+      configured?: boolean;
+      hmac_ok?: boolean;
+      up?: boolean;
+      down?: boolean;
+      status?: string;
+      health?: { ok: boolean; latency_ms?: number } | null;
+      ready?: { ok: boolean; latency_ms?: number } | null;
+      signed_internal?: { ok: boolean; latency_ms?: number; code?: string } | null;
+      supported?: { ok: boolean; count?: number } | null;
+      alerts?: { ok: boolean; count?: number } | null;
+      metrics?: { ok: boolean } | null;
+    };
   ai?: {
     gemini?: HybridPresence;
     openai?: HybridPresence;
@@ -327,6 +330,51 @@ export async function runAdminHealthChecks(): Promise<HealthCheck[]> {
           : pyOk
             ? "Public /health ok but signed internal auth failed — check HMAC secret sync"
             : hybrid.python?.signed_internal?.code ?? "HMAC probe failed",
+    });
+    const pyConfigured = hybrid.python?.configured === true;
+    checks.push({
+      id: "python_supported",
+      label: "Python supported operations",
+      status: !pyConfigured
+        ? "NOT_CONFIGURED"
+        : hybrid.python?.supported?.ok
+          ? "PASS"
+          : "WARNING",
+      detail: !pyConfigured
+        ? "Integration not configured"
+        : hybrid.python?.supported?.ok
+          ? `${hybrid.python.supported.count ?? 0} HMAC operations listed`
+          : "GET /internal/operations/supported failed",
+    });
+    checks.push({
+      id: "python_alerts",
+      label: "Python alerts",
+      status: !pyConfigured
+        ? "NOT_CONFIGURED"
+        : hybrid.python?.alerts?.ok
+          ? (hybrid.python.alerts.count ?? 0) > 0
+            ? "WARNING"
+            : "PASS"
+          : "WARNING",
+      detail: !pyConfigured
+        ? "Integration not configured"
+        : hybrid.python?.alerts?.ok
+          ? `${hybrid.python.alerts.count ?? 0} active alert(s)`
+          : "GET /alerts failed",
+    });
+    checks.push({
+      id: "python_metrics",
+      label: "Python metrics",
+      status: !pyConfigured
+        ? "NOT_CONFIGURED"
+        : hybrid.python?.metrics?.ok
+          ? "PASS"
+          : "WARNING",
+      detail: !pyConfigured
+        ? "Integration not configured"
+        : hybrid.python?.metrics?.ok
+          ? "Prometheus scrape reachable"
+          : "GET /metrics failed",
     });
     checks.push({
       id: "python_edge",

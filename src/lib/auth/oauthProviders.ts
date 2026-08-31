@@ -64,3 +64,25 @@ export function isOAuthCancelledError(
     haystack.includes("canceled")
   );
 }
+
+/** True when Google/GitHub/etc. is not enabled in the Auth dashboard. */
+export function isOAuthNotConfiguredError(
+  error: string | null | undefined,
+  description?: string | null,
+  errorCode?: string | null,
+): boolean {
+  const haystack = [error, description, errorCode]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" ")
+    .toLowerCase();
+  return (
+    haystack.includes("provider is not enabled") ||
+    haystack.includes("unsupported provider") ||
+    haystack.includes("oauth_provider_not_found") ||
+    haystack.includes("provider_disabled") ||
+    haystack.includes("validation_failed") && haystack.includes("provider")
+  );
+}
+
+export const OAUTH_NOT_CONFIGURED_MESSAGE =
+  "Google sign-in is not configured on this deployment. Use email and password, or contact support.";

@@ -129,9 +129,66 @@ Deno.serve(async (req) => {
 
     if (!claimed.ok) {
       if (claimed.message === "PYTHON_FACTORY_OWNED" && jobId) {
+        const { data: owned } = await db
+          .from("gov_paper_generation_jobs")
+          .select(
+            "id, status, mock_test_id, generated_paper_id, error_code, user_id, request_json, lease_expires_at, started_at",
+          )
+          .eq("id", jobId)
+          .maybeSingle();
+
+        const leaseActive =
+          owned?.lease_expires_at &&
+          new Date(String(owned.lease_expires_at)).getTime() > Date.now();
+        if (owned && !leaseActive && owned.status !== "completed" && owned.status !== "cancelled") {
+          const prevJson =
+            owned.request_json && typeof owned.request_json === "object"
+              ? (owned.request_json as Record<string, unknown>)
+              : {};
+          await db
+            .from("gov_paper_generation_jobs")
+            .update({
+              request_json: { ...prevJson, generator: "edge_assembler", pythonFallback: "stale_python_lease" },
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", jobId);
+          const fallback = await claimPaperGenerationJob(db, {
+            jobId,
+            workerId,
+            userId: actor === "owner" && userId ? userId : undefined,
+          });
+          if (fallback.ok) {
+            claimedJobId = String(fallback.job.id);
+            claimedWorkerId = fallback.workerId;
+            const result = await assembleClaimedPaperJob(db, fallback.job, fallback.workerId);
+            if (result.ok) {
+              return json(req, {
+                jobId: fallback.job.id,
+                status: "completed",
+                mockTestId: result.mockTestId,
+                paperId: result.paperId,
+                questionCount: result.questionCount,
+                paperClass: result.paperClass,
+                workerId: fallback.workerId,
+                attemptCount: fallback.attemptCount,
+                pythonFallback: true,
+              });
+            }
+            return json(req, {
+              jobId: fallback.job.id,
+              status: result.status,
+              errorCode: result.errorCode,
+              error: result.error,
+              pythonFallback: true,
+            }, result.status === "cancelled" ? 202 : (result.httpStatus ?? 500));
+          }
+        }
+
         return json(req, {
           jobId,
-          status: "queued",
+          status: owned?.status ?? "queued",
+          mockTestId: owned?.mock_test_id ?? null,
+          paperId: owned?.generated_paper_id ?? null,
           code: "PYTHON_FACTORY_OWNED",
           error: "This job is owned by the Python paper-factory worker.",
         }, 202);
@@ -185,6 +242,51 @@ Deno.serve(async (req) => {
             error: "This job is owned by the Python paper-factory worker.",
             generator: routedGenerator,
           }, 202);
+        }
+        if (
+          existing.status === "queued" ||
+          existing.status === "failed_retryable" ||
+          existing.status === "failed"
+        ) {
+          await db
+            .from("gov_paper_generation_jobs")
+            .update({
+              worker_id: null,
+              lease_expires_at: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", jobId)
+            .in("status", ["queued", "failed_retryable", "failed"]);
+          const stolen = await claimPaperGenerationJob(db, {
+            jobId,
+            workerId,
+            userId: actor === "owner" && userId ? userId : undefined,
+          });
+          if (stolen.ok) {
+            claimedJobId = String(stolen.job.id);
+            claimedWorkerId = stolen.workerId;
+            const result = await assembleClaimedPaperJob(db, stolen.job, stolen.workerId);
+            if (result.ok) {
+              return json(req, {
+                jobId: stolen.job.id,
+                status: "completed",
+                mockTestId: result.mockTestId,
+                paperId: result.paperId,
+                questionCount: result.questionCount,
+                paperClass: result.paperClass,
+                workerId: stolen.workerId,
+                attemptCount: stolen.attemptCount,
+                recovered: true,
+              });
+            }
+            return json(req, {
+              jobId: stolen.job.id,
+              status: result.status,
+              errorCode: result.errorCode,
+              error: result.error,
+              recovered: true,
+            }, result.status === "cancelled" ? 202 : (result.httpStatus ?? 500));
+          }
         }
       }
       return json(req, {

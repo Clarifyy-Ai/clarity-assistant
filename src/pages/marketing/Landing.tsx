@@ -19,6 +19,7 @@ import {
   razorpayPaiseForPlan,
 } from "@/lib/billing/priceCalculator";
 import { SALES_EMAIL } from "@/lib/constants/contact";
+import { MARKETING_SHELL } from "@/lib/ui/responsivePage";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import {
   AiProviderStrip,
@@ -406,7 +407,7 @@ export default function Landing() {
 
       {/* ── How It Works ────────────────────────────────────────────────────── */}
       <section className="pb-14 sm:pb-16 px-4 sm:px-6 bg-secondary/20">
-        <div className="max-w-5xl mx-auto py-14">
+        <div className={`${MARKETING_SHELL} py-14`}>
           <m.div className="text-center mb-12" {...fadeUp()}>
             <h2 className="text-2xl md:text-3xl font-bold">How it works</h2>
             <p className="mt-3 text-sm text-muted-foreground max-w-md mx-auto">
@@ -439,7 +440,7 @@ export default function Landing() {
       <PracticeCoachWalkthrough />
 
       <section id="gov-exams" className="px-4 sm:px-6 bg-amber-500/5 border-y border-amber-500/10">
-        <div className="max-w-5xl mx-auto py-8 sm:py-10">
+        <div className={`${MARKETING_SHELL} py-8 sm:py-10`}>
           <m.div className="text-center mb-5" {...fadeUp()}>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs font-medium text-amber-600 mb-4">
               <Landmark className="w-3.5 h-3.5" />
@@ -470,7 +471,7 @@ export default function Landing() {
 
       {/* ── Feature Pillars ─────────────────────────────────────────────────── */}
       <section id="features" className="scroll-mt-20 pt-6 pb-10 sm:pb-12 px-4 sm:px-6">
-        <div className="max-w-6xl mx-auto">
+        <div className={MARKETING_SHELL}>
           <m.div className="text-center mb-4" {...fadeUp()}>
             <h2 className="text-2xl sm:text-3xl font-bold">
               Five pillars. One complete prep system.
@@ -573,7 +574,7 @@ export default function Landing() {
 
       {/* ── Testimonials ────────────────────────────────────────────────────── */}
       <section className="pb-14 sm:pb-16 px-4 sm:px-6">
-        <div className="max-w-5xl mx-auto">
+        <div className={MARKETING_SHELL}>
           <m.div className="text-center mb-10" {...fadeUp()}>
             <h2 className="text-2xl sm:text-3xl font-bold">Candidates who got the offer</h2>
             <p className="mt-3 text-sm text-muted-foreground">

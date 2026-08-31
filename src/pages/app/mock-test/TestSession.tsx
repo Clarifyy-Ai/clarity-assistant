@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { formatGovExamOperationError } from "@/lib/gov-exam/examOperationErrors";
+import { saveTestAnswers, startExam } from "@/lib/gov-exam/api";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/env";
 import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/Button";
@@ -80,6 +81,49 @@ interface Question {
   marks_negative: number;
   image_url?: string | null;
   latex_present?: boolean | null;
+  section_code?: string | null;
+  section_name?: string | null;
+}
+
+function questionFromSnapshot(
+  questionId: string,
+  snap: Record<string, unknown>,
+  sectionCode: string | null,
+): Question | null {
+  const text = String(snap.question_text ?? "").trim();
+  if (!text) return null;
+  const rawOpts = snap.options;
+  let options: QuestionOption[] | null = null;
+  if (Array.isArray(rawOpts)) {
+    options = rawOpts.map((opt, idx) => {
+      if (opt && typeof opt === "object" && "text" in opt) {
+        const rec = opt as { label?: unknown; text?: unknown };
+        return {
+          label: String(rec.label ?? String.fromCharCode(65 + idx)),
+          text: String(rec.text ?? ""),
+        };
+      }
+      return { label: String.fromCharCode(65 + idx), text: String(opt ?? "") };
+    });
+  }
+  const qType = String(snap.question_type ?? "MCQ").toUpperCase();
+  return {
+    id: questionId,
+    question_text: text,
+    question_type: (["MCQ", "TRUE_FALSE", "SHORT_ANSWER", "NUMERICAL", "CODING"].includes(qType)
+      ? qType
+      : "MCQ") as Question["question_type"],
+    options,
+    subject: String(snap.subject ?? sectionCode ?? "General"),
+    topic: String(snap.topic ?? "General"),
+    difficulty: (["EASY", "MEDIUM", "HARD"].includes(String(snap.difficulty ?? "").toUpperCase())
+      ? String(snap.difficulty).toUpperCase()
+      : "MEDIUM") as Question["difficulty"],
+    marks_positive: Number(snap.marks_positive ?? 0),
+    marks_negative: Number(snap.marks_negative ?? 0),
+    section_code: sectionCode ?? (typeof snap.section_code === "string" ? snap.section_code : null),
+    section_name: typeof snap.section_name === "string" ? snap.section_name : null,
+  };
 }
 
 type QuestionState =
@@ -112,6 +156,7 @@ interface TestResponseRow {
   is_attempted: boolean | null;
   is_marked_review: boolean | null;
   time_spent_seconds: number | null;
+  answer_version?: number | null;
 }
 
 interface MathSegment {
@@ -327,6 +372,10 @@ export default function TestSession() {
   const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const responsesRef = useRef<Record<string, ResponseState>>({});
   const questionsRef = useRef<Question[]>([]);
+  const testRef = useRef<MockTest | null>(null);
+  const answerVersionRef = useRef<Record<string, number>>({});
+  const saveInFlightRef = useRef(false);
+  const saveAgainRef = useRef(false);
   const questionEnterTsRef = useRef<number>(Date.now());
   const prevQuestionIdRef = useRef<string | null>(null);
   const timeSpentMapRef = useRef<Record<string, number>>({});
@@ -441,6 +490,7 @@ export default function TestSession() {
   // having to recreate intervals on every keystroke.
   useEffect(() => { responsesRef.current = responses; }, [responses]);
   useEffect(() => { questionsRef.current = questions; }, [questions]);
+  useEffect(() => { testRef.current = test; }, [test]);
 
   useEffect(() => {
     if (!testId || !user?.id) return;
@@ -564,6 +614,41 @@ export default function TestSession() {
         .map((id) => questionMap[id])
         .filter(Boolean);
 
+      const paperId =
+        loadedTest.config && typeof loadedTest.config.gov_paper_id === "string"
+          ? loadedTest.config.gov_paper_id
+          : null;
+      if (paperId) {
+        const frozen = await supabase
+          .from("gov_paper_questions_playable")
+          .select("question_id, section_code, sort_order, snapshot_json")
+          .eq("paper_id", paperId)
+          .order("sort_order");
+        if (!frozen.error && frozen.data?.length) {
+          const fromSnap: Question[] = [];
+          for (const row of frozen.data) {
+            const rec = row as {
+              question_id: string;
+              section_code: string | null;
+              snapshot_json: Record<string, unknown> | null;
+            };
+            if (!rec.snapshot_json) continue;
+            const q = questionFromSnapshot(rec.question_id, rec.snapshot_json, rec.section_code);
+            if (q) fromSnap.push(q);
+          }
+          if (fromSnap.length > 0) {
+            orderedQuestions = fromSnap;
+          } else {
+            orderedQuestions = orderedQuestions.map((q) => {
+              const link = frozen.data.find((r) => (r as { question_id: string }).question_id === q.id) as
+                | { section_code?: string | null }
+                | undefined;
+              return { ...q, section_code: link?.section_code ?? q.section_code };
+            });
+          }
+        }
+      }
+
       orderedQuestions = dedupeExactQuestionCopies(orderedQuestions);
 
       // Prefer approved regional translations when mock config.language is set
@@ -591,7 +676,7 @@ export default function TestSession() {
       const token = sessionData?.session?.access_token ?? "";
 
       const responseFetch = await fetch(
-        `${SUPABASE_URL}/rest/v1/test_responses?select=question_id,user_answer,is_attempted,is_marked_review,time_spent_seconds&test_id=eq.${loadedTest.id}&user_id=eq.${user!.id}`,
+        `${SUPABASE_URL}/rest/v1/test_responses?select=question_id,user_answer,is_attempted,is_marked_review,time_spent_seconds,answer_version&test_id=eq.${loadedTest.id}&user_id=eq.${user!.id}`,
         {
           headers: {
             apikey: SUPABASE_ANON_KEY,
@@ -606,10 +691,12 @@ export default function TestSession() {
 
       const restoredResponses: Record<string, ResponseState> = {};
       const restoredTimeMap: Record<string, number> = {};
+      const restoredVersions: Record<string, number> = {};
 
       for (const row of responseRows) {
         restoredResponses[row.question_id] = deriveResponseState(row);
         restoredTimeMap[row.question_id] = Number(row.time_spent_seconds ?? 0);
+        restoredVersions[row.question_id] = Number(row.answer_version ?? 0);
       }
 
       const queued = user?.id ? loadAttemptRecovery(loadedTest.id, user.id) : null;
@@ -642,6 +729,7 @@ export default function TestSession() {
       setResponses(restoredResponses);
       setTimeLeft(remainingSeconds);
       timeSpentMapRef.current = restoredTimeMap;
+      answerVersionRef.current = restoredVersions;
     } catch (error) {
       console.error("[TestSession] load error:", error);
       toast.error(error instanceof Error ? error.message : "Failed to load test.");
@@ -655,29 +743,13 @@ export default function TestSession() {
     if (!test || startingTest) return;
     setStartingTest(true);
     try {
-      const startedAt = new Date().toISOString();
-      const limitMins = Number(test.time_limit_minutes ?? 0);
-      const expiresAt =
-        Number.isFinite(limitMins) && limitMins > 0
-          ? new Date(Date.now() + limitMins * 60_000).toISOString()
-          : null;
-      const { error } = await supabase
-        .from("mock_tests")
-        .update({
-          status: "IN_PROGRESS",
-          started_at: startedAt,
-          expires_at: expiresAt,
-          attempt_phase: "ACTIVE",
-        })
-        .eq("id", test.id)
-        .eq("user_id", user!.id);
-      if (error) throw error;
+      const started = await startExam(test.id);
       const updated: MockTest = {
         ...test,
-        status: "IN_PROGRESS",
-        started_at: startedAt,
-        expires_at: expiresAt,
-        attempt_phase: "ACTIVE",
+        status: (started.status as MockTest["status"]) || "IN_PROGRESS",
+        started_at: started.startedAt,
+        expires_at: started.expiresAt,
+        attempt_phase: started.attemptPhase ?? "ACTIVE",
       };
       setTest(updated);
       setTimeLeft(computeRemainingSeconds(updated));
@@ -686,7 +758,7 @@ export default function TestSession() {
       toast.success("Test started — good luck!");
     } catch (err) {
       console.error("[TestSession] start error:", err);
-      toast.error(err instanceof Error ? err.message : "Failed to start test.");
+      toast.error(formatGovExamOperationError(err));
     } finally {
       setStartingTest(false);
     }
@@ -710,6 +782,15 @@ export default function TestSession() {
 
   async function saveResponses(options?: { throwOnError?: boolean }) {
     if (!testId || !user?.id || questionsRef.current.length === 0) return;
+    const live = testRef.current;
+    if (!live || live.status === "DRAFT" || live.status === "COMPLETED" || !live.started_at) {
+      return;
+    }
+    if (saveInFlightRef.current) {
+      saveAgainRef.current = true;
+      return;
+    }
+    saveInFlightRef.current = true;
 
     try {
       const currentId = currentQuestion?.id;
@@ -725,29 +806,29 @@ export default function TestSession() {
       }
 
       const responsesNow = responsesRef.current;
-      const payload = questionsRef.current.map((question) => {
+      const clientUpdatedAt = new Date().toISOString();
+      const answers = questionsRef.current.map((question) => {
         const response = responsesNow[question.id] ?? {
           answer: "",
           state: "unattempted" as QuestionState,
         };
+        const marked =
+          response.state === "marked" || response.state === "answered-marked";
 
         return {
-          test_id: testId,
-          user_id: user.id,
-          question_id: question.id,
-          user_answer: response.answer || null,
-          is_attempted: response.state !== "unattempted",
-          is_marked_review:
-            response.state === "marked" || response.state === "answered-marked",
-          time_spent_seconds: timeSpentMapRef.current[question.id] ?? 0,
+          questionId: question.id,
+          userAnswer: response.answer || null,
+          isAttempted: Boolean(response.answer) || response.state !== "unattempted",
+          isMarkedReview: marked,
+          timeSpentSeconds: timeSpentMapRef.current[question.id] ?? 0,
+          clientUpdatedAt,
         };
       });
 
-      const { error } = await supabase
-        .from("test_responses")
-        .upsert(payload, { onConflict: "test_id,question_id" });
-
-      if (error) throw error;
+      const result = await saveTestAnswers(testId, answers);
+      for (const qid of result.staleQuestionIds ?? []) {
+        answerVersionRef.current[qid] = (answerVersionRef.current[qid] ?? 0) + 1;
+      }
       if (user?.id) clearAttemptRecovery(testId, user.id);
     } catch (error) {
       if (user?.id && testId) {
@@ -775,6 +856,12 @@ export default function TestSession() {
         throw error instanceof Error
           ? error
           : new Error("Could not save answers. Check your connection and try again.");
+      }
+    } finally {
+      saveInFlightRef.current = false;
+      if (saveAgainRef.current) {
+        saveAgainRef.current = false;
+        void saveResponses(options);
       }
     }
   }
@@ -1029,7 +1116,26 @@ export default function TestSession() {
             {limitMins > 0 && (
               <p><strong className="text-foreground">{limitMins} minutes</strong> time limit</p>
             )}
-            <p className="text-xs">The timer starts only after you click Start. You can pause and resume during the test.</p>
+            {(test.config?.marks_positive != null || test.config?.total_marks != null) && (
+              <p>
+                Marks:{" "}
+                <strong className="text-foreground">
+                  {test.config?.total_marks != null
+                    ? String(test.config.total_marks)
+                    : `${questions.length} × ${Number(test.config?.marks_positive ?? 0)}`}
+                </strong>
+                {Number(test.config?.marks_negative ?? test.config?.negative_mark ?? 0) > 0 && (
+                  <>
+                    {" "}
+                    · Negative marking{" "}
+                    <strong className="text-foreground">
+                      −{Number(test.config?.marks_negative ?? test.config?.negative_mark)}
+                    </strong>
+                  </>
+                )}
+              </p>
+            )}
+            <p className="text-xs">The timer starts only after you click Start. Remaining time is taken from the server clock.</p>
           </div>
           {paperMeta.disclaimer && (
             <p className="text-left text-[11px] leading-relaxed text-muted-foreground border border-border/60 rounded-lg px-3 py-2 bg-muted/30">
@@ -1059,46 +1165,69 @@ export default function TestSession() {
     : "text-foreground font-bold";
 
   function NavigatorGrid() {
-    return (
-      <div
-        className="grid grid-cols-4 gap-2 sm:grid-cols-5 md:grid-cols-4 lg:grid-cols-5"
-        role="list"
-        aria-label="Question palette"
-      >
-        {questions.map((question, index) => {
-          const response = responses[question.id] ?? {
-            answer: "",
-            state: "unattempted" as QuestionState,
-          };
-          const status = STATE_STATUS[response.state];
-          const isCurrent = index === currentIndex;
+    const sections: { code: string; name: string; items: { question: Question; index: number }[] }[] = [];
+    questions.forEach((question, index) => {
+      const code = question.section_code || question.subject || "Paper";
+      let section = sections.find((s) => s.code === code);
+      if (!section) {
+        section = { code, name: question.section_name || question.subject || code, items: [] };
+        sections.push(section);
+      }
+      section.items.push({ question, index });
+    });
+    const multi = sections.length > 1;
 
-          return (
-            <button
-              key={question.id}
-              type="button"
-              role="listitem"
-              onClick={() => navigateTo(index)}
-              title={`Question ${index + 1}: ${status.label}`}
-              aria-label={`Question ${index + 1}, ${status.label}${isCurrent ? ", current" : ""}`}
-              aria-current={isCurrent ? "true" : undefined}
-              className={cn(
-                "relative flex h-9 w-9 flex-col items-center justify-center rounded-md border text-xs font-bold transition-all",
-                STATE_COLORS[response.state],
-                isCurrent &&
-                  "ring-2 ring-primary ring-offset-1 ring-offset-background scale-105"
-              )}
+    return (
+      <div className="space-y-3" aria-label="Question palette">
+        {sections.map((section) => (
+          <div key={section.code}>
+            {multi && (
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {section.name}
+              </p>
+            )}
+            <div
+              className="grid grid-cols-4 gap-2 sm:grid-cols-5 md:grid-cols-4 lg:grid-cols-5"
+              role="list"
+              aria-label={multi ? `${section.name} questions` : "Question palette"}
             >
-              <span aria-hidden="true">{index + 1}</span>
-              <span
-                className="pointer-events-none absolute bottom-0.5 right-0.5 text-[8px] font-black leading-none opacity-80"
-                aria-hidden="true"
-              >
-                {status.short}
-              </span>
-            </button>
-          );
-        })}
+              {section.items.map(({ question, index }) => {
+                const response = responses[question.id] ?? {
+                  answer: "",
+                  state: "unattempted" as QuestionState,
+                };
+                const status = STATE_STATUS[response.state];
+                const isCurrent = index === currentIndex;
+
+                return (
+                  <button
+                    key={question.id}
+                    type="button"
+                    role="listitem"
+                    onClick={() => navigateTo(index)}
+                    title={`Question ${index + 1}: ${status.label}`}
+                    aria-label={`Question ${index + 1}, ${status.label}${isCurrent ? ", current" : ""}`}
+                    aria-current={isCurrent ? "true" : undefined}
+                    className={cn(
+                      "relative flex h-9 w-9 flex-col items-center justify-center rounded-md border text-xs font-bold transition-all",
+                      STATE_COLORS[response.state],
+                      isCurrent &&
+                        "ring-2 ring-primary ring-offset-1 ring-offset-background scale-105"
+                    )}
+                  >
+                    <span aria-hidden="true">{index + 1}</span>
+                    <span
+                      className="pointer-events-none absolute bottom-0.5 right-0.5 text-[8px] font-black leading-none opacity-80"
+                      aria-hidden="true"
+                    >
+                      {status.short}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
@@ -1117,7 +1246,7 @@ export default function TestSession() {
         <div className="flex items-center gap-3">
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8 w-8 p-0">
+              <Button variant="outline" size="sm" className="h-8 w-8 p-0" aria-label="Open question palette">
                 <Menu className="h-4 w-4" />
               </Button>
             </SheetTrigger>
@@ -1304,11 +1433,11 @@ export default function TestSession() {
             <div className="flex items-center gap-3 text-sm font-semibold">
               <div className="flex gap-1 text-muted-foreground">
                 <span className="text-green-500">
-                  +{Number(currentQuestion.marks_positive ?? 4)}
+                  +{Number(currentQuestion.marks_positive ?? test.config?.marks_positive ?? 0)}
                 </span>
                 <span>/</span>
                 <span className="text-red-400">
-                  -{Number(currentQuestion.marks_negative ?? 1)}
+                  -{Number(currentQuestion.marks_negative ?? test.config?.marks_negative ?? 0)}
                 </span>
               </div>
               <Button
@@ -1333,8 +1462,8 @@ export default function TestSession() {
                   Q. {currentIndex + 1}
                 </span>
                 <div className="rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
-                  {currentQuestion.subject} • +{Number(currentQuestion.marks_positive ?? 4)}/-
-                  {Number(currentQuestion.marks_negative ?? 1)}
+                  {currentQuestion.subject} • +{Number(currentQuestion.marks_positive ?? test.config?.marks_positive ?? 0)}/-
+                  {Number(currentQuestion.marks_negative ?? test.config?.marks_negative ?? 0)}
                 </div>
               </div>
 

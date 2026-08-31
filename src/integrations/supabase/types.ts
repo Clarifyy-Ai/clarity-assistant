@@ -3153,6 +3153,7 @@ export type Database = {
           paper_id: string
           question_id: string
           section_code: string | null
+          snapshot_json: Json | null
           sort_order: number
           source_class: string
         }
@@ -3161,6 +3162,7 @@ export type Database = {
           paper_id: string
           question_id: string
           section_code?: string | null
+          snapshot_json?: Json | null
           sort_order?: number
           source_class?: string
         }
@@ -3169,6 +3171,7 @@ export type Database = {
           paper_id?: string
           question_id?: string
           section_code?: string | null
+          snapshot_json?: Json | null
           sort_order?: number
           source_class?: string
         }
@@ -3400,6 +3403,9 @@ export type Database = {
           created_at: string
           credit_reservation: string | null
           credits_charged: number
+          credits_reserved: number
+          credits_finalized_at: string | null
+          credits_released_at: string | null
           error_code: string | null
           error_message: string | null
           exam_id: string
@@ -3431,6 +3437,9 @@ export type Database = {
           created_at?: string
           credit_reservation?: string | null
           credits_charged?: number
+          credits_reserved?: number
+          credits_finalized_at?: string | null
+          credits_released_at?: string | null
           error_code?: string | null
           error_message?: string | null
           exam_id: string
@@ -3462,6 +3471,9 @@ export type Database = {
           created_at?: string
           credit_reservation?: string | null
           credits_charged?: number
+          credits_reserved?: number
+          credits_finalized_at?: string | null
+          credits_released_at?: string | null
           error_code?: string | null
           error_message?: string | null
           exam_id?: string
@@ -7144,6 +7156,8 @@ export type Database = {
       test_responses: {
         Row: {
           answered_at: string | null
+          answer_version: number | null
+          client_updated_at: string | null
           created_at: string | null
           id: string
           is_attempted: boolean | null
@@ -7158,6 +7172,8 @@ export type Database = {
         }
         Insert: {
           answered_at?: string | null
+          answer_version?: number | null
+          client_updated_at?: string | null
           created_at?: string | null
           id?: string
           is_attempted?: boolean | null
@@ -7172,6 +7188,8 @@ export type Database = {
         }
         Update: {
           answered_at?: string | null
+          answer_version?: number | null
+          client_updated_at?: string | null
           created_at?: string | null
           id?: string
           is_attempted?: boolean | null
@@ -7671,6 +7689,18 @@ export type Database = {
         }
         Relationships: []
       }
+      gov_paper_questions_playable: {
+        Row: {
+          id: string | null
+          paper_id: string | null
+          question_id: string | null
+          section_code: string | null
+          snapshot_json: Json | null
+          sort_order: number | null
+          source_class: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       add_credits: {
@@ -7715,6 +7745,22 @@ export type Database = {
         }
         Returns: Json
       }
+      start_owned_mock_test: {
+        Args: { p_test_id: string }
+        Returns: Json
+      }
+      save_owned_test_answer: {
+        Args: {
+          p_test_id: string
+          p_question_id: string
+          p_user_answer: string | null
+          p_is_attempted: boolean
+          p_is_marked_review: boolean
+          p_time_spent_seconds: number
+          p_client_updated_at: string
+        }
+        Returns: Json
+      }
       end_owned_session: {
         Args: {
           p_user_id: string
@@ -7722,6 +7768,10 @@ export type Database = {
           p_terminal_reason?: string
           p_lifecycle_status?: string | null
         }
+        Returns: Json
+      }
+      get_owned_session_detail: {
+        Args: { p_session_id: string }
         Returns: Json
       }
       finalize_owned_session: {
@@ -8013,6 +8063,23 @@ export type Database = {
           p_source_transaction_id?: string
           p_user_id: string
         }
+        Returns: Json
+      }
+      reserve_gov_paper_credits: {
+        Args: {
+          p_job_id: string
+          p_user_id: string
+          p_cost: number
+          p_idempotency_key: string
+        }
+        Returns: Json
+      }
+      finalize_gov_paper_credits: {
+        Args: { p_job_id: string }
+        Returns: Json
+      }
+      release_gov_paper_credits: {
+        Args: { p_job_id: string; p_reason?: string }
         Returns: Json
       }
       update_topic_performance: {

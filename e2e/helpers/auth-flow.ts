@@ -1,7 +1,13 @@
 import { expect, type Page } from "@playwright/test";
 import { E2E_TEST_USER, setupSupabaseMocks } from "./supabase-mock";
 
-export { E2E_TEST_USER, setupSupabaseMocks };
+export {
+  E2E_TEST_USER,
+  E2E_USER_A_ID,
+  E2E_USER_B_ID,
+  E2E_COMPLETED_SESSION_ID,
+  setupSupabaseMocks,
+} from "./supabase-mock";
 
 export async function fillSignupForm(
   page: Page,
@@ -205,6 +211,22 @@ export async function loginAsTestUser(
   const signIn = page.getByRole("button", { name: "Sign in" });
   await expect(signIn).toBeEnabled({ timeout: 20_000 });
   await signIn.click();
+  if (options?.emailConfirmed === false) {
+    await expect(page.getByText(/verify your email before continuing/i)).toBeVisible({
+      timeout: 15_000,
+    });
+    return;
+  }
+  if (options?.mfaEnrolled) {
+    await expect(page.getByRole("heading", { name: /Two-factor authentication/i })).toBeVisible({
+      timeout: 15_000,
+    });
+    return;
+  }
+  if (options?.onboarded === false) {
+    await page.waitForURL(/\/onboarding/, { timeout: 20_000 });
+    return;
+  }
   await expectDashboardReady(page);
 }
 

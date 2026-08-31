@@ -61,6 +61,62 @@ export interface PaperFactoryExamsResponse {
   exams: PaperFactoryExamRow[];
 }
 
+export const PAPER_FACTORY_MODES = [
+  "official_previous",
+  "generated_mock",
+  "custom_mock",
+  "adaptive",
+] as const;
+
+export type PaperFactoryMode = (typeof PAPER_FACTORY_MODES)[number];
+
+export interface PaperFactoryPlanBody {
+  exam: string;
+  stage?: string | null;
+  language?: string;
+  mode?: PaperFactoryMode;
+  question_count?: number;
+  duration_minutes?: number;
+  seed?: string | null;
+}
+
+export interface PaperFactoryGenerateBody extends PaperFactoryPlanBody {
+  user_id?: string | null;
+  publish?: boolean;
+  use_bank?: boolean;
+  include_questions?: boolean;
+  title?: string | null;
+}
+
+export interface PaperFactoryPlanResponse {
+  success: boolean;
+  plan: Record<string, unknown>;
+}
+
+export interface PaperFactoryGenerateResponse {
+  success: boolean;
+  exam?: string;
+  question_count?: number;
+  planned_count?: number;
+  complete?: boolean;
+  bank_questions?: number;
+  ai_questions?: number;
+  paper_id?: string | null;
+  mock_test_id?: string | null;
+  quality_score?: number;
+  disclaimer?: string;
+}
+
+export interface PaperFactoryProcessJobResponse {
+  success: boolean;
+  already_completed?: boolean;
+  job_id?: string;
+  paper_id?: string | null;
+  mock_test_id?: string | null;
+  question_count?: number;
+  quality_score?: number;
+}
+
 const BASE = (import.meta.env.VITE_SCRAPER_URL as string | undefined)?.replace(/\/$/, "") ?? "";
 
 export class ScraperNotConfiguredError extends Error {
@@ -79,23 +135,53 @@ async function authHeaders(): Promise<HeadersInit> {
   };
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  if (!BASE) throw new ScraperNotConfiguredError();
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: { ...(await authHeaders()), ...(init?.headers ?? {}) },
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    let detail = text;
-    try {
-      detail = (JSON.parse(text) as { detail?: string }).detail ?? text;
-    } catch {
-      /* not json */
+function formatScraperDetail(text: string): string {
+  try {
+    const parsed = JSON.parse(text) as { detail?: unknown };
+    const detail = parsed.detail ?? parsed;
+    if (typeof detail === "string") return detail;
+    if (detail && typeof detail === "object") {
+      const row = detail as { message?: string; code?: string };
+      if (row.message) return row.code ? `${row.code}: ${row.message}` : row.message;
+      return JSON.stringify(detail).slice(0, 400);
     }
-    throw new Error(`Scraper ${res.status}: ${detail || res.statusText}`);
+  } catch {
+    /* not json */
   }
-  return res.json() as Promise<T>;
+  return text;
+}
+
+async function request<T>(
+  path: string,
+  init?: RequestInit & { timeoutMs?: number },
+): Promise<T> {
+  if (!BASE) throw new ScraperNotConfiguredError();
+  const { timeoutMs, ...fetchInit } = init ?? {};
+  const controller = timeoutMs ? new AbortController() : undefined;
+  const timer =
+    timeoutMs && controller
+      ? setTimeout(() => controller.abort(), timeoutMs)
+      : undefined;
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      ...fetchInit,
+      signal: fetchInit.signal ?? controller?.signal,
+      headers: { ...(await authHeaders()), ...(fetchInit.headers ?? {}) },
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      const detail = formatScraperDetail(text);
+      throw new Error(`Scraper ${res.status}: ${detail || res.statusText}`);
+    }
+    return res.json() as Promise<T>;
+  } catch (err) {
+    if (controller?.signal.aborted) {
+      throw new Error(`Scraper request timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export const scraperApi = {
@@ -115,4 +201,21 @@ export const scraperApi = {
   sources: () => request<{ supported: string[] }>("/scrape/sources"),
   paperFactoryExams: () =>
     request<PaperFactoryExamsResponse>("/paper-factory/exams"),
+  paperFactoryPlan: (body: PaperFactoryPlanBody) =>
+    request<PaperFactoryPlanResponse>("/paper-factory/plan", {
+      method: "POST",
+      body: JSON.stringify(body),
+      timeoutMs: 20_000,
+    }),
+  paperFactoryGenerate: (body: PaperFactoryGenerateBody) =>
+    request<PaperFactoryGenerateResponse>("/paper-factory/generate", {
+      method: "POST",
+      body: JSON.stringify(body),
+      timeoutMs: 90_000,
+    }),
+  paperFactoryProcessJob: (jobId: string) =>
+    request<PaperFactoryProcessJobResponse>(
+      `/paper-factory/jobs/${encodeURIComponent(jobId)}/process`,
+      { method: "POST", timeoutMs: 90_000 },
+    ),
 };

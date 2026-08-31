@@ -7,7 +7,7 @@ import {
   Flag, Shield, ChevronRight, DollarSign, Cpu, Bot,
   MessageSquare, FileText, Database, ScrollText, LifeBuoy,
   ExternalLink, Upload, Menu, Tag, Settings2,
-  Link2, BookOpen, ListChecks, FileStack, Languages, FileUp,
+  Link2, BookOpen, ListChecks, FileStack, Languages, FileUp, Factory,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AppLoadingFallback } from "@/components/layout/AppLoadingFallback";
@@ -62,6 +62,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { to: "/app/admin/gov/exams",            icon: BookOpen,   label: "Exam Registry" },
       { to: "/app/admin/gov/question-review",  icon: ListChecks, label: "Q Review", staff: "staff" },
       { to: "/app/admin/gov/paper-review",     icon: FileStack,  label: "Paper Review"  },
+      { to: "/app/admin/gov/paper-factory",    icon: Factory,    label: "Paper Factory" },
       { to: "/app/admin/gov/translations",     icon: Languages,  label: "Translations"  },
     ],
   },

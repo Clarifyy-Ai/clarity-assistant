@@ -25,7 +25,7 @@ import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import {
   Mic, ClipboardList, FlaskConical, BarChart2, Landmark,
-  CalendarDays, Flame, Zap, ChevronRight, ChevronDown,
+  CalendarDays, Flame, Zap, Coins, ChevronRight, ChevronDown,
   TrendingUp, Trophy, Clock,
   Building2, AlertTriangle, Info,
   ListTodo, PenTool, FolderOpen, BarChart3, FileSpreadsheet,
@@ -37,6 +37,7 @@ import { getStealthLabel } from "@/lib/stealth/stealthConfig";
 import { DesktopDownloadButton } from "@/components/common/DesktopDownloadButton";
 import { isElectronApp } from "@/lib/platform/isElectron";
 import { PlanGate } from "@/components/layout/PlanGate";
+import { upcomingInterviewsForDashboard } from "@/lib/interviews/upcomingInterviews";
 import { normalizePlanId } from "@/lib/billing/planIds";
 
 const IS_ELECTRON = isElectronApp();
@@ -301,9 +302,11 @@ export default function Dashboard() {
           ) : (
             <Link
               to="/app/usage"
+              aria-label="Credits remaining — open usage"
+              title="Credits remaining"
               className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 border rounded-xl bg-primary/10 border-primary/20 hover:bg-primary/15 transition-colors"
             >
-              <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-primary" />
+              <Coins className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-primary" aria-hidden />
               <span className="text-[10px] sm:text-xs font-bold text-primary">
                 {profileLoading ? "…" : creditBalance} credits
               </span>
@@ -643,7 +646,7 @@ function DashboardSecondaryWidgets({
             onRetry={onRetryRecent}
           />
           <UpcomingInterviews
-            interviews={(scheduler.interviews as ScheduledInterview[]).slice(0, 3)}
+            interviews={upcomingInterviewsForDashboard(scheduler.interviews as ScheduledInterview[], 3)}
             loading={scheduler.is_loading}
             error={scheduler.load_error}
             onRetry={() => void reloadInterviews()}

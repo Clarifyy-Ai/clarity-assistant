@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
-  User, Bell, Shield, CreditCard,
+  User, Bell, ShieldCheck, Lock, CreditCard,
   Zap, Palette, Download, Trash2,
   ChevronRight, Globe, Mic, Keyboard, Sparkles, LogOut, Headphones,
   type LucideIcon,
@@ -56,8 +56,8 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
     id: "privacy",
     label: "Privacy & Security",
     items: [
-      { to: "/app/settings/privacy", icon: Shield, label: "Privacy" },
-      { to: "/app/settings/security", icon: Shield, label: "Security" },
+      { to: "/app/settings/privacy", icon: Lock, label: "Privacy" },
+      { to: "/app/settings/security", icon: ShieldCheck, label: "Security" },
     ],
   },
   {
@@ -86,6 +86,7 @@ function SettingsNavLink({ item }: { item: SettingsNavItem }) {
   return (
     <NavLink
       to={item.to}
+      aria-label={item.label}
       className={({ isActive }) =>
         cn(
           "flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all",
@@ -99,7 +100,7 @@ function SettingsNavLink({ item }: { item: SettingsNavItem }) {
         )
       }
     >
-      <item.icon className="w-4 h-4 shrink-0" />
+      <item.icon className="w-4 h-4 shrink-0" aria-hidden />
       {item.label}
     </NavLink>
   );
@@ -179,6 +180,7 @@ export default function Settings() {
               <NavLink
                 key={item.to}
                 to={item.to}
+                aria-label={item.label}
                 className={({ isActive }) =>
                   cn(
                     "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all",

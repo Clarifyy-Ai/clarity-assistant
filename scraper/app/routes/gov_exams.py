@@ -30,6 +30,15 @@ from app.paper_factory.repository import PaperRepository
 
 router = APIRouter(prefix="/internal/gov-exams", tags=["gov-exams"])
 
+# Keep a strong reference so ack-and-poll process-job work is not GC'd.
+_background_jobs: set[asyncio.Task[object]] = set()
+
+
+def _spawn_process(coro: object) -> None:
+    task = asyncio.create_task(coro)  # type: ignore[arg-type]
+    _background_jobs.add(task)
+    task.add_done_callback(_background_jobs.discard)
+
 
 def _repo() -> PaperRepository:
     return PaperRepository(get_factory_settings())
@@ -43,6 +52,7 @@ def _http_error(exc: PaperFactoryError, correlation_id: str | None) -> HTTPExcep
         "PATTERN_INVALID": 409,
         "EXAM_NOT_APPROVED": 403,
         "CONTENT_INSUFFICIENT": 422,
+        "LANGUAGE_UNAVAILABLE": 409,
         "JOB_NOT_FOUND": 404,
         "USER_REQUIRED": 422,
     }
@@ -159,6 +169,7 @@ async def process_job(
                 success=current["status"] == "completed",
                 job_id=body.job_id,
                 status=str(current["status"]),
+                accepted=True,
                 paper_id=current.get("generated_paper_id"),
                 mock_test_id=current.get("mock_test_id"),
                 error_code=current.get("error_code"),
@@ -175,27 +186,29 @@ async def process_job(
             },
         )
 
-    result = await process_gov_exam_job(
-        claimed,
-        settings=settings,
-        repo=repo,
-        correlation_id=correlation,
+    async def _run_claimed() -> None:
+        try:
+            await process_gov_exam_job(
+                claimed,
+                settings=settings,
+                repo=repo,
+                correlation_id=correlation,
+            )
+        except Exception:  # noqa: BLE001 - engine fail_job already records terminal state
+            gov_exam_log(
+                "process_job_background_failed",
+                operation_id=correlation,
+                job_id=body.job_id,
+                correlation_id=correlation,
+            )
+
+    _spawn_process(_run_claimed())
+    return ProcessJobResponse(
+        success=True,
+        job_id=body.job_id,
+        status=str(claimed.get("status") or "leased"),
+        accepted=True,
     )
-    if not result.success:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY
-            if result.error_code == "CONTENT_INSUFFICIENT"
-            else status.HTTP_502_BAD_GATEWAY,
-            detail={
-                "code": result.error_code or "PAPER_GENERATION_FAILED",
-                "message": result.error_message or "Generation failed.",
-                "retryable": bool(result.retryable),
-                "stage": "process_job",
-                "correlation_id": correlation,
-                "status": result.status,
-            },
-        )
-    return result
 
 
 @router.post("/build-paper", response_model=BuildPaperResponse)

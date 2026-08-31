@@ -121,12 +121,64 @@ export function formatGovExamOperationError(err: unknown): string {
     return sanitizeGovFacingMessage(msg ?? "This exam configuration is not available.");
   }
 
-  if (code === "INVALID_QUESTION_COUNT") {
+  if (code === "INVALID_QUESTION_COUNT" || code === "INVALID_COUNT") {
     return "Enter a whole number between 5 and 100 questions.";
+  }
+
+  if (code === "NO_RESULTS") {
+    return "No exams matched that search. Try another name or recruiting body.";
+  }
+
+  if (code === "LANGUAGE_UNAVAILABLE" || code === "LANGUAGE_NOT_SUPPORTED") {
+    return "This exam paper is not available in the selected language.";
+  }
+
+  if (code === "JOB_NOT_FOUND") {
+    return "We couldn't find that generation job. Refresh and try again.";
+  }
+
+  if (code === "PYTHON_UNAVAILABLE" || code === "PYTHON_NOT_CONFIGURED") {
+    return "The exam generation service is temporarily unavailable. Please try again.";
+  }
+
+  if (code === "AI_UNAVAILABLE" || code === "PROVIDER_UNAVAILABLE") {
+    return "AI generation is unavailable. We'll use the approved bank when possible.";
+  }
+
+  if (code === "PAPER_VALIDATION_FAILED") {
+    return "The paper did not pass validation. No unofficial questions were added to fill the gap.";
+  }
+
+  if (code === "ATTEMPT_EXPIRED") {
+    return "Time is up. Your answers were submitted automatically.";
+  }
+
+  if (code === "ATTEMPT_NOT_STARTED") {
+    return "Start the exam before saving or submitting answers.";
+  }
+
+  if (code === "SUBMISSION_CONFLICT") {
+    return "This exam is already submitted. Open your results instead.";
+  }
+
+  if (code === "JOB_TERMINAL_FAILURE") {
+    return "Paper generation failed. Credits were not kept. You can retry.";
+  }
+
+  if (code === "REGION_RESTRICTED") {
+    return "Government exams are available for India accounts.";
+  }
+
+  if (code === "GENERATION_CONFLICT") {
+    return "A paper is already being generated. Wait for it to finish or open the existing job.";
   }
 
   if (code === "RATE_LIMITED") {
     return "Too many requests. Please wait a moment and try again.";
+  }
+
+  if (code === "RATE_LIMIT_BACKEND_UNAVAILABLE") {
+    return "The exam service is briefly unavailable. Please try again.";
   }
 
   if (code === "ACCOUNT_RESTRICTED") {

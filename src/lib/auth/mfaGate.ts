@@ -6,10 +6,10 @@ import {
 import { collectMfaFactors, findVerifiedTotp } from "@/lib/auth/mfaFactors";
 
 /**
- * Temporary: skip login / route 2FA challenges. Flip to false to restore
- * fail-closed AAL enforcement. Authenticator factors in Settings are unchanged.
+ * Live AAL enforcement. Login and ProtectedRoute challenge verified TOTP
+ * factors. Settings enrollment remains the setup UI.
  */
-export const MFA_ENFORCEMENT_PAUSED = true;
+export const MFA_ENFORCEMENT_PAUSED = false;
 
 export type MfaGateDecision = "allow" | "challenge" | "block";
 

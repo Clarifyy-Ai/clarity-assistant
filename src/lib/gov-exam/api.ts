@@ -288,6 +288,75 @@ export async function getPaperGenerationJob(jobId: string): Promise<PaperJobResu
   return fetchEdgeJson("get-paper-generation-job", { jobId });
 }
 
+export async function startExamAttempt(attemptId: string): Promise<{
+  attemptId: string;
+  status: string;
+  startedAt: string | null;
+  expiresAt: string | null;
+  idempotentReplay?: boolean;
+}> {
+  const started = await startExam(attemptId);
+  return {
+    attemptId,
+    status: started.status,
+    startedAt: started.startedAt,
+    expiresAt: started.expiresAt,
+    idempotentReplay: started.alreadyStarted,
+  };
+}
+
+export async function saveAttemptAnswers(input: {
+  attemptId: string;
+  answers: Array<{
+    questionId: string;
+    answer: string | null;
+    markedForReview: boolean;
+    timeSpentSeconds: number;
+    version: number;
+  }>;
+}): Promise<{
+  attemptId: string;
+  saved: number;
+  staleQuestionIds: string[];
+  nextVersions: Record<string, number>;
+}> {
+  return fetchEdgeJson("save-attempt-answer", input);
+}
+
+/** Owner kick so a queued job can be claimed/assembled if Python did not finish. */
+export async function processPaperGenerationJob(jobId: string): Promise<PaperJobResult> {
+  return fetchEdgeJson("process-paper-generation-job", { jobId }, { timeoutMs: 60_000 });
+}
+
+export type StartExamResult = {
+  success: boolean;
+  alreadyStarted?: boolean;
+  startedAt: string;
+  expiresAt: string | null;
+  status: string;
+  attemptPhase?: string;
+};
+
+export async function startExam(testId: string): Promise<StartExamResult> {
+  return fetchEdgeJson("start-exam", { testId });
+}
+
+export type SaveTestAnswerInput = {
+  questionId: string;
+  userAnswer: string | null;
+  isAttempted: boolean;
+  isMarkedReview: boolean;
+  timeSpentSeconds: number;
+  clientUpdatedAt: string;
+};
+
+export async function saveTestAnswers(
+  testId: string,
+  answers: SaveTestAnswerInput[],
+): Promise<{ success: boolean; savedCount: number; staleQuestionIds: string[] }> {
+  return fetchEdgeJson("save-test-answer", { testId, answers });
+}
+
 export type TopicMasterySummary = {
   topic: string;
   mastery_score: number;
@@ -550,6 +619,7 @@ export type ExamPaperAvailability = {
   language: string;
   mode: string;
   requested: number;
+  eligible?: number;
   available: number;
   missing: number;
   fullMockAllowed: boolean;

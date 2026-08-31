@@ -322,6 +322,7 @@ type PrepToolId =
   | "rephrase"
   | "project_build"
   | "star_method"
+  | "raw_prompt"
   | "system_design"
   | "jd_fit"
   | "question_predict"
@@ -336,6 +337,7 @@ const PREP_TOOL_IDS = new Set<string>([
   "rephrase",
   "project_build",
   "star_method",
+  "raw_prompt",
   "system_design",
   "jd_fit",
   "question_predict",
@@ -351,6 +353,7 @@ const TOOL_COSTS: Partial<Record<PrepToolId, number>> = {
   rephrase:        creditCost("rephraser"),
   project_build:   creditCost("project_builder"),
   star_method:     creditCost("star_builder"),
+  raw_prompt:      creditCost("rephraser"),
   system_design:   creditCost("system_design"),
 };
 
@@ -608,6 +611,21 @@ Deno.serve(async (req: Request) => {
     }
 
     const { tool_id: rawToolId } = body;
+    const dbForCredits = createServiceClient();
+    const { data: creditProfile } = await dbForCredits
+      .from("profiles")
+      .select("credits")
+      .eq("id", userId)
+      .maybeSingle();
+    const spendable = Math.max(0, Number(creditProfile?.credits) || 0);
+    const minToolCost = creditCost("rephraser");
+    if (spendable < minToolCost) {
+      return creditDenialResponse(
+        req,
+        { success: false, code: "INSUFFICIENT_CREDITS", error: "Insufficient credits.", balance: spendable },
+        minToolCost,
+      );
+    }
     if (!isPrepToolId(rawToolId)) {
       return errorResponse(`Unknown tool_id: ${rawToolId}`, "INVALID_TOOL", 400, req);
     }

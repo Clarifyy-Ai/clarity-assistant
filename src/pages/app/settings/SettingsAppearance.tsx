@@ -11,10 +11,11 @@ import { setAppStealthMode } from "@/lib/stealth/stealthActions";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/switch";
-import { CheckCircle, Palette, Monitor, Sun, Moon, Layers, EyeOff } from "lucide-react";
+import { CheckCircle, Palette, Monitor, Sun, Moon, Layers, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
+import { SettingsSaveBar } from "@/components/settings/SettingsSaveBar";
 
 const THEMES = [
   { id: "light"  as const, label: "Light",  icon: Sun,     preview: "bg-[#fafafa]" },
@@ -47,6 +48,7 @@ export default function SettingsAppearance() {
   const [density,  setDensity]  = useState(extras.density ?? "Default");
   const [saved,    setSaved]    = useState(false);
   const [saving, setSaving] = useState(false);
+  const [overlayOn, setOverlayOn] = useState(() => getDefaultOverlayEnabled());
 
   useEffect(() => {
     const prefs = profile?.ui_preferences;
@@ -194,7 +196,7 @@ export default function SettingsAppearance() {
         </div>
       </Card>
 
-      <div>
+      <SettingsSaveBar>
         <Button
           variant={saved ? "success" : "primary"}
           size="md"
@@ -210,14 +212,40 @@ export default function SettingsAppearance() {
         <p className="text-xs text-muted-foreground mt-2">
           Theme selection applies instantly. Click apply to save accent color, font size, and layout density.
         </p>
-      </div>
+      </SettingsSaveBar>
+
+      <Card>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-secondary flex items-center justify-center shrink-0 mt-0.5">
+              <Layers className="w-4 h-4 text-muted-foreground" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Default overlay</h3>
+              <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                Open the practice overlay automatically on new live sessions.
+              </p>
+            </div>
+          </div>
+          <Switch
+            checked={overlayOn}
+            onCheckedChange={(v) => {
+              setOverlayOn(v);
+              setDefaultOverlayEnabled(v);
+            }}
+            aria-label="Default overlay"
+          />
+        </div>
+      </Card>
 
       {/* ── Discrete / Stealth mode ── */}
       <Card>
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <div className="w-9 h-9 rounded-xl bg-secondary flex items-center justify-center shrink-0 mt-0.5">
-              <EyeOff className="w-4 h-4 text-muted-foreground" />
+              {stealthMode
+                ? <EyeOff className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
+                : <Eye className="w-4 h-4 text-muted-foreground" aria-hidden="true" />}
             </div>
             <div>
               <h3 className="text-sm font-semibold text-foreground">Discrete mode</h3>

@@ -36,6 +36,7 @@ import {
   setPendingPlan,
 } from "@/lib/billing/pendingPlan";
 import { normalizeRefCode, storeRefCode } from "@/lib/referrals";
+import { formatSupabaseAuthError } from "@/lib/errors";
 
 type PasswordStrength = {
   score: number;
@@ -244,12 +245,7 @@ export default function Signup(): JSX.Element {
       navigate("/verify-email", { replace: true, state: { email: data.email } });
 
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Unable to create account. Please try again.";
-
-      setFormError(message);
+      setFormError(formatSupabaseAuthError(error));
     }
   }
 

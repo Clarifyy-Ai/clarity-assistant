@@ -10,6 +10,7 @@ import { usePageMeta } from "@/hooks/usePageMeta";
 
 import { LAUNCH_PLANS, getPlanDisplayName } from "@/lib/constants/pricing";
 import { formatPlanCheckoutPrice, razorpayPaiseForPlan } from "@/lib/billing/priceCalculator";
+import { MARKETING_SHELL } from "@/lib/ui/responsivePage";
 import {
   billingReturnPathForPlan,
   isPaidSignupPlan,
@@ -86,7 +87,7 @@ export default function Pricing() {
       </section>
 
       <section className="pb-16 sm:pb-20 px-4 sm:px-6">
-        <div className="max-w-5xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+        <div className={`${MARKETING_SHELL} grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5`}>
           {DISPLAY_PLANS.map((planId, i) => {
             const plan = PLANS[planId];
             const inrPaise = razorpayPaiseForPlan(planId);

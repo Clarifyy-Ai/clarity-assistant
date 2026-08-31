@@ -1,5 +1,16 @@
 // Static FAQ content used when help_articles DB is empty or unreachable.
 // Slug pattern matches migration 20260531174228: {prefix}-{n} (gs-, li-, mt-, bi-).
+// Credit numbers come from creditEconomics — do not hardcode a second catalog.
+
+import {
+  CREDIT_PACK_DEFINITIONS,
+  PLAN_MONTHLY_CREDITS,
+} from "@/lib/constants/creditEconomics";
+
+const FREE_CREDITS = PLAN_MONTHLY_CREDITS.free;
+const PRO_CREDITS = PLAN_MONTHLY_CREDITS.pro;
+const MAX_CREDITS = PLAN_MONTHLY_CREDITS.enterprise;
+const PACK_LIST = CREDIT_PACK_DEFINITIONS.map((p) => `${p.credits}`).join(", ");
 
 export type HelpArticleItem = {
   slug: string;
@@ -50,7 +61,7 @@ Clarify AI is for practice only. Using AI assistance covertly during a real inte
 3. Verify your email address
 4. Complete the quick onboarding flow (role, experience, target companies)
 
-No credit card is required. You'll start on the Free plan with 50 credits per month.`,
+No credit card is required. You'll start on the Free plan with ${FREE_CREDITS} credits per month.`,
     sort_order: 20,
   },
   {
@@ -59,14 +70,14 @@ No credit card is required. You'll start on the Free plan with 50 credits per mo
     category_title: "Getting Started",
     question: "Is there a free plan?",
     answer:
-      "Yes. The Free plan includes 50 credits per month — enough to try Practice Coach and a mock session. Pro is ₹2,499 one-time. Max is ₹6,799 one-time.",
+      `Yes. The Free plan includes ${FREE_CREDITS} credits per month — enough to try Practice Coach and a mock session. Pro is ₹2,499 one-time. Max is ₹6,799 one-time.`,
     body_md: `Yes. The Free plan includes:
 
-- **50 credits** per month
+- **${FREE_CREDITS} credits** per month
 - Practice sessions with the live AI coach (limited)
 - STAR builder and answer bank (limited)
 
-No credit card required. Upgrade to **Pro** (₹2,499 one-time, 1,400 credits) or **Max** (₹6,799 one-time, 4,000 credits) anytime.`,
+No credit card required. Upgrade to **Pro** (₹2,499 one-time, ${PRO_CREDITS} credits) or **Max** (₹6,799 one-time, ${MAX_CREDITS} credits) anytime.`,
     sort_order: 30,
   },
   {
@@ -162,7 +173,7 @@ Until then, use solo mock interviews and practice sessions. Check Help again whe
     category_title: "Billing & Credits",
     question: "How do credits work?",
     answer:
-      "Credits are the currency for AI-powered features. Free includes 50 credits/month, Pro includes 1,400/month, and Max includes 4,000/month.",
+      `Credits are the currency for AI-powered features. Free includes ${FREE_CREDITS} credits/month, Pro includes ${PRO_CREDITS} one-time, and Max includes ${MAX_CREDITS} one-time.`,
     body_md: `Credits are the currency for AI features. Each action has a set cost:
 
 - Live hint: 2 credits
@@ -171,7 +182,7 @@ Until then, use solo mock interviews and practice sessions. Check Help again whe
 - STAR builder: 10 credits
 - Company research: 20 credits
 
-Credits refresh monthly based on your plan tier. Credit packs are one-time top-ups — upgrading to Pro or Max is the best value.`,
+Free credits refresh monthly. Pro and Max are one-time purchases. Extra credit packs (${PACK_LIST} credits) are available from Settings → Billing.`,
     sort_order: 10,
   },
   {
@@ -180,8 +191,8 @@ Credits refresh monthly based on your plan tier. Credit packs are one-time top-u
     category_title: "Billing & Credits",
     question: "How much do paid plans cost?",
     answer:
-      "Pro is ₹2,499 one-time (1,400 credits). Max is ₹6,799 one-time (4,000 credits). Pay in INR with Razorpay — no auto-renew.",
-    body_md: `Pro is **₹2,499 one-time** for 1,400 credits and unlocks the full feature set. Max is **₹6,799 one-time** for 4,000 credits and priority model access. Pay in INR with Razorpay — checkout does not auto-renew. Upgrade anytime from **Settings → Billing**.`,
+      `Pro is ₹2,499 one-time (${PRO_CREDITS} credits). Max is ₹6,799 one-time (${MAX_CREDITS} credits). Pay in INR with Razorpay — no auto-renew.`,
+    body_md: `Pro is **₹2,499 one-time** for ${PRO_CREDITS} credits and unlocks the full feature set. Max is **₹6,799 one-time** for ${MAX_CREDITS} credits and priority model access. Pay in INR with Razorpay — checkout does not auto-renew. Upgrade anytime from **Settings → Billing**.`,
     sort_order: 20,
   },
   {
@@ -190,8 +201,8 @@ Credits refresh monthly based on your plan tier. Credit packs are one-time top-u
     category_title: "Billing & Credits",
     question: "Can I buy extra credits?",
     answer:
-      "A la carte credit packs are not available at launch. Upgrade your plan to increase your monthly allowance.",
-    body_md: `A la carte credit packs are not available at launch. To increase your monthly allowance, upgrade to **Pro** (₹2,499 one-time, 1,400 credits) or **Max** (₹6,799 one-time, 4,000 credits) from **Settings → Billing**.`,
+      `Yes. Buy extra credit packs (${PACK_LIST} credits) from Settings → Billing, or upgrade to Pro (${PRO_CREDITS} credits) or Max (${MAX_CREDITS} credits).`,
+    body_md: `Yes. Extra credit packs of **${PACK_LIST} credits** are available from **Settings → Billing**. You can also upgrade to **Pro** (₹2,499 one-time, ${PRO_CREDITS} credits) or **Max** (₹6,799 one-time, ${MAX_CREDITS} credits).`,
     sort_order: 50,
   },
 ];

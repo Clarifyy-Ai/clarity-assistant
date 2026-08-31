@@ -10,6 +10,9 @@ import { cn } from "@/lib/utils";
 import { userFacingDbError } from "@/lib/errors/userFacingDbError";
 import { fetchEdge } from "@/lib/network/fetchEdge";
 import { createExportIdempotencyKey, messageFromExportCaught } from "@/lib/export/exportUserFacingError";
+import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
+import { SettingsSaveBar } from "@/components/settings/SettingsSaveBar";
+import { Button } from "@/components/ui/Button";
 
 type RetentionKey = "transcripts" | "ai_answers" | "debriefs" | "documents";
 type ChannelKey = "email" | "push" | "in_app";
@@ -52,6 +55,10 @@ function readPolishPrefs(uiPreferences: unknown): ExtendedPrefs {
     retention: { ...DEFAULTS.retention, ...(polish.retention ?? {}) },
     channels: { ...DEFAULTS.channels, ...(polish.channels ?? {}) },
   };
+}
+
+function sessionsCsvFilename(date = new Date()): string {
+  return `clarify-sessions-${date.toISOString().slice(0, 10)}.csv`;
 }
 
 export default function SettingsPolish() {
@@ -155,7 +162,7 @@ export default function SettingsPolish() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `clarify-sessions-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = sessionsCsvFilename();
       a.click();
       URL.revokeObjectURL(url);
       exportRetryKey.current = null;
@@ -167,15 +174,13 @@ export default function SettingsPolish() {
     }
   }
 
-  return (
-    <div className="max-w-3xl space-y-5">
-      <div>
-        <h1 className="text-xl font-bold">Polish & advanced preferences</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Preference-only retention (not yet enforced), notification channel prefs, and CSV export.
-        </p>
-      </div>
+  const csvFilename = sessionsCsvFilename();
 
+  return (
+    <SettingsPageShell
+      title="Polish & advanced preferences"
+      description="Preference-only retention (not yet enforced), notification channel prefs, and CSV export."
+    >
       <section className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-center gap-2 mb-3">
           <Clock className="w-4 h-4 text-blue-400" />
@@ -279,7 +284,10 @@ export default function SettingsPolish() {
           <h2 className="text-sm font-semibold">Quick export</h2>
         </div>
         <p className="text-xs text-muted-foreground mb-3">
-          Download your last 1,000 sessions as CSV (includes scores, timestamps, and metadata).
+          Exports include session dates, scores, and metadata. Files are named{" "}
+          <code className="font-mono text-[11px]">clarify-sessions-YYYY-MM-DD.csv</code>
+          {" "}(today:{" "}
+          <code className="font-mono text-[11px]">{csvFilename}</code>).
         </p>
         <button
           type="button"
@@ -292,24 +300,18 @@ export default function SettingsPolish() {
         </button>
       </section>
 
-      <div className="sticky bottom-4 flex justify-end">
-        <button
+      <SettingsSaveBar>
+        <Button
           type="button"
+          variant={saved ? "success" : saveFailed ? "danger" : "primary"}
+          size="md"
+          loading={saving}
           onClick={() => void save()}
-          disabled={saving}
-          className={cn(
-            "px-4 py-2 text-sm rounded-md text-white flex items-center gap-2 shadow-lg",
-            saved
-              ? "bg-emerald-600 hover:bg-emerald-600"
-              : saveFailed
-                ? "bg-destructive hover:bg-destructive"
-                : "bg-primary hover:bg-primary",
-          )}
+          leftIcon={saved ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
         >
-          {saved ? <CheckCircle className="w-4 h-4" /> : <Save className="w-4 h-4" />}
           {saving ? "Saving…" : saved ? "Saved!" : saveFailed ? "Failed — retry" : "Save preferences"}
-        </button>
-      </div>
-    </div>
+        </Button>
+      </SettingsSaveBar>
+    </SettingsPageShell>
   );
 }

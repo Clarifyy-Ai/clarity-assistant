@@ -20,6 +20,8 @@ import {
 import { format, isPast, isToday } from "date-fns";
 import { cn } from "@/lib/utils";
 import { companyProfilePath } from "@/lib/company/slug";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { useCalendarSync } from "@/hooks/useCalendarSync";
 
 // ─────────────────────────────────────────────────────────────────
 // InterviewDetail — single interview view + prep checklist
@@ -39,6 +41,7 @@ export default function InterviewDetail() {
   const navigate  = useNavigate();
   const scheduler = useInterviewScheduler();
   const store     = useInterviewSchedulerStore();
+  const calendar  = useCalendarSync();
 
   const [checklist, setChecklist] = useState<boolean[]>(
     PREP_CHECKLIST.map(() => false)
@@ -163,6 +166,19 @@ export default function InterviewDetail() {
         } as any);
       }
       await scheduler.updateInterview(iv.id, { status: "cancelled" } as any);
+      void fetchEdgeJson("schedule-interview", {
+        action: "cancel",
+        interview_id: iv.id,
+        company_name: iv.company_name,
+        role_title: iv.role_title,
+        scheduled_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      }).catch(() => undefined);
+      if (calendar.syncAvailable && calendar.isConnected) {
+        void calendar.deleteEvent({
+          interviewId: iv.id,
+          eventId: (iv as { calendar_event_id?: string }).calendar_event_id,
+        });
+      }
       toast.success("Interview cancelled. It remains in your history.");
       await scheduler.reload();
     } catch (err) {

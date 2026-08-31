@@ -423,7 +423,7 @@ export default function TestResults() {
           kind === "weak" ? Math.min(questionCount, 10) : questionCount,
         duration_minutes: durationMinutes,
         marks_positive: normalizeNumber(originalConfig.marks_positive, 4),
-        marks_negative: normalizeNumber(originalConfig.marks_negative, 1),
+        marks_negative: normalizeNumber(originalConfig.marks_negative, 0),
         randomize_order: true,
         shuffle_options: true,
         allow_shortfall: true,

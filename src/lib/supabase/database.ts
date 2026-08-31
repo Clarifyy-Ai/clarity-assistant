@@ -7,6 +7,11 @@
 import { supabase } from "@/lib/supabase/client";
 import { DatabaseError, ErrorCode, tryCatch } from "@/lib/errors";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase";
+import {
+  RESUME_DEDUPE_ORDER_COLUMN,
+  isMissingResumeUpdatedAtError,
+  omitResumeUpdatedAt,
+} from "@/lib/supabase/resumeSchemaCompat";
 import { catalogPaiseForPlan } from "@/lib/billing/priceCalculator";
 import { toDbPreferredModel } from "@/lib/ai/modelOptions";
 import {
@@ -1073,8 +1078,9 @@ export const resumesDB = {
   },
 
   async create(row: TablesInsert<"resumes">): Promise<Tables<"resumes">> {
+    const insertRow = omitResumeUpdatedAt(row);
     return query(
-      () => supabase.from("resumes").insert(row).select().single(),
+      () => supabase.from("resumes").insert(insertRow).select().single(),
       { table: "resumes", operation: "create" },
     );
   },
@@ -1083,15 +1089,22 @@ export const resumesDB = {
     userId: string,
     contentHash: string,
   ): Promise<Tables<"resumes"> | null> {
-    const { data, error } = await supabase
-      .from("resumes")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("content_hash", contentHash)
-      .not("content", "is", null)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const run = (orderColumn: "created_at" | "updated_at") =>
+      supabase
+        .from("resumes")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("content_hash", contentHash)
+        .not("content", "is", null)
+        .order(orderColumn, { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    // created_at always exists; retry from updated_at is only if a caller flips the constant.
+    let { data, error } = await run(RESUME_DEDUPE_ORDER_COLUMN);
+    if (error && isMissingResumeUpdatedAtError(error)) {
+      ({ data, error } = await run("created_at"));
+    }
     if (error) {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
         table: "resumes",
@@ -1102,7 +1115,11 @@ export const resumesDB = {
   },
 
   async update(id: string, updates: TablesUpdate<"resumes">): Promise<void> {
-    const { error } = await supabase.from("resumes").update(updates).eq("id", id);
+    const patch = omitResumeUpdatedAt(updates);
+    let { error } = await supabase.from("resumes").update(patch).eq("id", id);
+    if (error && isMissingResumeUpdatedAtError(error)) {
+      ({ error } = await supabase.from("resumes").update(patch).eq("id", id));
+    }
     if (error) {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
         table: "resumes",
@@ -2962,6 +2979,50 @@ export const scorecardsDB = {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
         table: "scorecards",
         operation: "getBySessionId",
+      });
+    }
+    if (!data) {
+      return null;
+    }
+    return mapRowToScorecard(data as unknown as ScorecardRow);
+  },
+
+  async listScoresByUserId(
+    userId: string,
+    sessionIds: string[],
+  ): Promise<Map<string, number>> {
+    const scores = new Map<string, number>();
+    if (sessionIds.length === 0) return scores;
+    const { data, error } = await supabase
+      .from("scorecards")
+      .select("session_id, overall_score")
+      .eq("user_id", userId)
+      .in("session_id", sessionIds);
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "scorecards",
+        operation: "listScoresByUserId",
+      });
+    }
+    for (const row of data ?? []) {
+      const score = Number((row as { overall_score?: number }).overall_score);
+      const sid = String((row as { session_id?: string }).session_id ?? "");
+      if (sid && Number.isFinite(score)) scores.set(sid, score);
+    }
+    return scores;
+  },
+
+  async getBySessionIdForUser(sessionId: string, userId: string): Promise<Scorecard | null> {
+    const { data, error } = await supabase
+      .from("scorecards")
+      .select("*")
+      .eq("session_id", sessionId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "scorecards",
+        operation: "getBySessionIdForUser",
       });
     }
     if (!data) {

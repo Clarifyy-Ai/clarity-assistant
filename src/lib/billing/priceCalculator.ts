@@ -13,6 +13,7 @@ import {
   CREDIT_PACK_DEFINITIONS,
 } from "@/lib/constants/creditEconomics";
 import { ENV } from "@/lib/env";
+import { CATALOG_PAISE_FALLBACK, getLiveCatalogPaise } from "@/lib/billing/liveCatalog";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Credit Top-Up Packs
@@ -84,14 +85,8 @@ function normalizeCents(cents: number): number {
  * formatPrice(1900) => "$19.00"
  * formatPrice(1900, true) => "$19"
  */
-/** Catalog INR amounts charged via Razorpay (paise). */
-export const RAZORPAY_INR_PAISE = {
-  pro_monthly: 249_900,
-  enterprise_monthly: 679_900,
-  credits_50: 69_900,
-  credits_150: 189_900,
-  credits_500: 599_900,
-} as const;
+/** Catalog INR amounts. Prefer live billing_settings via getLiveCatalogPaise(). */
+export const RAZORPAY_INR_PAISE = CATALOG_PAISE_FALLBACK;
 
 export function formatInrPaise(paise: number, hideDecimals = true): string {
   const safePaise = normalizeCents(paise);
@@ -106,8 +101,9 @@ export function formatInrPaise(paise: number, hideDecimals = true): string {
 }
 
 export function razorpayPaiseForPlan(planId: string): number | null {
-  if (planId === "pro" || planId === "elite") return RAZORPAY_INR_PAISE.pro_monthly;
-  if (planId === "enterprise") return RAZORPAY_INR_PAISE.enterprise_monthly;
+  const catalog = getLiveCatalogPaise();
+  if (planId === "pro" || planId === "elite") return catalog.pro_monthly;
+  if (planId === "enterprise") return catalog.enterprise_monthly;
   return null;
 }
 
@@ -117,9 +113,10 @@ export function catalogPaiseForPlan(planId: string): number {
 }
 
 export function razorpayPaiseForPack(packId: string): number | null {
-  if (packId === "credits_50" || packId === "pack_50") return RAZORPAY_INR_PAISE.credits_50;
-  if (packId === "credits_150" || packId === "pack_150") return RAZORPAY_INR_PAISE.credits_150;
-  if (packId === "credits_500" || packId === "pack_500") return RAZORPAY_INR_PAISE.credits_500;
+  const catalog = getLiveCatalogPaise();
+  if (packId === "credits_50" || packId === "pack_50") return catalog.credits_50;
+  if (packId === "credits_150" || packId === "pack_150") return catalog.credits_150;
+  if (packId === "credits_500" || packId === "pack_500") return catalog.credits_500;
   return null;
 }
 

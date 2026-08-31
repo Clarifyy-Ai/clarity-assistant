@@ -15,6 +15,10 @@ import {
 import { toast } from "sonner";
 import { unwrapEdgePayload } from "@/lib/network/edgeResult";
 import { normalizeExamTypeForStorage } from "@/lib/mock-test/examTypes";
+import {
+  isParseQuestionPdfQueuedPayload,
+  pollParseQuestionPdfJob,
+} from "@/lib/gov-exam/parseQuestionPdfJob";
 import { cn } from "@/lib/utils";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -103,14 +107,55 @@ export function BulkPdfUploadPanel({
       body: formData,
     });
 
-    if (!response.ok) {
-      const errBody = await response.json().catch(() => ({}));
-      throw new Error((errBody as { error?: string }).error ?? "PDF parsing failed");
+    const json = await response.json().catch(() => ({}));
+
+    if (response.status === 504 || response.status === 502) {
+      throw new Error(
+        (json as { error?: string }).error ?? "PDF parsing failed. Credits refunded.",
+      );
     }
 
-    const json = await response.json();
-    const inner = unwrapEdgePayload<{ questions?: unknown[] }>(json);
+    if (!response.ok && response.status !== 202) {
+      throw new Error((json as { error?: string }).error ?? "PDF parsing failed");
+    }
+
+    let inner = unwrapEdgePayload<{
+      questions?: unknown[];
+      accepted?: boolean;
+      jobId?: string;
+      status?: string;
+      persistedToBank?: boolean;
+      count?: number;
+      error?: string;
+      message?: string;
+    }>(json);
+
+    if (response.status === 202 || isParseQuestionPdfQueuedPayload(inner)) {
+      if (!inner.jobId) throw new Error("PDF queued but no job id was returned.");
+      const parsedJob = await pollParseQuestionPdfJob(inner.jobId);
+      if (parsedJob.status === "failed") {
+        throw new Error(
+          parsedJob.error || parsedJob.message || "PDF parsing failed. Credits refunded.",
+        );
+      }
+      inner = {
+        questions: parsedJob.questions,
+        count: parsedJob.count,
+        persistedToBank: parsedJob.persistedToBank,
+      };
+    }
+
     const questions = Array.isArray(inner.questions) ? inner.questions : [];
+    if (inner.persistedToBank && (inner.count ?? questions.length) > 0) {
+      const count = inner.count ?? questions.length;
+      return {
+        ...job,
+        status: "done",
+        count,
+        message: `${count} questions saved`,
+      };
+    }
+
     if (questions.length === 0) throw new Error("No MCQs extracted from PDF");
 
     const storageExamType = normalizeExamTypeForStorage(examType) ?? examType;

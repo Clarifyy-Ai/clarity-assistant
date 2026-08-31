@@ -172,7 +172,7 @@ Deno.serve(async (req) => {
   for (const row of rows) {
     const { data: interview } = await db
       .from("scheduled_interviews")
-      .select("id, company_name, role_title, status")
+      .select("id, company_name, role_title, status, timezone")
       .eq("id", row.interview_id)
       .maybeSingle();
 
@@ -189,19 +189,45 @@ Deno.serve(async (req) => {
       continue;
     }
 
-    // Prefer round scheduled_at for display time
+    const { data: profile } = await db
+      .from("profiles")
+      .select("session_reminders, email_notifications, timezone")
+      .eq("id", row.user_id)
+      .maybeSingle();
+    if (profile && (profile.session_reminders === false || profile.email_notifications === false)) {
+      await db
+        .from("interview_reminders")
+        .update({
+          status: "failed",
+          error: "reminders_disabled",
+          updated_at: nowIso,
+        })
+        .eq("id", row.id);
+      skipped++;
+      continue;
+    }
+
     const { data: rounds } = await db
       .from("interview_rounds")
-      .select("scheduled_at")
+      .select("scheduled_at, timezone")
       .eq("scheduled_interview_id", row.interview_id)
       .order("round_number", { ascending: true })
       .limit(1);
 
     const whenIso = rounds?.[0]?.scheduled_at ?? row.remind_at;
+    const zone =
+      rounds?.[0]?.timezone ||
+      interview.timezone ||
+      profile?.timezone ||
+      "UTC";
     const when = new Date(whenIso);
     const whenText = Number.isNaN(when.getTime())
       ? String(whenIso)
-      : when.toLocaleString("en-US", { dateStyle: "full", timeStyle: "short" });
+      : when.toLocaleString("en-US", {
+          timeZone: zone,
+          dateStyle: "full",
+          timeStyle: "short",
+        });
 
     const { data: authUser } = await db.auth.admin.getUserById(row.user_id);
     const email = authUser?.user?.email ?? "";

@@ -20,6 +20,10 @@ import {
   loadOnboardingDraft,
   saveOnboardingDraft,
 } from "@/lib/onboarding/draft";
+import {
+  onboardingHistoryState,
+  stepFromPopState,
+} from "@/lib/onboarding/history";
 import { normalizePreferredModel, toDbPreferredModel } from "@/lib/ai/modelOptions";
 import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
 
@@ -202,11 +206,30 @@ export default function OnboardingIndex() {
     });
   }, [currentStep]);
 
-  const goToStep = useCallback((step: number) => {
+  const persistOnboardingStep = useCallback((step: number) => {
+    if (!user?.id) return;
+    void supabase
+      .from("profiles")
+      .update({ onboarding_step: step } as never)
+      .eq("id", user.id)
+      .then(({ error }) => {
+        if (error) {
+          console.warn("[OnboardingIndex] onboarding_step persist failed:", error.message);
+        }
+      });
+  }, [user?.id]);
+
+  const goToStep = useCallback((step: number, historyMode: "push" | "replace" | "none" = "push") => {
     setCurrentStep(step);
     saveOnboardingDraft(step, data);
+    persistOnboardingStep(step);
+    if (historyMode === "push") {
+      window.history.pushState(onboardingHistoryState(step), "");
+    } else if (historyMode === "replace") {
+      window.history.replaceState(onboardingHistoryState(step), "");
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [data]);
+  }, [data, persistOnboardingStep]);
 
   const finishOnboarding = useCallback(async (lastStepData?: Partial<OnboardingData>) => {
     const finalData = lastStepData ? { ...data, ...lastStepData } : data;
@@ -323,21 +346,10 @@ export default function OnboardingIndex() {
   }, [currentStep, mergeData, goToStep, finishOnboarding]);
 
   const handleBack = useCallback(() => {
-    // #region agent log
-    debugLog161d95({
-      hypothesisId: "H7",
-      location: "OnboardingIndex.tsx:handleBack",
-      message: "onboarding_inwizard_back",
-      data: {
-        fromStep: currentStep,
-        resumeFileId: data.resumeFileId ?? null,
-        skipResume: data.skipResume,
-        industry: data.industry || null,
-      },
-    });
-    // #endregion
-    if (currentStep > 1) goToStep(currentStep - 1);
-  }, [currentStep, goToStep, data.resumeFileId, data.skipResume, data.industry]);
+    if (currentStep > 1) {
+      window.history.back();
+    }
+  }, [currentStep]);
 
   const handleSkipRerun = useCallback(() => {
     navigate(ONBOARDING_COMPLETION_PATH, { replace: true });
@@ -370,23 +382,16 @@ export default function OnboardingIndex() {
   const [slideDirection, setSlideDirection] = useState(1);
 
   useEffect(() => {
-    const onPopState = () => {
-      // #region agent log
-      debugLog161d95({
-        hypothesisId: "H7",
-        location: "OnboardingIndex.tsx:popstate",
-        message: "onboarding_browser_back",
-        data: {
-          currentStep,
-          path: window.location.pathname,
-          resumeFileId: data.resumeFileId ?? null,
-        },
-      });
-      // #endregion
+    window.history.replaceState(onboardingHistoryState(currentStep), "");
+    const onPopState = (event: PopStateEvent) => {
+      const nextStep = stepFromPopState(event.state, currentStep);
+      setCurrentStep(nextStep);
+      saveOnboardingDraft(nextStep, data);
+      persistOnboardingStep(nextStep);
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, [currentStep, data.resumeFileId]);
+  }, [currentStep, data, persistOnboardingStep]);
 
   const goNext = useCallback((stepData?: Partial<OnboardingData>) => {
     setSlideDirection(1);

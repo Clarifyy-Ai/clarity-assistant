@@ -14,6 +14,7 @@ import {
 } from "@/lib/auth/mfaFactors";
 import { MFA_ENFORCEMENT_PAUSED } from "@/lib/auth/mfaGate";
 import { getPasswordStrength, validatePassword } from "@/lib/validators/emailValidator";
+import { debugLog161d95 } from "@/lib/debug/debugLog161d95";
 
 type MfaUiState =
   | "NOT_CONFIGURED"
@@ -32,8 +33,6 @@ function deriveMfaUiState(
   if (enrollingQr || unverifiedTotp.length > 0) return "ENROLLING";
   return "NOT_CONFIGURED";
 }
-import { agentDebugIngest } from "@/lib/debug/agentIngest";
-import { debugLog161d95 } from "@/lib/debug/debugLog161d95";
 
 export default function SettingsSecurity() {
   const [currentPw, setCurrentPw] = useState("");
@@ -283,7 +282,7 @@ export default function SettingsSecurity() {
                 onClick={() => setShowCurrentPw((v) => !v)}
                 aria-label={showCurrentPw ? "Hide current password" : "Show current password"}
                 aria-pressed={showCurrentPw}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
                 {showCurrentPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -309,7 +308,7 @@ export default function SettingsSecurity() {
                 onClick={() => setShowNewPw((v) => !v)}
                 aria-label={showNewPw ? "Hide new password" : "Show new password"}
                 aria-pressed={showNewPw}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
                 {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
@@ -335,7 +334,7 @@ export default function SettingsSecurity() {
                 onClick={() => setShowConfirmPw((v) => !v)}
                 aria-label={showConfirmPw ? "Hide confirm password" : "Show confirm password"}
                 aria-pressed={showConfirmPw}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
                 {showConfirmPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>

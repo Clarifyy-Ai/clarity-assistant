@@ -17,6 +17,7 @@ import {
 import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
 import { useAuthStore } from "@/store/userStore";
 import { generateId } from "@/lib/utils";
+import { schedulerCompanyNameSchema, schedulerRoleTitleSchema, schedulerTimezoneSchema } from "@/lib/validators/interviewSchemas";
 import { subscribeFocusRecovery } from "@/lib/focusRecovery";
 import { toSafeUiError } from "@/lib/focusRecovery";
 import type { TablesInsert, TablesUpdate } from "@/integrations/supabase";
@@ -108,6 +109,15 @@ export function useInterviewScheduler() {
   ): Promise<{ id: string | null; error: string | null }> => {
     if (!user?.id) return { id: null, error: "Not authenticated" };
 
+    const company = schedulerCompanyNameSchema.safeParse(values.company_name);
+    const role = schedulerRoleTitleSchema.safeParse(values.role_title);
+    if (!company.success) {
+      return { id: null, error: company.error.issues[0]?.message ?? "Invalid company name" };
+    }
+    if (!role.success) {
+      return { id: null, error: role.error.issues[0]?.message ?? "Invalid role title" };
+    }
+
     const id = generateId();
 
     // ✅ FIX: Only send actual schema columns to Supabase.
@@ -117,8 +127,8 @@ export function useInterviewScheduler() {
     const dbRow = {
       id,
       user_id:         user.id,
-      company_name:    values.company_name,
-      role_title:      values.role_title,
+      company_name:    company.data,
+      role_title:      role.data,
       stage:           values.stage,
       priority:        values.priority,
       is_remote:       values.is_remote,
@@ -128,6 +138,7 @@ export function useInterviewScheduler() {
       notes:           values.notes           || null,
       resume_id:       values.resume_id       ?? null,
       jd_id:           values.jd_id           ?? null,
+      timezone:        (values as { timezone?: string }).timezone || null,
       // ✅ NOT included: rounds, next_round, is_today
       created_at:      new Date().toISOString(),
       updated_at:      new Date().toISOString(),
@@ -197,6 +208,18 @@ export function useInterviewScheduler() {
     interviewId: string,
     values: RoundFormValues,
   ): Promise<{ error: string | null }> => {
+    if (values.scheduled_at) {
+      const when = new Date(values.scheduled_at);
+      if (!Number.isFinite(when.getTime()) || when.getTime() <= Date.now()) {
+        return { error: "Scheduled time must be in the future." };
+      }
+    }
+    const timezone = schedulerTimezoneSchema.safeParse(
+      (values as { timezone?: string }).timezone ?? "local",
+    );
+    if (!timezone.success) {
+      return { error: timezone.error.issues[0]?.message ?? "Invalid timezone" };
+    }
     const round: Partial<InterviewRound> & Record<string, any> = {
       id:                     generateId(),
       scheduled_interview_id: interviewId,
@@ -212,6 +235,7 @@ export function useInterviewScheduler() {
       status:                 "scheduled",
       outcome:                null,
       notes:                  values.notes             || null,
+      timezone:               timezone.data === "local" ? null : timezone.data,
       session_id:             null,
       debrief_id:             null,
       created_at:             new Date().toISOString(),

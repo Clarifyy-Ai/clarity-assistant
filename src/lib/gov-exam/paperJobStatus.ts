@@ -38,8 +38,13 @@ export const PAPER_JOB_USER_STAGES = [
 export type PaperJobUserStage = (typeof PAPER_JOB_USER_STAGES)[number];
 
 export const PAPER_JOB_STAGE_LABEL: Record<string, string> = {
-  queued: "Generating paper…",
-  validating: "Generating paper…",
+  queued: "Queued…",
+  leased: "Starting generation…",
+  checking_availability: "Checking availability…",
+  selecting: "Selecting questions…",
+  generating: "Generating paper…",
+  validating: "Validating paper…",
+  assembling: "Assembling paper…",
   retrieving_sources: "Generating paper…",
   analyzing_pattern: "Generating paper…",
   planning_blueprint: "Generating paper…",
@@ -50,7 +55,6 @@ export const PAPER_JOB_STAGE_LABEL: Record<string, string> = {
   generating_missing_slots: "Generating paper…",
   validating_questions: "Validating paper…",
   checking_similarity: "Validating paper…",
-  assembling: "Validating paper…",
   validating_paper: "Validating paper…",
   completed: "Completed",
   failed: "We couldn't generate this paper. Try again.",
@@ -77,8 +81,9 @@ export function mapProgressToUserStage(
     return "failed";
   }
   const stage = String(progressStage ?? status ?? "").trim();
-  if (stage === "selecting_questions") return "selecting_questions";
+  if (stage === "selecting" || stage === "selecting_questions") return "selecting_questions";
   if (
+    stage === "validating" ||
     stage === "validating_questions" ||
     stage === "checking_similarity" ||
     stage === "assembling" ||
