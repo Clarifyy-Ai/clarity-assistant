@@ -577,6 +577,52 @@ export default function AdminGovQuestionReview() {
         isLoading={bulkBusy}
         onConfirm={() => void runBulkConfirm()}
       />
+
+      <Dialog
+        open={override !== null}
+        onOpenChange={(open) => {
+          if (!open && busyId === null) {
+            setOverride(null);
+            setOverrideReason("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {OVERRIDE_LABELS[override?.action ?? ""] ?? "Override"} question
+            </DialogTitle>
+            <DialogDescription>
+              Manual overrides are recorded in the admin audit log with your identity,
+              timestamp, previous status and reason. Approval does not publish content.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={overrideReason}
+            onChange={(e) => setOverrideReason(e.target.value)}
+            placeholder="Reason for this override (required)"
+            rows={3}
+          />
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setOverride(null);
+                setOverrideReason("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={busyId !== null || overrideReason.trim().length === 0}
+              onClick={() => void runOverride()}
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
