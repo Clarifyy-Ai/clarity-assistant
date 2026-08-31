@@ -87,6 +87,11 @@ export default function AdminGovQuestionReview() {
   const [missingSourceOnly, setMissingSourceOnly] = useState(false);
   const [status, setStatus] = useState<QuestionReviewFilterStatus>("public_unverified");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [override, setOverride] = useState<
+    { row: QuestionReviewRow; action: AdminOverrideAction } | null
+  >(null);
+  const [overrideReason, setOverrideReason] = useState("");
+
   const [bulkBusy, setBulkBusy] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [translationLang, setTranslationLang] = useState("hi");
