@@ -115,7 +115,7 @@ export async function countQuestionsForPaper(
     .from(PLAYABLE_QUESTIONS_VIEW)
     .select("id", { count: "exact", head: true })
     .eq("exam_type", examType)
-    .eq("source_year", year)
+    .eq("source_year" as never, year as never)
     .eq("is_public", true);
 
   if (error) {

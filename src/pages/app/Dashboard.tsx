@@ -646,7 +646,7 @@ function DashboardSecondaryWidgets({
             onRetry={onRetryRecent}
           />
           <UpcomingInterviews
-            interviews={upcomingInterviewsForDashboard(scheduler.interviews as ScheduledInterview[], 3)}
+            interviews={upcomingInterviewsForDashboard(scheduler.interviews as never, 3) as unknown as ScheduledInterview[]}
             loading={scheduler.is_loading}
             error={scheduler.load_error}
             onRetry={() => void reloadInterviews()}
