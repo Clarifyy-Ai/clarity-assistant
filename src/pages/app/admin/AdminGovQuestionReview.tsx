@@ -167,6 +167,38 @@ export default function AdminGovQuestionReview() {
     }
   }
 
+  async function runOverride() {
+    if (!override) return;
+    const reason = overrideReason.trim();
+    if (!reason) {
+      toast.error("Override reason is required");
+      return;
+    }
+    setBusyId(override.row.id);
+    const { error } = await adminOverrideQuestion(
+      override.row.id,
+      override.action,
+      reason,
+      {
+        is_verified: override.row.is_verified,
+        is_public: override.row.is_public,
+        review_status: deriveQuestionQueueStatus(override.row),
+        metadata: override.row.metadata,
+      },
+    );
+    setBusyId(null);
+    if (error) {
+      toast.error(error);
+      return;
+    }
+    toast.success(`${OVERRIDE_LABELS[override.action] ?? override.action} recorded with audit entry`);
+    setOverride(null);
+    setOverrideReason("");
+    void load();
+  }
+
+
+
   async function verifyOne(row: QuestionReviewRow) {
     setBusyId(row.id);
     const { error } = await applyQuestionVerifyAction(row.id, "verify", row);
