@@ -35,6 +35,10 @@
     "coverage",
     "supabase",
     "playwright-fixture.ts",
-    "playwright.config.ts"
+    "playwright.config.ts",
+    "feature-copies",
+    "e2e",
+    "scraper",
+    "electron"
   ]
 }
