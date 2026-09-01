@@ -9,7 +9,7 @@ export const SUPPORT_FAILED_LABEL = "Could not send. Retry";
 export const SUPPORT_MAX_BODY = 4000;
 export const SUPPORT_CONNECT_TIMEOUT_MS = 8000;
 export const SUPPORT_AI_TIMEOUT_MS = 20000;
-export const SUPPORT_GUEST_POLL_MS = 2000;
+export const SUPPORT_GUEST_POLL_MS = 8000;
 
 export type SupportChipId =
   | "interview"
