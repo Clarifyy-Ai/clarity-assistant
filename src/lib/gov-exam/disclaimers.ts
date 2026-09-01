@@ -1,5 +1,5 @@
 export const GOV_EXAM_AFFILIATION_DISCLAIMER =
-  "Clarify AI is an independent preparation platform and is not affiliated with or " +
+  "Career Pilot is an independent preparation platform and is not affiliated with or " +
   "endorsed by any government recruiting body. Candidates must verify notifications, " +
   "eligibility, dates, syllabus, and examination rules on the official website.";
 

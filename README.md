@@ -1,8 +1,8 @@
-# Clarify AI — Interview Preparation & Live Practice Coach
+# Career Pilot — AI Career & Exam Preparation
 
 AI-powered interview preparation for students and job seekers: mock sessions, live practice coaching, prep tools, analytics, and secure document management.
 
-**Practice only.** Clarify AI is built for mock interviews and rehearsal. It must not be used to conceal assistance during real, graded, or employer interviews.
+**Practice only.** Career Pilot is built for mock interviews and rehearsal. It must not be used to conceal assistance during real, graded, or employer interviews.
 
 ---
 
@@ -93,4 +93,4 @@ Screen-capture exclusion, overlay hiding from interviewers, and anti-detection b
 
 ## License
 
-Proprietary — Clarify AI. See repository maintainers for terms.
+Proprietary — Career Pilot. See repository maintainers for terms.

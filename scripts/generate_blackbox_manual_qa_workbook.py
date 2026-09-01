@@ -1,5 +1,5 @@
 """
-Clarify AI — Black-Box Manual QA Workbook generator
+Career Pilot — Black-Box Manual QA Workbook generator
 
 Independent workbook for human manual testers who have ONLY:
   - application URL
@@ -128,7 +128,7 @@ def sheet_cover(wb: Workbook) -> None:
     ws.title = "00 Cover & Instructions"
     start = write_title_block(
         ws,
-        "Clarify AI — Black-Box Manual QA Workbook",
+        "Career Pilot — Black-Box Manual QA Workbook",
         "CYCLE 31 AUG 2026 | COMPLETE WITHIN 2 DAYS | 3 TESTERS PRE-ASSIGNED | UPDATE PEACH COLUMNS ONLY",
         cols=6,
     )

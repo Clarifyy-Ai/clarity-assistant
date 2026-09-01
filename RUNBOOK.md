@@ -1,4 +1,4 @@
-# RUNBOOK.md — Clarify AI closed beta
+# RUNBOOK.md — Career Pilot closed beta
 
 ## Severity
 

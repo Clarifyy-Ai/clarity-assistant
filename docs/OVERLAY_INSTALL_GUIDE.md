@@ -1,6 +1,6 @@
 # Practice Coach overlay — install, system settings & troubleshooting
 
-Clarify AI’s **Practice Coach** shows AI coaching hints in an on-screen overlay during rehearsal sessions. The overlay is a **normal application window** — it remains **visible on screen share, recordings, and proctoring tools**. It is not designed to be hidden during real interviews.
+Career Pilot’s **Practice Coach** shows AI coaching hints in an on-screen overlay during rehearsal sessions. The overlay is a **normal application window** — it remains **visible on screen share, recordings, and proctoring tools**. It is not designed to be hidden during real interviews.
 
 ---
 
@@ -16,7 +16,7 @@ Clarify AI’s **Practice Coach** shows AI coaching hints in an on-screen overla
 
 ### 1. Sign in and open Practice Coach
 
-1. Log in at your Clarify AI URL.
+1. Log in at your Career Pilot URL.
 2. Go to **Dashboard → Practice Coach** (or `/app/live`).
 3. Complete the session setup wizard through **Connect** (step 6).
 
@@ -40,7 +40,7 @@ Pick the mic you actually use:
 | **macOS** | System Settings → Sound → Input → select mic → level meter moves when you speak |
 | **Linux** | Settings → Sound → Input (or `pavucontrol`) → default source |
 
-Then verify in **Settings → Audio & speech → Test mic** inside Clarify AI.
+Then verify in **Settings → Audio & speech → Test mic** inside Career Pilot.
 
 ### 4. System / tab audio (optional, Chromium only)
 
@@ -48,7 +48,7 @@ To hear the interviewer through Zoom / Meet / Teams in the **browser tab**:
 
 1. Enable **System Audio** in session setup (step 6).
 2. Open the meeting in a **browser tab** (not the desktop app).
-3. When Clarify AI opens the share picker:
+3. When Career Pilot opens the share picker:
    - Select the **meeting tab** (not “Entire screen”).
    - Tick **Share tab audio** — required on Chrome/Edge.
 4. Confirm the overlay shows **Mic + Tab** in the audio badge.
@@ -84,11 +84,11 @@ End users: download the signed installer from your release channel, run the wiza
 
 **macOS:** drag to Applications; on first open, approve in Privacy & Security if Gatekeeper prompts. Production builds should be notarized (see `docs/ELECTRON_RELEASE.md`).
 
-**Linux:** `chmod +x Clarify AI*.AppImage` then run.
+**Linux:** `chmod +x Career Pilot*.AppImage` then run.
 
 ### Desktop-specific settings
 
-1. **Microphone:** allow when Clarify AI first requests access (Windows Privacy → Microphone; macOS Privacy → Microphone → Clarify AI).
+1. **Microphone:** allow when Career Pilot first requests access (Windows Privacy → Microphone; macOS Privacy → Microphone → Career Pilot).
 2. **Tray icon:** closing the overlay window **hides to tray** — use tray → **Quit** to exit fully.
 3. **Always on top:** the overlay floats above other windows and **appears in screen capture** by design (compliance).
 4. **Global hotkey:** `Ctrl+Shift+A` requests an AI answer system-wide (desktop only). If it fails, another app may own the shortcut — see troubleshooting.
@@ -114,7 +114,7 @@ The app shows a notification when you open Practice Coach on mobile reminding yo
 ### Microphone denied or silent
 
 - Reload and click **Allow**.
-- Check OS privacy settings for browser / Clarify AI.
+- Check OS privacy settings for browser / Career Pilot.
 - Close apps holding the mic (Zoom, Discord, etc.).
 - Run **Settings → Audio & speech → Test mic**.
 
@@ -128,8 +128,8 @@ The app shows a notification when you open Practice Coach on mobile reminding yo
 ### Overlay missing
 
 - `Ctrl+Shift+H` or **Restore Overlay** button.
-- Desktop: tray → **Show Clarify AI**.
-- Web: keep the Clarify AI tab open — overlay is tied to the session tab.
+- Desktop: tray → **Show Career Pilot**.
+- Web: keep the Career Pilot tab open — overlay is tied to the session tab.
 
 ### Slow hints / transcript lag
 
@@ -140,7 +140,7 @@ The app shows a notification when you open Practice Coach on mobile reminding yo
 ### Desktop global hotkey conflict
 
 - Quit apps using `Ctrl+Shift+A`.
-- Restart Clarify AI after install.
+- Restart Career Pilot after install.
 
 ### Session fails to start
 
@@ -156,7 +156,7 @@ The app shows a notification when you open Practice Coach on mobile reminding yo
 2. Click **Capture** in the overlay toolbar (or press `Ctrl+Shift+C`).
 3. Allow screen share when prompted (one time per capture).
 4. **Drag a box** around the coding question on the frozen preview.
-5. Clarify AI streams a **full answer** (2 credits) — uses the spoken question if detected, otherwise reads the problem from your selection.
+5. Career Pilot streams a **full answer** (2 credits) — uses the spoken question if detected, otherwise reads the problem from your selection.
 
 Pick **Coding** (or your interview type) in session setup so prompts match the session.
 

@@ -1,4 +1,4 @@
-# IMPLEMENTATION_LEDGER.md — Clarify AI v1.0.0 closed-beta remediation
+# IMPLEMENTATION_LEDGER.md — Career Pilot v1.0.0 closed-beta remediation
 
 | ID | Priority | Requirement | Previous risk | Implementation | Files | Tests | Verification | Deployment | Status | Remaining |
 |----|----------|-------------|---------------|----------------|-------|-------|--------------|------------|--------|-----------|

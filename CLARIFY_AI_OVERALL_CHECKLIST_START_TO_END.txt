@@ -1,7 +1,7 @@
 ================================================================================
 CLARIFY AI — OVERALL COMPLETE CHECKLIST (START TO END)
 ================================================================================
-Product   : Clarify AI — Interview Prep & Practice Platform
+Product   : Career Pilot — Interview Prep & Practice Platform
 Site      : https://clarify.ai.sltfinanceindia.com/
 Date      : _______________
 Tester    : _______________
@@ -40,7 +40,7 @@ Before you start:
 ================================================================================
 B. PRE-FLIGHT / COLD LOAD (START HERE)
 ================================================================================
-[ ] P0  Open / — leaves "Loading Clarify AI…" and shows landing
+[ ] P0  Open / — leaves "Loading Career Pilot…" and shows landing
 [ ] P0  Brand, headline, primary CTA visible
 [ ] P0  Console: NO fatal red errors on cold load
 [ ] P0  Console: NO CSP font errors (cdn.gpteng.co / CameraPlainVariable)

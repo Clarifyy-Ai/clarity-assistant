@@ -41,7 +41,7 @@ export function ElectronOpenInBrowser({
           <div className="space-y-2">
             <h1 className="text-lg font-semibold text-foreground">Open in your browser</h1>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Your browser has the full Clarify AI product — dashboard, prep, billing, and mock
+              Your browser has the full Career Pilot product — dashboard, prep, billing, and mock
               interviews. The desktop app is a lightweight upgrade for Practice Coach overlay
               convenience during live practice.
             </p>

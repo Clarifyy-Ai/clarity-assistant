@@ -1,6 +1,6 @@
 # CHANGELOG — Production Hardening Pass
 
-Source: Clarify AI Complete Application Audit (28 July 2026) + Master Production-Readiness Implementation Prompt.
+Source: Career Pilot Complete Application Audit (28 July 2026) + Master Production-Readiness Implementation Prompt.
 
 ## P0 — Money / security (2026-07-28)
 

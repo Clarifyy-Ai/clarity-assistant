@@ -11,19 +11,19 @@
   "results": {
     "SMOKE-APP-001": {
       "status": "Pass",
-      "actual": "Loaded HTTP 200; title=Clarify AI — Practice every interview with AI by your side",
+      "actual": "Loaded HTTP 200; title=Career Pilot — Practice every interview with AI by your side",
       "evidence": "https://clarify.ai.sltfinanceindia.com/",
       "notes": ""
     },
     "SMOKE-APP-002": {
       "status": "Pass",
-      "actual": "Loaded HTTP 200; title=Clarify AI — Practice every interview with AI by your side",
+      "actual": "Loaded HTTP 200; title=Career Pilot — Practice every interview with AI by your side",
       "evidence": "https://clarify.ai.sltfinanceindia.com/",
       "notes": ""
     },
     "PUBLIC-001": {
       "status": "Pass",
-      "actual": "Loaded HTTP 200; title=Clarify AI — Practice every interview with AI by your side",
+      "actual": "Loaded HTTP 200; title=Career Pilot — Practice every interview with AI by your side",
       "evidence": "https://clarify.ai.sltfinanceindia.com/",
       "notes": ""
     },
@@ -35,43 +35,43 @@
     },
     "PUBLIC-005": {
       "status": "Pass",
-      "actual": "Loaded HTTP 200; title=Gov Exam Mock Tests — UPSC, SSC, IBPS & more | Clarify AI",
+      "actual": "Loaded HTTP 200; title=Gov Exam Mock Tests — UPSC, SSC, IBPS & more | Career Pilot",
       "evidence": "https://clarify.ai.sltfinanceindia.com/gov-exams",
       "notes": ""
     },
     "PUBLIC-006": {
       "status": "Pass",
-      "actual": "Loaded HTTP 200; title=Help Center — Clarify AI",
+      "actual": "Loaded HTTP 200; title=Help Center — Career Pilot",
       "evidence": "https://clarify.ai.sltfinanceindia.com/help",
       "notes": ""
     },
     "PUBLIC-008": {
       "status": "Pass",
-      "actual": "Loaded HTTP 200; title=Keyboard Shortcuts — Clarify AI",
+      "actual": "Loaded HTTP 200; title=Keyboard Shortcuts — Career Pilot",
       "evidence": "https://clarify.ai.sltfinanceindia.com/shortcuts",
       "notes": ""
     },
     "PUBLIC-009": {
       "status": "Pass",
-      "actual": "Loaded HTTP 200; title=Blog — Clarify AI",
+      "actual": "Loaded HTTP 200; title=Blog — Career Pilot",
       "evidence": "https://clarify.ai.sltfinanceindia.com/blog",
       "notes": ""
     },
     "PUBLIC-011": {
       "status": "Pass",
-      "actual": "Loaded HTTP 200; title=Terms of Service | Clarify AI",
+      "actual": "Loaded HTTP 200; title=Terms of Service | Career Pilot",
       "evidence": "https://clarify.ai.sltfinanceindia.com/terms",
       "notes": ""
     },
     "PUBLIC-012": {
       "status": "Pass",
-      "actual": "Loaded HTTP 200; title=Privacy Policy | Clarify AI",
+      "actual": "Loaded HTTP 200; title=Privacy Policy | Career Pilot",
       "evidence": "https://clarify.ai.sltfinanceindia.com/privacy",
       "notes": ""
     },
     "PUBLIC-016": {
       "status": "Pass",
-      "actual": "Loaded HTTP 200; title=Page not found — Clarify AI",
+      "actual": "Loaded HTTP 200; title=Page not found — Career Pilot",
       "evidence": "https://clarify.ai.sltfinanceindia.com/unknown-route-test",
       "notes": ""
     },
@@ -83,7 +83,7 @@
     },
     "SMOKE-AUTH-001": {
       "status": "Pass",
-      "actual": "Loaded HTTP 200; title=Sign in | Clarify AI",
+      "actual": "Loaded HTTP 200; title=Sign in | Career Pilot",
       "evidence": "https://clarify.ai.sltfinanceindia.com/login",
       "notes": ""
     },
@@ -95,31 +95,31 @@
     },
     "AUTH-RESET-001": {
       "status": "Pass",
-      "actual": "Forgot-password submit response: Clarify AI Practice interviews with an AI coach that feels real. Practice Coach Scorecards and Skills Analytics Prep Lab and Mock Interviews “Clarify AI helped",
+      "actual": "Forgot-password submit response: Career Pilot Practice interviews with an AI coach that feels real. Practice Coach Scorecards and Skills Analytics Prep Lab and Mock Interviews “Career Pilot helped",
       "evidence": "https://clarify.ai.sltfinanceindia.com/forgot-password",
       "notes": ""
     },
     "PUBLIC-014": {
       "status": "Pass",
-      "actual": "Loaded HTTP 200; title=Shared session · Clarify AI",
+      "actual": "Loaded HTTP 200; title=Shared session · Career Pilot",
       "evidence": "https://clarify.ai.sltfinanceindia.com/share/invalid-token-test",
       "notes": ""
     },
     "HONESTY-001": {
       "status": "Pass",
-      "actual": "Loaded HTTP 200; title=Sign in | Clarify AI",
+      "actual": "Loaded HTTP 200; title=Sign in | Career Pilot",
       "evidence": "https://clarify.ai.sltfinanceindia.com/app/rooms",
       "notes": ""
     },
     "SHELL-008": {
       "status": "Pass",
-      "actual": "Loaded HTTP 200; title=Sign in | Clarify AI",
+      "actual": "Loaded HTTP 200; title=Sign in | Career Pilot",
       "evidence": "https://clarify.ai.sltfinanceindia.com/dashboard",
       "notes": ""
     },
     "RELIABILITY-002": {
       "status": "Pass",
-      "actual": "Loaded HTTP 200; title=Page not found — Clarify AI",
+      "actual": "Loaded HTTP 200; title=Page not found — Career Pilot",
       "evidence": "https://clarify.ai.sltfinanceindia.com/unknown-route-test",
       "notes": ""
     },
@@ -143,7 +143,7 @@
     },
     "PUBLIC-010": {
       "status": "Pass",
-      "actual": "Invalid blog slug handled HTTP 200; title=Post not found | Clarify AI Blog",
+      "actual": "Invalid blog slug handled HTTP 200; title=Post not found | Career Pilot Blog",
       "evidence": "https://clarify.ai.sltfinanceindia.com/blog/this-slug-should-not-exist-xyz",
       "notes": ""
     },
@@ -857,7 +857,7 @@
     },
     "AUTH-SESSION-004": {
       "status": "Pass",
-      "actual": "Offline login attempt recoverable UI=true; snippet=Clarify AI\nPractice interviews with an AI coach that feels real.\nPractice Coach\nScorecards and Skills Analytics\nPrep Lab",
+      "actual": "Offline login attempt recoverable UI=true; snippet=Career Pilot\nPractice interviews with an AI coach that feels real.\nPractice Coach\nScorecards and Skills Analytics\nPrep Lab",
       "evidence": "https://clarify.ai.sltfinanceindia.com/login",
       "notes": ""
     },

@@ -4,7 +4,7 @@ const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const FROM_EMAIL =
   Deno.env.get("RESEND_FROM_EMAIL") ??
   Deno.env.get("FROM_EMAIL") ??
-  "Clarify AI <noreply@clarifyprep.com>";
+  "Career Pilot <noreply@clarifyprep.com>";
 const SALES_EMAIL = Deno.env.get("SALES_EMAIL") ?? "sales@clarifyprep.com";
 
 function sanitize(str: unknown, max = 2000): string {

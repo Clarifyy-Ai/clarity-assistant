@@ -62,7 +62,7 @@ export const XP_LEVELS: XPLevelThreshold[] = [
   { level: 7,  label: "Live Interview Ready",   xp_required: 5000, badge_id: "live_ready",     perks: ["Practice Coach full access"] },
   { level: 8,  label: "Zero Filler Champion",   xp_required: 7500, badge_id: "zero_filler",    perks: ["Filler insights dashboard"] },
   { level: 9,  label: "Interview Strategist",   xp_required: 10000,badge_id: "strategist",     perks: ["Company deep research"] },
-  { level: 10, label: "Clarify AI Master",       xp_required: 15000,badge_id: "master",         perks: ["All features unlocked", "Master badge"] },
+  { level: 10, label: "Career Pilot Master",     xp_required: 15000,badge_id: "master",         perks: ["All features unlocked", "Master badge"] },
 ];
 
 // ── Badges ────────────────────────────────────────────────────────
@@ -324,7 +324,7 @@ export const BADGE_DEFINITIONS: Record<BadgeId, BadgeDefinition> = {
   sysdesign:   { id: "sysdesign",  name: "System Thinker",   description: "Reached Level 6", icon: "🏗️", rarity: "rare",      xp_bonus: 0,   condition_description: "Reach Level 6", is_hidden: false },
   live_ready:  { id: "live_ready", name: "Live Ready",       description: "Reached Level 7", icon: "🎙️", rarity: "rare",      xp_bonus: 0,   condition_description: "Reach Level 7", is_hidden: false },
   strategist:  { id: "strategist", name: "Strategist",       description: "Reached Level 9", icon: "🧠", rarity: "legendary", xp_bonus: 0,   condition_description: "Reach Level 9", is_hidden: false },
-  master:      { id: "master",     name: "Clarify AI Master", description: "Reached Level 10",icon: "👑", rarity: "legendary", xp_bonus: 0,   condition_description: "Reach Level 10",is_hidden: false },
+  master:      { id: "master",     name: "Career Pilot Master", description: "Reached Level 10",icon: "👑", rarity: "legendary", xp_bonus: 0,   condition_description: "Reach Level 10",is_hidden: false },
   // Level milestone badges
   level_5:     { id: "level_5",    name: "Level 5",           description: "Reached Level 5", icon: "🎯", rarity: "uncommon",  xp_bonus: 0,   condition_description: "Reach Level 5", is_hidden: false },
   level_10:    { id: "level_10",   name: "Level 10",          description: "Reached Level 10",icon: "🏅", rarity: "rare",      xp_bonus: 0,   condition_description: "Reach Level 10",is_hidden: false },

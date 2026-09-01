@@ -146,8 +146,8 @@ export default defineConfig(({ mode }) => {
               });
               server.middlewares.use("/dev-downloads/clarify-ai-setup.exe", (_req, res, next) => {
                 const candidates = [
-                  path.join(__dirname, "release-new", "Clarify AI Setup 1.0.0.exe"),
-                  path.join(__dirname, "release", "Clarify AI Setup 1.0.0.exe"),
+                  path.join(__dirname, "release-new", "Career Pilot Setup 1.0.0.exe"),
+                  path.join(__dirname, "release", "Career Pilot Setup 1.0.0.exe"),
                 ];
                 for (const dir of ["release-new", "release"]) {
                   const folder = path.join(__dirname, dir);

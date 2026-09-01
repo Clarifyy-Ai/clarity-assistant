@@ -1592,7 +1592,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                     Recording and transcribing conversations may be subject to local laws requiring all-party consent (e.g. California's CMIA, UK's RIPA, GDPR). By enabling transcript saving, you confirm that you have obtained all necessary consents from other participants, or that applicable law does not require it.
                   </p>
                   <p>
-                    Clarify AI does not share your transcripts with third parties. Transcripts are stored securely and only accessible by you.
+                    Career Pilot does not share your transcripts with third parties. Transcripts are stored securely and only accessible by you.
                   </p>
                   {!saveTranscript && (
                     <p className="text-emerald-400/80 font-medium">
@@ -1634,7 +1634,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 <p className="text-xs font-semibold text-blue-400">How it works</p>
                 <ol className="text-[11px] text-muted-foreground space-y-1.5 list-decimal list-inside">
                   <li>Open your interview platform (Zoom, Meet, etc.) in a <strong className="text-foreground">browser tab</strong></li>
-                  <li>Click "Start" below — Clarify AI will listen automatically</li>
+                  <li>Click "Start" below — Career Pilot will listen automatically</li>
                   {!isMobile && (
                     <li>For <strong className="text-foreground">system audio</strong> capture, enable "Share tab audio" when screen-sharing</li>
                   )}

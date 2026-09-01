@@ -113,7 +113,7 @@ Verify/apply the following in **Supabase Dashboard → Authentication**:
      emails feel consistent with product emails.
 
 3. **SMTP Settings** (recommended, not yet done per `2026-08-qa-basic-bugfixes.md`)
-   - Configure custom SMTP (e.g. Resend) so the `From:` address is a Clarify AI domain instead of
+   - Configure custom SMTP (e.g. Resend) so the `From:` address is a Career Pilot domain instead of
      Supabase's shared default sender — improves deliverability and reduces spam-folder risk.
 
 4. **After any Dashboard change:** send a real test reset email to a QA inbox and click through —

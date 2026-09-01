@@ -14,7 +14,7 @@ export default function About() {
   usePageMeta({
     title: `About — ${PRODUCT_NAMES.brand}`,
     description:
-      "Clarify AI is a practice product for software interviews and government exam mock tests. Operated by Payara Labs.",
+      "Career Pilot is a practice product for software interviews and government exam mock tests. Operated by Payara Labs.",
     canonical: `${SITE_URL}/about`,
   });
 

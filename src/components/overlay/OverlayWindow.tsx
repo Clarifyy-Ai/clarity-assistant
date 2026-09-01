@@ -479,7 +479,7 @@ export function OverlayWindow({
         e.stopPropagation();
       }}
       role="dialog"
-      aria-label="Clarify AI Overlay"
+      aria-label="Career Pilot Overlay"
       aria-hidden={shouldShow ? undefined : true}
       {...(!shouldShow ? ({ inert: "" } as const) : {})}
     >
@@ -522,11 +522,11 @@ export function OverlayWindow({
           aria-hidden
         />
         <div className="flex items-center gap-2 shrink-0 min-w-0 flex-1">
-          <div className="w-5 h-5 rounded-md bg-gradient-to-br from-indigo-500 to-primary flex items-center justify-center shadow-lg shadow-indigo-500/30 shrink-0">
+          <div className="w-5 h-5 rounded-md bg-gradient-to-br from-sky-blue to-electric-blue flex items-center justify-center shadow-lg shadow-primary/30 shrink-0">
             <Sparkles className="w-3 h-3 text-white" />
           </div>
           <span className="text-[12px] font-bold tracking-wide text-white/90 select-none truncate">
-            Clarify AI
+            Career Pilot
           </span>
 
           <span

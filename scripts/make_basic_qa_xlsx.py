@@ -73,7 +73,7 @@ def main() -> None:
     # --- Instructions ---
     ws0 = wb.active
     ws0.title = "Instructions"
-    ws0["A1"] = "Clarify AI — QA Checklist (Basic)"
+    ws0["A1"] = "Career Pilot — QA Checklist (Basic)"
     ws0["A1"].font = Font(bold=True, size=16, color="1F4E79")
     ws0.merge_cells("A1:D1")
 

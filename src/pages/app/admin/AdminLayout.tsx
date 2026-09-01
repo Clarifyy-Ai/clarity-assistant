@@ -225,10 +225,10 @@ export default function AdminLayout() {
         <div className="p-4 border-b border-border">
           <div className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-red-400" aria-hidden="true" />
-            <span className="text-sm font-bold text-foreground">{isAdmin ? "Admin" : "Moderation"}</span>
+            <span className="text-sm font-bold text-foreground">{isAdmin ? "Career Pilot Admin" : "Moderation"}</span>
           </div>
           <p className="text-[10px] text-muted-foreground mt-0.5">
-            {isAdmin ? "Clarify AI control panel" : "Content moderation"}
+            {isAdmin ? "Career Pilot Administration" : "Content moderation"}
           </p>
         </div>
 

@@ -78,7 +78,7 @@ export function ProductDemoHero() {
         </div>
         <div className="flex-1 mx-4">
           <div className="h-5 rounded-md bg-secondary/60 w-48 mx-auto text-[10px] text-muted-foreground/60 flex items-center justify-center">
-            Clarify AI — Practice Session
+            Career Pilot — Practice Session
           </div>
         </div>
         <div className="flex items-center gap-1.5">

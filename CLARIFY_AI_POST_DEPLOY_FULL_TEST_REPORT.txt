@@ -54,13 +54,13 @@ PHASE: PUBLIC_API
 PHASE: PUBLIC_UI
 --------------------------------------------------------------------------------
 [PASS] UI /
-  title=Clarify AI — Practice every interview with AI by your side h1=Practice every interview with AI by your side consoleErrors=1
+  title=Career Pilot — Practice every interview with AI by your side h1=Practice every interview with AI by your side consoleErrors=1
 [PASS] UI /login
-  title=Sign in | Clarify AI h1=Practice interviews with an AI coach that feels real. consoleErrors=1
+  title=Sign in | Career Pilot h1=Practice interviews with an AI coach that feels real. consoleErrors=1
 [PASS] UI /pricing
-  title=Pricing — Clarify AI h1=Simple, transparent pricing consoleErrors=1
+  title=Pricing — Career Pilot h1=Simple, transparent pricing consoleErrors=1
 [PASS] UI /help
-  title=Help Center — Clarify AI h1=Help Center consoleErrors=1
+  title=Help Center — Career Pilot h1=Help Center consoleErrors=1
 --------------------------------------------------------------------------------
 PHASE: AUTH
 --------------------------------------------------------------------------------
@@ -117,9 +117,9 @@ PHASE: AUTH
 [PASS] logout clears /app access
   url=https://clarify.ai.sltfinanceindia.com/login?returnTo=%2Fapp%2Fdashboard
 [PASS] Free UI shell
-  ms=3936 shell=Clarify AI PRACTICE Dashboard Practice Coach Mock Interview Prep Lab Gov Exam Mock Tests PROGRESS Session History Skills Analytics Credits & Usage Debrief Referrals Documents Answer Bank PLANNER 
+  ms=3936 shell=Career Pilot PRACTICE Dashboard Practice Coach Mock Interview Prep Lab Gov Exam Mock Tests PROGRESS Session History Skills Analytics Credits & Usage Debrief Referrals Documents Answer Bank PLANNER 
 [PASS] Admin UI portal
-  ms=3766 snip=Admin Clarify AI control panel USERS & SUPPORT Users Live Chat Support Audit Log CONTENT Questions Bulk Upload Seed / Import QA Checklist GOV EXAMS Sourc
+  ms=3766 snip=Admin Career Pilot control panel USERS & SUPPORT Users Live Chat Support Audit Log CONTENT Questions Bulk Upload Seed / Import QA Checklist GOV EXAMS Sourc
 [PASS] Max UI login
   ms=3922 url=https://clarify.ai.sltfinanceindia.com/app/dashboard
 --------------------------------------------------------------------------------
@@ -155,7 +155,7 @@ PHASE: UX
 [PASS] login has heading
   h1=Practice interviews with an AI coach that feels real.
 [PASS] Free shell name/plan/credits
-  Clarify AI PRACTICE Dashboard Practice Coach Mock Interview Prep Lab Gov Exam Mock Tests PROGRESS Session History Skills Analytics Credits & Usage Debrief Referrals Documents Answer Bank PLANNER Interview Day Interviews Company Research Guide N
+  Career Pilot PRACTICE Dashboard Practice Coach Mock Interview Prep Lab Gov Exam Mock Tests PROGRESS Session History Skills Analytics Credits & Usage Debrief Referrals Documents Answer Bank PLANNER Interview Day Interviews Company Research Guide N
 --------------------------------------------------------------------------------
 PHASE: LOAD
 --------------------------------------------------------------------------------

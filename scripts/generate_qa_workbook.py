@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Clarify AI — Enterprise QA Testing Workbook generator
+Career Pilot — Enterprise QA Testing Workbook generator
 Google Sheets–compatible .xlsx with 20 work sheets + Lists + Daily Log.
 
 Domain sheets 14–16 are Clarify-specific (not Marketplace/Checkout/Payment):
@@ -188,7 +188,7 @@ def build_qa_team(wb: Workbook):
             None, None, None, "Active", "",
         ])
     # Write with per-row formulas after
-    write_table(ws, "QA Team Roster — Clarify AI", "", headers, [[r[0], r[1], r[2], r[3], r[4], None, None, None, None, r[9], r[10]] for r in rows])
+    write_table(ws, "QA Team Roster — Career Pilot", "", headers, [[r[0], r[1], r[2], r[3], r[4], None, None, None, None, r[9], r[10]] for r in rows])
     for i, (name, role, email, cap, skills) in enumerate(QA_TEAM):
         r = 3 + i
         ws.cell(r, 6, f"=COUNTIF('04 Test Case Repository'!S$3:S$5000,A{r})")
@@ -525,7 +525,7 @@ def build_dev_team(wb: Workbook):
         "Developer", "Role", "Email", "Capacity Hrs/Week", "Focus Area",
         "Open Bugs Assigned", "In Progress", "Ready for Retest", "Utilization Hint", "Status", "Remarks",
     ]
-    write_table(ws, "Dev Team Roster — Clarify AI", "Assigned bugs come from 06 Bug Tracker → Assigned To. Keep names in sync with Lists!Developers.", headers, [])
+    write_table(ws, "Dev Team Roster — Career Pilot", "Assigned bugs come from 06 Bug Tracker → Assigned To. Keep names in sync with Lists!Developers.", headers, [])
     for i, (name, role, email, cap, focus) in enumerate(DEV_TEAM):
         r = 3 + i
         ws.cell(r, 1, name)
@@ -633,13 +633,13 @@ def build_dev_tasks(wb: Workbook):
 # ═══════════════════════════════════════════════════════════════════════════
 def build_readme(wb: Workbook):
     ws = wb.create_sheet("00 Read Me", 0)
-    ws["A1"] = "Clarify AI — Enterprise QA Testing Workbook"
+    ws["A1"] = "Career Pilot — Enterprise QA Testing Workbook"
     ws["A1"].font = TITLE_FONT
     ws.merge_cells("A1:B1")
 
     rows = [
         ("", ""),
-        ("Application", "Clarify AI"),
+        ("Application", "Career Pilot"),
         ("Description", "AI-powered interview preparation & rehearsal platform with Indian gov-exam MCQ mock tests, live coaching overlay, and dual Stripe/Razorpay billing."),
         ("Tech stack", "React 18 + TypeScript + Vite + Tailwind/shadcn · Supabase (Auth, Postgres+RLS, Edge/Deno, Storage, Realtime) · Electron · Deepgram · Gemini/OpenAI/Anthropic · Stripe + Razorpay"),
         ("Portals", "Marketing · Auth · Candidate App · Admin · Electron Overlay"),
@@ -768,7 +768,7 @@ def build_readme(wb: Workbook):
 
 def build_dashboard(wb: Workbook):
     ws = wb.create_sheet("01 Dashboard", 1)
-    ws["A1"] = "Clarify AI — QA Executive Dashboard (Power BI style)"
+    ws["A1"] = "Career Pilot — QA Executive Dashboard (Power BI style)"
     ws["A1"].font = TITLE_FONT
     ws.merge_cells("A1:F1")
     add_nav_bar(ws, "01 Dashboard")
@@ -1058,7 +1058,7 @@ def build_modules(wb: Workbook):
             total, done, total - done, est, actual, pri, deps.get(mid, "—"),
             "Seeded from audit 28 Jul 2026",
         ])
-    write_table(ws, "Module Master — Clarify AI (20 core modules)", "", headers, rows)
+    write_table(ws, "Module Master — Career Pilot (20 core modules)", "", headers, rows)
     add_dv(ws, lr(wb, "Portals"), "C3:C5000")
     add_dv(ws, lr(wb, "Owners"), "E3:E5000")
     add_dv(ws, lr(wb, "Testers"), "F3:F5000")
@@ -1095,7 +1095,7 @@ def build_features(wb: Workbook):
         samples.append(list(f) + [route, deep, how, role, credit, blocking])
     write_table(
         ws,
-        "Feature Inventory — full Clarify AI catalogue (" + str(len(samples)) + " features)",
+        "Feature Inventory — full Career Pilot catalogue (" + str(len(samples)) + " features)",
         "Deep Link = Environments!BaseURL & Route. Replace BaseURL after seeding staging.",
         headers,
         samples,
@@ -1356,7 +1356,7 @@ def build_test_cases(wb: Workbook):
          "1. Open /app/admin", "Denied", "Denied", "Pass", "Completed", "",
          "Raj Balani", 1.0, 0.75, TODAY, "1.0.0", "Staging", "Chrome", "Desktop", "Web", "Manual", "Yes", "Yes", "Yes", "Sprint 26", "1.0.0-beta", ""),
     ]
-    write_table(ws, "Test Case Repository — Clarify AI", "", headers, samples)
+    write_table(ws, "Test Case Repository — Career Pilot", "", headers, samples)
     add_dv(ws, lr(wb, "Modules"), "C3:C5000")
     add_dv(ws, lr(wb, "Roles"), "G3:G5000")
     add_dv(ws, lr(wb, "Priority"), "H3:H5000")
@@ -1414,7 +1414,7 @@ def build_e2e(wb: Workbook):
          "1. Import questions 2. Candidate creates test",
          "Imported questions available", "Blocked", "Blocked", "High", "Admin, Gemini PDF",
          "Raj Balani", 4.0, 1.0, ""),
-        ("E2E-06", "Electron overlay boot", "Electron Overlay", "Clarify AI.exe", "Overlay window",
+        ("E2E-06", "Electron overlay boot", "Electron Overlay", "Career Pilot.exe", "Overlay window",
          "1. Launch 2. Auth if needed 3. Overlay topmost 4. Hotkey",
          "Overlay-only shell", "", "Not Run", "Critical", "Code signing deferred",
          "Shreya Patil", 3.0, 0, "Unsigned beta OK"),
@@ -1816,7 +1816,7 @@ def build_signoff(wb: Workbook):
 
 def build_nav_hub(wb: Workbook):
     ws = wb.create_sheet("NAV Hub")
-    ws["A1"] = "NAV Hub — Clarify AI QA Workbook (Power BI style)"
+    ws["A1"] = "NAV Hub — Career Pilot QA Workbook (Power BI style)"
     ws["A1"].font = TITLE_FONT
     ws.merge_cells("A1:D1")
     add_nav_bar(ws, "NAV Hub")

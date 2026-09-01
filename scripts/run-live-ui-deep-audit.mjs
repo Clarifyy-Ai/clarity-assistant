@@ -154,7 +154,7 @@ async function injectSession(page, session) {
   await page.goto(BASE + "/login", { waitUntil: "domcontentloaded", timeout: 60_000 });
   await page
     .waitForFunction(
-      () => !/Loading Clarify AI/i.test(document.body?.innerText || ""),
+      () => !/Loading Career Pilot/i.test(document.body?.innerText || ""),
       { timeout: 30_000 },
     )
     .catch(() => {});
@@ -170,7 +170,7 @@ async function loginViaUi(page, email, password) {
   await page.goto(BASE + "/login", { waitUntil: "domcontentloaded", timeout: 60_000 });
   await page
     .waitForFunction(
-      () => !/Loading Clarify AI/i.test(document.body?.innerText || ""),
+      () => !/Loading Career Pilot/i.test(document.body?.innerText || ""),
       { timeout: 30_000 },
     )
     .catch(() => {});
@@ -181,7 +181,7 @@ async function loginViaUi(page, email, password) {
   await page.waitForURL(/\/app\//, { timeout: 45_000 }).catch(() => {});
   await page
     .waitForFunction(
-      () => !/Loading Clarify AI/i.test(document.body?.innerText || ""),
+      () => !/Loading Career Pilot/i.test(document.body?.innerText || ""),
       { timeout: 30_000 },
     )
     .catch(() => {});
@@ -210,7 +210,7 @@ async function waitBoot(page) {
     .waitForFunction(
       () => {
         const t = document.body?.innerText || "";
-        return !/Loading Clarify AI/i.test(t) && t.trim().length > 20;
+        return !/Loading Career Pilot/i.test(t) && t.trim().length > 20;
       },
       { timeout: 30_000 },
     )
@@ -271,7 +271,7 @@ async function gotoCollect(page, urlPath, { timeout = 45_000 } = {}) {
 
 function failIfBlankOrCrash({ bodyText, httpStatus, finalUrl, path: p }) {
   const notes = [];
-  if (/Loading Clarify AI/i.test(bodyText)) notes.push("Stuck on boot loader");
+  if (/Loading Career Pilot/i.test(bodyText)) notes.push("Stuck on boot loader");
   if (/something went wrong|application error|chunkloaderror|unexpected application error/i.test(bodyText)) {
     notes.push("Crash / error boundary");
   }

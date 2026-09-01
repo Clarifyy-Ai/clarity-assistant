@@ -1,4 +1,4 @@
-# Clarify AI — Production Audit (2026-05-25)
+# Career Pilot — Production Audit (2026-05-25)
 
 Full-stack production audit with in-repo fixes applied. Supersedes partial runs in `PRODUCTION_AUDIT_2026-05-03.md`.
 

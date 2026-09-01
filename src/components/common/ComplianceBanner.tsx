@@ -20,7 +20,7 @@ export function ComplianceBanner({ className }: ComplianceBannerProps) {
       <Shield className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" aria-hidden="true" />
       <p className="text-xs text-muted-foreground leading-relaxed">
         <strong className="text-foreground font-medium">Practice and rehearsal only.</strong>{" "}
-        Clarify AI features are designed for mock interviews and prep sessions — not for use during
+        Career Pilot features are designed for mock interviews and prep sessions — not for use during
         actual third-party interviews, assessments, or employer evaluations.
       </p>
     </div>

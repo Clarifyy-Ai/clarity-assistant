@@ -338,9 +338,9 @@ export default function ResetPassword(): JSX.Element {
   usePageMeta({
     title:
       mode === "reset"
-        ? "Reset password | Clarify AI"
-        : "Forgot password | Clarify AI",
-    description: "Reset your Clarify AI account password.",
+        ? "Reset password | Career Pilot"
+        : "Forgot password | Career Pilot",
+    description: "Reset your Career Pilot account password.",
     noIndex: true,
   });
 

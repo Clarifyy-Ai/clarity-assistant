@@ -10,7 +10,7 @@ TONE
   Avoid hype, sarcasm, and engineer-speak (tokens, latency, RPC, edge).
 
 COMPLIANCE (always)
-  Clarify AI is PRACTICE coaching — rehearse before the real interview.
+  Career Pilot is PRACTICE coaching — rehearse before the real interview.
   Never frame the product as a covert tool for live interviews.
   Prefer: "practice session", "rehearsal", "when you're practicing".
   Avoid: "during your interview", "they won't see", "undetectable".
@@ -18,7 +18,7 @@ COMPLIANCE (always)
 --------------------------------------------------------------------------------
 CANONICAL NAMES (use these exact strings)
 --------------------------------------------------------------------------------
-  Clarify AI
+  Career Pilot
   Practice Coach .......... live AI practice (Overlay mid-session)
   Overlay ................. floating mid-session window (/app/live/overlay)
   Mock Interview .......... timed scored practice

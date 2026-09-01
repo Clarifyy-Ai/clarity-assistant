@@ -72,7 +72,7 @@ export function AppLoadingFallback(): JSX.Element {
             Reload
           </Button>
           <a
-            href={supportMailto("Clarify AI loading help")}
+            href={supportMailto("Career Pilot loading help")}
             className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Mail className="h-4 w-4" aria-hidden="true" />

@@ -87,7 +87,7 @@ function renderMarkdown(text: string) {
 
 function BlogPostNotFound() {
   usePageMeta({
-    title: "Post not found | Clarify AI Blog",
+    title: "Post not found | Career Pilot Blog",
     description: "This blog post could not be found.",
     noIndex: true,
   });
@@ -141,13 +141,13 @@ export default function BlogPost() {
         description: post.excerpt,
         datePublished: post.published_at,
         author: { "@type": "Organization", name: post.author },
-        publisher: { "@type": "Organization", name: "Clarify AI" },
+        publisher: { "@type": "Organization", name: "Career Pilot" },
       }
     : undefined;
 
   usePageMeta({
-    title: post ? `${post.title} | Clarify AI Blog` : "Blog | Clarify AI",
-    description: post?.excerpt ?? "Interview prep insights from Clarify AI.",
+    title: post ? `${post.title} | Career Pilot Blog` : "Blog | Career Pilot",
+    description: post?.excerpt ?? "Interview prep insights from Career Pilot.",
     canonical,
     ogType: "article",
     ogImage: post?.cover_image_url ?? undefined,

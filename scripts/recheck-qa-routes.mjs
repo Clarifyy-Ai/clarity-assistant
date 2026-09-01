@@ -63,7 +63,7 @@ const results = [];
   await page
     .waitForFunction(
       () =>
-        /Practice|interview|Clarify AI/i.test(document.body?.innerText || "") &&
+        /Practice|interview|Career Pilot/i.test(document.body?.innerText || "") &&
         !/didn't finish loading|Preparing your workspace/i.test(
           document.body?.innerText || "",
         ),
@@ -162,7 +162,7 @@ if (report.stagingProbe?.status === "Fail") {
       reportedBy: "Cursor Agent",
       assignedTo: "Platform Dev",
       steps:
-        "1. Set Lovable env VITE_SUPABASE_* + rebuild\n2. Confirm bundle contains project ref\n3. After code deploy without env, UI should show 'Clarify AI failed to start' not infinite loader",
+        "1. Set Lovable env VITE_SUPABASE_* + rebuild\n2. Confirm bundle contains project ref\n3. After code deploy without env, UI should show 'Career Pilot failed to start' not infinite loader",
       expected: "Site boots with baked env",
       actual: report.stagingProbe.notes,
       env: report.stagingProbe.url,

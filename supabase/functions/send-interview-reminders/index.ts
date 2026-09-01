@@ -22,7 +22,7 @@ const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const FROM_EMAIL =
   Deno.env.get("RESEND_FROM_EMAIL") ??
   Deno.env.get("FROM_EMAIL") ??
-  "Clarify AI <noreply@clarifyprep.com>";
+  "Career Pilot <noreply@clarifyprep.com>";
 const APP_URL = Deno.env.get("APP_URL") ?? "https://clarityapp.ai";
 const BATCH_LIMIT = 50;
 
@@ -82,14 +82,14 @@ function bodyForKind(
   const roleBit = role ? `${sanitize(role)} ` : "";
   if (kind === "t24h") {
     return `<p>Reminder: your ${roleBit}interview at <strong>${sanitize(company)}</strong> is in about 24 hours (${sanitize(whenText)}).</p>
-<p><a href="${APP_URL}/app/interviews">View in Clarify AI</a></p>`;
+<p><a href="${APP_URL}/app/interviews">View in Career Pilot</a></p>`;
   }
   if (kind === "t1h") {
     return `<p>Reminder: your ${roleBit}interview at <strong>${sanitize(company)}</strong> starts in about 1 hour (${sanitize(whenText)}).</p>
-<p><a href="${APP_URL}/app/interviews">View in Clarify AI</a></p>`;
+<p><a href="${APP_URL}/app/interviews">View in Career Pilot</a></p>`;
   }
   return `<p>Your ${roleBit}interview at <strong>${sanitize(company)}</strong> is scheduled for ${sanitize(whenText)}.</p>
-<p><a href="${APP_URL}/app/interviews">View in Clarify AI</a></p>`;
+<p><a href="${APP_URL}/app/interviews">View in Career Pilot</a></p>`;
 }
 
 async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {

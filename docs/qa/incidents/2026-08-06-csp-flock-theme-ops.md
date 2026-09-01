@@ -21,7 +21,7 @@ UI shows **“Edit with”** badge; HTML includes `src="/~flock.js"`.
 
 ### Ops fix (Lovable dashboard)
 
-1. Open the Clarify AI project in Lovable.
+1. Open the Career Pilot project in Lovable.
 2. Disable production **badge / “Edit with” / flock / preview widget** for the custom domain.
 3. Re-publish / clear CDN cache.
 4. Verify home HTML has **no** `src="/~flock.js"` and cold-load console has **no** CSP script errors.

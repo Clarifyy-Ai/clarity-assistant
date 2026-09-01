@@ -100,7 +100,7 @@ export default function Referrals() {
     if (typeof navigator.share === "function") {
       try {
         await navigator.share({
-          title: "Join Clarify AI",
+          title: "Join Career Pilot",
           text: "Practice interviews with AI coaching — use my referral link:",
           url: link,
         });

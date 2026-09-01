@@ -154,7 +154,7 @@ export function InstallPromptModal(): JSX.Element | null {
                 </DialogTitle>
                 <DialogDescription className="text-sm mt-0.5">
                   {isMobile || canInstall
-                    ? "Add Clarify to your home screen for faster Practice Coach access."
+                    ? "Add Career Pilot to your home screen for faster Practice Coach access."
                     : "Get the desktop app for the full Practice Coach overlay experience."}
                 </DialogDescription>
               </div>

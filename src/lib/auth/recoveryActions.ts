@@ -8,7 +8,7 @@ import { SUPPORT_EMAIL } from "@/lib/constants/contact";
 export const PROFILE_FRIENDLY_ERROR =
   "Unable to load your account information.";
 
-export function supportMailto(subject = "Clarify AI account help"): string {
+export function supportMailto(subject = "Career Pilot account help"): string {
   return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}`;
 }
 

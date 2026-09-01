@@ -1,6 +1,6 @@
 # Monitoring & alert setup (provider-neutral)
 
-Clarify AI emits structured JSON via `opsLog` and existing Edge Function loggers.
+Career Pilot emits structured JSON via `opsLog` and existing Edge Function loggers.
 
 ## Wire-up steps (external ops)
 

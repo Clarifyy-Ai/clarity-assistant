@@ -1,6 +1,6 @@
-# Government Exam Architecture (Clarify AI)
+# Government Exam Architecture (Career Pilot)
 
-Clarify AI provides an **independent** government-exam preparation engine. It is not affiliated with UPSC, SSC, RRB, IBPS, or any recruiting body.
+Career Pilot provides an **independent** government-exam preparation engine. It is not affiliated with UPSC, SSC, RRB, IBPS, or any recruiting body.
 
 ## Hybrid pipeline (target = shipped)
 

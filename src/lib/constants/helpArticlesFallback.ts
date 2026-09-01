@@ -33,10 +33,10 @@ export const HELP_ARTICLES_FALLBACK: HelpArticleItem[] = [
     slug: "gs-1",
     category_slug: "getting-started",
     category_title: "Getting Started",
-    question: "What is Clarify AI?",
+    question: "What is Career Pilot?",
     answer:
-      "Clarify AI is an AI-powered interview preparation platform that provides real-time coaching during practice sessions, full mock simulations with analytics, and prep tools to help you land your dream job.",
-    body_md: `Clarify AI is an AI-powered interview **preparation** platform. It provides a live practice coach, full mock simulations with analytics, and a suite of prep tools to help you land your dream job.
+      "Career Pilot is an AI-powered interview preparation platform that provides real-time coaching during practice sessions, full mock simulations with analytics, and prep tools to help you land your dream job.",
+    body_md: `Career Pilot is an AI-powered interview **preparation** platform. It provides a live practice coach, full mock simulations with analytics, and a suite of prep tools to help you land your dream job.
 
 The platform combines three core capabilities:
 
@@ -44,7 +44,7 @@ The platform combines three core capabilities:
 2. **Mock Interview** — Full simulation interviews with AI scoring, filler-word tracking, and detailed performance analytics
 3. **Prep Lab** — Tools including STAR builder, answer rephraser, gap analysis, company research, and coding hints
 
-Clarify AI is for practice only. Using AI assistance covertly during a real interview violates most employer and assessment policies.`,
+Career Pilot is for practice only. Using AI assistance covertly during a real interview violates most employer and assessment policies.`,
     sort_order: 10,
   },
   {
@@ -56,7 +56,7 @@ Clarify AI is for practice only. Using AI assistance covertly during a real inte
       "Click 'Get started free' on the homepage. You can sign up with your email or use Google OAuth. No credit card required for the free plan.",
     body_md: `Creating an account takes less than a minute:
 
-1. Visit the Clarify AI homepage and click **Get started free**
+1. Visit the Career Pilot homepage and click **Get started free**
 2. Enter your email and create a password, or sign in with Google
 3. Verify your email address
 4. Complete the quick onboarding flow (role, experience, target companies)
@@ -86,7 +86,7 @@ No credit card required. Upgrade to **Pro** (₹2,499 one-time, ${PRO_CREDITS} c
     category_title: "Live Interview",
     question: "How does the live practice coach work?",
     answer:
-      "During a practice session, Clarify AI listens to your spoken answers and provides real-time suggested talking points, structure hints, and follow-up prompts in an on-screen prep overlay.",
+      "During a practice session, Career Pilot listens to your spoken answers and provides real-time suggested talking points, structure hints, and follow-up prompts in an on-screen prep overlay.",
     body_md: `The live practice coach works in three steps:
 
 1. **Audio capture** — Your microphone (and optionally system audio in Chromium browsers) picks up the question
@@ -111,7 +111,7 @@ Using AI assistance covertly during a live interview:
 - May breach the terms of platforms like Zoom, Teams, Google Meet, HackerRank, and CoderPad
 - Can result in offer rescissions or disciplinary action
 
-The Clarify AI overlay is a normal on-screen window and is visible to screen-sharing tools by design.`,
+The Career Pilot overlay is a normal on-screen window and is visible to screen-sharing tools by design.`,
     sort_order: 20,
   },
   {

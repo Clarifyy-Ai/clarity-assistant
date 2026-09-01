@@ -112,13 +112,13 @@ SECTION: BROWSER
 [PASS] pageerrors
   none
 [PASS] page /login
-  title=Sign in | Clarify AI url=https://clarify.ai.sltfinanceindia.com/login
+  title=Sign in | Career Pilot url=https://clarify.ai.sltfinanceindia.com/login
 [PASS] page /signup
-  title=Create account | Clarify AI url=https://clarify.ai.sltfinanceindia.com/signup
+  title=Create account | Career Pilot url=https://clarify.ai.sltfinanceindia.com/signup
 [PASS] page /pricing
-  title=Pricing — Clarify AI url=https://clarify.ai.sltfinanceindia.com/pricing
+  title=Pricing — Career Pilot url=https://clarify.ai.sltfinanceindia.com/pricing
 [PASS] page /help
-  title=Help Center — Clarify AI url=https://clarify.ai.sltfinanceindia.com/help
+  title=Help Center — Career Pilot url=https://clarify.ai.sltfinanceindia.com/help
 [PASS] anon /app/dashboard → login
   landed=https://clarify.ai.sltfinanceindia.com/login
 [PASS] anon /dashboard behavior
@@ -126,7 +126,7 @@ SECTION: BROWSER
 [PASS] Pro UI login → /app
   ms=2572 url=https://clarify.ai.sltfinanceindia.com/app/dashboard profileError=false stillLoading=false
 [INFO] shell text after login
-  Clarify AI
+  Career Pilot
 
 PRACTICE
 
@@ -187,7 +187,7 @@ Q | Edit with
 [FAIL] session_expired banner
   message missing (remediation may be undeployed)
 [PASS] mobile landing
-  title=Clarify AI — Practice every interview with AI by your side
+  title=Career Pilot — Practice every interview with AI by your side
 [INFO] supabase API samples during UI
   67 captured
 [WARN] failed requests

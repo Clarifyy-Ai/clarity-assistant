@@ -18,34 +18,38 @@ const config: Config = {
     },
     extend: {
       colors: {
-        /* Clarify AI Brand Palette */
+        /* Career Pilot brand palette */
         brand: {
-          50:  "#eef2ff",
-          100: "#e0e7ff",
-          200: "#c7d2fe",
-          300: "#a5b4fc",
-          400: "#818cf8",
-          500: "#6366f1", // Primary
-          600: "#4f46e5",
-          700: "#4338ca",
-          800: "#3730a3",
-          900: "#312e81",
-          950: "#1e1b4b",
+          50:  "#EFF6FF",
+          100: "#DBEAFE",
+          200: "#BFDBFE",
+          300: "#93C5FD",
+          400: "#38BDF8",
+          500: "#2563EB",
+          600: "#1D4ED8",
+          700: "#163B73",
+          800: "#0F294F",
+          900: "#0B1220",
+          950: "#070B14",
         },
+        navy: "#0B1220",
+        "deep-blue": "#163B73",
+        "electric-blue": "#2563EB",
+        "sky-blue": "#38BDF8",
         accent: {
-          DEFAULT: "#06b6d4", // Cyan — live session accent
-          foreground: "#ffffff",
+          DEFAULT: "#38BDF8",
+          foreground: "#0B1220",
         },
         success: {
-          DEFAULT: "#10b981",
+          DEFAULT: "#16A34A",
           foreground: "#ffffff",
         },
         warning: {
-          DEFAULT: "#f59e0b",
+          DEFAULT: "#F59E0B",
           foreground: "#ffffff",
         },
         danger: {
-          DEFAULT: "#ef4444",
+          DEFAULT: "#DC2626",
           foreground: "#ffffff",
         },
 
@@ -90,9 +94,9 @@ const config: Config = {
 
         /* Overlay-specific — glass dark panel */
         overlay: {
-          bg:     "rgba(10, 10, 20, 0.88)",
-          border: "rgba(99, 102, 241, 0.35)",
-          text:   "#e0e7ff",
+          bg:     "rgba(11, 18, 32, 0.92)",
+          border: "rgba(37, 99, 235, 0.38)",
+          text:   "#e2e8f0",
         },
       },
 
@@ -123,7 +127,7 @@ const config: Config = {
           from: { height: "var(--radix-accordion-content-height)" },
           to:   { height: "0" },
         },
-        /* Custom Clarify AI */
+        /* Career Pilot motion */
         "fade-in": {
           from: { opacity: "0", transform: "translateY(4px)" },
           to:   { opacity: "1", transform: "translateY(0)" },
@@ -187,21 +191,21 @@ const config: Config = {
       },
 
       boxShadow: {
-        overlay: "0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.25)",
-        "overlay-hover": "0 12px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(99,102,241,0.5)",
-        glow: "0 0 20px rgba(99,102,241,0.4)",
-        "glow-success": "0 0 20px rgba(16,185,129,0.4)",
+        overlay: "0 8px 32px rgba(11,18,32,0.55), 0 0 0 1px rgba(37,99,235,0.25)",
+        "overlay-hover": "0 12px 40px rgba(11,18,32,0.65), 0 0 0 1px rgba(56,189,248,0.4)",
+        glow: "0 0 20px rgba(37,99,235,0.4)",
+        "glow-success": "0 0 20px rgba(22,163,74,0.4)",
         "glow-warning": "0 0 20px rgba(245,158,11,0.4)",
-        "glow-danger":  "0 0 20px rgba(239,68,68,0.4)",
+        "glow-danger":  "0 0 20px rgba(220,38,38,0.4)",
       },
 
       backgroundImage: {
         "shimmer-gradient":
           "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.05) 50%, transparent 100%)",
         "brand-gradient":
-          "linear-gradient(135deg, #6366f1 0%, #06b6d4 100%)",
+          "linear-gradient(135deg, #2563EB 0%, #38BDF8 100%)",
         "dark-glass":
-          "linear-gradient(135deg, rgba(15,15,30,0.9) 0%, rgba(20,20,45,0.85) 100%)",
+          "linear-gradient(135deg, rgba(11,18,32,0.94) 0%, rgba(22,59,115,0.85) 100%)",
       },
 
       transitionTimingFunction: {

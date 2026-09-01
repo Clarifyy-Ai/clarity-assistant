@@ -75,10 +75,10 @@ const STRIPE_CHECKOUT_DISABLED =
   "Stripe Checkout is not available. Plans and credit packs are one-time Razorpay purchases.";
 
 const STRIPE_PORTAL_DISABLED =
-  "Billing portal is not available. Clarify AI uses one-time Razorpay purchases, not subscriptions.";
+  "Billing portal is not available. Career Pilot uses one-time Razorpay purchases, not subscriptions.";
 
 const STRIPE_SUBSCRIPTION_DISABLED =
-  "Subscriptions are not available. Clarify AI uses one-time Razorpay purchases.";
+  "Subscriptions are not available. Career Pilot uses one-time Razorpay purchases.";
 
 export async function createCheckoutSession(
   _payload: CheckoutRequest,

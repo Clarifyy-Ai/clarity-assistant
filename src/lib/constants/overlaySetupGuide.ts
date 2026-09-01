@@ -5,7 +5,7 @@ export const OVERLAY_VISIBILITY_WARNING =
 
 export const OVERLAY_MOBILE_TOAST_TITLE = "Desktop overlay required";
 export const OVERLAY_MOBILE_TOAST_BODY =
-  "Live overlay, global hotkeys (Ctrl+Shift+H / Ctrl+Shift+P), and system-audio capture need a desktop browser or the Clarify desktop app. On mobile you can still complete setup and practice with the microphone, but overlay shortcuts are unavailable.";
+  "Live overlay, global hotkeys (Ctrl+Shift+H / Ctrl+Shift+P), and system-audio capture need a desktop browser or the Career Pilot desktop app. On mobile you can still complete setup and practice with the microphone, but overlay shortcuts are unavailable.";
 
 export type SetupChecklistItem = {
   id: string;
@@ -40,14 +40,14 @@ export const OVERLAY_SYSTEM_CHECKLIST: SetupChecklistItem[] = [
     id: "system-audio",
     title: "Enable system / tab audio (optional)",
     detail:
-      "Open your meeting in a browser tab. When Clarify AI asks to share, select that tab and tick Share tab audio (Chrome/Edge). Without it, only your microphone is captured.",
+      "Open your meeting in a browser tab. When Career Pilot asks to share, select that tab and tick Share tab audio (Chrome/Edge). Without it, only your microphone is captured.",
     platforms: ["web"],
   },
   {
     id: "desktop-install",
     title: "Install the desktop app (optional)",
     detail:
-      "Download the signed Clarify AI installer (.exe on Windows, .dmg on macOS, AppImage on Linux). Run the installer, allow microphone when prompted, and sign in with the same account.",
+      "Download the signed Career Pilot installer (.exe on Windows, .dmg on macOS, AppImage on Linux). Run the installer, allow microphone when prompted, and sign in with the same account.",
     platforms: ["desktop", "mac", "win", "linux"],
   },
   {
@@ -85,7 +85,7 @@ export const OVERLAY_TROUBLESHOOTING: TroubleshootingItem[] = [
     problem: "Microphone access denied or no audio detected",
     fixes: [
       "Reload the page and click Allow when the browser prompts.",
-      "Check OS privacy settings: Windows Privacy → Microphone; macOS Privacy & Security → Microphone → enable your browser or Clarify AI.",
+      "Check OS privacy settings: Windows Privacy → Microphone; macOS Privacy & Security → Microphone → enable your browser or Career Pilot.",
       "Unplug/replug USB headsets; close other apps that may hold the mic exclusively.",
       "Run the mic test under Settings → Audio & speech.",
     ],
@@ -105,7 +105,7 @@ export const OVERLAY_TROUBLESHOOTING: TroubleshootingItem[] = [
     problem: "Overlay disappeared during a session",
     fixes: [
       "Press Ctrl+Shift+H or click Show Overlay / Restore Overlay at the bottom-right.",
-      "Desktop app: click the tray icon → Show Clarify AI.",
+      "Desktop app: click the tray icon → Show Career Pilot.",
       "Check you did not minimize the browser window on web — the overlay lives inside the tab.",
     ],
   },
@@ -123,7 +123,7 @@ export const OVERLAY_TROUBLESHOOTING: TroubleshootingItem[] = [
     problem: "Global hotkey Ctrl+Shift+A does nothing (desktop)",
     fixes: [
       "Another app may have registered the same shortcut — quit conflicting tools or change their bindings.",
-      "Restart Clarify AI after install so global shortcuts register cleanly.",
+      "Restart Career Pilot after install so global shortcuts register cleanly.",
     ],
   },
   {
@@ -138,10 +138,10 @@ export const OVERLAY_TROUBLESHOOTING: TroubleshootingItem[] = [
 ];
 
 export const DESKTOP_INSTALL_STEPS = [
-  "Download the installer for your OS from the Clarify AI website or release page.",
+  "Download the installer for your OS from the Career Pilot website or release page.",
   "Windows: run the .exe, choose install location if prompted, finish the NSIS wizard.",
-  "macOS: open the .dmg, drag Clarify AI to Applications, first launch → Open anyway if Gatekeeper warns (signed builds only).",
+  "macOS: open the .dmg, drag Career Pilot to Applications, first launch → Open anyway if Gatekeeper warns (signed builds only).",
   "Linux: mark the AppImage executable (chmod +x) and run it, or integrate via your distro's AppImage launcher.",
-  "Sign in with your Clarify AI account; allow microphone access when the app requests it.",
+  "Sign in with your Career Pilot account; allow microphone access when the app requests it.",
   "Open Practice Coach from the app menu or navigate to the live session route after login.",
 ];

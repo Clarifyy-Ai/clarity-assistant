@@ -1,7 +1,7 @@
 ================================================================================
 CLARIFY AI — UI/UX REVIEW, GAP ANALYSIS & USER-FRIENDLINESS ROADMAP
 ================================================================================
-Based on: "Clarify AI — Complete UI/UX Implementation Audit" (30 July 2026)
+Based on: "Career Pilot — Complete UI/UX Implementation Audit" (30 July 2026)
 Goal stated by product owner: the WHOLE app should be simple and friendly to
 use — on desktop AND mobile — and the core live-practice experience should
 feel as fast, light, and frictionless as PARAKEET AI (a focused live-interview
@@ -20,7 +20,7 @@ post-session only (redirect into Overlay on session start).
   2. Section 2 — what's missing entirely (gaps, not just inconsistencies).
   3. Section 3 — health scorecard per area.
   4. Section 4 — "What makes Parakeet AI feel simple" and a direct gap map
-     against Clarify AI's Practice Coach / Overlay experience.
+     against Career Pilot's Practice Coach / Overlay experience.
   5. Section 5 — dedicated MOBILE-friendliness checklist.
   6. Section 6 — dedicated USER-friendliness checklist (first-time-user lens).
   7. Section 7 — canonical naming glossary + IA map to end the naming drift.
@@ -99,7 +99,7 @@ CORE PRACTICE EXPERIENCE GAPS
       picked up mid-conversation without checking a meter buried in a tab.
   [x] No auto-generated post-session notes/summary comparable to what
       competitors offer (Parakeet AI auto-writes call notes + action items
-      after every session — Clarify AI has Scorecard/Debrief but nothing
+      after every session — Career Pilot has Scorecard/Debrief but nothing
       framed as a quick digestible "here's what happened" note).
   [x] No clear in-product answer to "will the interviewer be able to see
       this?" — stealth/compliance messaging exists but isn't presented as a
@@ -284,13 +284,13 @@ SPRINT 5 — Design system unification & polish
 ================================================================================
 9. CLOSING SUMMARY
 ================================================================================
-Clarify AI already has more depth than a focused tool like Parakeet AI.
+Career Pilot already has more depth than a focused tool like Parakeet AI.
 The gap is FRICTION: too many setup steps, dual session UIs, naming drift,
 and a mobile notice instead of a real path.
 
 Sprint 1 and Sprint 2 alone — fixing the /app/live dead state, one-click
 session start, and quieting the Overlay default — move the core practice loop
-close to "open it and it just works," while keeping Clarify AI's deeper product.
+close to "open it and it just works," while keeping Career Pilot's deeper product.
 
 ================================================================================
 END OF DOCUMENT

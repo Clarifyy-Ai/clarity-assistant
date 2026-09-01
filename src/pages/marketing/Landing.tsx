@@ -18,7 +18,6 @@ import {
   formatPlanCheckoutPrice,
   razorpayPaiseForPlan,
 } from "@/lib/billing/priceCalculator";
-import { SALES_EMAIL } from "@/lib/constants/contact";
 import { MARKETING_SHELL } from "@/lib/ui/responsivePage";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import {
@@ -36,7 +35,7 @@ const STEPS = [
     num: "01",
     icon: Upload,
     title: "Sign up & set up",
-    desc: "Create your free Clarify AI account, paste your job description, and upload your resume. The AI generates a tailored question bank and gap analysis in seconds.",
+    desc: "Create your free Career Pilot account, paste your job description, and upload your resume. The AI generates a tailored question bank and gap analysis in seconds.",
     color: "text-primary",
     bg: "bg-primary/10",
   },
@@ -227,24 +226,24 @@ const TESTIMONIALS = [
 
 const FAQS = [
   {
-    q: "What is Clarify AI?",
-    a: "Clarify AI is an interview preparation platform that combines a live AI practice coach, a full mock interview engine, a prep lab, and detailed analytics. It is designed for rehearsal — to help you walk into the real interview prepared and confident.",
+    q: "What is Career Pilot?",
+    a: "Career Pilot is an AI-powered career and exam preparation platform: live interview coaching, mock interviews, Government Exams, learning, practice, and performance insights. It is for rehearsal — not for a live employer interview or a proctored exam.",
   },
   {
-    q: "Can I use Clarify AI during a real interview?",
-    a: "No. Clarify AI is built strictly for practice. Using AI assistance covertly during a real interview violates most employer and assessment policies and may breach the terms of platforms like Zoom, Teams, Google Meet, HackerRank, and CoderPad. The on-screen overlay is a normal window and is visible to screen-sharing tools.",
+    q: "Can I use Career Pilot during a real interview?",
+    a: "No. Career Pilot is built strictly for practice. Using AI assistance covertly during a real interview violates most employer and assessment policies and may breach the terms of platforms like Zoom, Teams, Google Meet, HackerRank, and CoderPad. The on-screen overlay is a normal window and is visible to screen-sharing tools.",
   },
   {
-    q: "Which AI models does Clarify AI use?",
-    a: "Clarify AI routes each request to the best model for the job: Google Gemini 2.0 Flash for sub-second live hints, OpenAI GPT-4o for deep reasoning, and Anthropic Claude for system design and behavioural depth. Deepgram powers live transcription. Pro plans unlock full multi-model selection in Settings.",
+    q: "Which AI models does Career Pilot use?",
+    a: "Career Pilot routes each request to the best model for the job: Google Gemini 2.0 Flash for sub-second live hints, OpenAI GPT-4o for deep reasoning, and Anthropic Claude for system design and behavioural depth. Deepgram powers live transcription. Pro plans unlock full multi-model selection in Settings.",
   },
   {
-    q: "How much does Clarify AI cost?",
+    q: "How much does Career Pilot cost?",
     a: "Free includes 50 credits per month — enough to try Practice Coach and a mock session — plus prep lab tools and basic analytics. Pro is a one-time purchase for 1,400 credits and the full feature set. Max is a one-time purchase for 4,000 credits and priority model access.",
   },
   {
     q: "Does it work for all interview types?",
-    a: "Yes. Clarify AI supports behavioral interviews (STAR format), technical coding rounds (with hints and explanations), system design interviews (with frameworks and diagrams), and general Q&A. The prep lab covers more than 500 common interview topics.",
+    a: "Yes. Career Pilot supports behavioral interviews (STAR format), technical coding rounds (with hints and explanations), system design interviews (with frameworks and diagrams), and general Q&A. The prep lab covers more than 500 common interview topics.",
   },
 ];
 
@@ -294,21 +293,21 @@ function CellValue({ value }: { value: boolean | string }) {
 
 export default function Landing() {
   usePageMeta({
-    title: "Clarify AI — Practice every interview with AI by your side",
-    description: "Live AI practice coach, full mock interview engine with analytics, and a complete prep lab. Multi-model routing across Gemini, GPT-4o, and Claude. Start free with 50 credits / month.",
+    title: PRODUCT_NAMES.titleLong,
+    description: `${PRODUCT_NAMES.tagline} ${PRODUCT_NAMES.positioning}. Mock interviews, Government Exams, learning, practice, and performance insights.`,
     canonical: "https://clarify.ai.sltfinanceindia.com/",
     jsonLd: [
       {
         "@context": "https://schema.org",
         "@type": "Organization",
-        name: "Clarify AI",
+        name: "Career Pilot",
         url: "https://clarify.ai.sltfinanceindia.com/",
         description: "AI-powered interview preparation platform.",
       },
       {
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
-        name: "Clarify AI",
+        name: "Career Pilot",
         applicationCategory: "BusinessApplication",
         operatingSystem: "Web",
         offers: {
@@ -331,28 +330,28 @@ export default function Landing() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7 }}
         >
-          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight leading-[1.08]">
-            Practice every interview with{" "}
-            <span className="bg-gradient-to-r from-primary via-fuchsia-400 to-blue-400 bg-clip-text text-transparent">
-              AI by your side
-            </span>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary mb-3">
+            Career Pilot
+          </p>
+          <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight leading-[1.08]">
+            {PRODUCT_NAMES.tagline}
           </h1>
           <p className="mt-5 text-sm md:text-base text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            A live AI practice coach, mock interviews, and a full prep lab — so you walk into the real interview ready, not anxious.
+            AI-powered career preparation, mock interviews, Government Exams, learning, practice, and performance insights in one platform.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-8">
             <Link
               to="/signup"
               className="inline-flex items-center gap-2 text-sm font-semibold px-5 py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity shadow-lg shadow-primary/25"
             >
-              Get started free
+              Start Preparing
               <ArrowRight className="w-4 h-4" />
             </Link>
             <Link
-              to="/pricing"
+              to="/#features"
               className="inline-flex items-center gap-2 text-sm font-medium px-5 py-2.5 rounded-xl border border-border text-foreground hover:bg-secondary/60 transition-all"
             >
-              See pricing
+              Explore Career Pilot
             </Link>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
@@ -527,7 +526,7 @@ export default function Landing() {
           <m.div className="text-center mb-10" {...fadeUp()}>
             <h2 className="text-2xl md:text-3xl font-bold">How we compare</h2>
             <p className="mt-3 text-sm text-muted-foreground max-w-md mx-auto">
-              Clarify AI is built for live practice coaching and rehearsal — not covert assistance during real interviews.
+              Career Pilot is built for live practice coaching and rehearsal — not covert assistance during real interviews.
             </p>
           </m.div>
           <m.div {...fadeUp(0.1)} className="overflow-x-auto rounded-2xl border border-border">
@@ -538,7 +537,7 @@ export default function Landing() {
                   <th className="px-4 py-4 font-semibold text-center">
                     <span className="inline-flex items-center gap-1.5 text-primary">
                       <Zap className="w-3.5 h-3.5" />
-                      Clarify AI
+                      Career Pilot
                     </span>
                   </th>
                   <th className="px-4 py-4 font-semibold text-center text-muted-foreground">Other AI Tools</th>
@@ -780,14 +779,14 @@ export default function Landing() {
             Your next interview is closer than you think
           </h2>
           <p className="text-sm text-muted-foreground mb-8 max-w-md mx-auto leading-relaxed">
-            Join candidates who use Clarify AI to prepare faster, practice smarter,
+            Join candidates who use Career Pilot to prepare faster, practice smarter,
             and walk in with AI confidence.
           </p>
           <Link
             to="/signup"
             className="inline-flex items-center gap-2 text-sm font-semibold px-6 py-3 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity shadow-xl shadow-primary/30"
           >
-            Get started free <ArrowRight className="w-4 h-4" />
+            Start Preparing <ArrowRight className="w-4 h-4" />
           </Link>
           <p className="mt-4 text-xs text-muted-foreground">
             Free plan &middot; No card required &middot; Cancel anytime

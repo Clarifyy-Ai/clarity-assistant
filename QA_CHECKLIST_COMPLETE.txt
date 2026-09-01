@@ -2,7 +2,7 @@
 CLARIFY AI â€” COMPLETE APPLICATION QA CHECKLIST
 ================================================================================
 FOR QA TESTER â€” FULL PASS TARGET: SAME DAY
-Product : Clarify AI (Interview Prep & Practice Platform)
+Product : Career Pilot (Interview Prep & Practice Platform)
 Date    : _______________
 Tester  : _______________
 Browser : Chrome (primary) + one of Edge/Firefox/mobile Safari
@@ -19,7 +19,7 @@ App home   : https://clarify.ai.sltfinanceindia.com/app/dashboard
 
 Do NOT use localhost unless asked. All checks below are against the published site.
 
-If the page stays on "Loading Clarify AIâ€¦" for more than ~10 seconds:
+If the page stays on "Loading Career Pilotâ€¦" for more than ~10 seconds:
   - Hard refresh (Ctrl+Shift+R)
   - Try Incognito
   - Note FAIL on Pre-flight and stop until build is fixed
@@ -66,7 +66,7 @@ Write Fail notes at the bottom (URL + steps + screenshot name).
 0. PRE-FLIGHT / ENVIRONMENT  (site: https://clarify.ai.sltfinanceindia.com/)
 --------------------------------------------------------------------------------
 [ ] P0  Open URL â€” app leaves splash and shows landing (not stuck loading)
-[ ] P0  Landing shows Clarify AI brand, headline, CTA
+[ ] P0  Landing shows Career Pilot brand, headline, CTA
 [ ] P0  No fatal red errors in browser Console on cold load
 [ ] P0  /login and /signup pages open
 [ ] P0  Login with Pro credentials succeeds â†’ reaches /app/dashboard
@@ -495,13 +495,13 @@ NOTES FOR TESTER
 ================================================================================
 
 ================================================================================
-INCIDENT RECHECK — INC-2026-08-005 (Auth / CSP / Dashboard) — 2026-08-05
+INCIDENT RECHECK ï¿½ INC-2026-08-005 (Auth / CSP / Dashboard) ï¿½ 2026-08-05
 ================================================================================
 Site: https://clarify.ai.sltfinanceindia.com/
 Ledger: docs/qa/incidents/2026-08-auth-csp-dashboard-remediation.md
 
-[P] P0  GET /dashboard returns SPA HTML (HTTP 200) — hosting rewrite OK
-[P] P0  Vitest sessionRecovery (14/14) — invalid refresh, returnTo, redaction
+[P] P0  GET /dashboard returns SPA HTML (HTTP 200) ï¿½ hosting rewrite OK
+[P] P0  Vitest sessionRecovery (14/14) ï¿½ invalid refresh, returnTo, redaction
 [ ] P0  Deploy follow-up CHG-013+ so structured-data.js is removed from prod HTML
 [ ] P0  Cold load console: no CSP font/inline script violations after deploy
 [ ] P0  Stale refresh token ? /login?reason=session_expired (single clear, no loop)
@@ -510,13 +510,13 @@ Ledger: docs/qa/incidents/2026-08-auth-csp-dashboard-remediation.md
 [ ] P1  Health log shows supabaseConfigured=true (no key= fragment)
 [ ] P1  Playwright e2e/auth-recovery.spec.ts on deployed URL
 
-Release decision (repo): CONDITIONAL GO — awaiting production redeploy + smoke.
+Release decision (repo): CONDITIONAL GO ï¿½ awaiting production redeploy + smoke.
 
 ================================================================================
-INCIDENT RECHECK — Profile timeout / CSP / consistency — 2026-08-05 (evening)
+INCIDENT RECHECK ï¿½ Profile timeout / CSP / consistency ï¿½ 2026-08-05 (evening)
 ================================================================================
 Root causes addressed in repo (deploy required for production):
-[P] Profile fetch uses BOOT columns + 2s timeout (was slow wide select / 4–20s)
+[P] Profile fetch uses BOOT columns + 2s timeout (was slow wide select / 4ï¿½20s)
 [P] Missing profile rows auto-upserted for authenticated users
 [P] AppLoadingFallback stuck budget 20s + soft retry (was 10s hard reload race)
 [P] ProtectedRoute: Try again / Reload / Contact support (no raw timeout string)
@@ -528,4 +528,4 @@ Root causes addressed in repo (deploy required for production):
 [ ] Post-deploy: console clean of CSP font/inline script errors
 [ ] Post-deploy: inject stale refresh ? session_expired once (no loop)
 
-Decision: CONDITIONAL GO — code ready; production redeploy still required.
+Decision: CONDITIONAL GO ï¿½ code ready; production redeploy still required.

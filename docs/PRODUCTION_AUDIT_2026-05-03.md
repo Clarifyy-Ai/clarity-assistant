@@ -1,4 +1,4 @@
-# Clarify AI — Production Readiness Audit
+# Career Pilot — Production Readiness Audit
 **Date:** 2026-05-03
 **Supersedes:** `docs/AUDIT_2026-05-01.md`
 **Method:** Static review of every route in `src/App.tsx`, every page file under `src/pages/**`, all 38 Edge Functions in `supabase/functions/**`, and the live database schema (40+ tables, 51 user-defined functions, RLS policies, secrets, storage buckets). Cross-checked with `supabase--linter` and project memory.

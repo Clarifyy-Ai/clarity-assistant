@@ -727,7 +727,7 @@ export async function setupSupabaseMocks(
             },
           },
         ],
-        disclaimer: "Clarify AI is an independent preparation platform.",
+        disclaimer: "Career Pilot is an independent preparation platform.",
       });
     }
 

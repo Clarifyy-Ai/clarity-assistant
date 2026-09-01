@@ -1,4 +1,4 @@
-# Electron production smoke checklist — Clarify AI v1.0.0
+# Electron production smoke checklist — Career Pilot v1.0.0
 
 Honest product note: the desktop app is a **framed companion overlay window** with global shortcuts, not a frameless transparent always-on-top stealth HUD unless the user explicitly enables content-protection / stealth opt-in.
 

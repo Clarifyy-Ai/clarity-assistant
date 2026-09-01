@@ -1,5 +1,5 @@
 COMPLETE APPLICATION IMPLEMENTATION PERCENTAGE AUDIT
-Clarify AI / clarity-assistant
+Career Pilot / clarity-assistant
 Audit date: 2026-08-15
 Auditor roles applied: Principal Architect, Full-Stack Engineer, Supabase/Postgres Security Engineer, QA Lead, Product Manager, UI/UX Accessibility Expert
 Method: repository source + live remote project evidence. Documentation, TODOs, filenames, and prior audit docs were not treated as proof.
@@ -45,7 +45,7 @@ not observe a passing GitHub Actions run.
 1. EXECUTIVE SUMMARY
 ================================================================================
 This repository is a B2C AI interview-preparation and India government-exam platform
-(Clarify AI / Clarify Coach), not a multi-organization SaaS. There is no organizations
+(Career Pilot / Career Pilot), not a multi-organization SaaS. There is no organizations
 table, no org_id tenant column, no departments/teams/invitations/subdomains/branding
 portals, and no org-type module provisioning. Tenant isolation is user-scoped
 (auth.uid()). Roles are app_role = admin | moderator | user, with only admin wired.

@@ -20,7 +20,7 @@ export const OVERLAY_HOTKEY_CATALOG: OverlayHotkeyCatalogEntry[] = [
   {
     keys: ["ctrl", "shift", "h"],
     label: "Toggle overlay",
-    description: "Show or hide the Clarify AI overlay",
+    description: "Show or hide the Career Pilot overlay",
     group: "visibility",
   },
   {

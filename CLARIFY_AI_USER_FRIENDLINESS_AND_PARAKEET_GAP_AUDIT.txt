@@ -4,7 +4,7 @@ Complete “what’s missing / what’s confusing / how to feel as simple as
 Parakeet AI” companion to the UI/UX Implementation Audit (30 July 2026).
 ================================================================================
 
-Product ............... Clarify AI (clarify-ai / clarity-assistant)
+Product ............... Career Pilot (clarify-ai / clarity-assistant)
 Audit date ............ 31 July 2026
 Status refresh ........ 1 August 2026 (post Full UX Agent Waves)
 Based on ..............
@@ -16,7 +16,7 @@ Based on ..............
 
 IMPORTANT POSITIONING NOTE
   Parakeet AI is marketed as a LIVE interview copilot (real-time answers
-  during real interviews). Clarify AI is positioned as PRACTICE-first with
+  during real interviews). Career Pilot is positioned as PRACTICE-first with
   compliance messaging. “Work like Parakeet” here means MATCH THE FEEL:
   one-click start, minimal mid-session UI, fast confidence, instant wrap-up —
   NOT copy deceptive “use this on a real interview to cheat” product framing.
@@ -40,7 +40,7 @@ HOW TO USE THIS DOC
 PART 0 — VERDICT IN ONE PAGE
 ================================================================================
 
-Clarify AI is FEATURE-RICH. Before the UX waves it was FRICTION-HEAVY.
+Career Pilot is FEATURE-RICH. Before the UX waves it was FRICTION-HEAVY.
 Parakeet AI is FEATURE-NARROW but FRICTION-LIGHT.
 
 Competitive UX problem = friction on the core practice loop, not missing

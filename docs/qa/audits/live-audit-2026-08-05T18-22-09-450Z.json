@@ -547,7 +547,7 @@
       "section": "BROWSER",
       "id": "page /login",
       "status": "PASS",
-      "detail": "title=Sign in | Clarify AI url=https://clarify.ai.sltfinanceindia.com/login",
+      "detail": "title=Sign in | Career Pilot url=https://clarify.ai.sltfinanceindia.com/login",
       "evidence": {},
       "ts": "2026-08-05T18:20:53.650Z"
     },
@@ -555,7 +555,7 @@
       "section": "BROWSER",
       "id": "page /signup",
       "status": "PASS",
-      "detail": "title=Create account | Clarify AI url=https://clarify.ai.sltfinanceindia.com/signup",
+      "detail": "title=Create account | Career Pilot url=https://clarify.ai.sltfinanceindia.com/signup",
       "evidence": {},
       "ts": "2026-08-05T18:20:55.628Z"
     },
@@ -563,7 +563,7 @@
       "section": "BROWSER",
       "id": "page /pricing",
       "status": "PASS",
-      "detail": "title=Pricing — Clarify AI url=https://clarify.ai.sltfinanceindia.com/pricing",
+      "detail": "title=Pricing — Career Pilot url=https://clarify.ai.sltfinanceindia.com/pricing",
       "evidence": {},
       "ts": "2026-08-05T18:20:57.774Z"
     },
@@ -571,7 +571,7 @@
       "section": "BROWSER",
       "id": "page /help",
       "status": "PASS",
-      "detail": "title=Help Center — Clarify AI url=https://clarify.ai.sltfinanceindia.com/help",
+      "detail": "title=Help Center — Career Pilot url=https://clarify.ai.sltfinanceindia.com/help",
       "evidence": {},
       "ts": "2026-08-05T18:20:59.724Z"
     },
@@ -608,7 +608,7 @@
       "section": "BROWSER",
       "id": "shell text after login",
       "status": "INFO",
-      "detail": "Clarify AI\n\nPRACTICE\n\nDashboard\nPractice Coach\nMock Interview\nPrep Lab\nGov Exam Mock Tests\n\nPROGRESS\n\nSession History\nSkills Analytics\nCredits & Usage\nDebrief\nReferrals\nDocuments\nAnswer Bank\n\nPLANNER\n\nInterview Day\nInterviews\nCompany Research\nGuide\nNotifications\nSettings\nQ\n\nQA Audit User\n\nPro | Interview Practice\n1029\ncredits\nDiscrete UI\n\nPress Ctrl+K to jump anywhere fast.\n\nQ | Edit with",
+      "detail": "Career Pilot\n\nPRACTICE\n\nDashboard\nPractice Coach\nMock Interview\nPrep Lab\nGov Exam Mock Tests\n\nPROGRESS\n\nSession History\nSkills Analytics\nCredits & Usage\nDebrief\nReferrals\nDocuments\nAnswer Bank\n\nPLANNER\n\nInterview Day\nInterviews\nCompany Research\nGuide\nNotifications\nSettings\nQ\n\nQA Audit User\n\nPro | Interview Practice\n1029\ncredits\nDiscrete UI\n\nPress Ctrl+K to jump anywhere fast.\n\nQ | Edit with",
       "evidence": {},
       "ts": "2026-08-05T18:21:20.043Z"
     },
@@ -696,7 +696,7 @@
       "section": "BROWSER",
       "id": "mobile landing",
       "status": "PASS",
-      "detail": "title=Clarify AI — Practice every interview with AI by your side",
+      "detail": "title=Career Pilot — Practice every interview with AI by your side",
       "evidence": {},
       "ts": "2026-08-05T18:22:09.303Z"
     },

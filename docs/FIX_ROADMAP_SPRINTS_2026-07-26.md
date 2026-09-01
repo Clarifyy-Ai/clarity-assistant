@@ -1,4 +1,4 @@
-# Clarify AI — Fix Roadmap by Sprint
+# Career Pilot — Fix Roadmap by Sprint
 
 **Date:** 2026-07-26  
 **Source:** Master audit Agents 1–5 (final addendum: Database/Supabase)  

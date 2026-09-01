@@ -79,7 +79,7 @@ function renderMarkdown(text: string): React.ReactNode[] {
 
 function NotFound() {
   usePageMeta({
-    title: "Article not found — Help — Clarify AI",
+    title: "Article not found — Help — Career Pilot",
     description: "The requested help article could not be found.",
     noIndex: true,
   });
@@ -215,15 +215,15 @@ export default function HelpArticle() {
   }, [slug]);
 
   const pageTitle = categoryArticles
-    ? `${categoryArticles[0]?.category_title ?? "Help"} — Help — Clarify AI`
+    ? `${categoryArticles[0]?.category_title ?? "Help"} — Help — Career Pilot`
     : article
-      ? `${article.question} — Help — Clarify AI`
-      : "Help — Clarify AI";
+      ? `${article.question} — Help — Career Pilot`
+      : "Help — Career Pilot";
   const pageDesc = categoryArticles
-    ? `Help articles about ${categoryArticles[0]?.category_title?.toLowerCase() ?? "Clarify AI"}.`
+    ? `Help articles about ${categoryArticles[0]?.category_title?.toLowerCase() ?? "Career Pilot"}.`
     : article
       ? article.answer.replace(/\*\*/g, "").slice(0, 155)
-      : "Clarify AI help center.";
+      : "Career Pilot help center.";
 
   usePageMeta({
     title: pageTitle,

@@ -30,7 +30,7 @@ const emptyForm = (): Omit<BlogPost, "id"> => ({
   excerpt: "",
   content: "",
   category: "Product",
-  author: "Clarify AI",
+  author: "Career Pilot",
   published: false,
   published_at: new Date().toISOString(),
   read_time: "5 min",

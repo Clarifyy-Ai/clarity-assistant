@@ -16,7 +16,7 @@ export const GITHUB_ORG_URL =
   "https://github.com/Clarifyy-Ai";
 
 /** Product / service brand name shown in UI and marketing. */
-export const COMPANY_NAME = "Clarify AI";
+export const COMPANY_NAME = "Career Pilot";
 
 /** Legal operator name for Terms, Privacy, footer, and email — not the registered entity suffix. */
 export const LEGAL_ENTITY_NAME = "Payara Labs";

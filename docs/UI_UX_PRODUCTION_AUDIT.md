@@ -1,4 +1,4 @@
-# Clarify AI — UI/UX Production Audit Report
+# Career Pilot — UI/UX Production Audit Report
 
 **Audit date:** June 28, 2026  
 **Scope:** Full application — marketing, auth, onboarding, app shell, admin, overlay, design system  
@@ -9,7 +9,7 @@
 
 ## Executive Summary
 
-Clarify AI has a **solid shadcn/Radix foundation** with a parallel custom component layer (Button, Card, Modal, Tabs, Input). The product is **functionally rich** and approaching production quality, but suffers from **pattern fragmentation** across pages — inconsistent headers, loading states, empty states, and hardcoded color classes (`violet-*`, `blue-400`) that bypass semantic design tokens.
+Career Pilot has a **solid shadcn/Radix foundation** with a parallel custom component layer (Button, Card, Modal, Tabs, Input). The product is **functionally rich** and approaching production quality, but suffers from **pattern fragmentation** across pages — inconsistent headers, loading states, empty states, and hardcoded color classes (`violet-*`, `blue-400`) that bypass semantic design tokens.
 
 **This audit cycle implemented foundational design-system fixes** that propagate globally. **Phase 1–4 implementation completed** — see Appendix C for full changelog.
 
@@ -286,7 +286,7 @@ Added utility: `.interactive-surface` for reusable hover/active pattern.
 3. **Header patterns:** PageHeader vs raw h1 vs Settings sidebar
 4. **Loading:** 6+ distinct patterns
 5. **Empty states:** EmptyState vs inline text vs upload zones
-6. **Brand naming:** "Clarify" vs "Clarify AI" vs "ClarifyPrep"
+6. **Brand naming:** "Clarify" vs "Career Pilot" vs "ClarifyPrep"
 7. **Link colors:** blue-400, violet-400, primary mixed
 
 ### Consolidation Target
@@ -600,7 +600,7 @@ Six parallel agent passes implemented all recommended improvements:
 
 | Agent | Deliverables |
 |-------|-------------|
-| **Tokens & brand** | Violet→primary on 12 top files; Badge `violet` aliases `primary`; ClarifyPrep→Clarify AI copy |
+| **Tokens & brand** | Violet→primary on 12 top files; Badge `violet` aliases `primary`; ClarifyPrep→Career Pilot copy |
 | **Settings & pages** | `SettingsPageShell` + 10 settings pages; EmptyState/retry/skeleton on SessionDetail, JDDetail, Scorecard, AdminUsers, AdminRevenue, PracticeCoachGuide; SessionHistory deleted |
 | **Billing & Help** | `CreditExhaustedState`; credit pack comparison table; Help debounce + popular articles |
 | **Product UX** | Debrief share preview modal; upload toasts; onboarding skip CTA; prominent setup banner; overlay-default setting |

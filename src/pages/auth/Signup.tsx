@@ -138,8 +138,8 @@ type SignupFormInput = z.infer<typeof signupSchema>;
 
 export default function Signup(): JSX.Element {
   usePageMeta({
-    title: "Create account | Clarify AI",
-    description: "Create your Clarify AI account.",
+    title: "Create account | Career Pilot",
+    description: "Create your Career Pilot account.",
     noIndex: true,
   });
   const navigate = useNavigate();
@@ -283,7 +283,7 @@ export default function Signup(): JSX.Element {
 
           <div className="mb-7">
             <h1 className="text-2xl font-bold text-foreground">
-              Create your account
+              Create your Career Pilot account
             </h1>
             <p className="text-muted-foreground text-sm mt-1">
               Start your interview prep journey today

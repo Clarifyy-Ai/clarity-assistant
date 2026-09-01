@@ -19,8 +19,8 @@ export default function ContactSales() {
   const [mailtoFallback, setMailtoFallback] = useState(false);
 
   usePageMeta({
-    title: "Contact Sales · Clarify AI",
-    description: "Talk to Clarify AI about Pro, Max, and team plans.",
+    title: "Contact Sales · Career Pilot",
+    description: "Talk to Career Pilot about Pro, Max, and team plans.",
   });
 
   async function onSubmit(e: FormEvent) {

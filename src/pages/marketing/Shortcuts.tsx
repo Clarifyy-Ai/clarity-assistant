@@ -80,8 +80,8 @@ function KeyBadge({ children }: { children: string }) {
 
 export default function Shortcuts() {
   usePageMeta({
-    title: "Keyboard Shortcuts — Clarify AI",
-    description: "Keyboard shortcuts for navigation, live sessions, mock practice, and settings in Clarify AI.",
+    title: "Keyboard Shortcuts — Career Pilot",
+    description: "Keyboard shortcuts for navigation, live sessions, mock practice, and settings in Career Pilot.",
   });
 
   return (
@@ -91,7 +91,7 @@ export default function Shortcuts() {
           <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
             <Keyboard className="w-10 h-10 text-primary mx-auto mb-4" />
             <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight">Keyboard Shortcuts</h1>
-            <p className="mt-4 text-lg text-muted-foreground">Navigate and control Clarify AI like a pro</p>
+            <p className="mt-4 text-lg text-muted-foreground">Navigate and control Career Pilot like a pro</p>
             <p className="mt-2 text-sm text-muted-foreground/70">
               Showing shortcuts for {isMac ? "macOS" : "Windows/Linux"}
             </p>

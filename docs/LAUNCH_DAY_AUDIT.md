@@ -1,4 +1,4 @@
-# Clarify AI — Launch Day Production Audit
+# Career Pilot — Launch Day Production Audit
 
 **Audit date:** June 29, 2026 (launch: June 30, 2026)  
 **Scope:** Full application — web, Supabase, Edge Functions, Electron, billing, AI  
@@ -45,7 +45,7 @@
 ✅ npm run pre-deploy (19 migrations, 45 edge functions, session enforcement)
 ✅ npm run build (42s)
 ✅ npm run test:run — 172 tests passed, 776 placeholder todos skipped
-✅ Electron — window opens, sign-in renders (release/Clarify AI Setup 1.0.0.exe)
+✅ Electron — window opens, sign-in renders (release/Career Pilot Setup 1.0.0.exe)
 ✅ Compliance — capture evasion removed (COMPLIANCE_GATING.md)
 ```
 
@@ -107,7 +107,7 @@ npm run publish:desktop-installer
 # Redeploy web with printed VITE_DESKTOP_DOWNLOAD_URL_WIN
 ```
 
-Or distribute `release\Clarify AI Setup 1.0.0.exe` directly for early users.
+Or distribute `release\Career Pilot Setup 1.0.0.exe` directly for early users.
 
 ### 4. Stripe webhook (15 min)
 

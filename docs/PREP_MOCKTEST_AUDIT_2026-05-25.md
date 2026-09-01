@@ -57,7 +57,7 @@
 ## 3. Remaining / manual test
 
 - Populate `questions` table (upload, admin seed, or `SYSTEM_USER_ID` + gap-fill)
-- Add `ClarifyAI_Question_Template.xlsx` to `public/` or fix download path
+- Add `CareerPilot_Question_Template.xlsx` to `public/` or fix download path
 - CSV import (not implemented — Excel only)
 - `StarBuilder.tsx` still uses `supabase.functions.invoke` — verify envelope
 - Deploy updated `select-test-questions` edge function to Supabase

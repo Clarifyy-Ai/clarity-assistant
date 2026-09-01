@@ -144,7 +144,7 @@
     "status": "Pass",
     "module": "Public Pages",
     "feature": "Shortcuts",
-    "notes": "user see the shortcut keys of Clarify AI commands and information",
+    "notes": "user see the shortcut keys of Career Pilot commands and information",
     "actual": "User see the shortcut page successfully without error",
     "defect": null,
     "expected": "Shortcuts page loads",

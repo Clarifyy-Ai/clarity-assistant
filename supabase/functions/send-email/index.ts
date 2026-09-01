@@ -14,7 +14,7 @@ const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const FROM_EMAIL =
   Deno.env.get("RESEND_FROM_EMAIL") ??
   Deno.env.get("FROM_EMAIL") ??
-  "Clarify AI <noreply@clarifyprep.com>";
+  "Career Pilot <noreply@clarifyprep.com>";
 /** Public legal operator name — not "Payara Innovations Private Limited". */
 const LEGAL_ENTITY_NAME = "Payara Labs";
 
@@ -98,11 +98,11 @@ function renderTemplate(type: EmailType, data: Record<string, unknown>) {
 <head>
   <meta charset="utf-8"/>
   <style>
-    body { font-family: system-ui, sans-serif; background: #0a0a0f; color: #e2e2e2; margin: 0; padding: 0; }
+    body { font-family: Inter, system-ui, sans-serif; background: #0B1220; color: #F5F7FA; margin: 0; padding: 0; }
     .container { max-width: 560px; margin: 0 auto; padding: 40px 24px; }
-    .logo { font-size: 20px; font-weight: 900; color: #8b5cf6; margin-bottom: 32px; }
-    .card { background: #13131f; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 24px; margin: 16px 0; }
-    .btn { display: inline-block; background: #7c3aed; color: white !important; text-decoration: none; padding: 12px 24px; border-radius: 12px; font-weight: 600; font-size: 14px; margin-top: 16px; }
+    .logo { font-size: 20px; font-weight: 800; color: #38BDF8; margin-bottom: 32px; }
+    .card { background: #163B73; border: 1px solid rgba(56,189,248,0.18); border-radius: 16px; padding: 24px; margin: 16px 0; }
+    .btn { display: inline-block; background: #2563EB; color: white !important; text-decoration: none; padding: 12px 24px; border-radius: 12px; font-weight: 600; font-size: 14px; margin-top: 16px; }
     h1 { font-size: 24px; font-weight: 800; margin: 0 0 8px; }
     p { font-size: 14px; color: #9ca3af; line-height: 1.6; margin: 8px 0; }
     .footer { font-size: 11px; color: #4b5563; margin-top: 32px; text-align: center; }
@@ -110,7 +110,7 @@ function renderTemplate(type: EmailType, data: Record<string, unknown>) {
 </head>
 <body>
 <div class="container">
-  <div class="logo">⚡ Clarify AI</div>
+  <div class="logo">Career Pilot</div>
   ${inner}
   <div class="footer">
     © ${new Date().getFullYear()} ${LEGAL_ENTITY_NAME} · <a href="https://confideq.app/unsubscribe" style="color:#4b5563;">Unsubscribe</a>
@@ -143,7 +143,7 @@ function renderTemplate(type: EmailType, data: Record<string, unknown>) {
       };
     case "weekly_report":
       return {
-        subject: `Your weekly Clarify AI report — ${safe(data.sessions_this_week)} sessions`,
+        subject: `Your weekly Career Pilot report — ${safe(data.sessions_this_week)} sessions`,
         html: base(`
           <div class="card">
             <h1>This week's summary</h1>
@@ -154,7 +154,7 @@ function renderTemplate(type: EmailType, data: Record<string, unknown>) {
       };
     case "welcome":
       return {
-        subject: "Welcome to Clarify AI! 🎉",
+        subject: "Welcome to Career Pilot! 🎉",
         html: base(`
           <div class="card">
             <h1>Welcome ${safe(data.name)}</h1>
@@ -182,7 +182,7 @@ function renderTemplate(type: EmailType, data: Record<string, unknown>) {
           </div>`),
       };
     default:
-      return { subject: "Clarify AI Notification", html: base("<div class='card'>Hello!</div>") };
+      return { subject: "Career Pilot Notification", html: base("<div class='card'>Hello!</div>") };
   }
 }
 

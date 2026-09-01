@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Validates the env vars required to build/package the Clarify AI Electron
+ * Validates the env vars required to build/package the Career Pilot Electron
  * desktop app. Fails on errors; warnings (e.g. OAuth unset) do not fail.
  *
  * Usage: npm run electron:check-config

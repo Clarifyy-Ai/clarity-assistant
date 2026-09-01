@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { m, AnimatePresence } from "framer-motion";
 import { Clock, CheckCircle2, Landmark } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 
 const GOV_EXAMS = ["UPSC CSE", "SSC CGL", "IBPS PO", "HPCL", "PSU"];
 const PALETTE_SIZE = 24;
@@ -78,7 +79,7 @@ export function GovExamShowcase({ compact = false, className }: GovExamShowcaseP
           </div>
           <div>
             <p className={cn("font-bold text-foreground", compact ? "text-xs" : "text-sm")}>
-              Gov Exam Mock Tests
+              {PRODUCT_NAMES.govExams}
             </p>
             <p className="text-[10px] text-muted-foreground">
               Official PYP papers · timed exam mode

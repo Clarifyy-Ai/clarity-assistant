@@ -1,6 +1,6 @@
-# Clarify AI Launch Checklist — Alignment Tracker
+# Career Pilot Launch Checklist — Alignment Tracker
 
-Maps the [Clarify AI production launch checklist](./Clarify AI_SPEC.md) (sections A–F) to this repo.  
+Maps the [Career Pilot production launch checklist](./Career Pilot_SPEC.md) (sections A–F) to this repo.  
 Legend: ✅ done · ⚠️ partial · ❌ not done
 
 **Last reviewed:** 2026-06-28 (Full launch implementation pass)
@@ -152,7 +152,7 @@ Legend: ✅ done · ⚠️ partial · ❌ not done
 | E Legal | 10% | 45% |
 | F Go-live | 15% | 30% |
 
-**Weighted overall: ~43%** toward full Clarify AI launch checklist.
+**Weighted overall: ~43%** toward full Career Pilot launch checklist.
 
 **P0 before public launch (from audits):** apply security migrations, deploy edge functions, set secrets, Stripe round-trip, block or gate practice rooms WebRTC, enable leaked-password protection in Supabase Auth.
 
@@ -163,7 +163,7 @@ Legend: ✅ done · ⚠️ partial · ❌ not done
 | Deliverable | Status |
 |-------------|--------|
 | Server-side session-type AI enforcement | ✅ |
-| `Clarify AI_ALIGNMENT.md` | ✅ |
-| `Clarify AI_SPEC.md` | ✅ |
+| `Career Pilot_ALIGNMENT.md` | ✅ |
+| `Career Pilot_SPEC.md` | ✅ |
 | `pre-deploy-check.mjs` session migration check | ✅ |
 | Terms Acceptable Use deception ban | ✅ |

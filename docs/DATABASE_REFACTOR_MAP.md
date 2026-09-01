@@ -1,4 +1,4 @@
-# Clarify AI — database.ts decomposition map
+# Career Pilot — database.ts decomposition map
 
 Incremental refactor only. Do not big-bang rewrite.
 

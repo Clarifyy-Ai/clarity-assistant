@@ -4,5 +4,5 @@ Canonical: https://clarify.ai.sltfinanceindia.com/.well-known/security.txt
 Policy: https://clarify.ai.sltfinanceindia.com/privacy
 Acknowledgments: https://clarify.ai.sltfinanceindia.com/help
 
-# Clarify AI security contact
+# Career Pilot security contact
 # Report vulnerabilities responsibly to security@clarifyprep.com

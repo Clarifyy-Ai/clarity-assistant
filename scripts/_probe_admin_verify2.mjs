@@ -200,7 +200,7 @@ if (auth.error) throw new Error(auth.error.message);
       excerpt: "e",
       content: "c",
       category: "Product",
-      author: "Clarify AI",
+      author: "Career Pilot",
       published: true,
       published_at: new Date().toISOString(),
       read_time: "1 min",

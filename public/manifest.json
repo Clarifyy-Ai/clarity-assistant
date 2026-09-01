@@ -1,13 +1,13 @@
 {
-  "name": "Clarify AI",
-  "short_name": "Clarify",
-  "description": "Clarify AI — interview practice coach for desktop and mobile",
+  "name": "Career Pilot",
+  "short_name": "Career Pilot",
+  "description": "Career Pilot — AI-powered career and exam preparation",
   "start_url": "/app/dashboard",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#020617",
-  "theme_color": "#0f172a",
+  "background_color": "#0B1220",
+  "theme_color": "#163B73",
   "icons": [
     {
       "src": "/brand/app-icon-192.png",

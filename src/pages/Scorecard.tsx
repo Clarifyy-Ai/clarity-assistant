@@ -97,7 +97,7 @@ export default function Scorecard() {
             title={isNoAnswersError ? "Session incomplete — no scorecard" : "Not scored"}
             description={
               error ??
-              "No server scorecard exists for this session yet. Clarify AI does not invent a numeric score in the browser."
+              "No server scorecard exists for this session yet. Career Pilot does not invent a numeric score in the browser."
             }
             actionLabel={isNoAnswersError ? "Back to mock interviews" : "Generate scorecard"}
             onAction={

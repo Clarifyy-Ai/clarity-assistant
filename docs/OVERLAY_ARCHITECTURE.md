@@ -1,6 +1,6 @@
-# Overlay Architecture — Clarify AI Practice Coach
+# Overlay Architecture — Career Pilot Practice Coach
 
-Clarify AI’s desktop coaching overlay is an **original, consent-based practice assistant**.
+Career Pilot’s desktop coaching overlay is an **original, consent-based practice assistant**.
 It is not a proctoring bypass, concealment tool, or undetectable assessment utility.
 
 ## Surfaces

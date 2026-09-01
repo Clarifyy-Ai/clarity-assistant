@@ -1,4 +1,4 @@
-# Clarify AI
+# Career Pilot
 
 > AI-powered interview preparation platform: live practice coaching during mock and rehearsal sessions, full mock-interview engine with AI-graded scorecards, and a prep lab covering behavioral, technical, and system-design rounds. AI features are for preparation only — not for use during actual third-party interviews.
 
@@ -12,7 +12,7 @@
 - [Terms](/terms): Terms of Service.
 - [Privacy](/privacy): Privacy Policy and data handling.
 - [Sign up](/signup): Create a free account (200 credits/month).
-- [Log in](/login): Sign in to your Clarify AI account.
+- [Log in](/login): Sign in to your Career Pilot account.
 
 ## Key features
 

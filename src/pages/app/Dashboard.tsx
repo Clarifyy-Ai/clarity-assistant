@@ -377,9 +377,9 @@ export default function Dashboard() {
               <Sparkles className="w-7 h-7 text-primary" />
             </div>
             <div className="space-y-1.5 max-w-md">
-              <h3 className="text-lg font-bold text-foreground">Welcome to Clarify AI!</h3>
+              <h3 className="text-lg font-bold text-foreground">Welcome to Career Pilot!</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Start your first {getStealthLabel(PRODUCT_NAMES.practiceCoach, stealth).toLowerCase()} session to get real-time coaching.
+                Career Pilot helps you prepare for interviews, exams, and career growth. Start your first {getStealthLabel(PRODUCT_NAMES.practiceCoach, stealth).toLowerCase()} session to get real-time coaching.
               </p>
             </div>
             <Link
@@ -419,7 +419,7 @@ export default function Dashboard() {
             <div data-testid="desktop-installer-copy" className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-foreground">Desktop app</p>
               <p className="text-xs text-muted-foreground mt-0.5 break-words">
-                Install Clarify AI for system-wide hotkeys and the floating Practice Coach overlay.
+                Install Career Pilot for system-wide hotkeys and the floating Practice Coach overlay.
               </p>
             </div>
           </div>

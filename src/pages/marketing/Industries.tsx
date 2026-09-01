@@ -13,7 +13,7 @@ export default function Industries() {
   usePageMeta({
     title: `Industries — ${PRODUCT_NAMES.brand}`,
     description:
-      "Clarify AI is used for software interview practice and government exam mock tests in India. No customer logos.",
+      "Career Pilot is used for software interview practice and government exam mock tests in India. No customer logos.",
     canonical: `${SITE_URL}/industries`,
   });
 

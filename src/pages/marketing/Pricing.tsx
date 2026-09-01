@@ -51,15 +51,15 @@ export default function Pricing() {
   );
 
   usePageMeta({
-    title: "Pricing — Clarify AI",
+    title: "Pricing — Career Pilot",
     description: "Simple, transparent pricing for interview prep and rehearsal. Free, Pro, and Max — one-time Razorpay purchases in INR, no auto-renew.",
     canonical: `${SITE_URL}/pricing`,
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Product",
-      name: "Clarify AI",
+      name: "Career Pilot",
       description: "AI-powered interview preparation platform with live practice coaching, mock interviews, and a prep lab.",
-      brand: { "@type": "Brand", name: "Clarify AI" },
+      brand: { "@type": "Brand", name: "Career Pilot" },
       offers,
     },
   });

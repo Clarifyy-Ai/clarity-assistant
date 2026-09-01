@@ -131,7 +131,7 @@ export default function AssessmentTemplatesPage() {
     <div className={PAGE_SHELL}>
       <PageHeader
         title="Exam Templates"
-        description="Clarify original assessments assembled from the internal question bank. These are not official certification papers."
+        description="Career Pilot original assessments assembled from the internal question bank. These are not official certification papers."
       />
       <div className={STACK_GRID}>
         {loading && (
@@ -147,7 +147,7 @@ export default function AssessmentTemplatesPage() {
           <EmptyState
             icon={ClipboardList}
             title="No assessments published yet"
-            description="Clarify original templates will appear here once an admin publishes them."
+            description="Career Pilot original templates will appear here once an admin publishes them."
           />
         )}
         {!loading && !loadError && templates.map((template) => (

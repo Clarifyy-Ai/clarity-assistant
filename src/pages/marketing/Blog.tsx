@@ -38,8 +38,8 @@ function formatDate(dateStr: string) {
 export default function Blog() {
   const navigate = useNavigate();
   usePageMeta({
-    title: "Blog — Clarify AI",
-    description: "Interview prep guides, STAR method tips, and AI coaching insights from Clarify AI.",
+    title: "Blog — Career Pilot",
+    description: "Interview prep guides, STAR method tips, and AI coaching insights from Career Pilot.",
     canonical: "/blog",
     ogType: "website",
   });

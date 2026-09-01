@@ -609,7 +609,7 @@
       "original_status": "Pass",
       "defect_id": null,
       "actual": "User see the shortcut page successfully without error",
-      "notes": "user see the shortcut keys of Clarify AI commands and information",
+      "notes": "user see the shortcut keys of Career Pilot commands and information",
       "problem_hits": [
         "error"
       ],

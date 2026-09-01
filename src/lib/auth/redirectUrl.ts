@@ -14,7 +14,7 @@
  * In that case, fall back to the known production origin instead.
  */
 
-/** Canonical production origin for Clarify AI. Keep in sync with docs/QA_ENVIRONMENTS.md. */
+/** Canonical production origin for Career Pilot. Keep in sync with docs/QA_ENVIRONMENTS.md. */
 export const PRODUCTION_APP_URL = "https://clarify.ai.sltfinanceindia.com";
 
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1"]);

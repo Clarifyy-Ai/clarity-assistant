@@ -738,14 +738,14 @@ export async function getUserPlanId(userId: string): Promise<PlanId> {
 
 export async function cancelSubscription(): Promise<void> {
   throw new BillingError(
-    "Subscriptions are not available. Clarify AI uses one-time Razorpay purchases.",
+    "Subscriptions are not available. Career Pilot uses one-time Razorpay purchases.",
     ErrorCode.BILLING_STRIPE_ERROR
   );
 }
 
 export async function resumeSubscription(): Promise<void> {
   throw new BillingError(
-    "Subscriptions are not available. Clarify AI uses one-time Razorpay purchases.",
+    "Subscriptions are not available. Career Pilot uses one-time Razorpay purchases.",
     ErrorCode.BILLING_STRIPE_ERROR
   );
 }

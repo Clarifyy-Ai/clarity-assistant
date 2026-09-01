@@ -65,7 +65,7 @@ export default function NotFound() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   usePageMeta({
-    title: "Page not found — Clarify AI",
+    title: "Page not found — Career Pilot",
     description: "The page you're looking for doesn't exist.",
     noIndex: true,
   });

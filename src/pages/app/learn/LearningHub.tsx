@@ -65,8 +65,8 @@ export default function LearningHubPage() {
         badge="Preview"
         description={
           isPreview
-            ? "Preview — original Clarify courses will appear here. This is not a third-party LMS and not an official certification program."
-            : "Original Clarify courses. This is not a third-party LMS and not an official certification program."
+            ? "Preview — original Career Pilot courses will appear here. This is not a third-party LMS and not an official certification program."
+            : "Original Career Pilot courses. This is not a third-party LMS and not an official certification program."
         }
       />
       {error && (

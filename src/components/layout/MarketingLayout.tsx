@@ -75,7 +75,7 @@ const FOOTER_COLUMNS: Array<{
     links: [
       { href: `mailto:${SUPPORT_EMAIL}`, label: "Email support" },
       { to: "/help", label: "Help Center" },
-      { href: `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Clarify AI system status")}`, label: "Report an outage" },
+      { href: `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Career Pilot system status")}`, label: "Report an outage" },
       { href: GITHUB_ORG_URL, label: "GitHub", external: true },
     ],
   },
@@ -180,7 +180,7 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
           <Link
             to="/"
             className="flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label="Clarify AI home"
+            aria-label="Career Pilot home"
           >
             <BrandLogo size="md" />
           </Link>
@@ -301,7 +301,7 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
               <Link
                 to="/"
                 className="inline-flex mb-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label="Clarify AI home"
+                aria-label="Career Pilot home"
               >
                 <BrandLogo size="sm" />
               </Link>

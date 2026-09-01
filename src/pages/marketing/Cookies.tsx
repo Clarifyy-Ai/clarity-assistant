@@ -14,7 +14,7 @@ export default function Cookies() {
   usePageMeta({
     title: `Cookies — ${PRODUCT_NAMES.brand}`,
     description:
-      "How Clarify AI uses essential cookies, PostHog analytics, and Sentry crash reporting. Manage prefs in Settings → Privacy.",
+      "How Career Pilot uses essential cookies, PostHog analytics, and Sentry crash reporting. Manage prefs in Settings → Privacy.",
     canonical: `${SITE_URL}/cookies`,
   });
 

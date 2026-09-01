@@ -1,4 +1,4 @@
-# Clarify AI — Manual QA Scripts
+# Career Pilot — Manual QA Scripts
 
 For test items that cannot be automated in a jsdom sandbox.
 Each script is tagged with its catalog T-ID where possible.

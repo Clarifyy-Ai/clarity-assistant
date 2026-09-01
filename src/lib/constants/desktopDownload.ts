@@ -43,9 +43,9 @@ export const GITHUB_RELEASE_REPO =
 export const DESKTOP_INSTALL_GUIDE_PATH = "/app/guide/practice-coach";
 
 const ASSET_PATTERNS: Record<DetectedOs, RegExp[]> = {
-  windows: [/Clarify.*Setup.*\.exe$/i, /\.exe$/i, /setup.*win/i, /windows/i],
-  mac: [/Clarify.*\.dmg$/i, /\.dmg$/i, /mac/i],
-  linux: [/Clarify.*\.appimage$/i, /\.appimage$/i, /linux/i],
+  windows: [/Career.?Pilot.*Setup.*\.exe$/i, /Clarify.*Setup.*\.exe$/i, /\.exe$/i, /setup.*win/i, /windows/i],
+  mac: [/Career.?Pilot.*\.dmg$/i, /Clarify.*\.dmg$/i, /\.dmg$/i, /mac/i],
+  linux: [/Career.?Pilot.*\.appimage$/i, /Clarify.*\.appimage$/i, /\.appimage$/i, /linux/i],
   other: [/\.exe$/i, /\.dmg$/i, /\.appimage$/i],
 };
 

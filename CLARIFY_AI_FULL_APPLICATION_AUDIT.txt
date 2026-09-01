@@ -4,7 +4,7 @@ Full inventory of portals, modules, features, navigation, marketplace, checkout,
 payments, backend, database, desktop app, and implementation status.
 ================================================================================
 
-Product name .......... Clarify AI  (package name: "clarify-ai")
+Product name .......... Career Pilot  (package name: "clarify-ai")
 Repo folder ........... clarity-assistant
 Version ............... 1.0.0
 Audit date ............ 28 July 2026
@@ -51,7 +51,7 @@ PART 1 — EXECUTIVE SUMMARY AND SCORECARD
 
 1.1 WHAT THIS APPLICATION IS
 ----------------------------
-Clarify AI is an AI-powered interview preparation and rehearsal platform with a
+Career Pilot is an AI-powered interview preparation and rehearsal platform with a
 second, largely separate product line for Indian government / competitive exam
 MCQ mock tests. It ships as:
 

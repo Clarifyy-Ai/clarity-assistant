@@ -158,7 +158,7 @@
       "phase": "PUBLIC_UI",
       "id": "UI /",
       "status": "PASS",
-      "detail": "title=Clarify AI — Practice every interview with AI by your side h1=Practice every interview with AI by your side consoleErrors=1",
+      "detail": "title=Career Pilot — Practice every interview with AI by your side h1=Practice every interview with AI by your side consoleErrors=1",
       "evidence": {},
       "ts": "2026-08-05T20:02:58.506Z"
     },
@@ -166,7 +166,7 @@
       "phase": "PUBLIC_UI",
       "id": "UI /login",
       "status": "PASS",
-      "detail": "title=Sign in | Clarify AI h1=Practice interviews with an AI coach that feels real. consoleErrors=1",
+      "detail": "title=Sign in | Career Pilot h1=Practice interviews with an AI coach that feels real. consoleErrors=1",
       "evidence": {},
       "ts": "2026-08-05T20:03:01.018Z"
     },
@@ -174,7 +174,7 @@
       "phase": "PUBLIC_UI",
       "id": "UI /pricing",
       "status": "PASS",
-      "detail": "title=Pricing — Clarify AI h1=Simple, transparent pricing consoleErrors=1",
+      "detail": "title=Pricing — Career Pilot h1=Simple, transparent pricing consoleErrors=1",
       "evidence": {},
       "ts": "2026-08-05T20:03:03.473Z"
     },
@@ -182,7 +182,7 @@
       "phase": "PUBLIC_UI",
       "id": "UI /help",
       "status": "PASS",
-      "detail": "title=Help Center — Clarify AI h1=Help Center consoleErrors=1",
+      "detail": "title=Help Center — Career Pilot h1=Help Center consoleErrors=1",
       "evidence": {},
       "ts": "2026-08-05T20:03:06.397Z"
     },
@@ -414,7 +414,7 @@
       "phase": "AUTH",
       "id": "Free UI shell",
       "status": "PASS",
-      "detail": "ms=3659 shell=Clarify AI PRACTICE Dashboard Practice Coach Mock Interview Prep Lab Gov Exam Mock Tests PROGRESS Session History Skills Analytics Credits & Usage Debrief Referrals Documents Answer Bank PLANNER ",
+      "detail": "ms=3659 shell=Career Pilot PRACTICE Dashboard Practice Coach Mock Interview Prep Lab Gov Exam Mock Tests PROGRESS Session History Skills Analytics Credits & Usage Debrief Referrals Documents Answer Bank PLANNER ",
       "evidence": {},
       "ts": "2026-08-05T20:04:29.525Z"
     },
@@ -422,7 +422,7 @@
       "phase": "AUTH",
       "id": "Admin UI portal",
       "status": "PASS",
-      "detail": "ms=3441 snip=Admin Clarify AI control panel USERS & SUPPORT Users Live Chat Support Audit Log CONTENT Questions Bulk Upload Seed / Import QA Checklist GOV EXAMS Sourc",
+      "detail": "ms=3441 snip=Admin Career Pilot control panel USERS & SUPPORT Users Live Chat Support Audit Log CONTENT Questions Bulk Upload Seed / Import QA Checklist GOV EXAMS Sourc",
       "evidence": {},
       "ts": "2026-08-05T20:04:39.822Z"
     },
@@ -526,7 +526,7 @@
       "phase": "UX",
       "id": "Free shell name/plan/credits",
       "status": "PASS",
-      "detail": "Clarify AI PRACTICE Dashboard Practice Coach Mock Interview Prep Lab Gov Exam Mock Tests PROGRESS Session History Skills Analytics Credits & Usage Debrief Referrals Documents Answer Bank PLANNER Interview Day Interviews Company Research Guide N",
+      "detail": "Career Pilot PRACTICE Dashboard Practice Coach Mock Interview Prep Lab Gov Exam Mock Tests PROGRESS Session History Skills Analytics Credits & Usage Debrief Referrals Documents Answer Bank PLANNER Interview Day Interviews Company Research Guide N",
       "evidence": {},
       "ts": "2026-08-05T20:05:17.945Z"
     },

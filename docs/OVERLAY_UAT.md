@@ -2,7 +2,7 @@
 
 ## UAT: Desktop overlay rehearsal
 
-1. Install / launch Clarify Coach (Electron) or open `/app/live/rehearsal` in browser.  
+1. Install / launch Career Pilot (Electron) or open `/app/live/rehearsal` in browser.  
 2. Sign in.  
 3. Run device / microphone check (must not consume paid credits).  
 4. On Connect step, acknowledge **screen share visibility** and **responsible use**.  

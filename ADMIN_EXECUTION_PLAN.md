@@ -156,7 +156,7 @@ SELECT id, code, bonus_credits FROM promo_codes WHERE code = 'TEST0100';
 2. Click "New article"
 3. Question: "Is there a free plan?"
 4. Slug: "is-free-plan-test"
-5. Answer: "Yes, Clarify AI offers a free plan..."
+5. Answer: "Yes, Career Pilot offers a free plan..."
 6. Click "Publish"
 7. Wait for save
 8. Create another article

@@ -88,7 +88,7 @@ CASES: list[dict] = [
         "3. Check the address bar is exactly the production host (no localhost, no 127.0.0.1).\n"
         "4. Confirm landing headline and primary CTA are visible.\n"
         "5. Open DevTools Console; note any red errors (ignore known 3rd-party noise).",
-        "Splash ends. Landing shows Clarify AI branding and a real CTA. "
+        "Splash ends. Landing shows Career Pilot branding and a real CTA. "
         "Address bar is production. No infinite spinner. Config failure shows a recoverable error, not a blank page.",
         f"{SITE}/", "Venkata",
         "Must be executed against the live frontend host after deploy. Agent cannot publish or hit production DNS.",
@@ -610,7 +610,7 @@ def main() -> None:
     # ── Instructions ────────────────────────────────────────────────
     ws0 = wb.active
     ws0.title = "Instructions"
-    ws0["A1"] = "Clarify AI v1.0.0 — Final Production QA (Manual only)"
+    ws0["A1"] = "Career Pilot v1.0.0 — Final Production QA (Manual only)"
     ws0["A1"].font = TITLE_FONT
     ws0.merge_cells("A1:F1")
     ws0["A2"] = (

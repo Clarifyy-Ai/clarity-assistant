@@ -14,7 +14,7 @@ const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
 export default function Careers() {
   usePageMeta({
     title: `Careers — ${PRODUCT_NAMES.brand}`,
-    description: "Career opportunities at Clarify AI. We currently have no open public roles.",
+    description: "Career opportunities at Career Pilot. We currently have no open public roles.",
     canonical: `${SITE_URL}/careers`,
   });
 

@@ -11,7 +11,7 @@ env:
   VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key-not-a-real-secret
   VITE_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
   VITE_APP_ENV: development
-  VITE_APP_NAME: Clarify AI
+  VITE_APP_NAME: Career Pilot
   VITE_APP_URL: http://127.0.0.1:5173
 
 jobs:

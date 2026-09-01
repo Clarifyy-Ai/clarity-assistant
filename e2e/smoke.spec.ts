@@ -3,7 +3,7 @@ import { test, expect, loginAsTestUser } from "../playwright-fixture";
 test.describe("Marketing & auth smoke", () => {
   test("landing page loads", async ({ page }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await expect(page).toHaveTitle(/Clarify AI/i);
+    await expect(page).toHaveTitle(/Career Pilot/i);
     await expect(page.getByRole("heading", { level: 1 })).toContainText(
       /Practice every interview/i,
       { timeout: 15_000 }

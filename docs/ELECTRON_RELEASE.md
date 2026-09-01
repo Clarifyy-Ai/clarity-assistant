@@ -1,4 +1,4 @@
-# Clarify AI Electron Release
+# Career Pilot Electron Release
 
 ## Why download might not work
 
@@ -27,13 +27,13 @@ npm ci
 npm run dist:win
 ```
 
-Installer output: **`release/Clarify AI Setup *.exe`** (NSIS).
+Installer output: **`release/Career Pilot Setup *.exe`** (NSIS).
 
 ### Install on Windows
 
 1. Run the `.exe` from `release/`
 2. If **SmartScreen** appears (unsigned build): **More info → Run anyway**
-3. Allow microphone when Clarify AI starts
+3. Allow microphone when Career Pilot starts
 4. Sign in with the same account as the web app
 
 ---
@@ -67,7 +67,7 @@ If you already built the `.exe` on this machine:
 npm run install:desktop
 ```
 
-Or open `release-new\Clarify AI Setup 1.0.0.exe` directly in File Explorer.
+Or open `release-new\Career Pilot Setup 1.0.0.exe` directly in File Explorer.
 
 ---
 

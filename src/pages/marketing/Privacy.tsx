@@ -6,8 +6,8 @@ import { usePageMeta } from "@/hooks/usePageMeta";
 
 export default function Privacy() {
   usePageMeta({
-    title: "Privacy Policy | Clarify AI",
-    description: "Learn how Clarify AI collects, uses, and protects your personal data.",
+    title: "Privacy Policy | Career Pilot",
+    description: "Learn how Career Pilot collects, uses, and protects your personal data.",
   });
 
   return (

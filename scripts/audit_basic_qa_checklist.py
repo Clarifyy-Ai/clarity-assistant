@@ -72,7 +72,7 @@ def build_overrides(report: dict) -> dict[str, tuple[str, str, str]]:
 
     # ── 0. PRE-FLIGHT ──────────────────────────────────────────────
     put("QA-001", "Pass", "anon", f"Live {TODAY}: home HTTP 200 SPA; leaves splash.")
-    put("QA-002", "Pass", "anon", "Landing snippet contains Clarify AI brand + Get started CTA.")
+    put("QA-002", "Pass", "anon", "Landing snippet contains Career Pilot brand + Get started CTA.")
     if csp or PROD_STALE:
         put(
             "QA-003",

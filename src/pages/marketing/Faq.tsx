@@ -23,7 +23,7 @@ const PACK_LIST = CREDIT_PACK_DEFINITIONS.map((p) => `${p.credits}`).join(", ");
 
 const FAQS: Array<{ q: string; a: string }> = [
   {
-    q: "What is Clarify AI?",
+    q: "What is Career Pilot?",
     a: `${PRODUCT_NAMES.brand} is an interview and exam-prep practice product: ${PRODUCT_NAMES.practiceCoach}, ${PRODUCT_NAMES.mockInterview} scorecards, ${PRODUCT_NAMES.prepLab} tools, and ${PRODUCT_NAMES.govExams}. It is for rehearsal — not for a live employer interview or a proctored exam.`,
   },
   {
@@ -36,7 +36,7 @@ const FAQS: Array<{ q: string; a: string }> = [
   },
   {
     q: "Can I use this during a real interview?",
-    a: "No. Using AI assistance covertly during a real interview or a proctored assessment violates most employer and exam policies. Clarify AI is built for practice only.",
+    a: "No. Using AI assistance covertly during a real interview or a proctored assessment violates most employer and exam policies. Career Pilot is built for practice only.",
   },
   {
     q: "What government exams can I practice?",
@@ -55,7 +55,7 @@ export default function Faq() {
   usePageMeta({
     title: `FAQ — ${PRODUCT_NAMES.brand}`,
     description:
-      "Answers about Clarify AI credits, Practice Coach, government exam mocks, and billing. More articles in Help.",
+      "Answers about Career Pilot credits, Practice Coach, government exam mocks, and billing. More articles in Help.",
     canonical: `${SITE_URL}/faq`,
   });
 

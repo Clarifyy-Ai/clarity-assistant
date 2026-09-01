@@ -1,4 +1,4 @@
-# Clarify AI — Enterprise Production Audit & Go-Live Report
+# Career Pilot — Enterprise Production Audit & Go-Live Report
 
 **Audit date:** June 28, 2026  
 **Scope:** Full-stack — 125+ pages, 76 edge functions, 63 migrations, Electron overlay, Stripe billing, AI pipeline  
@@ -22,7 +22,7 @@ A **controlled B2C launch** against the **existing linked Supabase project** is 
 
 ## Executive Summary
 
-Clarify AI is a **feature-rich, architecturally sound** interview preparation platform with mature patterns in Supabase RLS, Stripe webhook idempotency, compliance gating (capture evasion removed), and server-side AI key management. The product covers live coaching, mock interviews, gov exam engine, prep lab, debrief analytics, documents, billing, admin, and Electron overlay.
+Career Pilot is a **feature-rich, architecturally sound** interview preparation platform with mature patterns in Supabase RLS, Stripe webhook idempotency, compliance gating (capture evasion removed), and server-side AI key management. The product covers live coaching, mock interviews, gov exam engine, prep lab, debrief analytics, documents, billing, admin, and Electron overlay.
 
 **Critical gaps blocking enterprise go-live:**
 

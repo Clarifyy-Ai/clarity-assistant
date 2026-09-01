@@ -1023,7 +1023,7 @@ export default function GovExamDetail(): React.ReactElement {
             <section className="space-y-3 rounded-xl border border-border p-5">
               <h3 className="text-sm font-semibold">Official sources</h3>
               <p className="text-xs text-muted-foreground">
-                Link-first provenance from the registry. Clarify AI does not display government
+                Link-first provenance from the registry. Career Pilot does not display government
                 logos or claim affiliation.
               </p>
               {details.officialSources.length === 0 ? (

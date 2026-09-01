@@ -99,7 +99,7 @@ export function UpgradeModal() {
     ? "Add credits"
     : planId === "pro"
       ? "Upgrade or add credits"
-      : "Upgrade Clarify AI"
+      : "Upgrade Career Pilot"
 
   return (
     <Modal

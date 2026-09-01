@@ -70,6 +70,6 @@ this repo, so every deploy must be checked manually:
 4. On the Supabase Edge Functions side, `ALLOWED_ORIGINS` **must include**
    `https://clarify.ai.sltfinanceindia.com` or every Edge Function call (AI
    hints, debrief, billing, etc.) will fail CORS for this domain.
-5. If the app is still stuck on "Loading Clarify AI…": open DevTools console.
+5. If the app is still stuck on "Loading Career Pilot…": open DevTools console.
    - `Missing required environment variable: VITE_SUPABASE_URL` → step 1/2 above was skipped or the rebuild didn't pick up the new env vars.
-   - The boot splash should never hang silently — `src/main.tsx` replaces it with a "Clarify AI failed to start" panel as soon as the app's startup module throws, and `public/boot-watchdog.js` (loaded as an external `/boot-watchdog.js` script, never inline, to satisfy the `script-src 'self'` CSP) is a second-line fallback after 8s if something else goes wrong.
+   - The boot splash should never hang silently — `src/main.tsx` replaces it with a "Career Pilot failed to start" panel as soon as the app's startup module throws, and `public/boot-watchdog.js` (loaded as an external `/boot-watchdog.js` script, never inline, to satisfy the `script-src 'self'` CSP) is a second-line fallback after 8s if something else goes wrong.

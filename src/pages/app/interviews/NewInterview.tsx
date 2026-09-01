@@ -670,7 +670,7 @@ export default function NewInterview() {
                   Google Calendar — Not configured
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Calendar sync is not configured on this environment yet. You can still schedule interviews in Clarify.
+                  Calendar sync is not configured on this environment yet. You can still schedule interviews in Career Pilot.
                 </p>
               </div>
             </div>

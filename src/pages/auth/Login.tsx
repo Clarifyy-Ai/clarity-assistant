@@ -65,7 +65,7 @@ type LocationState = {
 
 const TESTIMONIAL = {
   quote:
-    "Clarify AI helped me land offers at 3 FAANG companies. The mock interviews are incredibly realistic.",
+    "Career Pilot helped me land offers at 3 FAANG companies. The mock interviews are incredibly realistic.",
   author: "Sarah K.",
   role: "Senior Engineer at Google",
 };
@@ -126,8 +126,8 @@ function formatLockMessage(lockMinsLeft: number): string {
 
 export default function Login(): JSX.Element {
   usePageMeta({
-    title: "Sign in | Clarify AI",
-    description: "Sign in to your Clarify AI account.",
+    title: "Sign in | Career Pilot",
+    description: "Sign in to your Career Pilot account.",
     noIndex: true,
   });
 
@@ -536,7 +536,7 @@ export default function Login(): JSX.Element {
                 ? "This account cannot sign in right now."
                 : mfaPending
                   ? "Enter the 6-digit code from your authenticator app"
-                  : "Sign in to your account to continue"}
+                  : "Sign in to Career Pilot"}
             </p>
           </div>
 
@@ -551,7 +551,7 @@ export default function Login(): JSX.Element {
               </div>
               <div className="flex flex-col gap-2">
                 <a
-                  href={supportMailto("Clarify AI suspended account")}
+                  href={supportMailto("Career Pilot suspended account")}
                   className="inline-flex items-center justify-center rounded-xl border border-border px-4 py-2.5 text-sm font-medium hover:bg-secondary transition"
                 >
                   Contact support

@@ -196,7 +196,7 @@ await step("blogCrud", async () => {
       excerpt: "probe",
       content: "probe body",
       category: "Product",
-      author: "Clarify AI",
+      author: "Career Pilot",
       published: false,
       published_at: new Date().toISOString(),
       read_time: "1 min",
@@ -230,7 +230,7 @@ await step("blogCrud", async () => {
     excerpt: "x",
     content: "x",
     category: "Product",
-    author: "Clarify AI",
+    author: "Career Pilot",
     published: false,
     published_at: new Date().toISOString(),
   });

@@ -9,7 +9,7 @@ const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const FROM_EMAIL =
   Deno.env.get("RESEND_FROM_EMAIL") ??
   Deno.env.get("FROM_EMAIL") ??
-  "Clarify AI <noreply@clarifyprep.com>";
+  "Career Pilot <noreply@clarifyprep.com>";
 const APP_URL = Deno.env.get("APP_URL") ?? "https://clarityapp.ai";
 
 function sanitize(str: unknown, max = 200): string {
@@ -47,7 +47,7 @@ async function sendConfirmationEmail(
         to,
         subject: `Interview scheduled: ${company}`,
         html: `<p>Your ${sanitize(role)} interview at <strong>${sanitize(company)}</strong> is scheduled for ${sanitize(whenText)}.</p>
-<p><a href="${APP_URL}/app/interviews">View in Clarify AI</a></p>`,
+<p><a href="${APP_URL}/app/interviews">View in Career Pilot</a></p>`,
       }),
     });
 

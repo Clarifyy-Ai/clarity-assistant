@@ -174,7 +174,7 @@ export default function GovExams() {
           <m.div {...fadeUp()}>
             <h2 className="text-xl font-bold mb-4">Also preparing for job interviews?</h2>
             <p className="text-sm text-muted-foreground mb-6">
-              Clarify AI combines gov exam mock tests with AI interview coaching, mock sessions,
+              Career Pilot combines gov exam mock tests with AI interview coaching, mock sessions,
               and a full prep lab — one account for every stage of your career.
             </p>
             <div className="flex flex-wrap justify-center gap-3 text-xs">

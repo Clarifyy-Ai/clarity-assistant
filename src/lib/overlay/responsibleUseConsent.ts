@@ -4,7 +4,7 @@
  */
 
 export const RESPONSIBLE_USE_NOTICE =
-  "Use Clarify AI only where assistance, recording, transcription, and screen " +
+  "Use Career Pilot only where assistance, recording, transcription, and screen " +
   "capture are permitted. You are responsible for obtaining required consent and " +
   "following interview, employer, examination, and local privacy rules.";
 

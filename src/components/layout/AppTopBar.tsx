@@ -87,7 +87,7 @@ export function AppTopBar() {
         <Link
           to="/app/dashboard"
           className="flex items-center gap-1.5 pr-1"
-          aria-label="Clarify AI home"
+          aria-label="Career Pilot home"
         >
           <BrandLogo size="sm" />
         </Link>
@@ -98,7 +98,7 @@ export function AppTopBar() {
         <Link
           to="/app/dashboard"
           className="flex items-center gap-1.5 pr-1 shrink-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label="Clarify AI dashboard"
+          aria-label="Career Pilot dashboard"
         >
           <BrandLogo size="sm" showText={false} />
         </Link>
@@ -143,7 +143,7 @@ export function AppTopBar() {
           aria-label={stealthMode ? "Disable discrete UI" : "Enable discrete UI"}
           title={
             stealthMode
-              ? "Disable discrete UI labels (restores Clarify AI naming)"
+              ? "Disable discrete UI labels (restores Career Pilot naming)"
               : "Use neutral nav labels for private practice (does not hide the app from screen sharing)"
           }
           className={cn(

@@ -101,7 +101,7 @@ function showMainWindow() {
 }
 
 function reportLoadFailure(title, detail) {
-  console.error(`[Clarify Coach] ${title}:`, detail);
+  console.error(`[Career Pilot] ${title}:`, detail);
   showMainWindow();
   dialog.showErrorBox(title, detail);
 }
@@ -120,8 +120,8 @@ function createMainWindow() {
     minWidth: 360,
     minHeight: 320,
     show: false,
-    backgroundColor: "#0F172A",
-    title: "Clarify Coach",
+    backgroundColor: "#0B1220",
+    title: "Career Pilot",
     autoHideMenuBar: true,
     // Always-on-top is opt-in via overlay:set-always-on-top (privacy default).
     alwaysOnTop: false,
@@ -167,15 +167,15 @@ function createMainWindow() {
 
   mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
     reportLoadFailure(
-      "Clarify Coach failed to load",
+      "Career Pilot failed to load",
       `Could not load the app shell (${errorCode}: ${errorDescription}).\n\nURL: ${validatedURL}`,
     );
   });
 
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     reportLoadFailure(
-      "Clarify Coach crashed",
-      `The app window stopped unexpectedly (${details.reason}). Please restart Clarify Coach.`,
+      "Career Pilot crashed",
+      `The app window stopped unexpectedly (${details.reason}). Please restart Career Pilot.`,
     );
   });
 
@@ -188,7 +188,7 @@ function createMainWindow() {
   // Fallback: never leave the app running with a hidden window.
   const showFallbackTimer = setTimeout(() => {
     if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
-      console.warn("[Clarify Coach] ready-to-show timeout — forcing window visible");
+      console.warn("[Career Pilot] ready-to-show timeout — forcing window visible");
       showMainWindow();
     }
   }, 3000);
@@ -243,7 +243,7 @@ function registerGlobalShortcuts(bindings) {
     const accelerator = item?.accelerator;
     const action = item?.action;
     if (!isSafeAccelerator(accelerator) || !allowedActions.has(action)) {
-      console.warn("[Clarify Coach] Rejected shortcut binding", item);
+      console.warn("[Career Pilot] Rejected shortcut binding", item);
       continue;
     }
     try {
@@ -252,13 +252,13 @@ function registerGlobalShortcuts(bindings) {
         mainWindow.webContents.send("global-shortcut", action);
       });
       if (!ok) {
-        console.warn(`[Clarify Coach] Failed to register ${accelerator}`);
+        console.warn(`[Career Pilot] Failed to register ${accelerator}`);
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send("hotkey-conflict", { key: accelerator });
         }
       }
     } catch (err) {
-      console.warn(`[Clarify Coach] Shortcut error ${accelerator}:`, err);
+      console.warn(`[Career Pilot] Shortcut error ${accelerator}:`, err);
     }
   }
 }
@@ -311,7 +311,7 @@ app.whenReady().then(() => {
       registerGlobalShortcuts(bindings);
       return { ok: true };
     } catch (err) {
-      console.warn("[Clarify Coach] sync-global-shortcuts failed:", err);
+      console.warn("[Career Pilot] sync-global-shortcuts failed:", err);
       return { ok: false };
     }
   });

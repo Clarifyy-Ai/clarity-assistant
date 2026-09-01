@@ -3,7 +3,7 @@
 /**
  * scripts/validate-env.js
  *
- * Production-grade environment validation for Clarify AI.
+ * Production-grade environment validation for Career Pilot.
  *
  * Usage:
  *   npm run validate-env

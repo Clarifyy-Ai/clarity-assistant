@@ -216,7 +216,7 @@ if (email && password && anon && base) {
         type: "behavioral",
         count: 2,
         role: "Software Engineer",
-        company: "Clarify AI",
+        company: "Career Pilot",
         free_session: true,
       }),
     });

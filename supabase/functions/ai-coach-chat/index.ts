@@ -60,7 +60,7 @@ const DEFAULT_MODEL =
   Deno.env.get("GEMINI_MODEL_DEFAULT") ?? "gemini-2.5-flash";
 const SERVER_GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 
-const BASE_SYSTEM_PROMPT = `You are an expert, empathetic interview coach for Clarify AI practice sessions.
+const BASE_SYSTEM_PROMPT = `You are an expert, empathetic interview coach for Career Pilot practice sessions.
 
 Rules:
 - Do NOT answer the interview question with a full script the candidate can read verbatim unless they explicitly ask for structure help.

@@ -1,4 +1,4 @@
-# Clarify AI — Auth, CSP, and Dashboard Remediation Ledger
+# Career Pilot — Auth, CSP, and Dashboard Remediation Ledger
 
 ## Incident Metadata
 

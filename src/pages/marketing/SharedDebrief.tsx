@@ -58,7 +58,7 @@ export default function SharedDebrief() {
 
   usePageMeta({
     title: `Shared session · ${PRODUCT_NAMES.brand}`,
-    description: "Review a shared practice session scorecard and debrief on Clarify AI.",
+    description: "Review a shared practice session scorecard and debrief on Career Pilot.",
     ogType: "website",
   });
 
@@ -111,7 +111,7 @@ export default function SharedDebrief() {
             error ??
             "This shared link is invalid, expired, or has been revoked. No private session or account data is shown."
           }
-          homeLabel="Go to Clarify AI"
+          homeLabel="Go to Career Pilot"
         />
         <p className="max-w-md mx-auto px-4 -mt-6 mb-10 text-center text-xs text-muted-foreground leading-relaxed">
           Share links are created from your signed-in Debrief or Scorecard page
@@ -207,7 +207,7 @@ export default function SharedDebrief() {
             Ready to improve your next interview?
           </p>
           <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-            Practice with Clarify AI — live coaching, mock interviews, and scorecards like this one.
+            Practice with Career Pilot — live coaching, mock interviews, and scorecards like this one.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
             <Link

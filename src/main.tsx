@@ -18,7 +18,7 @@ function escapeHtml(value: string): string {
 }
 
 function showBootError(error: unknown): void {
-  console.error("[Clarify AI] Boot failed:", error);
+  console.error("[Career Pilot] Boot failed:", error);
 
   const message = error instanceof Error ? error.message : String(error);
   const isMissingEnv = /Missing required environment variable/i.test(message);
@@ -35,7 +35,7 @@ function showBootError(error: unknown): void {
     '<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;' +
     'gap:16px;background:#0f172a;color:#e2e8f0;font-family:system-ui,-apple-system,\'Segoe UI\',sans-serif;' +
     'padding:24px;text-align:center;">' +
-    '<h1 style="margin:0;font-size:20px;font-weight:700">Clarify AI failed to start</h1>' +
+    '<h1 style="margin:0;font-size:20px;font-weight:700">Career Pilot failed to start</h1>' +
     '<p style="margin:0;max-width:32rem;font-size:14px;opacity:.8;line-height:1.6">' +
     escapeHtml(description) +
     "</p>" +

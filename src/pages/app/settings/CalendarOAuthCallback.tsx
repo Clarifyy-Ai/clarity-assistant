@@ -5,7 +5,7 @@ import { useCalendarSync } from "@/hooks/useCalendarSync";
 
 /**
  * Google Calendar OAuth redirect target.
- * Exchanges ?code=&state= with the Edge Function using the existing Clarify AI session.
+ * Exchanges ?code=&state= with the Edge Function using the existing Career Pilot session.
  * Never stores Google tokens in the browser.
  */
 export default function CalendarOAuthCallback() {

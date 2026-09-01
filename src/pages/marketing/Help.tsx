@@ -63,7 +63,7 @@ function mapDbRowsToCategories(
 
 export default function Help() {
   usePageMeta({
-    title: "Help Center — Clarify AI",
+    title: "Help Center — Career Pilot",
     description: "FAQs and guides for interview prep, live practice coaching, mock tests, and billing.",
     canonical: `${SITE_URL}/help`,
   });
@@ -142,7 +142,7 @@ export default function Help() {
           <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
             <HelpCircle className="w-8 h-8 text-primary mx-auto mb-4" />
             <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Help Center</h1>
-            <p className="mt-4 text-sm md:text-base text-muted-foreground">Find answers to common questions about Clarify AI</p>
+            <p className="mt-4 text-sm md:text-base text-muted-foreground">Find answers to common questions about Career Pilot</p>
           </motion.div>
 
           <div className="mt-8 max-w-md mx-auto">
@@ -276,7 +276,7 @@ export default function Help() {
         <div className="max-w-xl mx-auto text-center rounded-2xl border border-border bg-card p-8">
           <Mail className="w-8 h-8 text-primary mx-auto mb-3" />
           <h3 className="text-lg font-bold">Still need help?</h3>
-          <p className="text-sm text-muted-foreground mt-2">Our support team is here to help you get the most out of Clarify AI.</p>
+          <p className="text-sm text-muted-foreground mt-2">Our support team is here to help you get the most out of Career Pilot.</p>
           <a
             href={`mailto:${SUPPORT_EMAIL}`}
             className="inline-flex items-center gap-2 mt-5 px-6 py-2.5 rounded-xl bg-secondary text-sm font-semibold hover:bg-secondary/80 transition-all"
@@ -298,7 +298,7 @@ export default function Help() {
               <span className="text-sm text-muted-foreground">
                 No public status page configured —{" "}
                 <a
-                  href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Clarify AI system status")}`}
+                  href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Career Pilot system status")}`}
                   className="text-sm text-primary hover:underline"
                 >
                   email {SUPPORT_EMAIL}

@@ -573,7 +573,7 @@ function LiveOverlaySession() {
               <p className="text-lg font-semibold text-foreground">Overlay Mode Active</p>
               <p className="text-sm text-muted-foreground max-w-sm">
                 {isMobile
-                  ? "Live overlay shortcuts and floating desktop overlay are limited on phones. Use a desktop browser or the Clarify desktop app for Ctrl+Shift+H / Ctrl+Shift+P."
+                  ? "Live overlay shortcuts and floating desktop overlay are limited on phones. Use a desktop browser or the Career Pilot desktop app for Ctrl+Shift+H / Ctrl+Shift+P."
                   : (
                     <>
                       The overlay is floating on your screen. Use{" "}

@@ -129,7 +129,7 @@ export function extractPdfLinks(html: string, pageUrl: string, year?: number, ma
 
 async function fetchText(url: string): Promise<string> {
   const res = await fetch(url, {
-    headers: { "User-Agent": "ClarifyAI-ExamCollector/1.0 (+admin)" },
+    headers: { "User-Agent": "CareerPilot-ExamCollector/1.0 (+admin)" },
   });
   if (!res.ok) throw new Error(`Failed to fetch ${url}: HTTP ${res.status}`);
   return await res.text();
@@ -137,7 +137,7 @@ async function fetchText(url: string): Promise<string> {
 
 async function fetchPdfBase64(url: string): Promise<string> {
   const res = await fetch(url, {
-    headers: { "User-Agent": "ClarifyAI-ExamCollector/1.0 (+admin)" },
+    headers: { "User-Agent": "CareerPilot-ExamCollector/1.0 (+admin)" },
   });
   if (!res.ok) throw new Error(`Failed to download PDF: HTTP ${res.status}`);
   const buf = await res.arrayBuffer();

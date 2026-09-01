@@ -4,7 +4,7 @@ Detailed inventory of every feature, screen, flow, popup, form, dashboard,
 and workflow — documented for redesign and UX enhancement planning.
 ================================================================================
 
-Product name .......... Clarify AI  (package: "clarify-ai")
+Product name .......... Career Pilot  (package: "clarify-ai")
 Repo folder ........... clarity-assistant
 Audit date ............ 30 July 2026
 Audited by ............ Cursor Agent (source-code UI/UX audit)
@@ -64,7 +64,7 @@ PART 0 — EXECUTIVE SUMMARY & CROSS-CUTTING FINDINGS
 
 0.1 PRODUCT UX IN ONE PARAGRAPH
 -------------------------------
-Clarify AI is a practice-first interview coaching product with a second product
+Career Pilot is a practice-first interview coaching product with a second product
 line for Indian government/competitive exam MCQ tests. Web users live inside an
 AppShell (sidebar + top bar + mobile bottom nav). The core practice experience
 is a floating dark-glass Overlay (hints, chat, transcript, stealth controls)
@@ -1896,5 +1896,5 @@ JOURNEY 7: Desktop
 
 ================================================================================
 END OF UI/UX IMPLEMENTATION AUDIT
-Generated 30 July 2026 from source analysis of Clarify AI (clarity-assistant).
+Generated 30 July 2026 from source analysis of Career Pilot (clarity-assistant).
 ================================================================================

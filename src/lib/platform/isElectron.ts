@@ -10,7 +10,7 @@ type ElectronWindow = Window & {
 };
 
 /**
- * True when running inside the Clarify AI Electron desktop shell.
+ * True when running inside the Career Pilot Electron desktop shell.
  *
  * Do not sniff navigator.userAgent for "Electron". Cursor, VS Code, and other
  * Chromium shells also include that token, which would treat a local Vite

@@ -91,7 +91,7 @@ const INTEGRATIONS: Integration[] = [
     id:     "zapier",
     icon:   Zap,
     label:  "Zapier",
-    desc:   "Connect Clarify AI to 5,000+ apps via Zapier workflows.",
+    desc:   "Connect Career Pilot to 5,000+ apps via Zapier workflows.",
     status: "coming_soon",
     color:  "text-orange-400",
     bg:     "bg-orange-500/10",
@@ -329,7 +329,7 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
       <div className="mt-3 pt-3 border-t border-border">
         {!syncAvailable ? (
           <p className="text-[10px] text-muted-foreground leading-relaxed">
-            Calendar is not configured on the server. There is no active Connect until Google OAuth secrets are set — schedule interviews in Clarify without a Google event for now.
+            Calendar is not configured on the server. There is no active Connect until Google OAuth secrets are set — schedule interviews in Career Pilot without a Google event for now.
           </p>
         ) : isConnected ? (
           <>
@@ -342,7 +342,7 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
           </>
         ) : (
           <p className="text-[10px] text-muted-foreground leading-relaxed">
-            Connect from Settings. Google Sign-In does not grant Calendar access. Clarify AI will request permission to create, update, and cancel interview events only.
+            Connect from Settings. Google Sign-In does not grant Calendar access. Career Pilot will request permission to create, update, and cancel interview events only.
           </p>
         )}
       </div>

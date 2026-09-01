@@ -66,7 +66,7 @@ function buildMenu({ isDev }) {
       role: "help",
       submenu: [
         {
-          label: "Open Clarify AI Website",
+          label: "Open Career Pilot Website",
           click: () => shell.openExternal("https://clarify.ai.sltfinanceindia.com"),
         },
         ...(isDev

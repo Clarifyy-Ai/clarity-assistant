@@ -1,8 +1,8 @@
-# Clarify AI — Abbreviated Spec Pointer
+# Career Pilot — Abbreviated Spec Pointer
 
-**Product:** Clarify AI — AI-powered interview **preparation**  
+**Product:** Career Pilot — AI-powered interview **preparation**  
 **Stack in repo:** Vite + React + Supabase Edge Functions + optional Electron desktop  
-**Full launch checklist:** [Clarify AI_ALIGNMENT.md](./Clarify AI_ALIGNMENT.md)
+**Full launch checklist:** [Career Pilot_ALIGNMENT.md](./Career Pilot_ALIGNMENT.md)
 
 ---
 
@@ -54,4 +54,4 @@ See also: [COMPLIANCE_GATING.md](./COMPLIANCE_GATING.md), `src/lib/compliance/fe
 
 ---
 
-*For checklist status by section (A–F), see [Clarify AI_ALIGNMENT.md](./Clarify AI_ALIGNMENT.md).*
+*For checklist status by section (A–F), see [Career Pilot_ALIGNMENT.md](./Career Pilot_ALIGNMENT.md).*

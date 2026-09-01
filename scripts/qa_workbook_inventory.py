@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Clarify AI QA inventory — full feature + defect registers for workbook generation.
+"""Career Pilot QA inventory — full feature + defect registers for workbook generation.
 Statuses reflect post–launch-fixes pass (29 Jul 2026) where applicable.
 """
 

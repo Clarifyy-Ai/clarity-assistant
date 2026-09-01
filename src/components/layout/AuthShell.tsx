@@ -18,7 +18,7 @@ type AuthShellProps = {
 
 const DEFAULT_TESTIMONIAL = {
   quote:
-    "Clarify AI helped me land offers at 3 FAANG companies. The mock interviews are incredibly realistic.",
+    "Career Pilot helped me land offers at 3 FAANG companies. The mock interviews are incredibly realistic.",
   author: "Sarah K.",
   role: "Senior Engineer at Google",
 };
@@ -29,7 +29,7 @@ const DEFAULT_TESTIMONIAL = {
  */
 export function AuthShell({
   children,
-  mobileTitle = "Clarify AI",
+  mobileTitle = "Career Pilot",
   testimonial = DEFAULT_TESTIMONIAL,
 }: AuthShellProps) {
   return (
@@ -40,19 +40,19 @@ export function AuthShell({
       >
         Skip to content
       </a>
-      <div className="hidden lg:flex lg:w-1/2 xl:w-[55%] flex-col relative overflow-hidden bg-gradient-to-br from-primary via-indigo-600 to-blue-700 p-10">
+      <div className="hidden lg:flex lg:w-1/2 xl:w-[55%] flex-col relative overflow-hidden bg-gradient-to-br from-navy via-deep-blue to-electric-blue p-10">
         <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_30%_20%,white,transparent_45%)]" />
         <Link
           to="/"
           className="relative z-10 flex items-center gap-3 w-fit rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-          aria-label="Clarify AI home"
+          aria-label="Career Pilot home"
         >
           <BrandLogo size="md" showText={false} />
-          <span className="text-lg font-bold text-white">Clarify AI</span>
+          <span className="text-lg font-bold text-white">Career Pilot</span>
         </Link>
         <div className="relative z-10 flex-1 flex flex-col justify-center gap-8 max-w-md">
           <h1 className="text-3xl xl:text-4xl font-bold text-white leading-tight">
-            Practice interviews with an AI coach that feels real.
+            Welcome to Career Pilot. Navigate your career. Prepare with confidence.
           </h1>
           <ul className="space-y-3 text-sm text-white/90">
             <li className="flex items-center gap-2">

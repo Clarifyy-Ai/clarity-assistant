@@ -3,7 +3,7 @@
  * Upload the Windows desktop installer to Supabase Storage (public bucket).
  *
  * Prerequisites:
- *   1. npm run dist:win   (or use release-new/Clarify AI Setup *.exe)
+ *   1. npm run dist:win   (or use release-new/Career Pilot Setup *.exe)
  *   2. supabase db push   (creates desktop-releases bucket)
  *   3. Set SUPABASE_SERVICE_ROLE_KEY in .env.local or env
  *
@@ -45,8 +45,8 @@ function loadEnv() {
 
 function findInstaller() {
   const candidates = [
-    path.join(ROOT, "release", "Clarify AI Setup 1.0.0.exe"),
-    path.join(ROOT, "release-new", "Clarify AI Setup 1.0.0.exe"),
+    path.join(ROOT, "release", "Career Pilot Setup 1.0.0.exe"),
+    path.join(ROOT, "release-new", "Career Pilot Setup 1.0.0.exe"),
   ];
   for (const dir of ["release", "release-new"]) {
     const folder = path.join(ROOT, dir);
@@ -81,7 +81,7 @@ async function main() {
   if (!installerPath) {
     console.error(
       "No installer found. Run: npm run dist:win\n" +
-        "Expected: release/Clarify AI Setup 1.0.0.exe",
+        "Expected: release/Career Pilot Setup 1.0.0.exe",
     );
     process.exit(1);
   }

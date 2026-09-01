@@ -1,4 +1,4 @@
-# Clarify AI — QA Test Pass Report
+# Career Pilot — QA Test Pass Report
 
 **Run date:** 2026-04-30
 **Catalog:** `clarify-ai-qa-checklist.xlsx` (1,003 items)

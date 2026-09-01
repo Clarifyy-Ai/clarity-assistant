@@ -82,7 +82,7 @@ export default function AdminBulkUpload() {
               </p>
 
               <div className="flex flex-wrap gap-2">
-                <a href="/Clarify AI_Question_Template.csv" download>
+                <a href="/career-pilot-question-template.csv" download>
                   <span className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium hover:bg-secondary/60 transition-colors">
                     <Download className="w-4 h-4" />
                     Download CSV template

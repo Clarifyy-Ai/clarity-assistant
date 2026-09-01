@@ -1,10 +1,10 @@
-Here’s a prompt you can paste into Lovable AI so it fixes these 9 issues end‑to‑end, using your existing Clarify AI codebase and Supabase setup.
+Here’s a prompt you can paste into Lovable AI so it fixes these 9 issues end‑to‑end, using your existing Career Pilot codebase and Supabase setup.
 
 ***
 
-## Master Fix Prompt for Lovable AI (Clarify AI)
+## Master Fix Prompt for Lovable AI (Career Pilot)
 
-You are working on an existing production codebase called **Clarify AI**, a full-stack interview preparation platform.
+You are working on an existing production codebase called **Career Pilot**, a full-stack interview preparation platform.
 
 The repo has this structure (key parts only):
 
@@ -32,7 +32,7 @@ Assume those three shared files are correct and up to date.
 
 ### Your Goal
 
-Systematically fix the following **9 functional issues** in Clarify AI, wiring up frontend + Supabase Edge functions + database so everything works together in production:
+Systematically fix the following **9 functional issues** in Career Pilot, wiring up frontend + Supabase Edge functions + database so everything works together in production:
 
 1. **Mock interviews not starting / questions not generating**
 2. **Deepgram streaming fails even with correct API key**
@@ -499,7 +499,7 @@ C:.
 |       preload.ts
 |       
 +---public
-|   |   ClarifyAI_Question_Template.xlsx
+|   |   CareerPilot_Question_Template.xlsx
 |   |   favicon.png
 |   |   llms.txt
 |   |   manifest.json

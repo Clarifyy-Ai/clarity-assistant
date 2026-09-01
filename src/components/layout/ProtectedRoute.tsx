@@ -74,7 +74,7 @@ function AccountLoadErrorCard({
                 Reload
               </Button>
               <a
-                href={supportMailto("Clarify AI profile load help")}
+                href={supportMailto("Career Pilot profile load help")}
                 className="inline-flex items-center px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-secondary transition"
               >
                 Contact support
@@ -361,7 +361,7 @@ export const ProtectedRoute = memo(function ProtectedRoute({
               </p>
               <div className="flex flex-wrap gap-2">
                 <a
-                  href={supportMailto("Clarify AI suspended account")}
+                  href={supportMailto("Career Pilot suspended account")}
                   className="inline-block px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-secondary transition"
                 >
                   Contact support

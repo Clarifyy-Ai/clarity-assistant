@@ -1,4 +1,4 @@
-# Clarify AI remediation report (workbook wave 3)
+# Career Pilot remediation report (workbook wave 3)
 
 Workbook: `Clarify_AI_BB_Manual_QA_Workbook (2).xlsx`  
 Scope: Billing, Credits, Scheduler, Integrations, Settings, Notifications, Dashboard, Sessions, Reports, Analytics, Answer Bank.  

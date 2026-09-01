@@ -2,7 +2,7 @@
 //
 // RETIRED payment surface. Stripe is not an active billing provider.
 // Signature handling stays fail-closed so forged events cannot mint credits.
-// Clarify AI launch billing is Razorpay one-time purchases — this
+// Career Pilot launch billing is Razorpay one-time purchases — this
 // endpoint never grants plan entitlements or credits.
 
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";

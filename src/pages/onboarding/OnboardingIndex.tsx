@@ -408,10 +408,10 @@ export default function OnboardingIndex() {
       <header className="sticky top-0 z-10 border-b border-border/50 bg-background/80 backdrop-blur-md">
         <div className="mx-auto max-w-3xl px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="h-7 w-7 rounded-lg bg-primary/90 flex items-center justify-center">
-              <span className="text-xs font-bold text-primary-foreground">C</span>
+            <div className="h-7 w-7 rounded-lg overflow-hidden">
+              <img src="/brand/logo-192.png" alt="" width={28} height={28} className="h-7 w-7 object-cover" />
             </div>
-            <span className="font-semibold text-sm tracking-tight">Clarify AI</span>
+            <span className="font-semibold text-sm tracking-tight">Career Pilot</span>
           </div>
 
           <div className="hidden sm:block flex-1 max-w-xs mx-4">

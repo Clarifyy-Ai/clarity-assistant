@@ -242,7 +242,7 @@ async function injectSession(page, session) {
   await page.goto(BASE + "/login", { waitUntil: "domcontentloaded", timeout: 60_000 });
   await page
     .waitForFunction(
-      () => !/Loading Clarify AI/i.test(document.body?.innerText || ""),
+      () => !/Loading Career Pilot/i.test(document.body?.innerText || ""),
       { timeout: 30_000 },
     )
     .catch(() => {});
@@ -258,7 +258,7 @@ async function loginViaUi(page, email, password) {
   await page.goto(BASE + "/login", { waitUntil: "domcontentloaded", timeout: 60_000 });
   await page
     .waitForFunction(
-      () => !/Loading Clarify AI/i.test(document.body?.innerText || ""),
+      () => !/Loading Career Pilot/i.test(document.body?.innerText || ""),
       { timeout: 30_000 },
     )
     .catch(() => {});
@@ -271,7 +271,7 @@ async function loginViaUi(page, email, password) {
   await page.waitForURL(/\/app\//, { timeout: 45_000 }).catch(() => {});
   await page
     .waitForFunction(
-      () => !/Loading Clarify AI/i.test(document.body?.innerText || ""),
+      () => !/Loading Career Pilot/i.test(document.body?.innerText || ""),
       { timeout: 30_000 },
     )
     .catch(() => {});
@@ -343,7 +343,7 @@ async function auditRoute(page, route, role) {
       .waitForFunction(
         () => {
           const t = document.body?.innerText || "";
-          return !/Loading Clarify AI/i.test(t) && t.trim().length > 20;
+          return !/Loading Career Pilot/i.test(t) && t.trim().length > 20;
         },
         { timeout: 25_000 },
       )
@@ -359,7 +359,7 @@ async function auditRoute(page, route, role) {
       ? (await page.locator(`[data-testid="${route.testId}"]`).count().catch(() => 0)) > 0
       : false;
 
-    const stuckLoader = /Loading Clarify AI/i.test(bodyText);
+    const stuckLoader = /Loading Career Pilot/i.test(bodyText);
     const bouncedToLogin =
       /\/login/i.test(finalUrl) && !/\/login/i.test(route.path);
     const bouncedOnboarding = /\/onboarding/i.test(finalUrl);
@@ -554,13 +554,13 @@ async function main() {
     const stText = (await p.locator("body").innerText().catch(() => "")).slice(0, 200);
     await b.close();
     const stagingBroken =
-      /Loading Clarify AI/i.test(stText) ||
+      /Loading Career Pilot/i.test(stText) ||
       stErrs.some((e) => /VITE_SUPABASE_URL|Missing required environment/i.test(e));
     report.stagingProbe = {
       url: stagingUrl,
       status: stagingBroken ? "Fail" : "Pass",
       notes: stagingBroken
-        ? "Closed-beta host missing VITE_* in deployed bundle (Critical). After boot-error UI deploy expect 'Clarify AI failed to start' instead of infinite loader; still Fail until Lovable sets VITE_*."
+        ? "Closed-beta host missing VITE_* in deployed bundle (Critical). After boot-error UI deploy expect 'Career Pilot failed to start' instead of infinite loader; still Fail until Lovable sets VITE_*."
         : "Staging hydrated",
       snippet: stText,
       pageErrors: stErrs.slice(0, 5),
@@ -577,7 +577,7 @@ async function main() {
         steps:
           "1. Open https://clarify.ai.sltfinanceindia.com/pricing\n2. Observe stuck loader or missing-env boot failure\n3. Console: Missing required environment variable: VITE_SUPABASE_URL (+ CSP may block inline script)",
         expected:
-          "After code deploy with boot-error UI: page shows 'Clarify AI failed to start' (not infinite loader). Staging remains Fail until Lovable sets VITE_* in the host build / .env.production.",
+          "After code deploy with boot-error UI: page shows 'Career Pilot failed to start' (not infinite loader). Staging remains Fail until Lovable sets VITE_* in the host build / .env.production.",
         actual: report.stagingProbe.notes,
         env: stagingUrl,
         date: TODAY,
@@ -653,7 +653,7 @@ async function main() {
   async function auditWithRetry(route, role, { loginEmail, loginPassword, session } = {}) {
     let r = await auditRoute(page, route, role);
     const resourceFail =
-      /INSUFFICIENT_RESOURCES|Failed to fetch dynamically|Clarify AI failed to start/i.test(
+      /INSUFFICIENT_RESOURCES|Failed to fetch dynamically|Career Pilot failed to start/i.test(
         `${r.notes} ${r.snippet} ${(r.consoleErrors || []).join(" ")}`,
       );
     if (resourceFail || (r.status === "Fail" && !r.snippet)) {

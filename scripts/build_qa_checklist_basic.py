@@ -85,7 +85,7 @@ def cases() -> list[tuple]:
         anon,
         td(chrome, f"URL={B}/"),
         "1. Open /.\n2. Inspect the first viewport (desktop 1440px).",
-        "Clarify AI branding, headline, product description, and primary CTA are visible. No stealth/invisible/HRIS/SSO overclaims.",
+        "Career Pilot branding, headline, product description, and primary CTA are visible. No stealth/invisible/HRIS/SSO overclaims.",
         prod, "/",
     )
     add(
@@ -533,7 +533,7 @@ def autosize(ws, widths: dict[int, int]) -> None:
 
 def write_instructions(wb: openpyxl.Workbook, old_creds: list[tuple] | None) -> None:
     ws = wb.create_sheet("Instructions", 0)
-    ws["A1"] = "Clarify AI v1.0.0 — QA Execution Checklist (Basic)"
+    ws["A1"] = "Career Pilot v1.0.0 — QA Execution Checklist (Basic)"
     ws["A1"].font = Font(bold=True, size=14)
     ws["A3"] = "Test Site (use this only)"
     ws["B3"] = BASE + "/"

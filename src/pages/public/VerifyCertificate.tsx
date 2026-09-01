@@ -42,7 +42,7 @@ export default function VerifyCertificatePage() {
   usePageMeta({
     title: `Verify certificate — ${PRODUCT_NAMES.brand}`,
     description:
-      "Verify a Clarify AI course completion certificate. Invalid IDs show a safe empty result.",
+      "Verify a Career Pilot course completion certificate. Invalid IDs show a safe empty result.",
     noIndex: !certificateId?.trim(),
   });
 
@@ -98,7 +98,7 @@ export default function VerifyCertificatePage() {
         <div>
           <h1 className="text-2xl font-semibold sm:text-3xl">{certificateKindLabel()}</h1>
           <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            This verifies a Clarify AI course completion record. It is not an official
+            This verifies a Career Pilot course completion record. It is not an official
             professional certification. Certificates are issued from your signed-in Learn
             account; this page only checks a public verification code.
           </p>

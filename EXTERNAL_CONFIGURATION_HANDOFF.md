@@ -1,6 +1,6 @@
 # External configuration handoff
 
-Clarify AI adapters, validation, UI disabled states, and tests are implemented in-repo.
+Career Pilot adapters, validation, UI disabled states, and tests are implemented in-repo.
 Do not commit secret values. Until a row is smoke-tested with a real key, its status remains `IMPLEMENTED_REQUIRES_EXTERNAL_CONFIGURATION`.
 
 Owner for all rows unless noted: product owner / ops.

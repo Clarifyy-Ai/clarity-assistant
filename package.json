@@ -1,6 +1,6 @@
 {
   "name": "clarify-ai",
-  "description": "Clarify AI — AI interview preparation and rehearsal platform",
+  "description": "Career Pilot — AI-powered career and exam preparation",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -13,9 +13,9 @@
     "build:dev": "vite build --mode development",
     "electron:dev": "cross-env BUILD_TARGET=electron concurrently \"vite\" \"wait-on http://localhost:5173 && cross-env ELECTRON_DEV=1 ELECTRON_DEV_URL=http://localhost:5173 electron .\"",
     "electron:build": "cross-env BUILD_TARGET=electron node scripts/validate-env.js && cross-env BUILD_TARGET=electron vite build",
-    "electron:package:linux": "npm run electron:build && npx @electron/packager . ClarifyCoach --platform=linux --arch=x64 --out=electron-release --overwrite --icon=public/brand/app-icon-512.png --ignore=^/src --ignore=^/public --ignore=^/electron-release --ignore=^/e2e --ignore=^/scripts --ignore=^/supabase --ignore=^/scraper --ignore=^/docs --ignore=^/.lovable --ignore=^/playwright-report --ignore=^/test-results",
-    "electron:package:mac": "npm run electron:build && npx @electron/packager . ClarifyCoach --platform=darwin --arch=x64 --out=electron-release --overwrite --icon=public/brand/app-icon-512.png --ignore=^/src --ignore=^/public --ignore=^/electron-release --ignore=^/e2e --ignore=^/scripts --ignore=^/supabase --ignore=^/scraper --ignore=^/docs --ignore=^/.lovable --ignore=^/playwright-report --ignore=^/test-results",
-    "electron:package:win": "npm run electron:build && npx @electron/packager . ClarifyCoach --platform=win32 --arch=x64 --out=electron-release --overwrite --icon=public/brand/app-icon.ico --ignore=^/src --ignore=^/public --ignore=^/electron-release --ignore=^/e2e --ignore=^/scripts --ignore=^/supabase --ignore=^/scraper --ignore=^/docs --ignore=^/.lovable --ignore=^/playwright-report --ignore=^/test-results",
+    "electron:package:linux": "npm run electron:build && npx @electron/packager . CareerPilot --platform=linux --arch=x64 --out=electron-release --overwrite --icon=public/brand/app-icon-512.png --ignore=^/src --ignore=^/public --ignore=^/electron-release --ignore=^/e2e --ignore=^/scripts --ignore=^/supabase --ignore=^/scraper --ignore=^/docs --ignore=^/.lovable --ignore=^/playwright-report --ignore=^/test-results",
+    "electron:package:mac": "npm run electron:build && npx @electron/packager . CareerPilot --platform=darwin --arch=x64 --out=electron-release --overwrite --icon=public/brand/app-icon-512.png --ignore=^/src --ignore=^/public --ignore=^/electron-release --ignore=^/e2e --ignore=^/scripts --ignore=^/supabase --ignore=^/scraper --ignore=^/docs --ignore=^/.lovable --ignore=^/playwright-report --ignore=^/test-results",
+    "electron:package:win": "npm run electron:build && npx @electron/packager . CareerPilot --platform=win32 --arch=x64 --out=electron-release --overwrite --icon=public/brand/app-icon.ico --ignore=^/src --ignore=^/public --ignore=^/electron-release --ignore=^/e2e --ignore=^/scripts --ignore=^/supabase --ignore=^/scraper --ignore=^/docs --ignore=^/.lovable --ignore=^/playwright-report --ignore=^/test-results",
     "dist:mac": "cross-env BUILD_TARGET=electron node scripts/validate-env.js && cross-env BUILD_TARGET=electron vite build && electron-builder --mac",
     "dist:win": "cross-env BUILD_TARGET=electron node scripts/validate-env.js && cross-env BUILD_TARGET=electron vite build && electron-builder --win",
     "dist:linux": "cross-env BUILD_TARGET=electron node scripts/validate-env.js && cross-env BUILD_TARGET=electron vite build && electron-builder --linux",
@@ -59,7 +59,7 @@
   },
   "build": {
     "appId": "com.clarify.coach",
-    "productName": "Clarify Coach",
+    "productName": "Career Pilot",
     "asar": true,
     "files": [
       "!**/*",
@@ -107,7 +107,7 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "shortcutName": "Clarify Coach"
+      "shortcutName": "Career Pilot"
     },
     "publish": {
       "provider": "github",

@@ -1,8 +1,8 @@
-# RELEASE_NOTES_v1.0.0.md — Clarify AI closed beta
+# RELEASE_NOTES_v1.0.0.md — Career Pilot closed beta
 
 ## Scope
 
-Clarify AI v1.0.0 is a **consumer interview-preparation** product for a paid closed beta (target 100–1,000 users).
+Career Pilot v1.0.0 is a **consumer interview-preparation** product for a paid closed beta (target 100–1,000 users).
 
 It is **not** an HRIS, workforce platform, multi-tenant organization suite, SSO/SCIM product, or Rooms collaboration platform.
 

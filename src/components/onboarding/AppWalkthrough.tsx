@@ -92,7 +92,7 @@ const STEPS: TourStep[] = [
     icon: Mic,
     title: "You're ready to practice",
     description:
-      "Start with Practice Coach when you're ready. Remember: Clarify AI is for mock and rehearsal only.",
+      "Start with Practice Coach when you're ready. Remember: Career Pilot is for mock and rehearsal only.",
     target: null,
     placement: "center",
   },

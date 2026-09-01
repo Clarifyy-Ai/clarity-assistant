@@ -24,6 +24,7 @@ import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import "@fontsource/inter/700.css";
+import "@fontsource/inter/800.css";
 import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/500.css";
 
@@ -47,7 +48,7 @@ if (
     dsn: import.meta.env.VITE_SENTRY_DSN,
     enabled: bootPrivacy.crash_reporting,
     environment: import.meta.env.VITE_APP_ENV || "development",
-    release: `Clarify AI@${import.meta.env.VITE_APP_VERSION || "1.0.0"}`,
+    release: `Career Pilot@${import.meta.env.VITE_APP_VERSION || "1.0.0"}`,
     integrations: [
       Sentry.browserTracingIntegration(),
       Sentry.replayIntegration({
@@ -142,7 +143,7 @@ if (!isElectronApp() && "serviceWorker" in navigator) {
 const rootEl = document.getElementById("root");
 if (!rootEl) {
   throw new Error(
-    "[Clarify AI] #root element not found. Check your index.html.",
+    "[Career Pilot] #root element not found. Check your index.html.",
   );
 }
 
@@ -154,7 +155,7 @@ if (!rootEl) {
   const ROOT_IDS = ["overlay-root", "clarify-overlay-root"];
   for (const id of ROOT_IDS) {
     if (document.getElementById(id)) continue;
-    console.warn(`[Clarify AI] #${id} missing from HTML — recreating it.`);
+    console.warn(`[Career Pilot] #${id} missing from HTML — recreating it.`);
     const el = document.createElement("div");
     el.id = id;
     el.style.cssText =

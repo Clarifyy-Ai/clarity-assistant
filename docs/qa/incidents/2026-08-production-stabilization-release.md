@@ -1,4 +1,4 @@
-# Clarify AI — Master Production Stabilization Release
+# Career Pilot — Master Production Stabilization Release
 
 | Field | Value |
 |-------|-------|

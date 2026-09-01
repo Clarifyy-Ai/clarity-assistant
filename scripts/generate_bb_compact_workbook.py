@@ -1,5 +1,5 @@
 """
-Clarify AI — compact black-box QA workbook (same layout as
+Career Pilot — compact black-box QA workbook (same layout as
 Clarify_AI_BB_Manual_QA_Workbook (5).xlsx).
 
 Sheets:
@@ -246,7 +246,7 @@ def sheet_cover(wb: Workbook) -> None:
     ws.title = "00 Cover & Instructions"
     start = write_title_block(
         ws,
-        "Clarify AI — Black-Box Manual QA Workbook",
+        "Career Pilot — Black-Box Manual QA Workbook",
         "CREDENTIALS PRE-FILLED | TESTERS PRE-ASSIGNED | ALL TEST CASES IN ONE SHEET | "
         "COMPLETE WITHIN 2 DAYS | UPDATE PEACH COLUMNS ONLY",
         cols=6,

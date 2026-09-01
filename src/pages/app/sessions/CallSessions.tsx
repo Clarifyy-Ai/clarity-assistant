@@ -61,7 +61,7 @@ type SessionTab = (typeof SESSION_TABS)[number];
 
 export default function CallSessions() {
   usePageMeta({
-    title: "Session History | Clarify AI",
+    title: "Session History | Career Pilot",
     description: "Review all your practice sessions — live coaching, mock interviews, and rehearsals.",
   });
 

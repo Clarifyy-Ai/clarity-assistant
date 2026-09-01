@@ -7,8 +7,8 @@ import { usePageMeta } from "@/hooks/usePageMeta";
 
 export default function Terms() {
   usePageMeta({
-    title: "Terms of Service | Clarify AI",
-    description: "Read the Clarify AI terms of service, usage policies, and legal agreements.",
+    title: "Terms of Service | Career Pilot",
+    description: "Read the Career Pilot terms of service, usage policies, and legal agreements.",
   });
 
   return (
@@ -30,12 +30,12 @@ export default function Terms() {
 
         <h2>2. Description of Service</h2>
         <p>
-          Clarify AI is an AI-powered interview preparation platform providing mock interviews, live practice coaching, analytics, and related tools for rehearsal and preparation. The Service is provided &quot;as is&quot; and &quot;as available.&quot;
+          Career Pilot is an AI-powered interview preparation platform providing mock interviews, live practice coaching, analytics, and related tools for rehearsal and preparation. The Service is provided &quot;as is&quot; and &quot;as available.&quot;
         </p>
 
         <h3>2.1 Practice and Rehearsal Only</h3>
         <p>
-          Clarify AI is designed exclusively for interview preparation, mock sessions, and rehearsal. You may not use AI assistance features during actual third-party interviews, employer assessments, proctored exams, or any evaluation where outside assistance is prohibited. The on-screen overlay is a standard application window and is visible to screen-sharing and recording tools.
+          Career Pilot is designed exclusively for interview preparation, mock sessions, and rehearsal. You may not use AI assistance features during actual third-party interviews, employer assessments, proctored exams, or any evaluation where outside assistance is prohibited. The on-screen overlay is a standard application window and is visible to screen-sharing and recording tools.
         </p>
 
         <h2>3. User Accounts</h2>
@@ -61,7 +61,7 @@ export default function Terms() {
           <li>Upload malicious content, viruses, or harmful code.</li>
         </ul>
         <p>
-          Clarify AI is an interview <strong>preparation</strong> platform. Mock sessions, warmups,
+          Career Pilot is an interview <strong>preparation</strong> platform. Mock sessions, warmups,
           and live rehearsals are practice contexts. AI model answers and coaching are study aids for
           rehearsal — not scripts to be used during actual third-party interviews or employer evaluations.
         </p>

@@ -593,7 +593,7 @@ export default function DocumentLibraryPage() {
     <div className={PAGE_SHELL}>
       <PageHeader
         title="Personal Document Library"
-        description="Upload documents you own or have permission to use. Clarify does not scrape copyrighted exam papers."
+        description="Upload documents you own or have permission to use. Career Pilot does not scrape copyrighted exam papers."
         breadcrumbs={[{ label: "Dashboard", href: "/app/dashboard" }, { label: "Document Library" }]}
       />
       <Card className="mb-4 space-y-3">

@@ -510,7 +510,7 @@ Deno.serve(async (req) => {
             metadata: { reason: "account_in_use" },
           });
           return errorResponse(
-            "That Google Calendar account is already connected to another Clarify AI user.",
+            "That Google Calendar account is already connected to another Career Pilot user.",
             "CONFLICT",
             409,
             req,
