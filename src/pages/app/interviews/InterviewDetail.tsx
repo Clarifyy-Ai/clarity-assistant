@@ -174,10 +174,17 @@ export default function InterviewDetail() {
         scheduled_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       }).catch(() => undefined);
       if (calendar.syncAvailable && calendar.isConnected) {
-        void calendar.deleteEvent({
+        const calResult = await calendar.deleteEvent({
           interviewId: iv.id,
           eventId: (iv as { calendar_event_id?: string }).calendar_event_id,
         });
+        if (calResult.error) {
+          toast.message(
+            calResult.code === "REAUTH_REQUIRED"
+              ? "Interview cancelled. Reconnect Google Calendar to cancel the calendar event."
+              : "Interview cancelled. The Google Calendar event could not be updated.",
+          );
+        }
       }
       toast.success("Interview cancelled. It remains in your history.");
       await scheduler.reload();

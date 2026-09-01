@@ -69,6 +69,14 @@ export type AuditAction =
   | "VALIDATION_FAILURE"
   | "AUTH_FAILURE"
   | "PERMISSION_DENIED"
+  | "CALENDAR_CONNECTED"
+  | "CALENDAR_DISCONNECTED"
+  | "CALENDAR_OAUTH_FAILED"
+  | "CALENDAR_REAUTH_REQUIRED"
+  | "CALENDAR_EVENT_CREATED"
+  | "CALENDAR_EVENT_UPDATED"
+  | "CALENDAR_EVENT_CANCELLED"
+  | "CALENDAR_SYNC_FAILED"
   | "UNKNOWN";
 
 export type AuditResourceType =
@@ -87,6 +95,7 @@ export type AuditResourceType =
   | "settings"
   | "admin"
   | "system"
+  | "calendar"
   | "unknown";
 
 export type AuditEvent = {
@@ -114,6 +123,10 @@ const SENSITIVE_KEYS = [
   "token",
   "access_token",
   "refresh_token",
+  "provider_token",
+  "provider_refresh_token",
+  "code_verifier",
+  "id_token",
   "authorization",
   "apiKey",
   "api_key",

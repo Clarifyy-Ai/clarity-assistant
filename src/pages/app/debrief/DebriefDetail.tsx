@@ -1,5 +1,5 @@
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import {
@@ -59,11 +59,15 @@ export default function DebriefDetail() {
   const [scorecard, setScorecard] = useState<any>(null);
   const [transcriptSegments, setTranscriptSegments] = useState<any[]>([]);
   const [debriefSource, setDebriefSource] = useState<string | null>(null);
+  const generateInFlightRef = useRef(false);
 
   // ── Generate debrief from edge function ──────────────────────
   // FIX 1: fetchEdge returns parsed data directly — no .ok / .json()
   // FIX 5: removed user_id from body — derived server-side from auth token
   const generateDebrief = useCallback(async (sessionId: string) => {
+    if (generateInFlightRef.current) return;
+    generateInFlightRef.current = true;
+    setFetchError(null);
     setGenning(true);
     setLoadStep(2);
     try {
@@ -86,13 +90,12 @@ export default function DebriefDetail() {
       toast.error(msg);
       setFetchError(msg);
     } finally {
+      generateInFlightRef.current = false;
       setGenning(false);
     }
   }, []);
 
-  // ── Fetch existing debrief from DB ────────────────────────────
-  // FIX 2: separate error from "not found" — only generate if truly not found
-  // FIX 4: wrapped in useCallback with proper deps
+  // Persist-first: load DB only. Missing debriefs wait for an explicit Generate click.
   const fetchDebrief = useCallback(async () => {
     if (!id || !user) return;
     setLoading(true);
@@ -154,9 +157,9 @@ export default function DebriefDetail() {
             setTranscript(sess?.notes ?? null);
           }
         } catch {
-          // Artifacts are optional; report generation still runs.
+          // Artifacts are optional; user can still generate a debrief.
         }
-        await generateDebrief(id);
+        // Persist-first: never spend AI credits just because this page mounted.
       }
     } catch (err: unknown) {
       const msg = getAiUserFacingError(err);
@@ -165,7 +168,7 @@ export default function DebriefDetail() {
     } finally {
       setLoading(false);
     }
-  }, [id, user?.id, generateDebrief]);
+  }, [id, user?.id]);
 
   // FIX 3: include user?.id in dep array so it re-runs if user loads after id
   useEffect(() => {
@@ -266,8 +269,12 @@ export default function DebriefDetail() {
             icon={AlertTriangle}
             title="Couldn't load debrief"
             description={fetchError}
-            actionLabel="Retry"
-            onAction={fetchDebrief}
+            actionLabel={session && id ? "Generate debrief" : "Retry"}
+            onAction={
+              session && id
+                ? () => void generateDebrief(id)
+                : fetchDebrief
+            }
             secondaryActionLabel="Back to debriefs"
             onSecondaryAction={() => navigate("/app/debriefs")}
           />
@@ -277,6 +284,28 @@ export default function DebriefDetail() {
   }
 
   // ── Not found state ───────────────────────────────────────────
+  if (!debrief && session && id) {
+    return (
+      <div className="max-w-3xl space-y-5">
+        <PageHeader
+          title="Session Debrief"
+          breadcrumbs={debriefBreadcrumbs.slice(0, 2).concat([{ label: "Not generated" }])}
+        />
+        <Card>
+          <EmptyState
+            icon={Brain}
+            title="No debrief yet"
+            description="This session has no saved debrief. Generate one when you are ready — it uses AI credits."
+            actionLabel="Generate debrief"
+            onAction={() => void generateDebrief(id)}
+            secondaryActionLabel="Back to debriefs"
+            onSecondaryAction={() => navigate("/app/debriefs")}
+          />
+        </Card>
+      </div>
+    );
+  }
+
   if (!debrief) {
     return (
       <div className="max-w-3xl space-y-5">

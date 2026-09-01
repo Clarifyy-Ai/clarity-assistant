@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { answerBankDB, sessionsDB, sessionAnswersDB, scorecardsDB } from "@/lib/supabase/database";
-import { supabase } from "@/lib/supabase/client";
+import { answerBankDB } from "@/lib/supabase/database";
 import { exportSessionPdf } from "@/lib/export/sessionPdf";
 import { useAuthStore } from "@/store/userStore";
+import { loadOwnedSessionDetail } from "@/lib/sessions/ownedSessionDetail";
+import { PAGE_SHELL_STANDARD } from "@/lib/ui/responsivePage";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -38,6 +39,8 @@ export default function SessionDetail() {
   const [session,     setSession]     = useState<any>(null);
   const [answers,     setAnswers]     = useState<any[]>([]);
   const [scorecard,   setScorecard]   = useState<{ overall_score?: number | null } | null>(null);
+  const [transcript,  setTranscript]  = useState<string | null>(null);
+  const [debriefSummary, setDebriefSummary] = useState<string | null>(null);
   const [loading,     setLoading]     = useState(true);
   const [fetchError,  setFetchError]  = useState<string | null>(null);
   const [expanded,    setExpanded]    = useState<Record<string, boolean>>({});
@@ -63,29 +66,18 @@ export default function SessionDetail() {
     setFetchError(null);
 
     try {
-      let sess: Awaited<ReturnType<typeof sessionsDB.getByIdForUser>> = null;
-      let ans: Awaited<ReturnType<typeof sessionAnswersDB.listBySessionIdForUser>> = [];
-      let sc: Awaited<ReturnType<typeof scorecardsDB.getBySessionIdForUser>> = null;
-      const { data: bundled, error: rpcErr } = await supabase.rpc(
-        "get_owned_session_detail",
-        { p_session_id: id },
-      );
-      if (!rpcErr && bundled && typeof bundled === "object" && (bundled as { found?: boolean }).found) {
-        const payload = bundled as { session?: typeof sess; answers?: typeof ans };
-        sess = (payload.session as typeof sess) ?? null;
-        ans = Array.isArray(payload.answers) ? payload.answers : [];
-        sc = await scorecardsDB.getBySessionIdForUser(id, user.id).catch(() => null);
-      } else {
-        const pair = await Promise.all([
-          sessionsDB.getByIdForUser(id, user.id),
-          sessionAnswersDB.listBySessionIdForUser(id, user.id),
-          scorecardsDB.getBySessionIdForUser(id, user.id).catch(() => null),
-        ]);
-        sess = pair[0];
-        ans = pair[1];
-        sc = pair[2];
-      }
+      const detail = await loadOwnedSessionDetail(id, user.id);
       if (requestId !== fetchRequestRef.current) return;
+
+      if (detail.code === "NOT_AUTHENTICATED") {
+        setFetchError("Your session expired. Please sign in again to view session details.");
+        setSession(null);
+        setScorecard(null);
+        setAnswers([]);
+        setTranscript(null);
+        setDebriefSummary(null);
+        return;
+      }
 
       agentDebugIngest({
         sessionId: "fcd48a",
@@ -95,16 +87,28 @@ export default function SessionDetail() {
         message: "session detail loaded",
         data: {
           requestedId: id,
-          found: Boolean(sess?.id),
-          status: sess?.status ?? null,
-          answerCount: Array.isArray(ans) ? ans.length : 0,
+          found: Boolean(detail.session?.id),
+          status: detail.session?.status ?? null,
+          answerCount: Array.isArray(detail.answers) ? detail.answers.length : 0,
+          code: detail.code,
         },
       });
 
-      setSession(sess);
-      setScorecard(sc);
+      setSession(detail.session);
+      setScorecard(detail.scorecard);
+      const transcriptText =
+        typeof detail.transcript?.content === "string" ? detail.transcript.content.trim() : "";
+      setTranscript(transcriptText || null);
+      const debrief = detail.debrief;
+      const summary =
+        typeof debrief?.summary === "string"
+          ? debrief.summary
+          : typeof debrief?.insight === "string"
+            ? debrief.insight
+            : null;
+      setDebriefSummary(summary);
       setAnswers(
-        [...ans]
+        [...detail.answers]
           .sort((a, b) => {
             const ai = a.question_index;
             const bi = b.question_index;
@@ -138,20 +142,20 @@ export default function SessionDetail() {
       setFetchError(
         authLike
           ? "Your session expired. Please sign in again to view session details."
-          : err instanceof Error
-            ? err.message
-            : "Failed to load session",
+          : "We couldn't load this session. Please retry — we did not invent empty session data.",
       );
       setSession(null);
       setScorecard(null);
       setAnswers([]);
+      setTranscript(null);
+      setDebriefSummary(null);
     } finally {
       if (requestId === fetchRequestRef.current) setLoading(false);
     }
   }, [id, user?.id]);
 
   useEffect(() => {
-    fetchSession();
+    void fetchSession();
   }, [fetchSession]);
 
   // ── Derived values ────────────────────────────────────────────
@@ -176,7 +180,7 @@ export default function SessionDetail() {
 
   if (loading) {
     return (
-      <div className="space-y-5 max-w-4xl">
+      <div className={cn(PAGE_SHELL_STANDARD, "space-y-5")}>
         <SkeletonCard />
         <SkeletonCard />
         <SkeletonCard />
@@ -188,7 +192,7 @@ export default function SessionDetail() {
 
   if (fetchError) {
     return (
-      <div className="max-w-4xl space-y-4">
+      <div className={cn(PAGE_SHELL_STANDARD, "space-y-4")}>
         <InlineErrorRetry message={fetchError} onRetry={() => void fetchSession()} />
         <Button variant="secondary" size="sm" onClick={() => navigate("/app/sessions")}>
           ← Back to sessions
@@ -201,7 +205,7 @@ export default function SessionDetail() {
 
   if (!session) {
     return (
-      <div className="max-w-4xl">
+      <div className={PAGE_SHELL_STANDARD}>
         <Card>
           <EmptyState
             icon={MessageSquare}
@@ -219,7 +223,7 @@ export default function SessionDetail() {
   // ── Render ────────────────────────────────────────────────────
 
   return (
-    <div className="max-w-4xl space-y-5">
+    <div className={cn(PAGE_SHELL_STANDARD, "space-y-5")}>
 
       {/* ── Header ───────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -371,6 +375,33 @@ export default function SessionDetail() {
           </Card>
         ))}
       </div>
+
+      {(transcript || debriefSummary) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {transcript && (
+            <Card>
+              <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                <Mic className="w-4 h-4 text-primary" />
+                Transcript
+              </h3>
+              <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto">
+                {transcript}
+              </p>
+            </Card>
+          )}
+          {debriefSummary && (
+            <Card>
+              <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
+                <Brain className="w-4 h-4 text-primary" />
+                Report
+              </h3>
+              <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
+                {debriefSummary}
+              </p>
+            </Card>
+          )}
+        </div>
+      )}
 
       {/* ── AI Overall Feedback ────────────────────────── */}
       {session.ai_feedback && (

@@ -11,7 +11,9 @@ import {
   getAdminClient,
 } from "../_shared/utils.ts";
 import { generateWithFallback } from "../_shared/aiProvider.ts";
+import { getAiFeaturePolicy } from "../_shared/aiFeaturePolicy.ts";
 import type { STARAnswer, ModelId } from "../_shared/types.ts";
+import { providerForModel } from "../_shared/modelCatalog.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
@@ -40,8 +42,6 @@ function sanitize(input: unknown, max = 2000): string {
     .replace(/[\u000E-\u001F]/g, "")
     .slice(0, max);
 }
-
-const ALLOWED_MODELS: ModelId[] = ["gpt-4o", "gpt-4o-mini", "gpt-4o-reasoning"];
 
 function hasRichResumeEvidence(resumeText: string): boolean {
   const t = resumeText.trim();
@@ -150,7 +150,7 @@ Deno.serve(async (req: Request) => {
     const role = sanitize(body.role, 120);
 
     let model: ModelId = body.model ?? "gpt-4o";
-    if (!ALLOWED_MODELS.includes(model)) model = "gpt-4o";
+    if (!providerForModel(model)) model = "gpt-4o";
 
     const starCost = creditCost("star_builder");
     const idempotencyKey =
@@ -281,17 +281,20 @@ Return ONLY this JSON:
           : "";
         const polishSystemPrompt = `${systemPrompt}${draftAddon}`;
 
+        const policy = getAiFeaturePolicy("generate_star_answer");
+        const starMaxTokens = Math.min(1200, policy.maxOutputTokens);
         let aiResult;
         try {
           aiResult = await generateWithFallback({
             prompt: userPrompt,
             systemPrompt: polishSystemPrompt,
-            maxTokens: 1200,
+            maxTokens: starMaxTokens,
             temperature: 0.72,
             jsonMode: true,
             model: String(model),
             userId,
             action: "generate_star_answer",
+            skipSecondaryOnQuota: policy.skipSecondaryOnQuota,
           });
         } catch {
           aiResult = null;
@@ -311,12 +314,13 @@ Return ONLY this JSON:
           const repaired = await generateWithFallback({
             prompt: `${REPAIR_JSON_PROMPT}\n\nBroken output:\n${aiResult.text.slice(0, 4000)}`,
             systemPrompt: polishSystemPrompt,
-            maxTokens: 1200,
+            maxTokens: starMaxTokens,
             temperature: 0.2,
             jsonMode: true,
             model: String(model),
             userId,
             action: "generate_star_answer_repair",
+            skipSecondaryOnQuota: policy.skipSecondaryOnQuota,
           });
           parsed = parseStructuredJson(repaired.text, isStarStructuredAnswer);
         }

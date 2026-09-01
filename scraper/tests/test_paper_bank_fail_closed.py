@@ -106,3 +106,88 @@ def test_factory_fail_closed_without_deterministic_permission() -> None:
         assert "deterministic fill disabled" in exc.value.message.lower()
 
     asyncio.run(run())
+
+
+def test_factory_official_previous_never_constructs_mcq_generator() -> None:
+    settings = MagicMock()
+    settings.has_ai_provider = True
+    settings.batch_size = 4
+    settings.max_repair_rounds = 1
+    settings.gemini_api_key = "g"
+    settings.openai_api_key = "o"
+
+    exam = ExamContext(
+        exam_id="e1",
+        code="TEST_EXAM",
+        name="Test Exam",
+        legacy_exam_type="TEST",
+        bank_type_keys=("TEST",),
+    )
+    blueprint = PaperBlueprint(
+        exam=exam,
+        pattern_version_id="p1",
+        pattern_version="1",
+        syllabus_version_id=None,
+        syllabus_version=None,
+        language="en",
+        mode="official_previous",
+        paper_class="official",
+        total_questions=10,
+        total_marks=10.0,
+        duration_minutes=60,
+        negative_mark=0.0,
+        marks_per_question=1.0,
+        random_seed="seed",
+        sections=(
+            SectionBlueprint(
+                code="gen",
+                name="General",
+                question_count=10,
+                marks=10.0,
+                sort_order=1,
+                topics=("general",),
+                difficulty_counts=(("MEDIUM", 10),),
+                topic_counts=(("general", 10),),
+            ),
+        ),
+        slots=(),
+        source_years=(2024,),
+    )
+
+    factory = PaperFactory(settings, repository=MagicMock())
+    factory.repo.load_bank_questions = MagicMock(return_value=[])
+    factory.plan = AsyncMock(return_value=blueprint)  # type: ignore[method-assign]
+
+    request = GenerationRequest(
+        exam_query="TEST_EXAM",
+        mode="official_previous",
+        user_id="user-1",
+        job_id="job-1",
+        use_bank=True,
+        allow_deterministic_fill=False,
+        publish=False,
+    )
+
+    def boom(*_a, **_k):
+        raise AssertionError("official_previous must never construct MCQGenerator")
+
+    async def run() -> None:
+        with patch.object(
+            PaperFactory,
+            "_subtract_bank_coverage",
+            return_value=[
+                MagicMock(
+                    count=10,
+                    section_code="gen",
+                    section_name="General",
+                    topic="t",
+                    difficulty="MEDIUM",
+                )
+            ],
+        ):
+            with patch("app.paper_factory.factory.MCQGenerator", boom):
+                with pytest.raises(PaperFactoryError) as exc:
+                    await factory.generate(request)
+        assert exc.value.code == "CONTENT_INSUFFICIENT"
+
+    asyncio.run(run())

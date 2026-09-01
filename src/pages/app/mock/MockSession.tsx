@@ -1,5 +1,9 @@
 // src/pages/app/mock/MockSession.tsx
 import { useState, useEffect, useRef, useCallback } from "react";
+import {
+  beginAutoHintIfIdle,
+  questionFingerprint,
+} from "@/lib/ai/questionDetection";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useSessionOrchestrator } from "@/hooks/useSessionOrchestrator";
 import { useAudioSession } from "@/hooks/useAudioSession";
@@ -272,6 +276,7 @@ export default function MockSession() {
   const answerNextOpRef = useRef(0);
   /** Synchronous lock so rapid Next clicks cannot start two next-ops. */
   const nextOpLockRef = useRef(false);
+  const autoHintInflightFingerprintsRef = useRef<Set<string>>(new Set());
   const listeningStartedAtRef = useRef<number | null>(null);
   const interviewerAudioActiveRef = useRef(false);
   const [typedAnswer, setTypedAnswer] = useState("");
@@ -622,7 +627,10 @@ export default function MockSession() {
     setAnswerNextState((s) => reduceAnswerNext(s, { type: "QUESTION_READY" }));
 
     if (overlay.auto_generate) {
-      void handleRequestHint(qText);
+      const autoFp = questionFingerprint(qText) || qText;
+      if (beginAutoHintIfIdle(autoHintInflightFingerprintsRef, autoFp)) {
+        void handleRequestHint(qText);
+      }
     }
 
     speakingQuestionIdRef.current = qId;

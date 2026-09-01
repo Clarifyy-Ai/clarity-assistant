@@ -67,7 +67,7 @@ function buildMenu({ isDev }) {
       submenu: [
         {
           label: "Open Clarify AI Website",
-          click: () => shell.openExternal("https://clarify-aii.lovable.app"),
+          click: () => shell.openExternal("https://clarify.ai.sltfinanceindia.com"),
         },
         ...(isDev
           ? [{

@@ -1,5 +1,5 @@
 // Sprint C: Hotkey customization UI
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { DEFAULT_HOTKEYS, type HotkeyId, isMac } from "@/lib/constants/hotkeys";
 import {
   captureCombo,
@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useAuthStore } from "@/store/authStore";
 
 const STORAGE_KEY = "clarify_custom_hotkeys";
 
@@ -24,7 +25,7 @@ function loadOverrides(): Overrides {
   }
 }
 
-function saveOverrides(o: Overrides) {
+function saveLocal(o: Overrides) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(o));
   window.dispatchEvent(new CustomEvent("clarify:hotkeys-changed", { detail: o }));
 }
@@ -51,8 +52,38 @@ function findConflicts(overrides: Overrides): Map<string, HotkeyId[]> {
 
 export default function SettingsHotkeys() {
   const isMobile = useIsMobile();
+  const profile = useAuthStore((s) => s.profile);
+  const updateProfile = useAuthStore((s) => s.updateProfile);
   const [overrides, setOverrides] = useState<Overrides>(() => loadOverrides());
   const [recordingId, setRecordingId] = useState<HotkeyId | null>(null);
+
+  useEffect(() => {
+    const prefs = profile?.ui_preferences;
+    if (!prefs || typeof prefs !== "object" || Array.isArray(prefs)) return;
+    const stored = (prefs as Record<string, unknown>).hotkeys;
+    if (stored && typeof stored === "object" && !Array.isArray(stored)) {
+      const next = stored as Overrides;
+      setOverrides(next);
+      saveLocal(next);
+    }
+  }, [profile?.id, profile?.ui_preferences]);
+
+  const persistOverrides = useCallback(async (next: Overrides) => {
+    setOverrides(next);
+    saveLocal(next);
+    if (!profile?.id) return;
+    const existing =
+      profile.ui_preferences && typeof profile.ui_preferences === "object"
+        ? (profile.ui_preferences as Record<string, unknown>)
+        : {};
+    try {
+      await updateProfile({
+        ui_preferences: { ...existing, hotkeys: next },
+      });
+    } catch {
+      toast.error("Saved on this device, but we couldn't sync shortcuts to your account.");
+    }
+  }, [profile?.id, profile?.ui_preferences, updateProfile]);
 
   useEffect(() => {
     if (!recordingId) return;
@@ -85,26 +116,24 @@ export default function SettingsHotkeys() {
         toast.warning(
           `Conflict: ${combo} is already assigned to "${DEFAULT_HOTKEYS[conflict].description}"`,
         );
+        return;
       }
-      setOverrides(next);
-      saveOverrides(next);
       setRecordingId(null);
       toast.success(`Bound ${combo}`);
+      void persistOverrides(next);
     };
     window.addEventListener("keydown", handler, { capture: true });
     return () => window.removeEventListener("keydown", handler, { capture: true } as any);
-  }, [recordingId, overrides]);
+  }, [recordingId, overrides, persistOverrides]);
 
   const reset = (id: HotkeyId) => {
     const { [id]: _, ...rest } = overrides;
-    setOverrides(rest);
-    saveOverrides(rest);
+    void persistOverrides(rest);
     toast.success("Reset to default");
   };
 
   const resetAll = () => {
-    setOverrides({});
-    saveOverrides({});
+    void persistOverrides({});
     toast.success("All hotkeys reset");
   };
 

@@ -161,6 +161,7 @@ export default function JDDetail() {
   }, [user?.id, id, selectedResumeId, jd?.updated_at, jd?.created_at]);
 
   async function handleGapAnalysis() {
+    if (gapRunning) return;
     if (!id || !selectedResumeId) {
       toast.error("Select a resume to compare against this JD.");
       return;

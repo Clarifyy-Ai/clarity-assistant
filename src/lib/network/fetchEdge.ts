@@ -61,6 +61,7 @@ const CREDIT_REFRESH_SKIP = new Set([
   "contact-sales",
   "schedule-interview",
   "sync-calendar",
+  "disconnect-calendar",
   "deepgram-token",
   "stripe-webhook",
   "create-checkout",
@@ -135,6 +136,8 @@ const OPERATIONAL_EDGE_FNS = new Set([
   "run-daily-exam-scrape",
   "moderate-content",
   "issue-course-certificate",
+  "sync-calendar",
+  "disconnect-calendar",
 ]);
 
 /** Mutating calls that must not be retried by the browser after a network/CORS glitch. */
@@ -168,6 +171,8 @@ const NO_NETWORK_RETRY_FNS = new Set([
   // spinner storms while still recovering from transient network blips.
   "check-exam-paper-availability",
   "get-paper-generation-job",
+  "sync-calendar",
+  "disconnect-calendar",
 ]);
 
 function unreachableUserMessage(fnName: string): string {

@@ -69,6 +69,7 @@ test.describe("Account deletion", () => {
     await dismissCookieBanner(page);
     await page.getByRole("button", { name: /Delete my account/i }).click();
     await page.getByPlaceholder(E2E_TEST_USER.email).fill(E2E_TEST_USER.email);
+    await page.getByPlaceholder("Your password").fill(E2E_TEST_USER.password);
     const confirm = page.getByRole("button", { name: /^Delete account$/i });
     await expect(confirm).toBeEnabled({ timeout: 10_000 });
     await Promise.all([confirm.click(), confirm.click()]);

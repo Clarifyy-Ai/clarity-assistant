@@ -1,5 +1,5 @@
 import { ENV } from "@/lib/env";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { scorecardsDB, sessionAnswersDB } from "@/lib/supabase/database";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { ApiClientError } from "@/lib/api/apiClient";
@@ -25,11 +25,16 @@ interface ScorecardState {
   shareBlockedReason: string | null;
 }
 
+const NO_ANSWERS_MESSAGE =
+  "No answers were recorded for this session, so a scorecard cannot be generated. Re-run the session and answer at least one question.";
+
 /**
  * Scorecards are authoritative only when persisted in `scorecards`.
- * The browser must not invent a final numeric score (no client Gemini write-back).
+ * Mount/refresh only reads the DB. AI generate-scorecard is an explicit user action.
  */
 export function useScorecard({ sessionId }: UseScorecardOptions) {
+  const generateInFlightRef = useRef(false);
+
   const [state, setState] = useState<ScorecardState>({
     scorecard: null,
     status: "loading",
@@ -55,19 +60,6 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
       shareUrl: existing.share_token ? buildShareUrl(existing.share_token) : null,
     }));
   }, []);
-
-  const requestServerScore = useCallback(async (): Promise<Scorecard | null> => {
-    setState((s) => ({
-      ...s,
-      status: "pending",
-      isLoading: false,
-      isGenerating: true,
-      error: null,
-    }));
-
-    await fetchEdgeJson("generate-scorecard", { session_id: sessionId }, { timeoutMs: 60_000 });
-    return scorecardsDB.getBySessionId(sessionId);
-  }, [sessionId]);
 
   const loadScorecard = useCallback(async (): Promise<void> => {
     setState((s) => ({
@@ -95,39 +87,19 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
           status: "not_scored",
           isLoading: false,
           isGenerating: false,
-          error:
-            "No answers were recorded for this session, so a scorecard cannot be generated. Re-run the session and answer at least one question.",
+          error: NO_ANSWERS_MESSAGE,
         }));
         return;
       }
 
-      try {
-        const created = await requestServerScore();
-        if (created) {
-          applyScorecard(created);
-          return;
-        }
-        setState((s) => ({
-          ...s,
-          scorecard: null,
-          status: "not_scored",
-          isLoading: false,
-          isGenerating: false,
-          error: null,
-        }));
-      } catch (err) {
-        const isNotScored =
-          err instanceof ApiClientError && err.code === "NOT_SCORED";
-        const message = getAiUserFacingError(err);
-        setState((s) => ({
-          ...s,
-          scorecard: null,
-          status: isNotScored ? "not_scored" : "failed",
-          isLoading: false,
-          isGenerating: false,
-          error: message,
-        }));
-      }
+      setState((s) => ({
+        ...s,
+        scorecard: null,
+        status: "not_scored",
+        isLoading: false,
+        isGenerating: false,
+        error: null,
+      }));
     } catch {
       setState((s) => ({
         ...s,
@@ -137,9 +109,70 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
         error: "Failed to load scorecard",
       }));
     }
-  }, [sessionId, applyScorecard, requestServerScore]);
+  }, [sessionId, applyScorecard]);
+
+  const generateScorecard = useCallback(async (): Promise<void> => {
+    if (!sessionId || generateInFlightRef.current) return;
+    generateInFlightRef.current = true;
+
+    setState((s) => ({
+      ...s,
+      status: "pending",
+      isLoading: false,
+      isGenerating: true,
+      error: null,
+    }));
+
+    try {
+      const answers = await sessionAnswersDB.listBySessionId(sessionId).catch(() => []);
+      const hasAnswers = (answers ?? []).some(
+        (row: { answer?: string | null }) => (row.answer ?? "").trim().length > 0,
+      );
+      if (!hasAnswers) {
+        setState((s) => ({
+          ...s,
+          scorecard: null,
+          status: "not_scored",
+          isLoading: false,
+          isGenerating: false,
+          error: NO_ANSWERS_MESSAGE,
+        }));
+        return;
+      }
+
+      await fetchEdgeJson("generate-scorecard", { session_id: sessionId }, { timeoutMs: 60_000 });
+      const created = await scorecardsDB.getBySessionId(sessionId);
+      if (created) {
+        applyScorecard(created);
+        return;
+      }
+      setState((s) => ({
+        ...s,
+        scorecard: null,
+        status: "not_scored",
+        isLoading: false,
+        isGenerating: false,
+        error: null,
+      }));
+    } catch (err) {
+      const isNotScored =
+        err instanceof ApiClientError && err.code === "NOT_SCORED";
+      const message = getAiUserFacingError(err);
+      setState((s) => ({
+        ...s,
+        scorecard: null,
+        status: isNotScored ? "not_scored" : "failed",
+        isLoading: false,
+        isGenerating: false,
+        error: message,
+      }));
+    } finally {
+      generateInFlightRef.current = false;
+    }
+  }, [sessionId, applyScorecard]);
 
   useEffect(() => {
+    generateInFlightRef.current = false;
     if (!sessionId) return;
     void loadScorecard();
   }, [sessionId, loadScorecard]);
@@ -192,7 +225,7 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
 
   return {
     ...state,
-    generateScorecard: loadScorecard,
+    generateScorecard,
     shareScorecard,
     exportJSON,
     exportPDF,

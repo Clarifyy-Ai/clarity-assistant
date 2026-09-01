@@ -196,6 +196,11 @@ for (const s of ["OPENAI_API_KEY", "ANTHROPIC_API_KEY"]) {
   console.log(`  - ${s}`);
 }
 
+console.log("\nRecommended secrets (warn only — missing does not fail this check):");
+console.log(
+  "  - ALLOW_ELECTRON_NULL_ORIGIN — set to true so Electron desktop (file:// / null origin) CORS requests are allowed; cors.ts already defaults true if unset",
+);
+
 console.log("\nCommands:");
 console.log("  npm run validate-env");
 console.log("  npx supabase db push");

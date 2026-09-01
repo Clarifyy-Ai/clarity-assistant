@@ -16,7 +16,8 @@ import {
   refundCredits,
   storeIdempotentResponse,
 } from "../_shared/supabase.ts";
-import { generateWithFallback, logAICost } from "../_shared/aiProvider.ts";
+import { generateWithFallback } from "../_shared/aiProvider.ts";
+import { getAiFeaturePolicy } from "../_shared/aiFeaturePolicy.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
@@ -42,6 +43,8 @@ import {
   httpStatusForDomainCode,
 } from "../_shared/domainErrors.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
+
+const PREP_AI_POLICY = getAiFeaturePolicy("prep_tool");
 
 function structuredError(
   req: Request,
@@ -627,13 +630,13 @@ Deno.serve(async (req: Request) => {
       );
     }
     if (!isPrepToolId(rawToolId)) {
-      return errorResponse(`Unknown tool_id: ${rawToolId}`, "INVALID_TOOL", 400, req);
+      return errorResponse("Unknown tool.", "INVALID_TOOL", 400, req);
     }
     const tool_id: PrepToolId = rawToolId;
 
     const promptFn = TOOL_PROMPTS[tool_id];
     if (!promptFn) {
-      return errorResponse(`Unknown tool_id: ${tool_id}`, "INVALID_TOOL", 400, req);
+      return errorResponse("Unknown tool.", "INVALID_TOOL", 400, req);
     }
 
     // For coding_hint, prepend depth level to input if provided
@@ -792,10 +795,11 @@ Deno.serve(async (req: Request) => {
             : prompt;
           const ai = await generateWithFallback({
             prompt: polishPrompt,
-            maxTokens: 1200,
+            maxTokens: PREP_AI_POLICY.maxOutputTokens,
+            skipSecondaryOnQuota: PREP_AI_POLICY.skipSecondaryOnQuota,
             temperature: 0.6,
             userId,
-            action: `prep_tool_${tool_id}`,
+            action: "prep_tool",
           });
           const aiText = sanitizeAIOutput(ai.text ?? "");
           if (!aiText.trim()) {
@@ -901,10 +905,11 @@ Deno.serve(async (req: Request) => {
         runAi: async () => {
           const ai = await generateWithFallback({
             prompt,
-            maxTokens: 1200,
+            maxTokens: PREP_AI_POLICY.maxOutputTokens,
+            skipSecondaryOnQuota: PREP_AI_POLICY.skipSecondaryOnQuota,
             temperature: 0.6,
             userId,
-            action: `prep_tool_${tool_id}`,
+            action: "prep_tool",
           });
           const aiText = sanitizeAIOutput(ai.text ?? "");
           if (!aiText || !isValidSystemDesignOutput(aiText)) {
@@ -1079,11 +1084,12 @@ Deno.serve(async (req: Request) => {
         runAi: async () => {
           const ai = await generateWithFallback({
             prompt,
-            maxTokens: 1200,
+            maxTokens: PREP_AI_POLICY.maxOutputTokens,
+            skipSecondaryOnQuota: PREP_AI_POLICY.skipSecondaryOnQuota,
             temperature: 0.6,
             jsonMode: tool_id === "rephrase",
             userId,
-            action: `prep_tool_${tool_id}`,
+            action: "prep_tool",
           });
           const raw = ai.text ?? "";
           if (!raw.trim()) throw new Error("AI returned empty response");
@@ -1093,11 +1099,12 @@ Deno.serve(async (req: Request) => {
             if (!parsed.ok) {
               const repaired = await generateWithFallback({
                 prompt: `${REPAIR_JSON_PROMPT}\n\nOriginal answer:\n${sanitizedInput}\n\nBroken output:\n${raw.slice(0, 4000)}`,
-                maxTokens: 1200,
+                maxTokens: PREP_AI_POLICY.maxOutputTokens,
+                skipSecondaryOnQuota: PREP_AI_POLICY.skipSecondaryOnQuota,
                 temperature: 0.2,
                 jsonMode: true,
                 userId,
-                action: `prep_tool_${tool_id}_repair`,
+                action: "prep_tool",
               });
               parsed = parseStructuredJson(repaired.text, isRephraseAlternatives);
             }
@@ -1207,11 +1214,12 @@ Deno.serve(async (req: Request) => {
     try {
       const ai = await generateWithFallback({
         prompt,
-        maxTokens: 1200,
+        maxTokens: PREP_AI_POLICY.maxOutputTokens,
+        skipSecondaryOnQuota: PREP_AI_POLICY.skipSecondaryOnQuota,
         temperature: 0.6,
         jsonMode: tool_id === "rephrase",
         userId,
-        action: `prep_tool_${tool_id}`,
+        action: "prep_tool",
       });
       raw = ai.text;
       usedModel = ai.model;
@@ -1241,16 +1249,6 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    void logAICost(getAdminClient(), {
-      userId,
-      action: `prep_tool_${tool_id}`,
-      model: usedModel,
-      inputTokens: Math.ceil(prompt.length / 4),
-      outputTokens: Math.ceil(raw.length / 4),
-      latencyMs: Date.now() - aiStartMs,
-      wasFallback: false,
-    });
-
     let alternatives: RephraseAlternatives | null = null;
     let cleaned = sanitizeAIOutput(raw);
 
@@ -1267,11 +1265,12 @@ Deno.serve(async (req: Request) => {
         try {
           const repaired = await generateWithFallback({
             prompt: `${REPAIR_JSON_PROMPT}\n\nOriginal answer:\n${sanitizedInput}\n\nBroken output:\n${raw.slice(0, 4000)}`,
-            maxTokens: 1200,
+            maxTokens: PREP_AI_POLICY.maxOutputTokens,
+            skipSecondaryOnQuota: PREP_AI_POLICY.skipSecondaryOnQuota,
             temperature: 0.2,
             jsonMode: true,
             userId,
-            action: `prep_tool_${tool_id}_repair`,
+            action: "prep_tool",
           });
           parsed = parseStructuredJson(repaired.text, isRephraseAlternatives);
         } catch {

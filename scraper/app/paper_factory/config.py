@@ -30,11 +30,15 @@ class FactorySettings(BaseSettings):
     gemini_model: str = Field("gemini-2.5-flash", alias="PAPER_FACTORY_GEMINI_MODEL")
     openai_api_key: str = Field("", alias="OPENAI_API_KEY")
     openai_model: str = Field("gpt-4o-mini", alias="PAPER_FACTORY_OPENAI_MODEL")
+    anthropic_api_key: str = Field("", alias="ANTHROPIC_API_KEY")
+    anthropic_model: str = Field(
+        "claude-3-haiku-20240307", alias="PAPER_FACTORY_ANTHROPIC_MODEL"
+    )
 
     # Generation tuning
     batch_size: int = Field(8, alias="PAPER_FACTORY_BATCH_SIZE")
-    max_concurrency: int = Field(4, alias="PAPER_FACTORY_CONCURRENCY")
-    max_repair_rounds: int = Field(4, alias="PAPER_FACTORY_MAX_REPAIR_ROUNDS")
+    max_concurrency: int = Field(2, alias="PAPER_FACTORY_CONCURRENCY")
+    max_repair_rounds: int = Field(2, alias="PAPER_FACTORY_MAX_REPAIR_ROUNDS")
     request_timeout_seconds: float = Field(180.0, alias="PAPER_FACTORY_TIMEOUT_SECONDS")
     temperature: float = Field(0.85, alias="PAPER_FACTORY_TEMPERATURE")
 
@@ -83,7 +87,7 @@ class FactorySettings(BaseSettings):
 
     @property
     def has_ai_provider(self) -> bool:
-        return bool(self.gemini_api_key or self.openai_api_key)
+        return bool(self.gemini_api_key or self.openai_api_key or self.anthropic_api_key)
 
 
 @lru_cache

@@ -57,7 +57,13 @@ function shouldHideWidget(pathname: string): boolean {
   return (
     pathname.startsWith("/app/admin/live-chat") ||
     pathname.startsWith("/app/live") ||
-    pathname.startsWith("/app/interview")
+    pathname.startsWith("/app/interview") ||
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/signup") ||
+    pathname.startsWith("/register") ||
+    pathname.startsWith("/reset-password") ||
+    pathname.startsWith("/forgot-password") ||
+    pathname.startsWith("/verify-email")
   );
 }
 

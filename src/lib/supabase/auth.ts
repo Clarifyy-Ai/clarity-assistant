@@ -172,10 +172,7 @@ export async function signInWithOAuth(provider: OAuthProvider): Promise<void> {
           windowOrigin:
             typeof window !== "undefined" ? window.location.origin : null,
         }),
-        queryParams: {
-          access_type: "offline",
-          prompt: "consent",
-        },
+        scopes: provider === "google" ? "email profile" : undefined,
       },
     });
     if (error) throw error;

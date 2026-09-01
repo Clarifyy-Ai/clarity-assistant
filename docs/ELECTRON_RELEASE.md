@@ -71,6 +71,44 @@ Or open `release-new\Clarify AI Setup 1.0.0.exe` directly in File Explorer.
 
 ---
 
+## APIs and env to add
+
+Operators must configure these before a production Electron build. Do **not** put OpenAI, Gemini, Deepgram, or Stripe **secret** keys in Electron or in GitHub Actions Electron secrets — those stay in Edge Function secrets.
+
+**Supabase Dashboard → Project Settings → API**
+
+- Project URL → `VITE_SUPABASE_URL`
+- anon / publishable key → `VITE_SUPABASE_ANON_KEY` and `VITE_SUPABASE_PUBLISHABLE_KEY`
+- Project ID → `VITE_SUPABASE_PROJECT_ID`
+
+**GitHub Actions secrets** (repo → Settings → Secrets → workflow **Electron Release**)
+
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `VITE_APP_URL` (production website, not localhost)
+- `VITE_SUPABASE_PROJECT_ID`
+- `VITE_OAUTH_PROVIDERS` (e.g. `google` if that provider is enabled)
+
+Local packaging uses the same `VITE_*` keys as the web app (`VITE_APP_ENV`, `VITE_APP_NAME`). Check with:
+
+```bash
+npm run electron:check-config
+```
+
+**Edge Functions secrets** (Dashboard or `npm run qa:sync-secrets`)
+
+- `ALLOW_ELECTRON_NULL_ORIGIN=true` (desktop `file://` / null origin)
+- `ALLOWED_ORIGINS`, `SITE_URL`, `PUBLIC_URL` — production website origin
+
+**Auth redirect URLs**
+
+Supabase Dashboard → Authentication → URL Configuration: Site URL and Redirect URLs must include the **web** origin (`VITE_APP_URL`), e.g. `{VITE_APP_URL}/auth/callback` and `{VITE_APP_URL}/reset-password`. The desktop app signs in against the same project; “Open in browser” uses that site.
+
+Optional web-app download buttons: `VITE_DESKTOP_DOWNLOAD_URL_WIN` and/or `VITE_GITHUB_RELEASE_REPO` (see above).
+
+---
+
 ## Prerequisites (signing — production)
 
 - Apple Developer ID Application certificate (macOS)

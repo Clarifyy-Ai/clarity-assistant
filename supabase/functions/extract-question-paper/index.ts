@@ -21,6 +21,7 @@ import {
 } from "../_shared/rateLimit.ts";
 import { validateIngestQuestionsPayload } from "../_shared/ingestJsonQuestions.ts";
 import { geminiGenerate, geminiGenerateWithPdf, parseJSON } from "../_shared/gemini.ts";
+import { getAiFeaturePolicy } from "../_shared/aiFeaturePolicy.ts";
 import {
   EXTRACT_PARSER_VERSION,
   PDF_QUESTION_EXTRACT_PROMPT,
@@ -380,7 +381,7 @@ Deno.serve(async (req) => {
                 textPrompt,
                 undefined,
                 0.2,
-                8192,
+                getAiFeaturePolicy("extract_question_paper").maxOutputTokens,
               );
               rawOcrText = rawText;
               const parsed = parseJSON<{ questions?: unknown[] }>(rawText, {
@@ -411,33 +412,39 @@ Deno.serve(async (req) => {
             );
           }
           const correlationId = String(jobId);
-          let rawText: string | null = null;
-          try {
-            rawText = await geminiGenerateWithPdf(
-              PDF_QUESTION_EXTRACT_PROMPT,
-              pdf.base64,
-              { temperature: 0.2, maxTokens: 8192 },
-            );
-          } catch (geminiErr) {
-            console.warn("[extract-question-paper] Gemini PDF extract failed:", geminiErr);
-            rawText = await tryPythonPdfText(pdf.base64, correlationId);
-            if (!rawText) throw geminiErr;
+          const extractPolicy = getAiFeaturePolicy("extract_question_paper");
+          let rawText: string | null = await tryPythonPdfText(pdf.base64, correlationId);
+          if (rawText) {
+            const deterministic = parsePlainTextMcqs(rawText);
+            if (deterministic.length > 0) {
+              rawOcrText = rawText;
+              rawQuestions = deterministic;
+            }
           }
-          if (!rawText) {
-            rawText = await tryPythonPdfText(pdf.base64, correlationId);
-          }
-          if (!rawText) {
-            throw new Error("PDF extraction failed via AI and Python services.");
-          }
-          rawOcrText = rawText;
-          const deterministic = parsePlainTextMcqs(rawText);
-          if (deterministic.length > 0) {
-            rawQuestions = deterministic;
-          } else {
-            const parsed = parseJSON<{ questions?: unknown[] }>(rawText, {
-              questions: [],
-            });
-            rawQuestions = Array.isArray(parsed.questions) ? parsed.questions : [];
+          if (rawQuestions.length === 0) {
+            try {
+              rawText = await geminiGenerateWithPdf(
+                PDF_QUESTION_EXTRACT_PROMPT,
+                pdf.base64,
+                { temperature: 0.2, maxTokens: extractPolicy.maxOutputTokens },
+              );
+            } catch (geminiErr) {
+              console.warn("[extract-question-paper] Gemini PDF extract failed:", geminiErr);
+              if (!rawText) throw geminiErr;
+            }
+            if (!rawText) {
+              throw new Error("PDF extraction failed via AI and Python services.");
+            }
+            rawOcrText = rawText;
+            const deterministic = parsePlainTextMcqs(rawText);
+            if (deterministic.length > 0) {
+              rawQuestions = deterministic;
+            } else {
+              const parsed = parseJSON<{ questions?: unknown[] }>(rawText, {
+                questions: [],
+              });
+              rawQuestions = Array.isArray(parsed.questions) ? parsed.questions : [];
+            }
           }
         }
       }

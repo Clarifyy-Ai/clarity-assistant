@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ExternalLink,
@@ -27,6 +27,10 @@ import {
   type PreviousYearPaper,
   type TopicMasterySummary,
 } from "@/lib/gov-exam/api";
+import {
+  getOrLoadPaperTrends,
+  paperTrendsCacheKey,
+} from "@/lib/gov-exam/paperTrendsCache";
 import { formatGovExamOperationError } from "@/lib/gov-exam/examOperationErrors";
 import { pollPaperJobUntilTerminal } from "@/lib/gov-exam/pollPaperJob";
 import {
@@ -139,6 +143,8 @@ export default function GovExamDetail(): React.ReactElement {
 
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [topicBusy, setTopicBusy] = useState(false);
+  const paperTrendsCacheRef = useRef(new Map<string, PaperTrendsResponse>());
+  const paperTrendsInflightRef = useRef(new Map<string, Promise<PaperTrendsResponse>>());
 
   async function load() {
     setLoading(true);
@@ -193,6 +199,8 @@ export default function GovExamDetail(): React.ReactElement {
     setReadiness(null);
     setMasteryRows([]);
     setPrepPlan(null);
+    paperTrendsCacheRef.current.clear();
+    paperTrendsInflightRef.current.clear();
     setSelectedTopics([]);
     setRegistryPapers([]);
     setBankEmpty(false);
@@ -293,11 +301,19 @@ export default function GovExamDetail(): React.ReactElement {
               .filter((y) => Number.isFinite(y))
               .sort((a, b) => b - a)
               .slice(0, 5);
-            const res = await analyzePaperTrends({
-              examId,
-              stageId,
-              sourceYears: years.length ? years : [2024, 2023, 2022],
-            });
+            const sourceYears = years.length ? years : [2024, 2023, 2022];
+            const cacheKey = paperTrendsCacheKey(examId, stageId, sourceYears);
+            const res = await getOrLoadPaperTrends(
+              paperTrendsCacheRef.current,
+              paperTrendsInflightRef.current,
+              cacheKey,
+              () =>
+                analyzePaperTrends({
+                  examId,
+                  stageId,
+                  sourceYears,
+                }),
+            );
             if (!cancelled) setTrends(res);
           }
         } else if (tab === "sources") {

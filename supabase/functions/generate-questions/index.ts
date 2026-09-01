@@ -48,6 +48,7 @@ import {
 
 import { parseStructuredJson } from "../_shared/structuredParse.ts";
 import { generateWithFallback } from "../_shared/aiProvider.ts";
+import { getAiFeaturePolicy } from "../_shared/aiFeaturePolicy.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { selectApprovedFallbackQuestions } from "../_shared/mockQuestionBank.ts";
@@ -900,16 +901,18 @@ Deno.serve(async (req: Request) => {
       return null;
     },
     runAi: async () => {
+      const policy = getAiFeaturePolicy("generate_questions");
       const ai = await withTimeout(
         retry(() =>
           generateWithFallback({
             prompt,
             systemPrompt: SYSTEM_PROMPT,
-            maxTokens: 2048,
+            maxTokens: Math.min(2048, policy.maxOutputTokens),
             temperature: 0.7,
             jsonMode: true,
             userId: user.id,
             action: "generate_questions",
+            skipSecondaryOnQuota: policy.skipSecondaryOnQuota,
           }),
         ),
         AI_TIMEOUT_MS,

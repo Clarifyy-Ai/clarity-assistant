@@ -8,6 +8,7 @@ import {
 } from "../_shared/utils.ts";
 import { parseStructuredJson } from "../_shared/structuredParse.ts";
 import { generateWithFallback } from "../_shared/aiProvider.ts";
+import { getAiFeaturePolicy } from "../_shared/aiFeaturePolicy.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
@@ -306,16 +307,18 @@ Return ONLY valid JSON:
   "watch_outs": []
 }`;
 
+  const policy = getAiFeaturePolicy("company_research");
   const aiResult = await withTimeout(
     retry(() =>
       generateWithFallback({
         prompt,
         systemPrompt: SYSTEM_PROMPT,
-        maxTokens: 2000,
+        maxTokens: Math.min(2000, policy.maxOutputTokens),
         temperature: 0.5,
         jsonMode: true,
         userId,
         action: "company_research",
+        skipSecondaryOnQuota: policy.skipSecondaryOnQuota,
       }),
     ),
     20000,

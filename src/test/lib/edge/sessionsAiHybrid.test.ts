@@ -56,12 +56,19 @@ describe("sessions-ai Wave 1 edge contracts", () => {
   it("generate-scorecard uses hybrid session_scorecard and throws on invalid AI JSON", () => {
     const source = readFunction("generate-scorecard");
     expect(source).toContain('operation: "session_scorecard"');
+    expect(source).toContain("runDatabase:");
     expect(source).toContain("runDeterministic:");
     expect(source).toContain("runPython:");
     expect(source).toContain("runAi:");
+    expect(source).toContain("existing && !recalculate");
+    expect(source).toContain("getAiFeaturePolicy(\"generate_scorecard\")");
+    expect(source).toContain("skipSecondaryOnQuota: true");
     expect(source).not.toContain("using deterministic rubric");
     expect(source).toContain("Scorecard AI returned invalid JSON");
     expect(source).toContain("Credits refunded");
+    expect(source.indexOf("existing && !recalculate")).toBeLessThan(
+      source.indexOf("await generateWithFallback"),
+    );
   });
 
   it("analyze-test-performance honors database → deterministic → python → ai", () => {
@@ -71,8 +78,14 @@ describe("sessions-ai Wave 1 edge contracts", () => {
     expect(source).toContain("runDeterministic:");
     expect(source).toContain("runPython:");
     expect(source).toContain("runAi:");
+    expect(source).toContain("cachedAnalysis");
+    expect(source).toContain("getAiFeaturePolicy(\"analyze_test\")");
     expect(source).toContain("Credits refunded");
     expect(source).not.toContain("DEFAULT_");
+    expect(source.indexOf("if (cachedAnalysis)")).toBeLessThan(
+      source.indexOf("generateWithFallback("),
+    );
+    expect(source).not.toMatch(/if \(!aiResult\) aiResult = await runAI\(\)/);
   });
 
   it("compare-sessions is DB-only with no silent AI/hybrid dependency", () => {

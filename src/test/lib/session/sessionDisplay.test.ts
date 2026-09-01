@@ -56,4 +56,8 @@ describe("delete account errors", () => {
     expect(shouldSkipDeleteReplayRateLimit("completed")).toBe(true);
     expect(shouldSkipDeleteReplayRateLimit("processing")).toBe(false);
   });
+
+  it("maps reauth required distinctly from confirmation", () => {
+    expect(messageFromDeleteAccountResponse(401, "REAUTH_REQUIRED")).toMatch(/password|sign in again/i);
+  });
 });

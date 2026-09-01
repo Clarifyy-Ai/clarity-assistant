@@ -225,6 +225,16 @@ describe("shared Edge Function CORS contract", () => {
     expect(headers["Access-Control-Allow-Credentials"]).toBeUndefined();
   });
 
+  it("defaults ALLOW_ELECTRON_NULL_ORIGIN to true when unset", () => {
+    setCorsEnvForTests({
+      get: (key: string) =>
+        key === "ALLOW_ELECTRON_NULL_ORIGIN" ? undefined : envStore[key],
+    });
+    const headers = getCorsHeaders(makeReq("POST", "null"));
+    expect(headers["Access-Control-Allow-Origin"]).toBe("null");
+    expect(headers["Access-Control-Allow-Credentials"]).toBeUndefined();
+  });
+
   it("infrastructure unexpectedErrorResponse is 503 + CORS and leak-free", async () => {
     const res = unexpectedErrorResponse(
       makeReq("POST", APPROVED),

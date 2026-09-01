@@ -301,7 +301,7 @@ function STARBuilder() {
             <button
               type="button"
               onClick={() => void polishSection(key)}
-              disabled={aiLoading === key || !credits.canAfford("star_analyse")}
+              disabled={!!aiLoading || !credits.canAfford("star_analyse")}
               className="flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 transition-colors disabled:opacity-40"
             >
               {aiLoading === key ? (
@@ -334,7 +334,7 @@ function STARBuilder() {
         <Button
           variant="primary"
           size="md"
-          disabled={!isComplete || loading || !credits.canAfford("star_generate")}
+          disabled={!isComplete || loading || !!aiLoading || !credits.canAfford("star_generate")}
           loading={loading}
           onClick={() => void generateFull()}
           leftIcon={<Zap className="w-4 h-4" />}
@@ -673,7 +673,7 @@ function AIToolModal({
   }, [toolId]);
 
   async function run() {
-    if (!input.trim()) return;
+    if (!input.trim() || loading) return;
     setLoading(true);
 
     try {
@@ -822,7 +822,7 @@ function CompanyPrep() {
           variant="primary"
           size="md"
           loading={loading}
-          disabled={!company.trim() || !role.trim() || !credits.canAfford("company_brief")}
+          disabled={!company.trim() || !role.trim() || loading || !credits.canAfford("company_brief")}
           onClick={generate}
           leftIcon={<Building2 className="w-4 h-4" />}
         >

@@ -219,7 +219,7 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
             </div>
             <Link
               to="/login"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:inline-block shrink-0"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors shrink-0"
             >
               Log in
             </Link>

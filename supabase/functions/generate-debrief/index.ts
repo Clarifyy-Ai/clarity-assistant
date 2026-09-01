@@ -56,10 +56,10 @@ import { createServiceClient } from "../_shared/supabase.ts";
 import { parseJSON } from "../_shared/gemini.ts";
 import {
   generateWithFallback,
-  logAICost,
   moderateOutput,
   type AIProviderResult,
 } from "../_shared/aiProvider.ts";
+import { getAiFeaturePolicy } from "../_shared/aiFeaturePolicy.ts";
 import { resolveModel } from "../_shared/resolveModel.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { extractBYOK } from "../_shared/utils.ts";
@@ -264,6 +264,7 @@ function json(
 
 function getIdempotencyKey(req: Request): string | null {
   const value =
+    req.headers.get("x-idempotency-key") ??
     req.headers.get("Idempotency-Key") ??
     req.headers.get("idempotency-key");
 
@@ -271,7 +272,7 @@ function getIdempotencyKey(req: Request): string | null {
     return null;
   }
 
-  return value.trim();
+  return value.trim().slice(0, 150);
 }
 
 function getByokGeminiKey(_req: Request): string | undefined {
@@ -600,15 +601,17 @@ async function generateDebriefText(options: {
   byok?: ReturnType<typeof extractBYOK>;
 }): Promise<{ text: string; aiResult: AIProviderResult } | null> {
   try {
+    const policy = getAiFeaturePolicy("generate_debrief");
     const result = await generateWithFallback({
       prompt: options.prompt,
       systemPrompt: SYSTEM_PROMPT,
       temperature: 0.4,
-      maxTokens: 3000,
+      maxTokens: Math.min(3000, policy.maxOutputTokens),
       userId: options.userId,
       action: "generate_debrief",
       model: options.model,
       jsonMode: true,
+      skipSecondaryOnQuota: policy.skipSecondaryOnQuota,
       byok: options.byok,
     });
     const moderated = moderateOutput(result.text);
@@ -1029,15 +1032,6 @@ Deno.serve(async (req: Request) => {
         if (!debriefAi) {
           throw new Error("AI service failed");
         }
-        void logAICost(db, {
-          userId: user.id,
-          action: "generate_debrief",
-          model: debriefAi.aiResult.model,
-          inputTokens: debriefAi.aiResult.inputTokens,
-          outputTokens: debriefAi.aiResult.outputTokens,
-          latencyMs: debriefAi.aiResult.latencyMs,
-          wasFallback: debriefAi.aiResult.wasFallback,
-        });
         const debriefPayload = parseDebriefFromAi(debriefAi.text);
         if (!debriefPayload) {
           throw new DomainError(

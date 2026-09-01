@@ -12,6 +12,7 @@ import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 import { isUserBanned, bannedResponse } from "../_shared/banCheck.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { generateWithFallback } from "../_shared/aiProvider.ts";
+import { getAiFeaturePolicy } from "../_shared/aiFeaturePolicy.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { executeHybridOperation } from "../_shared/hybridExecute.ts";
 import { pythonExecuteOperation } from "../_shared/pythonClient.ts";
@@ -490,13 +491,15 @@ Job Description:
 ${safeJD}
 `.trim();
 
+        const policy = getAiFeaturePolicy("gap_analysis");
         const aiResult = await generateWithFallback({
           prompt,
-          maxTokens: 2048,
+          maxTokens: Math.min(2048, policy.maxOutputTokens),
           temperature: 0.3,
           jsonMode: true,
           userId,
           action: "gap_analysis",
+          skipSecondaryOnQuota: policy.skipSecondaryOnQuota,
         });
         if (!aiResult?.text) {
           throw new Error("Gap analysis AI returned empty output");

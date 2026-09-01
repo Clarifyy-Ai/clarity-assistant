@@ -9,9 +9,19 @@ import path from "node:path";
 const root = process.cwd();
 const mainPath = path.join(root, "electron", "main.cjs");
 const preloadPath = path.join(root, "electron", "preload.cjs");
+const corsPath = path.join(root, "supabase", "functions", "_shared", "cors.ts");
+const envExamplePath = path.join(root, ".env.example");
+const syncSecretsPath = path.join(root, "scripts", "sync-edge-secrets-from-env.mjs");
+const validateEnvPath = path.join(root, "scripts", "validate-env.js");
 
 const main = fs.readFileSync(mainPath, "utf8");
 const preload = fs.readFileSync(preloadPath, "utf8");
+const corsSrc = fs.readFileSync(corsPath, "utf8");
+const envExample = fs.readFileSync(envExamplePath, "utf8");
+const syncSecrets = fs.readFileSync(syncSecretsPath, "utf8");
+const validateEnv = fs.existsSync(validateEnvPath)
+  ? fs.readFileSync(validateEnvPath, "utf8")
+  : "";
 
 const checks = [
   {
@@ -55,6 +65,34 @@ const checks = [
       fs.readdirSync(path.join(root, "dist", "assets")).some((f) =>
         f.startsWith("chunk-overlay"),
       ),
+  },
+  {
+    name: "preload exposes desktop and electronAPI",
+    ok:
+      /exposeInMainWorld\(\s*["']desktop["']/.test(preload) &&
+      /exposeInMainWorld\(\s*["']electronAPI["']/.test(preload),
+  },
+  {
+    name: "cors.ts mentions ALLOW_ELECTRON_NULL_ORIGIN",
+    ok: corsSrc.includes("ALLOW_ELECTRON_NULL_ORIGIN"),
+  },
+  {
+    name: "cors.ts electron null origin defaults true",
+    ok: /envFlag\(\s*["']ALLOW_ELECTRON_NULL_ORIGIN["']\s*,\s*true\s*\)/.test(
+      corsSrc,
+    ),
+  },
+  {
+    name: ".env.example contains ALLOW_ELECTRON_NULL_ORIGIN",
+    ok: envExample.includes("ALLOW_ELECTRON_NULL_ORIGIN"),
+  },
+  {
+    name: "sync-edge-secrets maps ALLOW_ELECTRON_NULL_ORIGIN",
+    ok: syncSecrets.includes("ALLOW_ELECTRON_NULL_ORIGIN"),
+  },
+  {
+    name: "validate-env.js contains BUILD_TARGET",
+    ok: validateEnv.includes("BUILD_TARGET"),
   },
 ];
 

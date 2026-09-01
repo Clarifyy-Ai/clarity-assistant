@@ -8,6 +8,7 @@ import {
 import { deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { geminiGenerate, geminiGenerateWithPdf, parseJSON } from "../_shared/gemini.ts";
+import { getAiFeaturePolicy } from "../_shared/aiFeaturePolicy.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { callPythonProcess, isPythonConfigured } from "../_shared/pythonClient.ts";
@@ -15,6 +16,7 @@ import {
   EXTRACT_PARSER_VERSION,
   PDF_QUESTION_EXTRACT_PROMPT,
   bufferToBase64,
+  parsePlainTextMcqs,
 } from "../_shared/pdfQuestionExtract.ts";
 
 const CREDIT_COST = creditCost("parse_question_pdf");
@@ -287,14 +289,24 @@ Deno.serve(async (req) => {
       pythonOcr;
 
     const runExtract = async (): Promise<{ questions: unknown[]; rawText: string }> => {
-      let rawText: string;
+      const policy = getAiFeaturePolicy("parse_question_pdf");
       const pythonText = await tryPythonPdfText(pdf.base64, pdf.fileName, correlationId);
+      if (pythonText) {
+        const deterministic = parsePlainTextMcqs(pythonText);
+        if (deterministic.length > 0) {
+          return {
+            questions: normalizeExtractedQuestions(deterministic),
+            rawText: pythonText,
+          };
+        }
+      }
+      let rawText: string;
       if (pythonText) {
         rawText = await geminiGenerate(
           `${PDF_QUESTION_EXTRACT_PROMPT}\n\n--- Extracted PDF text ---\n${pythonText.slice(0, 80000)}`,
           undefined,
           0.2,
-          4096,
+          policy.maxOutputTokens,
         );
       } else {
         rawText = await geminiGenerateWithPdf(
@@ -302,15 +314,19 @@ Deno.serve(async (req) => {
           pdf.base64,
           {
             temperature: 0.2,
-            maxTokens: 4096,
+            maxTokens: policy.maxOutputTokens,
           },
         );
       }
       const parsed = parseJSON<{ questions?: unknown[] }>(rawText, { questions: [] });
-      const questions = normalizeExtractedQuestions(
+      const fromJson = normalizeExtractedQuestions(
         Array.isArray(parsed.questions) ? parsed.questions : [],
       );
-      return { questions, rawText };
+      if (fromJson.length > 0) {
+        return { questions: fromJson, rawText };
+      }
+      const fromPlain = parsePlainTextMcqs(rawText);
+      return { questions: fromPlain, rawText };
     };
 
     const failHttp = async (err: unknown) => {

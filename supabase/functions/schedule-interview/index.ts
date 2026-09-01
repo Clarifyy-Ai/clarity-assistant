@@ -172,6 +172,42 @@ Deno.serve(async (req) => {
         ? true
         : Boolean(body.send_confirmation);
 
+    if (action === "cancel") {
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(interviewId)) {
+        return new Response(JSON.stringify({ error: "Interview id is required." }), {
+          status: 400,
+          headers,
+        });
+      }
+      const { data: owned } = await db
+        .from("scheduled_interviews")
+        .select("id")
+        .eq("id", interviewId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (!owned) {
+        return new Response(JSON.stringify({ error: "Interview not found" }), {
+          status: 404,
+          headers,
+        });
+      }
+      await db
+        .from("scheduled_interviews")
+        .update({ status: "cancelled", updated_at: new Date().toISOString() })
+        .eq("id", interviewId)
+        .eq("user_id", userId);
+      await db
+        .from("interview_reminders")
+        .delete()
+        .eq("interview_id", interviewId)
+        .eq("user_id", userId)
+        .eq("status", "pending");
+      return new Response(
+        JSON.stringify({ success: true, cancelled: true, reminders_cleared: true }),
+        { headers },
+      );
+    }
+
     const placeholderValues = new Set([
       "test",
       "testing",
@@ -232,17 +268,12 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (action === "cancel") {
+    if (timezone && timezone !== "local") {
       await db
-        .from("interview_reminders")
-        .delete()
-        .eq("interview_id", interviewId)
-        .eq("user_id", userId)
-        .eq("status", "pending");
-      return new Response(
-        JSON.stringify({ success: true, cancelled: true, reminders_cleared: true }),
-        { headers },
-      );
+        .from("scheduled_interviews")
+        .update({ timezone, updated_at: new Date().toISOString() })
+        .eq("id", interviewId)
+        .eq("user_id", userId);
     }
 
     const when = new Date(scheduledAt);

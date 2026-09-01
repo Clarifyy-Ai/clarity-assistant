@@ -384,7 +384,7 @@ export default function CodingHints() {
                   variant="secondary"
                   size="sm"
                   onClick={getAIHint}
-                  disabled={loading === "hint" || !credits.canAfford("coding_hint")}
+                  disabled={loading !== null || !credits.canAfford("coding_hint")}
                   loading={loading === "hint"}
                   leftIcon={<Lightbulb className="w-3.5 h-3.5" />}
                   fullWidth
@@ -395,7 +395,7 @@ export default function CodingHints() {
                   variant="primary"
                   size="sm"
                   onClick={getAISolution}
-                  disabled={loading === "solution" || !credits.canAfford("coding_solution")}
+                  disabled={loading !== null || !credits.canAfford("coding_solution")}
                   loading={loading === "solution"}
                   leftIcon={<Sparkles className="w-3.5 h-3.5" />}
                   fullWidth

@@ -266,6 +266,7 @@ export default function ResumeDetail() {
   }, [user?.id, id, selectedJdId, doc?.content_hash, doc?.created_at]);
 
   async function handleGapAnalysis() {
+    if (gapRunning) return;
     if (!id || !selectedJdId) {
       toast.error("Select a job description to compare against this resume.");
       return;

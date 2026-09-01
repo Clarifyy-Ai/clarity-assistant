@@ -35,7 +35,11 @@ import { getPrivateMode } from "@/hooks/usePrivateMode";
 import { parsePrivacyPrefs } from "@/lib/privacy/privacyPrefs";
 import { createDragHandler } from "@/lib/overlay/stealthMouse";
 import { generateId } from "@/lib/utils";
-import { questionFingerprint, hintIdempotencyKey } from "@/lib/ai/questionDetection";
+import {
+  questionFingerprint,
+  hintIdempotencyKey,
+  beginAutoHintIfIdle,
+} from "@/lib/ai/questionDetection";
 import { createLiveHintOperationId } from "@/lib/audio/liveQuestionGate";
 import {
   jobDescriptionsDB,
@@ -462,6 +466,7 @@ export function useLiveCopilot({
    * Stable question detected callback (used by audio pipeline).
    */
   const seenQuestionFingerprintsRef = useRef<Set<string>>(new Set());
+  const autoHintInflightFingerprintsRef = useRef<Set<string>>(new Set());
 
   const handleQuestionDetected = useCallback((question: string) => {
     if (sessionEndedRef.current) return;
@@ -502,7 +507,10 @@ export function useLiveCopilot({
     overlay.setActiveTab("answer");
 
     if (overlay.auto_generate) {
-      void requestLiveHintRef.current(trimmed);
+      const autoFp = fingerprint || trimmed;
+      if (beginAutoHintIfIdle(autoHintInflightFingerprintsRef, autoFp)) {
+        void requestLiveHintRef.current(trimmed);
+      }
     }
   }, []);
 

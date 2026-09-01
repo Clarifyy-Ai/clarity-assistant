@@ -63,6 +63,9 @@ const SECRET_MAP = [
   ["PUBLIC_URL", "PUBLIC_URL"],
   ["SITE_URL", "SITE_URL"],
   ["ALLOWED_ORIGINS", "ALLOWED_ORIGINS"],
+  ["ALLOW_ELECTRON_NULL_ORIGIN", "ALLOW_ELECTRON_NULL_ORIGIN"],
+  ["ALLOW_LOCALHOST_ORIGINS", "ALLOW_LOCALHOST_ORIGINS"],
+  ["ALLOW_PREVIEW_ORIGINS", "ALLOW_PREVIEW_ORIGINS"],
   ["APP_ENV", "APP_ENV"],
   ["ENVIRONMENT", "ENVIRONMENT"],
   // Vite Stripe price IDs → Edge STRIPE_PRICE_* names
@@ -122,6 +125,16 @@ function isUsable(value) {
   return true;
 }
 
+function isUsableHttpsUrl(value) {
+  if (!isUsable(value)) return false;
+  try {
+    const url = new URL(String(value).trim());
+    return url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function requestJson(method, apiPath, token, body) {
   const payload = body == null ? null : JSON.stringify(body);
   return new Promise((resolve, reject) => {
@@ -171,18 +184,33 @@ async function main() {
   }
 
   // Defaults for closed-beta prod host when not set locally
+  const productionHost = "https://clarify.ai.sltfinanceindia.com";
+  const viteAppUrl = isUsable(env.VITE_APP_URL)
+    ? String(env.VITE_APP_URL).trim()
+    : "";
+  const viteAppHttpsUrl = isUsableHttpsUrl(env.VITE_APP_URL) ? viteAppUrl : "";
+
   if (!isUsable(env.PUBLIC_URL)) {
-    env.PUBLIC_URL = "https://clarify.ai.sltfinanceindia.com";
+    env.PUBLIC_URL = viteAppHttpsUrl || productionHost;
   }
   if (!isUsable(env.SITE_URL)) {
-    env.SITE_URL = env.PUBLIC_URL;
+    env.SITE_URL = isUsable(env.PUBLIC_URL)
+      ? env.PUBLIC_URL
+      : viteAppHttpsUrl || productionHost;
   }
   if (!isUsable(env.ALLOWED_ORIGINS)) {
     env.ALLOWED_ORIGINS = [
-      "https://clarify.ai.sltfinanceindia.com",
+      ...(viteAppUrl ? [viteAppUrl] : []),
+      productionHost,
       "http://localhost:5173",
       "http://127.0.0.1:5173",
-    ].join(",");
+    ]
+      .filter((origin, index, all) => all.indexOf(origin) === index)
+      .join(",");
+  }
+  // Electron file:// shells send Origin: null; cors.ts also defaults this true.
+  if (!isUsable(env.ALLOW_ELECTRON_NULL_ORIGIN)) {
+    env.ALLOW_ELECTRON_NULL_ORIGIN = "true";
   }
   if (!isUsable(env.APP_ENV)) {
     env.APP_ENV = "production";
@@ -237,6 +265,7 @@ async function main() {
     "GEMINI_API_KEY",
     "DEEPGRAM_API_KEY",
     "PUBLIC_URL",
+    "ALLOW_ELECTRON_NULL_ORIGIN",
   ];
   console.log("Workbook secrets checklist:");
   for (const name of checklist) {

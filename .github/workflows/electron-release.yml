@@ -31,6 +31,9 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
           VITE_APP_ENV: production
+          VITE_APP_URL: ${{ secrets.VITE_APP_URL }}
+          VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+          VITE_OAUTH_PROVIDERS: ${{ secrets.VITE_OAUTH_PROVIDERS }}
 
       - name: Upload release artifacts
         uses: softprops/action-gh-release@v2

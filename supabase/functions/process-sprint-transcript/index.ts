@@ -20,6 +20,7 @@ import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 import { executeHybridOperation } from "../_shared/hybridExecute.ts";
 import { pythonExecuteOperation } from "../_shared/pythonClient.ts";
 import { generateWithFallback } from "../_shared/aiProvider.ts";
+import { getAiFeaturePolicy } from "../_shared/aiFeaturePolicy.ts";
 import { DomainError } from "../_shared/domainErrors.ts";
 
 const FN = "process-sprint-transcript";
@@ -190,14 +191,16 @@ Deno.serve(async (req: Request) => {
         const base = normalizeTranscript(transcriptRaw);
         let summary = base.summary;
         try {
+          const policy = getAiFeaturePolicy("process_sprint_transcript");
           const ai = await generateWithFallback({
             prompt:
               `Summarize this interview sprint transcript in 1-2 short sentences. ` +
               `Do not invent facts.\n\n${base.normalized.slice(0, 4000)}`,
-            maxTokens: 200,
+            maxTokens: Math.min(200, policy.maxOutputTokens),
             temperature: 0.3,
             userId,
-            action: "sprint_review_transcript",
+            action: "process_sprint_transcript",
+            skipSecondaryOnQuota: policy.skipSecondaryOnQuota,
           });
           if (ai?.text?.trim()) summary = ai.text.trim().slice(0, 500);
         } catch {

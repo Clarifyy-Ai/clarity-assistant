@@ -14,5 +14,8 @@ describe("delete-account idempotency", () => {
     expect(src).toContain("existingOp?.id");
     expect(src).toMatch(/existingOp\?\.id\s*\n?\s*\?\s*null/);
     expect(src).toContain("idempotency_key");
+    expect(src).toContain("REAUTH_REQUIRED");
+    expect(src).toContain("verifyPasswordReauth");
+    expect(src).not.toMatch(/console\.(log|info|debug|error)\([^)]*password/i);
   });
 });

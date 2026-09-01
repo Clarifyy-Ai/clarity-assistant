@@ -60,6 +60,30 @@ export const AI_HUB_MODELS: AIHubModelInfo[] = [
     freeTierEligible: true,
   },
   {
+    id: "gemini-2.5-flash-lite",
+    provider: "gemini",
+    displayName: "Gemini 2.5 Flash-Lite",
+    inputPricePerMillionMicroUsd: 80_000,
+    outputPricePerMillionMicroUsd: 300_000,
+    maxOutputTokens: 8192,
+    capabilities: ["text", "json"],
+    enabled: true,
+    tier: "cheap",
+    freeTierEligible: true,
+  },
+  {
+    id: "gemini-2.5-pro",
+    provider: "gemini",
+    displayName: "Gemini 2.5 Pro",
+    inputPricePerMillionMicroUsd: 1_250_000,
+    outputPricePerMillionMicroUsd: 5_000_000,
+    maxOutputTokens: 8192,
+    capabilities: ["text", "json", "reasoning"],
+    enabled: true,
+    tier: "premium",
+    freeTierEligible: false,
+  },
+  {
     id: "gpt-4o-mini",
     provider: "openai",
     displayName: "GPT-4o mini",
@@ -114,21 +138,21 @@ export const AI_HUB_ROUTING_DEFAULTS: AIHubRoutingRule[] = [
     taskType: "short_qa",
     preferredProvider: "gemini",
     preferredModel: "gemini-2.5-flash",
-    fallbackChain: ["gemini-2.5-flash", "gpt-4o-mini", "claude-3-haiku-20240307"],
+    fallbackChain: ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gpt-4o-mini", "claude-3-haiku-20240307"],
     maxOutputTokensDefault: 500,
   },
   {
     taskType: "summarize",
     preferredProvider: "gemini",
     preferredModel: "gemini-2.5-flash",
-    fallbackChain: ["gemini-2.5-flash", "gpt-4o-mini"],
+    fallbackChain: ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gpt-4o-mini"],
     maxOutputTokensDefault: 1000,
   },
   {
     taskType: "extract_json",
     preferredProvider: "gemini",
     preferredModel: "gemini-2.5-flash",
-    fallbackChain: ["gemini-2.5-flash", "gpt-4o-mini"],
+    fallbackChain: ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gpt-4o-mini"],
     maxOutputTokensDefault: 1500,
   },
   {
@@ -163,7 +187,34 @@ export const AI_HUB_MODE_OUTPUT_CAPS = {
 } as const;
 
 export function getHubModel(id: string): AIHubModelInfo | undefined {
-  return AI_HUB_MODELS.find((m) => m.id === id && m.enabled);
+  const known = AI_HUB_MODELS.find((m) => m.id === id && m.enabled);
+  if (known) return known;
+  return syntheticHubModel(id);
+}
+
+function syntheticHubModel(id: string): AIHubModelInfo | undefined {
+  const n = id.trim().toLowerCase();
+  const provider: AIHubProvider | null = n.startsWith("gpt") || n.startsWith("o1") || n.startsWith("o3") || n.startsWith("o4")
+    ? "openai"
+    : n.startsWith("claude")
+      ? "anthropic"
+      : n.startsWith("gemini")
+        ? "gemini"
+        : null;
+  if (!provider) return undefined;
+  const cheap = /mini|haiku|flash|lite/.test(n);
+  return {
+    id,
+    provider,
+    displayName: id,
+    inputPricePerMillionMicroUsd: cheap ? 100_000 : 2_500_000,
+    outputPricePerMillionMicroUsd: cheap ? 400_000 : 10_000_000,
+    maxOutputTokens: 8192,
+    capabilities: ["text", "json"],
+    enabled: true,
+    tier: cheap ? "cheap" : "premium",
+    freeTierEligible: cheap && provider === "gemini",
+  };
 }
 
 export function estimateCostMicroUsd(

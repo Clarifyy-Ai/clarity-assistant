@@ -1,8 +1,7 @@
 // supabase/functions/_shared/aiProvider.ts
 //
-// AI Provider abstraction with automatic fallback.
-// Primary: Gemini 2.0 Flash
-// Fallback: Gemini 1.5 Pro (if Flash fails or is rate-limited)
+// AI Provider abstraction with automatic fallback across Gemini, OpenAI, and Anthropic.
+// Prefers live-available models (paid/free) and fails over per model on 429/404.
 //
 // Includes:
 // - Retry with exponential backoff on transient errors
@@ -14,7 +13,13 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { callAI } from "./utils.ts";
 import type { ModelId } from "./types.ts";
-import { getFallbackModels } from "./resolveModel.ts";
+import { DEFAULT_TEXT_MODEL, providerForModel } from "./modelCatalog.ts";
+import { getFallbackModelsAsync } from "./resolveModel.ts";
+import { createServiceClient } from "./supabase.ts";
+import {
+  geminiCircuitCanAttempt,
+  tripGeminiCircuit,
+} from "./aiFeaturePolicy.ts";
 
 const GEMINI_API_VERSION = Deno.env.get("GEMINI_API_VERSION") ?? "v1beta";
 const GEMINI_BASE = `https://generativelanguage.googleapis.com/${GEMINI_API_VERSION}`;
@@ -28,11 +33,13 @@ export interface AIProviderOptions {
   systemPrompt?: string;
   maxTokens?: number;
   temperature?: number;
-  userId: string;
+  userId?: string;
   action: string;
   jsonMode?: boolean;
   /** API model id (e.g. gpt-4o, gemini-2.0-flash). Falls back to Gemini chain if omitted. */
   model?: string;
+  /** Skip OpenAI/Anthropic when Gemini returns 429/quota (avoid double spend). */
+  skipSecondaryOnQuota?: boolean;
   /** @deprecated M1 — BYOK ignored; server keys only. */
   byok?: Record<string, never>;
 }
@@ -52,7 +59,7 @@ export interface AIProviderResult {
 /* -------------------------------------------------------------------------- */
 
 const MODELS = {
-  primary: "gemini-2.5-flash",
+  primary: DEFAULT_TEXT_MODEL,
   fallback: "gemini-flash-latest",
 } as const;
 
@@ -71,22 +78,36 @@ export const TOKEN_LIMITS = {
 
 const COST_PER_MILLION_INPUT: Record<string, number> = {
   "gemini-2.0-flash": 10,
+  "gemini-2.0-flash-lite": 8,
   "gemini-1.5-pro": 125,
   "gemini-2.5-flash": 10,
+  "gemini-2.5-flash-lite": 8,
+  "gemini-2.5-pro": 125,
+  "gemini-flash-latest": 10,
   "gpt-4o": 250,
   "gpt-4o-mini": 15,
+  "gpt-4.1": 200,
+  "gpt-4.1-mini": 15,
   "claude-3-5-sonnet-20241022": 300,
   "claude-3-haiku-20240307": 25,
+  "claude-3-5-haiku-20241022": 80,
 };
 
 const COST_PER_MILLION_OUTPUT: Record<string, number> = {
   "gemini-2.0-flash": 40,
+  "gemini-2.0-flash-lite": 30,
   "gemini-1.5-pro": 500,
   "gemini-2.5-flash": 40,
+  "gemini-2.5-flash-lite": 30,
+  "gemini-2.5-pro": 500,
+  "gemini-flash-latest": 40,
   "gpt-4o": 1000,
   "gpt-4o-mini": 60,
+  "gpt-4.1": 800,
+  "gpt-4.1-mini": 60,
   "claude-3-5-sonnet-20241022": 1500,
   "claude-3-haiku-20240307": 125,
+  "claude-3-5-haiku-20241022": 400,
 };
 
 /* -------------------------------------------------------------------------- */
@@ -201,6 +222,26 @@ function isQuotaOrRateLimitError(err: Error): boolean {
   );
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Placeholders like "gap-fill" cannot be stored as user_id; table allows null. */
+function resolveUsageUserId(userId: string | undefined): string | null {
+  if (!userId || !userId.trim()) return null;
+  const trimmed = userId.trim();
+  return UUID_RE.test(trimmed) ? trimmed : null;
+}
+
+function isAuthOrKeyError(err: Error): boolean {
+  return /API_KEY_INVALID|invalid.?api.?key|401|API key not/i.test(err.message);
+}
+
+function isModelUnavailableError(err: Error): boolean {
+  return /404|not found|INVALID_ARGUMENT|deprecated|empty response/i.test(
+    err.message,
+  );
+}
+
 export async function generateWithFallback(
   options: AIProviderOptions
 ): Promise<AIProviderResult> {
@@ -211,19 +252,31 @@ export async function generateWithFallback(
     temperature = 0.7,
     jsonMode = false,
     model: requestedModel,
+    skipSecondaryOnQuota = false,
   } = options;
 
-  const models = getFallbackModels(requestedModel ?? MODELS.primary);
+  const models = await getFallbackModelsAsync(requestedModel ?? MODELS.primary);
+  const geminiModels = models.filter((m) => providerForModel(m) === "gemini");
   let lastError: Error | null = null;
-  let skipGeminiFamily = false;
+  const circuitOpen = !geminiCircuitCanAttempt();
+  let skipGeminiFamily = circuitOpen;
+  let geminiQuotaFails = circuitOpen ? geminiModels.length : 0;
 
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
-    const isGemini = model.startsWith("gemini");
+    const provider = providerForModel(model) ?? "gemini";
+    const isGemini = provider === "gemini";
     if (skipGeminiFamily && isGemini) continue;
+    if (
+      skipSecondaryOnQuota &&
+      !isGemini &&
+      geminiModels.length > 0 &&
+      geminiQuotaFails >= geminiModels.length
+    ) {
+      continue;
+    }
 
     const isFallback = i > 0;
-    // Quota errors rarely recover within a few seconds — one retry max.
     const attempts = isGemini ? 1 : MAX_RETRIES;
 
     for (let attempt = 0; attempt <= attempts; attempt++) {
@@ -259,13 +312,7 @@ export async function generateWithFallback(
           throw new Error(`Model ${model} returned an empty response`);
         }
 
-        const provider = model.startsWith("gpt")
-          ? "openai"
-          : model.startsWith("claude")
-            ? "anthropic"
-            : "gemini";
-
-        return {
+        const payload: AIProviderResult = {
           text: result.text,
           provider,
           model: result.model,
@@ -274,6 +321,25 @@ export async function generateWithFallback(
           latencyMs: Date.now() - startMs,
           wasFallback: isFallback,
         };
+
+        try {
+          void logAICost(createServiceClient(), {
+            userId: resolveUsageUserId(options.userId),
+            action: options.action || "unknown",
+            model: payload.model,
+            inputTokens: payload.inputTokens,
+            outputTokens: payload.outputTokens,
+            latencyMs: payload.latencyMs,
+            wasFallback: payload.wasFallback,
+          }).catch(() => {});
+        } catch (err) {
+          console.error(
+            "[aiProvider] Failed to schedule AI cost log:",
+            err instanceof Error ? err.message : String(err),
+          );
+        }
+
+        return payload;
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
         console.warn(
@@ -284,22 +350,23 @@ export async function generateWithFallback(
             message: lastError.message.slice(0, 240),
           }),
         );
-        // Gemini project issues (quota, 404, empty/safety, invalid arg) are shared —
-        // jump to OpenAI/Anthropic instead of burning the full Gemini chain.
-        if (
-          isGemini &&
-          (isQuotaOrRateLimitError(lastError) ||
-            /empty response|404|not found|INVALID_ARGUMENT|deprecated|API key|403/i.test(
-              lastError.message,
-            ))
-        ) {
+
+        const quota = isQuotaOrRateLimitError(lastError);
+        if (isGemini && quota) {
+          geminiQuotaFails += 1;
+          if (geminiQuotaFails >= geminiModels.length) {
+            tripGeminiCircuit();
+          }
+          break;
+        }
+        if (isGemini && isAuthOrKeyError(lastError)) {
           skipGeminiFamily = true;
           break;
         }
-        if (attempt < attempts) continue;
-        if (isGemini) {
-          skipGeminiFamily = true;
+        if (isGemini && isModelUnavailableError(lastError)) {
+          break;
         }
+        if (attempt < attempts) continue;
         break;
       }
     }
@@ -412,7 +479,7 @@ function estimateCostMicrocents(
 export async function logAICost(
   supabaseAdmin: SupabaseClient,
   params: {
-    userId: string;
+    userId: string | null;
     action: string;
     model: string;
     inputTokens: number;

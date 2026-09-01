@@ -243,6 +243,44 @@ export async function activateSession(sessionId: string): Promise<void> {
   }
 }
 
+export async function persistSessionLifecycle(
+  sessionId: string,
+  userId: string,
+  next: {
+    status?: SessionRow["status"];
+    lifecycle_status: string;
+  },
+): Promise<void> {
+  const update: TablesUpdate<"sessions"> & { lifecycle_status?: string } = {
+    lifecycle_status: next.lifecycle_status,
+    ...(next.status ? { status: next.status } : {}),
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await withDbTimeout(
+    supabase
+      .from("sessions")
+      .update(update)
+      .eq("id", sessionId)
+      .eq("user_id", userId),
+    "Session lifecycle",
+  );
+  if (error) throw new Error(error.message);
+}
+
+export async function pauseOwnedSession(sessionId: string, userId: string): Promise<void> {
+  await persistSessionLifecycle(sessionId, userId, {
+    status: "paused",
+    lifecycle_status: "PAUSED",
+  });
+}
+
+export async function resumeOwnedSession(sessionId: string, userId: string): Promise<void> {
+  await persistSessionLifecycle(sessionId, userId, {
+    status: "active",
+    lifecycle_status: "RESUMED",
+  });
+}
+
 /**
  * Validate a session is still resumable (not expired, not completed).
  * Returns the row if usable, null otherwise.

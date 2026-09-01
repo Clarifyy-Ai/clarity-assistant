@@ -7,6 +7,8 @@
  *
  * Usage:
  *   npm run validate-env
+ *   npm run electron:check-config
+ *   node scripts/validate-env.js --electron
  *
  * What this checks:
  * - Required Vite frontend variables exist
@@ -86,8 +88,19 @@ const PLACEHOLDER_PATTERNS = [
   /^AIza\.\.\.$/i,
 ];
 
+const ELECTRON_SUMMARY_KEYS = [
+  "VITE_SUPABASE_URL",
+  "VITE_SUPABASE_ANON_KEY",
+  "VITE_SUPABASE_PUBLISHABLE_KEY",
+  "VITE_APP_URL",
+];
+
 const errors = [];
 const warnings = [];
+
+function isElectronMode() {
+  return process.env.BUILD_TARGET === "electron" || process.argv.includes("--electron");
+}
 
 function stripQuotes(value) {
   const trimmed = value.trim();
@@ -340,6 +353,76 @@ function checkOptionalUrls(env) {
   }
 }
 
+function isElectronProduction(env) {
+  const appEnv = env.VITE_APP_ENV;
+
+  // Local Electron dev/staging may use http/localhost. Packaging (`vite build` / dist:*)
+  // typically ships production — treat unset env as production in Electron mode.
+  if (appEnv === "development" || appEnv === "staging") {
+    return false;
+  }
+
+  return appEnv === "production" || isElectronMode();
+}
+
+function checkElectronConfig(env) {
+  if (!isElectronMode()) {
+    return;
+  }
+
+  const appEnv = env.VITE_APP_ENV || "development";
+  const appUrl = env.VITE_APP_URL;
+
+  if (isMissing(appUrl)) {
+    errors.push(
+      "Missing required environment variable: VITE_APP_URL (used for \"Open in browser\" from desktop)."
+    );
+  } else if (isPlaceholder(appUrl, appEnv)) {
+    errors.push("Environment variable VITE_APP_URL still contains a placeholder value.");
+  } else if (isElectronProduction(env)) {
+    let protocol = "";
+    try {
+      protocol = new URL(appUrl).protocol;
+    } catch {
+      protocol = "";
+    }
+
+    const isLocalhost =
+      appUrl.includes("localhost") || appUrl.includes("127.0.0.1");
+
+    if (protocol !== "https:" || isLocalhost) {
+      errors.push(
+        "VITE_APP_URL must be https (not localhost) for Electron production packaging."
+      );
+    }
+  }
+
+  if (isMissing(env.VITE_SUPABASE_PROJECT_ID)) {
+    warnings.push(
+      "VITE_SUPABASE_PROJECT_ID is missing. Set it for Electron desktop builds when available."
+    );
+  }
+
+  const oauthProviders = typeof env.VITE_OAUTH_PROVIDERS === "string"
+    ? env.VITE_OAUTH_PROVIDERS.trim().toLowerCase()
+    : "";
+
+  if (!oauthProviders || oauthProviders === "none") {
+    warnings.push(
+      "VITE_OAUTH_PROVIDERS is unset or none. Desktop login is email-only unless Google is enabled."
+    );
+  }
+}
+
+function printElectronConfigSummary(env) {
+  console.log("\nElectron config:");
+
+  for (const key of ELECTRON_SUMMARY_KEYS) {
+    const status = isMissing(env[key]) ? "missing" : "present";
+    console.log(`  ${key}: ${status}`);
+  }
+}
+
 function checkServerSecretExposure(env) {
   for (const secretName of SERVER_ONLY_SECRET_NAMES) {
     const badClientName = `VITE_${secretName}`;
@@ -363,13 +446,21 @@ function checkKnownLegacyNames(env) {
   }
 }
 
-function printResult(loadedFiles) {
+function printResult(loadedFiles, env) {
   console.log("\n🔎 Environment validation started...");
+
+  if (isElectronMode()) {
+    console.log("🖥️  Mode: Electron");
+  }
 
   if (loadedFiles.length > 0) {
     console.log(`📄 Loaded env files: ${loadedFiles.join(", ")}`);
   } else {
     console.log("📄 No local env files found. Using process.env only.");
+  }
+
+  if (isElectronMode() && env) {
+    printElectronConfigSummary(env);
   }
 
   if (warnings.length > 0) {
@@ -396,6 +487,7 @@ function printResult(loadedFiles) {
 
 function main() {
   const { env, loadedFiles } = loadEnvFromFiles();
+  const electron = isElectronMode();
 
   checkRequiredVars(env);
   checkSupabaseConfig(env);
@@ -403,16 +495,21 @@ function main() {
   checkOptionalUrls(env);
   checkServerSecretExposure(env);
   checkKnownLegacyNames(env);
+  checkElectronConfig(env);
 
   // Friendly visibility for optional vars without failing builds.
   const appEnv = env.VITE_APP_ENV || "development";
   for (const key of OPTIONAL_CLIENT_VARS) {
+    if (electron && key === "VITE_APP_URL") {
+      continue;
+    }
+
     if (isPlaceholder(env[key], appEnv)) {
       warnings.push(`${key} appears to contain a placeholder value.`);
     }
   }
 
-  printResult(loadedFiles);
+  printResult(loadedFiles, env);
 }
 
 main();

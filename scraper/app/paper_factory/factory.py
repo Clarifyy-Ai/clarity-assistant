@@ -1,7 +1,7 @@
 """End-to-end paper generation orchestrator.
 
-Pipeline: resolve exam -> plan blueprint -> reuse approved bank items -> generate the
-remainder with AI -> validate hard constraints -> balance answer keys -> persist.
+Pipeline: resolve exam -> plan blueprint -> reuse approved bank items -> leftover
+and deterministic fill -> AI only for remaining slots -> validate -> persist.
 Nothing is published unless the paper matches the blueprint exactly.
 """
 from __future__ import annotations
@@ -13,6 +13,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Sequence
 
+from app.ai_policy import decide_ai
 from app.core.logger import get_logger
 from app.gov_exams.deterministic_generate import (
     PRACTICE_DISCLAIMER,
@@ -173,83 +174,96 @@ class PaperFactory:
             )
             bank_count = sum(len(items) for items in bank_selected.values())
 
-        # ── Reduce the plan by what the bank already covers ────────────────────
         outstanding = self._subtract_bank_coverage(blueprint, bank_selected)
         needed = sum(slot.count for slot in outstanding)
+        if needed > 0 and request.allow_deterministic_fill:
+            await self._fill_deterministic_slots(
+                blueprint,
+                bank_selected,
+                None,
+                seed=request.random_seed or request.job_id or "gov-paper",
+            )
+            outstanding = self._subtract_bank_coverage(blueprint, bank_selected)
+            needed = sum(slot.count for slot in outstanding)
+        decision = decide_ai(
+            feature="paper_factory_mcq",
+            needed_count=needed,
+            permitted=request.mode != "official_previous",
+            provider_configured=self.settings.has_ai_provider,
+            official_mode=request.mode == "official_previous",
+        )
 
         report = None
-        if needed > 0:
-            if self.settings.has_ai_provider:
-                await self._stage(on_stage, "generating_questions")
-                try:
-                    async with MCQGenerator(self.settings) as ai:
-                        report = await generate_for_slots(
-                            exam=exam,
-                            blueprint=blueprint,
-                            slots=outstanding,
-                            generator=ai,
-                            validator=validator,
-                            batch_size=self.settings.batch_size,
-                            max_repair_rounds=self.settings.max_repair_rounds,
-                            on_progress=on_progress,
-                        )
-                except Exception as exc:
-                    log.warning(
-                        "paper_factory_ai_unavailable",
-                        exam=exam.code,
-                        error=str(exc),
+        if needed > 0 and decision == "AI_REQUIRED":
+            await self._stage(on_stage, "generating_questions")
+            try:
+                async with MCQGenerator(self.settings) as ai:
+                    report = await generate_for_slots(
+                        exam=exam,
+                        blueprint=blueprint,
+                        slots=outstanding,
+                        generator=ai,
+                        validator=validator,
+                        batch_size=self.settings.batch_size,
+                        max_repair_rounds=self.settings.max_repair_rounds,
+                        on_progress=on_progress,
                     )
-                    report = None
+            except Exception as exc:
+                log.warning(
+                    "paper_factory_ai_unavailable",
+                    exam=exam.code,
+                    error=str(exc),
+                )
+                report = None
 
-                if report is None or report.shortfalls:
-                    if request.allow_deterministic_fill:
-                        log.info(
-                            "paper_factory_ai_shortfall_deterministic_fill",
-                            exam=exam.code,
-                        )
-                        report = await self._fill_deterministic_slots(
-                            blueprint,
-                            bank_selected,
-                            report,
-                            seed=request.random_seed or request.job_id or "gov-paper",
-                        )
-                    else:
-                        generated_so_far = (
-                            0
-                            if report is None
-                            else sum(len(v) for v in report.accepted.values())
-                        )
-                        have = (blueprint.total_questions - needed) + generated_so_far
-                        raise PaperFactoryError(
-                            "CONTENT_INSUFFICIENT",
-                            f"Only {have} of {blueprint.total_questions} questions "
-                            "could be assembled; deterministic fill is not permitted.",
-                            retryable=False,
-                        )
-            else:
-                # No AI provider — fail closed unless deterministic practice is allowed.
-                if request.mode == "official_previous":
-                    raise PaperFactoryError(
-                        "CONTENT_INSUFFICIENT",
-                        f"{needed} official questions are missing and cannot be fabricated.",
-                        retryable=False,
-                    )
+            if report is None or report.shortfalls:
                 if request.allow_deterministic_fill:
-                    await self._fill_deterministic_slots(
+                    log.info(
+                        "paper_factory_ai_shortfall_deterministic_fill",
+                        exam=exam.code,
+                    )
+                    report = await self._fill_deterministic_slots(
                         blueprint,
                         bank_selected,
-                        None,
+                        report,
                         seed=request.random_seed or request.job_id or "gov-paper",
                     )
-                    blueprint.paper_class = "custom_practice"
                 else:
-                    have = blueprint.total_questions - needed
-                    raise PaperFactoryError(
-                        "CONTENT_INSUFFICIENT",
-                        f"Only {have} of {blueprint.total_questions} bank questions "
-                        "are available; no AI provider and deterministic fill disabled.",
-                        retryable=False,
+                    generated_so_far = (
+                        0
+                        if report is None
+                        else sum(len(v) for v in report.accepted.values())
                     )
+                    have = (blueprint.total_questions - needed) + generated_so_far
+                    raise PaperFactoryError(
+                        "GENERATION_INCOMPLETE",
+                        f"Only {have} of {blueprint.total_questions} questions "
+                        "could be assembled; deterministic fill is not permitted.",
+                        retryable=True,
+                    )
+        elif needed > 0:
+            if request.mode == "official_previous":
+                raise PaperFactoryError(
+                    "CONTENT_INSUFFICIENT",
+                    f"{needed} official questions are missing and cannot be fabricated.",
+                    retryable=False,
+                )
+            gemini_key = getattr(self.settings, "gemini_api_key", "") or ""
+            openai_key = getattr(self.settings, "openai_api_key", "") or ""
+            keys_empty = isinstance(gemini_key, str) and isinstance(openai_key, str) and not gemini_key and not openai_key
+            if keys_empty and not request.allow_deterministic_fill:
+                raise PaperFactoryError(
+                    "AI_PROVIDER_UNCONFIGURED",
+                    "No AI provider configured. Set GEMINI_API_KEY or OPENAI_API_KEY.",
+                    retryable=False,
+                )
+            have = blueprint.total_questions - needed
+            raise PaperFactoryError(
+                "CONTENT_INSUFFICIENT",
+                f"Only {have} of {blueprint.total_questions} bank questions "
+                "are available; deterministic fill disabled.",
+                retryable=False,
+            )
 
         # ── Assemble in section order ─────────────────────────────────────────
         await self._stage(on_stage, "validating_questions")

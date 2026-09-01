@@ -98,6 +98,8 @@ export interface ScheduledInterview {
   priority: "low" | "medium" | "high";
   is_today: boolean;               // computed — next_round is today
   calendar_event_id: string | null; // Google/Outlook event ID
+  calendar_sync_status?: string | null;
+  timezone?: string | null;
   company_research_id: string | null;
   /** Optional interview-level duration when no round is selected. */
   duration_minutes?: number | null;

@@ -211,7 +211,7 @@ export default function NewInterview() {
       toast.message("Interview saved. In-app reminder setup failed; email was not sent.");
     }
 
-    if (calendar.syncAvailable && calendar.isConnected && calendar.writeEvent) {
+    if (calendar.syncAvailable && calendar.writeEvent) {
       try {
         const start = new Date(input.scheduledAt);
         const end = new Date(start.getTime() + input.durationMinutes * 60_000);
@@ -226,10 +226,17 @@ export default function NewInterview() {
           eventId: input.calendarEventId || undefined,
         });
         if (wrote.error) {
-          toast.error(`Calendar write failed: ${wrote.error}`);
+          const code = wrote.code ?? "";
+          if (code === "CALENDAR_NOT_CONNECTED" || code === "NOT_CONFIGURED") {
+            toast.message("Interview saved. Google Calendar is not connected — no calendar event was created.");
+          } else if (code === "REAUTH_REQUIRED") {
+            toast.message("Interview saved. Reconnect Google Calendar to sync this event.");
+          } else {
+            toast.error(`Interview saved. Calendar sync failed: ${wrote.error}`);
+          }
         }
       } catch {
-        toast.error("Calendar write failed.");
+        toast.error("Interview saved. Calendar sync failed.");
       }
     }
   }
@@ -485,6 +492,7 @@ export default function NewInterview() {
         timezone: timeZoneKey,
         durationMinutes: duration,
         meetingLink: meetingLink.trim(),
+        calendarEventId: editingInterview?.calendar_event_id,
       });
 
       navigate(`/app/interviews/${editId}`);
@@ -537,6 +545,7 @@ export default function NewInterview() {
         timezone: timeZoneKey,
         durationMinutes: duration,
         meetingLink: meetingLink.trim(),
+        calendarEventId: editingInterview?.calendar_event_id,
       });
       navigate(`/app/interviews/${editId}`);
       return;

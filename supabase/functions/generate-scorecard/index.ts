@@ -10,9 +10,9 @@ import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 import { parseJsonBody } from "../_shared/errors.ts";
 import {
   generateWithFallback,
-  logAICost,
   moderateOutput,
 } from "../_shared/aiProvider.ts";
+import { decideAi, getAiFeaturePolicy } from "../_shared/aiFeaturePolicy.ts";
 import { resolveModel } from "../_shared/resolveModel.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
@@ -998,6 +998,7 @@ Deno.serve(async (req: Request) => {
     const transcripts = (transcriptsData ?? []) as TranscriptRow[];
 
     const idempotencyKey =
+      req.headers.get("x-idempotency-key") ??
       req.headers.get("Idempotency-Key") ??
       req.headers.get("idempotency-key") ??
       null;
@@ -1022,6 +1023,20 @@ Deno.serve(async (req: Request) => {
         session_id: sessionId,
         answered: answers.length,
         total: answers.length,
+      },
+      runDatabase: async () => {
+        if (recalculate) return null;
+        const { data: cached } = await db
+          .from("scorecards")
+          .select("*")
+          .eq("session_id", sessionId)
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (!cached) return null;
+        return responseBody(requestId, cached as Record<string, unknown>, {
+          idempotent: true,
+          recalculated: false,
+        }) as ScorecardHybridData;
       },
       runDeterministic: async () => {
         let payload = deterministicScore({ answers, transcripts, session });
@@ -1081,6 +1096,19 @@ Deno.serve(async (req: Request) => {
         }) as ScorecardHybridData;
       },
       runAi: async () => {
+        const policy = getAiFeaturePolicy("generate_scorecard");
+        const decision = decideAi({
+          feature: policy.feature,
+          needed: true,
+          permitted: policy.aiAllowed,
+          providerConfigured: Boolean(Deno.env.get("GEMINI_API_KEY")),
+        });
+        if (decision !== "AI_REQUIRED") {
+          throw new DomainError(
+            "AI_PROVIDER_UNAVAILABLE",
+            "Scorecard AI is not required or not available.",
+          );
+        }
         const baseline = applyAnswerQualityGuard(
           deterministicScore({ answers, transcripts, session }),
           answers,
@@ -1090,11 +1118,12 @@ Deno.serve(async (req: Request) => {
           prompt: buildPrompt({ session, answers, transcripts }),
           systemPrompt: SYSTEM_PROMPT,
           temperature: 0.3,
-          maxTokens: 2500,
+          maxTokens: policy.maxOutputTokens,
           userId,
           action: "generate_scorecard",
           model,
           jsonMode: true,
+          skipSecondaryOnQuota: true,
         });
         const moderated = moderateOutput(generated.text);
         const parsed = parseAiScorecard(moderated.filtered, generated.model);
@@ -1104,15 +1133,6 @@ Deno.serve(async (req: Request) => {
             "Scorecard AI returned invalid JSON.",
           );
         }
-        void logAICost(db, {
-          userId,
-          action: "generate_scorecard",
-          model: generated.model,
-          inputTokens: generated.inputTokens,
-          outputTokens: generated.outputTokens,
-          latencyMs: generated.latencyMs,
-          wasFallback: generated.wasFallback,
-        });
         const payload = applyAnswerQualityGuard(
           {
             ...parsed,

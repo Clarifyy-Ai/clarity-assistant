@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Awaitable, Callable, Sequence
 
 from app.core.logger import get_logger
+from app.ai_policy import FEATURE_POLICIES, mcq_output_token_budget
 from app.paper_factory.ai import MCQGenerator
 from app.paper_factory.blueprint import split_slots_for_batching
 from app.paper_factory.models import (
@@ -25,7 +26,7 @@ from app.paper_factory.validate import CandidateValidator
 
 log = get_logger("paper_factory.generator")
 
-OVERFETCH = 2
+OVERFETCH = FEATURE_POLICIES["paper_factory_mcq"].overfetch
 ProgressHook = Callable[[int, int], Awaitable[None] | None]
 
 
@@ -79,6 +80,7 @@ async def generate_for_slots(
     round_reasons: dict[str, list[str]] = defaultdict(list)
 
     for round_index in range(max_repair_rounds + 1):
+        remaining_before = sum(remaining.values())
         pending = [
             GenerationSlot(
                 section_code=slot_by_key[key].section_code,
@@ -115,7 +117,7 @@ async def generate_for_slots(
                 "language": blueprint.language,
                 "marks_positive": blueprint.marks_per_question,
                 "marks_negative": blueprint.negative_mark,
-                "avoid_stems": validator.accepted_stems[-18:],
+                "avoid_stems": validator.accepted_stems[-8:],
                 "attempt": round_index + 1,
             }
             prompt = (
@@ -126,7 +128,10 @@ async def generate_for_slots(
                 )
             )
             try:
-                response = await generator.generate(prompt)
+                response = await generator.generate(
+                    prompt,
+                    max_output_tokens=mcq_output_token_budget(request.count),
+                )
                 return batch, response.questions, None
             except Exception as exc:  # noqa: BLE001 - one bad batch must not kill the paper
                 log.warning(
@@ -178,6 +183,13 @@ async def generate_for_slots(
             remaining[key] = count
 
         if sum(remaining.values()) == 0:
+            break
+        if remaining_before == sum(remaining.values()):
+            log.info(
+                "paper_factory_generation_no_progress",
+                round=round_index + 1,
+                outstanding=remaining_before,
+            )
             break
 
     report.spares = {code: list(items) for code, items in spares.items() if items}

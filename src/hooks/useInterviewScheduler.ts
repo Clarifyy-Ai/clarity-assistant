@@ -172,14 +172,14 @@ export function useInterviewScheduler() {
 
     try {
       await scheduledInterviewsDB.update(id, dbPatch as TablesUpdate<"scheduled_interviews">);
-      store.updateInterview(id, patch as Partial<ScheduledInterview>);
+      await loadInterviews();
       return { error: null };
     } catch (err) {
       return {
         error: err instanceof Error ? err.message : "Failed to update interview",
       };
     }
-  }, []);
+  }, [loadInterviews]);
 
   /* ── Delete interview ────────────────────────────────────────────────── */
 

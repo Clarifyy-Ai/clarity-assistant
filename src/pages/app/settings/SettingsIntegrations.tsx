@@ -41,7 +41,7 @@ const INTEGRATIONS: Integration[] = [
     id:     "google_calendar",
     icon:   Calendar,
     label:  "Google Calendar",
-    desc:   "Link Google to import interview events when server sync is enabled.",
+    desc:   "Connect Google Calendar to create, update, and cancel interview events.",
     status: "available",
     color:  "text-blue-400",
     bg:     "bg-blue-500/10",
@@ -151,13 +151,15 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
     connectGoogle,
     syncNow,
     disconnect,
-    persistRefreshToken,
-    checkConnection,
     isSyncing,
     isDisconnecting,
+    isConnecting,
     isCheckingConnection,
     isProbingSync,
     isConnected,
+    reauthRequired,
+    connectionStatus,
+    googleEmail,
     syncAvailable,
     lastSynced,
     importedCount,
@@ -170,35 +172,42 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
 
   useEffect(() => {
     if (!integration.live) return;
-    if (searchParams.get("calendar") !== "connected") return;
-    if (isProbingSync) return;
+    const flag = searchParams.get("calendar");
+    if (!flag) return;
 
-    let cancelled = false;
-    (async () => {
-      if (!syncAvailable) {
-        toast.info(
-          "Google account linked, but calendar sync is not configured on the server yet.",
-        );
-        setSearchParams({}, { replace: true });
-        return;
+    if (flag === "connected") {
+      if (isProbingSync || isCheckingConnection) return;
+      if (isConnected) {
+        toast.success("Google Calendar connected.");
+      } else {
+        toast.error("Google Calendar was not connected. Please try again.");
       }
-      await persistRefreshToken();
-      if (cancelled) return;
-      await checkConnection();
-      toast.success("Google Calendar connected!");
       setSearchParams({}, { replace: true });
-    })();
-    return () => {
-      cancelled = true;
-    };
+      return;
+    }
+
+    if (flag === "denied") {
+      toast.info("Google Calendar permission was not granted.");
+      setSearchParams({}, { replace: true });
+      return;
+    }
+
+    if (flag === "error") {
+      const code = searchParams.get("code");
+      toast.error(
+        code === "REAUTH_REQUIRED"
+          ? "Google Calendar needs to be reconnected."
+          : "Google Calendar authorization failed.",
+      );
+      setSearchParams({}, { replace: true });
+    }
   }, [
     integration.live,
     searchParams,
     setSearchParams,
-    persistRefreshToken,
-    checkConnection,
-    syncAvailable,
+    isConnected,
     isProbingSync,
+    isCheckingConnection,
   ]);
 
   async function handleConnect() {
@@ -248,19 +257,24 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <p className="text-sm font-semibold text-foreground">{integration.label}</p>
-            {isConnected && <Badge variant="emerald" size="sm" dot>Connected</Badge>}
-            {!syncAvailable && (
+            {connectionStatus === "connected" && (
+              <Badge variant="emerald" size="sm" dot>Connected</Badge>
+            )}
+            {connectionStatus === "reauth_required" && (
+              <Badge variant="amber" size="sm">Reconnect required</Badge>
+            )}
+            {connectionStatus === "not_configured" && (
               <Badge variant="amber" size="sm">Not configured</Badge>
             )}
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-            {isConnected
-              ? syncAvailable
-                ? "Your calendar is linked. Use Sync to import upcoming interview events."
-                : "Your Google account may be linked, but event import is not configured on the server yet."
-              : syncAvailable
-                ? integration.desc
-                : "Google Calendar sync is not configured. Connect appears here only when GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set."}
+            {connectionStatus === "connected"
+              ? `Calendar is connected${googleEmail ? ` (${googleEmail})` : ""}. Interview events can be created, updated, and cancelled.`
+              : connectionStatus === "reauth_required"
+                ? "Google Calendar access was revoked or expired. Reconnect to continue syncing events."
+                : syncAvailable
+                  ? integration.desc
+                  : "Google Calendar is not configured. Connect is available only when GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set on the server."}
           </p>
           {lastSynced && (
             <p className="text-[10px] text-muted-foreground mt-0.5">
@@ -286,29 +300,27 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
             </Button>
           )}
           {!syncAvailable ? (
-            isConnected ? (
-              <Button
-                variant="danger"
-                size="sm"
-                loading={isDisconnecting || isCheckingConnection}
-                onClick={handleDisconnect}
-              >
-                Disconnect
-              </Button>
-            ) : (
-              <Button variant="ghost" size="sm" disabled title="Calendar sync is not configured">
-                Not configured
-              </Button>
-            )
-          ) : (
+            <Button variant="ghost" size="sm" disabled title="Calendar sync is not configured">
+              Not configured
+            </Button>
+          ) : isConnected ? (
             <Button
-              variant={isConnected ? "danger" : "secondary"}
+              variant="danger"
               size="sm"
               loading={isDisconnecting || isCheckingConnection}
-              onClick={isConnected ? handleDisconnect : handleConnect}
-              leftIcon={isConnected ? undefined : <ExternalLink className="w-3.5 h-3.5" />}
+              onClick={handleDisconnect}
             >
-              {isCheckingConnection ? "…" : isConnected ? "Disconnect" : "Connect"}
+              Disconnect
+            </Button>
+          ) : (
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={isConnecting || isCheckingConnection}
+              onClick={handleConnect}
+              leftIcon={<ExternalLink className="w-3.5 h-3.5" />}
+            >
+              {isCheckingConnection ? "…" : reauthRequired ? "Reconnect" : "Connect"}
             </Button>
           )}
         </div>
@@ -317,19 +329,20 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
       <div className="mt-3 pt-3 border-t border-border">
         {!syncAvailable ? (
           <p className="text-[10px] text-muted-foreground leading-relaxed">
-            Calendar event import is not configured on the server. There is no active Connect until Google OAuth secrets are set — schedule interviews manually in Clarify for now.
+            Calendar is not configured on the server. There is no active Connect until Google OAuth secrets are set — schedule interviews in Clarify without a Google event for now.
           </p>
         ) : isConnected ? (
           <>
             <p className="text-[10px] text-muted-foreground mb-1.5">Permissions granted:</p>
             <div className="flex flex-wrap gap-1.5">
-              <Badge variant="blue" size="sm">Read calendar events</Badge>
-              <Badge variant="blue" size="sm">Import interviews</Badge>
+              <Badge variant="blue" size="sm">Create interview events</Badge>
+              <Badge variant="blue" size="sm">Update interview events</Badge>
+              <Badge variant="blue" size="sm">Cancel interview events</Badge>
             </div>
           </>
         ) : (
           <p className="text-[10px] text-muted-foreground leading-relaxed">
-            Connects via Google OAuth. Upcoming interview-related events are imported. When connected, Clarify AI can add, update, or delete interview events you schedule here.
+            Connect from Settings. Google Sign-In does not grant Calendar access. Clarify AI will request permission to create, update, and cancel interview events only.
           </p>
         )}
       </div>

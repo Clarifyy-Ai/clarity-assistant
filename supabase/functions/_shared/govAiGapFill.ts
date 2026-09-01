@@ -6,6 +6,7 @@
 
 import { createServiceClient } from "./supabase.ts";
 import { generateWithFallback } from "./aiProvider.ts";
+import { getAiFeaturePolicy, mcqOutputTokenBudget } from "./aiFeaturePolicy.ts";
 import { parseJSON } from "./gemini.ts";
 import { buildGapFillPrompt, type WeakTopicStat } from "./examAIPrompts.ts";
 import {
@@ -23,8 +24,8 @@ import {
 } from "./govQualityScore.ts";
 import { DEDUP_ALGORITHM_VERSION } from "./algorithmCatalog.ts";
 
-export const GAP_FILL_BATCH = 10;
-export const GAP_FILL_MAX_BATCHES = 16;
+export const GAP_FILL_BATCH = 8;
+export const GAP_FILL_MAX_BATCHES = 6;
 
 export type GapFillRow = {
   id: string;
@@ -98,8 +99,13 @@ export async function fillUntilCount(
 
   let lastError: string | undefined;
   let emptyBatches = 0;
+  const initialNeed = Math.max(0, opts.targetCount - opts.existing.length);
+  const maxBatches = Math.min(
+    GAP_FILL_MAX_BATCHES,
+    Math.ceil(initialNeed / Math.max(1, GAP_FILL_BATCH)) + 1,
+  );
 
-  for (let batch = 0; batch < GAP_FILL_MAX_BATCHES; batch++) {
+  for (let batch = 0; batch < maxBatches; batch++) {
     const have = opts.existing.length + added.length;
     if (have >= opts.targetCount) break;
 
@@ -181,13 +187,15 @@ async function generateAndInsertBatch(args: {
 
   let raw: string;
   try {
+    const policy = getAiFeaturePolicy("gov_ai_gap_fill");
     const generated = await generateWithFallback({
       prompt,
       temperature: 0.85,
-      maxTokens: 8192,
+      maxTokens: Math.min(mcqOutputTokenBudget(args.gapCount), policy.maxOutputTokens),
       jsonMode: true,
       userId: args.userId ?? getSystemUserId() ?? "gap-fill",
       action: "gov_ai_gap_fill",
+      skipSecondaryOnQuota: policy.skipSecondaryOnQuota,
     });
     raw = generated.text;
   } catch (err) {

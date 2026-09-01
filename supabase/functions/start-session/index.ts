@@ -338,7 +338,7 @@ function toDbModel(model: string): string {
 
   const map: Record<string, string> = {
     "gemini-flash": "gemini-2.5-flash",
-    "gemini-pro": "gemini-2.5-flash",
+    "gemini-pro": "gemini-2.5-pro",
     "gemini-2.5-flash": "gemini-2.5-flash",
     "gpt_4o": "gpt-4o",
   };
@@ -361,10 +361,12 @@ function toDbModelEnum(model: string): string {
   // sessions.model_used enum may not include newer API ids yet
   if (
     mapped === "gemini-2.5-flash" ||
+    mapped === "gemini-2.5-pro" ||
+    mapped === "gemini-2.5-flash-lite" ||
     mapped === "gemini-flash-latest" ||
     mapped === "gemini-2.0-flash-lite"
   ) {
-    return "gemini-2.0-flash";
+    return mapped.endsWith("pro") ? "gemini-1-5-pro" : "gemini-2.0-flash";
   }
   return DB_AI_MODELS.has(mapped) ? mapped : "gemini-1-5-flash";
 }

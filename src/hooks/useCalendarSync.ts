@@ -1,8 +1,14 @@
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { fetchEdge, fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useAuthStore } from "@/store/userStore";
 import type { AuthChangeEvent } from "@supabase/supabase-js";
+
+export type CalendarConnectionStatus =
+  | "not_configured"
+  | "disconnected"
+  | "connected"
+  | "reauth_required";
 
 async function parseEdgeJson<T>(res: Response): Promise<T> {
   const text = await res.text().catch(() => "");
@@ -33,7 +39,6 @@ function isCalendarUnavailableError(err: Error & { code?: string; status?: numbe
   );
 }
 
-/** Cross-mount cache — avoids hammering sync-calendar with 501 probes on every page. */
 const SYNC_PROBE_TTL_MS = 5 * 60 * 1000;
 let syncProbeCache: { available: boolean; checkedAt: number; unavailable: boolean } | null = null;
 let syncProbeInflight: Promise<{ available: boolean; unavailable: boolean }> | null = null;
@@ -70,151 +75,237 @@ async function probeSyncAvailabilityCached(): Promise<{ available: boolean; unav
   return syncProbeInflight;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// useCalendarSync
-// Google OAuth connect/disconnect; event import only when sync-calendar is configured.
-// ─────────────────────────────────────────────────────────────────
-
-// Auth events that warrant a re-check of calendar connection status
 const CONNECTION_CHECK_EVENTS: AuthChangeEvent[] = [
   "SIGNED_IN",
   "SIGNED_OUT",
   "USER_UPDATED",
 ];
 
+type WriteResult = {
+  eventId: string | null;
+  error: string | null;
+  code?: string;
+};
+
+type DeleteResult = {
+  error: string | null;
+  code?: string;
+};
+
+const writeInflight = new Map<string, Promise<WriteResult>>();
+const deleteInflight = new Map<string, Promise<DeleteResult>>();
+let connectInflight: Promise<{ error: string | null }> | null = null;
+
 export function useCalendarSync() {
   const { user } = useAuthStore();
 
   const [isSyncing,            setIsSyncing]            = useState(false);
   const [isDisconnecting,      setIsDisconnecting]      = useState(false);
+  const [isConnecting,         setIsConnecting]         = useState(false);
   const [isCheckingConnection, setIsCheckingConnection] = useState(true);
   const [lastSynced,           setLastSynced]           = useState<Date | null>(null);
   const [importedCount,        setImportedCount]        = useState<number | null>(null);
   const [error,                setError]                = useState<string | null>(null);
-  const [isConnected,          setIsConnected]          = useState(false);
+  const [connectionStatus,     setConnectionStatus]     = useState<CalendarConnectionStatus>("disconnected");
+  const [googleEmail,          setGoogleEmail]          = useState<string | null>(null);
   const [syncAvailable,        setSyncAvailable]        = useState(
     () => syncProbeCache?.available === true,
   );
   const [isProbingSync,        setIsProbingSync]        = useState(
     () => !(syncProbeCache && Date.now() - syncProbeCache.checkedAt < SYNC_PROBE_TTL_MS),
   );
+  const connectingRef = useRef(false);
 
-  // ── Check connection status ───────────────────────────────────
-  // Uses GET on disconnect-calendar which returns { connected: boolean }.
-  // Falls back to session provider_token if the edge call fails.
+  const isConnected = connectionStatus === "connected";
+  const reauthRequired = connectionStatus === "reauth_required";
+
+  const applyUnavailable = useCallback(() => {
+    setSyncAvailable(false);
+    setConnectionStatus("not_configured");
+    setError(CALENDAR_UNAVAILABLE_MSG);
+  }, []);
+
   const checkConnection = useCallback(async (): Promise<void> => {
     if (!user) {
-      setIsConnected(false);
+      setConnectionStatus("disconnected");
+      setGoogleEmail(null);
       setIsCheckingConnection(false);
       return;
     }
     try {
-      const data = await fetchEdgeJson<{ connected?: boolean }>(
+      const data = await fetchEdgeJson<{
+        connected?: boolean;
+        status?: string;
+        reauth_required?: boolean;
+        google_email?: string | null;
+        configured?: boolean;
+        code?: string;
+      }>(
         "disconnect-calendar",
         undefined,
-        { method: "GET" }
+        { method: "GET" },
       );
-      setIsConnected(!!data?.connected);
+
+      if (data?.configured === false) {
+        setSyncAvailable(false);
+        setConnectionStatus("not_configured");
+        setGoogleEmail(null);
+        return;
+      }
+
+      if (data?.reauth_required || data?.status === "reauth_required") {
+        setConnectionStatus("reauth_required");
+        setGoogleEmail(typeof data?.google_email === "string" ? data.google_email : null);
+        return;
+      }
+
+      if (data?.connected === true && data?.status !== "disconnected") {
+        setConnectionStatus("connected");
+        setGoogleEmail(typeof data?.google_email === "string" ? data.google_email : null);
+        return;
+      }
+
+      setConnectionStatus("disconnected");
+      setGoogleEmail(null);
     } catch (err) {
       const e = err as Error & { code?: string; status?: number };
-      // Auth/session failures must not fake a "Connected" state from a stale provider_token.
-      if (e.status === 401 || e.code === "AUTH_REQUIRED" || e.code === "AUTH_EXPIRED" || e.code === "AUTH_INVALID") {
-        setIsConnected(false);
-      } else {
-        const { data: sessionData } = await supabase.auth.getSession();
-        setIsConnected(!!sessionData?.session?.provider_token);
+      if (isCalendarUnavailableError(e)) {
+        applyUnavailable();
+        return;
       }
+      // Never fake Connected from the application session.
+      setConnectionStatus("disconnected");
+      setGoogleEmail(null);
     } finally {
       setIsCheckingConnection(false);
     }
-  }, [user]);
+  }, [user, applyUnavailable]);
 
   const probeSyncAvailability = useCallback(async (): Promise<void> => {
     setIsProbingSync(true);
     try {
-      const fromCache =
-        !!syncProbeCache && Date.now() - syncProbeCache.checkedAt < SYNC_PROBE_TTL_MS;
       const result = await probeSyncAvailabilityCached();
       setSyncAvailable(result.available);
-      if (result.unavailable) setError(CALENDAR_UNAVAILABLE_MSG);
+      if (result.unavailable) {
+        setConnectionStatus("not_configured");
+        setError(CALENDAR_UNAVAILABLE_MSG);
+      }
     } finally {
       setIsProbingSync(false);
     }
   }, []);
 
-  // ── Mount + auth state listener ───────────────────────────────
   useEffect(() => {
     checkConnection();
     void probeSyncAvailability();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event) => {
-        // FIX: Only re-check on meaningful events, not TOKEN_REFRESHED.
-        // Avoids an unnecessary edge function call every ~60 minutes.
         if (CONNECTION_CHECK_EVENTS.includes(event)) {
           checkConnection();
         }
-      }
+      },
     );
 
     return () => subscription.unsubscribe();
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Persist offline refresh token after OAuth connect ─────────
-  const persistRefreshToken = useCallback(async (): Promise<boolean> => {
-    if (!syncAvailable) return false;
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const refresh =
-        (sessionData?.session as { provider_refresh_token?: string } | null)
-          ?.provider_refresh_token ?? "";
-      if (!refresh) return false;
-
-      const data = await fetchEdgeJson<{ stored?: boolean; connected?: boolean }>(
-        "sync-calendar",
-        {
-          provider_refresh_token: refresh,
-          store_token_only: true,
-        },
-      );
-      if (data?.stored || data?.connected) {
-        setIsConnected(true);
-        return true;
-      }
-      return false;
-    } catch {
-      return false;
-    }
-  }, [syncAvailable]);
-
-  // ── Connect Google Calendar ───────────────────────────────────
   const connectGoogle = useCallback(async (): Promise<{ error: string | null }> => {
     if (!syncAvailable) {
       const msg = CALENDAR_UNAVAILABLE_MSG;
       setError(msg);
+      setConnectionStatus("not_configured");
       return { error: msg };
     }
+    if (connectingRef.current && connectInflight) return connectInflight;
+    connectingRef.current = true;
+    setIsConnecting(true);
     setError(null);
-    const { error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        scopes:      "https://www.googleapis.com/auth/calendar.events",
-        redirectTo:  `${window.location.origin}/app/settings/integrations?calendar=connected`,
-        // offline + consent so Google returns a refresh_token we can persist server-side
-        queryParams: { access_type: "offline", prompt: "consent" },
-      },
-    });
-    if (oauthError) {
-      setError(oauthError.message);
-      return { error: oauthError.message };
+
+    connectInflight = (async () => {
+      try {
+        const data = await fetchEdgeJson<{
+          authorization_url?: string;
+          already_connected?: boolean;
+          connected?: boolean;
+          error?: string;
+          code?: string;
+        }>("sync-calendar", { action: "oauth_start" });
+
+        if (data?.already_connected || data?.connected) {
+          setConnectionStatus("connected");
+          return { error: null };
+        }
+
+        const url = data?.authorization_url;
+        if (!url || !url.startsWith("https://accounts.google.com/")) {
+          const msg = "Could not start Google Calendar authorization.";
+          setError(msg);
+          return { error: msg };
+        }
+
+        window.location.assign(url);
+        return { error: null };
+      } catch (err) {
+        const e = err as Error & { code?: string; status?: number };
+        if (isCalendarUnavailableError(e)) {
+          applyUnavailable();
+          return { error: CALENDAR_UNAVAILABLE_MSG };
+        }
+        const msg = err instanceof Error ? err.message : "Failed to connect Google Calendar";
+        setError(msg);
+        return { error: msg };
+      } finally {
+        connectingRef.current = false;
+        connectInflight = null;
+        setIsConnecting(false);
+      }
+    })();
+
+    return connectInflight;
+  }, [syncAvailable, applyUnavailable]);
+
+  const completeOAuthCallback = useCallback(async (input: {
+    code?: string | null;
+    state?: string | null;
+    error?: string | null;
+    errorDescription?: string | null;
+  }): Promise<{ connected: boolean; error: string | null; code?: string }> => {
+    try {
+      const data = await fetchEdgeJson<{
+        connected?: boolean;
+        already_connected?: boolean;
+        error?: string;
+        code?: string;
+      }>("sync-calendar", {
+        action: "oauth_callback",
+        code: input.code ?? undefined,
+        state: input.state ?? undefined,
+        error: input.error ?? undefined,
+        error_description: input.errorDescription ?? undefined,
+      });
+      if (data?.connected) {
+        setConnectionStatus("connected");
+        setError(null);
+        return { connected: true, error: null };
+      }
+      const msg = data?.error ?? "Google Calendar authorization did not complete.";
+      setConnectionStatus("disconnected");
+      setError(msg);
+      return { connected: false, error: msg, code: data?.code };
+    } catch (err) {
+      const e = err as Error & { code?: string; status?: number };
+      if (isCalendarUnavailableError(e)) {
+        applyUnavailable();
+        return { connected: false, error: CALENDAR_UNAVAILABLE_MSG, code: "NOT_CONFIGURED" };
+      }
+      const msg = err instanceof Error ? err.message : "Google Calendar authorization failed.";
+      setConnectionStatus(e.code === "REAUTH_REQUIRED" ? "reauth_required" : "disconnected");
+      setError(msg);
+      return { connected: false, error: msg, code: e.code };
     }
-    return { error: null };
-  }, [syncAvailable]);
+  }, [applyUnavailable]);
 
-  // After OAuth redirect, SettingsIntegrations calls persistRefreshToken
-  // before clearing ?calendar=connected.
-
-  // ── Sync calendar events ──────────────────────────────────────
   const syncNow = useCallback(async (): Promise<{
     imported: number;
     error: string | null;
@@ -228,33 +319,23 @@ export function useCalendarSync() {
     setError(null);
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const providerToken = sessionData?.session?.provider_token;
-      const providerRefreshToken =
-        (sessionData?.session as { provider_refresh_token?: string } | null)
-          ?.provider_refresh_token;
-
-      const body: Record<string, unknown> = {};
-      if (providerToken) body.provider_token = providerToken;
-      if (providerRefreshToken) body.provider_refresh_token = providerRefreshToken;
-
-      const res = await fetchEdge("sync-calendar", body);
+      const res = await fetchEdge("sync-calendar", {});
       const data = await parseEdgeJson<{
         imported?: number;
         error?: string;
         code?: string;
       }>(res);
 
-      if (data?.code === "TOKEN_REVOKED") {
-        setIsConnected(false);
+      if (data?.code === "REAUTH_REQUIRED" || data?.code === "TOKEN_REVOKED") {
+        setConnectionStatus("reauth_required");
         const msg = "Google Calendar permission was revoked. Please reconnect.";
         setError(msg);
         return { imported: 0, error: msg };
       }
 
-      if (data?.code === "NO_TOKEN") {
-        setIsConnected(false);
-        const msg = "Google Calendar not connected. Please connect it first.";
+      if (data?.code === "CALENDAR_NOT_CONNECTED" || data?.code === "NO_TOKEN") {
+        setConnectionStatus("disconnected");
+        const msg = "Google Calendar is not connected.";
         setError(msg);
         return { imported: 0, error: msg };
       }
@@ -264,24 +345,24 @@ export function useCalendarSync() {
       const count = data?.imported ?? 0;
       setLastSynced(new Date());
       setImportedCount(count);
-      setIsConnected(true);
+      setConnectionStatus("connected");
       return { imported: count, error: null };
-
     } catch (err) {
       const e = err as Error & { code?: string; status?: number };
-      if (e.code === "TOKEN_REVOKED" || e.code === "NO_TOKEN") {
-        setIsConnected(false);
-        const msg =
-          e.code === "TOKEN_REVOKED"
-            ? "Google Calendar permission was revoked. Please reconnect."
-            : "Google Calendar not connected. Please connect it first.";
+      if (e.code === "REAUTH_REQUIRED" || e.code === "TOKEN_REVOKED") {
+        setConnectionStatus("reauth_required");
+        const msg = "Google Calendar permission was revoked. Please reconnect.";
         setError(msg);
         return { imported: 0, error: msg };
       }
-      // 501 / NOT_CONFIGURED — do not claim full Google Calendar sync works
+      if (e.code === "CALENDAR_NOT_CONNECTED" || e.code === "NO_TOKEN") {
+        setConnectionStatus("disconnected");
+        const msg = "Google Calendar is not connected.";
+        setError(msg);
+        return { imported: 0, error: msg };
+      }
       if (isCalendarUnavailableError(e)) {
-        setSyncAvailable(false);
-        setError(CALENDAR_UNAVAILABLE_MSG);
+        applyUnavailable();
         return { imported: 0, error: CALENDAR_UNAVAILABLE_MSG };
       }
       const msg = err instanceof Error ? err.message : "Sync failed";
@@ -290,9 +371,8 @@ export function useCalendarSync() {
     } finally {
       setIsSyncing(false);
     }
-  }, [user, syncAvailable]);
+  }, [user, syncAvailable, applyUnavailable]);
 
-  // ── Disconnect Google Calendar ────────────────────────────────
   const disconnect = useCallback(async (): Promise<{ error: string | null }> => {
     if (!user) return { error: "Not authenticated" };
     setIsDisconnecting(true);
@@ -302,7 +382,7 @@ export function useCalendarSync() {
       const data = await fetchEdgeJson<{ success?: boolean; error?: string }>(
         "disconnect-calendar",
         undefined,
-        { method: "POST" }
+        { method: "POST" },
       );
 
       if (data?.success === false) {
@@ -311,11 +391,11 @@ export function useCalendarSync() {
         return { error: msg };
       }
 
-      setIsConnected(false);
+      setConnectionStatus("disconnected");
+      setGoogleEmail(null);
       setLastSynced(null);
       setImportedCount(null);
       return { error: null };
-
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Disconnect failed";
       setError(msg);
@@ -334,74 +414,119 @@ export function useCalendarSync() {
     timeZone?: string;
     location?: string;
     eventId?: string;
-  }): Promise<{ eventId: string | null; error: string | null }> => {
+  }): Promise<WriteResult> => {
     if (!syncAvailable) {
-      return { eventId: null, error: CALENDAR_UNAVAILABLE_MSG };
+      return { eventId: null, error: CALENDAR_UNAVAILABLE_MSG, code: "NOT_CONFIGURED" };
     }
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const providerToken = sessionData?.session?.provider_token;
-      const data = await fetchEdgeJson<{ event_id?: string; error?: string; code?: string }>(
-        "sync-calendar",
-        {
-          action: "write_event",
-          interview_id: input.interviewId,
-          summary: input.summary,
-          description: input.description,
-          start: input.startIso,
-          end: input.endIso,
-          time_zone: input.timeZone,
-          location: input.location,
-          event_id: input.eventId,
-          provider_token: providerToken,
-        },
-      );
-      if (data?.error) return { eventId: null, error: data.error };
-      return { eventId: data?.event_id ?? null, error: null };
-    } catch (err) {
-      const e = err as Error & { code?: string };
-      if (isCalendarUnavailableError(e)) {
-        setSyncAvailable(false);
-        return { eventId: null, error: CALENDAR_UNAVAILABLE_MSG };
+    const key = input.interviewId;
+    const existing = writeInflight.get(key);
+    if (existing) return existing;
+
+    const pending = (async (): Promise<WriteResult> => {
+      try {
+        const data = await fetchEdgeJson<{ event_id?: string; error?: string; code?: string }>(
+          "sync-calendar",
+          {
+            action: "write_event",
+            interview_id: input.interviewId,
+            summary: input.summary,
+            description: input.description,
+            start: input.startIso,
+            end: input.endIso,
+            time_zone: input.timeZone,
+            location: input.location,
+            event_id: input.eventId,
+          },
+        );
+        if (data?.error) return { eventId: null, error: data.error, code: data.code };
+        if (!data?.event_id) {
+          return { eventId: null, error: "Calendar event was not created.", code: "SYNC_ERROR" };
+        }
+        return { eventId: data.event_id, error: null };
+      } catch (err) {
+        const e = err as Error & { code?: string; status?: number };
+        if (e.code === "REAUTH_REQUIRED") {
+          setConnectionStatus("reauth_required");
+        }
+        if (e.code === "CALENDAR_NOT_CONNECTED") {
+          setConnectionStatus("disconnected");
+        }
+        if (isCalendarUnavailableError(e)) {
+          applyUnavailable();
+          return { eventId: null, error: CALENDAR_UNAVAILABLE_MSG, code: "NOT_CONFIGURED" };
+        }
+        return {
+          eventId: null,
+          error: err instanceof Error ? err.message : "Calendar write failed",
+          code: e.code,
+        };
+      } finally {
+        writeInflight.delete(key);
       }
-      return { eventId: null, error: err instanceof Error ? err.message : "Calendar write failed" };
-    }
-  }, [syncAvailable]);
+    })();
+
+    writeInflight.set(key, pending);
+    return pending;
+  }, [syncAvailable, applyUnavailable]);
 
   const deleteEvent = useCallback(async (input: {
     interviewId: string;
     eventId?: string;
-  }): Promise<{ error: string | null }> => {
-    if (!syncAvailable) return { error: null };
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const providerToken = sessionData?.session?.provider_token;
-      await fetchEdgeJson("sync-calendar", {
-        action: "delete_event",
-        interview_id: input.interviewId,
-        event_id: input.eventId,
-        provider_token: providerToken,
-      });
-      return { error: null };
-    } catch {
-      return { error: null };
+  }): Promise<DeleteResult> => {
+    if (!syncAvailable) {
+      return { error: null, code: "NOT_CONFIGURED" };
     }
+    const key = input.interviewId;
+    const existing = deleteInflight.get(key);
+    if (existing) return existing;
+
+    const pending = (async (): Promise<DeleteResult> => {
+      try {
+        await fetchEdgeJson("sync-calendar", {
+          action: "delete_event",
+          interview_id: input.interviewId,
+          event_id: input.eventId,
+        });
+        return { error: null };
+      } catch (err) {
+        const e = err as Error & { code?: string; status?: number };
+        if (e.code === "REAUTH_REQUIRED") {
+          setConnectionStatus("reauth_required");
+        }
+        if (isCalendarUnavailableError(e)) {
+          return { error: null, code: "NOT_CONFIGURED" };
+        }
+        return {
+          error: err instanceof Error ? err.message : "Calendar cancel failed",
+          code: e.code,
+        };
+      } finally {
+        deleteInflight.delete(key);
+      }
+    })();
+
+    deleteInflight.set(key, pending);
+    return pending;
   }, [syncAvailable]);
 
   return {
     connectGoogle,
+    completeOAuthCallback,
     syncNow,
     writeEvent,
     deleteEvent,
     disconnect,
     checkConnection,
     probeSyncAvailability,
-    persistRefreshToken,
     isSyncing,
     isDisconnecting,
+    isConnecting,
     isCheckingConnection,
     isProbingSync,
     isConnected,
+    reauthRequired,
+    connectionStatus,
+    googleEmail,
     syncAvailable,
     lastSynced,
     importedCount,

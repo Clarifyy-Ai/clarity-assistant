@@ -3,6 +3,7 @@ import {
   detectQuestion,
   hintIdempotencyKey,
   questionFingerprint,
+  beginAutoHintIfIdle,
 } from "@/lib/ai/questionDetection";
 
 describe("questionDetection", () => {
@@ -47,5 +48,16 @@ describe("questionDetection", () => {
       seenFingerprints: seen,
     });
     expect(detected?.questionText).toMatch(/strengths/i);
+  });
+
+  it("claims auto-hint once per fingerprint while in flight", () => {
+    const inflight = { current: new Set<string>() };
+    const fp = questionFingerprint("Why this role?");
+    expect(beginAutoHintIfIdle(inflight, fp)).toBe(true);
+    expect(beginAutoHintIfIdle(inflight, fp)).toBe(false);
+    expect(beginAutoHintIfIdle(inflight, "")).toBe(false);
+    const other = questionFingerprint("What are your strengths?");
+    expect(beginAutoHintIfIdle(inflight, other)).toBe(true);
+    expect(beginAutoHintIfIdle(inflight, fp)).toBe(false);
   });
 });

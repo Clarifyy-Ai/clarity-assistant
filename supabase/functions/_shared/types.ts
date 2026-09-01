@@ -42,14 +42,8 @@ export interface ResponseMeta {
 
 export type AIProvider = "openai" | "anthropic" | "gemini";
 
-export type ModelId =
-  | "gpt-4o"
-  | "gpt-4o-mini"
-  | "gpt-4-turbo"
-  | "claude-3-5-sonnet-20241022"
-  | "claude-3-haiku-20240307"
-  | "gemini-2.0-flash"
-  | "gemini-1.5-pro";
+/** Official provider model id (Gemini / OpenAI / Anthropic). Not a closed enum. */
+export type ModelId = string;
 
 export interface ModelConfig {
   id:           ModelId;

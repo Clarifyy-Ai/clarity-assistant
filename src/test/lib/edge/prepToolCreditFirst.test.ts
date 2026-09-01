@@ -12,10 +12,11 @@ describe("prep-tool credit-first gate", () => {
       "utf8",
     );
     const creditIdx = src.indexOf("INSUFFICIENT_CREDITS");
-    const unknownIdx = src.indexOf("Unknown tool_id");
+    const unknownIdx = src.indexOf("Unknown tool.");
     expect(creditIdx).toBeGreaterThan(0);
     expect(unknownIdx).toBeGreaterThan(creditIdx);
     expect(src).toContain('"raw_prompt"');
     expect(src).toContain("creditDenialResponse");
+    expect(src).not.toContain("Unknown tool_id:");
   });
 });

@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import asyncio
+from collections import defaultdict
 from typing import Any
 
+from app.ai_policy import FEATURE_POLICIES, decide_ai
 from app.gov_exams.availability import MIN_CUSTOM_PRACTICE, load_eligible_bank
 from app.gov_exams.deterministic_generate import (
     PRACTICE_DISCLAIMER,
@@ -330,26 +332,62 @@ async def process_gov_exam_job(
         bank_selected, leftovers = fill_bank_into_slots(shuffled, blueprint, mode=mode)
         bank_count = sum(len(items) for items in bank_selected.values())
 
+        questions = [q for items in bank_selected.values() for q in items]
+        used_ids = {q.question_id for q in questions if q.question_id}
+        leftovers = [q for q in leftovers if q.id not in used_ids]
+        questions, leftovers, det_pre = repair_paper(
+            blueprint,
+            questions,
+            leftovers,
+            mode=mode,
+            allow_det=allow_det,
+            seed=seed,
+            max_rounds=1,
+        )
+        deterministic_count = det_pre
+        deterministic_ids: set[str] = set()
+        for q in questions:
+            if q.python_generated and q.question_id:
+                deterministic_ids.add(q.question_id)
+        validator.seed_existing((q.question_text, q.options) for q in questions)
+
+        bank_selected = defaultdict(list)
+        for question in questions:
+            bank_selected[question.section_code].append(question)
+        bank_count = sum(
+            1
+            for q in questions
+            if q.source_class in {"bank", "previous_year"} and not q.generated_practice
+        )
+
         outstanding = PaperFactory._subtract_bank_coverage(blueprint, bank_selected)
         needed = sum(slot.count for slot in outstanding)
+        decision = decide_ai(
+            feature="gov_exam_gap_fill",
+            needed_count=needed,
+            permitted=allow_ai,
+            provider_configured=settings.has_ai_provider,
+            official_mode=mode == "official_previous",
+        )
 
         ai_count = 0
-        deterministic_count = 0
-        deterministic_ids: set[str] = set()
         report = None
         need_fallback = False
 
         async def on_ai_progress(_done: int, _total: int) -> None:
             await asyncio.to_thread(repo.heartbeat, job_id)
 
-        if needed > 0 and allow_ai:
+        if needed > 0 and decision == "AI_REQUIRED":
             await set_stage("generating_missing_slots")
+            gap_policy = FEATURE_POLICIES["gov_exam_gap_fill"]
             gov_exam_log(
                 "ai_generation_started",
                 operation_id=operation_id,
                 job_id=job_id,
                 correlation_id=correlation,
                 needed=needed,
+                prompt_version=gap_policy.prompt_version,
+                decision=decision,
             )
             try:
                 async with MCQGenerator(settings) as ai:

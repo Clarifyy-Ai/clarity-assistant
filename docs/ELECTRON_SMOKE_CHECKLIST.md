@@ -2,6 +2,13 @@
 
 Honest product note: the desktop app is a **framed companion overlay window** with global shortcuts, not a frameless transparent always-on-top stealth HUD unless the user explicitly enables content-protection / stealth opt-in.
 
+## Config APIs
+
+- [ ] `npm run electron:check-config` passes (VITE Supabase URL/keys, project ID, `VITE_APP_URL` not localhost for packaging)
+- [ ] GitHub Actions secrets set for Electron Release: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_APP_URL`, `VITE_SUPABASE_PROJECT_ID`, `VITE_OAUTH_PROVIDERS`
+- [ ] Edge secret `ALLOW_ELECTRON_NULL_ORIGIN=true` (plus `ALLOWED_ORIGINS` / `SITE_URL` / `PUBLIC_URL` for the web origin)
+- [ ] Auth redirect URLs include the production website origin — no OpenAI/Gemini/Deepgram/Stripe **secrets** in Electron env
+
 ## Automated / local (Windows)
 
 - [ ] `npm run electron:dev` launches without crash

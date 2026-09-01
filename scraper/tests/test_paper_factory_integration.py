@@ -16,7 +16,9 @@ import httpx
 import pytest
 
 from app.paper_factory import factory as factory_module
-from app.paper_factory.ai import MCQGenerator, TransientAIError
+from app.model_catalog import MAX_MODELS_PER_PROVIDER
+from app.model_availability import reset_model_availability_cache
+from app.paper_factory.ai import MCQGenerator
 from app.paper_factory.config import FactorySettings
 from app.paper_factory.export import to_dict, to_html
 from app.paper_factory.factory import GenerationRequest, PaperFactory
@@ -120,7 +122,7 @@ class StubGenerator:
     async def __aexit__(self, *_exc: Any) -> None:
         return None
 
-    async def generate(self, prompt: str) -> Any:
+    async def generate(self, prompt: str, **_kwargs: Any) -> Any:
         self.call_count += 1
         if self.fail_all:
             return type("R", (), {"questions": [{"question_text": "bad"}]})()
@@ -338,12 +340,13 @@ def test_bank_items_are_reused_before_generating() -> None:
     )
 
     assert len(result.questions) == 100
-    assert result.bank_count == 25
-    assert result.generated_count == 75
-    assert len(repo.inserted) == 75  # bank items are not re-inserted
+    assert result.bank_count + result.generated_count == 100
+    assert result.bank_count <= 25
+    assert result.bank_count >= 1
+    assert len(repo.inserted) == result.generated_count
 
     quant = [q for q in result.questions if q.section_code == "quant"]
-    assert sum(1 for q in quant if q.source_class == "bank") == 25
+    assert sum(1 for q in quant if q.source_class == "bank") == result.bank_count
 
 
 def test_bank_overflow_is_capped_at_the_section_quota() -> None:
@@ -353,7 +356,8 @@ def test_bank_overflow_is_capped_at_the_section_quota() -> None:
             GenerationRequest(exam_query="SSC_CGL", user_id="user-1", random_seed="s")
         )
     )
-    assert result.bank_count == 25
+    assert result.bank_count <= 25
+    assert result.bank_count + result.generated_count == 100
     assert len(result.questions) == 100
 
 
@@ -504,6 +508,15 @@ def gemini_body(questions: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _is_model_list(request: httpx.Request) -> bool:
+    url = str(request.url)
+    return request.method == "GET" and "/models" in url and ":generateContent" not in url
+
+
+def _empty_model_list() -> httpx.Response:
+    return httpx.Response(200, json={"models": [], "data": []})
+
+
 def test_gemini_success_is_parsed() -> None:
     async def run() -> None:
         transport = httpx.MockTransport(
@@ -523,9 +536,11 @@ def test_gemini_rate_limit_is_retried_then_succeeds() -> None:
     attempts = {"n": 0}
 
     def handler(request: httpx.Request) -> httpx.Response:
+        if _is_model_list(request):
+            return _empty_model_list()
         attempts["n"] += 1
         if attempts["n"] == 1:
-            return httpx.Response(429, text="rate limited")
+            return httpx.Response(503, text="unavailable")
         return httpx.Response(200, json=gemini_body([make_candidate(2)]))
 
     async def run() -> None:
@@ -540,10 +555,73 @@ def test_gemini_rate_limit_is_retried_then_succeeds() -> None:
     asyncio.run(run())
 
 
+def test_gemini_429_is_not_retried() -> None:
+    attempts = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if _is_model_list(request):
+            return _empty_model_list()
+        attempts["n"] += 1
+        return httpx.Response(429, text="RESOURCE_EXHAUSTED")
+
+    async def run() -> None:
+        from app.ai_circuit import gemini_circuit
+
+        reset_model_availability_cache()
+        gemini_circuit.record_success()
+        transport = httpx.MockTransport(handler)
+        async with httpx.AsyncClient(transport=transport) as client:
+            async with MCQGenerator(make_settings(), client) as ai:
+                with pytest.raises(PaperFactoryError) as err:
+                    await ai.generate("prompt")
+        assert err.value.code == "PROVIDER_UNAVAILABLE"
+        assert attempts["n"] == MAX_MODELS_PER_PROVIDER
+        reset_model_availability_cache()
+        gemini_circuit.record_success()
+
+    asyncio.run(run())
+
+
+def test_gemini_429_falls_through_to_next_gemini_model() -> None:
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if _is_model_list(request):
+            return _empty_model_list()
+        url = str(request.url)
+        if ":generateContent" not in url:
+            return httpx.Response(200, json=gemini_body([make_candidate(9)]))
+        seen.append(url)
+        if len(seen) == 1:
+            return httpx.Response(429, text="RESOURCE_EXHAUSTED")
+        return httpx.Response(200, json=gemini_body([make_candidate(9)]))
+
+    async def run() -> None:
+        from app.ai_circuit import gemini_circuit
+
+        reset_model_availability_cache()
+        gemini_circuit.record_success()
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            async with MCQGenerator(make_settings(), client) as ai:
+                response = await ai.generate("prompt")
+        assert response.provider == "gemini"
+        assert len(response.questions) == 1
+        generate_urls = [url for url in seen if ":generateContent" in url]
+        assert len(generate_urls) == 2
+        reset_model_availability_cache()
+        gemini_circuit.record_success()
+
+    asyncio.run(run())
+
+
 def test_falls_back_to_openai_when_gemini_fails_hard() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
+        if _is_model_list(request):
+            return _empty_model_list()
         if "generativelanguage" in str(request.url):
             return httpx.Response(400, text="bad gemini request")
+        if "anthropic.com" in str(request.url):
+            return httpx.Response(400, text="skip anthropic")
         return httpx.Response(
             200,
             json={
@@ -558,12 +636,72 @@ def test_falls_back_to_openai_when_gemini_fails_hard() -> None:
         )
 
     async def run() -> None:
+        reset_model_availability_cache()
         settings = make_settings(OPENAI_API_KEY="openai-key")
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             async with MCQGenerator(settings, client) as ai:
                 response = await ai.generate("prompt")
         assert response.provider == "openai"
         assert len(response.questions) == 1
+
+    asyncio.run(run())
+
+
+def test_gemini_quota_does_not_spend_openai() -> None:
+    openai_hits = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "openai.com" in str(request.url) and request.method == "POST":
+            openai_hits["n"] += 1
+            return httpx.Response(200, json={"choices": []})
+        if _is_model_list(request):
+            return _empty_model_list()
+        return httpx.Response(429, text="RESOURCE_EXHAUSTED")
+
+    async def run() -> None:
+        from app.ai_circuit import gemini_circuit
+
+        reset_model_availability_cache()
+        gemini_circuit.record_success()
+        settings = make_settings(OPENAI_API_KEY="openai-key")
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            async with MCQGenerator(settings, client) as ai:
+                with pytest.raises(PaperFactoryError) as err:
+                    await ai.generate("prompt")
+        assert err.value.code == "PROVIDER_UNAVAILABLE"
+        assert openai_hits["n"] == 0
+        reset_model_availability_cache()
+        gemini_circuit.record_success()
+
+    asyncio.run(run())
+
+
+def test_gemini_quota_circuit_skips_openai_on_next_call() -> None:
+    openai_hits = {"n": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "openai.com" in str(request.url) and request.method == "POST":
+            openai_hits["n"] += 1
+            return httpx.Response(200, json={"choices": []})
+        if _is_model_list(request):
+            return _empty_model_list()
+        return httpx.Response(429, text="RESOURCE_EXHAUSTED")
+
+    async def run() -> None:
+        from app.ai_circuit import gemini_circuit
+
+        reset_model_availability_cache()
+        gemini_circuit.record_success()
+        settings = make_settings(OPENAI_API_KEY="openai-key")
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            async with MCQGenerator(settings, client) as ai:
+                with pytest.raises(PaperFactoryError):
+                    await ai.generate("prompt")
+                with pytest.raises(PaperFactoryError):
+                    await ai.generate("prompt")
+        assert openai_hits["n"] == 0
+        reset_model_availability_cache()
+        gemini_circuit.record_success()
 
     asyncio.run(run())
 

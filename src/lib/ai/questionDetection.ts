@@ -25,6 +25,20 @@ export function questionFingerprint(text: string): string {
     .slice(0, 240);
 }
 
+/**
+ * Claim auto-hint generation for a fingerprint (StrictMode / rapid re-detect).
+ * Returns true only the first time `fingerprint` is claimed on this ref.
+ */
+export function beginAutoHintIfIdle(
+  inflightFingerprintsRef: { current: Set<string> },
+  fingerprint: string,
+): boolean {
+  if (!fingerprint) return false;
+  if (inflightFingerprintsRef.current.has(fingerprint)) return false;
+  inflightFingerprintsRef.current.add(fingerprint);
+  return true;
+}
+
 /** Stable client idempotency key for hint generation (session + fingerprint).
  * Must match edge `isValidIdempotencyKey`: /^[A-Za-z0-9._:-]{16,150}$/
  * (spaces in fingerprints previously caused CREDIT_DEDUCTION_FAILED 500s).

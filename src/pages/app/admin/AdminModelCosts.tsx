@@ -24,7 +24,7 @@ import { Button }   from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Bot, Cpu, DollarSign, TrendingUp,
-  RefreshCw,
+  RefreshCw, Percent,
 } from "lucide-react";
 
 interface ModelUsageStat {
@@ -37,6 +37,13 @@ interface ModelUsageStat {
   revenueCredits: number;
   avgLatencyMs:   number;
   errorRate:      number;
+}
+
+interface ActionUsageStat {
+  action: string;
+  callCount: number;
+  tokensTotal: number;
+  costUSDCents: number;
 }
 
 interface FeatureCreditCost {
@@ -109,6 +116,8 @@ export default function AdminModelCosts() {
   const [isLoading,    setIsLoading]    = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionStats, setActionStats] = useState<ActionUsageStat[]>([]);
+  const [fallbackCalls, setFallbackCalls] = useState(0);
 
   const fetchData = async (showRefresh = false) => {
     if (showRefresh) setIsRefreshing(true);
@@ -123,7 +132,7 @@ export default function AdminModelCosts() {
         creditsDB.listRecent(2000),
         supabase
           .from("ai_usage_logs" as "profiles")
-          .select("model, input_tokens, output_tokens, cost_microcents, latency_ms")
+          .select("model, input_tokens, output_tokens, cost_microcents, latency_ms, action, was_fallback, created_at")
           .gte("created_at", since),
         supabase
           .from("model_pricing")
@@ -166,8 +175,13 @@ export default function AdminModelCosts() {
         output_tokens?: number | null;
         cost_microcents?: number | null;
         latency_ms?: number | null;
+        action?: string | null;
+        was_fallback?: boolean | null;
+        created_at?: string | null;
       }>;
       const modelMap = new Map<string, ModelUsageStat>();
+      const actionMap = new Map<string, ActionUsageStat>();
+      let fallbacks = 0;
 
       for (const row of usageRows) {
         const modelId = String(row.model ?? "unknown");
@@ -191,14 +205,36 @@ export default function AdminModelCosts() {
           errorRate: 0,
         };
 
+        const tokensIn = Number(row.input_tokens) || 0;
+        const tokensOut = Number(row.output_tokens) || 0;
+        const costUSDCents = Math.round((Number(row.cost_microcents) || 0) / 10_000);
+
         existing.callCount += 1;
-        existing.tokensIn += Number(row.input_tokens) || 0;
-        existing.tokensOut += Number(row.output_tokens) || 0;
-        existing.costUSDCents += Math.round((Number(row.cost_microcents) || 0) / 10_000);
+        existing.tokensIn += tokensIn;
+        existing.tokensOut += tokensOut;
+        existing.costUSDCents += costUSDCents;
         existing.avgLatencyMs += Number(row.latency_ms) || 0;
         modelMap.set(modelId, existing);
+
+        if (row.was_fallback === true) fallbacks += 1;
+
+        const action = String(row.action ?? "unknown") || "unknown";
+        const actionExisting = actionMap.get(action) ?? {
+          action,
+          callCount: 0,
+          tokensTotal: 0,
+          costUSDCents: 0,
+        };
+        actionExisting.callCount += 1;
+        actionExisting.tokensTotal += tokensIn + tokensOut;
+        actionExisting.costUSDCents += costUSDCents;
+        actionMap.set(action, actionExisting);
       }
 
+      setFallbackCalls(fallbacks);
+      setActionStats(
+        [...actionMap.values()].sort((a, b) => b.tokensTotal - a.tokensTotal).slice(0, 10),
+      );
       setModelStats(
         [...modelMap.values()].map((m) => ({
           ...m,
@@ -249,6 +285,8 @@ export default function AdminModelCosts() {
   const totalCost    = modelStats.reduce((s, m) => s + m.costUSDCents, 0);
   const totalRevCred = modelStats.reduce((s, m) => s + m.revenueCredits, 0);
   const totalCalls   = modelStats.reduce((s, m) => s + m.callCount, 0);
+  const totalTokens  = modelStats.reduce((s, m) => s + m.tokensIn + m.tokensOut, 0);
+  const fallbackRate = totalCalls === 0 ? 0 : (fallbackCalls / totalCalls) * 100;
 
   return (
     <div className="space-y-6">
@@ -284,10 +322,12 @@ export default function AdminModelCosts() {
       )}
 
       {/* Summary KPIs */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {[
-          { label: "Total API Cost",   value: formatUsdCentsAsInr(totalCost),     icon: DollarSign, sub: "USD provider cost shown in INR" },
-          { label: "Total API Calls",  value: formatNumber(totalCalls),   icon: Cpu,        sub: "completions + transcriptions" },
+          { label: "Estimated Cost",   value: formatUsdCentsAsInr(totalCost), icon: DollarSign, sub: "from cost_microcents" },
+          { label: "Total Calls",      value: formatNumber(totalCalls),   icon: Cpu,        sub: "ai_usage_logs rows" },
+          { label: "Total Tokens",     value: formatNumber(totalTokens),  icon: Bot,        sub: "input + output" },
+          { label: "Fallback Rate",    value: `${fallbackRate.toFixed(1)}%`, icon: Percent, sub: `${formatNumber(fallbackCalls)} of ${formatNumber(totalCalls)}` },
           { label: "Credits Consumed", value: formatNumber(totalRevCred), icon: TrendingUp, sub: "by users this period" },
         ].map(({ label, value, icon: Icon, sub }) => (
           <Card key={label}>
@@ -389,6 +429,54 @@ export default function AdminModelCosts() {
               </TableBody>
             </Table>
           )}
+        </CardContent>
+      </Card>
+
+      <Card padding="none">
+        <CardHeader className="px-5 pt-4">
+          <CardTitle className="text-base">Top actions by tokens</CardTitle>
+          <CardDescription>
+            Aggregated from <code className="text-[11px]">ai_usage_logs.action</code> for the selected date range.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-0 overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Action</TableHead>
+                <TableHead className="text-right">Calls</TableHead>
+                <TableHead className="text-right">Tokens</TableHead>
+                <TableHead className="text-right">Est. Cost</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading
+                ? Array.from({ length: 4 }).map((_, i) => (
+                    <TableRow key={i}>
+                      {Array.from({ length: 4 }).map((_, j) => (
+                        <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                : actionStats.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-8">
+                        No action-level usage telemetry in this date range.
+                      </TableCell>
+                    </TableRow>
+                  ) : actionStats.map((row) => (
+                    <TableRow key={row.action}>
+                      <TableCell>
+                        <code className="text-xs font-mono">{row.action}</code>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{formatNumber(row.callCount)}</TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">{formatNumber(row.tokensTotal)}</TableCell>
+                      <TableCell className="text-right font-medium tabular-nums">{formatUsdCentsAsInr(row.costUSDCents)}</TableCell>
+                    </TableRow>
+                  ))
+              }
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
 

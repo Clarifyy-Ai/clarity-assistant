@@ -44,7 +44,15 @@ import {
   createServiceClient,
 } from "../_shared/supabase.ts";
 import { callAI } from "../_shared/utils.ts";
-import { logAICost } from "../_shared/aiProvider.ts";
+import {
+  logAICost,
+  TOKEN_LIMITS,
+  truncateChatHistory,
+  truncateResumeContext,
+  truncateToTokenLimit,
+  truncateUserQuestion,
+} from "../_shared/aiProvider.ts";
+import { getAiFeaturePolicy } from "../_shared/aiFeaturePolicy.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
 import { requireCapabilityAsync } from "../_shared/requireCapability.ts";
 import { resolveModel, isGeminiModel } from "../_shared/resolveModel.ts";
@@ -61,6 +69,7 @@ const DEFAULT_MODEL =
   Deno.env.get("GEMINI_MODEL_DEFAULT") ?? "gemini-2.5-flash";
 
 const FUNCTION_NAME = "generate-answer";
+const ANSWER_AI_POLICY = getAiFeaturePolicy("generate_answer");
 
 const COST = creditCost("live_answer");
 
@@ -481,7 +490,7 @@ async function runGeminiNonStream(opts: {
         },
         generationConfig: {
           temperature: 0.7,
-          maxOutputTokens: 1024,
+          maxOutputTokens: ANSWER_AI_POLICY.maxOutputTokens,
           topP: 0.95,
         },
       }),
@@ -517,11 +526,11 @@ async function runGeminiNonStream(opts: {
       systemInstruction: {
         parts: [{ text: opts.systemPrompt }],
       },
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 1024,
-        topP: 0.95,
-      },
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: ANSWER_AI_POLICY.maxOutputTokens,
+          topP: 0.95,
+        },
     }),
   });
   if (!res.ok) {
@@ -693,11 +702,23 @@ Deno.serve(async (req: Request) => {
   const userPrompt = buildPrompt({
     interviewType: body.interview_type,
     company: body.target_company,
-    question: body.question,
-    transcript: body.transcript,
-    resumeContext: body.resume_context,
+    question: truncateUserQuestion(body.question),
+    transcript: truncateToTokenLimit(body.transcript, TOKEN_LIMITS.chatHistory),
+    resumeContext: truncateResumeContext(body.resume_context),
     hasScreenshot,
   });
+
+  const boundedMessages = truncateChatHistory(
+    [
+      { role: "system" as const, content: systemPrompt },
+      { role: "user" as const, content: userPrompt },
+    ],
+    ANSWER_AI_POLICY.maxInputTokens,
+  );
+  const boundedSystemPrompt =
+    boundedMessages.find((m) => m.role === "system")?.content ?? systemPrompt;
+  const boundedUserPrompt =
+    boundedMessages.find((m) => m.role === "user")?.content ?? userPrompt;
 
   const aiStartMs = Date.now();
 
@@ -719,17 +740,20 @@ Deno.serve(async (req: Request) => {
       has_screenshot: hasScreenshot,
     },
     runAi: async () => {
+      const aiAttempts = Math.max(1, ANSWER_AI_POLICY.maxRetries);
       if (!isGeminiModel(model)) {
-        const result = await retryTransient(() =>
-          callAI({
-            model: model as ModelId,
-            messages: [
-              { role: "system", content: systemPrompt },
-              { role: "user", content: userPrompt },
-            ],
-            maxTokens: 1024,
-            temperature: 0.7,
-          }),
+        const result = await retryTransient(
+          () =>
+            callAI({
+              model: model as ModelId,
+              messages: [
+                { role: "system", content: boundedSystemPrompt },
+                { role: "user", content: boundedUserPrompt },
+              ],
+              maxTokens: ANSWER_AI_POLICY.maxOutputTokens,
+              temperature: 0.7,
+            }),
+          aiAttempts,
         );
         void logAICost(db, {
           userId: user.id,
@@ -748,13 +772,15 @@ Deno.serve(async (req: Request) => {
         };
       }
 
-      const text = await retryTransient(() =>
-        runGeminiNonStream({
-          model,
-          systemPrompt,
-          userPrompt,
-          screenshotBase64: body.screenshot_base64,
-        }),
+      const text = await retryTransient(
+        () =>
+          runGeminiNonStream({
+            model,
+            systemPrompt: boundedSystemPrompt,
+            userPrompt: boundedUserPrompt,
+            screenshotBase64: body.screenshot_base64,
+          }),
+        aiAttempts,
       );
       void logAICost(db, {
         userId: user.id,

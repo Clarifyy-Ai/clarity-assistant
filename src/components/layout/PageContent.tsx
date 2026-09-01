@@ -10,7 +10,7 @@ export function PageContent({ children, className, ...rest }: PageContentProps) 
   return (
     <div
       className={cn(
-        "animate-in fade-in slide-in-from-bottom-2 duration-200",
+        "w-full min-w-0 overflow-x-hidden animate-in fade-in slide-in-from-bottom-2 duration-200",
         className,
       )}
       {...rest}

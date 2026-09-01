@@ -51,9 +51,9 @@ import {
 
 import {
   generateWithFallback,
-  logAICost,
   moderateOutput,
 } from "../_shared/aiProvider.ts";
+import { getAiFeaturePolicy } from "../_shared/aiFeaturePolicy.ts";
 import { resolveModel } from "../_shared/resolveModel.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { extractBYOK } from "../_shared/utils.ts";
@@ -532,29 +532,21 @@ Deno.serve(async (req: Request) => {
       mode: body.mode,
     },
     runAi: async () => {
+      const policy = getAiFeaturePolicy("generate_hint");
       const aiResult = await generateWithFallback({
         prompt,
         systemPrompt: SYSTEM_PROMPT,
-        maxTokens: 300,
+        maxTokens: Math.min(500, Math.max(300, policy.maxOutputTokens)),
         temperature: 0.5,
         userId: user.id,
         action: "generate_hint",
         model: resolvedModel,
+        skipSecondaryOnQuota: policy.skipSecondaryOnQuota,
         byok,
       });
 
       const moderated = moderateOutput(aiResult.text);
       const rawHints = moderated.filtered;
-
-      void logAICost(admin, {
-        userId: user.id,
-        action: "generate_hint",
-        model: aiResult.model,
-        inputTokens: aiResult.inputTokens,
-        outputTokens: aiResult.outputTokens,
-        latencyMs: aiResult.latencyMs,
-        wasFallback: aiResult.wasFallback,
-      });
 
       if (!rawHints || !rawHints.trim()) {
         throw new Error("AI returned empty hints");

@@ -18,7 +18,6 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 import { isTerminalDeletionStatus } from "@/lib/account/deletionStates";
 import { messageFromDeleteAccountResponse } from "@/lib/account/deleteAccountErrors";
@@ -40,7 +39,6 @@ export default function SettingsDanger() {
   const [resetOpen,   setResetOpen]   = useState(false);
   const [confirm,     setConfirm]     = useState("");
   const [deletePassword, setDeletePassword] = useState("");
-  const [usePasswordConfirm, setUsePasswordConfirm] = useState(false);
   const [deleting,    setDeleting]    = useState(false);
   const [resetting,   setResetting]   = useState(false);
   const [exporting,   setExporting]   = useState(false);
@@ -125,20 +123,20 @@ export default function SettingsDanger() {
     if (deleting) return;
     if (!user?.email) return;
 
-    if (usePasswordConfirm) {
-      if (!deletePassword.trim()) {
-        toast.error("Enter your password to confirm deletion.");
-        return;
-      }
-      const { error: authErr } = await supabase.auth.signInWithPassword({
-        email: user.email,
-        password: deletePassword,
-      });
-      if (authErr) {
-        toast.error("Incorrect password. Account was not deleted.");
-        return;
-      }
-    } else if (confirm !== user.email) {
+    if (confirm !== user.email) {
+      toast.error("Type your email exactly to confirm deletion.");
+      return;
+    }
+    if (!deletePassword.trim()) {
+      toast.error("Enter your password to confirm deletion.");
+      return;
+    }
+    const { error: authErr } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: deletePassword,
+    });
+    if (authErr) {
+      toast.error("Incorrect password. Account was not deleted.");
       return;
     }
 
@@ -151,7 +149,8 @@ export default function SettingsDanger() {
           : `delete-${Date.now()}`);
       deleteIdempotencyKey.current = idempotencyKey;
       const res = await fetchEdge("delete-account", {
-        confirmation: usePasswordConfirm ? "DELETE" : confirm,
+        confirmation: confirm,
+        password: deletePassword,
         idempotencyKey,
       }, {
         headers: { "Idempotency-Key": idempotencyKey },
@@ -301,55 +300,27 @@ export default function SettingsDanger() {
             will be permanently deleted.
           </p>
         </div>
-        <div className="flex gap-2 mb-4">
-          <button
-            type="button"
-            onClick={() => setUsePasswordConfirm(false)}
-            className={cn(
-              "flex-1 text-xs py-2 rounded-lg border transition-colors",
-              !usePasswordConfirm
-                ? "border-primary/40 bg-primary/10 text-primary"
-                : "border-border text-muted-foreground",
-            )}
-          >
-            Confirm with email
-          </button>
-          <button
-            type="button"
-            onClick={() => setUsePasswordConfirm(true)}
-            className={cn(
-              "flex-1 text-xs py-2 rounded-lg border transition-colors",
-              usePasswordConfirm
-                ? "border-primary/40 bg-primary/10 text-primary"
-                : "border-border text-muted-foreground",
-            )}
-          >
-            Confirm with password
-          </button>
+        <div className="mb-4">
+          <p className="text-xs text-muted-foreground mb-1.5">
+            Type your email <span className="text-foreground font-mono">{user?.email}</span> to confirm
+          </p>
+          <Input
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            placeholder={user?.email ?? "your@email.com"}
+            autoComplete="username"
+          />
         </div>
-        {usePasswordConfirm ? (
-          <div className="mb-5">
-            <p className="text-xs text-muted-foreground mb-1.5">Enter your account password</p>
-            <Input
-              type="password"
-              value={deletePassword}
-              onChange={(e) => setDeletePassword(e.target.value)}
-              placeholder="Your password"
-              autoComplete="current-password"
-            />
-          </div>
-        ) : (
-          <div className="mb-5">
-            <p className="text-xs text-muted-foreground mb-1.5">
-              Type your email <span className="text-foreground font-mono">{user?.email}</span> to confirm
-            </p>
-            <Input
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              placeholder={user?.email ?? "your@email.com"}
-            />
-          </div>
-        )}
+        <div className="mb-5">
+          <p className="text-xs text-muted-foreground mb-1.5">Re-enter your password</p>
+          <Input
+            type="password"
+            value={deletePassword}
+            onChange={(e) => setDeletePassword(e.target.value)}
+            placeholder="Your password"
+            autoComplete="current-password"
+          />
+        </div>
         <div className="flex gap-3">
           <Button
             variant="secondary"
@@ -364,7 +335,7 @@ export default function SettingsDanger() {
             size="sm"
             fullWidth
             loading={deleting}
-            disabled={deleting || (usePasswordConfirm ? !deletePassword.trim() : confirm !== user?.email)}
+            disabled={deleting || confirm !== user?.email || !deletePassword.trim()}
             onClick={handleDelete}
           >
             Delete account

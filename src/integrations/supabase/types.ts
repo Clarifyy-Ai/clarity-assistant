@@ -2675,22 +2675,49 @@ export type Database = {
       }
       google_calendar_refresh_tokens: {
         Row: {
+          connected_at: string | null
           created_at: string
+          disconnected_at: string | null
+          google_account_id: string | null
+          google_email: string | null
+          last_error: string | null
+          last_error_code: string | null
+          provider: string
+          reauth_required: boolean
           refresh_token: string | null
+          scopes: string[] | null
           status: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          connected_at?: string | null
           created_at?: string
+          disconnected_at?: string | null
+          google_account_id?: string | null
+          google_email?: string | null
+          last_error?: string | null
+          last_error_code?: string | null
+          provider?: string
+          reauth_required?: boolean
           refresh_token?: string | null
+          scopes?: string[] | null
           status?: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          connected_at?: string | null
           created_at?: string
+          disconnected_at?: string | null
+          google_account_id?: string | null
+          google_email?: string | null
+          last_error?: string | null
+          last_error_code?: string | null
+          provider?: string
+          reauth_required?: boolean
           refresh_token?: string | null
+          scopes?: string[] | null
           status?: string
           updated_at?: string
           user_id?: string
@@ -6711,6 +6738,9 @@ export type Database = {
         Row: {
           calendar_event_id: string | null
           calendar_provider: string | null
+          calendar_sync_error: string | null
+          calendar_sync_status: string | null
+          calendar_synced_at: string | null
           company_name: string
           company_research_id: string | null
           created_at: string
@@ -6733,6 +6763,9 @@ export type Database = {
         Insert: {
           calendar_event_id?: string | null
           calendar_provider?: string | null
+          calendar_sync_error?: string | null
+          calendar_sync_status?: string | null
+          calendar_synced_at?: string | null
           company_name: string
           company_research_id?: string | null
           created_at?: string
@@ -6755,6 +6788,9 @@ export type Database = {
         Update: {
           calendar_event_id?: string | null
           calendar_provider?: string | null
+          calendar_sync_error?: string | null
+          calendar_sync_status?: string | null
+          calendar_synced_at?: string | null
           company_name?: string
           company_research_id?: string | null
           created_at?: string
@@ -8574,6 +8610,10 @@ export type Database = {
           p99_ms: number
         }[]
       }
+      get_calendar_connection_status: {
+        Args: { p_user_id?: string }
+        Returns: Json
+      }
       get_google_refresh_token: { Args: { p_user_id: string }; Returns: Json }
       get_gov_exam_bank_readiness: {
         Args: { p_exam_id?: string }
@@ -8677,6 +8717,10 @@ export type Database = {
       has_google_calendar_grant: {
         Args: { p_user_id: string }
         Returns: boolean
+      }
+      mark_google_calendar_reauth: {
+        Args: { p_error?: string; p_error_code?: string; p_user_id: string }
+        Returns: undefined
       }
       has_own_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
@@ -8851,8 +8895,14 @@ export type Database = {
         Returns: undefined
       }
       upsert_google_refresh_token: {
-        Args: { p_refresh_token: string; p_user_id: string }
-        Returns: undefined
+        Args: {
+          p_google_account_id?: string
+          p_google_email?: string
+          p_refresh_token: string
+          p_scopes?: string[]
+          p_user_id: string
+        }
+        Returns: Json
       }
       verify_course_certificate: { Args: { p_code: string }; Returns: Json }
     }

@@ -158,6 +158,48 @@ async function removeUserStorage(
   }
 }
 
+function jwtIssuedAtSeconds(req: Request): number | null {
+  const header = req.headers.get("Authorization") ?? req.headers.get("authorization") ?? "";
+  const token = header.replace(/^Bearer\s+/i, "").trim();
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  try {
+    const padded = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const json = JSON.parse(atob(padded));
+    return typeof json?.iat === "number" ? json.iat : null;
+  } catch {
+    return null;
+  }
+}
+
+async function verifyPasswordReauth(input: {
+  email: string | undefined;
+  password: string;
+  expectedUserId: string;
+}): Promise<boolean> {
+  const email = input.email?.trim();
+  const password = input.password;
+  if (!email || !password) return false;
+  const url = Deno.env.get("SUPABASE_URL") ?? "";
+  const anon = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  if (!url || !anon) return false;
+  try {
+    const res = await fetch(`${url.replace(/\/$/, "")}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: {
+        apikey: anon,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) return false;
+    const payload = await res.json().catch(() => ({})) as { user?: { id?: string } };
+    return payload?.user?.id === input.expectedUserId;
+  } catch {
+    return false;
+  }
+}
+
 Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
@@ -174,6 +216,7 @@ Deno.serve(async (req) => {
     const confirmation = typeof body?.confirmation === "string"
       ? body.confirmation.trim()
       : "";
+    const password = typeof body?.password === "string" ? body.password : "";
     const idempotencyKey = typeof body?.idempotencyKey === "string"
       ? body.idempotencyKey.trim().slice(0, 150)
       : req.headers.get("Idempotency-Key")?.trim().slice(0, 150) ?? "";
@@ -212,6 +255,29 @@ Deno.serve(async (req) => {
         operationId: existingOp.id,
         correlationId,
       });
+    }
+
+    if (!existingOp?.id) {
+      const passwordOk = password
+        ? await verifyPasswordReauth({
+            email: userEmail,
+            password,
+            expectedUserId: authenticatedUserId,
+          })
+        : false;
+      const iat = jwtIssuedAtSeconds(req);
+      const recentSession =
+        typeof iat === "number" && Date.now() / 1000 - iat <= 10 * 60;
+      if (!passwordOk && !recentSession) {
+        return jsonWithCors(
+          req,
+          {
+            error: "Re-enter your password, or sign in again, before deleting this account.",
+            code: "REAUTH_REQUIRED",
+          },
+          401,
+        );
+      }
     }
 
     const rateLimited = existingOp?.id
@@ -295,6 +361,15 @@ Deno.serve(async (req) => {
 
     await db.from("referrals").delete().eq("referred_id", targetUserId);
     await db.from("referrals").delete().eq("referrer_id", targetUserId);
+
+    const { data: interviewIds } = await db
+      .from("scheduled_interviews")
+      .select("id")
+      .eq("user_id", targetUserId);
+    const scheduledIds = (interviewIds ?? []).map((row: { id: string }) => row.id);
+    if (scheduledIds.length > 0) {
+      await db.from("interview_rounds").delete().in("scheduled_interview_id", scheduledIds);
+    }
 
     for (const spec of WIPE_TABLES) {
       const { error } = await db.from(spec.table).delete().eq(spec.column, targetUserId);

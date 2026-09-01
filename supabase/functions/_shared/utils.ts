@@ -20,6 +20,7 @@ import type {
   ValidationResult, ValidationError
 } from "./types.ts";
 import { CREDIT_COSTS } from "./types.ts";
+import { providerForModel } from "./modelCatalog.ts";
 
 /* -------------------------------------------------------------------------- */
 /*                              CORS SAFE HEADERS                              */
@@ -349,40 +350,18 @@ export async function deductCredits(
 /*                         AI DISPATCHER — OpenAI / Anthropic / Gemini         */
 /* -------------------------------------------------------------------------- */
 
-// Updated provider map with modern Gemini 2.5 models (recommended) 【1-c30e89】
-const PROVIDER_MAP: Record<string, "openai" | "anthropic" | "gemini"> = {
-  // OpenAI
-  "gpt-4o": "openai",
-  "gpt-4o-mini": "openai",
-  "gpt-4-turbo": "openai",
-
-  // Anthropic
-  "claude-3-5-sonnet-20241022": "anthropic",
-  "claude-3-haiku-20240307": "anthropic",
-
-  // Gemini (modern + legacy)
-  "gemini-2.5-flash": "gemini",
-  "gemini-2.5-pro": "gemini",
-  "gemini-2.5-flash-lite": "gemini",
-  "gemini-2.0-flash": "gemini",
-  "gemini-2.0-flash-lite": "gemini",
-  "gemini-flash-latest": "gemini",
-  "gemini-1.5-flash": "gemini",
-  "gemini-1.5-pro": "gemini",
-};
-
 export async function callAI(
   req: AICompletionRequest,
 ): Promise<AICompletionResponse> {
   const start = Date.now();
-  const provider = PROVIDER_MAP[req.model];
+  const provider = providerForModel(req.model);
 
   if (provider === "openai") return callOpenAI(req, start);
   if (provider === "anthropic") return callAnthropic(req, start);
   if (provider === "gemini") return callGemini(req, start);
 
   throw new Error(
-    `Unknown model provider for "${req.model}". Add it to PROVIDER_MAP in utils.ts.`
+    `Unknown model provider for "${req.model}". Expected a Gemini, OpenAI, or Anthropic model id.`
   );
 }
 

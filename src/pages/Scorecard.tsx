@@ -28,7 +28,8 @@ export default function Scorecard() {
   const navigate = useNavigate();
   const {
     scorecard, status, isLoading, isGenerating, error,
-    isShared, shareScorecard, shareBlockedReason, exportPDF, reload,
+    isShared, shareScorecard, shareBlockedReason, exportPDF,
+    generateScorecard,
   } = useScorecard({ sessionId: sessionId! });
   const shareAllowed = canShareScorecard(
     useAuthStore((s) => s.profile?.privacy_prefs),
@@ -76,7 +77,7 @@ export default function Scorecard() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-4">
           <InlineErrorRetry
             message={error ?? "Scoring failed. Retry when you are ready."}
-            onRetry={() => void reload()}
+            onRetry={() => void generateScorecard()}
           />
         </div>
       </div>
@@ -98,10 +99,14 @@ export default function Scorecard() {
               error ??
               "No server scorecard exists for this session yet. Clarify AI does not invent a numeric score in the browser."
             }
-            actionLabel="Back to mock interviews"
-            onAction={() => navigate("/app/mock")}
-            secondaryActionLabel="Retry scoring"
-            onSecondaryAction={() => void reload()}
+            actionLabel={isNoAnswersError ? "Back to mock interviews" : "Generate scorecard"}
+            onAction={
+              isNoAnswersError
+                ? () => navigate("/app/mock")
+                : () => void generateScorecard()
+            }
+            secondaryActionLabel={isNoAnswersError ? undefined : "Back to mock interviews"}
+            onSecondaryAction={isNoAnswersError ? undefined : () => navigate("/app/mock")}
             compact
           />
         </div>

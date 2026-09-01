@@ -492,6 +492,56 @@ export async function setupSupabaseMocks(
       return fulfillJson(route, 200, { success: true });
     }
 
+    if (url.includes("/rest/v1/rpc/get_owned_session_detail")) {
+      const body = (route.request().postDataJSON() as { p_session_id?: string } | null) ?? {};
+      const requested = String(body.p_session_id ?? "");
+      const owned = userId === sessionOwnerId && requested === E2E_COMPLETED_SESSION_ID;
+      if (!owned) {
+        return fulfillJson(route, 200, {
+          found: false,
+          code: "NOT_FOUND",
+          session: null,
+          answers: [],
+          scorecard: null,
+          transcript: null,
+          debrief: null,
+        });
+      }
+      return fulfillJson(route, 200, {
+        found: true,
+        code: "OK",
+        session: {
+          id: E2E_COMPLETED_SESSION_ID,
+          user_id: sessionOwnerId,
+          type: "mock",
+          title: "Completed mock interview",
+          overall_score: null,
+          created_at: "2026-08-30T10:00:00.000Z",
+          started_at: "2026-08-30T10:00:00.000Z",
+          ended_at: "2026-08-30T10:18:00.000Z",
+          duration_seconds: 1080,
+          questions_asked: 3,
+          status: "completed",
+          lifecycle_status: "completed",
+        },
+        answers: [
+          {
+            id: "ans-1",
+            session_id: E2E_COMPLETED_SESSION_ID,
+            user_id: userId,
+            question: "Tell me about yourself",
+            answer: "I am a software engineer with eight years of experience.",
+            score: 82,
+            question_index: 0,
+            created_at: "2026-08-30T10:05:00.000Z",
+          },
+        ],
+        scorecard: { overall_score: 81 },
+        transcript: { content: "I am a software engineer with eight years of experience." },
+        debrief: { summary: "Strong opener with clear experience." },
+      });
+    }
+
     // ── Practice plan ─────────────────────────────────────────────────────
     if (url.includes("/rest/v1/interview_practice_plans") && method === "GET") {
       return fulfillJson(route, 200, practicePlans);
@@ -996,6 +1046,24 @@ Result: Checkout failures dropped using the metrics already in my draft.`,
       });
     }
 
+    if (url.includes("/functions/v1/disconnect-calendar")) {
+      if (method === "GET") {
+        return fulfillJson(route, 200, {
+          connected: !!calendarConfigured,
+          status: calendarConfigured ? "connected" : "disconnected",
+          reauth_required: false,
+          configured: !!calendarConfigured,
+        });
+      }
+      return fulfillJson(route, 200, {
+        success: true,
+        connected: false,
+        status: "disconnected",
+        unlinked: false,
+        preserved_google_login: true,
+      });
+    }
+
     if (url.includes("/functions/v1/sync-calendar")) {
       if (!calendarConfigured) {
         return fulfillJson(route, 501, {
@@ -1009,6 +1077,15 @@ Result: Checkout failures dropped using the metrics already in my draft.`,
         action = String((route.request().postDataJSON() as { action?: string }).action ?? "");
       } catch {
         // ignore
+      }
+      if (action === "oauth_start") {
+        return fulfillJson(route, 200, {
+          authorization_url: "https://accounts.google.com/o/oauth2/v2/auth?e2e=1",
+          already_connected: false,
+        });
+      }
+      if (action === "oauth_callback") {
+        return fulfillJson(route, 200, { connected: true, already_connected: false, status: "connected" });
       }
       if (action === "write_event") {
         return fulfillJson(route, 200, { event_id: "gcal-e2e-1", written: true });

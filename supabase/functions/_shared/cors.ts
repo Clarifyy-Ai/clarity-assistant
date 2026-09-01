@@ -15,7 +15,9 @@
 //
 // ALLOW_LOCALHOST_ORIGINS — "true" (default) or "false"
 // ALLOW_PREVIEW_ORIGINS — "true" (default) or "false" (Lovable preview hosts)
-// ALLOW_ELECTRON_NULL_ORIGIN — "true" (default) or "false" (file:// Electron)
+// ALLOW_ELECTRON_NULL_ORIGIN — "true" (default) or "false" (file:// Electron).
+//   Unset env is treated as true. Secret sync also defaults this secret to "true"
+//   when local env does not set a usable value.
 // APP_ENV / ENVIRONMENT / DENO_ENV — production vs non-production labels
 
 export type CorsEnvReader = {

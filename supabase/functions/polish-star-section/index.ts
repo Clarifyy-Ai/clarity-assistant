@@ -7,6 +7,7 @@ import {
   requireFields, log, getAdminClient
 } from "../_shared/utils.ts";
 import { generateWithFallback } from "../_shared/aiProvider.ts";
+import { getAiFeaturePolicy } from "../_shared/aiFeaturePolicy.ts";
 import type { ModelId } from "../_shared/types.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
@@ -259,14 +260,16 @@ ${styleInstruction}
 Return ONLY the rewritten ${sectionLabel} text:
 `.trim();
 
+        const policy = getAiFeaturePolicy("polish_star_section");
         const aiResult = await generateWithFallback({
           prompt: polishUserPrompt,
           systemPrompt,
-          maxTokens: 400,
+          maxTokens: Math.min(400, policy.maxOutputTokens),
           temperature: 0.65,
           model: String(model),
           userId: auth.userId,
           action: "polish_star_section",
+          skipSecondaryOnQuota: policy.skipSecondaryOnQuota,
         });
         const polished = sanitizeAIOutput(aiResult.text);
         if (!polished.trim()) {

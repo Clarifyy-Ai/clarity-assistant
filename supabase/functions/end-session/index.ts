@@ -79,7 +79,15 @@ Deno.serve(async (req: Request) => {
         ? "EXPIRED"
         : parsed.data.terminal_reason === "USER_ENDED"
           ? "COMPLETED"
-          : null,
+          : parsed.data.terminal_reason === "CANCELLED"
+            ? "CANCELLED"
+            : parsed.data.terminal_reason === "FAILED" ||
+                parsed.data.terminal_reason === "SYSTEM_ERROR" ||
+                parsed.data.terminal_reason === "PROVIDER_UNAVAILABLE"
+              ? "FAILED"
+              : parsed.data.terminal_reason === "AUTH_EXPIRED"
+                ? "INTERRUPTED"
+                : "COMPLETED",
     });
 
     if (error) {

@@ -1,5 +1,5 @@
-// sync-calendar/index.ts
-
+// Canonical Google Calendar Edge Function.
+// Login OAuth is Supabase Auth. Calendar OAuth is this function only.
 
 import {
   handleCors,
@@ -14,21 +14,25 @@ import { createServiceClient } from "../_shared/supabase.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { enforceSessionRateLimitAsync } from "../_shared/rateLimit.ts";
+import { logAuditEventFromRequest } from "../_shared/audit.ts";
+import {
+  isCalendarConfigured,
+  googleClientId,
+  calendarOAuthRedirectUri,
+  generatePkce,
+  buildGoogleAuthorizationUrl,
+  exchangeGoogleAuthorizationCode,
+  refreshGoogleAccessTokenFromSecret,
+  fetchGoogleAccountProfile,
+  googleCalendarWriteEvent,
+  googleCalendarDeleteEvent,
+  mapGoogleCalendarHttpStatus,
+  GOOGLE_CALENDAR_OAUTH_SCOPES,
+  type GoogleCalendarDomainCode,
+} from "../_shared/googleCalendar.ts";
 
-// ─────────────────────────────────────────────────────────────────
-// Configuration guard — fail fast with 501 if OAuth creds are absent.
-// This prevents misleading 500 errors and gives the client a clear
-// signal to show a "not available" UI rather than a generic error.
-// ─────────────────────────────────────────────────────────────────
-
-const GOOGLE_CLIENT_ID     = Deno.env.get("GOOGLE_CLIENT_ID")     ?? "";
-const GOOGLE_CLIENT_SECRET = Deno.env.get("GOOGLE_CLIENT_SECRET") ?? "";
-
-const CALENDAR_CONFIGURED = !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
-
-// ─────────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────────
+const CALENDAR_CONFIGURED = isCalendarConfigured();
+const FN = "sync-calendar";
 
 interface GoogleCalendarEvent {
   id:           string;
@@ -54,10 +58,6 @@ const KEYWORDS = [
   "technical", "onsite", "on-site", "assessment", "coding",
   "panel interview", "phone screen", "video call", "loop",
 ];
-
-// ─────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────
 
 function safe(text: unknown, max = 120): string {
   return String(text ?? "")
@@ -118,91 +118,110 @@ function extractRole(summary: string): string {
   return safe(m?.[1] ?? "Role TBD", 80);
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Google OAuth token refresh
-// ─────────────────────────────────────────────────────────────────
-
-async function upsertGoogleRefreshToken(
-  userId: string,
-  refreshToken: string,
-): Promise<boolean> {
-  const url = Deno.env.get("SUPABASE_URL")              ?? "";
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-  if (!url || !key || !refreshToken) return false;
-
-  const rpcRes = await fetch(`${url}/rest/v1/rpc/upsert_google_refresh_token`, {
-    method:  "POST",
-    headers: {
-      apikey:         key,
-      Authorization:  `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      p_user_id:       userId,
-      p_refresh_token: refreshToken,
+function notConfiguredResponse(req: Request): Response {
+  console.warn(
+    "[sync-calendar] Google OAuth credentials not configured. " +
+    "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable this feature.",
+  );
+  return new Response(
+    JSON.stringify({
+      error:   "Calendar sync is not available yet.",
+      code:    "NOT_CONFIGURED",
+      message: "Google Calendar is not configured on this deployment. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.",
     }),
-  }).catch(() => null);
-
-  return !!rpcRes?.ok;
-}
-
-async function refreshGoogleAccessToken(userId: string): Promise<string | null> {
-  const url = Deno.env.get("SUPABASE_URL")              ?? "";
-  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-
-  // Prefer RPC for refresh token retrieval (secure table)
-  const rpcRes = await fetch(`${url}/rest/v1/rpc/get_google_refresh_token`, {
-    method:  "POST",
-    headers: {
-      apikey:         key,
-      Authorization:  `Bearer ${key}`,
-      "Content-Type": "application/json",
+    {
+      status:  501,
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     },
-    body: JSON.stringify({ p_user_id: userId }),
-  }).catch(() => null);
-
-  let refreshToken: string | undefined;
-
-  if (rpcRes?.ok) {
-    const data = await rpcRes.json();
-    refreshToken = data?.refresh_token;
-  }
-
-  // Fallback: admin user endpoint (legacy / identity_data)
-  if (!refreshToken) {
-    const ures = await fetch(`${url}/auth/v1/admin/users/${userId}`, {
-      headers: { apikey: key, Authorization: `Bearer ${key}` },
-    });
-    if (!ures.ok) return null;
-    const u      = await ures.json();
-    const ident  = u?.identities?.find((i: { provider: string }) => i.provider === "google");
-    refreshToken = ident?.identity_data?.refresh_token ?? ident?.refresh_token ?? null;
-  }
-
-  if (!refreshToken) return null;
-
-  const params = new URLSearchParams({
-    client_id:     GOOGLE_CLIENT_ID,
-    client_secret: GOOGLE_CLIENT_SECRET,
-    refresh_token: refreshToken,
-    grant_type:    "refresh_token",
-  });
-
-  const tRes = await fetch("https://oauth2.googleapis.com/token", {
-    method:  "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body:    params.toString(),
-  });
-
-  if (!tRes.ok) return null;
-
-  const t = await tRes.json();
-  return t.access_token ?? null;
+  );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Google Calendar events fetch
-// ─────────────────────────────────────────────────────────────────
+function domainError(
+  req: Request,
+  code: GoogleCalendarDomainCode,
+  http: number,
+  message: string,
+): Response {
+  return errorResponse(message, code, http, req);
+}
+
+type ServiceDb = ReturnType<typeof createServiceClient>;
+
+async function rpcJson(
+  db: ServiceDb,
+  fn: string,
+  args: Record<string, unknown>,
+): Promise<{ ok: boolean; data: unknown; error: string | null }> {
+  const { data, error } = await db.rpc(fn, args);
+  if (error) return { ok: false, data: null, error: error.message };
+  return { ok: true, data, error: null };
+}
+
+async function getStoredRefreshToken(db: ServiceDb, userId: string): Promise<string | null> {
+  const { ok, data } = await rpcJson(db, "get_google_refresh_token", { p_user_id: userId });
+  if (!ok || !data || typeof data !== "object") return null;
+  const tok = (data as { refresh_token?: string }).refresh_token;
+  return typeof tok === "string" && tok.length > 0 ? tok : null;
+}
+
+async function markReauth(
+  db: ServiceDb,
+  userId: string,
+  code: string,
+  message: string,
+): Promise<void> {
+  await rpcJson(db, "mark_google_calendar_reauth", {
+    p_user_id: userId,
+    p_error_code: code,
+    p_error: message,
+  });
+}
+
+async function resolveCalendarAccessToken(
+  db: ServiceDb,
+  userId: string,
+): Promise<
+  | { ok: true; accessToken: string }
+  | { ok: false; code: GoogleCalendarDomainCode; http: number; message: string }
+> {
+  const refreshToken = await getStoredRefreshToken(db, userId);
+  if (!refreshToken) {
+    return {
+      ok: false,
+      code: "CALENDAR_NOT_CONNECTED",
+      http: 409,
+      message: "Google Calendar is not connected.",
+    };
+  }
+
+  const refreshed = await refreshGoogleAccessTokenFromSecret(refreshToken);
+  if (!refreshed.ok) {
+    if (refreshed.code === "REAUTH_REQUIRED") {
+      await markReauth(db, userId, "REAUTH_REQUIRED", "Google Calendar authorization was revoked or expired.");
+      return {
+        ok: false,
+        code: "REAUTH_REQUIRED",
+        http: 401,
+        message: "Google Calendar access expired. Reconnect your calendar.",
+      };
+    }
+    const mapped = refreshed.code === "RATE_LIMITED"
+      ? mapGoogleCalendarHttpStatus(429)
+      : refreshed.code === "SERVICE_UNAVAILABLE"
+        ? mapGoogleCalendarHttpStatus(503)
+        : { code: "SYNC_ERROR" as const, http: 502, message: "Calendar synchronization failed." };
+    return { ok: false, code: mapped.code, http: mapped.http, message: mapped.message };
+  }
+
+  if (refreshed.refreshToken) {
+    await rpcJson(db, "upsert_google_refresh_token", {
+      p_user_id: userId,
+      p_refresh_token: refreshed.refreshToken,
+    });
+  }
+
+  return { ok: true, accessToken: refreshed.accessToken };
+}
 
 async function fetchEvents(
   token: string,
@@ -231,62 +250,49 @@ async function fetchEvents(
   return { events: json?.items ?? [], status: 200 };
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Handler
-// ─────────────────────────────────────────────────────────────────
+async function setInterviewSync(
+  db: ServiceDb,
+  userId: string,
+  interviewId: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  await db
+    .from("scheduled_interviews")
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("id", interviewId)
+    .eq("user_id", userId);
+}
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
-  // ── 501 guard — return before any auth/DB work ──────────────────
-  // HTTP 501 Not Implemented is the correct status for a feature that
-  // exists in the codebase but isn't operational yet, as opposed to
-  // 503 (service temporarily unavailable) or 500 (unexpected crash).
   if (!CALENDAR_CONFIGURED) {
-    console.warn(
-      "[sync-calendar] Google OAuth credentials not configured. " +
-      "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable this feature.",
-    );
-    return new Response(
-      JSON.stringify({
-        error:   "Calendar sync is not available yet.",
-        code:    "NOT_CONFIGURED",
-        message: "Google Calendar is not configured on this deployment. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.",
-      }),
-      {
-        status:  501,
-        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
-      },
-    );
+    return notConfiguredResponse(req);
   }
 
   const db = createServiceClient();
-  const FN = "sync-calendar";
 
   try {
-    // ── Auth ─────────────────────────────────────────────────────
     const auth = await requireAuth(req);
     const userId = auth.userId;
 
     const rateLimited = await enforceSessionRateLimitAsync(db, FN, userId);
     if (rateLimited) return rateLimited;
 
-    // P0-3: Calendar sync is a Pro feature (matches PLANS.features.calendar_sync)
     const planGate = requirePlan(auth.planId, "pro", req);
     if (planGate) return planGate;
     const capabilityGate = await requireCapabilityForFunction(auth.planId, FN, req);
     if (capabilityGate) return capabilityGate;
 
-    // ── Body ─────────────────────────────────────────────────────
     const body = await parseBody<{
-      provider_token?:          string;
-      provider_refresh_token?:  string;
-      days_ahead?:              number;
       probe?:                   boolean;
-      /** Persist refresh token only (connect callback); skip Calendar API. */
-      store_token_only?:        boolean;
       action?:                  string;
+      code?:                    string;
+      state?:                   string;
+      error?:                   string;
+      error_description?:       string;
+      days_ahead?:              number;
       interview_id?:            string;
       summary?:                 string;
       description?:             string;
@@ -295,67 +301,266 @@ Deno.serve(async (req) => {
       time_zone?:               string;
       location?:                string;
       event_id?:                string;
+      provider_token?:          string;
+      provider_refresh_token?:  string;
+      store_token_only?:        boolean;
     }>(req);
 
-    // Availability probe — auth + plan/capability only; skip Google API.
     if (body?.probe === true) {
       return successResponse({ available: true, configured: true }, undefined, 200, req);
     }
 
-    const refreshFromClient =
-      typeof body?.provider_refresh_token === "string"
-        ? body.provider_refresh_token.trim()
-        : "";
+    const action = typeof body?.action === "string" ? body.action.trim() : "";
 
-    // Persist offline refresh token whenever the client sends one (connect / sync).
-    let tokenStored = false;
-    if (refreshFromClient) {
-      tokenStored = await upsertGoogleRefreshToken(userId, refreshFromClient);
-      if (!tokenStored) {
-        log(FN, "warn", "Failed to upsert Google refresh token");
-      }
+    // Client must never send Google tokens. Ignore if present.
+    if (body?.provider_token || body?.provider_refresh_token || body?.store_token_only) {
+      log(FN, "warn", "Rejected client-supplied Google token fields");
     }
 
-    if (body?.store_token_only === true) {
-      if (!refreshFromClient) {
+    // ── oauth_start ──────────────────────────────────────────────
+    if (action === "oauth_start") {
+      const existing = await rpcJson(db, "get_calendar_connection_status", { p_user_id: userId });
+      const status = (existing.data ?? {}) as { connected?: boolean; status?: string };
+      if (status.connected === true) {
+        return successResponse({
+          already_connected: true,
+          connected: true,
+          status: "connected",
+        }, undefined, 200, req);
+      }
+
+      await db.from("calendar_oauth_states")
+        .delete()
+        .lt("expires_at", new Date().toISOString());
+      await db.from("calendar_oauth_states")
+        .delete()
+        .not("consumed_at", "is", null);
+
+      const pkce = await generatePkce();
+      const redirectUri = calendarOAuthRedirectUri(req);
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+      const { error: stateErr } = await db.from("calendar_oauth_states").insert({
+        state: pkce.state,
+        user_id: userId,
+        code_verifier: pkce.verifier,
+        redirect_uri: redirectUri,
+        nonce: pkce.nonce,
+        expires_at: expiresAt,
+      });
+      if (stateErr) {
+        log(FN, "error", "Failed to persist OAuth state", stateErr);
+        return errorResponse("Could not start Google Calendar authorization.", "SYNC_ERROR", 500, req);
+      }
+
+      const authorizationUrl = buildGoogleAuthorizationUrl({
+        clientId: googleClientId(),
+        redirectUri,
+        state: pkce.state,
+        codeChallenge: pkce.challenge,
+        nonce: pkce.nonce,
+      });
+
+      return successResponse({
+        authorization_url: authorizationUrl,
+        already_connected: false,
+        redirect_uri: redirectUri,
+      }, undefined, 200, req);
+    }
+
+    // ── oauth_callback ───────────────────────────────────────────
+    if (action === "oauth_callback") {
+      const oauthError = typeof body?.error === "string" ? body.error.trim() : "";
+      if (oauthError) {
+        const denied = oauthError === "access_denied";
+        await logAuditEventFromRequest({
+          req,
+          userId,
+          action: "CALENDAR_OAUTH_FAILED",
+          resourceType: "calendar",
+          status: "failure",
+          metadata: { reason: denied ? "access_denied" : "oauth_error" },
+        });
         return errorResponse(
-          "provider_refresh_token is required to store calendar grant.",
-          "NO_REFRESH_TOKEN",
-          400,
+          denied ? "Google Calendar permission was denied." : "Google Calendar authorization failed.",
+          denied ? "NOT_AUTHORIZED" : "INVALID_REQUEST",
+          denied ? 403 : 400,
           req,
         );
       }
-      return successResponse(
-        { stored: tokenStored, connected: tokenStored },
-        undefined,
-        tokenStored ? 200 : 502,
-        req,
-      );
-    }
 
-    const action = typeof body?.action === "string" ? body.action.trim() : "";
-    if (action === "write_event" || action === "delete_event") {
-      let accessToken = typeof body?.provider_token === "string" ? body.provider_token.trim() : "";
-      if (!accessToken) {
-        accessToken = (await refreshGoogleAccessToken(userId)) ?? "";
+      const code = typeof body?.code === "string" ? body.code.trim() : "";
+      const state = typeof body?.state === "string" ? body.state.trim() : "";
+      if (!code || !state) {
+        return errorResponse("Missing authorization code or state.", "INVALID_REQUEST", 400, req);
       }
-      if (!accessToken) {
+
+      const { data: stateRow } = await db
+        .from("calendar_oauth_states")
+        .select("state, user_id, code_verifier, redirect_uri, nonce, expires_at, consumed_at")
+        .eq("state", state)
+        .maybeSingle();
+
+      if (!stateRow) {
+        return errorResponse("Invalid or expired authorization state.", "INVALID_REQUEST", 400, req);
+      }
+      if (stateRow.user_id !== userId) {
+        await logAuditEventFromRequest({
+          req,
+          userId,
+          action: "CALENDAR_OAUTH_FAILED",
+          resourceType: "calendar",
+          status: "blocked",
+          metadata: { reason: "state_user_mismatch" },
+        });
+        return errorResponse("Authorization state does not match this account.", "NOT_AUTHORIZED", 403, req);
+      }
+      if (stateRow.consumed_at) {
+        return errorResponse("This authorization code was already used.", "INVALID_REQUEST", 400, req);
+      }
+      if (new Date(stateRow.expires_at).getTime() < Date.now()) {
+        return errorResponse("Authorization state expired. Please connect again.", "INVALID_REQUEST", 400, req);
+      }
+
+      const { data: consumed } = await db
+        .from("calendar_oauth_states")
+        .update({ consumed_at: new Date().toISOString() })
+        .eq("state", state)
+        .is("consumed_at", null)
+        .select("state")
+        .maybeSingle();
+      if (!consumed) {
+        return errorResponse("This authorization code was already used.", "INVALID_REQUEST", 400, req);
+      }
+
+      const expectedRedirect = calendarOAuthRedirectUri(req);
+      if (stateRow.redirect_uri !== expectedRedirect) {
+        await logAuditEventFromRequest({
+          req,
+          userId,
+          action: "CALENDAR_OAUTH_FAILED",
+          resourceType: "calendar",
+          status: "failure",
+          metadata: { reason: "redirect_mismatch" },
+        });
+        return errorResponse("Authorization callback mismatch. Please connect again.", "INVALID_REQUEST", 400, req);
+      }
+
+      const exchanged = await exchangeGoogleAuthorizationCode({
+        code,
+        redirectUri: stateRow.redirect_uri,
+        codeVerifier: stateRow.code_verifier,
+      });
+      if (!exchanged.ok) {
+        await logAuditEventFromRequest({
+          req,
+          userId,
+          action: "CALENDAR_OAUTH_FAILED",
+          resourceType: "calendar",
+          status: "failure",
+          metadata: { reason: exchanged.code },
+        });
+        return domainError(
+          req,
+          exchanged.code,
+          exchanged.status,
+          exchanged.code === "INVALID_REQUEST"
+            ? "Google rejected the authorization code. Please connect again."
+            : "Could not complete Google Calendar authorization.",
+        );
+      }
+
+      if (!exchanged.tokens.refreshToken) {
+        await logAuditEventFromRequest({
+          req,
+          userId,
+          action: "CALENDAR_OAUTH_FAILED",
+          resourceType: "calendar",
+          status: "failure",
+          metadata: { reason: "missing_refresh_token" },
+        });
         return errorResponse(
-          "Google Calendar not connected. Please connect it first.",
-          "NO_TOKEN",
+          "Google did not return a refresh token. Disconnect any prior grant in Google Account permissions and connect again.",
+          "REAUTH_REQUIRED",
           401,
           req,
         );
       }
 
+      const profile = await fetchGoogleAccountProfile(exchanged.tokens.accessToken);
+      const scopes = (exchanged.tokens.scope ?? GOOGLE_CALENDAR_OAUTH_SCOPES).split(/\s+/).filter(Boolean);
+
+      const upsert = await rpcJson(db, "upsert_google_refresh_token", {
+        p_user_id: userId,
+        p_refresh_token: exchanged.tokens.refreshToken,
+        p_google_account_id: profile.id,
+        p_google_email: profile.email,
+        p_scopes: scopes,
+      });
+
+      if (!upsert.ok) {
+        const msg = upsert.error ?? "";
+        if (msg.includes("GOOGLE_ACCOUNT_IN_USE") || msg.includes("23505")) {
+          await logAuditEventFromRequest({
+            req,
+            userId,
+            action: "CALENDAR_OAUTH_FAILED",
+            resourceType: "calendar",
+            status: "blocked",
+            metadata: { reason: "account_in_use" },
+          });
+          return errorResponse(
+            "That Google Calendar account is already connected to another Clarify AI user.",
+            "CONFLICT",
+            409,
+            req,
+          );
+        }
+        log(FN, "error", "Failed to persist calendar grant", upsert.error);
+        return errorResponse("Could not store Calendar authorization.", "SYNC_ERROR", 500, req);
+      }
+
+      const already = Boolean((upsert.data as { already_connected?: boolean } | null)?.already_connected);
+
+      await logAuditEventFromRequest({
+        req,
+        userId,
+        action: "CALENDAR_CONNECTED",
+        resourceType: "calendar",
+        status: "success",
+        metadata: { already_connected: already, has_account: Boolean(profile.id) },
+      });
+
+      return successResponse({
+        connected: true,
+        already_connected: already,
+        status: "connected",
+        google_email: profile.email,
+      }, undefined, 200, req);
+    }
+
+    if (action === "connection_status") {
+      const { ok, data } = await rpcJson(db, "get_calendar_connection_status", { p_user_id: userId });
+      const row = (ok && data && typeof data === "object") ? data as Record<string, unknown> : {};
+      return successResponse({
+        configured: true,
+        connected: row.connected === true,
+        status: row.status ?? "disconnected",
+        reauth_required: row.reauth_required === true,
+        google_email: typeof row.google_email === "string" ? row.google_email : null,
+        last_error_code: typeof row.last_error_code === "string" ? row.last_error_code : null,
+      }, undefined, 200, req);
+    }
+
+    if (action === "write_event" || action === "delete_event") {
       const interviewId = typeof body?.interview_id === "string" ? body.interview_id.trim() : "";
       if (!/^[0-9a-f-]{36}$/i.test(interviewId)) {
-        return errorResponse("interview_id is required.", "INVALID_INTERVIEW", 400, req);
+        return errorResponse("interview_id is required.", "INVALID_REQUEST", 400, req);
       }
 
       const { data: owned } = await db
         .from("scheduled_interviews")
-        .select("id, calendar_event_id")
+        .select("id, calendar_event_id, calendar_provider, calendar_sync_status, timezone")
         .eq("id", interviewId)
         .eq("user_id", userId)
         .maybeSingle();
@@ -363,115 +568,193 @@ Deno.serve(async (req) => {
         return errorResponse("Interview not found.", "NOT_FOUND", 404, req);
       }
 
+      const access = await resolveCalendarAccessToken(db, userId);
+      if (!access.ok) {
+        if (access.code === "CALENDAR_NOT_CONNECTED") {
+          await setInterviewSync(db, userId, interviewId, {
+            calendar_sync_status: "not_connected",
+            calendar_sync_error: access.message,
+          });
+        } else if (access.code === "REAUTH_REQUIRED") {
+          await setInterviewSync(db, userId, interviewId, {
+            calendar_sync_status: "reauth_required",
+            calendar_sync_error: access.message,
+          });
+          await logAuditEventFromRequest({
+            req,
+            userId,
+            action: "CALENDAR_REAUTH_REQUIRED",
+            resourceType: "calendar",
+            resourceId: interviewId,
+            status: "failure",
+          });
+        }
+        return domainError(req, access.code, access.http, access.message);
+      }
+
       if (action === "delete_event") {
         const eventId =
           (typeof body?.event_id === "string" && body.event_id.trim()) ||
           owned.calendar_event_id ||
           "";
-        if (eventId) {
-          await fetch(
-            `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`,
-            { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } },
-          );
+        if (!eventId) {
+          await setInterviewSync(db, userId, interviewId, {
+            calendar_event_id: null,
+            calendar_provider: null,
+            calendar_sync_status: "cancelled",
+            calendar_sync_error: null,
+            calendar_synced_at: new Date().toISOString(),
+          });
+          return successResponse({ deleted: true, already_gone: true }, undefined, 200, req);
         }
-        await db
-          .from("scheduled_interviews")
-          .update({ calendar_event_id: null, calendar_provider: null, updated_at: new Date().toISOString() })
-          .eq("id", interviewId)
-          .eq("user_id", userId);
-        return successResponse({ deleted: true }, undefined, 200, req);
+
+        const deleted = await googleCalendarDeleteEvent({
+          accessToken: access.accessToken,
+          eventId,
+        });
+        if (!deleted.ok) {
+          const mapped = mapGoogleCalendarHttpStatus(deleted.status);
+          if (mapped.code === "REAUTH_REQUIRED") {
+            await markReauth(db, userId, mapped.code, mapped.message);
+          }
+          await setInterviewSync(db, userId, interviewId, {
+            calendar_sync_status: mapped.code === "REAUTH_REQUIRED" ? "reauth_required" : "sync_error",
+            calendar_sync_error: mapped.message,
+          });
+          await logAuditEventFromRequest({
+            req,
+            userId,
+            action: "CALENDAR_SYNC_FAILED",
+            resourceType: "calendar",
+            resourceId: interviewId,
+            status: "failure",
+            metadata: { op: "delete", code: mapped.code },
+          });
+          return domainError(req, mapped.code, mapped.http, mapped.message);
+        }
+
+        await setInterviewSync(db, userId, interviewId, {
+          calendar_event_id: null,
+          calendar_provider: null,
+          calendar_sync_status: "cancelled",
+          calendar_sync_error: null,
+          calendar_synced_at: new Date().toISOString(),
+        });
+        await logAuditEventFromRequest({
+          req,
+          userId,
+          action: "CALENDAR_EVENT_CANCELLED",
+          resourceType: "calendar",
+          resourceId: interviewId,
+          status: "success",
+          metadata: { already_gone: deleted.alreadyGone },
+        });
+        return successResponse({ deleted: true, already_gone: deleted.alreadyGone }, undefined, 200, req);
       }
 
       const summary = safe(body?.summary ?? "Interview", 200);
       const description = safe(body?.description ?? "", 2000);
       const startIso = typeof body?.start === "string" ? body.start : "";
       const endIso = typeof body?.end === "string" ? body.end : "";
-      const timeZone = typeof body?.time_zone === "string" && body.time_zone !== "local"
-        ? body.time_zone
-        : "UTC";
+      const timeZone =
+        typeof body?.time_zone === "string" && body.time_zone.trim() && body.time_zone !== "local"
+          ? body.time_zone.trim()
+          : (typeof owned.timezone === "string" && owned.timezone.trim() && owned.timezone !== "local"
+            ? owned.timezone.trim()
+            : "UTC");
       const location = typeof body?.location === "string" ? safe(body.location, 500) : "";
       if (!startIso || !endIso) {
-        return errorResponse("start and end are required.", "INVALID_EVENT", 400, req);
+        return errorResponse("start and end are required.", "INVALID_REQUEST", 400, req);
       }
 
-      const payload = {
-        summary,
-        description,
-        location: location || undefined,
-        start: { dateTime: startIso, timeZone },
-        end: { dateTime: endIso, timeZone },
-      };
       const existingId =
         (typeof body?.event_id === "string" && body.event_id.trim()) ||
         owned.calendar_event_id ||
         "";
-      const url = existingId
-        ? `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(existingId)}`
-        : "https://www.googleapis.com/calendar/v3/calendars/primary/events";
-      const googleRes = await fetch(url, {
-        method: existingId ? "PATCH" : "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
+
+      const written = await googleCalendarWriteEvent({
+        accessToken: access.accessToken,
+        existingEventId: existingId || null,
+        interviewId,
+        payload: {
+          summary,
+          description,
+          location: location || undefined,
+          start: { dateTime: startIso, timeZone },
+          end: { dateTime: endIso, timeZone },
         },
-        body: JSON.stringify(payload),
       });
-      if (!googleRes.ok) {
-        return errorResponse(
-          "Failed to write Google Calendar event.",
-          "GOOGLE_API_ERROR",
-          502,
+
+      if (!written.ok) {
+        const mapped = mapGoogleCalendarHttpStatus(written.status);
+        if (mapped.code === "REAUTH_REQUIRED") {
+          await markReauth(db, userId, mapped.code, mapped.message);
+        }
+        await setInterviewSync(db, userId, interviewId, {
+          calendar_sync_status: mapped.code === "REAUTH_REQUIRED" ? "reauth_required" : "sync_error",
+          calendar_sync_error: mapped.message,
+        });
+        await logAuditEventFromRequest({
           req,
-        );
+          userId,
+          action: "CALENDAR_SYNC_FAILED",
+          resourceType: "calendar",
+          resourceId: interviewId,
+          status: "failure",
+          metadata: { op: existingId ? "update" : "create", code: mapped.code },
+        });
+        return domainError(req, mapped.code, mapped.http, mapped.message);
       }
-      const created = await googleRes.json().catch(() => null);
-      const eventId = created?.id ?? existingId;
-      await db
-        .from("scheduled_interviews")
-        .update({
-          calendar_event_id: eventId,
-          calendar_provider: "google",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", interviewId)
-        .eq("user_id", userId);
-      return successResponse({ event_id: eventId, written: true }, undefined, 200, req);
-    }
 
-    let providerToken  = body?.provider_token;
-    const daysAhead    = Math.min(Number(body?.days_ahead ?? 30), 90); // cap at 90 days
-
-    // ── Fetch events (with token refresh fallback) ───────────────
-    let cal = providerToken
-      ? await fetchEvents(providerToken, daysAhead)
-      : { events: null, status: 0 };
-
-    if (!cal.events && (cal.status === 401 || !providerToken)) {
-      const refreshed = await refreshGoogleAccessToken(userId);
-      if (refreshed) {
-        providerToken = refreshed;
-        cal           = await fetchEvents(refreshed, daysAhead);
-      }
-    }
-
-    if (!cal.events) {
-      if (cal.status === 401 || cal.status === 403) {
-        return errorResponse(
-          "Google Calendar access revoked. Reconnect your calendar.",
-          "TOKEN_REVOKED",
-          401,
-          req,
-        );
-      }
-      return errorResponse(
-        "Failed to fetch Google Calendar events.",
-        "GOOGLE_API_ERROR",
-        502,
+      await setInterviewSync(db, userId, interviewId, {
+        calendar_event_id: written.eventId,
+        calendar_provider: "google",
+        calendar_sync_status: "synced",
+        calendar_sync_error: null,
+        calendar_synced_at: new Date().toISOString(),
+      });
+      await logAuditEventFromRequest({
         req,
-      );
+        userId,
+        action: written.created ? "CALENDAR_EVENT_CREATED" : "CALENDAR_EVENT_UPDATED",
+        resourceType: "calendar",
+        resourceId: interviewId,
+        status: "success",
+        metadata: { created: written.created },
+      });
+      return successResponse({
+        event_id: written.eventId,
+        written: true,
+        created: written.created,
+        time_zone: timeZone,
+      }, undefined, 200, req);
     }
 
-    // ── Filter to interview events ───────────────────────────────
+    // ── Import interview-like events (server token only) ─────────
+    const daysAhead = Math.min(Number(body?.days_ahead ?? 30), 90);
+    const access = await resolveCalendarAccessToken(db, userId);
+    if (!access.ok) {
+      if (access.code === "REAUTH_REQUIRED") {
+        await logAuditEventFromRequest({
+          req,
+          userId,
+          action: "CALENDAR_REAUTH_REQUIRED",
+          resourceType: "calendar",
+          status: "failure",
+        });
+      }
+      return domainError(req, access.code, access.http, access.message);
+    }
+
+    const cal = await fetchEvents(access.accessToken, daysAhead);
+    if (!cal.events) {
+      const mapped = mapGoogleCalendarHttpStatus(cal.status || 502);
+      if (mapped.code === "REAUTH_REQUIRED") {
+        await markReauth(db, userId, mapped.code, mapped.message);
+      }
+      return domainError(req, mapped.code, mapped.http, mapped.message);
+    }
+
     const interviewEvents = cal.events.filter(isInterviewEvent);
 
     let imported = 0;
@@ -483,7 +766,6 @@ Deno.serve(async (req) => {
       action:      string;
     }> = [];
 
-    // ── Process each event ───────────────────────────────────────
     for (const evt of interviewEvents) {
       const summary     = safe(evt.summary ?? "Interview");
       const scheduledAt = evt.start?.dateTime ?? evt.start?.date ?? null;
@@ -501,7 +783,6 @@ Deno.serve(async (req) => {
         .maybeSingle();
 
       if (existing) {
-        // ── Update existing record ──────────────────────────────
         const { error: uErr } = await db
           .from("scheduled_interviews")
           .update({
@@ -510,9 +791,12 @@ Deno.serve(async (req) => {
             stage,
             notes:        evt.description ?? null,
             location:     evt.location    ?? null,
+            calendar_sync_status: "synced",
+            calendar_synced_at: new Date().toISOString(),
             updated_at:   new Date().toISOString(),
           })
-          .eq("id", existing.id);
+          .eq("id", existing.id)
+          .eq("user_id", userId);
 
         if (uErr) {
           log(FN, "error", "Update failed", uErr);
@@ -546,7 +830,6 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // ── Insert new record ───────────────────────────────────────
       const { data: newInterview, error: iErr } = await db
         .from("scheduled_interviews")
         .insert({
@@ -561,6 +844,8 @@ Deno.serve(async (req) => {
           status:            "upcoming",
           calendar_event_id: evt.id,
           calendar_provider: "google",
+          calendar_sync_status: "synced",
+          calendar_synced_at: new Date().toISOString(),
         })
         .select("id")
         .single();
@@ -598,7 +883,6 @@ Deno.serve(async (req) => {
     }, undefined, 200, req);
 
   } catch (err) {
-    // requireAuth / parseBody throw Response objects — return them with CORS intact.
     if (err instanceof Response) return err;
     log(FN, "error", "Unhandled error", err);
     return errorResponse("Internal server error", "INTERNAL", 500, req);

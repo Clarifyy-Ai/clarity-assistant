@@ -915,6 +915,201 @@ def test_engine_assembles_valid_paper_from_bank() -> None:
     assert "validating_questions" in stages
 
 
+def test_engine_does_not_call_ai_when_bank_covers_the_paper() -> None:
+    """Full approved bank must not open the AI generator."""
+    blueprint = _tiny_blueprint(5)
+    bank_rows = [
+        _bank(f"q-{i:04d}", "Quantitative Aptitude", "arithmetic" if i % 2 == 0 else "algebra")
+        for i in range(8)
+    ]
+    settings = MagicMock()
+    settings.has_ai_provider = True
+    settings.batch_size = 4
+    settings.max_repair_rounds = 2
+    settings.system_user_id = ""
+    repo = MagicMock()
+    repo.set_stage = MagicMock()
+    repo.save_blueprint = MagicMock()
+    repo.heartbeat = MagicMock()
+    repo.publish_paper = MagicMock(return_value=("paper-1", "mock-1"))
+    repo.complete_job = MagicMock()
+    repo.patch_job_source_mix = MagicMock()
+    repo.insert_questions = MagicMock(return_value=[])
+    repo.fail_job = MagicMock()
+
+    class _Eligible:
+        def __init__(self, b: BankQuestion) -> None:
+            self.id = b.id
+            self.question_text = b.question_text
+            self.options = b.options
+            self.correct_index = b.correct_index
+            self.subject = b.subject
+            self.topic = b.topic
+            self.difficulty = b.difficulty
+            self.is_verified = b.is_verified
+            self.source = b.source
+            self.source_type = b.source_type
+            self.explanation = b.explanation
+            self.source_id = b.source_id
+            self.source_document = b.source_document
+            self.source_page = None
+            self.source_year = b.source_year
+            self.ingestion_job_id = None
+            self.python_generated = False
+            self.metadata = None
+
+    eligible = [_Eligible(b) for b in bank_rows]
+    job = {
+        "id": "55555555-5555-5555-5555-555555555555",
+        "exam_id": blueprint.exam.exam_id,
+        "stage_id": blueprint.exam.stage_id,
+        "user_id": "66666666-6666-6666-6666-666666666666",
+        "mode": "generated_mock",
+        "language": "en",
+        "random_seed": "seed",
+        "status": "queued",
+        "request_json": {
+            "questionCount": 5,
+            "allowAiFill": True,
+            "allowDeterministicFill": True,
+        },
+    }
+
+    def boom(*_a, **_k):
+        raise AssertionError("AI generator must not run when the bank already covers the paper")
+
+    with patch.object(PaperFactory, "plan", AsyncMock(return_value=blueprint)):
+        with patch(
+            "app.gov_exams.engine.load_eligible_bank",
+            return_value=(eligible, ["TEST"]),
+        ):
+            with patch("app.gov_exams.engine.MCQGenerator", boom):
+                result = asyncio.run(
+                    process_gov_exam_job(job, settings=settings, repo=repo)
+                )
+
+    assert result.success is True
+    assert result.paper_id == "paper-1"
+    stages = [call.args[1] for call in repo.set_stage.call_args_list]
+    assert "generating_missing_slots" not in stages
+
+
+def test_engine_official_previous_never_constructs_mcq_generator() -> None:
+    """Official PYQ mode must not open MCQGenerator even if AI fill is requested."""
+    blueprint = _tiny_blueprint(5)
+    settings = MagicMock()
+    settings.has_ai_provider = True
+    settings.batch_size = 4
+    settings.max_repair_rounds = 1
+    settings.system_user_id = ""
+    repo = MagicMock()
+    repo.set_stage = MagicMock()
+    repo.save_blueprint = MagicMock()
+    repo.heartbeat = MagicMock()
+    repo.fail_job = MagicMock()
+    job = {
+        "id": "77777777-7777-7777-7777-777777777777",
+        "exam_id": blueprint.exam.exam_id,
+        "stage_id": blueprint.exam.stage_id,
+        "user_id": "88888888-8888-8888-8888-888888888888",
+        "mode": "official_previous",
+        "language": "en",
+        "random_seed": "seed",
+        "status": "queued",
+        "request_json": {
+            "questionCount": 5,
+            "allowAiFill": True,
+            "allowDeterministicFill": True,
+        },
+    }
+
+    def boom(*_a, **_k):
+        raise AssertionError("official_previous must never construct MCQGenerator")
+
+    with patch.object(PaperFactory, "plan", AsyncMock(return_value=blueprint)):
+        with patch("app.gov_exams.engine.load_eligible_bank", return_value=([], ["TEST"])):
+            with patch("app.gov_exams.engine.MCQGenerator", boom):
+                result = asyncio.run(
+                    process_gov_exam_job(job, settings=settings, repo=repo)
+                )
+    assert result.success is False
+    assert result.error_code == "CONTENT_INSUFFICIENT"
+    assert result.paper_id is None
+    repo.fail_job.assert_called()
+
+
+def test_ai_generation_started_logs_policy_not_prompts() -> None:
+    from app.ai_policy import FEATURE_POLICIES
+    from app.paper_factory.ai import AIResponse
+
+    blueprint = _tiny_blueprint(5)
+    settings = MagicMock()
+    settings.has_ai_provider = True
+    settings.batch_size = 4
+    settings.max_repair_rounds = 1
+    settings.system_user_id = ""
+    repo = MagicMock()
+    repo.set_stage = MagicMock()
+    repo.save_blueprint = MagicMock()
+    repo.heartbeat = MagicMock()
+    repo.fail_job = MagicMock()
+
+    class _StubGen:
+        def __init__(self, *_a, **_k) -> None:
+            self.call_count = 0
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc):
+            return None
+
+        async def generate(self, prompt, **_k):
+            assert isinstance(prompt, str)
+            return AIResponse("gemini", "stub", [])
+
+    logged: list[tuple[str, dict]] = []
+
+    def capture(event, **fields):
+        logged.append((event, fields))
+
+    job = {
+        "id": "99999999-9999-9999-9999-999999999999",
+        "exam_id": blueprint.exam.exam_id,
+        "stage_id": blueprint.exam.stage_id,
+        "user_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "mode": "generated_mock",
+        "language": "en",
+        "random_seed": "seed",
+        "status": "queued",
+        "request_json": {
+            "questionCount": 5,
+            "allowAiFill": True,
+            "allowDeterministicFill": False,
+        },
+    }
+
+    with patch.object(PaperFactory, "plan", AsyncMock(return_value=blueprint)):
+        with patch("app.gov_exams.engine.load_eligible_bank", return_value=([], ["TEST"])):
+            with patch("app.gov_exams.engine.MCQGenerator", _StubGen):
+                with patch("app.gov_exams.engine.gov_exam_log", side_effect=capture):
+                    result = asyncio.run(
+                        process_gov_exam_job(job, settings=settings, repo=repo)
+                    )
+
+    assert result.success is False
+    started = [fields for event, fields in logged if event == "ai_generation_started"]
+    assert started
+    payload = started[0]
+    policy = FEATURE_POLICIES["gov_exam_gap_fill"]
+    assert payload["needed"] == 5
+    assert payload["prompt_version"] == policy.prompt_version
+    assert payload["decision"] == "AI_REQUIRED"
+    assert "user_id" not in payload
+    assert job["user_id"] not in str(payload)
+    assert "prompt" not in payload
+
+
 def test_match_bank_to_sections_reexported() -> None:
     blueprint = _tiny_blueprint(2)
     bank = [_bank("q-1", "Quantitative Aptitude", "arithmetic")]
