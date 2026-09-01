@@ -54,6 +54,7 @@ import {
   generateMockInterviewQuestion,
   QUESTION_GENERATION_USER_ERROR,
 } from "@/lib/mock/generateMockQuestion";
+import { createMockPrefetchController } from "@/lib/mock/mockQuestionPrefetch";
 import {
   encodeMockProgressNotes,
   isSkippedAnswerText,
@@ -344,6 +345,8 @@ export default function MockSession() {
   const lifecycleRef = useRef<MockSessionLifecycle>("ACTIVE");
   const generationAbortRef = useRef<AbortController | null>(null);
   const activeOperationIdRef = useRef<string | null>(null);
+  const prefetchRef = useRef(createMockPrefetchController());
+  const mockDocCacheRef = useRef<{ key: string; resume: string; jd: string } | null>(null);
   const speakingQuestionIdRef = useRef<string | null>(null);
   const overlayMountedSessionRef = useRef<string | null>(null);
   const overlayGenerationRef = useRef<number>(0);
@@ -382,7 +385,21 @@ export default function MockSession() {
     generationAbortRef.current?.abort();
     generationAbortRef.current = null;
     activeOperationIdRef.current = null;
+    prefetchRef.current.abortAll();
     setGenerationSnap((s) => reduceQuestionGeneration(s, { type: "CANCEL" }));
+  }, []);
+
+  const getCachedMockDocuments = useCallback(async (config: MockConfig) => {
+    const key = `${config.resume_id ?? ""}|${config.jd_id ?? ""}`;
+    if (mockDocCacheRef.current?.key === key) {
+      return { resume: mockDocCacheRef.current.resume, jd: mockDocCacheRef.current.jd };
+    }
+    const [resume, jd] = await Promise.all([
+      loadResumeContextText(config),
+      loadJobDescriptionText(config),
+    ]);
+    mockDocCacheRef.current = { key, resume, jd };
+    return { resume, jd };
   }, []);
 
   // Overlay mount only after authoritative mock session context is ready — one instance per session.
@@ -528,8 +545,48 @@ export default function MockSession() {
       }
       setAnswerNextState((s) => reduceAnswerNext(s, { type: "SPEAKING_DONE" }));
       setAnswerNextState((s) => reduceAnswerNext(s, { type: "START_LISTENING" }));
+
+      const sessionId = useSessionStore.getState().session_id;
+      const cfg = sessionConfigRef.current as MockConfig | null;
+      const idx = useSessionStore.getState().current_question_index ?? 0;
+      const last = idx >= totalQ - 1;
+      if (last || !sessionId || !cfg) return;
+      const nextNumber = idx + 2;
+      if (prefetchRef.current.get(nextNumber)) return;
+      const operationId = createMockQuestionOperationId(sessionId, nextNumber);
+      const usedTexts = useSessionStore
+        .getState()
+        .questions.map((q) => q.question_text)
+        .filter(Boolean);
+      const { interviewType, role, company, difficulty } = resolveMockConfigFields(cfg);
+      const signal = prefetchRef.current.getAbortSignal();
+      const promise = (async () => {
+        const docs = await getCachedMockDocuments(cfg);
+        const result = await generateMockInterviewQuestion({
+          type: interviewType,
+          count: 1,
+          difficulty,
+          company,
+          role,
+          session_id: sessionId,
+          resume_context: docs.resume,
+          job_description: docs.jd,
+          free_session: true,
+          exclude_questions: usedTexts,
+          allow_fallback: true,
+          questionNumber: nextNumber,
+          usedTexts,
+          signal,
+          idempotencyKey: operationId,
+        });
+        return result.question;
+      })();
+      prefetchRef.current.set({ questionNumber: nextNumber, operationId, promise });
+      void promise.catch(() => {
+        /* Next falls back to runQuestionGeneration */
+      });
     },
-    [audio],
+    [audio, getCachedMockDocuments, totalQ],
   );
 
   const handleRequestHint = useCallback(async (questionText?: string) => {
@@ -990,10 +1047,9 @@ export default function MockSession() {
     );
 
     try {
-      const [resume_context, job_description] = await Promise.all([
-        loadResumeContextText(options.config),
-        loadJobDescriptionText(options.config),
-      ]);
+      const docs = await getCachedMockDocuments(options.config);
+      const resume_context = docs.resume;
+      const job_description = docs.jd;
 
       if (
         !assertMockSessionAllowsUpdate(
@@ -1135,6 +1191,8 @@ export default function MockSession() {
     abortInFlightGeneration();
     setGenerationSnap(createQuestionGenerationSnapshot());
     questionsCacheRef.current = null;
+    mockDocCacheRef.current = null;
+    prefetchRef.current.abortAll();
     speakingQuestionIdRef.current = null;
     restoredElapsedRef.current = 0;
     sessionElapsedRef.current = 0;
@@ -1563,12 +1621,27 @@ export default function MockSession() {
       const usedIds = new Set(usedQuestions.map((q) => q.id).filter(Boolean));
       const nextNumber = qIndex + 2;
 
-      const nextQ = await runQuestionGeneration({
-        dbSessionId: sessionId,
-        config: cfg,
-        questionNumber: nextNumber,
-        usedTexts,
-      });
+      const slot = prefetchRef.current.consume(nextNumber);
+      let nextQ: SessionQuestion;
+      if (slot) {
+        try {
+          nextQ = await slot.promise;
+        } catch {
+          nextQ = await runQuestionGeneration({
+            dbSessionId: sessionId,
+            config: cfg,
+            questionNumber: nextNumber,
+            usedTexts,
+          });
+        }
+      } else {
+        nextQ = await runQuestionGeneration({
+          dbSessionId: sessionId,
+          config: cfg,
+          questionNumber: nextNumber,
+          usedTexts,
+        });
+      }
 
       if (opId !== answerNextOpRef.current) return;
       if (!isMockSessionMutable(lifecycleRef.current)) return;

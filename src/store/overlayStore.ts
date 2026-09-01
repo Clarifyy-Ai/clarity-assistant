@@ -17,6 +17,26 @@ import { getOverlaySessionAuthority } from "@/store/overlaySessionAuthorityStore
 let lastMinimizeToggleAt = 0;
 const MINIMIZE_TOGGLE_GUARD_MS = 80;
 
+const STREAM_FLUSH_MS = 50;
+const streamFirstChunk = new Set<string>();
+const streamPending = new Map<string, string>();
+const streamTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function streamOpKey(operationId?: string): string {
+  return operationId ?? "__default";
+}
+
+function clearStreamThrottle(operationId?: string): string {
+  const key = streamOpKey(operationId);
+  const timer = streamTimers.get(key);
+  if (timer) clearTimeout(timer);
+  streamTimers.delete(key);
+  const pending = streamPending.get(key) ?? "";
+  streamPending.delete(key);
+  streamFirstChunk.delete(key);
+  return pending;
+}
+
 /** Reject late Live/Mock updates after terminal / generation mismatch. */
 function guardSessionMutation(): boolean {
   return getOverlaySessionAuthority().canAcceptSessionMutations();
@@ -572,6 +592,7 @@ export const useOverlayStore = create<OverlayStore>()(
 
       beginHintOperation: ({ operationId, sessionId, questionId, question }) => {
         if (!guardSessionMutation()) return;
+        clearStreamThrottle(operationId);
         set((s) => ({
           current_question: question,
           current_hint: "",
@@ -594,27 +615,48 @@ export const useOverlayStore = create<OverlayStore>()(
 
       appendStreamChunk: (chunk, operationId) => {
         if (!guardSessionMutation()) return;
-        set((state) => {
-          if (
-            operationId &&
-            state.active_hint_operation_id &&
-            operationId !== state.active_hint_operation_id
-          ) {
-            return state;
-          }
-          return {
-            streaming_buffer: state.streaming_buffer + chunk,
-            hint_state: "streaming" as HintState,
-            session_pipeline_state: transitionWithMode(
-              state.session_pipeline_state,
-              "generating_guidance",
-            ),
-          };
-        });
+        const key = streamOpKey(operationId);
+        const apply = (text: string) => {
+          set((state) => {
+            if (
+              operationId &&
+              state.active_hint_operation_id &&
+              operationId !== state.active_hint_operation_id
+            ) {
+              return state;
+            }
+            return {
+              streaming_buffer: state.streaming_buffer + text,
+              hint_state: "streaming" as HintState,
+              session_pipeline_state: transitionWithMode(
+                state.session_pipeline_state,
+                "generating_guidance",
+              ),
+            };
+          });
+        };
+        if (!streamFirstChunk.has(key)) {
+          streamFirstChunk.add(key);
+          apply(chunk);
+          return;
+        }
+        streamPending.set(key, (streamPending.get(key) ?? "") + chunk);
+        if (!streamTimers.has(key)) {
+          streamTimers.set(
+            key,
+            setTimeout(() => {
+              const pending = streamPending.get(key) ?? "";
+              streamPending.delete(key);
+              streamTimers.delete(key);
+              if (pending) apply(pending);
+            }, STREAM_FLUSH_MS),
+          );
+        }
       },
 
       commitStreamedHint: (operationId) => {
         if (!guardSessionMutation()) return;
+        const pending = clearStreamThrottle(operationId);
         set((state) => {
           if (
             operationId &&
@@ -624,7 +666,7 @@ export const useOverlayStore = create<OverlayStore>()(
             return state;
           }
 
-          const text = state.streaming_buffer.trim();
+          const text = `${state.streaming_buffer}${pending}`.trim();
           if (!text) {
             return {
               streaming_buffer: "",
@@ -688,6 +730,7 @@ export const useOverlayStore = create<OverlayStore>()(
       },
 
       clearPendingHintOperation: () => {
+        clearStreamThrottle();
         set({
           streaming_buffer: "",
           active_hint_operation_id: null,

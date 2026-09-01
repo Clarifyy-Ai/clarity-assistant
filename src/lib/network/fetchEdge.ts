@@ -27,7 +27,7 @@ const ANON_OK_EDGE_FNS = new Set([
 /** Edge calls blocked while private mode is on (no cloud AI / analysis). */
 const PRIVATE_MODE_ALLOWLIST = new Set([
   "ping",
-  // Live Chat is human support, not cloud AI — keep available in private mode.
+  // Live Chat is hybrid support (account lookups first). Keep available in private mode.
   "support-chat",
   "razorpay-create-order",
   "razorpay-verify-payment",

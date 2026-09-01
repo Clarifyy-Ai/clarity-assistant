@@ -208,6 +208,19 @@ export async function generateHint(
   );
 }
 
+export async function streamGenerateHint(
+  payload: GenerateHintRequest,
+  options: StreamGenerateAnswerOptions,
+): Promise<void> {
+  await streamFunction("generate-hint", payload, {
+    idempotencyKey:
+      options.idempotencyKey ?? createIdempotencyKey("generate-hint"),
+    signal: options.signal,
+    onChunk: options.onChunk,
+    onDone: options.onDone,
+  });
+}
+
 export async function generateDebrief(
   payload: GenerateDebriefRequest,
   options: IdempotencyOptions = {}

@@ -2921,6 +2921,65 @@ export const supportDB = {
     return data ?? [];
   },
 
+  async listEventsByThreadId(threadId: string) {
+    const { data, error } = await supabase
+      .from("support_events")
+      .select("*")
+      .eq("thread_id", threadId)
+      .order("created_at", { ascending: true });
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "support_events",
+        operation: "listEventsByThreadId",
+      });
+    }
+    return data ?? [];
+  },
+
+  async listAttachmentsByThreadId(threadId: string) {
+    const { data, error } = await supabase
+      .from("support_attachments")
+      .select("*")
+      .eq("thread_id", threadId)
+      .order("created_at", { ascending: true });
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "support_attachments",
+        operation: "listAttachmentsByThreadId",
+      });
+    }
+    return data ?? [];
+  },
+
+  async createAttachmentSignedUrl(storagePath: string, expiresIn = 120) {
+    const { data, error } = await supabase.storage
+      .from("support-attachments")
+      .createSignedUrl(storagePath, expiresIn);
+    if (error || !data?.signedUrl) {
+      throw new DatabaseError(error?.message ?? "Signed URL failed", ErrorCode.DB_QUERY_FAILED, {
+        table: "support_attachments",
+        operation: "createAttachmentSignedUrl",
+      });
+    }
+    return data.signedUrl;
+  },
+
+  async listAssignableAdmins() {
+    const { data, error } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "admin" as never);
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "user_roles",
+        operation: "listAssignableAdmins",
+      });
+    }
+    const ids = Array.from(new Set((data ?? []).map((r: { user_id: string }) => r.user_id)));
+    if (!ids.length) return [];
+    return profilesDB.listLiteByIds(ids);
+  },
+
   async markThreadReadForAdmin(threadId: string): Promise<void> {
     const { error } = await supabase
       .from("support_threads")

@@ -62,9 +62,17 @@ const allowedInterviewTypes = [
   "behavioral",
   "behavioural",
   "technical",
-  "case_study",
+  "coding",
   "system_design",
   "hr",
+  "product",
+  "leadership",
+  "case_study",
+  "sales",
+  "customer_success",
+  "internship",
+  "academic",
+  "government_exam",
   "mixed",
   "custom",
 ] as const;
@@ -81,6 +89,20 @@ const allowedHintStyles = [
   "balanced",
   "detailed",
 ] as const;
+
+const HINT_STYLE_ALIASES: Record<string, (typeof allowedHintStyles)[number]> = {
+  minimal: "minimal",
+  balanced: "balanced",
+  detailed: "detailed",
+  short_hints: "minimal",
+  full_answer: "detailed",
+  keywords_only: "balanced",
+};
+
+function coerceHintStyle(value: unknown): (typeof allowedHintStyles)[number] {
+  if (value == null || value === "") return "balanced";
+  return HINT_STYLE_ALIASES[String(value)] ?? "balanced";
+}
 
 const startSessionSchema = z.object({
   session_type: z
@@ -165,10 +187,7 @@ const startSessionSchema = z.object({
     .optional()
     .default("gemini-2.5-flash"),
 
-  hint_style: z
-    .enum(allowedHintStyles)
-    .optional()
-    .default("balanced"),
+  hint_style: z.preprocess(coerceHintStyle, z.enum(allowedHintStyles)).optional().default("balanced"),
 
   focus_areas: z
     .array(

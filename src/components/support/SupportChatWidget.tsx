@@ -1,40 +1,82 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { MessageCircle, X, Send, LifeBuoy } from "lucide-react";
+import { MessageCircle, X, Send, LifeBuoy, Paperclip, RotateCcw } from "lucide-react";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useAuthStore } from "@/store/userStore";
+import { supabase } from "@/lib/supabase/client";
 import { SUPPORT_EMAIL } from "@/lib/constants/contact";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import {
+  SUPPORT_CHIPS,
   SUPPORT_COMPOSER_PLACEHOLDER,
+  SUPPORT_AI_TIMEOUT_MS,
+  SUPPORT_CONNECT_TIMEOUT_MS,
   SUPPORT_FAILED_LABEL,
+  SUPPORT_GUEST_POLL_MS,
   SUPPORT_MAX_BODY,
   SUPPORT_SENDING_LABEL,
   SUPPORT_WIDGET_ARIA,
+  SUPPORT_WIDGET_GREETING,
   SUPPORT_WIDGET_SLA,
   SUPPORT_WIDGET_TITLE,
   canSubmitSupportMessage,
+  validateSupportAttachment,
+  type SupportChipId,
 } from "@/lib/support/supportCopy";
 
 const GUEST_TOKEN_KEY = "clarify-support-guest-token";
 const THREAD_KEY = "clarify-support-thread-id";
 
+type SenderType = "user" | "ai" | "agent" | "system";
+
 type ChatMessage = {
   id: string;
   thread_id: string;
   sender_role: "user" | "admin" | "system";
+  sender_type?: SenderType;
   body: string;
   created_at: string;
+  delivery_status?: string;
+  client_message_id?: string | null;
+};
+
+type ThreadSummary = {
+  id: string;
+  public_ref: string | null;
+  subject: string;
+  status: string;
+  mode: string;
+  category: string;
+  last_message_at: string;
+  last_message_preview: string | null;
 };
 
 type ChatResponse = {
-  thread_id: string;
+  thread_id: string | null;
   guest_token?: string | null;
-  status?: string;
+  status?: string | null;
+  mode?: string | null;
+  category?: string | null;
+  public_ref?: string | null;
   messages: ChatMessage[];
+  threads?: ThreadSummary[];
+  attachment_id?: string;
+  token?: string;
+  path?: string;
+  signed_url?: string;
 };
+
+type UiState =
+  | "offline"
+  | "connecting"
+  | "connected"
+  | "ai_typing"
+  | "waiting_for_agent"
+  | "agent_connected"
+  | "resolved"
+  | "failed";
 
 function readStorage(key: string): string | null {
   try {
@@ -49,7 +91,7 @@ function writeStorage(key: string, value: string | null): void {
     if (value == null) localStorage.removeItem(key);
     else localStorage.setItem(key, value);
   } catch {
-    // ignore
+    /* ignore */
   }
 }
 
@@ -67,15 +109,51 @@ function shouldHideWidget(pathname: string): boolean {
   );
 }
 
-/**
- * Floating Support widget (async human inbox — not live/immediate AI).
- * Guests chat via support-chat edge; messages land in Admin → Support messages.
- */
 function clearChatSession(): void {
   writeStorage(THREAD_KEY, null);
   writeStorage(GUEST_TOKEN_KEY, null);
 }
 
+function senderTypeOf(m: ChatMessage): SenderType {
+  if (m.sender_type) return m.sender_type;
+  if (m.sender_role === "admin") return "agent";
+  if (m.sender_role === "system") return "system";
+  return "user";
+}
+
+function modeToUi(mode: string | null | undefined, fallback: UiState): UiState {
+  if (mode === "waiting_agent") return "waiting_for_agent";
+  if (mode === "agent") return "agent_connected";
+  if (mode === "resolved") return "resolved";
+  if (mode === "ai") return "connected";
+  return fallback;
+}
+
+function statusLabel(state: UiState): string {
+  switch (state) {
+    case "connecting":
+      return "Connecting…";
+    case "ai_typing":
+      return "Career Pilot is writing…";
+    case "waiting_for_agent":
+      return "Waiting for an agent";
+    case "agent_connected":
+      return "Agent connected";
+    case "resolved":
+      return "Resolved";
+    case "failed":
+      return "Could not connect";
+    case "offline":
+      return "Offline";
+    default:
+      return SUPPORT_WIDGET_SLA;
+  }
+}
+
+/**
+ * Career Pilot hybrid Live Chat: chips first, Edge-owned identity,
+ * Realtime for signed-in users, short poll for guests.
+ */
 export function SupportChatWidget() {
   const location = useLocation();
   const user = useAuthStore((s) => s.user);
@@ -91,10 +169,20 @@ export function SupportChatWidget() {
   const [threadId, setThreadId] = useState<string | null>(() => readStorage(THREAD_KEY));
   const [guestToken, setGuestToken] = useState<string | null>(() => readStorage(GUEST_TOKEN_KEY));
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [uiState, setUiState] = useState<UiState>("connected");
   const [sending, setSending] = useState(false);
-  const [sendState, setSendState] = useState<"idle" | "sending" | "sent" | "failed">("idle");
+  const [failedClientId, setFailedClientId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<ThreadSummary[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [publicRef, setPublicRef] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const lastClientIdRef = useRef<string | null>(null);
+  const lastPayloadRef = useRef<{
+    text: string;
+    category?: string;
+    escalate?: boolean;
+  } | null>(null);
 
   const hide = shouldHideWidget(location.pathname);
   const offsetMobileNav = location.pathname.startsWith("/app");
@@ -107,6 +195,7 @@ export function SupportChatWidget() {
     "/auth/",
   ].some((p) => location.pathname.startsWith(p));
   const showGuestFields = (!isAuthed || forceGuestFields) && !threadId;
+  const showChips = messages.length === 0 && !sending && uiState !== "connecting";
 
   const resolvedGuestName =
     guestName.trim() ||
@@ -119,20 +208,38 @@ export function SupportChatWidget() {
     profile?.email?.trim() ||
     "";
 
+  function persistThread(id: string, token?: string | null) {
+    setThreadId(id);
+    writeStorage(THREAD_KEY, id);
+    if (token) {
+      setGuestToken(token);
+      writeStorage(GUEST_TOKEN_KEY, token);
+    }
+  }
+
   function resetThreadLocally(message?: string) {
     clearChatSession();
     setThreadId(null);
     setGuestToken(null);
     setMessages([]);
+    setPublicRef(null);
     setForceGuestFields(true);
+    setUiState("connected");
     if (message) setError(message);
   }
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, open]);
+  function applyResponse(data: ChatResponse) {
+    if (data.thread_id) persistThread(data.thread_id, data.guest_token);
+    setMessages(data.messages ?? []);
+    setPublicRef(data.public_ref ?? null);
+    setUiState(modeToUi(data.mode, "connected"));
+    setError(null);
+  }
 
-  // Prefill guest contact from the signed-in profile when available.
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView?.({ behavior: "smooth" });
+  }, [messages, open, uiState]);
+
   useEffect(() => {
     if (!isAuthed) return;
     if (!guestName && (profile?.full_name || user?.email)) {
@@ -143,93 +250,139 @@ export function SupportChatWidget() {
     }
   }, [isAuthed, profile?.full_name, profile?.email, user?.email, guestName, guestEmail]);
 
-  // Restore / poll conversation while panel is open.
+  const bootstrap = useCallback(async () => {
+    if (!open || hide) return;
+    setUiState("connecting");
+    const timer = window.setTimeout(() => {
+      setUiState((prev) => (prev === "connecting" ? "failed" : prev));
+    }, SUPPORT_CONNECT_TIMEOUT_MS);
+    try {
+      const data = await fetchEdgeJson<ChatResponse>("support-chat", {
+        action: "bootstrap",
+        thread_id: threadId,
+        guest_token: guestToken,
+      });
+      window.clearTimeout(timer);
+      if (!data.thread_id) {
+        setMessages([]);
+        setUiState("connected");
+        return;
+      }
+      applyResponse(data);
+    } catch (err) {
+      window.clearTimeout(timer);
+      const status = typeof (err as { status?: number })?.status === "number"
+        ? (err as { status: number }).status
+        : undefined;
+      if (status === 403 || status === 404) {
+        resetThreadLocally("Previous chat session expired. Enter your details to continue.");
+        return;
+      }
+      setUiState("failed");
+      setError(err instanceof Error ? err.message : "Could not load chat");
+    }
+  }, [open, hide, threadId, guestToken]);
+
   useEffect(() => {
     if (!open || hide) return;
-    if (!threadId) return;
-    if (!isAuthed && !guestToken) return;
+    void bootstrap();
+    // bootstrap on open only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, hide]);
 
-    let cancelled = false;
+  useEffect(() => {
+    if (!open || hide || !isAuthed) return;
+    void fetchEdgeJson<ChatResponse>("support-chat", { action: "list_threads" })
+      .then((data) => setHistory(data.threads ?? []))
+      .catch(() => setHistory([]));
+  }, [open, hide, isAuthed, threadId]);
 
-    async function pull() {
+  useEffect(() => {
+    if (!open || hide || !threadId) return;
+    if (isAuthed) {
+      const ch = supabase
+        .channel(`support-user-${threadId}`)
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "support_messages", filter: `thread_id=eq.${threadId}` },
+          (payload) => {
+            const m = payload.new as ChatMessage;
+            setMessages((prev) => (prev.some((x) => x.id === m.id) ? prev : [...prev, m]));
+            if (senderTypeOf(m) !== "user") setUiState((s) => (s === "ai_typing" ? "connected" : s));
+          },
+        )
+        .subscribe();
+      return () => {
+        void supabase.removeChannel(ch);
+      };
+    }
+    const t = window.setInterval(async () => {
       try {
         const data = await fetchEdgeJson<ChatResponse>("support-chat", {
           action: "list",
           thread_id: threadId,
           guest_token: guestToken,
         });
-        if (!cancelled) {
-          setMessages(data.messages ?? []);
-          setError(null);
-        }
-      } catch (err) {
-        if (cancelled) return;
-        const message = err instanceof Error ? err.message : "Could not load chat";
-        const status = typeof (err as { status?: number })?.status === "number"
-          ? (err as { status: number }).status
-          : undefined;
-        // Stale thread / lost guest token after logout — start fresh instead of looping errors.
-        if (status === 403 || status === 404 || /forbidden|not found/i.test(message)) {
-          resetThreadLocally("Previous chat session expired. Enter your details to continue.");
-          return;
-        }
-        setError(message);
+        applyResponse(data);
+      } catch {
+        /* next tick */
       }
-    }
-
-    void pull();
-    const t = window.setInterval(() => void pull(), 8000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(t);
-    };
+    }, SUPPORT_GUEST_POLL_MS);
+    return () => window.clearInterval(t);
   }, [open, hide, threadId, guestToken, isAuthed]);
 
   if (hide) return null;
 
-  async function submitMessage(e?: FormEvent) {
-    e?.preventDefault();
-    const text = draft.trim();
-    if (!canSubmitSupportMessage({ sending, draft })) return;
-
-    // Always send contact fields as a fallback: UI may be "authenticated" while the
-    // Edge call only has the anon key (tab-local logout / expired JWT).
+  async function sendPayload(opts: {
+    text: string;
+    category?: string;
+    escalate?: boolean;
+    clientId?: string;
+  }) {
     if (!resolvedGuestName || !resolvedGuestEmail) {
       setForceGuestFields(true);
       setError("Please enter your name and email to start chatting.");
       return;
     }
-
+    const clientId = opts.clientId ?? crypto.randomUUID();
+    lastClientIdRef.current = clientId;
+    lastPayloadRef.current = { text: opts.text, category: opts.category, escalate: opts.escalate };
     setSending(true);
-    setSendState("sending");
+    setFailedClientId(null);
     setError(null);
+    setUiState(opts.escalate ? "waiting_for_agent" : "ai_typing");
+    const typingTimer = window.setTimeout(() => {
+      setUiState((prev) => (prev === "ai_typing" ? "connected" : prev));
+    }, SUPPORT_AI_TIMEOUT_MS);
+    const params = new URLSearchParams(location.search);
+    const resource_hint = {
+      exam_id: params.get("exam_id") || undefined,
+      job_id: params.get("job_id") || undefined,
+    };
     try {
-      const action = threadId ? "send" : "start";
       const data = await fetchEdgeJson<ChatResponse>("support-chat", {
-        action,
-        message: text,
+        action: threadId ? "send" : "start",
+        message: opts.text,
         thread_id: threadId,
         guest_token: guestToken,
         guest_name: resolvedGuestName,
         guest_email: resolvedGuestEmail,
+        client_message_id: clientId,
+        category: opts.category,
+        page_path: location.pathname,
+        resource_hint:
+          resource_hint.exam_id || resource_hint.job_id ? resource_hint : undefined,
+        escalate: opts.escalate === true,
       });
-
-      setThreadId(data.thread_id);
-      writeStorage(THREAD_KEY, data.thread_id);
-      if (data.guest_token) {
-        setGuestToken(data.guest_token);
-        writeStorage(GUEST_TOKEN_KEY, data.guest_token);
-      }
-      setForceGuestFields(false);
-      setMessages(data.messages ?? []);
+      applyResponse(data);
       setDraft("");
-      setSendState("sent");
+      setForceGuestFields(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to send message";
       const status = typeof (err as { status?: number })?.status === "number"
         ? (err as { status: number }).status
         : undefined;
-      if (status === 403 || status === 404 || /forbidden|not found/i.test(message)) {
+      if (status === 403 || status === 404) {
         resetThreadLocally("Previous chat session expired. Enter your details and send again.");
       } else if (/name and email/i.test(message)) {
         setForceGuestFields(true);
@@ -237,9 +390,110 @@ export function SupportChatWidget() {
       } else {
         setError(message);
       }
-      setSendState("failed");
+      setFailedClientId(clientId);
+      setUiState("failed");
     } finally {
+      window.clearTimeout(typingTimer);
       setSending(false);
+    }
+  }
+
+  async function submitMessage(e?: FormEvent) {
+    e?.preventDefault();
+    const text = draft.trim();
+    if (!canSubmitSupportMessage({ sending, draft })) return;
+    await sendPayload({ text });
+  }
+
+  async function retryLast() {
+    const last = lastPayloadRef.current;
+    const id = lastClientIdRef.current;
+    if (!last || !id) return;
+    await sendPayload({ ...last, clientId: id });
+  }
+
+  async function onChip(id: SupportChipId) {
+    const chip = SUPPORT_CHIPS.find((c) => c.id === id);
+    if (!chip) return;
+    if (chip.escalate) {
+      if (threadId) {
+        setUiState("waiting_for_agent");
+        try {
+          const data = await fetchEdgeJson<ChatResponse>("support-chat", {
+            action: "escalate",
+            thread_id: threadId,
+            guest_token: guestToken,
+          });
+          applyResponse(data);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Could not escalate");
+        }
+        return;
+      }
+      await sendPayload({ text: chip.prompt ?? "Talk to Support", category: chip.category, escalate: true });
+      return;
+    }
+    await sendPayload({ text: chip.prompt ?? chip.label, category: chip.category });
+  }
+
+  async function onAttach(file: File) {
+    if (!threadId) {
+      setError("Send a message first, then attach a file.");
+      return;
+    }
+    const invalid = validateSupportAttachment(file);
+    if (invalid) {
+      setError(invalid);
+      return;
+    }
+    try {
+      const signed = await fetchEdgeJson<ChatResponse>("support-chat", {
+        action: "attachment_url",
+        thread_id: threadId,
+        guest_token: guestToken,
+        content_type: file.type,
+        byte_size: file.size,
+        filename: file.name,
+      });
+      if (!signed.signed_url && (!signed.token || !signed.path)) {
+        throw new Error("Upload URL missing");
+      }
+      if (signed.signed_url) {
+        const put = await fetch(signed.signed_url, {
+          method: "PUT",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+        if (!put.ok) throw new Error("Could not upload the file");
+      } else {
+        const { error: upErr } = await supabase.storage
+          .from("support-attachments")
+          .uploadToSignedUrl(signed.path!, signed.token!, file);
+        if (upErr) throw upErr;
+      }
+      const data = await fetchEdgeJson<ChatResponse>("support-chat", {
+        action: "attachment_confirm",
+        thread_id: threadId,
+        guest_token: guestToken,
+        attachment_id: signed.attachment_id,
+      });
+      applyResponse(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not attach file");
+    }
+  }
+
+  async function openHistoryThread(id: string) {
+    persistThread(id);
+    setShowHistory(false);
+    try {
+      const data = await fetchEdgeJson<ChatResponse>("support-chat", {
+        action: "bootstrap",
+        thread_id: id,
+      });
+      applyResponse(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not open conversation");
     }
   }
 
@@ -247,9 +501,7 @@ export function SupportChatWidget() {
     <div
       className={cn(
         "fixed z-[80] flex flex-col items-end gap-3 pointer-events-none",
-        onAuthShell
-          ? "left-4 right-auto bottom-28 sm:bottom-8"
-          : "right-4",
+        onAuthShell ? "left-4 right-auto bottom-28 sm:bottom-8" : "right-4",
         !onAuthShell && (offsetMobileNav ? "bottom-20 md:bottom-4" : "bottom-20 md:bottom-6"),
       )}
     >
@@ -266,55 +518,113 @@ export function SupportChatWidget() {
                 {SUPPORT_WIDGET_TITLE}
               </p>
               <p className="text-[11px] text-primary-foreground/80 truncate">
-                {SUPPORT_WIDGET_SLA}
+                {uiState === "connecting" || uiState === "ai_typing"
+                  ? statusLabel(uiState)
+                  : publicRef
+                    ? `${publicRef} · ${statusLabel(uiState)}`
+                    : statusLabel(uiState)}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="rounded-lg p-1.5 hover:bg-primary-foreground/10 transition-colors"
-              aria-label="Close chat"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              {isAuthed && (
+                <button
+                  type="button"
+                  onClick={() => setShowHistory((v) => !v)}
+                  className="rounded-lg px-2 py-1 text-[10px] hover:bg-primary-foreground/10"
+                >
+                  Previous
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="rounded-lg p-1.5 hover:bg-primary-foreground/10 transition-colors"
+                aria-label="Close chat"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
 
-          <div className="flex h-72 flex-col bg-background">
-            <div className="flex-1 space-y-2 overflow-y-auto px-3 py-3">
-              {messages.length === 0 && (
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Ask about pricing, exams, billing, or product help. Or email{" "}
-                  <a
-                    href={`mailto:${SUPPORT_EMAIL}`}
-                    className="text-primary underline-offset-2 hover:underline"
-                  >
-                    {SUPPORT_EMAIL}
-                  </a>
-                  .
-                </p>
-              )}
-              {messages.map((m) => {
-                const mine = m.sender_role === "user";
-                return (
-                  <div
-                    key={m.id}
-                    className={cn("flex", mine ? "justify-end" : "justify-start")}
-                  >
-                    <div
-                      className={cn(
-                        "max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed",
-                        mine
-                          ? "bg-primary text-primary-foreground rounded-br-md"
-                          : "bg-secondary text-foreground rounded-bl-md",
-                      )}
+          <div className="flex h-80 flex-col bg-background">
+            {showHistory ? (
+              <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
+                {history.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No previous conversations.</p>
+                ) : (
+                  history.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => void openHistoryThread(t.id)}
+                      className="w-full rounded-lg border border-border px-2 py-2 text-left hover:bg-muted/40"
                     >
-                      {m.body}
+                      <p className="text-[11px] font-semibold">
+                        {t.public_ref ?? t.id.slice(0, 8)} · {t.category}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground truncate">
+                        {t.last_message_preview ?? t.subject} · {t.status}
+                      </p>
+                    </button>
+                  ))
+                )}
+              </div>
+            ) : (
+              <div className="flex-1 space-y-2 overflow-y-auto px-3 py-3">
+                {showChips && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {SUPPORT_WIDGET_GREETING} Email{" "}
+                      <a href={`mailto:${SUPPORT_EMAIL}`} className="text-primary underline-offset-2 hover:underline">
+                        {SUPPORT_EMAIL}
+                      </a>{" "}
+                      anytime.
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {SUPPORT_CHIPS.map((chip) => (
+                        <button
+                          key={chip.id}
+                          type="button"
+                          onClick={() => void onChip(chip.id)}
+                          className="rounded-full border border-border bg-secondary px-2.5 py-1 text-[10px] font-medium hover:bg-secondary/80"
+                        >
+                          {chip.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
-                );
-              })}
-              <div ref={bottomRef} />
-            </div>
+                )}
+                {messages.map((m) => {
+                  const type = senderTypeOf(m);
+                  const mine = type === "user";
+                  return (
+                    <div key={m.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
+                      <div
+                        className={cn(
+                          "max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed",
+                          mine
+                            ? "bg-primary text-primary-foreground rounded-br-md"
+                            : type === "agent"
+                              ? "bg-emerald-500/15 text-foreground rounded-bl-md"
+                              : "bg-secondary text-foreground rounded-bl-md",
+                        )}
+                      >
+                        {!mine && (
+                          <p className="mb-0.5 text-[9px] uppercase tracking-wide opacity-70">
+                            {type === "ai" ? "Career Pilot" : type === "agent" ? "Agent" : "System"}
+                          </p>
+                        )}
+                        {m.body}
+                      </div>
+                    </div>
+                  );
+                })}
+                {uiState === "ai_typing" && (
+                  <p className="text-[11px] text-muted-foreground">Career Pilot is writing…</p>
+                )}
+                <div ref={bottomRef} />
+              </div>
+            )}
 
             {showGuestFields && (
               <div className="grid grid-cols-1 gap-2 border-t border-border px-3 pt-2">
@@ -350,12 +660,13 @@ export function SupportChatWidget() {
                 {error}
               </p>
             )}
-            {sendState === "failed" && (
+            {failedClientId && (
               <button
                 type="button"
-                onClick={() => void submitMessage()}
-                className="px-3 pt-1 text-[11px] text-primary underline-offset-2 hover:underline text-left"
+                onClick={() => void retryLast()}
+                className="px-3 pt-1 text-[11px] text-primary underline-offset-2 hover:underline text-left inline-flex items-center gap-1"
               >
+                <RotateCcw className="h-3 w-3" />
                 {SUPPORT_FAILED_LABEL}
               </button>
             )}
@@ -364,12 +675,22 @@ export function SupportChatWidget() {
               onSubmit={(e) => void submitMessage(e)}
               className="flex items-end gap-2 border-t border-border p-3"
             >
+              <label className="shrink-0 cursor-pointer rounded-lg p-2 text-muted-foreground hover:bg-muted">
+                <Paperclip className="h-4 w-4" />
+                <input
+                  type="file"
+                  className="sr-only"
+                  accept="image/png,image/jpeg,image/webp,application/pdf"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (file) void onAttach(file);
+                  }}
+                />
+              </label>
               <textarea
                 value={draft}
-                onChange={(e) => {
-                  setDraft(e.target.value);
-                  if (sendState === "sent" || sendState === "failed") setSendState("idle");
-                }}
+                onChange={(e) => setDraft(e.target.value)}
                 rows={2}
                 maxLength={SUPPORT_MAX_BODY}
                 placeholder={SUPPORT_COMPOSER_PLACEHOLDER}

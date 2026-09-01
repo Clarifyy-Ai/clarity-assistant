@@ -202,3 +202,48 @@ export function markFirstHint(): void {
     },
   });
 }
+
+export type AnswerLatencyFeature = "live" | "live_hint" | "mock_hint" | "mock_question";
+
+type AnswerLatencySpan = {
+  feature: string;
+  t0: number;
+  marks: Partial<Record<"t1" | "t3" | "t5" | "t6", number>>;
+};
+
+let activeAnswerSpan: AnswerLatencySpan | null = null;
+
+/** T0 — question detected or Generate pressed. Fire-and-forget. */
+export function startAnswerLatencySpan(
+  feature: AnswerLatencyFeature,
+  extra?: Record<string, unknown>,
+): void {
+  const t0 = now();
+  activeAnswerSpan = { feature, t0, marks: {} };
+  emit({
+    event: "latency_t0",
+    properties: { feature, t0, ...extra },
+  });
+}
+
+/** Subsequent T1/T3/T5/T6 marks as deltas from T0. */
+export function markAnswerLatency(
+  stage: "t1" | "t3" | "t5" | "t6",
+  extra?: Record<string, unknown>,
+): void {
+  const span = activeAnswerSpan;
+  if (!span) return;
+  if (span.marks[stage] != null) return;
+  const at = now();
+  span.marks[stage] = at;
+  emit({
+    event: `latency_${stage}`,
+    properties: {
+      feature: extra?.feature ?? span.feature,
+      t0: span.t0,
+      at,
+      delta_ms: Math.max(0, at - span.t0),
+      ...extra,
+    },
+  });
+}

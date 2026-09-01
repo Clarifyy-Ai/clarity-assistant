@@ -1,7 +1,7 @@
 // src/lib/ai/openaiClient.ts — PRODUCTION READY
-import { fetchEdgeJson, fetchEdge, getAuthHeaders } from "@/lib/network/fetchEdge";
+import { fetchEdge, fetchEdgeJson, getAuthHeaders } from "@/lib/network/fetchEdge";
 import { createIdempotencyKey } from "@/lib/api/functions";
-import { retry } from "@/lib/utils";
+import { consumeSSEStream } from "@/lib/ai/geminiClient";
 import { ApiClientError } from "@/lib/api/apiClient";
 import type { CoachingContext } from "@/types/ai.types";
 import type { CoachTone, HintStyle } from "@/types/user.types";
@@ -59,19 +59,39 @@ export async function streamOpenAIHint(opts: OpenAIStreamOptions): Promise<void>
       typeof opts.questionId === "string" && opts.questionId.length > 0
         ? opts.questionId
         : createIdempotencyKey("generate-hint");
-    const data = await retry(
-      () =>
-        fetchEdgeJson<{ hints?: string; hint?: string }>("generate-hint", body, {
-          signal,
-          headers: { "Idempotency-Key": idempotencyKey },
-        }),
-      2,
-      400,
-    );
-
-    const hintText = data.hints ?? data.hint ?? "";
-    if (hintText) onChunk(hintText);
-    onDone(hintText);
+    const headers = await getAuthHeaders({
+      Accept: "text/event-stream",
+      "Idempotency-Key": idempotencyKey,
+      "x-idempotency-key": idempotencyKey,
+    });
+    const response = await fetchEdge("generate-hint", body, {
+      method: "POST",
+      headers,
+      signal,
+      timeoutMs: 60_000,
+    });
+    if (!response.ok) {
+      const errText = await response.text().catch(() => `HTTP ${response.status}`);
+      let parsed: { error?: string; code?: string } | null = null;
+      try {
+        parsed = JSON.parse(errText) as { error?: string; code?: string };
+      } catch {
+        parsed = null;
+      }
+      throw new ApiClientError({
+        message: parsed?.error || `Hint generation failed (${response.status}).`,
+        status: response.status,
+        code: parsed?.code ?? "",
+      });
+    }
+    if (!response.body) {
+      throw new ApiClientError({
+        message: "Hint stream returned an empty body.",
+        status: 502,
+        code: "EMPTY_STREAM",
+      });
+    }
+    await consumeSSEStream(response.body, onChunk, onDone, onError, signal);
   } catch (err) {
     if ((err as Error).name === "AbortError") return;
     onError(err instanceof Error ? err : new Error(String(err)));

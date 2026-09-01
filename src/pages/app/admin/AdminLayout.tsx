@@ -37,7 +37,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
     label: "Users & Support",
     items: [
       { to: "/app/admin/users",     icon: Users,         label: "Users"     },
-      { to: "/app/admin/live-chat", icon: MessageSquare, label: "Support messages" },
+      { to: "/app/admin/live-chat", icon: MessageSquare, label: "Live Support" },
       { to: "/app/admin/support",   icon: LifeBuoy,      label: "Support"   },
       { to: "/app/admin/audit-log", icon: ScrollText,    label: "Audit Log" },
     ],

@@ -57,10 +57,12 @@ import { getAiFeaturePolicy } from "../_shared/aiFeaturePolicy.ts";
 import { resolveModel } from "../_shared/resolveModel.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { extractBYOK } from "../_shared/utils.ts";
-import { executeHybridOperation } from "../_shared/hybridExecute.ts";
-import { callPythonProcess } from "../_shared/pythonClient.ts";
+import { executeHybridOperation, prepareHybridStreamOperation } from "../_shared/hybridExecute.ts";
+import { callPythonProcess, livePythonTimeoutMs } from "../_shared/pythonClient.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { normalizePythonCoachData } from "../_shared/practiceCoachContract.ts";
+import { createSseStreamResponse, requestWantsSse, sseFromText } from "../_shared/sse.ts";
+import { streamGeminiContent } from "../_shared/geminiStream.ts";
 
 const FUNCTION_NAME = "generate-hint";
 const CREDIT_COST = creditCost("live_hint");
@@ -514,11 +516,46 @@ Deno.serve(async (req: Request) => {
     user.id,
     sanitizeModelInput(body.model),
   );
+  const pythonTimeoutMs = livePythonTimeoutMs();
+  const wantsSse = requestWantsSse(req);
+  const policy = getAiFeaturePolicy("generate_hint");
+  const maxHintTokens = Math.min(500, Math.max(300, policy.maxOutputTokens));
 
-  const hybridResult = await executeHybridOperation<HintHybridData>({
+  const runPythonHint = async (ctx: { operationId: string; correlationId: string }) => {
+    const py = await callPythonProcess({
+      operation: "practice_coach",
+      operationId: ctx.operationId,
+      correlationId: ctx.correlationId,
+      timeoutMs: pythonTimeoutMs,
+      payload: {
+        operation_type: "hint",
+        question: body.question,
+        transcript: body.transcript,
+        interview_type: body.interview_type,
+        resume_context: body.resume_context,
+        target_company: body.target_company,
+      },
+    });
+    if (!py.ok) return null;
+    const normalized = normalizePythonCoachData(py.data);
+    if (!normalized) return null;
+    const hintsRaw =
+      normalized.hints.length > 0
+        ? normalized.hints.map((h) => (h.startsWith("•") ? h : `• ${h}`)).join("\n")
+        : normalized.reply;
+    if (!hintsRaw.trim()) return null;
+    return {
+      request_id: requestId,
+      hints: normalizeHints(hintsRaw),
+      source: "python_structured",
+      model: "python",
+    };
+  };
+
+  const hybridShared = {
     req,
     auth: { userId: user.id, planId },
-    operation: "practice_coach_help",
+    operation: "practice_coach_help" as const,
     idempotencyKey,
     creditCost: CREDIT_COST,
     creditAction: "generate_hint",
@@ -531,12 +568,189 @@ Deno.serve(async (req: Request) => {
       session_id: body.session_id,
       mode: body.mode,
     },
+    runDeterministic: async () => ({
+      request_id: requestId,
+      hints: FALLBACK_HINTS,
+      source: "fallback",
+      model: "deterministic",
+    }),
+    runPython: runPythonHint,
+    aiMeta: { provider: "gemini", modelVersion: resolvedModel },
+  };
+
+  if (wantsSse) {
+    const prepared = await prepareHybridStreamOperation<HintHybridData>(hybridShared);
+    if (prepared.kind === "terminal") {
+      if (!prepared.result.ok) {
+        await logAiAudit({
+          req,
+          userId: user.id,
+          action: "GENERATE_HINT",
+          sessionId: body.session_id ?? null,
+          status: "failure",
+          metadata: {
+            reason: String(prepared.result.code),
+            requestId,
+          },
+        });
+        return prepared.result.response;
+      }
+      await logAiAudit({
+        req,
+        userId: user.id,
+        action: "GENERATE_HINT",
+        sessionId: body.session_id ?? null,
+        status: "success",
+        metadata: {
+          requestId,
+          source: prepared.result.data.source,
+          model: prepared.result.data.model,
+          cost: CREDIT_COST,
+          hybrid_source: prepared.result.source,
+          operation_id: prepared.result.operationId,
+          questionId: body.question_id ?? null,
+          idempotent_replay: true,
+        },
+      });
+      return sseFromText(
+        prepared.result.data.hints,
+        corsHeaders,
+        prepared.result.data.source,
+      );
+    }
+
+    const aiStartMs = Date.now();
+    return createSseStreamResponse({
+      corsHeaders,
+      source: "ai",
+      start: async (writer) => {
+        let full = "";
+        let firstTokenAt: number | null = null;
+        try {
+          for await (
+            const delta of streamGeminiContent({
+              model: resolvedModel,
+              systemPrompt: SYSTEM_PROMPT,
+              userPrompt: prompt,
+              maxTokens: maxHintTokens,
+              temperature: 0.5,
+            })
+          ) {
+            if (!firstTokenAt) {
+              firstTokenAt = Date.now();
+              prepared.keepCharge();
+            }
+            full += delta;
+            writer.sendText(delta);
+          }
+          if (!full.trim()) throw new Error("AI returned empty hints");
+          const moderated = moderateOutput(full);
+          const storedHints = normalizeHints(
+            moderated.safe ? moderated.filtered : full,
+          );
+          if (!moderated.safe) {
+            console.warn("[generate-hint] output moderated after stream");
+          }
+          const ttftMs = firstTokenAt ? firstTokenAt - prepared.creditReadyAt : null;
+          const totalMs = Date.now() - aiStartMs;
+          await prepared.finalizeSuccess(
+            {
+              request_id: requestId,
+              hints: storedHints,
+              source: "ai",
+              model: resolvedModel,
+            },
+            "ai",
+            { ttft_ms: ttftMs, total_ms: totalMs },
+          );
+          await logAiAudit({
+            req,
+            userId: user.id,
+            action: "GENERATE_HINT",
+            sessionId: body.session_id ?? null,
+            status: "success",
+            metadata: {
+              requestId,
+              source: "ai",
+              model: resolvedModel,
+              cost: CREDIT_COST,
+              hybrid_source: "ai",
+              operation_id: prepared.operationId,
+              questionId: body.question_id ?? null,
+              ttft_ms: ttftMs,
+              total_ms: totalMs,
+            },
+          });
+          writer.sendDone();
+        } catch (err) {
+          if (full.trim()) {
+            const storedHints = normalizeHints(full);
+            await prepared.finalizeSuccess(
+              {
+                request_id: requestId,
+                hints: storedHints,
+                source: "ai",
+                model: resolvedModel,
+              },
+              "ai",
+              { partial: true, total_ms: Date.now() - aiStartMs },
+            );
+            writer.sendDone();
+            return;
+          }
+          let fallback: HintHybridData | null = null;
+          try {
+            fallback = await prepared.runPython();
+          } catch {
+            fallback = null;
+          }
+          if (!fallback?.hints?.trim()) {
+            fallback = await prepared.runDeterministic();
+          }
+          const hints = fallback?.hints ?? FALLBACK_HINTS;
+          await prepared.finalizeSuccess(
+            fallback ?? {
+              request_id: requestId,
+              hints: FALLBACK_HINTS,
+              source: "fallback",
+              model: "deterministic",
+            },
+            fallback?.source === "python_structured" ? "python" : "deterministic",
+            { fallback_reason: "ai_failed_before_token" },
+          );
+          await logAiAudit({
+            req,
+            userId: user.id,
+            action: "GENERATE_HINT",
+            sessionId: body.session_id ?? null,
+            status: "success",
+            metadata: {
+              requestId,
+              source: fallback?.source ?? "fallback",
+              model: fallback?.model ?? "deterministic",
+              cost: CREDIT_COST,
+              hybrid_source: fallback?.source ?? "fallback",
+              operation_id: prepared.operationId,
+              fallback: true,
+            },
+          });
+          writer.sendJson({
+            source: fallback?.source ?? "fallback",
+          });
+          writer.sendText(hints);
+          writer.sendDone();
+        }
+      },
+    });
+  }
+
+  const hybridResult = await executeHybridOperation<HintHybridData>({
+    ...hybridShared,
     runAi: async () => {
-      const policy = getAiFeaturePolicy("generate_hint");
       const aiResult = await generateWithFallback({
         prompt,
         systemPrompt: SYSTEM_PROMPT,
-        maxTokens: Math.min(500, Math.max(300, policy.maxOutputTokens)),
+        maxTokens: maxHintTokens,
         temperature: 0.5,
         userId: user.id,
         action: "generate_hint",
@@ -559,42 +773,6 @@ Deno.serve(async (req: Request) => {
         model: aiResult.model,
       };
     },
-    runDeterministic: async () => ({
-      request_id: requestId,
-      hints: FALLBACK_HINTS,
-      source: "fallback",
-      model: "deterministic",
-    }),
-    runPython: async (ctx) => {
-      const py = await callPythonProcess({
-        operation: "practice_coach",
-        operationId: ctx.operationId,
-        correlationId: ctx.correlationId,
-        payload: {
-          operation_type: "hint",
-          question: body.question,
-          transcript: body.transcript,
-          interview_type: body.interview_type,
-          resume_context: body.resume_context,
-          target_company: body.target_company,
-        },
-      });
-      if (!py.ok) return null;
-      const normalized = normalizePythonCoachData(py.data);
-      if (!normalized) return null;
-      const hintsRaw =
-        normalized.hints.length > 0
-          ? normalized.hints.map((h) => (h.startsWith("•") ? h : `• ${h}`)).join("\n")
-          : normalized.reply;
-      if (!hintsRaw.trim()) return null;
-      return {
-        request_id: requestId,
-        hints: normalizeHints(hintsRaw),
-        source: "python_structured",
-        model: "python",
-      };
-    },
-    aiMeta: { provider: "gemini", modelVersion: resolvedModel },
   });
 
   if (!hybridResult.ok) {

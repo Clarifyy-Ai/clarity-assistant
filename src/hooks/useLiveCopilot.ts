@@ -27,9 +27,12 @@ import {
   formatTalkingPointsAsHint,
 } from "@/lib/ai/resumeFallback";
 import {
-  buildResumeContextForAI,
   loadPrimaryCoverLetterText,
 } from "@/lib/documents/interviewContext";
+import {
+  getOrBuildSessionAiContext,
+  lastTranscriptSlice,
+} from "@/lib/ai/sessionAiContext";
 import { parseResumeContentString } from "@/lib/documents/resumeParse";
 import { getPrivateMode } from "@/hooks/usePrivateMode";
 import { parsePrivacyPrefs } from "@/lib/privacy/privacyPrefs";
@@ -44,7 +47,6 @@ import { createLiveHintOperationId } from "@/lib/audio/liveQuestionGate";
 import {
   jobDescriptionsDB,
   resumesDB,
-  answerBankDB,
 } from "@/lib/supabase/database";
 import { pairLiveSessionAnswers } from "@/lib/session/liveSessionAnswers";
 import {
@@ -61,7 +63,7 @@ import {
 import { startSession as startSessionApi, finalizeSession as finalizeSessionApi } from "@/lib/api/sessions";
 import { ApiClientError } from "@/lib/api/apiClient";
 import { toDbModel } from "@/lib/ai/modelMapping";
-import { markFirstListening } from "@/lib/analytics/uxMetrics";
+import { markFirstListening, startAnswerLatencySpan, markAnswerLatency } from "@/lib/analytics/uxMetrics";
 import { toast } from "sonner";
 import type { LiveSessionConfig } from "@/types/session.types";
 import {
@@ -236,7 +238,13 @@ export function useLiveCopilot({
       if (cfg.role) jdParts.push(`Role: ${cfg.role}`);
       if (cfg.company) jdParts.push(`Company: ${cfg.company}`);
 
-      const resumeBlock = await buildResumeContextForAI(userId, {
+      const cached = await getOrBuildSessionAiContext({
+        userId,
+        resumeId: cfg.resume_id,
+        jdId: cfg.jd_id,
+        instructions: cfg.instructions,
+        role: cfg.role,
+        company: cfg.company,
         parsedResume: parsed,
         resumeContent: activeResume?.content ?? null,
         resumeSummary:
@@ -244,78 +252,23 @@ export function useLiveCopilot({
             ? overlay.resume_context?.summary ?? null
             : String(overlay.resume_context ?? ""),
         jdSnippet: jdParts.join("\n") || null,
-        instructions: cfg.instructions ?? "",
-        role: cfg.role ?? null,
-        company: cfg.company ?? null,
       });
 
-      const transcript =
-        useAudioStore.getState().transcript?.full_transcript ?? "";
-      const lastTranscript =
-        transcript.length > 2500 ? transcript.slice(-2500) : transcript;
+      const resumeBlock = cached.resumeBlock;
 
-      let jdKeywords: string[] = [];
-      if (Array.isArray(base.jd_required_skills) && base.jd_required_skills.length) {
-        jdKeywords = base.jd_required_skills as string[];
-      }
-      if (cfg.jd_id) {
-        try {
-          const jd = await jobDescriptionsDB.getByIdMaybe(cfg.jd_id);
-          const raw = jd as Record<string, unknown> | null;
-          const kw = raw?.keywords ?? raw?.required_skills ?? raw?.skills;
-          if (Array.isArray(kw)) {
-            jdKeywords = [
-              ...new Set([
-                ...jdKeywords,
-                ...kw.filter((s): s is string => typeof s === "string"),
-              ]),
-            ];
-          }
-        } catch {
-          /* non-fatal */
-        }
-      }
-
-      let starStoriesBlock = "";
-      try {
-        const entries = await answerBankDB.listByUserId(userId);
-        const lines = entries.slice(0, 5).map((entry) => {
-          const enriched = entry as typeof entry & {
-            star_situation?: string | null;
-            star_task?: string | null;
-            star_action?: string | null;
-            star_result?: string | null;
-            summary?: string | null;
-          };
-          const starParts = [
-            enriched.star_situation,
-            enriched.star_task,
-            enriched.star_action,
-            enriched.star_result,
-          ].filter(Boolean);
-          const starText =
-            starParts.length > 0
-              ? starParts.join(" → ")
-              : (enriched.summary ?? enriched.answer_text?.slice(0, 240) ?? "");
-          return `Q: ${entry.question_text}\nSTAR: ${starText}`;
-        });
-        if (lines.length) {
-          starStoriesBlock = `\n\nRelevant saved STAR stories:\n${lines.join("\n\n")}`;
-        }
-      } catch {
-        /* non-fatal */
-      }
-
-      const jdBlock =
-        jdKeywords.length > 0
-          ? `\n\nJD keywords to weave in: ${jdKeywords.join(", ")}`
-          : "";
+      const lastTranscript = lastTranscriptSlice(
+        useAudioStore.getState().transcript?.full_transcript ?? "",
+      );
 
       return {
         ...base,
-        resume_experience_summary: resumeBlock + jdBlock + starStoriesBlock,
-        resume_skills: parsed?.skills ?? base.resume_skills,
-        jd_required_skills: jdKeywords.length ? jdKeywords : base.jd_required_skills,
+        resume_experience_summary: resumeBlock || String(base.resume_experience_summary ?? ""),
+        resume_skills: cached.parsedSkills.length
+          ? cached.parsedSkills
+          : parsed?.skills ?? base.resume_skills,
+        jd_required_skills: cached.jdKeywords.length
+          ? cached.jdKeywords
+          : base.jd_required_skills,
         last_transcript: lastTranscript,
       };
     },
@@ -437,6 +390,33 @@ export function useLiveCopilot({
         session_type: (cfg.interview_type as any) ?? "behavioral",
         last_transcript: "",
       } as any);
+    }
+
+    if (profile.id) {
+      const overlayNow = useOverlayStore.getState();
+      const jdParts: string[] = [];
+      if (jdRequiredSkills.length) {
+        jdParts.push(`Required skills: ${jdRequiredSkills.join(", ")}`);
+      }
+      if (cfg.role) jdParts.push(`Role: ${cfg.role}`);
+      if (cfg.company) jdParts.push(`Company: ${cfg.company}`);
+      void getOrBuildSessionAiContext({
+        userId: profile.id,
+        resumeId: cfg.resume_id,
+        jdId: cfg.jd_id,
+        instructions: cfg.instructions,
+        role: cfg.role,
+        company: cfg.company,
+        parsedResume: parsed,
+        resumeContent: activeResume?.content ?? null,
+        resumeSummary:
+          typeof overlayNow.resume_context === "object"
+            ? overlayNow.resume_context?.summary ?? null
+            : String(overlayNow.resume_context ?? ""),
+        jdSnippet: jdParts.join("\n") || null,
+      }).catch((err) => {
+        console.warn("[useLiveCopilot] session AI context preload failed:", err);
+      });
     }
   }, [profile, coachStore]);
 
@@ -679,6 +659,8 @@ export function useLiveCopilot({
       const controller = new AbortController();
       abortRef.current = controller;
 
+      startAnswerLatencySpan("live_hint");
+
       const questionId = hintIdempotencyKey(sessionIdRef.current, question);
       const operationId = createLiveHintOperationId(sessionIdRef.current, questionId);
       hintOperationIdRef.current = operationId;
@@ -689,6 +671,7 @@ export function useLiveCopilot({
         questionId,
         question,
       });
+      markAnswerLatency("t1", { feature: "live_hint" });
 
       const stillCurrent = () =>
         !sessionEndedRef.current &&
@@ -697,6 +680,7 @@ export function useLiveCopilot({
         getOverlaySessionAuthority().canAcceptSessionMutations();
 
       try {
+        markAnswerLatency("t3", { feature: "live_hint" });
         if (answerMode === "full_answer") {
           await requestFullAnswer(
             question,
@@ -722,10 +706,12 @@ export function useLiveCopilot({
           answerMode: "hint",
           onChunk: (chunk) => {
             if (!stillCurrent()) return;
+            markAnswerLatency("t5", { feature: "live_hint" });
             useOverlayStore.getState().appendStreamChunk(chunk, operationId);
           },
           onDone: async () => {
             if (!stillCurrent()) return;
+            markAnswerLatency("t6", { feature: "live_hint" });
             useOverlayStore.getState().commitStreamedHint(operationId);
             checkpointLiveSession();
             const remaining = await refreshCredits();

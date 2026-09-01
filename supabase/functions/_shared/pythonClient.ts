@@ -5,6 +5,7 @@
  * - PYTHON_SERVICE_URL or SCRAPER_URL — FastAPI base URL (no trailing slash)
  * - DOCUMENT_INTELLIGENCE_AUTH_SECRET or PYTHON_SERVICE_AUTH_SECRET — HMAC secret
  * - PYTHON_REQUEST_TIMEOUT_MS — default 25000
+ * - PYTHON_LIVE_TIMEOUT_MS — overlay hint/answer fallback (default 5000)
  * - HYBRID_FORCE_PYTHON_UNAVAILABLE=1 — failure simulation
  *
  * Auth headers (match scraper/app/core/internal_auth.py):
@@ -22,6 +23,7 @@ import {
 } from "./domainErrors.ts";
 
 const DEFAULT_TIMEOUT_MS = 25_000;
+const DEFAULT_LIVE_TIMEOUT_MS = 5_000;
 const DEFAULT_MAX_RETRIES = 1;
 
 /** Legacy alias union — routes via V1_PROCESS_OPERATION or mapPythonOperationType. */
@@ -73,6 +75,14 @@ function envInt(name: string, fallback: number): number {
   const n = Number(raw);
   if (!Number.isFinite(n) || n <= 0) return fallback;
   return Math.floor(n);
+}
+
+/** Overlay hint/answer Python fallback — fail fast to deterministic templates. */
+export function livePythonTimeoutMs(): number {
+  return Math.min(
+    Math.max(1_000, envInt("PYTHON_LIVE_TIMEOUT_MS", DEFAULT_LIVE_TIMEOUT_MS)),
+    25_000,
+  );
 }
 
 function bytesToHex(buf: ArrayBuffer): string {

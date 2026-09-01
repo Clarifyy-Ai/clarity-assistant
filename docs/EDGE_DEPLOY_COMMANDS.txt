@@ -6,6 +6,7 @@ npx supabase functions deploy analytics-dashboard
 npx supabase functions deploy analyze-paper-trends
 npx supabase functions deploy analyze-test-performance
 npx supabase functions deploy assemble-assessment
+npx supabase functions deploy billing-catalog
 npx supabase functions deploy billing-status
 npx supabase functions deploy bulk-import-questions
 npx supabase functions deploy cancel-document-processing-job
@@ -15,6 +16,7 @@ npx supabase functions deploy check-exam-paper-availability
 npx supabase functions deploy collect-exam-papers
 npx supabase functions deploy company-research
 npx supabase functions deploy compare-sessions
+npx supabase functions deploy contact-sales
 npx supabase functions deploy create-billing-portal
 npx supabase functions deploy create-checkout
 npx supabase functions deploy create-document-processing-job
@@ -25,6 +27,7 @@ npx supabase functions deploy deepgram-token
 npx supabase functions deploy delete-account
 npx supabase functions deploy disconnect-calendar
 npx supabase functions deploy end-session
+npx supabase functions deploy evaluate-auto-approval
 npx supabase functions deploy export-user-data
 npx supabase functions deploy extract-question-paper
 npx supabase functions deploy finalize-session
@@ -68,6 +71,8 @@ npx supabase functions deploy resume-subscription
 npx supabase functions deploy retry-document-processing-job
 npx supabase functions deploy run-daily-exam-scrape
 npx supabase functions deploy save-answer
+npx supabase functions deploy save-attempt-answer
+npx supabase functions deploy save-test-answer
 npx supabase functions deploy save-transcript
 npx supabase functions deploy schedule-interview
 npx supabase functions deploy score-coding-submission
@@ -75,6 +80,8 @@ npx supabase functions deploy search-exams
 npx supabase functions deploy select-test-questions
 npx supabase functions deploy send-email
 npx supabase functions deploy send-interview-reminders
+npx supabase functions deploy start-exam
+npx supabase functions deploy start-exam-attempt
 npx supabase functions deploy start-session
 npx supabase functions deploy stripe-webhook
 npx supabase functions deploy submit-test

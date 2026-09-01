@@ -649,3 +649,231 @@ export async function executeHybridOperation<T = unknown>(
     };
   }
 }
+
+export type PreparedHybridStream<T = unknown> =
+  | { kind: "terminal"; result: HybridResult<T> }
+  | {
+      kind: "ready";
+      correlationId: string;
+      operationId: string;
+      creditReadyAt: number;
+      ctx: PythonRunContext;
+      runPython: () => Promise<T | null>;
+      runDeterministic: () => Promise<T | null>;
+      keepCharge: () => void;
+      finalizeSuccess: (
+        data: T,
+        source: OperationSource,
+        extraMeta?: Record<string, unknown>,
+      ) => Promise<void>;
+      refundOnFailure: (code: string) => Promise<void>;
+    };
+
+/**
+ * Auth/idempotency/credits through deductCreditsAtomic, then return helpers
+ * so the caller can stream AI tokens without awaiting the full model response.
+ */
+export async function prepareHybridStreamOperation<T = unknown>(
+  input: HybridExecuteInput<T>,
+): Promise<PreparedHybridStream<T>> {
+  const started = Date.now();
+  const correlationId = resolveCorrelationId(input.req);
+  const operationId = newId();
+  const userId = userIdOf(input.auth);
+  const operation = String(input.operation);
+  const body = input.body ?? {};
+  const creditCost =
+    typeof input.creditCost === "number" && Number.isFinite(input.creditCost)
+      ? Math.max(0, Math.floor(input.creditCost))
+      : 0;
+
+  const route = decideRoute({ operation });
+  const db = createServiceClient();
+
+  const rawKey = input.idempotencyKey?.trim() || null;
+  const opKey = rawKey ? operationIdemKey(operation, userId, rawKey) : null;
+
+  if (opKey) {
+    const prior = await getIdempotentResponse(db, opKey, {
+      userId,
+      action: `hybrid:${operation}`,
+    });
+    if (prior?.success && prior.payload) {
+      const cached = prior.payload as {
+        data?: T;
+        source?: OperationSource;
+        operation_id?: string;
+        meta?: HybridMeta;
+      };
+      if (cached.data !== undefined && cached.source) {
+        const executionMs = Date.now() - started;
+        return {
+          kind: "terminal",
+          result: {
+            ok: true,
+            data: cached.data,
+            source: cached.source,
+            operationId: cached.operation_id ?? operationId,
+            correlationId,
+            executionMs,
+            response: hybridSuccess({
+              req: input.req,
+              data: cached.data,
+              source: cached.source,
+              operationId: cached.operation_id ?? operationId,
+              correlationId,
+              meta: {
+                ...(cached.meta ?? {}),
+                execution_ms: executionMs,
+                idempotent_replay: true,
+              },
+            }),
+          },
+        };
+      }
+    }
+  }
+
+  let creditsReserved = false;
+  let creditFinalized = false;
+  const creditAction = input.creditAction ?? route.creditCostKey ?? operation;
+
+  if (creditCost > 0) {
+    const credit = await deductCreditsAtomic({
+      userId,
+      action: creditAction,
+      cost: creditCost,
+      idempotencyKey: `hyb-crd:${opKey ?? operationId}`.slice(0, 150),
+    });
+
+    if (!credit.success) {
+      const creditCode = classifyCreditFailure(credit.error, credit.code);
+      const code: DomainErrorCode =
+        creditCode === "CAPABILITY_REQUIRED"
+          ? "CAPABILITY_REQUIRED"
+          : creditCode === "INSUFFICIENT_CREDITS" || creditCode === "PAYMENT_REQUIRED"
+          ? "INSUFFICIENT_CREDITS"
+          : "DATABASE_FAILURE";
+      const executionMs = Date.now() - started;
+      await recordOperationSource({
+        operationId,
+        userId,
+        operationType: operation,
+        source: "fallback",
+        status: "failure",
+        correlationId,
+        executionMs,
+        fallbackReason: creditCode,
+      });
+      return {
+        kind: "terminal",
+        result: {
+          ok: false,
+          code,
+          correlationId,
+          executionMs,
+          response: creditDenialResponse(input.req, credit, creditCost),
+        },
+      };
+    }
+    creditsReserved = true;
+  }
+
+  const skipPython =
+    !route.canUsePython || isPythonForceUnavailable() || !isPythonConfigured();
+
+  const ctx: PythonRunContext = {
+    correlationId,
+    operationId,
+    operation,
+    body,
+    route,
+  };
+
+  const flags = { skipAi: false, skipPython };
+
+  const refundIfNeeded = async (reason: string) => {
+    if (creditsReserved && !creditFinalized && creditCost > 0) {
+      await refundCredits({
+        userId,
+        cost: creditCost,
+        reason,
+        idempotencyKey: `hyb-ref:${operationId}`.slice(0, 150),
+      }).catch(() => {});
+    }
+  };
+
+  return {
+    kind: "ready",
+    correlationId,
+    operationId,
+    creditReadyAt: Date.now(),
+    ctx,
+    runPython: async () => {
+      const outcome = await runSource("python", input, route, ctx, flags);
+      if (outcome.kind === "data") return outcome.data;
+      return null;
+    },
+    runDeterministic: async () => {
+      const outcome = await runSource("deterministic", input, route, ctx, flags);
+      if (outcome.kind === "data") return outcome.data;
+      return null;
+    },
+    keepCharge: () => {
+      creditFinalized = true;
+    },
+    finalizeSuccess: async (data, source, extraMeta) => {
+      creditFinalized = true;
+      const executionMs = Date.now() - started;
+      const meta: HybridMeta = {
+        execution_ms: executionMs,
+        ...(input.aiMeta?.provider ? { provider: input.aiMeta.provider } : {}),
+        ...(input.aiMeta?.modelVersion
+          ? { model_version: input.aiMeta.modelVersion }
+          : {}),
+        ...(extraMeta ?? {}),
+      };
+      const stored: DeductCreditsAtomicResult = {
+        success: true,
+        payload: {
+          data,
+          source,
+          operation_id: operationId,
+          meta,
+        } as Record<string, unknown>,
+      };
+      await storeIdempotentResponse(db, opKey, stored, {
+        userId,
+        action: `hybrid:${operation}`,
+      });
+      await recordOperationSource({
+        operationId,
+        userId,
+        operationType: operation,
+        source,
+        provider: meta.provider ?? null,
+        modelVersion: typeof meta.model_version === "string" ? meta.model_version : null,
+        fallbackReason: typeof extraMeta?.fallback_reason === "string"
+          ? extraMeta.fallback_reason
+          : null,
+        executionMs,
+        status: "success",
+        correlationId,
+      });
+    },
+    refundOnFailure: async (code) => {
+      const executionMs = Date.now() - started;
+      await refundIfNeeded(`hybrid_stream_failure:${operation}:${code}`);
+      await recordOperationSource({
+        operationId,
+        userId,
+        operationType: operation,
+        source: "fallback",
+        fallbackReason: code,
+        executionMs,
+        status: "failure",
+        correlationId,
+      });
+    },
+  };
+}

@@ -6,9 +6,12 @@ import { useCallback, useRef } from "react";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useAuthStore } from "@/store/userStore";
-import { generateHint, type GenerateHintRequest } from "@/lib/api/ai";
+import { streamGenerateHint, type GenerateHintRequest } from "@/lib/api/ai";
 import { hintIdempotencyKey } from "@/lib/ai/questionDetection";
-import { buildResumeContextForAI } from "@/lib/documents/interviewContext";
+import {
+  getOrBuildSessionAiContext,
+  lastTranscriptSlice,
+} from "@/lib/ai/sessionAiContext";
 import { parseResumeContentString } from "@/lib/documents/resumeParse";
 import { getLocalHintFallback } from "@/lib/mock/localHintFallback";
 import {
@@ -17,6 +20,7 @@ import {
 } from "@/lib/network/aiErrorUx";
 import { useDocumentStore } from "@/store/documentStore";
 import { useAudioStore } from "@/store/audioStore";
+import { markAnswerLatency } from "@/lib/analytics/uxMetrics";
 import type { SessionQuestion } from "@/types/session.types";
 
 interface CreateSessionParams {
@@ -114,7 +118,14 @@ export function useSessionOrchestrator() {
     if (session.status === "completed" || session.status === "abandoned") {
       return;
     }
-    const cfg = session.config as { instructions?: string; role?: string; company?: string } | null;
+    const cfg = session.config as {
+      instructions?: string;
+      role?: string;
+      company?: string;
+      resume_id?: string | null;
+      jd_id?: string | null;
+      interview_type?: string;
+    } | null;
     const resumeSummary =
       typeof overlay.resume_context === "string"
         ? overlay.resume_context
@@ -124,24 +135,29 @@ export function useSessionOrchestrator() {
       | { content?: string | null }
       | null;
     const parsed = parseResumeContentString(activeResume?.content ?? null);
-    const resumeCtx = userId
-      ? await buildResumeContextForAI(userId, {
+    const cached = userId
+      ? await getOrBuildSessionAiContext({
+          userId,
+          resumeId: cfg?.resume_id,
+          jdId: cfg?.jd_id,
+          instructions: cfg?.instructions,
+          role: cfg?.role,
+          company: cfg?.company,
           parsedResume: parsed,
           resumeContent: activeResume?.content ?? null,
           resumeSummary,
-          instructions: cfg?.instructions ?? null,
-          role: cfg?.role ?? null,
-          company: cfg?.company ?? null,
         })
-      : resumeSummary || "None provided.";
+      : null;
+    const resumeCtx = cached?.resumeBlock || resumeSummary || "None provided.";
 
     // Re-check after async context build — session may have ended.
     if (store.getState().status === "completed" || store.getState().status === "abandoned") {
       return;
     }
 
-    const transcript =
-      useAudioStore.getState().transcript?.full_transcript ?? "";
+    const transcript = lastTranscriptSlice(
+      useAudioStore.getState().transcript?.full_transcript ?? "",
+    );
 
     // Record the user's question in chat history so it actually shows up
     overlay.addChatMessage({
@@ -154,6 +170,14 @@ export function useSessionOrchestrator() {
     const controller = new AbortController();
     hintAbortRef.current = controller;
     const hintSessionId = session.session_id;
+    const operationId = hintIdempotencyKey(session.session_id, questionText);
+    overlay.beginHintOperation({
+      operationId,
+      sessionId: session.session_id,
+      questionId: operationId,
+      question: questionText,
+    });
+    markAnswerLatency("t1", { feature: "mock_hint" });
 
     try {
       overlay.setHintState("generating");
@@ -162,15 +186,34 @@ export function useSessionOrchestrator() {
       const payload: GenerateHintRequest = {
         question: questionText,
         resume_context: resumeCtx,
-        transcript: transcript.length > 2500 ? transcript.slice(-2500) : transcript,
-        interview_type:
-          (session.config as { interview_type?: string })?.interview_type ?? "behavioural",
+        transcript,
+        interview_type: cfg?.interview_type ?? "behavioural",
         model: overlay.active_model ?? "gemini-2.5-flash",
         session_id: session.session_id ?? undefined,
       };
-      const data = await generateHint(payload, {
-        idempotencyKey: hintIdempotencyKey(session.session_id, questionText),
+      let streamed = "";
+      let firstChunk = true;
+      markAnswerLatency("t3", { feature: "mock_hint" });
+      await streamGenerateHint(payload, {
+        idempotencyKey: operationId,
         signal: controller.signal,
+        onChunk: (chunk) => {
+          if (
+            controller.signal.aborted ||
+            store.getState().session_id !== hintSessionId
+          ) {
+            return;
+          }
+          if (firstChunk) {
+            firstChunk = false;
+            markAnswerLatency("t5", { feature: "mock_hint" });
+          }
+          streamed += chunk;
+          overlay.appendStreamChunk(chunk, operationId);
+        },
+        onDone: () => {
+          markAnswerLatency("t6", { feature: "mock_hint" });
+        },
       });
 
       if (
@@ -182,34 +225,12 @@ export function useSessionOrchestrator() {
         return;
       }
 
-      const hint = typeof data?.hints === "string" ? data.hints : String(data?.hints ?? "");
-      const isDegraded =
-        data?.success === false ||
-        data?.source === "fallback" ||
-        data?.refunded === true;
-
-      if (isDegraded) {
-        overlay.setCurrentQuestion(questionText);
-        overlay.setOfflineFallback(hint);
-        overlay.setError(
-          "AI hint service unavailable — showing offline coaching tips. Credits refunded if charged.",
-        );
-        overlay.addChatMessage({
-          role: "assistant",
-          text: `${hint}\n\n_(Offline coaching tips — AI hint service unavailable.)_`,
-          timestamp: Date.now(),
-        });
-        return;
-      }
-
-      overlay.setCurrentQuestion(questionText);
-      overlay.appendStreamChunk(hint);
-      overlay.commitStreamedHint();
+      overlay.commitStreamedHint(operationId);
       overlay.setHintState("ready");
       overlay.setError(null);
       overlay.addChatMessage({
         role: "assistant",
-        text: hint,
+        text: streamed,
         timestamp: Date.now(),
       });
     } catch (err) {

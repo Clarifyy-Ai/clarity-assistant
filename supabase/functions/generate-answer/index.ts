@@ -58,13 +58,15 @@ import { requireCapabilityAsync } from "../_shared/requireCapability.ts";
 import { resolveModel, isGeminiModel } from "../_shared/resolveModel.ts";
 import type { ModelId } from "../_shared/types.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
-import { callPythonProcess } from "../_shared/pythonClient.ts";
+import { callPythonProcess, livePythonTimeoutMs } from "../_shared/pythonClient.ts";
 import { normalizePythonCoachData } from "../_shared/practiceCoachContract.ts";
-import { executeHybridOperation } from "../_shared/hybridExecute.ts";
+import {
+  executeHybridOperation,
+  prepareHybridStreamOperation,
+} from "../_shared/hybridExecute.ts";
+import { createSseStreamResponse, sseFromText } from "../_shared/sse.ts";
+import { streamGeminiContent } from "../_shared/geminiStream.ts";
 
-const SERVER_GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
-const GEMINI_API_VERSION = Deno.env.get("GEMINI_API_VERSION") ?? "v1beta";
-const GEMINI_BASE = `https://generativelanguage.googleapis.com/${GEMINI_API_VERSION}`;
 const DEFAULT_MODEL =
   Deno.env.get("GEMINI_MODEL_DEFAULT") ?? "gemini-2.5-flash";
 
@@ -341,44 +343,6 @@ function buildPrompt(input: {
   ].filter(Boolean).join("\n");
 }
 
-function sseFromText(
-  text: string,
-  corsHeaders: HeadersInit,
-  source: string,
-): Response {
-  const encoder = new TextEncoder();
-  const chunkSize = 24;
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      if (source === "python" || source === "python_structured" || source === "fallback") {
-        controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({ source: source === "python" ? "python_structured" : source })}\n\n`,
-          ),
-        );
-      }
-      for (let i = 0; i < text.length; i += chunkSize) {
-        const slice = text.slice(i, i + chunkSize);
-        controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ text: slice })}\n\n`),
-        );
-        await new Promise((r) => setTimeout(r, 0));
-      }
-      controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-      controller.close();
-    },
-  });
-  const responseHeaders = new Headers(corsHeaders);
-  responseHeaders.set("Content-Type", "text/event-stream");
-  responseHeaders.set("Cache-Control", "no-cache, no-transform");
-  responseHeaders.set("Connection", "keep-alive");
-  responseHeaders.set("X-Accel-Buffering", "no");
-  if (source === "python" || source === "python_structured") {
-    responseHeaders.set("X-Clarify-Source", "python_structured");
-  }
-  return new Response(stream, { status: 200, headers: responseHeaders });
-}
-
 async function parseAndValidateRequest(
   req: Request,
   corsHeaders: HeadersInit
@@ -448,102 +412,6 @@ async function parseAndValidateRequest(
 
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
-}
-
-async function runGeminiNonStream(opts: {
-  model: string;
-  systemPrompt: string;
-  userPrompt: string;
-  screenshotBase64?: string | null;
-}): Promise<string> {
-  if (!SERVER_GEMINI_API_KEY.trim()) {
-    throw new Error("Gemini API key missing");
-  }
-
-  if (opts.screenshotBase64?.trim()) {
-    const pdfLike = opts.screenshotBase64.replace(/^data:image\/\w+;base64,/, "");
-    // Prefer multimodal generateContent via shared helper when image present.
-    const geminiUrl = `${GEMINI_BASE}/models/${opts.model}:generateContent`;
-    const res = await fetch(geminiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": SERVER_GEMINI_API_KEY,
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [
-              { text: opts.userPrompt },
-              {
-                inline_data: {
-                  mime_type: "image/png",
-                  data: pdfLike,
-                },
-              },
-            ],
-          },
-        ],
-        systemInstruction: {
-          parts: [{ text: opts.systemPrompt }],
-        },
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: ANSWER_AI_POLICY.maxOutputTokens,
-          topP: 0.95,
-        },
-      }),
-    });
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      throw new Error(`Gemini HTTP ${res.status}: ${errText.slice(0, 200)}`);
-    }
-    const jsonBody = await res.json();
-    const text =
-      jsonBody?.candidates?.[0]?.content?.parts
-        ?.map((p: { text?: string }) => p.text ?? "")
-        .join("") ?? "";
-    if (!text.trim()) throw new Error("Gemini returned empty answer");
-    return text;
-  }
-
-  // Text-only path: reuse stream URL helper pattern with generateContent.
-  const geminiUrl = `${GEMINI_BASE}/models/${opts.model}:generateContent`;
-  const res = await fetch(geminiUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-goog-api-key": SERVER_GEMINI_API_KEY,
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: opts.userPrompt }],
-        },
-      ],
-      systemInstruction: {
-        parts: [{ text: opts.systemPrompt }],
-      },
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: ANSWER_AI_POLICY.maxOutputTokens,
-          topP: 0.95,
-        },
-    }),
-  });
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    throw new Error(`Gemini HTTP ${res.status}: ${errText.slice(0, 200)}`);
-  }
-  const jsonBody = await res.json();
-  const text =
-    jsonBody?.candidates?.[0]?.content?.parts
-      ?.map((p: { text?: string }) => p.text ?? "")
-      .join("") ?? "";
-  if (!text.trim()) throw new Error("Gemini returned empty answer");
-  return text;
 }
 
 Deno.serve(async (req: Request) => {
@@ -721,11 +589,12 @@ Deno.serve(async (req: Request) => {
     boundedMessages.find((m) => m.role === "user")?.content ?? userPrompt;
 
   const aiStartMs = Date.now();
+  const pythonTimeoutMs = livePythonTimeoutMs();
 
-  const hybridResult = await executeHybridOperation<AnswerHybridData>({
+  const hybridInput = {
     req,
     auth: { userId: user.id, planId },
-    operation: "live_answer",
+    operation: "live_answer" as const,
     idempotencyKey,
     creditCost: COST,
     creditAction: "liveanswerlong",
@@ -739,9 +608,51 @@ Deno.serve(async (req: Request) => {
       mode: body.mode,
       has_screenshot: hasScreenshot,
     },
-    runAi: async () => {
-      const aiAttempts = Math.max(1, ANSWER_AI_POLICY.maxRetries);
-      if (!isGeminiModel(model)) {
+    runPython: async (ctx: { operationId: string; correlationId: string }) => {
+      const pythonCoach = await callPythonProcess({
+        operation: "practice_coach",
+        operationId: ctx.operationId,
+        correlationId: ctx.correlationId,
+        timeoutMs: pythonTimeoutMs,
+        payload: {
+          operation_type: "answer",
+          question: body.question,
+          transcript: body.transcript,
+          interview_type: body.interview_type,
+          resume_context: body.resume_context,
+          target_company: body.target_company,
+        },
+      });
+      if (!pythonCoach.ok) return null;
+      const normalized = normalizePythonCoachData(pythonCoach.data);
+      const text = (normalized?.reply ?? "").trim();
+      if (!text) return null;
+      return {
+        text,
+        source: "python_structured",
+        model: "python",
+      };
+    },
+    runDeterministic: async () => ({
+      text: FALLBACK_ANSWER,
+      source: "deterministic",
+      model: "deterministic",
+    }),
+    validate: async (data: AnswerHybridData) => {
+      if (!data.text?.trim()) throw new Error("Empty answer");
+      return data;
+    },
+    aiMeta: {
+      provider: isGeminiModel(model) ? "gemini" : "openai",
+      modelVersion: model,
+    },
+  };
+
+  if (!isGeminiModel(model)) {
+    const hybridResult = await executeHybridOperation<AnswerHybridData>({
+      ...hybridInput,
+      runAi: async () => {
+        const aiAttempts = Math.max(1, ANSWER_AI_POLICY.maxRetries);
         const result = await retryTransient(
           () =>
             callAI({
@@ -770,103 +681,213 @@ Deno.serve(async (req: Request) => {
           source: "ai",
           model: result.model,
         };
-      }
+      },
+    });
 
-      const text = await retryTransient(
-        () =>
-          runGeminiNonStream({
-            model,
-            systemPrompt: boundedSystemPrompt,
-            userPrompt: boundedUserPrompt,
-            screenshotBase64: body.screenshot_base64,
-          }),
-        aiAttempts,
-      );
-      void logAICost(db, {
+    if (!hybridResult.ok) {
+      await logAiAudit({
+        req,
         userId: user.id,
-        action: "generate_answer",
-        model,
-        inputTokens: estimateTokens(`${systemPrompt}\n${userPrompt}`),
-        outputTokens: estimateTokens(text),
-        latencyMs: Date.now() - aiStartMs,
-        wasFallback: false,
-      });
-      return { text, source: "ai", model };
-    },
-    runPython: async (ctx) => {
-      const pythonCoach = await callPythonProcess({
-        operation: "practice_coach",
-        operationId: ctx.operationId,
-        correlationId: ctx.correlationId,
-        payload: {
-          operation_type: "answer",
-          question: body.question,
-          transcript: body.transcript,
-          interview_type: body.interview_type,
-          resume_context: body.resume_context,
-          target_company: body.target_company,
+        action: "GENERATE_ANSWER",
+        sessionId: body.session_id ?? null,
+        status: "failure",
+        metadata: {
+          reason: String(hybridResult.code),
+          operation_id: hybridResult.correlationId,
         },
       });
-      if (!pythonCoach.ok) return null;
-      const normalized = normalizePythonCoachData(pythonCoach.data);
-      const text = (normalized?.reply ?? "").trim();
-      if (!text) return null;
-      return {
-        text,
-        source: "python_structured",
-        model: "python",
-      };
-    },
-    runDeterministic: async () => ({
-      text: FALLBACK_ANSWER,
-      source: "deterministic",
-      model: "deterministic",
-    }),
-    validate: async (data) => {
-      if (!data.text?.trim()) throw new Error("Empty answer");
-      return data;
-    },
-    aiMeta: {
-      provider: isGeminiModel(model) ? "gemini" : "openai",
-      modelVersion: model,
-    },
-  });
+      return hybridResult.response;
+    }
 
-  if (!hybridResult.ok) {
     await logAiAudit({
       req,
       userId: user.id,
       action: "GENERATE_ANSWER",
       sessionId: body.session_id ?? null,
-      status: "failure",
+      status: "success",
       metadata: {
-        reason: String(hybridResult.code),
-        operation_id: hybridResult.correlationId,
+        model: hybridResult.data.model,
+        streamStarted: true,
+        cost: COST,
+        questionId: body.question_id ?? null,
+        hybrid_source: hybridResult.source,
+        operation_id: hybridResult.operationId,
+        source: hybridResult.data.source,
       },
     });
-    return hybridResult.response;
+
+    return sseFromText(
+      hybridResult.data.text,
+      corsHeaders,
+      hybridResult.data.source,
+    );
   }
 
-  await logAiAudit({
-    req,
-    userId: user.id,
-    action: "GENERATE_ANSWER",
-    sessionId: body.session_id ?? null,
-    status: "success",
-    metadata: {
-      model: hybridResult.data.model,
-      streamStarted: true,
-      cost: COST,
-      questionId: body.question_id ?? null,
-      hybrid_source: hybridResult.source,
-      operation_id: hybridResult.operationId,
-      source: hybridResult.data.source,
+  const prepared = await prepareHybridStreamOperation<AnswerHybridData>(hybridInput);
+
+  if (prepared.kind === "terminal") {
+    if (!prepared.result.ok) {
+      await logAiAudit({
+        req,
+        userId: user.id,
+        action: "GENERATE_ANSWER",
+        sessionId: body.session_id ?? null,
+        status: "failure",
+        metadata: {
+          reason: String(prepared.result.code),
+          operation_id: prepared.result.correlationId,
+        },
+      });
+      return prepared.result.response;
+    }
+    await logAiAudit({
+      req,
+      userId: user.id,
+      action: "GENERATE_ANSWER",
+      sessionId: body.session_id ?? null,
+      status: "success",
+      metadata: {
+        model: prepared.result.data.model,
+        streamStarted: true,
+        cost: COST,
+        questionId: body.question_id ?? null,
+        hybrid_source: prepared.result.source,
+        operation_id: prepared.result.operationId,
+        source: prepared.result.data.source,
+        idempotent_replay: true,
+      },
+    });
+    return sseFromText(
+      prepared.result.data.text,
+      corsHeaders,
+      prepared.result.data.source,
+    );
+  }
+
+  return createSseStreamResponse({
+    corsHeaders,
+    source: "ai",
+    start: async (writer) => {
+      let full = "";
+      let firstTokenAt: number | null = null;
+      try {
+        for await (
+          const delta of streamGeminiContent({
+            model,
+            systemPrompt: boundedSystemPrompt,
+            userPrompt: boundedUserPrompt,
+            screenshotBase64: body.screenshot_base64,
+            maxTokens: ANSWER_AI_POLICY.maxOutputTokens,
+            temperature: 0.7,
+          })
+        ) {
+          if (!firstTokenAt) {
+            firstTokenAt = Date.now();
+            prepared.keepCharge();
+          }
+          full += delta;
+          writer.sendText(delta);
+        }
+        if (!full.trim()) throw new Error("AI returned empty answer");
+        const ttftMs = firstTokenAt ? firstTokenAt - prepared.creditReadyAt : null;
+        const totalMs = Date.now() - aiStartMs;
+        void logAICost(db, {
+          userId: user.id,
+          action: "generate_answer",
+          model,
+          inputTokens: estimateTokens(`${systemPrompt}\n${userPrompt}`),
+          outputTokens: estimateTokens(full),
+          latencyMs: totalMs,
+          wasFallback: false,
+        });
+        await prepared.finalizeSuccess(
+          { text: full, source: "ai", model },
+          "ai",
+          { ttft_ms: ttftMs, total_ms: totalMs },
+        );
+        await logAiAudit({
+          req,
+          userId: user.id,
+          action: "GENERATE_ANSWER",
+          sessionId: body.session_id ?? null,
+          status: "success",
+          metadata: {
+            model,
+            streamStarted: true,
+            cost: COST,
+            questionId: body.question_id ?? null,
+            hybrid_source: "ai",
+            operation_id: prepared.operationId,
+            source: "ai",
+            ttft_ms: ttftMs,
+            total_ms: totalMs,
+          },
+        });
+        writer.sendDone();
+      } catch (err) {
+        if (full.trim()) {
+          const totalMs = Date.now() - aiStartMs;
+          const ttftMs = firstTokenAt ? firstTokenAt - prepared.creditReadyAt : null;
+          await prepared.finalizeSuccess(
+            { text: full, source: "ai", model },
+            "ai",
+            {
+              ttft_ms: ttftMs,
+              total_ms: totalMs,
+              partial: true,
+              fallback_reason: err instanceof Error ? err.message.slice(0, 120) : "stream_aborted",
+            },
+          );
+          writer.sendDone();
+          return;
+        }
+        let fallback: AnswerHybridData | null = null;
+        try {
+          fallback = await prepared.runPython();
+        } catch {
+          fallback = null;
+        }
+        if (!fallback?.text?.trim()) {
+          fallback = await prepared.runDeterministic();
+        }
+        const text = fallback?.text?.trim() || FALLBACK_ANSWER;
+        const source = fallback?.source ?? "deterministic";
+        await prepared.finalizeSuccess(
+          { text, source, model: fallback?.model ?? "deterministic" },
+          source === "python_structured" ? "python" : "deterministic",
+          { fallback_reason: "ai_failed_before_token", total_ms: Date.now() - aiStartMs },
+        );
+        void logAICost(db, {
+          userId: user.id,
+          action: "generate_answer",
+          model: fallback?.model ?? "deterministic",
+          inputTokens: estimateTokens(`${systemPrompt}\n${userPrompt}`),
+          outputTokens: estimateTokens(text),
+          latencyMs: Date.now() - aiStartMs,
+          wasFallback: true,
+        });
+        await logAiAudit({
+          req,
+          userId: user.id,
+          action: "GENERATE_ANSWER",
+          sessionId: body.session_id ?? null,
+          status: "success",
+          metadata: {
+            model: fallback?.model ?? "deterministic",
+            streamStarted: true,
+            cost: COST,
+            hybrid_source: source,
+            operation_id: prepared.operationId,
+            source,
+            fallback: true,
+          },
+        });
+        writer.sendJson({
+          source: source === "python" ? "python_structured" : source,
+        });
+        writer.sendText(text);
+        writer.sendDone();
+      }
     },
   });
-
-  return sseFromText(
-    hybridResult.data.text,
-    corsHeaders,
-    hybridResult.data.source,
-  );
 });

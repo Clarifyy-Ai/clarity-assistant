@@ -90,7 +90,7 @@ export default function AdminSupport() {
         <div>
           <h1 className="text-xl font-bold text-foreground">Support Threads</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Read-only queue overview. Reply and resolve threads in Support messages.
+            Read-only queue overview. Reply and resolve threads in Live Support.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -98,7 +98,7 @@ export default function AdminSupport() {
           <Badge variant="default" size="sm">{rows.length} threads</Badge>
           <Link to="/app/admin/live-chat">
             <Button size="sm" leftIcon={<ExternalLink className="h-3.5 w-3.5" />}>
-              Open Support messages
+              Open Live Support
             </Button>
           </Link>
         </div>
@@ -109,12 +109,12 @@ export default function AdminSupport() {
           <p className="text-sm text-muted-foreground">
             This page lists threads only. Use{" "}
             <Link to="/app/admin/live-chat" className="text-primary font-medium underline-offset-2 hover:underline">
-              Support messages
+              Live Support
             </Link>{" "}
             to message users.
           </p>
           <Link to="/app/admin/live-chat">
-            <Button variant="secondary" size="sm">Go to Support messages</Button>
+            <Button variant="secondary" size="sm">Go to Live Support</Button>
           </Link>
         </CardContent>
       </Card>

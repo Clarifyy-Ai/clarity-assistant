@@ -8,7 +8,6 @@
 // - Keeps ALL existing features (retry, model selection, screenshot support, etc.)
 
 import type { CoachingContext } from "@/types/ai.types";
-import { retry } from "@/lib/utils";
 import { fetchEdge, fetchEdgeJson, getAuthHeaders } from "@/lib/network/fetchEdge";
 import { createIdempotencyKey } from "@/lib/api/functions";
 import { ApiClientError } from "@/lib/api/apiClient";
@@ -109,26 +108,56 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
   };
 
   try {
-    // Uses robust EDGE url handling + consistent auth headers
     const idempotencyKey =
       typeof opts.questionId === "string" && opts.questionId.length > 0
         ? opts.questionId
         : undefined;
-    const data = await retry(
-      () =>
-        fetchEdgeJson<{ hints?: string; hint?: string }>("generate-hint", body, {
-          signal,
-          headers: idempotencyKey
-            ? { "Idempotency-Key": idempotencyKey }
-            : undefined,
-        }),
-      1,
-      100,
-    );
+    const headers = await getAuthHeaders({
+      Accept: "text/event-stream",
+      ...(idempotencyKey
+        ? {
+            "Idempotency-Key": idempotencyKey,
+            "x-idempotency-key": idempotencyKey,
+          }
+        : {}),
+    });
 
-    const hints = data.hints ?? data.hint ?? "";
-    if (hints) onChunk(hints);
-    onDone(hints);
+    const response = await fetchEdge("generate-hint", body, {
+      method: "POST",
+      headers,
+      signal,
+      timeoutMs: 60_000,
+    });
+
+    if (!response.ok) {
+      const errText = await response.text().catch(() => `HTTP ${response.status}`);
+      let parsed: { error?: string; code?: string; message?: string } | null = null;
+      try {
+        parsed = JSON.parse(errText) as {
+          error?: string;
+          code?: string;
+          message?: string;
+        };
+      } catch {
+        parsed = null;
+      }
+      const code = parsed?.code ?? "";
+      throw new ApiClientError({
+        message: parsed?.error || parsed?.message || `Hint generation failed (${response.status}).`,
+        status: response.status,
+        code,
+      });
+    }
+
+    if (!response.body) {
+      throw new ApiClientError({
+        message: "Hint stream returned an empty body.",
+        status: 502,
+        code: "EMPTY_STREAM",
+      });
+    }
+
+    await consumeSSEStream(response.body, onChunk, onDone, onError, signal);
   } catch (err) {
     if ((err as Error).name === "AbortError") return;
     onError(err instanceof Error ? err : new Error(String(err)));

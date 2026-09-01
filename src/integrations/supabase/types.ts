@@ -7593,32 +7593,226 @@ export type Database = {
           },
         ]
       }
+      support_ai_operations: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_code: string | null
+          id: string
+          idempotency_key: string | null
+          input_tokens: number | null
+          model: string | null
+          operation_id: string
+          output_tokens: number | null
+          prompt_version: string
+          provider: string | null
+          status: string
+          thread_id: string
+          total_tokens: number | null
+          user_id: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          id?: string
+          idempotency_key?: string | null
+          input_tokens?: number | null
+          model?: string | null
+          operation_id: string
+          output_tokens?: number | null
+          prompt_version?: string
+          provider?: string | null
+          status?: string
+          thread_id: string
+          total_tokens?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_code?: string | null
+          id?: string
+          idempotency_key?: string | null
+          input_tokens?: number | null
+          model?: string | null
+          operation_id?: string
+          output_tokens?: number | null
+          prompt_version?: string
+          provider?: string | null
+          status?: string
+          thread_id?: string
+          total_tokens?: number | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_ai_operations_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "support_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_assignments: {
+        Row: {
+          action: string
+          admin_id: string
+          assigned_by: string | null
+          created_at: string
+          id: string
+          thread_id: string
+        }
+        Insert: {
+          action: string
+          admin_id: string
+          assigned_by?: string | null
+          created_at?: string
+          id?: string
+          thread_id: string
+        }
+        Update: {
+          action?: string
+          admin_id?: string
+          assigned_by?: string | null
+          created_at?: string
+          id?: string
+          thread_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_assignments_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "support_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_attachments: {
+        Row: {
+          byte_size: number
+          content_type: string
+          created_at: string
+          id: string
+          message_id: string | null
+          scanned_status: string
+          storage_path: string
+          thread_id: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          byte_size: number
+          content_type: string
+          created_at?: string
+          id?: string
+          message_id?: string | null
+          scanned_status?: string
+          storage_path: string
+          thread_id: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          byte_size?: number
+          content_type?: string
+          created_at?: string
+          id?: string
+          message_id?: string | null
+          scanned_status?: string
+          storage_path?: string
+          thread_id?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_attachments_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "support_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_events: {
+        Row: {
+          actor_id: string | null
+          body: string | null
+          created_at: string
+          event_type: string
+          id: string
+          metadata: Json
+          thread_id: string
+          visibility: string
+        }
+        Insert: {
+          actor_id?: string | null
+          body?: string | null
+          created_at?: string
+          event_type: string
+          id?: string
+          metadata?: Json
+          thread_id: string
+          visibility?: string
+        }
+        Update: {
+          actor_id?: string | null
+          body?: string | null
+          created_at?: string
+          event_type?: string
+          id?: string
+          metadata?: Json
+          thread_id?: string
+          visibility?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_events_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "support_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       support_messages: {
         Row: {
           attachments: Json
           body: string
+          client_message_id: string | null
           created_at: string
+          delivery_status: string
           id: string
+          operation_id: string | null
           sender_id: string | null
           sender_role: string
+          sender_type: string
           thread_id: string
         }
         Insert: {
           attachments?: Json
           body: string
+          client_message_id?: string | null
           created_at?: string
+          delivery_status?: string
           id?: string
+          operation_id?: string | null
           sender_id?: string | null
           sender_role: string
+          sender_type?: string
           thread_id: string
         }
         Update: {
           attachments?: Json
           body?: string
+          client_message_id?: string | null
           created_at?: string
+          delivery_status?: string
           id?: string
+          operation_id?: string | null
           sender_id?: string | null
           sender_role?: string
+          sender_type?: string
           thread_id?: string
         }
         Relationships: [
@@ -7634,6 +7828,8 @@ export type Database = {
       support_threads: {
         Row: {
           assigned_admin_id: string | null
+          category: string
+          context_snapshot: Json
           created_at: string
           guest_email: string | null
           guest_name: string | null
@@ -7641,9 +7837,13 @@ export type Database = {
           id: string
           last_message_at: string
           last_message_preview: string | null
+          mode: string
           priority: string
+          public_ref: string | null
+          source_path: string | null
           status: string
           subject: string
+          summary: string | null
           unread_for_admin: boolean
           unread_for_user: boolean
           updated_at: string
@@ -7651,6 +7851,8 @@ export type Database = {
         }
         Insert: {
           assigned_admin_id?: string | null
+          category?: string
+          context_snapshot?: Json
           created_at?: string
           guest_email?: string | null
           guest_name?: string | null
@@ -7658,9 +7860,13 @@ export type Database = {
           id?: string
           last_message_at?: string
           last_message_preview?: string | null
+          mode?: string
           priority?: string
+          public_ref?: string | null
+          source_path?: string | null
           status?: string
           subject?: string
+          summary?: string | null
           unread_for_admin?: boolean
           unread_for_user?: boolean
           updated_at?: string
@@ -7668,6 +7874,8 @@ export type Database = {
         }
         Update: {
           assigned_admin_id?: string | null
+          category?: string
+          context_snapshot?: Json
           created_at?: string
           guest_email?: string | null
           guest_name?: string | null
@@ -7675,9 +7883,13 @@ export type Database = {
           id?: string
           last_message_at?: string
           last_message_preview?: string | null
+          mode?: string
           priority?: string
+          public_ref?: string | null
+          source_path?: string | null
           status?: string
           subject?: string
+          summary?: string | null
           unread_for_admin?: boolean
           unread_for_user?: boolean
           updated_at?: string

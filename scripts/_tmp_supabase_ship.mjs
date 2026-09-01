@@ -19,6 +19,8 @@ if (!TOKEN) {
 const args = new Set(process.argv.slice(2));
 const migrationsOnly = args.has("--migrations-only");
 const functionsOnly = args.has("--functions-only");
+const onlySlug = process.argv.find((a) => a.startsWith("--only="))?.slice("--only=".length);
+
 
 const API = `https://api.supabase.com/v1/projects/${REF}`;
 const headers = { Authorization: `Bearer ${TOKEN}`, Accept: "application/json" };
@@ -153,10 +155,13 @@ async function deployFunction(slug) {
 
 async function deployAllFunctions() {
   const fnRoot = path.join(ROOT, "supabase", "functions");
-  const slugs = fs
-    .readdirSync(fnRoot)
-    .filter((n) => !n.startsWith("_") && fs.statSync(path.join(fnRoot, n)).isDirectory())
-    .sort();
+  const slugs = (
+    onlySlug
+      ? [onlySlug]
+      : fs
+          .readdirSync(fnRoot)
+          .filter((n) => !n.startsWith("_") && fs.statSync(path.join(fnRoot, n)).isDirectory())
+  ).sort();
   console.log(`\nDeploying ${slugs.length} functions via Management API...`);
   const ok = [];
   const failed = [];
