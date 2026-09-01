@@ -316,20 +316,37 @@ export function SupportChatWidget() {
         void supabase.removeChannel(ch);
       };
     }
-    const t = window.setInterval(async () => {
+    // Self-scheduling poll with exponential backoff. A fixed interval hits the
+    // support-chat guest rate limit (8 req/min) and floods the console with 429s.
+    let cancelled = false;
+    let timer = 0;
+    let delay = SUPPORT_GUEST_POLL_MS;
+
+    const tick = async () => {
       try {
         const data = await fetchEdgeJson<ChatResponse>("support-chat", {
           action: "list",
           thread_id: threadId,
           guest_token: guestToken,
         });
+        if (cancelled) return;
         applyResponse(data);
-      } catch {
-        /* next tick */
+        delay = SUPPORT_GUEST_POLL_MS;
+      } catch (err) {
+        const status = (err as { status?: number })?.status;
+        // 429 (or any failure) → back off up to 60s instead of retrying hot.
+        delay = Math.min(delay * (status === 429 ? 3 : 2), 60_000);
       }
-    }, SUPPORT_GUEST_POLL_MS);
-    return () => window.clearInterval(t);
+      if (!cancelled) timer = window.setTimeout(tick, delay);
+    };
+
+    timer = window.setTimeout(tick, delay);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [open, hide, threadId, guestToken, isAuthed]);
+
 
   if (hide) return null;
 
