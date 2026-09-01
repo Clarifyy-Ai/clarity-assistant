@@ -1,11 +1,14 @@
 /** Centralized public contact details for marketing and legal pages. */
 
-export const CONTACT_EMAIL = "hello@clarifyprep.com";
-export const SALES_EMAIL = "sales@clarifyprep.com";
-export const SUPPORT_EMAIL = "support@clarifyprep.com";
-export const LEGAL_EMAIL = "legal@clarifyprep.com";
-export const PRIVACY_EMAIL = "privacy@clarifyprep.com";
-export const SECURITY_EMAIL = "security@clarifyprep.com";
+/** Single public mailbox for Career Pilot. */
+export const UNIVERSAL_EMAIL = "hello@trycareerpilot.com";
+
+export const CONTACT_EMAIL = UNIVERSAL_EMAIL;
+export const SALES_EMAIL = UNIVERSAL_EMAIL;
+export const SUPPORT_EMAIL = UNIVERSAL_EMAIL;
+export const LEGAL_EMAIL = UNIVERSAL_EMAIL;
+export const PRIVACY_EMAIL = UNIVERSAL_EMAIL;
+export const SECURITY_EMAIL = UNIVERSAL_EMAIL;
 
 export const STATUS_PAGE_URL =
   (import.meta.env.VITE_STATUS_PAGE_URL as string | undefined)?.trim() || "";

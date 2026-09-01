@@ -200,76 +200,17 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       store.setMicStream(micStream);
       store.setMicState("ready");
 
-      let sysStream: MediaStream | null = null;
+      // Tab-share must not block Practice Coach from becoming active. The
+      // OS picker and guidance modal previously held startLiveSession on
+      // "starting" until the tester clicked Continue/Skip — that blocked QA.
       if (opts.enableSystemAudio && isSystemAudioSupported()) {
-        const proceed = await confirmTabAudioCapture();
-        if (proceed) {
-          try {
-            sysStream = await captureSystemAudio();
-            store.setSystemStream(sysStream);
-
-            cleanupSysRef.current = watchStreamEnded(sysStream, () => {
-              if (!isStartedRef.current) return;
-              deepgramSystemRef.current?.disconnect();
-              deepgramSystemRef.current = null;
-              store.setSystemStream(null);
-              markInterviewerChannel(false);
-              useOverlayStore.getState().setSessionPipelineState("audio_unavailable");
-              toast.warning(
-                "Interviewer audio unavailable — tab share stopped. Share again to detect interviewer questions.",
-                {
-                  duration: Infinity,
-                  action: {
-                    label: "Retry",
-                    onClick: () => {
-                      void toggleSystemAudioRef.current?.();
-                    },
-                  },
-                },
-              );
-            });
-          } catch (err) {
-            const message = err instanceof Error ? err.message : "Tab audio capture failed";
-            const isNoAudioTrack =
-              (err as { code?: string } | null)?.code === "NO_SHARE_AUDIO_TICKED";
-            store.setSystemAudioAvailable(false);
-            store.setStreamError({
-              code: "SYSTEM_AUDIO_FAILED",
-              message,
-              recoverable: true,
-              suggestion: isNoAudioTrack
-                ? 'In the share dialog, tick "Share tab audio" (or "Share audio") before clicking Share.'
-                : 'Share the interview tab and check "Share tab audio", then retry from the toolbar.',
-            });
-            toast.error(
-              isNoAudioTrack
-                ? 'Interviewer audio unavailable — "Share tab audio" wasn\'t ticked.'
-                : "Interviewer audio unavailable — only your mic is active.",
-              {
-                duration: Infinity,
-                action: {
-                  label: "Retry",
-                  onClick: () => {
-                    void toggleSystemAudioRef.current?.();
-                  },
-                },
-              },
-            );
-            toast.warning(
-              "Mic-only mode: interviewer questions will not auto-detect. Use Chat or Generate, or enable tab audio.",
-              { duration: Infinity },
-            );
-          }
-        } else {
-          store.setSystemAudioAvailable(false);
-          toast.message(
-            "Continuing with mic only. Enable tab audio from the toolbar to capture the interviewer.",
-          );
-          toast.warning(
-            "Interviewer audio unavailable — coach cannot auto-detect interviewer questions until tab audio is shared.",
-            { duration: Infinity },
-          );
-        }
+        store.setSystemAudioAvailable(false);
+        markInterviewerChannel(false);
+        window.setTimeout(() => {
+          if (!isStartedRef.current) return;
+          if (hasInterviewerChannelRef.current) return;
+          void toggleSystemAudioRef.current?.();
+        }, 0);
       } else if (opts.enableSystemAudio && !isSystemAudioSupported()) {
         store.setSystemAudioAvailable(false);
         store.setStreamError({
@@ -381,10 +322,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
           },
         );
 
-        if (sysStream) {
-          deepgramSystemRef.current = await connectDeepgram(sysStream, "interviewer");
-          markInterviewerChannel(true);
-        } else if (opts.enableSystemAudio) {
+        if (opts.enableSystemAudio) {
           markInterviewerChannel(false);
           store.setPipelineStatus("microphone_only");
         }

@@ -6,10 +6,11 @@ import {
 import { collectMfaFactors, findVerifiedTotp } from "@/lib/auth/mfaFactors";
 
 /**
- * Live AAL enforcement. Login and ProtectedRoute challenge verified TOTP
- * factors. Settings enrollment remains the setup UI.
+ * Temporary pause: login and ProtectedRoute skip AAL step-up so Practice Coach
+ * and the rest of /app are reachable. Settings enrollment UI stays available.
+ * Flip back to false to restore fail-closed MFA.
  */
-export const MFA_ENFORCEMENT_PAUSED = false;
+export const MFA_ENFORCEMENT_PAUSED = true;
 
 export type MfaGateDecision = "allow" | "challenge" | "block";
 

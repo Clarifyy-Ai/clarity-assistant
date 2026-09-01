@@ -335,7 +335,7 @@ describe("recovery helpers", () => {
       "@/lib/auth/recoveryActions"
     );
     expect(PROFILE_FRIENDLY_ERROR).toMatch(/Unable to load your account/i);
-    expect(supportMailto("help")).toMatch(/^mailto:support@clarifyprep\.com/);
+    expect(supportMailto("help")).toMatch(/^mailto:hello@trycareerpilot\.com/);
     expect(supportMailto("help")).not.toMatch(/token|password|jwt/i);
   });
 });

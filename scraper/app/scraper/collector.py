@@ -17,7 +17,7 @@ from app.scraper.allowlist import (
     is_restricted_coaching_domain,
 )
 
-COLLECTOR_USER_AGENT = "CareerPilot-GovExamBot/1.0 (+https://clarify.ai/bot; contact@clarify.ai)"
+COLLECTOR_USER_AGENT = "CareerPilot-GovExamBot/1.0 (+https://clarify.ai/bot; hello@trycareerpilot.com)"
 DEFAULT_MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024  # 50MB
 DEFAULT_TIMEOUT_SECONDS = 20.0
 DEFAULT_MAX_RETRIES = 3

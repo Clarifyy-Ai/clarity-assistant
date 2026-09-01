@@ -93,7 +93,7 @@ export function useLiveCopilot({
   sessionType = "live",
   existingSessionId,
 }: UseLiveCopilotOptions) {
-  const { profile } = useAuthStore();
+  const { profile, user } = useAuthStore();
 
   const sessionStatus = useSessionStore((s) => s.status);
   const elapsedSeconds = useSessionStore((s) => s.elapsed_seconds);
@@ -832,7 +832,7 @@ export function useLiveCopilot({
   }, [submitManualQuestion]);
 
   const startLiveSession = useCallback(async () => {
-    const userId = profile?.id;
+    const userId = profile?.id || user?.id;
     if (!userId) throw new Error("Please sign in to start a live session.");
 
     const cfg = configRef.current;
@@ -1008,7 +1008,7 @@ export function useLiveCopilot({
       setIsPreparingSession(false);
       setPrepStepIndex(0);
     }
-  }, [audio, checkpointLiveSession, initSessionFromConfig, profile?.id, sessionType]);
+  }, [audio, checkpointLiveSession, initSessionFromConfig, profile?.id, user?.id, sessionType]);
 
   const endLiveSession = useCallback(async (): Promise<{ answersRecorded: number }> => {
     const gen = overlayGenerationRef.current;

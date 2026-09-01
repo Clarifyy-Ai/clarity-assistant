@@ -4,7 +4,6 @@ import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { BrandLogo } from "@/components/marketing";
 import { Menu, X, Github, LifeBuoy } from "lucide-react";
 import {
-  SALES_EMAIL,
   SUPPORT_EMAIL,
   LEGAL_ENTITY_NAME,
   GITHUB_ORG_URL,
