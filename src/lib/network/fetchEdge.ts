@@ -19,6 +19,9 @@ const ANON_OK_EDGE_FNS = new Set([
   "ai-key-check",
   "billing-catalog",
   "contact-sales",
+  // Public support/live-chat widget: guests chat without an account.
+  "support-chat",
+
 ]);
 
 /** Edge calls blocked while private mode is on (no cloud AI / analysis). */
