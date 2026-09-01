@@ -605,11 +605,13 @@ export default function OnboardingStep2OptionalSetup({
                   </SelectTrigger>
                   <SelectContent position="popper" className="z-[200]">
                     <SelectItem value="default">Browser default</SelectItem>
-                    {audioOutputs.map((d) => (
-                      <SelectItem key={d.deviceId} value={d.deviceId}>
-                        {d.label || `Speaker ${d.deviceId.slice(0, 6)}`}
-                      </SelectItem>
-                    ))}
+                    {audioOutputs
+                      .filter((d) => Boolean(d.deviceId) && d.deviceId !== "default")
+                      .map((d) => (
+                        <SelectItem key={d.deviceId} value={d.deviceId}>
+                          {d.label || `Speaker ${d.deviceId.slice(0, 6)}`}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </label>
