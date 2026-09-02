@@ -830,7 +830,9 @@ export function useLiveCopilot({
   );  
 
   useEffect(() => {
-    submitManualQuestionRef.current = submitManualQuestion;
+    submitManualQuestionRef.current = async (q: string) => {
+      await submitManualQuestion(q);
+    };
   }, [submitManualQuestion]);
 
   const startLiveSession = useCallback(async () => {
