@@ -944,6 +944,39 @@ export type Database = {
         }
         Relationships: []
       }
+      calendar_oauth_states: {
+        Row: {
+          code_verifier: string
+          consumed_at: string | null
+          created_at: string
+          expires_at: string
+          nonce: string | null
+          redirect_uri: string
+          state: string
+          user_id: string
+        }
+        Insert: {
+          code_verifier: string
+          consumed_at?: string | null
+          created_at?: string
+          expires_at: string
+          nonce?: string | null
+          redirect_uri: string
+          state: string
+          user_id: string
+        }
+        Update: {
+          code_verifier?: string
+          consumed_at?: string | null
+          created_at?: string
+          expires_at?: string
+          nonce?: string | null
+          redirect_uri?: string
+          state?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       coach_conversations: {
         Row: {
           created_at: string
@@ -7923,6 +7956,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "support_attachments_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "support_messages"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "support_attachments_thread_id_fkey"
             columns: ["thread_id"]
             isOneToOne: false
@@ -9132,10 +9172,6 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: boolean
       }
-      mark_google_calendar_reauth: {
-        Args: { p_error?: string; p_error_code?: string; p_user_id: string }
-        Returns: undefined
-      }
       has_own_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
@@ -9167,11 +9203,16 @@ export type Database = {
       is_moderator: { Args: never; Returns: boolean }
       is_service_role_request: { Args: never; Returns: boolean }
       issue_course_certificate: { Args: { p_course_id: string }; Returns: Json }
+      mark_google_calendar_reauth: {
+        Args: { p_error?: string; p_error_code?: string; p_user_id: string }
+        Returns: undefined
+      }
       mark_notifications_read: {
         Args: { p_user_id: string }
         Returns: undefined
       }
       mask_email: { Args: { p_email: string }; Returns: string }
+      next_support_public_ref: { Args: never; Returns: string }
       normalize_company_name: { Args: { p_name: string }; Returns: string }
       plan_monthly_credits: { Args: { p_plan: string }; Returns: number }
       profiles_own_update_allowed: {
