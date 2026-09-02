@@ -194,7 +194,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
             store.setPipelineStatus("unavailable");
           } else if (status === "paused") {
             store.setPipelineStatus("idle");
-          } else if (status === "disconnected" && isStartedRef.current) {
+          } else if ((status as string) === "disconnected" && isStartedRef.current) {
             store.setPipelineStatus(
               hasInterviewerChannelRef.current ? "listening" : "microphone_only",
             );

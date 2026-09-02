@@ -113,10 +113,10 @@ export default function CommunityPostPage() {
         reason,
       });
       if (!result.ok) {
-        toast.error(result.message);
+        toast.error((result as { message?: string }).message ?? "Could not submit report.");
         return;
       }
-      if (result.alreadyReported) {
+      if ((result as { alreadyReported?: boolean }).alreadyReported) {
         toast.success("You already reported this post.");
         return;
       }

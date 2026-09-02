@@ -263,7 +263,7 @@ export default function Analytics() {
                 sessionsScored={analytics.sessionsScored}
               />
             </PlanGate>
-            <DimensionRadar dimensions={analytics.dimensionAverages} />
+            <DimensionRadar dimensions={analytics.dimensionAverages as unknown as Record<string, number>} />
           </div>
         </TabsContent>
 

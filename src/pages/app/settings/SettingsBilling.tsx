@@ -142,6 +142,7 @@ export default function SettingsBilling(): JSX.Element {
   const [razorpayLoading, setRazorpayLoading] = useState<string | null>(null);
   const [checkoutPhase, setCheckoutPhase] = useState<CheckoutPhase | null>(null);
   /** Sum of debit amounts this calendar month; null when unknown / N/A. */
+  const [creditsUsedThisPeriod, setCreditsUsedThisPeriod] = useState<number | null>(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   /** Sync lock so double-click before React re-render cannot start two checkouts. */
   const checkoutLockRef = useRef(false);

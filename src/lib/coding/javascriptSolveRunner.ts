@@ -304,20 +304,21 @@ export function runJavascriptSolveTests(
 
   const compiled = compileJavascriptSolve(source);
   if (!compiled.ok) {
-    const isBlocked = compiled.error.includes("not allowed");
+    const compileError = (compiled as { error: string }).error;
+    const isBlocked = compileError.includes("not allowed");
     return {
       ok: false,
       results: [],
       execution_status: isBlocked ? "blocked" : "compile_error",
-      blockedReason: compiled.error,
-      primary_error: compiled.error,
+      blockedReason: compileError,
+      primary_error: compileError,
     };
   }
 
   let sawRuntime = false;
   let sawTimeout = false;
   let primaryError: string | undefined;
-  const ctx: RunCaseContext = { solve: compiled.solve, timeoutMs };
+  const ctx: RunCaseContext = { solve: (compiled as { solve: (input: unknown) => unknown }).solve, timeoutMs };
 
   const results: SolveCaseResult[] = cases.map((testCase) => {
     const outcome = runSingleCase(testCase, ctx);
