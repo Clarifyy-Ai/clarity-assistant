@@ -1704,7 +1704,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "company_research_jobs_research_id_fkey"
+            columns: ["research_id"]
+            isOneToOne: false
+            referencedRelation: "company_research"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       content_quality_incidents: {
         Row: {
@@ -6724,6 +6732,7 @@ export type Database = {
           is_mastered: boolean
           next_review_date: string
           question_id: string
+          question_snapshot: Json | null
           review_count: number
           updated_at: string | null
           user_id: string
@@ -6736,6 +6745,7 @@ export type Database = {
           is_mastered?: boolean
           next_review_date?: string
           question_id: string
+          question_snapshot?: Json | null
           review_count?: number
           updated_at?: string | null
           user_id: string
@@ -6748,6 +6758,7 @@ export type Database = {
           is_mastered?: boolean
           next_review_date?: string
           question_id?: string
+          question_snapshot?: Json | null
           review_count?: number
           updated_at?: string | null
           user_id?: string
@@ -8898,6 +8909,10 @@ export type Database = {
         Returns: string[]
       }
       assessment_option_labels: { Args: { p_options: Json }; Returns: string[] }
+      begin_test_submission: {
+        Args: { p_test_id: string; p_user_id: string }
+        Returns: Json
+      }
       bulk_update_users: {
         Args: { p_patch: Json; p_user_ids: string[] }
         Returns: number
@@ -8956,10 +8971,6 @@ export type Database = {
         }[]
       }
       complete_learning_lesson: { Args: { p_lesson_id: string }; Returns: Json }
-      record_quiz_progress: {
-        Args: { p_passed: boolean; p_quiz_id: string; p_score: number }
-        Returns: Json
-      }
       complete_onboarding: {
         Args: {
           p_audio_input_device?: string
@@ -9029,8 +9040,37 @@ export type Database = {
         }
         Returns: Json
       }
+      enqueue_gov_paper_job: {
+        Args: {
+          p_cost: number
+          p_exam_id: string
+          p_idempotency_key: string
+          p_inventory_snapshot: Json
+          p_inventory_version: string
+          p_language: string
+          p_missing_count: number
+          p_mode: string
+          p_pattern_version_id: string
+          p_progress_stage?: string
+          p_random_seed: string
+          p_request_json: Json
+          p_source_mix: Json
+          p_stage_id: string
+          p_status?: string
+          p_syllabus_version_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       ensure_my_referral_code: { Args: never; Returns: string }
-      finalize_company_research_credits: { Args: { p_job_id: string }; Returns: Json }
+      expire_timed_out_open_session: {
+        Args: { p_now?: string; p_session_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      finalize_company_research_credits: {
+        Args: { p_job_id: string }
+        Returns: Json
+      }
       finalize_gov_paper_credits: { Args: { p_job_id: string }; Returns: Json }
       finalize_owned_session: {
         Args: {
@@ -9196,6 +9236,7 @@ export type Database = {
         Returns: undefined
       }
       is_admin: { Args: never; Returns: boolean }
+      is_auth_email_verified: { Args: never; Returns: boolean }
       is_frontend_only_category: {
         Args: { p_category: string }
         Returns: boolean
@@ -9242,6 +9283,10 @@ export type Database = {
         Returns: Json
       }
       record_practice_activity: { Args: { p_user_id?: string }; Returns: Json }
+      record_quiz_progress: {
+        Args: { p_passed: boolean; p_quiz_id: string; p_score: number }
+        Returns: Json
+      }
       record_referral_reward: {
         Args: { p_referral_code: string; p_referred_id: string }
         Returns: Json
@@ -9266,6 +9311,10 @@ export type Database = {
       release_gov_paper_credits: {
         Args: { p_job_id: string; p_reason?: string }
         Returns: Json
+      }
+      release_test_submission: {
+        Args: { p_test_id: string; p_user_id: string }
+        Returns: boolean
       }
       reserve_company_research_credits: {
         Args: {
@@ -9296,6 +9345,7 @@ export type Database = {
       save_owned_test_answer: {
         Args: {
           p_client_updated_at: string
+          p_expected_version?: number
           p_is_attempted: boolean
           p_is_marked_review: boolean
           p_question_id: string
@@ -9332,6 +9382,7 @@ export type Database = {
         }
         Returns: Json
       }
+      sweep_gov_paper_jobs: { Args: { p_limit?: number }; Returns: Json }
       terminate_stuck_gov_paper_jobs: {
         Args: { p_max_age_minutes?: number }
         Returns: number
@@ -9441,12 +9492,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -9470,11 +9521,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -9495,11 +9546,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -9520,11 +9571,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -9537,11 +9588,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
