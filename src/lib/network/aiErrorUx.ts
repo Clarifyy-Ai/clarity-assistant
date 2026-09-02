@@ -5,6 +5,10 @@ import {
   AI_RESPONSE_INVALID_MESSAGE,
   isRawJsonParseError,
 } from "@/lib/ai/structuredParse";
+import {
+  isKnownDocumentErrorCode,
+  userFacingDocumentFailureMessage,
+} from "@/lib/documents/documentFailure";
 
 const CREDITS_NEEDED_MESSAGE =
   BILLING_MESSAGES.INSUFFICIENT_CREDITS;
@@ -183,6 +187,10 @@ export function getAiUserFacingError(err: unknown): string {
 
   if (code === "RATE_LIMITED") {
     return "Too many AI requests right now. Please wait a moment and try again.";
+  }
+
+  if (isKnownDocumentErrorCode(code)) {
+    return userFacingDocumentFailureMessage(code, err instanceof Error ? err.message : null);
   }
 
   if (code === "INVALID_RESPONSE" || code === "AI_RESPONSE_INVALID") {

@@ -391,7 +391,7 @@ export default function AdminLiveChat() {
                       {t.public_ref ?? t.id.slice(0, 8)} · {t.category ?? "general"}
                     </p>
                     <p className="text-[10px] text-muted-foreground/70 line-clamp-1 mt-0.5">{t.last_message_preview ?? "—"}</p>
-                    <p className="text-[9px] text-muted-foreground/50 mt-1">
+                    <p className="text-[9px] text-muted-foreground mt-1">
                       {t.mode === "waiting_agent" ? "Escalated · " : ""}
                       {formatDistanceToNow(new Date(t.last_message_at), { addSuffix: true })}
                     </p>

@@ -21,6 +21,7 @@ import {
   isAiTrainingAllowed,
   stripSessionTextFromPayload,
 } from "@/lib/privacy/privacyPrefs";
+import { isExpectedBusinessFailure } from "@/lib/network/businessConflict";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -158,12 +159,24 @@ function emit(level: LogLevel, event: string, fields: Omit<LogEvent, "event" | "
   if (isCrashReportingEnabled() && (level !== "debug" || !IS_PRODUCTION)) {
     try {
       if (level === "error" || level === "fatal") {
-        const severity: Sentry.SeverityLevel = level === "fatal" ? "fatal" : "error";
-        const errObj = entry.error;
-        if (errObj instanceof Error) {
-          Sentry.captureException(errObj, { level: severity, tags: { event }, extra: entry });
+        const httpStatus =
+          typeof fields.httpStatus === "number" ? fields.httpStatus : Number.NaN;
+        const code = typeof fields.code === "string" ? fields.code : undefined;
+        if (fields.httpStatus === 409 || isExpectedBusinessFailure(httpStatus, code)) {
+          Sentry.addBreadcrumb({
+            category: event,
+            message: event,
+            level: "info",
+            data: entry,
+          });
         } else {
-          Sentry.captureMessage(`[${event}] ${typeof errObj === "string" ? errObj : JSON.stringify(entry)}`, { level: severity, tags: { event }, extra: entry });
+          const severity: Sentry.SeverityLevel = level === "fatal" ? "fatal" : "error";
+          const errObj = entry.error;
+          if (errObj instanceof Error) {
+            Sentry.captureException(errObj, { level: severity, tags: { event }, extra: entry });
+          } else {
+            Sentry.captureMessage(`[${event}] ${typeof errObj === "string" ? errObj : JSON.stringify(entry)}`, { level: severity, tags: { event }, extra: entry });
+          }
         }
       } else {
         Sentry.addBreadcrumb({

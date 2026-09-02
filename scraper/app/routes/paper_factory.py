@@ -6,6 +6,7 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.core.bounded import GOV_EXAM_CLAIM_TIMEOUT_SECONDS, GOV_EXAM_DB_TIMEOUT_SECONDS, await_bounded
 from app.core.config import get_settings
 from app.core.security import get_admin_user
 from app.paper_factory.blueprint import blueprint_summary
@@ -92,7 +93,11 @@ def _http_error(exc: PaperFactoryError) -> HTTPException:
 @router.get("/exams")
 async def exams(_admin: dict = Depends(get_admin_user)) -> dict[str, object]:
     repo = PaperRepository(_settings())
-    rows = await asyncio.to_thread(repo.list_exams)
+    rows = await await_bounded(
+        asyncio.to_thread(repo.list_exams),
+        GOV_EXAM_DB_TIMEOUT_SECONDS,
+        stage="exams",
+    )
     return {"success": True, "count": len(rows), "exams": rows}
 
 
@@ -182,7 +187,11 @@ async def process_queued_job(
     settings = _settings()
     repo = PaperRepository(settings)
 
-    job = await asyncio.to_thread(repo.get_job, job_id)
+    job = await await_bounded(
+        asyncio.to_thread(repo.get_job, job_id),
+        GOV_EXAM_CLAIM_TIMEOUT_SECONDS,
+        stage="job_lookup",
+    )
     if not job:
         raise HTTPException(
             status_code=404,
@@ -198,7 +207,11 @@ async def process_queued_job(
 
     result = await process_job(job, settings=settings, repo=repo)
     if result is None:
-        refreshed = await asyncio.to_thread(repo.get_job, job_id) or {}
+        refreshed = await await_bounded(
+            asyncio.to_thread(repo.get_job, job_id),
+            GOV_EXAM_CLAIM_TIMEOUT_SECONDS,
+            stage="job_lookup",
+        ) or {}
         raise HTTPException(
             status_code=502,
             detail={

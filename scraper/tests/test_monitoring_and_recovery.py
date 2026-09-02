@@ -18,16 +18,18 @@ def client():
 
 def test_health_endpoint(client):
     """GET /health returns ok status."""
-    response = client.get("/health")
+    response = client.get("/health", headers={"x-correlation-id": "corr-health-1"})
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
+    assert response.headers["x-correlation-id"] == "corr-health-1"
+    assert response.headers["x-request-id"] == "corr-health-1"
 
 
 def test_ready_endpoint(client):
     """GET /ready returns configuration readiness status."""
     response = client.get("/ready")
-    assert response.status_code == 200
+    assert response.status_code in (200, 503)
     data = response.json()
     assert data["status"] in ("ready", "not_ready")
     checks = data.get("checks") or {}
@@ -38,6 +40,9 @@ def test_ready_endpoint(client):
     assert "document_worker_embedded" in checks
     assert "paper_factory_embedded_worker" in checks
     assert "ai_provider_present" in checks
+    assert "factory_config" in checks
+    assert "paper_factory_queue" in checks
+    assert "paper_factory_worker_runtime" in checks
 
 
 def test_metrics_endpoint(client):

@@ -7,3 +7,4 @@ export {
   AzureOAuthButton,
 } from "./OAuthButton";
 export type { OAuthProvider } from "./OAuthButton";
+export { OAuthProviderSection } from "./OAuthProviderSection";

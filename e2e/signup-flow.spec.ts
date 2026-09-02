@@ -43,10 +43,32 @@ test.describe("Signup → email verification [T-0893]", () => {
 
     await page.getByRole("button", { name: "Create account" }).click();
 
-    await expect(page.getByRole("heading", { name: "Check your email" })).toBeVisible({
+    await expect(page).toHaveURL(/\/verify-email/, { timeout: 15_000 });
+    await expect(page.getByRole("heading", { name: "Check your inbox" })).toBeVisible({
       timeout: 15_000,
     });
     await expect(page.getByText(uniqueEmail)).toBeVisible();
+  });
+
+  test("unverified signup cannot open onboarding [AUTH-SIGNUP-007]", async ({
+    page,
+  }) => {
+    await setupSupabaseMocks(page);
+    const uniqueEmail = `e2e.unverified.${Date.now()}@example.com`;
+
+    await page.goto("/signup", { waitUntil: "domcontentloaded" });
+    await dismissCookieBanner(page);
+    await fillSignupForm(page, {
+      fullName: "Unverified User",
+      email: uniqueEmail,
+      password: "TestPass1!",
+    });
+    await page.getByRole("button", { name: "Create account" }).click();
+    await expect(page).toHaveURL(/\/verify-email/, { timeout: 15_000 });
+
+    await page.goto("/onboarding", { waitUntil: "domcontentloaded" });
+    await expect(page).toHaveURL(/\/(verify-email|login)/, { timeout: 15_000 });
+    await expect(page).not.toHaveURL(/\/onboarding/);
   });
 
   test("shows error when email is already registered [T-0569]", async ({

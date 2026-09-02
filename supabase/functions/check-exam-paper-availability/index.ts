@@ -6,6 +6,8 @@
 import { handleCors, getCorsHeaders, withBrowserCors, applyCors } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
+import { withTimeout } from "../_shared/withTimeout.ts";
+import { AUTH_LOOKUP_TIMEOUT_MS, PROFILE_LOOKUP_TIMEOUT_MS } from "../_shared/indiaRegion.ts";
 import {
   checkRateLimitAsync,
   createRateLimitKey,
@@ -24,6 +26,8 @@ import {
   isPythonGovExamConfigured,
   pythonGovAvailability,
 } from "../_shared/pythonGovExamClient.ts";
+import { decideRoute } from "../_shared/operationRouter.ts";
+import { isPythonForceUnavailable } from "../_shared/pythonClient.ts";
 import {
   GOV_QUESTION_COUNT_ABS_MAX,
   validateGovQuestionCount,
@@ -52,11 +56,28 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
   const correlationId = req.headers.get("x-request-id")?.trim() || crypto.randomUUID();
 
   try {
-    const auth = await authenticateRequest(req);
+    let auth: Awaited<ReturnType<typeof authenticateRequest>>;
+    try {
+      auth = await withTimeout(authenticateRequest(req), AUTH_LOOKUP_TIMEOUT_MS);
+    } catch {
+      return json(req, {
+        error: "Authentication timed out.",
+        code: "AUTH_TIMEOUT",
+      }, 503);
+    }
     if (auth.error) return applyCors(req, auth.error);
     const user = auth.context.user;
 
-    if (await isUserBanned(db, user.id)) {
+    let banned = false;
+    try {
+      banned = await withTimeout(isUserBanned(db, user.id), PROFILE_LOOKUP_TIMEOUT_MS);
+    } catch {
+      return json(req, {
+        error: "Account status lookup timed out.",
+        code: "PROFILE_LOOKUP_TIMEOUT",
+      }, 503);
+    }
+    if (banned) {
       return bannedResponse(getCorsHeaders(req));
     }
 
@@ -177,12 +198,15 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
       language,
       topics: topics.length ? topics : null,
       difficulty,
+      sourcePolicy: mode === "official_previous" ? "public_pyp" : "approved_bank",
     });
     let available = inventory.available;
     let examTypeKeys = inventory.examTypeKeys;
     let inventorySource: "canonical_rpc" | "python_authoritative" = "canonical_rpc";
 
-    if (isPythonGovExamConfigured()) {
+    // Official/PYQ availability is the canonical verified-source count only.
+    // Python mock inventory must never be used to overclaim official coverage.
+    if (mode !== "official_previous" && isPythonGovExamConfigured()) {
       const py = await pythonGovAvailability({
         exam_id: examId,
         stage_id: stageId,
@@ -224,13 +248,27 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
       }
     }
 
-    const { data: profile } = await db
-      .from("profiles")
-      .select("plan_id")
-      .eq("id", user.id)
-      .maybeSingle();
+    let planId: string | undefined;
+    try {
+      const { data: profile } = await withTimeout(
+        db
+          .from("profiles")
+          .select("plan_id")
+          .eq("id", user.id)
+          .maybeSingle(),
+        PROFILE_LOOKUP_TIMEOUT_MS,
+      );
+      planId = profile?.plan_id;
+    } catch (profileErr) {
+      console.warn(
+        "[check-exam-paper-availability] profile lookup timed out",
+        profileErr instanceof Error ? profileErr.message : "unknown",
+      );
+    }
 
-    const aiFillAllowed = hasCapability(profile?.plan_id, "gov_exam_ai_fill");
+    const assembleRoute = decideRoute({ operation: "gov_exam_assemble" });
+    const aiFillAllowed =
+      hasCapability(planId, "gov_exam_ai_fill") && assembleRoute.canUseAI;
     const pythonConfigured = isPythonGovExamConfigured();
     const plan = decideGenerationPlan({
       requested,
@@ -239,7 +277,8 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
       canUseAi: aiFillAllowed,
       generatorPreference: parseGeneratorPreference(body),
       pythonWorkerEnabled:
-        pythonConfigured || Deno.env.get("PAPER_FACTORY_WORKER") === "1",
+        !isPythonForceUnavailable() &&
+        (pythonConfigured || Deno.env.get("PAPER_FACTORY_WORKER") === "1"),
     });
 
     const missing = Math.max(0, requested - available);
@@ -265,15 +304,19 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
         : "CONTENT_INSUFFICIENT")
       : null;
 
+    const inventoryLabel =
+      mode === "official_previous" ? "verified official/PYQ" : "approved practice-bank";
     const message = blocked
       ? blockCode === "CAPABILITY_REQUIRED"
-        ? `Available: ${available}. Requested: ${requested}. Missing: ${missing}. ` +
+        ? `${inventoryLabel} available: ${available}. Requested: ${requested}. Missing: ${missing}. ` +
           `Full mock needs a plan that includes generation, or choose custom practice (max ${customPracticeMax}).`
-        : `Available: ${available}. Requested: ${requested}. Missing: ${missing}. ` +
-          `Not enough approved questions for a full mock. Custom practice is limited to ${customPracticeMax}.`
+        : `${inventoryLabel} available: ${available}. Requested: ${requested}. Missing: ${missing}. ` +
+          (mode === "official_previous"
+            ? "Not enough verified official/PYQ questions are available. No generated replacements will be used."
+            : `Not enough approved questions for a full mock. Custom practice is limited to ${customPracticeMax}.`)
       : missing > 0 && aiFillAllowed
-      ? `Available: ${available}. Requested: ${requested}. Missing: ${missing} will be filled during generation.`
-      : `Available: ${available}. Requested: ${requested}.`;
+      ? `${inventoryLabel} available: ${available}. Requested: ${requested}. Missing: ${missing} will be filled during generation.`
+      : `${inventoryLabel} available: ${available}. Requested: ${requested}.`;
 
     console.log(JSON.stringify({
       tag: "[GOV_EXAM] availability_completed",
@@ -296,6 +339,12 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
       eligible: available,
       available,
       missing,
+      inventoryClass:
+        mode === "official_previous" ? "official_pyq" : "approved_practice",
+      inventorySource,
+      billable: false,
+      creditCost: 0,
+      creditsCharged: 0,
       examTypeKeys,
       pattern: {
         totalQuestions: pattern.total_questions,

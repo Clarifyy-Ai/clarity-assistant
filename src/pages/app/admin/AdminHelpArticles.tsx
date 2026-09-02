@@ -6,10 +6,12 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/common/EmptyState";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { supabase } from "@/lib/supabase/client";
 import { writeAdminAudit } from "@/lib/admin/writeAdminAudit";
 import { adminActionFailedMessage, toAdminUserMessage } from "@/lib/admin/adminErrors";
+import { isValidHelpSlug, slugifyHelpQuestion } from "@/lib/admin/helpArticleSlug";
 
 type HelpArticle = {
   id: string;
@@ -41,6 +43,12 @@ export default function AdminHelpArticles() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Partial<HelpArticle> & { question: string; slug: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<HelpArticle | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const openNewArticle = () => {
+    setEditing(emptyForm());
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -69,6 +77,24 @@ export default function AdminHelpArticles() {
 
   function normalizeQuestion(q: string) {
     return q.trim().toLowerCase().replace(/\s+/g, " ");
+  }
+
+  async function checkSlugUnique(slug: string, exceptId?: string): Promise<string | null> {
+    const trimmed = slug.trim().toLowerCase();
+    if (!trimmed) return "Slug is required";
+    if (!isValidHelpSlug(trimmed)) {
+      return "Slug must be lowercase alphanumeric with hyphens (e.g. how-credits-work)";
+    }
+    const { data, error } = await supabase
+      .from("help_articles")
+      .select("id, slug")
+      .eq("slug", trimmed);
+    if (error) return toAdminUserMessage(error, undefined, "AdminHelp.slugCheck");
+    const clash = (data ?? []).find((row) => row.id !== exceptId);
+    if (clash) {
+      return `Slug "${trimmed}" is already in use. Choose a unique slug.`;
+    }
+    return null;
   }
 
   /** One published canonical FAQ per question text. */
@@ -102,8 +128,13 @@ export default function AdminHelpArticles() {
     if (saving) return;
     setSaving(true);
     try {
+      const slugError = await checkSlugUnique(editing.slug, editing.id);
+      if (slugError) {
+        toast.error(slugError);
+        return;
+      }
       const payload = {
-        slug: editing.slug.trim(),
+        slug: editing.slug.trim().toLowerCase(),
         category_slug: editing.category_slug,
         category_title: editing.category_title,
         question: editing.question.trim(),
@@ -141,13 +172,39 @@ export default function AdminHelpArticles() {
           newValue: { slug: payload.slug },
         });
       }
-      toast.success("Help article saved");
+      toast.success(editing.published ? "Help article published" : "Help article saved as draft");
       setEditing(null);
       await load();
     } catch (e) {
       toast.error(adminActionFailedMessage(e, "AdminHelp.save"));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const { error: err } = await supabase
+        .from("help_articles")
+        .delete()
+        .eq("id", deleteTarget.id);
+      if (err) throw err;
+      await writeAdminAudit({
+        action: "delete",
+        targetType: "help_article",
+        targetId: deleteTarget.id,
+        oldValue: { slug: deleteTarget.slug, question: deleteTarget.question },
+      });
+      toast.success("Help article deleted");
+      setDeleteTarget(null);
+      if (editing?.id === deleteTarget.id) setEditing(null);
+      await load();
+    } catch (e) {
+      toast.error(adminActionFailedMessage(e, "AdminHelp.delete"));
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -192,8 +249,63 @@ export default function AdminHelpArticles() {
           <h1 className="text-xl font-semibold">Help Articles CMS</h1>
           <p className="text-sm text-muted-foreground">Manage FAQ / help center content.</p>
         </div>
-        <Button type="button" onClick={() => setEditing(emptyForm())}>New article</Button>
+        <Button type="button" onClick={openNewArticle} data-testid="help-new-article">
+          New article
+        </Button>
       </div>
+
+      {editing && (
+        <Card className="space-y-3 p-4" data-testid="help-article-editor">
+          <div>
+            <h2 className="text-base font-semibold">{editing.id ? "Edit article" : "New article"}</h2>
+            <p className="text-sm text-muted-foreground">Create or update a help center FAQ entry.</p>
+          </div>
+          <Input
+            placeholder="Question"
+            value={editing.question}
+            onChange={(e) => {
+              const question = e.target.value;
+              setEditing((prev) => {
+                if (!prev) return prev;
+                const next = { ...prev, question };
+                if (!prev.id && !prev.slug.trim()) {
+                  next.slug = slugifyHelpQuestion(question);
+                }
+                return next;
+              });
+            }}
+          />
+          <Input
+            placeholder="Slug"
+            value={editing.slug}
+            onChange={(e) => setEditing({ ...editing, slug: e.target.value })}
+          />
+          <Input placeholder="Category slug" value={editing.category_slug} onChange={(e) => setEditing({ ...editing, category_slug: e.target.value })} />
+          <Input placeholder="Category title" value={editing.category_title} onChange={(e) => setEditing({ ...editing, category_title: e.target.value })} />
+          <Input
+            type="number"
+            placeholder="Sort order"
+            value={editing.sort_order}
+            onChange={(e) => setEditing({ ...editing, sort_order: Number(e.target.value) || 0 })}
+          />
+          <Textarea placeholder="Short answer" value={editing.answer} onChange={(e) => setEditing({ ...editing, answer: e.target.value })} />
+          <Textarea className="min-h-[160px]" placeholder="Body (markdown)" value={editing.body_md ?? ""} onChange={(e) => setEditing({ ...editing, body_md: e.target.value })} />
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={editing.published}
+              onChange={(e) => setEditing({ ...editing, published: e.target.checked })}
+            />
+            Published
+          </label>
+          <div className="flex gap-2">
+            <Button disabled={saving} onClick={() => void save()}>
+              {editing.published ? "Save & publish" : "Save draft"}
+            </Button>
+            <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+          </div>
+        </Card>
+      )}
 
       <Input
         placeholder="Search question or slug…"
@@ -207,7 +319,12 @@ export default function AdminHelpArticles() {
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
       ) : articles.length === 0 ? (
-        <EmptyState title="No articles" description="Create a draft article." />
+        <EmptyState
+          title="No articles"
+          description="Create a draft article."
+          actionLabel="New article"
+          onAction={openNewArticle}
+        />
       ) : (
         <ul className="space-y-2">
           {articles.map((a) => (
@@ -235,13 +352,20 @@ export default function AdminHelpArticles() {
                     )}
                   <Button size="xs" variant="outline" onClick={() => setEditing(a)}>Edit</Button>
                   <a
-                    href={`/help/${a.slug}`}
+                    href={`/app/admin/help-articles/preview/${a.id}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex h-7 items-center rounded-lg border border-border px-2.5 text-xs hover:bg-secondary"
                   >
                     Preview
                   </a>
+                  <Button
+                    size="xs"
+                    variant="danger"
+                    onClick={() => setDeleteTarget(a)}
+                  >
+                    Delete
+                  </Button>
                   {a.published ? (
                     <Button size="xs" variant="outline" onClick={() => void setPublished(a, false)}>Unpublish</Button>
                   ) : (
@@ -254,35 +378,22 @@ export default function AdminHelpArticles() {
         </ul>
       )}
 
-      {editing && (
-        <Card className="space-y-3 p-4">
-          <h2 className="font-medium">{editing.id ? "Edit article" : "New article"}</h2>
-          <Input placeholder="Question" value={editing.question} onChange={(e) => setEditing({ ...editing, question: e.target.value })} />
-          <Input placeholder="Slug" value={editing.slug} onChange={(e) => setEditing({ ...editing, slug: e.target.value })} />
-          <Input placeholder="Category slug" value={editing.category_slug} onChange={(e) => setEditing({ ...editing, category_slug: e.target.value })} />
-          <Input placeholder="Category title" value={editing.category_title} onChange={(e) => setEditing({ ...editing, category_title: e.target.value })} />
-          <Input
-            type="number"
-            placeholder="Sort order"
-            value={editing.sort_order}
-            onChange={(e) => setEditing({ ...editing, sort_order: Number(e.target.value) || 0 })}
-          />
-          <Textarea placeholder="Short answer" value={editing.answer} onChange={(e) => setEditing({ ...editing, answer: e.target.value })} />
-          <Textarea className="min-h-[160px]" placeholder="Body (markdown)" value={editing.body_md ?? ""} onChange={(e) => setEditing({ ...editing, body_md: e.target.value })} />
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={editing.published}
-              onChange={(e) => setEditing({ ...editing, published: e.target.checked })}
-            />
-            Published
-          </label>
-          <div className="flex gap-2">
-            <Button disabled={saving} onClick={() => void save()}>Save</Button>
-            <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
-          </div>
-        </Card>
-      )}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title="Delete this help article?"
+        description={
+          deleteTarget
+            ? `"${deleteTarget.question}" will be permanently removed.`
+            : undefined
+        }
+        confirmLabel="Delete"
+        variant="destructive"
+        isLoading={deleting}
+        onConfirm={() => void confirmDelete()}
+      />
     </div>
   );
 }

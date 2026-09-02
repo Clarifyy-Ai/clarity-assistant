@@ -9,6 +9,7 @@ export const TranscriptionState = {
   RECEIVING_AUDIO: "receiving_audio",
   TRANSCRIBING: "transcribing",
   RECONNECTING: "reconnecting",
+  PAUSED: "paused",
   TEXT_ONLY: "text_only",
   UNAVAILABLE: "unavailable",
   ENDED: "ended",
@@ -24,10 +25,37 @@ export const TRANSCRIPTION_STATUS_COPY: Record<TranscriptionState, string> = {
   receiving_audio: "Receiving audio",
   transcribing: "Transcribing",
   reconnecting: "Reconnecting transcription…",
+  paused: "Transcription paused",
   text_only: "Text only",
   unavailable: "Transcription unavailable",
   ended: "Transcription ended",
 };
+
+export function providerStatusToTranscription(
+  provider: string | undefined,
+  pipeline?: string,
+): TranscriptionState {
+  if (provider === "paused") return TranscriptionState.PAUSED;
+  if (provider === "ended") return TranscriptionState.ENDED;
+  if (provider === "unavailable") return TranscriptionState.UNAVAILABLE;
+  if (provider === "error") return TranscriptionState.UNAVAILABLE;
+  if (provider === "connecting") return TranscriptionState.CONNECTING;
+  if (provider === "reconnecting") return TranscriptionState.RECONNECTING;
+  if (provider === "connected") {
+    if (pipeline === "transcribing") return TranscriptionState.TRANSCRIBING;
+    if (pipeline === "receiving_audio") return TranscriptionState.RECEIVING_AUDIO;
+    return TranscriptionState.READY;
+  }
+  if (provider === "idle") {
+    if (pipeline === "ended") return TranscriptionState.ENDED;
+    if (pipeline === "text_only" || pipeline === "microphone_only") {
+      return TranscriptionState.TEXT_ONLY;
+    }
+    if (pipeline === "unavailable") return TranscriptionState.UNAVAILABLE;
+    return TranscriptionState.NOT_CHECKED;
+  }
+  return deepgramStatusToTranscription(provider, pipeline);
+}
 
 export function deepgramStatusToTranscription(
   deepgram: string | undefined,

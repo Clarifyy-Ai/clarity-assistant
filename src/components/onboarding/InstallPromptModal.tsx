@@ -23,6 +23,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { DESKTOP_INSTALL_GUIDE_PATH } from "@/lib/constants/desktopDownload";
 import { DesktopDownloadButton } from "@/components/common/DesktopDownloadButton";
+import { AdvisoryBanner } from "@/components/common/AdvisoryBanner";
 import {
   dismissInstallPrompt,
   hasDismissedInstallPrompt,
@@ -163,22 +164,23 @@ export function InstallPromptModal(): JSX.Element | null {
         </div>
 
         <div className="px-6 py-4 space-y-4">
-          <div className="flex gap-2 rounded-lg border border-indigo-500/25 bg-indigo-500/8 px-3 py-2.5 text-xs text-indigo-100/90 leading-relaxed">
-            <Sparkles className="w-4 h-4 shrink-0 mt-0.5 text-indigo-300" aria-hidden />
-            <p>
-              {isMobile || canInstall ? (
-                <>
-                  You completed your first practice session. Install the app for one-tap access to{" "}
-                  <strong className="text-indigo-100">Practice Coach</strong> and Mock Interview on mobile.
-                </>
-              ) : (
-                <>
-                  The web app supports <strong className="text-indigo-100">Mock Interview</strong> and Prep Lab in your browser.
-                  The <strong className="text-indigo-100">desktop installer</strong> unlocks Practice Coach with system-wide hotkeys.
-                </>
-              )}
-            </p>
-          </div>
+          <AdvisoryBanner icon={Sparkles} compact>
+            {isMobile || canInstall ? (
+              <>
+                You completed your first practice session. Install the app for one-tap access to{" "}
+                <strong className="font-semibold text-brand-950 dark:text-white">Practice Coach</strong>{" "}
+                and Mock Interview on mobile.
+              </>
+            ) : (
+              <>
+                The web app supports{" "}
+                <strong className="font-semibold text-brand-950 dark:text-white">Mock Interview</strong>{" "}
+                and Prep Lab in your browser. The{" "}
+                <strong className="font-semibold text-brand-950 dark:text-white">desktop installer</strong>{" "}
+                unlocks Practice Coach with system-wide hotkeys.
+              </>
+            )}
+          </AdvisoryBanner>
 
           <ol className="space-y-3">
             {installSteps.map((step, index) => {

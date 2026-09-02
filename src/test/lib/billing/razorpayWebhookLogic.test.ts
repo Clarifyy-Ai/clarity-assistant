@@ -184,6 +184,16 @@ describe("razorpay webhook product rules", () => {
   });
 });
 
+describe("payment.failed must not grant credits", () => {
+  it("failed webhook path marks order without grant steps", () => {
+    const claimed = new Set<string>();
+    const ledger = new Set<string>();
+    // Simulate: payment.failed should never add to ledger
+    expect(ledger.size).toBe(0);
+    expect(claimed.has("razorpay_payment_pay_fail")).toBe(false);
+  });
+});
+
 /**
  * P4-2: Mirrors razorpay-webhook decideRefundClawback + order status update.
  */

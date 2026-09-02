@@ -85,4 +85,42 @@ describe("Google Calendar OAuth source contracts", () => {
     expect(shared).toContain("deterministicCalendarEventId");
     expect(shared).toContain("clarify_interview_id");
   });
+
+  it("retries calendar import via googleCalendarFetch", () => {
+    expect(sync).toContain("googleCalendarFetch");
+    const fetchEventsBlock = sync.slice(
+      sync.indexOf("async function fetchEvents"),
+      sync.indexOf("async function setInterviewSync"),
+    );
+    expect(fetchEventsBlock).toContain("googleCalendarFetch");
+    expect(fetchEventsBlock).not.toMatch(/await fetch\(url\.toString\(\)/);
+  });
+});
+
+describe("scheduler UI contracts", () => {
+  const detail = fs.readFileSync(
+    path.join(root, "src/pages/app/interviews/InterviewDetail.tsx"),
+    "utf8",
+  );
+  const scheduleInterview = readFunction("schedule-interview");
+  const reminderWorker = readFunction("send-interview-reminders");
+
+  it("InterviewDetail exposes calendar sync status and retry", () => {
+    expect(detail).toContain("calendar_sync_status");
+    expect(detail).toContain("Retry calendar sync");
+    expect(detail).toContain("teardownInterviewSideEffects");
+  });
+
+  it("schedule-interview queues reminders without requiring Resend", () => {
+    expect(scheduleInterview).toContain("buildReminderRows");
+    expect(scheduleInterview).toMatch(/rows\.length > 0[\s\S]{0,400}interview_reminders/);
+    expect(scheduleInterview).not.toMatch(/if \(emailConfigured\) \{[\s\S]*buildReminderRows/);
+  });
+
+  it("reminder worker delivers in-app notifications and retries email failures", () => {
+    expect(reminderWorker).toContain('from("notifications").insert');
+    expect(reminderWorker).toContain("resend_failed");
+    expect(reminderWorker).toContain('status: "pending"');
+    expect(reminderWorker).not.toMatch(/if \(!RESEND_API_KEY\) \{[\s\S]*return json/);
+  });
 });

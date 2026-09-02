@@ -1,4 +1,3 @@
-import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
@@ -23,18 +22,37 @@ import { cn } from "@/lib/utils";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { normalizePlanId } from "@/lib/billing/planIds";
 import { normalizeCompanyName } from "@/lib/company/normalizeCompanyName";
+import {
+  cancelCompanyResearchJob,
+  generateCompanyBrief,
+  pollCompanyResearchJobUntilTerminal,
+  processCompanyResearchJob,
+  retryCompanyResearchJob,
+  userFacingCompanyBriefError,
+  isCompanyBriefInFlight,
+  type CompanyBriefJob,
+} from "@/lib/company/companyResearchJob";
+import {
+  saveActiveCompanyJob,
+  clearActiveCompanyJob,
+  loadActiveCompanyJob,
+  findInFlightCompanyJob,
+} from "@/lib/company/companyResearchSession";
+import { ApiClientError } from "@/lib/api/apiClient";
 
 /**
- * The Edge Function is the only writer of `company_research`. It returns
- * `persisted: true` only after the row is committed, so the page never shows a
- * brief that would disappear on reload.
+ * The Edge Function is the only writer of `company_research`. Long-running
+ * generation is queued as a job so the client never holds a gateway-timeout
+ * request open. The page only renders a brief after the job completes and
+ * the row is committed.
  */
-type CompanyResearchResponse = {
-  success?: boolean;
-  id?: string;
-  persisted?: boolean;
-  brief?: Record<string, unknown>;
-};
+function progressLabel(job: CompanyBriefJob | null): string {
+  const stage = String(job?.progressStage ?? job?.status ?? "").toLowerCase();
+  if (stage === "saving") return "Saving your brief…";
+  if (stage === "generating" || stage === "processing") return "Generating AI brief…";
+  if (stage === "queued") return "Queued — starting generation…";
+  return "Generating AI brief…";
+}
 
 export default function CompanyProfile() {
   const { id }     = useParams<{ id: string }>();
@@ -50,7 +68,10 @@ export default function CompanyProfile() {
   const [error,    setError]    = useState<string | null>(null);
   const [needsGenerateConfirm, setNeedsGenerateConfirm] = useState(false);
   const [confirmGenerate, setConfirmGenerate] = useState(false);
+  const [job, setJob] = useState<CompanyBriefJob | null>(null);
   const inFlightRef = useRef(false);
+  const abortRef = useRef(false);
+  const jobIdRef = useRef<string | null>(null);
 
   // ── Generate or load brief ────────────────────────────────────
   const generateBrief = useCallback(async (force = false) => {
@@ -62,6 +83,7 @@ export default function CompanyProfile() {
     // Guards double-click: a second submit would spend credits again.
     if (inFlightRef.current) return;
     inFlightRef.current = true;
+    abortRef.current = false;
 
     setLoading(true);
     setError(null);
@@ -83,7 +105,48 @@ export default function CompanyProfile() {
           setBrief(cached.raw_data);
           setLoading(false);
           setNeedsGenerateConfirm(false);
+          inFlightRef.current = false;
           return;
+        }
+
+        const normalized = normalizeCompanyName(companyName);
+        const stored = user?.id ? loadActiveCompanyJob(user.id) : null;
+        const storedMatch =
+          stored &&
+          user?.id &&
+          (stored.companyNormalized === normalized ||
+            normalizeCompanyName(stored.company) === normalized);
+        const inDb = user?.id ? await findInFlightCompanyJob(user.id, normalized) : null;
+        const resumeId = storedMatch ? stored.jobId : inDb?.id;
+        if (resumeId && user?.id) {
+          jobIdRef.current = resumeId;
+          setNeedsGenerateConfirm(false);
+          const terminal = await pollCompanyResearchJobUntilTerminal(
+            resumeId,
+            { jobId: resumeId, status: (inDb?.status as CompanyBriefJob["status"]) ?? "processing" },
+            {
+              setJob: (next) => {
+                jobIdRef.current = next.jobId || resumeId;
+                setJob(next);
+              },
+              shouldAbort: () => abortRef.current,
+              nudge: (id) => processCompanyResearchJob(id).then(() => undefined),
+            },
+          );
+          clearActiveCompanyJob(resumeId);
+          if (terminal.status === "completed" && terminal.brief) {
+            setBrief(terminal.brief);
+            setNeedsGenerateConfirm(false);
+            return;
+          }
+          if (terminal.status === "failed") {
+            setError(
+              terminal.errorMessage ??
+                userFacingCompanyBriefError({ code: terminal.errorCode ?? "PROVIDER_UNAVAILABLE" }),
+            );
+            setNeedsGenerateConfirm(true);
+            return;
+          }
         }
 
         // No saved brief — require explicit confirm before spending credits.
@@ -92,17 +155,28 @@ export default function CompanyProfile() {
         return;
       }
 
-      // Omit x-idempotency-key so the Edge Function derives minute-bucketed force keys.
-      const result = await fetchEdgeJson<CompanyResearchResponse>(
-        "company-research",
-        {
-          company: companyName,
-          role: params.get("role") ?? "",
-          force: true,
+      const result = await generateCompanyBrief({
+        company: companyName,
+        role: params.get("role") ?? "",
+        force: true,
+        userId: user?.id,
+        shouldAbort: () => abortRef.current,
+        onJob: (next) => {
+          jobIdRef.current = next.jobId || jobIdRef.current;
+          setJob(next);
+          if (next.jobId && user?.id && isCompanyBriefInFlight(next.status)) {
+            saveActiveCompanyJob({
+              jobId: next.jobId,
+              company: companyName,
+              role: params.get("role") ?? "",
+              userId: user.id,
+              companyNormalized: normalizeCompanyName(companyName),
+            });
+          }
         },
-      );
+      });
 
-      if (!result?.persisted || !result?.brief) {
+      if (!result?.persisted && !result?.brief) {
         setError("Research was generated but could not be saved. Please retry.");
         return;
       }
@@ -126,15 +200,119 @@ export default function CompanyProfile() {
 
       setBrief(briefFromDb);
       setNeedsGenerateConfirm(false);
+      setJob(result);
+      clearActiveCompanyJob(jobIdRef.current ?? undefined);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to generate brief";
+      const code = err instanceof ApiClientError ? String(err.code ?? "") : "";
+      if (code === "POLL_TIMEOUT" && jobIdRef.current) {
+        setError(userFacingCompanyBriefError({ code: "POLL_TIMEOUT" }));
+        setNeedsGenerateConfirm(true);
+        return;
+      }
+      const msg = userFacingCompanyBriefError(err);
       console.error("[CompanyProfile] generateBrief error:", err);
       setError(msg);
+      setNeedsGenerateConfirm(true);
     } finally {
       inFlightRef.current = false;
       setLoading(false);
     }
   }, [companyName, user?.id, params]);
+
+  const cancelInFlight = useCallback(async () => {
+    abortRef.current = true;
+    const id = jobIdRef.current;
+    if (id) {
+      try {
+        await cancelCompanyResearchJob(id);
+      } catch (err) {
+        console.warn("[CompanyProfile] cancel failed:", err);
+      }
+    }
+    inFlightRef.current = false;
+    setLoading(false);
+    setNeedsGenerateConfirm(true);
+    setError("Brief generation was cancelled. Credits were not charged.");
+    clearActiveCompanyJob(id ?? undefined);
+  }, []);
+
+  const resumeOrRetry = useCallback(async () => {
+    const id = jobIdRef.current;
+    const code = error && /taking longer/i.test(error) ? "POLL_TIMEOUT" : null;
+    if (id && code === "POLL_TIMEOUT") {
+      if (inFlightRef.current) return;
+      inFlightRef.current = true;
+      abortRef.current = false;
+      setLoading(true);
+      setError(null);
+      try {
+        const terminal = await pollCompanyResearchJobUntilTerminal(
+          id,
+          job ?? { jobId: id, status: "processing" },
+          {
+            setJob: (next) => {
+              jobIdRef.current = next.jobId || id;
+              setJob(next);
+            },
+            shouldAbort: () => abortRef.current,
+            nudge: (jobId) => processCompanyResearchJob(jobId).then(() => undefined),
+          },
+        );
+        if (terminal.status === "completed" && terminal.brief) {
+          setBrief(terminal.brief);
+          setNeedsGenerateConfirm(false);
+          setError(null);
+          return;
+        }
+        if (terminal.status === "failed" || terminal.status === "cancelled") {
+          setError(terminal.errorMessage || userFacingCompanyBriefError({ code: terminal.errorCode }));
+          setNeedsGenerateConfirm(true);
+          return;
+        }
+        setError(userFacingCompanyBriefError({ code: "POLL_TIMEOUT" }));
+        setNeedsGenerateConfirm(true);
+      } catch (err) {
+        setError(userFacingCompanyBriefError(err));
+        setNeedsGenerateConfirm(true);
+      } finally {
+        inFlightRef.current = false;
+        setLoading(false);
+      }
+      return;
+    }
+    if (id && job?.status === "failed") {
+      if (inFlightRef.current) return;
+      inFlightRef.current = true;
+      abortRef.current = false;
+      setLoading(true);
+      setError(null);
+      try {
+        const restarted = await retryCompanyResearchJob(id);
+        jobIdRef.current = restarted.jobId;
+        const terminal = await pollCompanyResearchJobUntilTerminal(restarted.jobId, restarted, {
+          setJob: (next) => setJob(next),
+          shouldAbort: () => abortRef.current,
+          nudge: (jobId) => processCompanyResearchJob(jobId).then(() => undefined),
+        });
+        if (terminal.status === "completed" && terminal.brief) {
+          setBrief(terminal.brief);
+          setNeedsGenerateConfirm(false);
+          setError(null);
+          return;
+        }
+        setError(terminal.errorMessage || userFacingCompanyBriefError({ code: terminal.errorCode }));
+        setNeedsGenerateConfirm(true);
+      } catch (err) {
+        setError(userFacingCompanyBriefError(err));
+        setNeedsGenerateConfirm(true);
+      } finally {
+        inFlightRef.current = false;
+        setLoading(false);
+      }
+      return;
+    }
+    void generateBrief(true);
+  }, [error, generateBrief, job]);
 
   useEffect(() => {
     if (planId === "free") return;
@@ -175,7 +353,7 @@ export default function CompanyProfile() {
         {/* A failed generation leaves this gate mounted — without the banner the
             user would see the same CTA with no idea why nothing happened. */}
         {error ? (
-          <InlineErrorRetry message={error} onRetry={() => void generateBrief(true)} />
+          <InlineErrorRetry message={error} onRetry={() => void resumeOrRetry()} />
         ) : null}
         <Card className="p-6 space-y-4 text-center">
           <Building2 className="w-10 h-10 text-primary mx-auto" />
@@ -221,13 +399,20 @@ export default function CompanyProfile() {
       <PageContent className="max-w-3xl space-y-5">
         <PageHeader
           title={companyName || "Company research"}
-          subtitle="Generating AI brief…"
+          subtitle={job ? progressLabel(job) : "Loading saved brief…"}
           breadcrumbs={[
             { label: "Company Research", href: "/app/companies" },
             { label: companyName || "Loading" },
           ]}
         />
         {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
+        {job && (job.status === "queued" || job.status === "processing") ? (
+          <div className="flex justify-center">
+            <Button variant="secondary" size="sm" onClick={() => void cancelInFlight()}>
+              Cancel generation
+            </Button>
+          </div>
+        ) : null}
       </PageContent>
     );
   }
@@ -242,7 +427,7 @@ export default function CompanyProfile() {
             { label: companyName || "Error" },
           ]}
         />
-        <InlineErrorRetry message={error} onRetry={() => void generateBrief(true)} />
+        <InlineErrorRetry message={error} onRetry={() => void resumeOrRetry()} />
         <div className="flex justify-center">
           <Button variant="secondary" size="sm" onClick={() => navigate("/app/companies")}>
             <ChevronLeft className="w-3 h-3 mr-1" />
@@ -304,7 +489,7 @@ export default function CompanyProfile() {
       />
 
       {error ? (
-        <InlineErrorRetry message={error} onRetry={() => void generateBrief(true)} />
+        <InlineErrorRetry message={error} onRetry={() => void resumeOrRetry()} />
       ) : null}
       {/* Company header */}
       <div className="flex items-center gap-4">

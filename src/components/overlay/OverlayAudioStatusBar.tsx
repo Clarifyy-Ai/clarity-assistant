@@ -1,12 +1,13 @@
-// ✅ FIX P1-B: Stable bottom audio status bar (mic / tab / Deepgram).
+// Stable bottom audio status bar (mic / tab / Parakeet transcription provider).
 
 import { memo } from "react";
 import { Mic, MicOff, Volume2, Wifi, WifiOff } from "lucide-react";
 import { useAudioStore } from "@/store/audioStore";
+import { useSessionStore } from "@/store/sessionStore";
 import {
   TRANSCRIPTION_STATUS_COPY,
   TranscriptionState,
-  deepgramStatusToTranscription,
+  providerStatusToTranscription,
 } from "@/lib/audio/transcriptionStates";
 import { cn } from "@/lib/utils";
 
@@ -15,15 +16,19 @@ export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
   const hasSystem = useAudioStore((s) => !!s.streams?.system_stream);
   const isMuted = useAudioStore((s) => s.is_muted ?? false);
   const currentLevel = useAudioStore((s) => s.levels?.current_level ?? 0);
-  const deepgramStatus = useAudioStore((s) => s.deepgram_status ?? "disconnected");
+  const providerStatus = useAudioStore((s) => s.transcription_provider_status ?? "idle");
   const pipelineStatus = useAudioStore((s) => s.pipeline_status ?? "idle");
   const streamError = useAudioStore((s) => s.streams?.error ?? null);
+  const sessionStatus = useSessionStore((s) => s.status);
 
-  if (!isCapturing && deepgramStatus === "disconnected") return null;
+  const isPaused = sessionStatus === "paused" || providerStatus === "paused";
+  if (!isCapturing && providerStatus === "idle" && !isPaused) return null;
 
-  const dgOk = deepgramStatus === "connected";
+  const providerOk = providerStatus === "connected";
 
-  const transcriptionState = deepgramStatusToTranscription(deepgramStatus, pipelineStatus);
+  const transcriptionState = isPaused
+    ? TranscriptionState.PAUSED
+    : providerStatusToTranscription(providerStatus, pipelineStatus);
   const transcriptionLabel = TRANSCRIPTION_STATUS_COPY[transcriptionState];
 
   return (
@@ -93,15 +98,17 @@ export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
             : transcriptionState === TranscriptionState.CONNECTING ||
                 transcriptionState === TranscriptionState.RECONNECTING
               ? "text-amber-300/80 bg-amber-500/10 border-amber-500/20"
-              : transcriptionState === TranscriptionState.TEXT_ONLY ||
-                  transcriptionState === TranscriptionState.ENDED
+              : transcriptionState === TranscriptionState.PAUSED
                 ? "text-sky-300/80 bg-sky-500/10 border-sky-500/20"
-                : "text-amber-300/80 bg-amber-500/10 border-amber-500/20",
+                : transcriptionState === TranscriptionState.TEXT_ONLY ||
+                    transcriptionState === TranscriptionState.ENDED
+                  ? "text-sky-300/80 bg-sky-500/10 border-sky-500/20"
+                  : "text-amber-300/80 bg-amber-500/10 border-amber-500/20",
         )}
         title={`Transcription: ${transcriptionLabel}`}
         data-transcription-state={transcriptionState}
       >
-        {dgOk ? <Wifi className="w-2.5 h-2.5" /> : <WifiOff className="w-2.5 h-2.5" />}
+        {providerOk ? <Wifi className="w-2.5 h-2.5" /> : <WifiOff className="w-2.5 h-2.5" />}
         {transcriptionLabel}
       </span>
 

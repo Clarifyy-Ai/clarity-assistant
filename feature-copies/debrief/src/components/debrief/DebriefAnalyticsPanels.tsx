@@ -5,7 +5,8 @@ import {
   HelpCircle, MessageSquare, Share2, Tags, TrendingUp, XCircle,
 } from "lucide-react";
 import { format, formatDistanceStrict } from "date-fns";
-import { cn } from "@/lib/utils";
+import { buildShareUrl, cn, generateShareToken } from "@/lib/utils";
+import { resolveDebriefCategoryScores } from "@/types/scorecard.types";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -13,6 +14,8 @@ import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { Tooltip } from "@/components/ui/tooltip";
 import { toast } from "sonner";
+import { useAuthStore } from "@/store/userStore";
+import { canShareScorecard } from "@/lib/privacy/privacyPrefs";
 import {
   Bar,
   BarChart,
@@ -67,6 +70,12 @@ export type DetailedReport = {
   filler_series?: { t: number; count: number }[];
   pause_series?: { bucket: string; count: number }[];
   confidence_series?: { t: number; score: number }[];
+  charts_available?: {
+    wpm: boolean;
+    fillers: boolean;
+    pauses: boolean;
+    confidence: boolean;
+  };
   missed_keywords?: string[];
   keyword_coverage?: KeywordCoverageItem[];
   jd_keywords?: string[];
@@ -195,17 +204,21 @@ export function DebriefSessionMeta({
     (scorecard?.overall_score as number | null) ??
     null;
 
-  const categoryScores: Record<string, number> = {
-    communication: (scorecard?.communication as number) ?? (session?.clarity_score as number) ?? 0,
-    confidence: (scorecard?.confidence as number) ?? (session?.confidence_score as number) ?? 0,
-    technical: (scorecard?.technical as number) ?? 0,
-    problem_solving: (scorecard?.problem_solving as number) ?? 0,
-    ...(debrief.detailed_report as DetailedReport | undefined)?.category_scores,
-  };
+  const categoryScores = resolveDebriefCategoryScores({
+    scorecard,
+    session,
+    reportCategoryScores: (debrief.detailed_report as DetailedReport | undefined)
+      ?.category_scores,
+  });
+
+  const hasCategoryData = CONFIDENCE_DIMS.some(
+    (dim) => categoryScores[dim.key] != null,
+  );
 
   const scoreColor =
-    (overallScore ?? 0) >= 75 ? "emerald" :
-    (overallScore ?? 0) >= 55 ? "amber" : "red";
+    overallScore == null ? null :
+    overallScore >= 75 ? "emerald" :
+    overallScore >= 55 ? "amber" : "red";
 
   const sessionType = String(session?.type ?? session?.session_type ?? "session");
   const company = session?.target_company ?? session?.company ?? session?.title;
@@ -217,7 +230,7 @@ export function DebriefSessionMeta({
           role="status"
           className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
         >
-          Scoring data is missing for this session. Metrics below may show as zero until AI scoring completes successfully.
+          Scoring data is not available yet for this session. Category scores will appear here once AI scoring completes successfully.
         </div>
       )}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -267,7 +280,9 @@ export function DebriefSessionMeta({
           <div className={cn(
             "text-4xl font-black mb-1",
             scoreColor === "emerald" ? "text-emerald-400" :
-            scoreColor === "amber" ? "text-amber-400" : "text-red-400",
+            scoreColor === "amber" ? "text-amber-400" :
+            scoreColor === "red" ? "text-red-400" :
+            "text-muted-foreground",
           )}>
             {overallScore ?? "—"}
           </div>
@@ -277,37 +292,47 @@ export function DebriefSessionMeta({
               Grade {String(debrief.overall_grade)}
             </Badge>
           )}
-          {overallScore != null && (
+          {overallScore != null && scoreColor != null && (
             <ProgressBar value={overallScore} max={100} color={scoreColor} size="sm" className="mt-3 w-28" />
           )}
         </Card>
 
-        <Card className="sm:col-span-2">
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
-            Score by category
-          </h3>
-          <div className="space-y-3">
-            {CONFIDENCE_DIMS.map((dim) => {
-              const val = categoryScores[dim.key] ?? 0;
-              const c = val >= 75 ? "emerald" : val >= 55 ? "amber" : "red";
-              return (
-                <div key={dim.key} className="flex items-center gap-3">
-                  <span className="text-[10px] sm:text-xs text-muted-foreground w-28 sm:w-36 shrink-0">
-                    {dim.label}
-                  </span>
-                  <ProgressBar value={val} max={100} color={c} size="sm" className="flex-1" />
-                  <span className={cn(
-                    "text-xs font-bold w-8 text-right tabular-nums",
-                    c === "emerald" ? "text-emerald-400" :
-                    c === "amber" ? "text-amber-400" : "text-red-400",
-                  )}>
-                    {val || "—"}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
+        {hasCategoryData && (
+          <Card className="sm:col-span-2">
+            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
+              Score by category
+            </h3>
+            <div className="space-y-3">
+              {CONFIDENCE_DIMS.map((dim) => {
+                const val = categoryScores[dim.key];
+                const c =
+                  val == null ? null :
+                  val >= 75 ? "emerald" : val >= 55 ? "amber" : "red";
+                return (
+                  <div key={dim.key} className="flex items-center gap-3">
+                    <span className="text-[10px] sm:text-xs text-muted-foreground w-28 sm:w-36 shrink-0">
+                      {dim.label}
+                    </span>
+                    {val != null && c != null ? (
+                      <ProgressBar value={val} max={100} color={c} size="sm" className="flex-1" />
+                    ) : (
+                      <div className="flex-1 h-1.5 rounded-full bg-secondary" />
+                    )}
+                    <span className={cn(
+                      "text-xs font-bold w-8 text-right tabular-nums",
+                      c === "emerald" ? "text-emerald-400" :
+                      c === "amber" ? "text-amber-400" :
+                      c === "red" ? "text-red-400" :
+                      "text-muted-foreground",
+                    )}>
+                      {val ?? "—"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        )}
       </div>
     </div>
   );
@@ -574,14 +599,20 @@ function ChartTooltip({
 }
 
 export function DebriefVocalCharts({ report }: { report: DetailedReport | null | undefined }) {
+  const charts = report?.charts_available;
   const wpm = report?.wpm_series ?? [];
   const fillers = report?.filler_series ?? [];
   const pauses = report?.pause_series ?? [];
   const confidence = report?.confidence_series ?? [];
 
+  const showWpm = charts?.wpm ?? wpm.length > 1;
+  const showFillers = charts?.fillers ?? fillers.length > 1;
+  const showPauses = charts?.pauses ?? pauses.length > 0;
+  const showConfidence = charts?.confidence ?? confidence.length > 1;
+
   const [hover, setHover] = useState<{ chart: string; i: number; x: number; y: number } | null>(null);
 
-  if (!wpm.length && !fillers.length && !pauses.length && !confidence.length) return null;
+  if (!showWpm && !showFillers && !showPauses && !showConfidence) return null;
 
   const renderLineChart = (
     chartId: string,
@@ -667,7 +698,7 @@ export function DebriefVocalCharts({ report }: { report: DetailedReport | null |
         <h3 className="text-sm font-semibold text-foreground">Vocal analytics</h3>
       </div>
       <div className="space-y-6">
-        {wpmSeries.length > 1 && (
+        {showWpm && (
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-2">WPM over session</p>
             {renderLineChart(
@@ -679,7 +710,7 @@ export function DebriefVocalCharts({ report }: { report: DetailedReport | null |
             )}
           </div>
         )}
-        {fillerSeries.length > 1 && (
+        {showFillers && (
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-2">Filler word frequency</p>
             {renderLineChart(
@@ -691,7 +722,7 @@ export function DebriefVocalCharts({ report }: { report: DetailedReport | null |
             )}
           </div>
         )}
-        {pauses.length > 0 && (
+        {showPauses && (
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-2">Pause distribution</p>
             <div className="h-28 w-full">
@@ -710,7 +741,7 @@ export function DebriefVocalCharts({ report }: { report: DetailedReport | null |
             </div>
           </div>
         )}
-        {confSeries.length > 1 && (
+        {showConfidence && (
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-2">Confidence trend</p>
             {renderLineChart(
@@ -736,19 +767,20 @@ export function DebriefConfidenceBreakdown({
   scorecard: Record<string, unknown> | null;
   session: Record<string, unknown> | null;
 }) {
-  const scores: Record<string, number> = {
-    communication: (scorecard?.communication as number) ?? (session?.clarity_score as number) ?? 0,
-    confidence: (scorecard?.confidence as number) ?? (session?.confidence_score as number) ?? 0,
-    technical: (scorecard?.technical as number) ?? 0,
-    problem_solving: (scorecard?.problem_solving as number) ?? 0,
-  };
+  const scores = resolveDebriefCategoryScores({
+    scorecard,
+    session,
+  });
 
-  const hasAny = Object.values(scores).some((v) => v > 0);
+  const hasAny = CONFIDENCE_DIMS.some((d) => scores[d.key] != null);
   if (!hasAny) return null;
 
-  const avg = Math.round(
-    CONFIDENCE_DIMS.reduce((s, d) => s + (scores[d.key] ?? 0), 0) / CONFIDENCE_DIMS.length,
+  const scoredValues = CONFIDENCE_DIMS.map((d) => scores[d.key]).filter(
+    (v): v is number => v != null,
   );
+  const avg = scoredValues.length
+    ? Math.round(scoredValues.reduce((s, v) => s + v, 0) / scoredValues.length)
+    : null;
 
   return (
     <Card>
@@ -767,21 +799,26 @@ export function DebriefConfidenceBreakdown({
         </Tooltip>
       </div>
       <p className="text-[10px] text-muted-foreground mb-4">
-        Composite confidence score: <span className="font-semibold text-foreground">{avg}/100</span>
+        Composite confidence score:{" "}
+        <span className="font-semibold text-foreground">
+          {avg != null ? `${avg}/100` : "—"}
+        </span>
         — hover each dimension for details.
       </p>
 
       <div className="grid grid-cols-2 gap-3 mb-4">
         {CONFIDENCE_DIMS.map((dim) => {
-          const val = scores[dim.key] ?? 0;
-          const c = val >= 75 ? "emerald" : val >= 55 ? "amber" : "red";
+          const val = scores[dim.key];
+          const c =
+            val == null ? null :
+            val >= 75 ? "emerald" : val >= 55 ? "amber" : "red";
           return (
             <Tooltip
               key={dim.key}
               content={
                 <span className="whitespace-normal block max-w-[200px]">
                   <strong>{dim.label}:</strong> {dim.description}
-                  {val < 65 && (
+                  {val != null && val < 65 && (
                     <> Tip: drill {dim.label.toLowerCase()} questions in Prep Lab.</>
                   )}
                 </span>
@@ -793,11 +830,15 @@ export function DebriefConfidenceBreakdown({
                 <p className={cn(
                   "text-xl font-black tabular-nums",
                   c === "emerald" ? "text-emerald-400" :
-                  c === "amber" ? "text-amber-400" : "text-red-400",
+                  c === "amber" ? "text-amber-400" :
+                  c === "red" ? "text-red-400" :
+                  "text-muted-foreground",
                 )}>
-                  {val || "—"}
+                  {val ?? "—"}
                 </p>
-                <ProgressBar value={val} max={100} color={c} size="xs" className="mt-2" />
+                {val != null && c != null && (
+                  <ProgressBar value={val} max={100} color={c} size="xs" className="mt-2" />
+                )}
               </div>
             </Tooltip>
           );
@@ -819,7 +860,7 @@ export function DebriefConfidenceBreakdown({
           <polygon
             points={radarPoints(
               4,
-              CONFIDENCE_DIMS.map((d) => (scores[d.key] ?? 0) / 100 * 50),
+              CONFIDENCE_DIMS.map((d) => ((scores[d.key] ?? 0) / 100) * 50),
               60,
               60,
             )}
@@ -872,18 +913,25 @@ export function DebriefShareButton({
   previewScore?: string | number | null;
   previewSummary?: string | null;
 }) {
+  const privacyPrefs = useAuthStore((s) => s.profile?.privacy_prefs);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [copying, setCopying] = useState(false);
 
   async function confirmShare() {
+    if (!canShareScorecard(privacyPrefs)) {
+      toast.error(
+        "Scorecard sharing is turned off in Settings → Privacy. Turn on “Allow scorecard sharing” to create a public link.",
+      );
+      return;
+    }
     setCopying(true);
     try {
       let token = report?.share_token;
       if (!token) {
-        token = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+        token = generateShareToken();
         await onShareToken(token);
       }
-      const url = `${window.location.origin}/share/${token}`;
+      const url = buildShareUrl(token);
       await navigator.clipboard.writeText(url);
       toast.success("Share link copied to clipboard");
       setPreviewOpen(false);

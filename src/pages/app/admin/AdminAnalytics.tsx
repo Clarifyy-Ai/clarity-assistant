@@ -116,21 +116,30 @@ function OverviewTab({ period }: { period: Period }) {
     }
   }
 
-  if (loading || !stats) {
+  if (loading) return <SkeletonGrid />;
+
+  if (loadError && !stats) {
     return (
       <div className="space-y-4">
-        {loadError && (
-          <InlineErrorRetry message={loadError} onRetry={() => void load()} />
-        )}
-        <SkeletonGrid />
+        <InlineErrorRetry message={loadError} onRetry={() => void load()} />
+        <EmptyState
+          icon={BarChart2}
+          title="Overview stats unavailable"
+          description="Retry to load platform overview metrics for this period."
+          compact
+          actionLabel="Retry"
+          onAction={() => void load()}
+        />
       </div>
     );
   }
 
+  if (!stats) return null;
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Stat label="DAU (today)" value={stats.dau.toLocaleString()} />
+        <Stat label="Daily active users" value={stats.dau.toLocaleString()} />
         <Stat label="Active users" value={stats.activeUsers.toLocaleString()} sub={`last ${period}d`} />
         <Stat label="Sessions" value={stats.sessions.toLocaleString()} sub={`last ${period}d`} />
         <Stat label="New signups" value={stats.signups.toLocaleString()} sub={`last ${period}d`} />
@@ -142,7 +151,16 @@ function OverviewTab({ period }: { period: Period }) {
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={signupSeries} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-              <XAxis dataKey="day" tick={{ fontSize: 10 }} tickFormatter={(d) => String(d).slice(5)} />
+              <XAxis
+                dataKey="day"
+                tick={{ fontSize: 10 }}
+                tickFormatter={(d) => {
+                  const parsed = new Date(`${String(d)}T00:00:00`);
+                  return Number.isNaN(parsed.getTime())
+                    ? String(d)
+                    : format(parsed, "MMM d");
+                }}
+              />
               <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
               <Tooltip
                 contentStyle={{ borderRadius: 12, border: "1px solid hsl(var(--border))" }}
@@ -346,30 +364,56 @@ function AITab({ period }: { period: Period }) {
 function MockTab({ period }: { period: Period }) {
   const [stats, setStats] = useState<{ created: number; submitted: number; byExam: { exam: string; count: number }[] } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => { void load(); }, [period]);
 
   async function load() {
     setLoading(true);
-    const since = new Date(Date.now() - period * 86400_000).toISOString();
-    const [created, submitted, examTypes] = await Promise.all([
-      adminAnalyticsDB.countMockTestsCreatedSince(since),
-      adminAnalyticsDB.countMockTestsSubmittedSince(since),
-      adminAnalyticsDB.getQuestionExamTypesSince(since),
-    ]);
-    const map: Record<string, number> = {};
-    examTypes.forEach((examType) => {
-      const k = examType ?? "Other";
-      map[k] = (map[k] ?? 0) + 1;
-    });
-    const byExam = Object.entries(map)
-      .map(([exam, count]) => ({ exam, count }))
-      .sort((a, b) => b.count - a.count);
-    setStats({ created, submitted, byExam });
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const since = new Date(Date.now() - period * 86400_000).toISOString();
+      const [created, submitted, examTypes] = await Promise.all([
+        adminAnalyticsDB.countMockTestsCreatedSince(since),
+        adminAnalyticsDB.countMockTestsSubmittedSince(since),
+        adminAnalyticsDB.getQuestionExamTypesSince(since),
+      ]);
+      const map: Record<string, number> = {};
+      examTypes.forEach((examType) => {
+        const k = examType ?? "Other";
+        map[k] = (map[k] ?? 0) + 1;
+      });
+      const byExam = Object.entries(map)
+        .map(([exam, count]) => ({ exam, count }))
+        .sort((a, b) => b.count - a.count);
+      setStats({ created, submitted, byExam });
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load mock test stats");
+      setStats(null);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  if (loading || !stats) return <SkeletonGrid />;
+  if (loading) return <SkeletonGrid />;
+
+  if (loadError && !stats) {
+    return (
+      <div className="space-y-4">
+        <InlineErrorRetry message={loadError} onRetry={() => void load()} />
+        <EmptyState
+          icon={FileText}
+          title="Mock test stats unavailable"
+          description="Retry to load mock test activity for this period."
+          compact
+          actionLabel="Retry"
+          onAction={() => void load()}
+        />
+      </div>
+    );
+  }
+
+  if (!stats) return null;
 
   return (
     <div className="space-y-4">
@@ -381,7 +425,12 @@ function MockTab({ period }: { period: Period }) {
       <Card><CardContent className="p-5">
         <h3 className="text-sm font-semibold mb-3">New questions added by exam</h3>
         {stats.byExam.length === 0 ? (
-          <p className="text-xs text-muted-foreground italic">No new questions in this period</p>
+          <EmptyState
+            icon={FileText}
+            title="No new questions in this period"
+            description="Question imports and exam uploads will appear here once added."
+            compact
+          />
         ) : (
           <div className="h-48 w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -413,28 +462,64 @@ function MockTab({ period }: { period: Period }) {
 function ChatTab({ period }: { period: Period }) {
   const [stats, setStats] = useState<{ open: number; resolved: number; avgResolution: number } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => { void load(); }, [period]);
 
   async function load() {
     setLoading(true);
-    const since = new Date(Date.now() - period * 86400_000).toISOString();
-    const threadStats = await adminAnalyticsDB.getSupportThreadStats(since);
-    setStats({
-      open: threadStats.open,
-      resolved: threadStats.resolved,
-      avgResolution: threadStats.avgResolutionHours,
-    });
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const since = new Date(Date.now() - period * 86400_000).toISOString();
+      const threadStats = await adminAnalyticsDB.getSupportThreadStats(since);
+      setStats({
+        open: threadStats.open,
+        resolved: threadStats.resolved,
+        avgResolution: threadStats.avgResolutionHours,
+      });
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load support stats");
+      setStats(null);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  if (loading || !stats) return <SkeletonGrid />;
+  if (loading) return <SkeletonGrid />;
+
+  if (loadError && !stats) {
+    return (
+      <div className="space-y-4">
+        <InlineErrorRetry message={loadError} onRetry={() => void load()} />
+        <EmptyState
+          icon={MessageSquare}
+          title="Support stats unavailable"
+          description="Retry to load support thread metrics for this period."
+          compact
+          actionLabel="Retry"
+          onAction={() => void load()}
+        />
+      </div>
+    );
+  }
+
+  if (!stats) return null;
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-      <Stat label="Open threads" value={stats.open.toLocaleString()} />
-      <Stat label="Resolved" value={stats.resolved.toLocaleString()} sub={`last ${period}d`} />
-      <Stat label="Avg resolution" value={`${stats.avgResolution.toFixed(1)} h`} />
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <Stat label="Open threads" value={stats.open.toLocaleString()} />
+        <Stat label="Resolved" value={stats.resolved.toLocaleString()} sub={`last ${period}d`} />
+        <Stat label="Avg resolution" value={`${stats.avgResolution.toFixed(1)} h`} />
+      </div>
+      {stats.open === 0 && stats.resolved === 0 && (
+        <EmptyState
+          icon={MessageSquare}
+          title="No support threads in this period"
+          description="Open and resolved thread counts will appear here once users contact support."
+          compact
+        />
+      )}
     </div>
   );
 }

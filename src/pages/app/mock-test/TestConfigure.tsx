@@ -410,7 +410,10 @@ export default function TestConfigure() {
           test_name: config.test_name,
           subjects: config.subjects,
           topics: config.topics,
-          source_types: config.source_types,
+          source_types:
+            isQuick && canUseAiQuestions && !config.source_types.includes("AI_GENERATED")
+              ? [...config.source_types, "AI_GENERATED"]
+              : config.source_types,
           year_range: config.year_range,
           difficulty_distribution: config.difficulty_distribution,
           question_count: config.question_count,
@@ -419,6 +422,8 @@ export default function TestConfigure() {
           marks_negative: config.marks_negative,
           randomize_order: config.randomize_order,
           shuffle_options: config.shuffle_options,
+          quick_drill: isQuick,
+          allow_ai_fill: isQuick && canUseAiQuestions,
         });
 
       if (warning) toast.warning(warning);

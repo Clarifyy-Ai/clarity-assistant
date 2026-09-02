@@ -20,7 +20,7 @@ export function OverlayQuestionBar({ question }: OverlayQuestionBarProps) {
   const hasNext = hint_history_index < total - 1;
 
   return (
-    <div className="flex items-start gap-2 px-3 py-2 border-b border-white/[0.06] bg-gradient-to-r from-indigo-500/[0.05] to-transparent animate-fade-in shrink-0">
+    <div className="flex items-start gap-2 px-3 py-2 border-b border-white/[0.06] bg-gradient-to-r from-indigo-500/[0.05] to-transparent shrink-0">
       {/* Question */}
       <div className="flex-1 min-w-0">
         <div className="flex items-start gap-1.5">

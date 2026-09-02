@@ -16,7 +16,11 @@ import {
   EXTRACT_PARSER_VERSION,
   PDF_QUESTION_EXTRACT_PROMPT,
   bufferToBase64,
+  isPdfMagicBase64,
   parsePlainTextMcqs,
+  pythonDocumentExtractText,
+  pythonExtractLooksScanned,
+  userMessageForPdfImportFailure,
 } from "../_shared/pdfQuestionExtract.ts";
 
 const CREDIT_COST = creditCost("parse_question_pdf");
@@ -24,6 +28,9 @@ const MAX_FILE_SIZE = 15 * 1024 * 1024;
 /** ~1.5MB base64 (~1.1MB binary). Larger PDFs must not wait in the HTTP body. */
 const ASYNC_PDF_B64_CHARS = 1_500_000;
 const ASYNC_FILE_BYTES = 1 * 1024 * 1024;
+const EXTRACT_DEADLINE_MS = 90_000;
+const PYTHON_EXTRACT_TIMEOUT_MS = 40_000;
+const GEMINI_PDF_TIMEOUT_MS = 60_000;
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -49,14 +56,54 @@ function scheduleWaitUntil(task: Promise<unknown>): boolean {
   return false;
 }
 
-async function extractPdf(req: Request) {
+type PdfUpload =
+  | {
+      ok: true;
+      fileName: string;
+      size: number;
+      base64: string;
+      examType: string | null;
+      sourceYear: number | null;
+    }
+  | { ok: false; code: string; message: string; status: number };
+
+class PdfImportError extends Error {
+  code: string;
+  httpStatus: number;
+  constructor(code: string, message: string, httpStatus = 422) {
+    super(message);
+    this.code = code;
+    this.httpStatus = httpStatus;
+  }
+}
+
+async function extractPdf(req: Request): Promise<PdfUpload> {
   const contentType = req.headers.get("content-type") || "";
-  if (!contentType.includes("multipart/form-data")) return null;
+  if (!contentType.includes("multipart/form-data")) {
+    return { ok: false, code: "NO_PDF", message: "No PDF uploaded", status: 400 };
+  }
 
   const form = await req.formData();
   const file = form.get("pdf");
-  if (!(file instanceof File)) return null;
-  if (file.size > MAX_FILE_SIZE) throw new Error("PDF exceeds 15MB limit");
+  if (!(file instanceof File)) {
+    return { ok: false, code: "NO_PDF", message: "No PDF uploaded", status: 400 };
+  }
+  if (file.size <= 0) {
+    return {
+      ok: false,
+      code: "EMPTY_PDF",
+      message: userMessageForPdfImportFailure("EMPTY_PDF", false),
+      status: 400,
+    };
+  }
+  if (file.size > MAX_FILE_SIZE) {
+    return {
+      ok: false,
+      code: "PDF_TOO_LARGE",
+      message: userMessageForPdfImportFailure("PDF_TOO_LARGE", false),
+      status: 400,
+    };
+  }
 
   const examTypeRaw = form.get("exam_type");
   const examType =
@@ -66,13 +113,59 @@ async function extractPdf(req: Request) {
   const sourceYear =
     Number.isFinite(yearNum) && yearNum >= 1990 && yearNum <= 2100 ? Math.floor(yearNum) : null;
 
+  const buf = await file.arrayBuffer();
+  const base64 = bufferToBase64(buf);
+  if (!isPdfMagicBase64(base64)) {
+    return {
+      ok: false,
+      code: "INVALID_PDF",
+      message: userMessageForPdfImportFailure("INVALID_PDF", false),
+      status: 400,
+    };
+  }
+
   return {
+    ok: true,
     fileName: file.name,
     size: file.size,
-    base64: bufferToBase64(await file.arrayBuffer()),
+    base64,
     examType,
     sourceYear,
   };
+}
+
+function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new PdfImportError(
+        "PARSER_TIMEOUT",
+        userMessageForPdfImportFailure("PARSER_TIMEOUT", true),
+        504,
+      ));
+    }, ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+function wrapProviderError(err: unknown): never {
+  if (err instanceof PdfImportError) throw err;
+  const msg = err instanceof Error ? err.message : String(err);
+  console.error("[parse-question-pdf] provider:", msg);
+  if (isTimeoutMessage(msg)) {
+    throw new PdfImportError(
+      "PARSER_TIMEOUT",
+      userMessageForPdfImportFailure("PARSER_TIMEOUT", true),
+      504,
+    );
+  }
+  throw new PdfImportError(
+    "AI_ERROR",
+    userMessageForPdfImportFailure("AI_ERROR", true),
+    502,
+  );
 }
 
 /** Prefer Python OCR/text extract when configured; never invent paper content. */
@@ -80,12 +173,13 @@ async function tryPythonPdfText(
   pdfBase64: string,
   fileName: string,
   correlationId: string,
-): Promise<string | null> {
-  if (!isPythonConfigured()) return null;
+): Promise<{ text: string | null; scannedHint: boolean; raw: unknown }> {
+  if (!isPythonConfigured()) return { text: null, scannedHint: false, raw: null };
   const result = await callPythonProcess({
     operation: "document_extract",
     operationId: correlationId,
     correlationId,
+    timeoutMs: PYTHON_EXTRACT_TIMEOUT_MS,
     payload: {
       base64: pdfBase64,
       filename: fileName || "questions.pdf",
@@ -95,15 +189,22 @@ async function tryPythonPdfText(
     },
   });
   if (!result.ok) {
-    console.warn("[parse-question-pdf] python document_extract failed:", result.message);
-    return null;
+    console.warn(
+      "[parse-question-pdf] python document_extract failed:",
+      result.code,
+      result.message,
+    );
+    const scannedHint = /OCR_UNAVAILABLE|NO_TEXT_EXTRACTED|OCR_FAILED|SCANNED|PARSER_UNAVAILABLE/i.test(
+      `${result.code} ${result.message}`,
+    );
+    return { text: null, scannedHint, raw: null };
   }
-  const data = result.data as Record<string, unknown>;
-  const text =
-    (typeof data.full_text === "string" && data.full_text) ||
-    (typeof data.text === "string" && data.text) ||
-    "";
-  return text.trim() ? text : null;
+  const text = pythonDocumentExtractText(result.data);
+  return {
+    text: text.trim() ? text : null,
+    scannedHint: pythonExtractLooksScanned(result.data),
+    raw: result.data,
+  };
 }
 
 function isTimeoutMessage(msg: string): boolean {
@@ -266,8 +367,8 @@ Deno.serve(async (req) => {
     if (capabilityGate) return capabilityGate;
 
     const pdf = await extractPdf(req);
-    if (!pdf?.base64) {
-      return errorResponse("No PDF uploaded", "NO_PDF", 400, req);
+    if (!pdf.ok) {
+      return errorResponse(pdf.message, pdf.code, pdf.status, req);
     }
 
     const creditResult = await deductCreditsAtomic({
@@ -288,36 +389,48 @@ Deno.serve(async (req) => {
       pdf.size > ASYNC_FILE_BYTES ||
       pythonOcr;
 
-    const runExtract = async (): Promise<{ questions: unknown[]; rawText: string }> => {
+    const runExtractInner = async (): Promise<{ questions: unknown[]; rawText: string }> => {
       const policy = getAiFeaturePolicy("parse_question_pdf");
-      const pythonText = await tryPythonPdfText(pdf.base64, pdf.fileName, correlationId);
-      if (pythonText) {
-        const deterministic = parsePlainTextMcqs(pythonText);
+      const python = await tryPythonPdfText(pdf.base64, pdf.fileName, correlationId);
+      if (python.text) {
+        const deterministic = parsePlainTextMcqs(python.text);
         if (deterministic.length > 0) {
           return {
             questions: normalizeExtractedQuestions(deterministic),
-            rawText: pythonText,
+            rawText: python.text,
           };
         }
       }
+
       let rawText: string;
-      if (pythonText) {
-        rawText = await geminiGenerate(
-          `${PDF_QUESTION_EXTRACT_PROMPT}\n\n--- Extracted PDF text ---\n${pythonText.slice(0, 80000)}`,
-          undefined,
-          0.2,
-          policy.maxOutputTokens,
-        );
-      } else {
-        rawText = await geminiGenerateWithPdf(
-          PDF_QUESTION_EXTRACT_PROMPT,
-          pdf.base64,
-          {
-            temperature: 0.2,
-            maxTokens: policy.maxOutputTokens,
-          },
-        );
+      try {
+        if (python.text) {
+          rawText = await withDeadline(
+            geminiGenerate(
+              `${PDF_QUESTION_EXTRACT_PROMPT}\n\n--- Extracted PDF text ---\n${python.text.slice(0, 80000)}`,
+              undefined,
+              0.2,
+              policy.maxOutputTokens,
+            ),
+            GEMINI_PDF_TIMEOUT_MS,
+          );
+        } else {
+          rawText = await withDeadline(
+            geminiGenerateWithPdf(
+              PDF_QUESTION_EXTRACT_PROMPT,
+              pdf.base64,
+              {
+                temperature: 0.2,
+                maxTokens: policy.maxOutputTokens,
+              },
+            ),
+            GEMINI_PDF_TIMEOUT_MS,
+          );
+        }
+      } catch (err) {
+        wrapProviderError(err);
       }
+
       const parsed = parseJSON<{ questions?: unknown[] }>(rawText, { questions: [] });
       const fromJson = normalizeExtractedQuestions(
         Array.isArray(parsed.questions) ? parsed.questions : [],
@@ -326,16 +439,37 @@ Deno.serve(async (req) => {
         return { questions: fromJson, rawText };
       }
       const fromPlain = parsePlainTextMcqs(rawText);
-      return { questions: fromPlain, rawText };
+      if (fromPlain.length > 0) {
+        return { questions: fromPlain, rawText };
+      }
+
+      if (python.scannedHint) {
+        throw new PdfImportError(
+          "SCANNED_PDF",
+          userMessageForPdfImportFailure("SCANNED_PDF", true),
+          422,
+        );
+      }
+      throw new PdfImportError(
+        "ZERO_QUESTIONS",
+        userMessageForPdfImportFailure("ZERO_QUESTIONS", true),
+        422,
+      );
     };
 
+    const runExtract = () => withDeadline(runExtractInner(), EXTRACT_DEADLINE_MS);
+
     const failHttp = async (err: unknown) => {
-      await refundOnce("parse-question-pdf AI call failure");
+      await refundOnce("parse-question-pdf extract failure");
+      if (err instanceof PdfImportError) {
+        console.error("[parse-question-pdf] extract error:", err.code, err.message);
+        return errorResponse(err.message, err.code, err.httpStatus, req);
+      }
       const msg = err instanceof Error ? err.message : "PDF parse failed";
       console.error("[parse-question-pdf] extract error:", msg);
       const isTimeout = isTimeoutMessage(msg);
       return errorResponse(
-        "PDF parsing failed. Credits refunded.",
+        userMessageForPdfImportFailure(isTimeout ? "PARSER_TIMEOUT" : "AI_ERROR", true),
         isTimeout ? "PARSER_TIMEOUT" : "AI_ERROR",
         isTimeout ? 504 : 502,
         req,
@@ -456,12 +590,20 @@ Deno.serve(async (req) => {
           },
         });
       } catch (err) {
+        const code = err instanceof PdfImportError ? err.code : "AI_ERROR";
         const msg = err instanceof Error ? err.message : "PDF parse failed";
-        console.error("[parse-question-pdf] background extract:", msg);
-        await refundOnce("parse-question-pdf AI call failure");
+        const userMessage =
+          err instanceof PdfImportError
+            ? err.message
+            : userMessageForPdfImportFailure(
+                isTimeoutMessage(msg) ? "PARSER_TIMEOUT" : "AI_ERROR",
+                true,
+              );
+        console.error("[parse-question-pdf] background extract:", code, msg);
+        await refundOnce("parse-question-pdf extract failure");
         await setJob(jobId!, {
           status: "failed" satisfies JobStatus,
-          error: "PDF parsing failed. Credits refunded.",
+          error: userMessage,
           completed_at: new Date().toISOString(),
           metadata: {
             kind: "parse_question_pdf",
@@ -470,6 +612,7 @@ Deno.serve(async (req) => {
             credits_refunded: true,
             persistedToBank: false,
             questions: [],
+            error_code: code,
             extract_error: msg.slice(0, 400),
           },
         });

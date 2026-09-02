@@ -25,7 +25,7 @@ const ERROR_PIPELINE: OverlaySessionState[] = [
 export const OverlayListeningIndicator = memo(function OverlayListeningIndicator() {
   const isMuted = useAudioStore((s) => s.is_muted);
   const streamError = useAudioStore((s) => s.streams?.error ?? null);
-  const deepgram = useAudioStore((s) => s.deepgram_status);
+  const providerStatus = useAudioStore((s) => s.transcription_provider_status);
   const audioPipeline = useAudioStore((s) => s.pipeline_status);
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
   const currentLevel = useAudioStore((s) => s.levels?.current_level ?? 0);
@@ -103,7 +103,7 @@ export const OverlayListeningIndicator = memo(function OverlayListeningIndicator
     detail = "Ready for the next question";
   } else if (
     sessionStatus === "active" &&
-    (deepgram === "connected" || isCapturing || pipeline === "listening")
+    (providerStatus === "connected" || isCapturing || pipeline === "listening")
   ) {
     state = "listening";
     label = "Listening";

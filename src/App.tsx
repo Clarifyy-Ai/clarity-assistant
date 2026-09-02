@@ -311,8 +311,12 @@ const AdminDiagnostics = lazy(
   () => import("@/pages/app/admin/AdminDiagnostics"),
 );
 const AdminBlog = lazy(() => import("@/pages/app/admin/AdminBlog"));
+const AdminBlogPreview = lazy(() => import("@/pages/app/admin/AdminBlogPreview"));
 const AdminHelpArticles = lazy(
   () => import("@/pages/app/admin/AdminHelpArticles"),
+);
+const AdminHelpArticlePreview = lazy(
+  () => import("@/pages/app/admin/AdminHelpArticlePreview"),
 );
 const AdminSupport = lazy(() => import("@/pages/app/admin/AdminSupport"));
 const AdminPromoCodes = lazy(() => import("@/pages/app/admin/AdminPromoCodes"));
@@ -468,6 +472,9 @@ function AppShell(): JSX.Element {
           IS_ELECTRON ? "electron-shell bg-background" : "bg-background",
         )}
       >
+        <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:text-sm focus:font-medium">
+          Skip to content
+        </a>
         {IS_ELECTRON && (
           <div
             style={{ WebkitAppRegion: "drag" } as CSSProperties}
@@ -985,7 +992,12 @@ const routes = [
             element: <Navigate to="/app/admin/diagnostics" replace />,
           },
           { path: "diagnostics", element: <Page component={AdminDiagnostics} /> },
+          { path: "blog/preview/:id", element: <Page component={AdminBlogPreview} /> },
           { path: "blog", element: <Page component={AdminBlog} /> },
+          {
+            path: "help-articles/preview/:id",
+            element: <Page component={AdminHelpArticlePreview} />,
+          },
           {
             path: "help-articles",
             element: <Page component={AdminHelpArticles} />,

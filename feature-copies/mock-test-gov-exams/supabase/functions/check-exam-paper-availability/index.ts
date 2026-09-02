@@ -6,6 +6,8 @@
 import { handleCors, getCorsHeaders, withBrowserCors, applyCors } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
+import { withTimeout } from "../_shared/withTimeout.ts";
+import { AUTH_LOOKUP_TIMEOUT_MS, PROFILE_LOOKUP_TIMEOUT_MS } from "../_shared/indiaRegion.ts";
 import {
   checkRateLimitAsync,
   createRateLimitKey,
@@ -24,9 +26,11 @@ import {
   isPythonGovExamConfigured,
   pythonGovAvailability,
 } from "../_shared/pythonGovExamClient.ts";
+import { decideRoute } from "../_shared/operationRouter.ts";
+import { isPythonForceUnavailable } from "../_shared/pythonClient.ts";
 import {
-  clampGovQuestionCount,
   GOV_QUESTION_COUNT_ABS_MAX,
+  validateGovQuestionCount,
 } from "../_shared/govQuestionCount.ts";
 
 function json(req: Request, payload: unknown, status = 200) {
@@ -52,17 +56,34 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
   const correlationId = req.headers.get("x-request-id")?.trim() || crypto.randomUUID();
 
   try {
-    const auth = await authenticateRequest(req);
+    let auth: Awaited<ReturnType<typeof authenticateRequest>>;
+    try {
+      auth = await withTimeout(authenticateRequest(req), AUTH_LOOKUP_TIMEOUT_MS);
+    } catch {
+      return json(req, {
+        error: "Authentication timed out.",
+        code: "AUTH_TIMEOUT",
+      }, 503);
+    }
     if (auth.error) return applyCors(req, auth.error);
     const user = auth.context.user;
 
-    if (await isUserBanned(db, user.id)) {
+    let banned = false;
+    try {
+      banned = await withTimeout(isUserBanned(db, user.id), PROFILE_LOOKUP_TIMEOUT_MS);
+    } catch {
+      return json(req, {
+        error: "Account status lookup timed out.",
+        code: "PROFILE_LOOKUP_TIMEOUT",
+      }, 503);
+    }
+    if (banned) {
       return bannedResponse(getCorsHeaders(req));
     }
 
     const rateLimitResult = await checkRateLimitAsync(db, {
       key: createRateLimitKey("check-exam-paper-availability", user.id),
-      ...RATE_LIMIT_PRESETS.SESSION_ACTION,
+      ...RATE_LIMIT_PRESETS.SEARCH_BROWSE,
     });
     if (!rateLimitResult.allowed) {
       return rateLimitResponse(rateLimitResult, req);
@@ -129,16 +150,22 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
     const langs: string[] = Array.isArray(pattern.languages) ? pattern.languages : ["en"];
     if (!langs.includes(language) && language !== "en") {
       return json(req, {
-        error: "Language not supported for this pattern",
-        code: "INVALID_CONFIGURATION",
-      }, 400);
+        error: "This exam paper is not available in the selected language.",
+        code: "LANGUAGE_UNAVAILABLE",
+      }, 409);
     }
 
     const requestedCountRaw = (body as Record<string, unknown>).questionCount;
-    const requested =
-      mode === "custom_mock"
-        ? clampGovQuestionCount(requestedCountRaw, GOV_QUESTION_COUNT_ABS_MAX)
-        : Number(pattern.total_questions) || 0;
+    let requested: number;
+    if (mode === "custom_mock") {
+      const qc = validateGovQuestionCount(requestedCountRaw, GOV_QUESTION_COUNT_ABS_MAX);
+      if (!qc.ok) {
+        return json(req, { error: qc.error, code: qc.code }, 400);
+      }
+      requested = qc.value;
+    } else {
+      requested = Number(pattern.total_questions) || 0;
+    }
 
     const topics = Array.isArray((body as Record<string, unknown>).topics)
       ? ((body as Record<string, unknown>).topics as unknown[])
@@ -161,11 +188,25 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
       requested,
     }));
 
-    let available = 0;
-    let examTypeKeys: string[] = [];
-    let inventorySource: "python" | "edge_bank" = "edge_bank";
+    const inventory = await countEligibleGovQuestions(db, {
+      examId,
+      exam: {
+        code: exam.code as string | null,
+        name: exam.name as string | null,
+        legacy_exam_type: exam.legacy_exam_type as string | null,
+      },
+      language,
+      topics: topics.length ? topics : null,
+      difficulty,
+      sourcePolicy: mode === "official_previous" ? "public_pyp" : "approved_bank",
+    });
+    let available = inventory.available;
+    let examTypeKeys = inventory.examTypeKeys;
+    let inventorySource: "canonical_rpc" | "python_authoritative" = "canonical_rpc";
 
-    if (isPythonGovExamConfigured()) {
+    // Official/PYQ availability is the canonical verified-source count only.
+    // Python mock inventory must never be used to overclaim official coverage.
+    if (mode !== "official_previous" && isPythonGovExamConfigured()) {
       const py = await pythonGovAvailability({
         exam_id: examId,
         stage_id: stageId,
@@ -174,50 +215,60 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
         topics,
         difficulty,
         correlation_id: correlationId,
+        bank_type_keys: examTypeKeys,
+        mode,
       });
       if (py.ok) {
         available = py.data.available;
-        examTypeKeys = py.data.exam_type_keys ?? [];
-        inventorySource = "python";
+        inventorySource = "python_authoritative";
         console.log(JSON.stringify({
-          tag: "[GOV_EXAM] availability_python",
+          tag: "[GOV_EXAM] availability_python_authoritative",
           correlation_id: correlationId,
-          available,
+          canonical_available: inventory.available,
+          python_available: py.data.available,
           requested: py.data.requested,
-          can_full_mock: py.data.can_full_mock,
         }));
       } else {
         console.warn(JSON.stringify({
-          tag: "[GOV_EXAM] availability_python_fallback",
+          tag: "[GOV_EXAM] availability_python_skipped",
           correlation_id: correlationId,
           code: py.error.code,
           message: py.error.message.slice(0, 160),
         }));
+        if (py.error.code === "LANGUAGE_UNAVAILABLE") {
+          return json(req, {
+            error: "This exam paper is not available in the selected language.",
+            code: "LANGUAGE_UNAVAILABLE",
+            requested,
+            available: 0,
+            eligible: 0,
+            correlationId,
+          }, 409);
+        }
       }
     }
 
-    if (inventorySource === "edge_bank") {
-      const inventory = await countEligibleGovQuestions(db, {
-        exam: {
-          code: exam.code as string | null,
-          name: exam.name as string | null,
-          legacy_exam_type: exam.legacy_exam_type as string | null,
-        },
-        language,
-        topics: topics.length ? topics : null,
-        difficulty,
-      });
-      available = inventory.available;
-      examTypeKeys = inventory.examTypeKeys;
+    let planId: string | undefined;
+    try {
+      const { data: profile } = await withTimeout(
+        db
+          .from("profiles")
+          .select("plan_id")
+          .eq("id", user.id)
+          .maybeSingle(),
+        PROFILE_LOOKUP_TIMEOUT_MS,
+      );
+      planId = profile?.plan_id;
+    } catch (profileErr) {
+      console.warn(
+        "[check-exam-paper-availability] profile lookup timed out",
+        profileErr instanceof Error ? profileErr.message : "unknown",
+      );
     }
 
-    const { data: profile } = await db
-      .from("profiles")
-      .select("plan_id")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    const aiFillAllowed = hasCapability(profile?.plan_id, "gov_exam_ai_fill");
+    const assembleRoute = decideRoute({ operation: "gov_exam_assemble" });
+    const aiFillAllowed =
+      hasCapability(planId, "gov_exam_ai_fill") && assembleRoute.canUseAI;
     const pythonConfigured = isPythonGovExamConfigured();
     const plan = decideGenerationPlan({
       requested,
@@ -226,7 +277,8 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
       canUseAi: aiFillAllowed,
       generatorPreference: parseGeneratorPreference(body),
       pythonWorkerEnabled:
-        pythonConfigured || Deno.env.get("PAPER_FACTORY_WORKER") === "1",
+        !isPythonForceUnavailable() &&
+        (pythonConfigured || Deno.env.get("PAPER_FACTORY_WORKER") === "1"),
     });
 
     const missing = Math.max(0, requested - available);
@@ -252,15 +304,19 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
         : "CONTENT_INSUFFICIENT")
       : null;
 
+    const inventoryLabel =
+      mode === "official_previous" ? "verified official/PYQ" : "approved practice-bank";
     const message = blocked
       ? blockCode === "CAPABILITY_REQUIRED"
-        ? `Available: ${available}. Requested: ${requested}. Missing: ${missing}. ` +
+        ? `${inventoryLabel} available: ${available}. Requested: ${requested}. Missing: ${missing}. ` +
           `Full mock needs a plan that includes generation, or choose custom practice (max ${customPracticeMax}).`
-        : `Available: ${available}. Requested: ${requested}. Missing: ${missing}. ` +
-          `Not enough approved questions for a full mock. Custom practice is limited to ${customPracticeMax}.`
+        : `${inventoryLabel} available: ${available}. Requested: ${requested}. Missing: ${missing}. ` +
+          (mode === "official_previous"
+            ? "Not enough verified official/PYQ questions are available. No generated replacements will be used."
+            : `Not enough approved questions for a full mock. Custom practice is limited to ${customPracticeMax}.`)
       : missing > 0 && aiFillAllowed
-      ? `Available: ${available}. Requested: ${requested}. Missing: ${missing} will be filled during generation.`
-      : `Available: ${available}. Requested: ${requested}.`;
+      ? `${inventoryLabel} available: ${available}. Requested: ${requested}. Missing: ${missing} will be filled during generation.`
+      : `${inventoryLabel} available: ${available}. Requested: ${requested}.`;
 
     console.log(JSON.stringify({
       tag: "[GOV_EXAM] availability_completed",
@@ -280,8 +336,15 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
       language,
       mode,
       requested,
+      eligible: available,
       available,
       missing,
+      inventoryClass:
+        mode === "official_previous" ? "official_pyq" : "approved_practice",
+      inventorySource,
+      billable: false,
+      creditCost: 0,
+      creditsCharged: 0,
       examTypeKeys,
       pattern: {
         totalQuestions: pattern.total_questions,

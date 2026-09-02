@@ -29,8 +29,10 @@ describe("hybridExecute / operationRouter source contracts", () => {
     expect(reserveIdx).toBeGreaterThan(0);
     expect(deductIdx).toBeGreaterThan(reserveIdx);
     expect(loopIdx).toBeGreaterThan(deductIdx);
-    // Only one deductCreditsAtomic call site in the executor body.
-    expect(hybrid.match(/deductCreditsAtomic\(/g)?.length).toBe(1);
+    // Each entry point (execute + stream prepare) reserves once — not inside the fallback loop.
+    const deductCalls = hybrid.match(/deductCreditsAtomic\(/g)?.length ?? 0;
+    expect(deductCalls).toBe(2);
+    expect(hybrid.indexOf("prepareHybridStreamOperation")).toBeGreaterThan(0);
     expect(hybrid).toContain("enqueueFallbacks");
     expect(hybrid.toLowerCase()).toContain("no re-deduct");
   });

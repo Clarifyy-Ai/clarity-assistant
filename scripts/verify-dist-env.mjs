@@ -116,6 +116,33 @@ function main() {
     process.exit(1);
   }
 
+  const forbiddenPatterns = [
+    { label: "localhost debug ingest", pattern: /127\.0\.0\.1:7572\/ingest|localhost:7572\/ingest/ },
+    { label: "agent debug sink path", pattern: /__agent_debug_/ },
+  ];
+
+  const violations = [];
+  for (const file of jsFiles) {
+    const contents = fs.readFileSync(file, "utf8");
+    for (const rule of forbiddenPatterns) {
+      if (rule.pattern.test(contents)) {
+        violations.push({ file: path.relative(ROOT_DIR, file), rule: rule.label });
+      }
+    }
+  }
+
+  if (violations.length > 0) {
+    console.error("\n❌ Production bundle contains forbidden dev debug telemetry artifacts:\n");
+    for (const violation of violations) {
+      console.error(`   - ${violation.file}: ${violation.rule}`);
+    }
+    console.error(
+      "\n   Client bundles must not call localhost ingest or ship __agent_debug_ sinks.\n" +
+        "   Use src/lib/debug/debugIngest.ts (dev-only same-origin sink) instead.\n",
+    );
+    process.exit(1);
+  }
+
   let found = false;
   for (const file of jsFiles) {
     const contents = fs.readFileSync(file, "utf8");

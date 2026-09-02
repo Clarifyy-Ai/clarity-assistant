@@ -42,6 +42,7 @@ const OPTIONAL_CLIENT_VARS = [
   "VITE_POSTHOG_KEY",
   "VITE_POSTHOG_HOST",
   "VITE_SENTRY_DSN",
+  "VITE_DEBUG_INGEST_URL",
   "VITE_STRIPE_PRICE_STARTER_MONTHLY",
   "VITE_STRIPE_PRICE_STARTER_YEARLY",
   "VITE_STRIPE_PRICE_PRO_MONTHLY",
@@ -327,6 +328,23 @@ function checkAppConfig(env) {
 
     if (env.VITE_ENABLE_DEBUG_PANEL === "true") {
       errors.push("VITE_ENABLE_DEBUG_PANEL must not be true in production.");
+    }
+
+    const debugIngest = env.VITE_DEBUG_INGEST_URL?.trim();
+    if (debugIngest) {
+      if (/localhost|127\.0\.0\.1|:7572\/ingest/i.test(debugIngest)) {
+        errors.push(
+          "VITE_DEBUG_INGEST_URL must not point at localhost or the dev ingest port in production.",
+        );
+      }
+      try {
+        const parsed = new URL(debugIngest);
+        if (parsed.protocol !== "https:") {
+          errors.push("VITE_DEBUG_INGEST_URL must use https in production.");
+        }
+      } catch {
+        errors.push("VITE_DEBUG_INGEST_URL must be a valid URL.");
+      }
     }
 
     const hasDesktopUrl =

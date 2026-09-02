@@ -169,6 +169,11 @@ function calcStreakDays(completedDates: string[]): number {
 export default function MockTestHub(): React.ReactElement {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const isProfileLoaded = useAuthStore((s) => s.isProfileLoaded);
+  const accountPhase = useAuthStore((s) => s.accountPhase);
+  const authStatus = useAuthStore((s) => s.status);
+  const authError = useAuthStore((s) => s.error);
+  const retryAccountLoad = useAuthStore((s) => s.retryAccountLoad);
   const [recentTests, setRecentTests] = useState<RecentTest[]>([]);
   const [stats, setStats] = useState<HubStats>({
     totalTests: 0, totalQuestions: 0, avgAccuracy: 0, streakDays: 0,
@@ -366,6 +371,17 @@ export default function MockTestHub(): React.ReactElement {
         <InlineErrorRetry message={loadError} onRetry={() => void loadData()} />
       )}
 
+      {!isProfileLoaded &&
+        (accountPhase === "RECOVERY_REQUIRED" || authStatus === "error") && (
+          <InlineErrorRetry
+            message={
+              authError ||
+              "We couldn't load your account details. Search still works — retry to restore full account features."
+            }
+            onRetry={() => void retryAccountLoad()}
+          />
+        )}
+
       {!loading && (
         <GovExamReadinessPanel
           examName={hubExamLabel ?? undefined}
@@ -536,6 +552,11 @@ export default function MockTestHub(): React.ReactElement {
                     : ""}
                   {verified ? ` · verified ${verified}` : ""}
                 </p>
+                {exam.aliases?.length > 0 && (
+                  <p className="text-xs text-muted-foreground truncate">
+                    Also known as: {exam.aliases.slice(0, 4).join(", ")}
+                  </p>
+                )}
                 {bank && (
                   <p
                     className={`text-xs mt-1 ${

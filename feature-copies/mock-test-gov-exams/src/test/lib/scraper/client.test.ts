@@ -64,6 +64,83 @@ describe("scraperApi — JWT admin paths", () => {
     );
   });
 
+  it("calls /paper-factory/plan with Bearer JWT", async () => {
+    vi.resetModules();
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ success: true, plan: { total_questions: 25 } }),
+        { status: 200 },
+      ),
+    );
+    const { scraperApi } = await import("@/lib/scraper/client");
+
+    const res = await scraperApi.paperFactoryPlan({
+      exam: "UPSC",
+      mode: "generated_mock",
+      question_count: 25,
+    });
+    expect(res.plan).toEqual({ total_questions: 25 });
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://scraper.test/paper-factory/plan",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer admin-jwt",
+        }),
+      }),
+    );
+  });
+
+  it("calls /paper-factory/generate with Bearer JWT", async () => {
+    vi.resetModules();
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ success: true, question_count: 25, complete: true }),
+        { status: 200 },
+      ),
+    );
+    const { scraperApi } = await import("@/lib/scraper/client");
+
+    const res = await scraperApi.paperFactoryGenerate({
+      exam: "SSC",
+      question_count: 25,
+      include_questions: false,
+    });
+    expect(res.complete).toBe(true);
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://scraper.test/paper-factory/generate",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer admin-jwt",
+        }),
+      }),
+    );
+  });
+
+  it("calls /paper-factory/jobs/{id}/process with Bearer JWT", async () => {
+    vi.resetModules();
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ success: true, job_id: "job-1", paper_id: "paper-1" }),
+        { status: 200 },
+      ),
+    );
+    const { scraperApi } = await import("@/lib/scraper/client");
+
+    const res = await scraperApi.paperFactoryProcessJob("job-1");
+    expect(res.paper_id).toBe("paper-1");
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://scraper.test/paper-factory/jobs/job-1/process",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer admin-jwt",
+        }),
+      }),
+    );
+  });
+
   it("throws ScraperNotConfiguredError when VITE_SCRAPER_URL is unset", async () => {
     import.meta.env.VITE_SCRAPER_URL = "";
     vi.resetModules();

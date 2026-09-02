@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
 
-const getBySessionId = vi.fn();
-const listBySessionId = vi.fn();
+const getBySessionIdForUser = vi.fn();
+const listBySessionIdForUser = vi.fn();
 const fetchEdgeJson = vi.fn();
 
 vi.mock("@/lib/env", () => ({
@@ -33,16 +33,19 @@ vi.mock("@/lib/network/fetchEdge", () => ({
 
 vi.mock("@/lib/supabase/database", () => ({
   scorecardsDB: {
-    getBySessionId: (...args: unknown[]) => getBySessionId(...args),
+    getBySessionIdForUser: (...args: unknown[]) => getBySessionIdForUser(...args),
     markShared: vi.fn(),
   },
   sessionAnswersDB: {
-    listBySessionId: (...args: unknown[]) => listBySessionId(...args),
+    listBySessionIdForUser: (...args: unknown[]) => listBySessionIdForUser(...args),
   },
 }));
 
 vi.mock("@/store/userStore", () => {
-  const state = { profile: { privacy_prefs: {} } };
+  const state = {
+    user: { id: "u1" },
+    profile: { privacy_prefs: {} },
+  };
   return {
     useAuthStore: Object.assign(() => state, { getState: () => state }),
   };
@@ -81,14 +84,14 @@ const PERSISTED = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  getBySessionId.mockResolvedValue(null);
-  listBySessionId.mockResolvedValue([{ answer: "I led a migration." }]);
+  getBySessionIdForUser.mockResolvedValue(null);
+  listBySessionIdForUser.mockResolvedValue([{ answer: "I led a migration." }]);
   fetchEdgeJson.mockResolvedValue({});
 });
 
 describe("useScorecard — persist-first, no mount AI", () => {
   it("returns a persisted scorecard without calling generate-scorecard", async () => {
-    getBySessionId.mockResolvedValue(PERSISTED);
+    getBySessionIdForUser.mockResolvedValue(PERSISTED);
 
     const { result } = renderHook(() => useScorecard({ sessionId: "sess-1" }));
 
@@ -96,6 +99,7 @@ describe("useScorecard — persist-first, no mount AI", () => {
       expect(result.current.isLoading).toBe(false);
     });
 
+    expect(getBySessionIdForUser).toHaveBeenCalledWith("sess-1", "u1");
     expect(result.current.status).toBe("scored");
     expect(result.current.scorecard?.id).toBe("sc1");
     expect(fetchEdgeJson).not.toHaveBeenCalled();
@@ -121,7 +125,7 @@ describe("useScorecard — persist-first, no mount AI", () => {
           resolveGenerate = () => resolve({});
         }),
     );
-    getBySessionId
+    getBySessionIdForUser
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(PERSISTED);
 

@@ -669,12 +669,14 @@ def test_official_mode_rejects_generated_bank_rows() -> None:
     bank = [
         _bank("q-gen", "Quantitative Aptitude", "arithmetic", source_type="ai_generated_practice"),
         _bank("q-ok", "Quantitative Aptitude", "algebra", source_type="official_verified"),
+        _bank("q-approved", "Quantitative Aptitude", "arithmetic", source_type="approved_bank"),
     ]
     selected, leftovers = fill_bank_into_slots(bank, blueprint, mode="official_previous")
     placed = [q for items in selected.values() for q in items]
     assert {q.question_id for q in placed} == {"q-ok"}
     assert all(q.source_type == "official_verified" for q in placed)
     assert "q-gen" in {q.id for q in leftovers}
+    assert "q-approved" in {q.id for q in leftovers}
 
 
 def test_granular_source_mix_and_label() -> None:

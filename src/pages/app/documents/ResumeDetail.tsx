@@ -30,6 +30,8 @@ import {
   openUpgradeIfCapabilityRequired,
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
+import { userFacingDocumentError } from "@/lib/documents/processingJobs";
+import { clearSessionAiContext } from "@/lib/ai/sessionAiContext";
 import { HybridSourceLine } from "@/components/hybrid/HybridSourceLine";
 
 interface ResumeVersionRow {
@@ -143,6 +145,7 @@ export default function ResumeDetail() {
   const [gapResult, setGapResult] = useState<GapAnalysisResult | null>(null);
   const [gapStale, setGapStale] = useState(false);
   const [gapUpdatedAt, setGapUpdatedAt] = useState<string | null>(null);
+  const [gapError, setGapError] = useState<string | null>(null);
 
   const parsed = useMemo(
     () => parseResumeContentString(doc?.content ?? null),
@@ -272,6 +275,7 @@ export default function ResumeDetail() {
       return;
     }
     setGapRunning(true);
+    setGapError(null);
     try {
       const result = await fetchEdgeJson<GapAnalysisResult>(
         "gap-analysis",
@@ -292,7 +296,9 @@ export default function ResumeDetail() {
     } catch (err) {
       openUpgradeIfInsufficientCredits(err);
       openUpgradeIfCapabilityRequired(err);
-      toast.error(getAiUserFacingError(err));
+      const message = getAiUserFacingError(err);
+      setGapError(message);
+      toast.error(message);
     } finally {
       setGapRunning(false);
     }
@@ -341,10 +347,11 @@ export default function ResumeDetail() {
         await resumesDB.update(id, { content });
         setDoc((prev) => (prev ? { ...prev, content } : prev));
         setForm(parsedToForm(normalized));
+        clearSessionAiContext();
         toast.success("Resume re-parsed");
       }
-    } catch {
-      toast.error("Re-parse failed");
+    } catch (err) {
+      toast.error(userFacingDocumentError(err));
     } finally {
       setReparse(false);
     }
@@ -702,6 +709,15 @@ export default function ResumeDetail() {
               </Button>
             </div>
           )}
+          {gapError && (
+            <div className="mt-3">
+              <InlineErrorRetry
+                message={gapError}
+                onRetry={() => void handleGapAnalysis()}
+                compact
+              />
+            </div>
+          )}
           {gapResult && (
             <div className="mt-4 space-y-3 border-t border-border pt-4">
               <HybridSourceLine data={gapResult} />
@@ -768,6 +784,19 @@ export default function ResumeDetail() {
                       </span>
                     ))}
                   </div>
+                </div>
+              )}
+              {(gapResult.recommendations?.length ?? 0) > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-foreground mb-1.5">Recommendations</p>
+                  <ul className="space-y-1">
+                    {gapResult.recommendations!.map((r, i) => (
+                      <li key={i} className="text-sm text-muted-foreground flex gap-2">
+                        <span className="text-primary">•</span>
+                        <span>{r}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
             </div>

@@ -3,6 +3,10 @@ import type {
   RoundStatus,
   ScheduledInterview,
 } from "@/types/interview.types";
+import {
+  isScheduledToday,
+  resolveSchedulerTimezoneKey,
+} from "@/lib/interviews/schedulerTimezone";
 
 /** Interview-like shape from the scheduler store (virtual next_round / rounds). */
 export type InterviewWithRounds = Pick<ScheduledInterview, "created_at"> & {
@@ -41,4 +45,13 @@ export function getCurrentRoundStatus(
   if (interview.status === "completed") return "completed";
   const round = getCurrentRound(interview);
   return round?.status ?? interview.status ?? "scheduled";
+}
+
+/** True when the current round's scheduled time is today in its timezone. */
+export function isInterviewScheduledToday(interview: InterviewWithRounds): boolean {
+  const round = getCurrentRound(interview);
+  const iso = getCurrentRoundDate(interview);
+  const interviewTz = (interview as { timezone?: string | null }).timezone;
+  const tz = resolveSchedulerTimezoneKey(round?.timezone, interviewTz);
+  return isScheduledToday(iso, tz);
 }

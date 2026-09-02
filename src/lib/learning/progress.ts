@@ -3,9 +3,11 @@ export type UnlockMode = "sequential" | "open";
 export type LessonRef = { id: string; moduleId: string; sortOrder: number };
 export type ModuleRef = { id: string; sortOrder: number; lessons: LessonRef[] };
 
+export type QuizRef = { id: string; isFinal?: boolean };
+
 export type ProgressMaps = {
   completedLessonIds: Set<string>;
-  completedQuizModuleIds?: Set<string>;
+  passedQuizIds?: Set<string>;
 };
 
 export function lessonCompletionRatio(totalLessons: number, completed: number): number {
@@ -37,14 +39,27 @@ export function isModuleUnlocked(
   return isModuleComplete(ordered[index - 1], completedLessonIds);
 }
 
-export function coursePercentage(modules: ModuleRef[], completedLessonIds: Set<string>): number {
+export function coursePercentage(
+  modules: ModuleRef[],
+  completedLessonIds: Set<string>,
+  quizzes: QuizRef[] = [],
+  passedQuizIds: Set<string> = new Set(),
+): number {
   const lessons = modules.flatMap((m) => m.lessons);
-  const done = lessons.filter((l) => completedLessonIds.has(l.id)).length;
-  return lessonCompletionRatio(lessons.length, done);
+  const completedLessons = lessons.filter((l) => completedLessonIds.has(l.id)).length;
+  const passedQuizzes = quizzes.filter((quiz) => passedQuizIds.has(quiz.id)).length;
+  return lessonCompletionRatio(lessons.length + quizzes.length, completedLessons + passedQuizzes);
 }
 
-export function canIssueCertificate(percentage: number): boolean {
-  return percentage >= 100;
+export function canIssueCertificate(
+  percentage: number,
+  quizzes: QuizRef[] = [],
+  passedQuizIds: Set<string> = new Set(),
+): boolean {
+  if (percentage < 100) return false;
+  const finalQuiz = quizzes.find((quiz) => quiz.isFinal);
+  if (finalQuiz && !passedQuizIds.has(finalQuiz.id)) return false;
+  return true;
 }
 
 export type ModuleProgressView = {

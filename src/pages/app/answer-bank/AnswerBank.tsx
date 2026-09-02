@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
-import { answerBankDB, practiceContextsDB } from "@/lib/supabase/database";
+import { answerBankDB, answerBankFoldersDB, practiceContextsDB } from "@/lib/supabase/database";
 import type { Tables } from "@/integrations/supabase";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -17,16 +17,22 @@ import {
   BookOpen, Search, Star, Trash2,
   ChevronDown, ChevronUp, Copy,
   Edit2, Check, Plus, Sparkles, ExternalLink, Mic,
+  Folder, FolderPlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
-import { createIdempotencyKey } from "@/lib/api/functions";
+import { parsePrepToolResponse } from "@/lib/network/edgeResult";
+import {
+  prepToolContentIdempotencyKey,
+} from "@/lib/network/idempotency";
+import { sha256 } from "@/lib/utils/hashUtils";
 import {
   getAiUserFacingError,
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
 import { refreshCredits } from "@/lib/billing/creditsManager";
+import { useCredits, type CreditAction } from "@/hooks/useCredits";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import {
   answerBankEmptyTitle,
@@ -79,12 +85,16 @@ function validateAnswer(question: string, answer: string, existingAnswers: strin
   return null;
 }
 
+type FolderFilter = "all" | "favorites" | string;
+
 export default function AnswerBank() {
   const { user }  = useAuthStore();
   const navigate = useNavigate();
   const productLabel = PRODUCT_NAMES.answerBank;
 
   const [answers,   setAnswers]   = useState<Tables<"answer_bank">[]>([]);
+  const [folders,   setFolders]   = useState<Tables<"answer_bank_folders">[]>([]);
+  const [folderFilter, setFolderFilter] = useState<FolderFilter>("all");
   const [loadPhase, setLoadPhase] = useState<LoadPhase>("IDLE");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search,    setSearch]    = useState("");
@@ -94,12 +104,26 @@ export default function AnswerBank() {
   const [editText,  setEditText]  = useState("");
   const [deleteId,  setDeleteId]  = useState<string | null>(null);
   const [addOpen,   setAddOpen]   = useState(false);
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [deleteFolderId, setDeleteFolderId] = useState<string | null>(null);
   const fetchGenRef = useRef(0);
 
   useEffect(() => {
     if (!user?.id) return;
     void fetchAnswers();
+    void fetchFolders();
   }, [user?.id]);
+
+  async function fetchFolders() {
+    if (!user?.id) return;
+    try {
+      const data = await answerBankFoldersDB.listByUserId(user.id);
+      setFolders(data);
+    } catch {
+      /* folders are optional enhancement */
+    }
+  }
 
   async function fetchAnswers() {
     if (!user?.id) return;
@@ -160,18 +184,83 @@ export default function AnswerBank() {
     }
   }
 
+  async function toggleFavourite(ans: Tables<"answer_bank">) {
+    if (!user?.id) return;
+    const next = !ans.is_favourite;
+    try {
+      await answerBankDB.update(user.id, ans.id, { is_favourite: next });
+      setAnswers((p) => p.map((a) => (a.id === ans.id ? { ...a, is_favourite: next } : a)));
+    } catch {
+      toast.error(userFacingDbError(null, "save"));
+    }
+  }
+
+  async function moveToFolder(answerId: string, folderId: string | null) {
+    if (!user?.id) return;
+    try {
+      await answerBankDB.update(user.id, answerId, { folder_id: folderId });
+      setAnswers((p) =>
+        p.map((a) => (a.id === answerId ? { ...a, folder_id: folderId } : a)),
+      );
+      toast.success(folderId ? "Moved to folder" : "Removed from folder");
+    } catch {
+      toast.error(userFacingDbError(null, "save"));
+    }
+  }
+
+  async function createFolder() {
+    if (!user?.id || !newFolderName.trim()) return;
+    try {
+      const created = await answerBankFoldersDB.create(user.id, {
+        name: newFolderName.trim(),
+        sort_order: folders.length,
+      });
+      setFolders((p) => [...p, created]);
+      setNewFolderName("");
+      setNewFolderOpen(false);
+      setFolderFilter(created.id);
+      toast.success("Folder created");
+    } catch {
+      toast.error("Could not create folder. Name may already exist.");
+    }
+  }
+
+  async function deleteFolder() {
+    if (!user?.id || !deleteFolderId) return;
+    try {
+      await answerBankFoldersDB.delete(user.id, deleteFolderId);
+      setFolders((p) => p.filter((f) => f.id !== deleteFolderId));
+      setAnswers((p) =>
+        p.map((a) =>
+          a.folder_id === deleteFolderId ? { ...a, folder_id: null } : a,
+        ),
+      );
+      if (folderFilter === deleteFolderId) setFolderFilter("all");
+      setDeleteFolderId(null);
+      toast.success("Folder deleted");
+    } catch {
+      toast.error(userFacingDbError(null, "delete"));
+    }
+  }
+
   const filtered = useMemo(() => {
     const q = safeLower(search.trim());
     return answers.filter((a) => {
       const rowCategory = safeCategory(a.category);
       if (category !== "All" && rowCategory !== category) return false;
+      if (folderFilter === "favorites" && !a.is_favourite) return false;
+      if (folderFilter !== "all" && folderFilter !== "favorites" && a.folder_id !== folderFilter) {
+        return false;
+      }
       if (!q) return true;
+      const tags = Array.isArray(a.tags) ? a.tags : [];
       return (
         safeLower(a.question_text).includes(q) ||
-        safeLower(a.answer_text).includes(q)
+        safeLower(a.answer_text).includes(q) ||
+        tags.some((t) => safeLower(t).includes(q))
       );
     });
-  }, [answers, category, search]);
+  }, [answers, category, search, folderFilter]);
 
   const loading = loadPhase === "LOADING" || loadPhase === "IDLE";
   const showEmpty =
@@ -211,32 +300,94 @@ export default function AnswerBank() {
       />
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <Input
-          placeholder="Search answers…"
-          aria-label="Search answers"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          leftIcon={<Search className="w-4 h-4" />}
-          fullWidth={false}
-          className="sm:w-64"
-        />
-        <div className="flex flex-wrap gap-1.5">
-          {CATEGORIES.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => setCategory(c)}
-              className={cn(
-                "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
-                category === c
-                  ? "bg-primary/10 border-primary/30 text-primary"
-                  : "bg-secondary border-border text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {c}
-            </button>
+      <div className="flex flex-col items-stretch gap-3">
+        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+          <Input
+            placeholder="Search answers, tags…"
+            aria-label="Search answers"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            leftIcon={<Search className="w-4 h-4" />}
+            fullWidth={false}
+            className="sm:w-64"
+          />
+          <div className="flex flex-wrap gap-1.5">
+            {CATEGORIES.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setCategory(c)}
+                className={cn(
+                  "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
+                  category === c
+                    ? "bg-primary/10 border-primary/30 text-primary"
+                    : "bg-secondary border-border text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-1.5 items-center">
+          <button
+            type="button"
+            onClick={() => setFolderFilter("all")}
+            className={cn(
+              "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all flex items-center gap-1",
+              folderFilter === "all"
+                ? "bg-primary/10 border-primary/30 text-primary"
+                : "bg-secondary border-border text-muted-foreground hover:text-foreground",
+            )}
+          >
+            All
+          </button>
+          <button
+            type="button"
+            onClick={() => setFolderFilter("favorites")}
+            className={cn(
+              "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all flex items-center gap-1",
+              folderFilter === "favorites"
+                ? "bg-primary/10 border-primary/30 text-primary"
+                : "bg-secondary border-border text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Star className="w-3 h-3" />
+            Favorites
+          </button>
+          {folders.map((folder) => (
+            <div key={folder.id} className="flex items-center gap-0.5">
+              <button
+                type="button"
+                onClick={() => setFolderFilter(folder.id)}
+                className={cn(
+                  "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all flex items-center gap-1",
+                  folderFilter === folder.id
+                    ? "bg-primary/10 border-primary/30 text-primary"
+                    : "bg-secondary border-border text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <Folder className="w-3 h-3" />
+                {folder.name}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteFolderId(folder.id)}
+                className="p-1 rounded-lg text-muted-foreground hover:text-red-400"
+                aria-label={`Delete folder ${folder.name}`}
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
           ))}
+          <button
+            type="button"
+            onClick={() => setNewFolderOpen(true)}
+            className="px-3 py-1.5 rounded-xl border border-dashed border-border text-xs font-medium text-muted-foreground hover:text-foreground flex items-center gap-1"
+          >
+            <FolderPlus className="w-3 h-3" />
+            New folder
+          </button>
         </div>
       </div>
 
@@ -265,6 +416,7 @@ export default function AnswerBank() {
             onAction={() => {
               setSearch("");
               setCategory("All");
+              setFolderFilter("all");
             }}
           />
         </Card>
@@ -312,10 +464,51 @@ export default function AnswerBank() {
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       type="button"
+                      onClick={() => void toggleFavourite(ans)}
+                      className={cn(
+                        "p-1.5 rounded-lg transition-all",
+                        ans.is_favourite
+                          ? "text-amber-400 hover:bg-amber-400/10"
+                          : "text-muted-foreground hover:text-amber-400 hover:bg-accent/5",
+                      )}
+                      title={ans.is_favourite ? "Remove from favorites" : "Add to favorites"}
+                      aria-label={ans.is_favourite ? "Remove from favorites" : "Add to favorites"}
+                    >
+                      <Star className={cn("w-3.5 h-3.5", ans.is_favourite && "fill-current")} />
+                    </button>
+                    {folders.length > 0 && (
+                      <select
+                        aria-label="Move to folder"
+                        value={ans.folder_id ?? ""}
+                        onChange={(e) =>
+                          void moveToFolder(ans.id, e.target.value || null)
+                        }
+                        className="text-[10px] bg-secondary border border-border rounded-lg px-1.5 py-1 max-w-[6rem] truncate"
+                      >
+                        <option value="">No folder</option>
+                        {folders.map((f) => (
+                          <option key={f.id} value={f.id}>{f.name}</option>
+                        ))}
+                      </select>
+                    )}
+                    <button
+                      type="button"
                       onClick={() => {
                         if (!user?.id) return;
                         void (async () => {
                           try {
+                            await answerBankDB.incrementUsage(user.id, ans.id);
+                            setAnswers((p) =>
+                              p.map((a) =>
+                                a.id === ans.id
+                                  ? {
+                                      ...a,
+                                      times_used: (a.times_used ?? 0) + 1,
+                                      last_used_at: new Date().toISOString(),
+                                    }
+                                  : a,
+                              ),
+                            );
                             const created = await practiceContextsDB.create(
                               user.id,
                               draftFromAnswerBankEntry(ans),
@@ -432,6 +625,47 @@ export default function AnswerBank() {
         </div>
       </Modal>
 
+      {/* Delete folder confirm */}
+      <Modal open={!!deleteFolderId} onClose={() => setDeleteFolderId(null)} title="Delete folder?" size="sm">
+        <p className="text-sm text-muted-foreground mb-5">
+          Answers in this folder will be kept but no longer grouped.
+        </p>
+        <div className="flex gap-3">
+          <Button variant="secondary" size="sm" fullWidth onClick={() => setDeleteFolderId(null)}>
+            Cancel
+          </Button>
+          <Button variant="danger" size="sm" fullWidth onClick={() => void deleteFolder()}>
+            Delete folder
+          </Button>
+        </div>
+      </Modal>
+
+      {/* New folder */}
+      <Modal open={newFolderOpen} onClose={() => setNewFolderOpen(false)} title="New folder" size="sm">
+        <div className="space-y-4">
+          <Input
+            placeholder="Folder name"
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            autoFocus
+          />
+          <div className="flex gap-3">
+            <Button variant="secondary" size="sm" fullWidth onClick={() => setNewFolderOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              fullWidth
+              disabled={!newFolderName.trim()}
+              onClick={() => void createFolder()}
+            >
+              Create
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Add new answer modal */}
       <AddAnswerModal
         open={addOpen}
@@ -467,37 +701,69 @@ function AddAnswerModal({
   const [saving,   setSaving]   = useState(false);
   const [generating, setGenerating] = useState(false);
   const [aiDraft, setAiDraft] = useState(false);
+  const generateInFlightRef = useRef(false);
+  const generateKeyRef = useRef<string | null>(null);
+  const credits = useCredits();
 
   async function handleGenerateWithAi() {
-    if (!question.trim() || generating) return;
+    if (!question.trim() || generating || generateInFlightRef.current) return;
+    const cat = category.trim() || "Behavioural";
+    const useStar =
+      cat === "Behavioural" || cat === "Leadership" || cat === "HR";
+    const creditAction: CreditAction = useStar ? "star_generate" : "rephrase";
+    if (!credits.canAfford(creditAction)) {
+      openUpgradeIfInsufficientCredits(
+        Object.assign(new Error("Insufficient credits."), { code: "INSUFFICIENT_CREDITS" }),
+      );
+      return;
+    }
+
+    generateInFlightRef.current = true;
     setGenerating(true);
     try {
-      const cat = category.trim() || "Behavioural";
-      const useStar =
-        cat === "Behavioural" || cat === "Leadership" || cat === "HR";
       const tool_id = useStar ? "star_method" : "raw_prompt";
       const input = useStar
         ? `Interview question:\n${question.trim()}\n\nCategory: ${cat}\n\nUser draft (optional):\n${answer.trim() || "(none yet)"}\n\nImprove structure into a STAR answer for THIS exact question. Only use facts from the draft. If evidence is missing, use [NEEDS EVIDENCE] or [Add measurable result if available]. Never invent employers, metrics, technologies, or outcomes.`
         : `Interview category: ${cat}\nInterview question:\n${question.trim()}\n\nUser draft (optional):\n${answer.trim() || "(none yet)"}\n\nWrite a strong interview-ready answer for this exact question. Match the category. Do NOT invent employers, metrics, or unsupported claims. Use [NEEDS EVIDENCE] where facts are missing.`;
 
-      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
+      const contentHash = await sha256(`${tool_id}\n${input}`);
+      const idempotencyKey =
+        generateKeyRef.current ??
+        prepToolContentIdempotencyKey(tool_id, contentHash);
+      generateKeyRef.current = idempotencyKey;
+
+      const data = await fetchEdgeJson<Record<string, unknown>>("prep-tool", {
         tool_id,
         input,
       }, {
         headers: {
-          "x-idempotency-key": createIdempotencyKey("answer-bank-ai"),
+          "x-idempotency-key": idempotencyKey,
         },
+        timeoutMs: 90_000,
       });
-      const text = (data.result ?? "").trim();
+      const parsed = parsePrepToolResponse(data);
+      const text = parsed.result;
       if (!text) throw new Error("AI returned an empty answer.");
-      setAnswer(text);
+      setAnswer(text.slice(0, MAX_ANSWER_LENGTH));
       setAiDraft(true);
-      await refreshCredits();
-      toast.success("Draft generated — review before saving");
+      generateKeyRef.current = null;
+      await refreshCredits().catch(() => undefined);
+      const usedFallback =
+        parsed.source === "deterministic" ||
+        parsed.source === "fallback" ||
+        parsed.source === "python";
+      toast.success(
+        usedFallback
+          ? "Draft outline generated — review and add your real experience before saving"
+          : "Draft generated — review before saving",
+      );
     } catch (err) {
+      generateKeyRef.current = null;
       openUpgradeIfInsufficientCredits(err);
       toast.error(getAiUserFacingError(err));
+      await refreshCredits().catch(() => undefined);
     } finally {
+      generateInFlightRef.current = false;
       setGenerating(false);
     }
   }

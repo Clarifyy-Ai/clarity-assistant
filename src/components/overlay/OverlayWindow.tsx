@@ -24,7 +24,7 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile";
 
 import { cn } from "@/lib/utils";
-import { AlertCircle, GripVertical, Loader2, Mic, MicOff, RefreshCw, Sparkles, Square } from "lucide-react";
+import { AlertCircle, GripVertical, Loader2, Mic, MicOff, Pause, Play, RefreshCw, Sparkles, Square } from "lucide-react";
 
 import type { LiveSessionConfig } from "@/types/session.types";
 import { OverlayComplianceBanner } from "./OverlayComplianceBanner";
@@ -134,6 +134,8 @@ interface OverlayWindowProps {
   onManualQuestion?: (question: string) => void;
   onStartSession?: (config: LiveSessionConfig) => void;
   onSetupNewSession?: () => void;
+  onPauseSession?: () => void;
+  onResumeSession?: () => void;
   onReconnectAudio?: () => void;
   lastSessionId?: string | null;
   isPreparingSession?: boolean;
@@ -156,6 +158,8 @@ export function OverlayWindow({
   onManualQuestion,
   onStartSession,
   onSetupNewSession,
+  onPauseSession,
+  onResumeSession,
   onReconnectAudio,
   lastSessionId,
   isPreparingSession = false,
@@ -208,6 +212,8 @@ export function OverlayWindow({
   const sessionStatus = useSessionStore((s) => s.status);
   const sessionMode = useSessionStore((s) => s.mode);
   const isSessionActive = sessionStatus === "active";
+  const isSessionPaused = sessionStatus === "paused";
+  const isSessionLive = isSessionActive || isSessionPaused;
 
   // Overlay store state
   const isVisible = useOverlayStore((s) => s.is_visible);
@@ -255,7 +261,7 @@ export function OverlayWindow({
   );
 
   // Audio state
-  const deepgramStatus = useAudioStore((s) => s.deepgram_status);
+  const providerStatus = useAudioStore((s) => s.transcription_provider_status);
   const tokenState = useAudioStore((s) => s.token_state);
   const micState = useAudioStore((s) => s.mic_state);
   const pipelineStatus = useAudioStore((s) => s.pipeline_status);
@@ -266,7 +272,7 @@ export function OverlayWindow({
       buildPracticeCoachWarnings({
         micState,
         tokenState,
-        deepgramStatus,
+        transcriptionProviderStatus: providerStatus,
         pipelineStatus,
         streamErrorMessage: streamError?.message ?? null,
         streamErrorCode: streamError?.code ?? null,
@@ -277,7 +283,7 @@ export function OverlayWindow({
           pipelineStatus !== "listening" &&
           pipelineStatus !== "transcribing",
       }),
-    [micState, tokenState, deepgramStatus, pipelineStatus, streamError, sessionRestored],
+    [micState, tokenState, providerStatus, pipelineStatus, streamError, sessionRestored],
   );
   const primaryCoachWarning = useMemo(
     () => primaryPracticeCoachWarning(practiceCoachWarnings),
@@ -289,7 +295,7 @@ export function OverlayWindow({
   const isMuted = useAudioStore((s) => s.is_muted);
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
 
-  const isRecording = deepgramStatus === "connected";
+  const isRecording = providerStatus === "connected" && isSessionActive;
   const isGenerating = hintState === "generating" || hintState === "streaming";
   const showFullHeaderChrome = !isMobile || !isMinimalMode;
 
@@ -612,6 +618,9 @@ export function OverlayWindow({
             onAdjustRegion={onAdjustRegion}
             onEndSession={onEndSession}
             onSetupNewSession={onSetupNewSession}
+            onPauseSession={onPauseSession}
+            onResumeSession={onResumeSession}
+            onReconnectAudio={onReconnectAudio}
             interviewType={interviewType}
             compactMobile={isMobile}
           />
@@ -633,6 +642,27 @@ export function OverlayWindow({
           )}
           <div className="flex items-center gap-2">
             <OverlayListeningIndicator />
+            {isSessionPaused && onResumeSession ? (
+              <button
+                type="button"
+                onClick={() => void onResumeSession()}
+                title="Resume session"
+                aria-label="Resume session"
+                className="w-8 h-8 flex items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/15 text-emerald-400 shrink-0"
+              >
+                <Play className="w-3.5 h-3.5" aria-hidden />
+              </button>
+            ) : isSessionActive && onPauseSession ? (
+              <button
+                type="button"
+                onClick={onPauseSession}
+                title="Pause session"
+                aria-label="Pause session"
+                className="w-8 h-8 flex items-center justify-center rounded-xl border border-amber-500/25 bg-amber-500/15 text-amber-400 shrink-0"
+              >
+                <Pause className="w-3.5 h-3.5" aria-hidden />
+              </button>
+            ) : null}
             {onToggleMic && (
               <button
                 type="button"
@@ -663,7 +693,7 @@ export function OverlayWindow({
                 compact
               />
             </div>
-            {onEndSession && isSessionActive && (
+            {onEndSession && isSessionLive && (
               <button
                 type="button"
                 onClick={onEndSession}
@@ -939,7 +969,7 @@ export function OverlayWindow({
                             id="overlay-panel-transcript"
                             role="tabpanel"
                             aria-label="Transcript"
-                            className="flex-1 min-h-0 overflow-y-auto p-3"
+                            className="flex-1 min-h-0 flex flex-col overflow-hidden p-3"
                           >
                             <LiveTranscriptStream />
                           </div>
@@ -975,9 +1005,9 @@ export function OverlayWindow({
         </>
       )}
 
-      {isSessionActive && !isMinimalMode && !isMobile && <OverlaySessionStats />}
+      {isSessionLive && !isMinimalMode && !isMobile && <OverlaySessionStats />}
 
-      {isSessionActive && !isMinimalMode && !isMobile && <OverlayAudioStatusBar />}
+      {isSessionLive && !isMinimalMode && !isMobile && <OverlayAudioStatusBar />}
 
       {isSessionActive && !isMinimalMode && !isMobile && (
         <div className="flex items-center justify-between border-t border-white/[0.04] px-3 py-1 shrink-0">

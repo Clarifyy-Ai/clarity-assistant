@@ -1,21 +1,18 @@
-/** 
- * Dev-only debug telemetry — PRODUCTION DISABLED.
- * This function is only available in development builds.
- * Attempting to use it in production will throw an error.
- */
+import { postDebugIngest } from "@/lib/debug/debugIngest";
+
+/** Dev-only agent debug telemetry — production no-op unless a secure ingest URL is configured. */
 export function agentDebugIngest(payload: Record<string, unknown>): void {
-  // This is a no-op in production builds.
-  // The Vite build process should tree-shake this entire function in production.
-  // If you see this running in production, the build configuration is incorrect.
-  if (typeof import.meta !== 'undefined' && import.meta.env?.DEV === true) {
-    // STRICTLY DEV ONLY: fetch() with localhost removed
-    // If this ever runs in production, it will fail silently
-    try {
-      // Development endpoint disabled - DO NOT USE
-      // fetch("http://127.0.0.1:7572/...", ...)
-    } catch {
-      // Silently fail
-    }
-  }
-  // Production: this function does nothing
+  const sessionId = typeof payload.sessionId === "string" && payload.sessionId.trim()
+    ? payload.sessionId.trim()
+    : "agent";
+  postDebugIngest(sessionId, {
+    hypothesisId: String(payload.hypothesisId ?? ""),
+    location: String(payload.location ?? ""),
+    message: String(payload.message ?? ""),
+    data:
+      payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)
+        ? (payload.data as Record<string, unknown>)
+        : undefined,
+    runId: typeof payload.runId === "string" ? payload.runId : undefined,
+  });
 }

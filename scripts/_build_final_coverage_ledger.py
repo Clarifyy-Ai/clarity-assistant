@@ -56,7 +56,9 @@ FIXED = {
     "TC-SCH-002", "TC-SCH-003", "TC-SES-002",
     "TC-PUB-001", "TC-PUB-004", "TC-PUB-009",
     # Extra bugs
-    "DEF-001", "DEF-002", "DEF-003",
+    "DEF-001", "DEF-002", "DEF-003", "DEF-GOV-QD-001",
+    "DEF-INT-001", "DEF-PUB-013", "DEF-HELP-COPY",
+    "DEF-BILL-002", "DEF-BILL-003",
     # Auth/login regression passes
     "TC-REG-001", "TC-REG-002", "TC-REG-014", "TC-REG-015",
     # search-exams runtime 200
@@ -233,15 +235,20 @@ def classify(row: dict) -> dict:
 
     # Extra bugs — only override when not already classified FIXED
     if tid.startswith("DEF-") and disposition not in ("FIXED_IN_CODE", "PASS_NOTE_CLOSED"):
-        if tid == "DEF-002":
+        crossref = {
+            "DEF-001": "ExamSearchCombobox abort loop + profile timeout hardened (BUG-003)",
+            "DEF-002": "DialogTitle present in CommandDialog (BUG-009)",
+            "DEF-003": "CSP script-src includes cdn.razorpay.com (BUG-030)",
+            "DEF-BILL-002": "India sandbox checkout copy + card guidance (BUG-030)",
+            "DEF-BILL-003": "validate/account mapped to actionable checkout errors (BUG-030)",
+            "DEF-INT-001": "Calendar not_configured disables Connect CTA (BUG-006)",
+            "DEF-PUB-013": "OAuth readiness hides CTA; callback URL builder (BUG-018)",
+            "DEF-HELP-COPY": "helpCatalogCopy shared Help/footer catalog (BUG-012)",
+            "DEF-GOV-QD-001": "Quick Drill AI fill + assembly; 409 shortage not 422 (BUG-002)",
+        }
+        if tid in crossref:
             disposition = "FIXED_IN_CODE"
-            impl = "DialogTitle present in CommandDialog"
-        elif tid == "DEF-003":
-            disposition = "FIXED_IN_CODE"
-            impl = "CSP script-src includes cdn.razorpay.com"
-        elif tid == "DEF-001":
-            disposition = "FIXED_IN_CODE"
-            impl = "ExamSearchCombobox abort loop + profile timeout hardened"
+            impl = crossref.get(tid, impl)
 
     return {
         **row,

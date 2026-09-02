@@ -1,8 +1,16 @@
 // parse-document — PDF/text extraction for documents table (cover letter, etc.)
 
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
-import { createServiceClient } from "../_shared/supabase.ts";
-import { parseJSON } from "../_shared/gemini.ts";
+import { createServiceClient, refundCredits } from "../_shared/supabase.ts";
+import { geminiGenerateWithPdf, parseJSON } from "../_shared/gemini.ts";
+import {
+  buildDocumentExtractPayload,
+  extractPdfTextBasic,
+  looksBinary,
+  tryDeterministicTextExtract,
+  bytesToUtf8,
+  type DocumentExtractPayload,
+} from "../_shared/documentTextExtract.ts";
 import { requireAuth } from "../_shared/utils.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import {
@@ -12,13 +20,15 @@ import { resolveUploadMime, validateUploadMime } from "../_shared/uploadValidati
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { callPythonProcess } from "../_shared/pythonClient.ts";
 import { executeHybridOperation } from "../_shared/hybridExecute.ts";
+import {
+  documentErrorMessage,
+  fileByteLengthFailure,
+} from "../_shared/documentErrors.ts";
 import JSZip from "https://esm.sh/jszip@3.10.1";
 
 const PARSE_DOCUMENT_COST = creditCost("parse_document");
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
-const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
-const GEMINI_MODEL = "gemini-2.5-flash";
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const PARSER_VERSION = "document-parser-v2";
 
@@ -26,25 +36,6 @@ function safeBase64(bytes: Uint8Array): string {
   let bin = "";
   for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
   return btoa(bin);
-}
-
-function bytesToUtf8(bytes: Uint8Array): string {
-  try {
-    return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
-  } catch {
-    let s = "";
-    for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]!);
-    return s;
-  }
-}
-
-function looksBinary(bytes: Uint8Array): boolean {
-  const sample = bytes.subarray(0, Math.min(bytes.length, 2048));
-  let nul = 0;
-  for (let i = 0; i < sample.length; i++) {
-    if (sample[i] === 0) nul++;
-  }
-  return nul > 4;
 }
 
 async function extractZipText(bytes: Uint8Array, xlsx: boolean): Promise<string | null> {
@@ -71,11 +62,54 @@ function response(req: Request, body: Record<string, unknown>, status = 200) {
   });
 }
 
+function storagePrefixForDocument(userId: string, doc: { type?: string | null; keywords?: unknown }): string {
+  if (Array.isArray(doc.keywords) && doc.keywords.includes("portfolio")) {
+    return `${userId}/portfolios`;
+  }
+  return `${userId}/cover-letters`;
+}
+
+async function persistJdParseError(db: ReturnType<typeof createServiceClient>, jdId: string, message: string) {
+  await db.from("job_descriptions").update({
+    parse_status: "error",
+    parse_error: message,
+    updated_at: new Date().toISOString(),
+  }).eq("id", jdId);
+}
+
+async function persistCoverParseError(db: ReturnType<typeof createServiceClient>, documentId: string, message: string) {
+  await db.from("documents").update({
+    content: null,
+    parsed_summary: message,
+    updated_at: new Date().toISOString(),
+  }).eq("id", documentId);
+}
+
+async function refundIfCharged(opts: {
+  userId: string;
+  cost: number;
+  reason: string;
+  idempotencyKey: string;
+}) {
+  if (opts.cost <= 0) return;
+  await refundCredits({
+    userId: opts.userId,
+    cost: opts.cost,
+    reason: opts.reason,
+    idempotencyKey: opts.idempotencyKey.slice(0, 150),
+  });
+}
+
+function sizeFailureResponse(req: Request, byteLength: number) {
+  const fail = fileByteLengthFailure(byteLength, MAX_FILE_BYTES);
+  if (!fail) return null;
+  return response(req, { error: fail.message, code: fail.code, message: fail.message }, 400);
+}
+
 async function extractWithGemini(
   base64: string,
-  mimeType: string,
-  docType: string
-): Promise<{ full_text: string; summary: string } | null> {
+  docType: string,
+): Promise<DocumentExtractPayload | null> {
   if (!GEMINI_API_KEY) return null;
 
   const prompt =
@@ -85,45 +119,31 @@ async function extractWithGemini(
       : docType === "portfolio"
       ? `Extract only text that appears in this portfolio document. Do not invent companies, titles, dates, skills, metrics, or achievements. If a field is not in the source, omit it. Return JSON only:
 {"full_text":"source text only","summary":"2-3 sentence summary of what the document actually says"}`
+      : docType === "job_description"
+      ? `Extract the full job description text from this document. Return JSON only:
+{"full_text":"complete job description text","summary":"2-3 sentence summary of role and requirements"}`
       : `Extract all readable text. Return JSON only:
 {"full_text":"...","summary":"brief summary"}`;
 
-  const res = await fetch(
-    `${GEMINI_BASE}/models/${GEMINI_MODEL}:generateContent`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": GEMINI_API_KEY,
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [
-              { text: prompt },
-              { inline_data: { mime_type: mimeType, data: base64 } },
-            ],
-          },
-        ],
-        generationConfig: { temperature: 0.2, maxOutputTokens: 8192 },
-      }),
-    }
-  );
+  try {
+    const raw = await geminiGenerateWithPdf(prompt, base64, {
+      temperature: 0.2,
+      maxTokens: 8192,
+    });
+    const parsed = parseJSON(
+      raw.replace(/```json/gi, "").replace(/```/g, "").trim(),
+      null,
+    ) as { full_text?: string; summary?: string } | null;
 
-  if (!res.ok) return null;
-  const json = await res.json();
-  const raw = json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-  const parsed = parseJSON(
-    raw.replace(/```json/gi, "").replace(/```/g, "").trim(),
-    null
-  ) as { full_text?: string; summary?: string } | null;
-
-  if (!parsed?.full_text || parsed.full_text.length < 20) return null;
-  return {
-    full_text: String(parsed.full_text).slice(0, 50000),
-    summary: String(parsed.summary ?? parsed.full_text).slice(0, 2000),
-  };
+    if (!parsed?.full_text || parsed.full_text.length < 20) return null;
+    return {
+      full_text: String(parsed.full_text).slice(0, 50_000),
+      summary: String(parsed.summary ?? parsed.full_text).slice(0, 2000),
+    };
+  } catch (err) {
+    console.warn("[parse-document] gemini PDF extract failed", err);
+    return null;
+  }
 }
 
 const UNRELATED_REJECT_CONFIDENCE = 0.7;
@@ -282,11 +302,6 @@ async function tryPythonDocumentExtract(opts: {
   return extractPythonDocument(result.data);
 }
 
-type DocumentExtractPayload = {
-  full_text: string;
-  summary: string;
-};
-
 async function hybridDocumentExtract(opts: {
   req: Request;
   userId: string;
@@ -314,6 +329,8 @@ async function hybridDocumentExtract(opts: {
       document_kind: opts.documentKind,
     },
     runPython: async (ctx) => {
+      const local = tryDeterministicTextExtract(opts.bytes, opts.mimeType);
+      if (local) return local;
       return await tryPythonDocumentExtract({
         base64: opts.base64,
         filename: opts.filename,
@@ -357,13 +374,15 @@ async function hybridDocumentExtract(opts: {
         if (!text) throw new Error("XLSX extract failed");
         return { full_text: text, summary: text.slice(0, 400) };
       }
-      const gemini = await extractWithGemini(
-        opts.base64,
-        opts.mimeType,
-        opts.documentKind,
-      );
-      if (!gemini) throw new Error("Gemini document extract failed");
-      return gemini;
+      if (opts.mimeType === "application/pdf") {
+        const pdfText = extractPdfTextBasic(opts.bytes);
+        const fromPdf = pdfText ? buildDocumentExtractPayload(pdfText) : null;
+        if (fromPdf) return fromPdf;
+        const gemini = await extractWithGemini(opts.base64, opts.documentKind);
+        if (!gemini) throw new Error("Gemini document extract failed");
+        return gemini;
+      }
+      throw new Error(`Unsupported MIME type for AI extract: ${opts.mimeType}`);
     },
     validate: async (data) => {
       if (!data.full_text || data.full_text.trim().length < 1) {
@@ -374,6 +393,15 @@ async function hybridDocumentExtract(opts: {
   });
 
   if (!hybrid.ok) {
+    const fallback = tryDeterministicTextExtract(opts.bytes, opts.mimeType);
+    if (fallback) {
+      return {
+        ok: true,
+        data: fallback,
+        response: hybrid.response,
+        source: "deterministic",
+      };
+    }
     return { ok: false, response: hybrid.response };
   }
   return {
@@ -454,15 +482,13 @@ Deno.serve(async (req) => {
         return response(req, { error: "Document file could not be downloaded.", code: "PARSER_UNAVAILABLE" }, 503);
       }
       const buf = await fileData.arrayBuffer();
-      if (!buf.byteLength || buf.byteLength > MAX_FILE_BYTES) {
+      const libSize = sizeFailureResponse(req, buf.byteLength);
+      if (libSize) {
         await db.from("personal_library_documents").update({
           processing_status: "rejected",
-          processing_error: !buf.byteLength ? "File is empty." : "File is too large.",
+          processing_error: buf.byteLength ? "File is too large." : "File is empty.",
         }).eq("id", libraryDocumentId).eq("owner_id", userId);
-        return response(req, {
-          error: !buf.byteLength ? "File is empty." : "File is too large.",
-          code: buf.byteLength ? "FILE_TOO_LARGE" : "PARSER_FAILED",
-        }, 400);
+        return libSize;
       }
       const resolvedMime = resolveUploadMime(libraryDoc.mime_type, {
         filePath: libraryDoc.storage_path,
@@ -488,7 +514,7 @@ Deno.serve(async (req) => {
         base64: safeBase64(bytes),
         bytes,
         filename: libraryDoc.storage_path.split("/").pop() || "document",
-        mimeType: mimeCheck.mimeType,
+        mimeType: resolvedMime.mimeType,
         documentKind: "library",
       });
       if (!hybrid.ok) {
@@ -567,18 +593,16 @@ Deno.serve(async (req) => {
         .download(filePath);
 
       if (downloadError || !fileData) {
-        return new Response(
-          JSON.stringify({ error: "Failed to download file from storage", code: "SERVICE_UNAVAILABLE" }),
-          { status: 502, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
-        );
+        const msg = documentErrorMessage("PARSER_UNAVAILABLE", "Failed to download file from storage");
+        await persistJdParseError(db, jdId, msg);
+        return response(req, { error: msg, code: "PARSER_UNAVAILABLE" }, 503);
       }
 
       const buf = await fileData.arrayBuffer();
-      if (!buf.byteLength || buf.byteLength > MAX_FILE_BYTES) {
-        return new Response(
-          JSON.stringify({ error: "File empty or too large", code: "BAD_REQUEST" }),
-          { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
-        );
+      const jdSize = sizeFailureResponse(req, buf.byteLength);
+      if (jdSize) {
+        await persistJdParseError(db, jdId, buf.byteLength ? "This file is too large to process." : "This file is empty.");
+        return jdSize;
       }
 
       const creditIdempotencyKey =
@@ -587,6 +611,18 @@ Deno.serve(async (req) => {
         `jd:${jdId}`.slice(0, 150);
 
       const fileBytes = new Uint8Array(buf);
+      const resolvedMime = resolveUploadMime(mimeType, {
+        filePath: match.name,
+        bytes: fileBytes,
+      });
+      if (!resolvedMime.ok) {
+        await persistJdParseError(db, jdId, resolvedMime.reason);
+        return response(req, {
+          error: resolvedMime.reason,
+          code: "CORRUPT_FILE",
+        }, 400);
+      }
+
       const hybrid = await hybridDocumentExtract({
         req,
         userId,
@@ -595,17 +631,25 @@ Deno.serve(async (req) => {
         base64: safeBase64(fileBytes),
         bytes: fileBytes,
         filename: match.name,
-        mimeType: mimeCheck.mimeType,
+        mimeType: resolvedMime.mimeType,
         documentKind: "job_description",
       });
 
       if (!hybrid.ok) {
+        await persistJdParseError(db, jdId, documentErrorMessage("PARSER_FAILED"));
         return hybrid.response;
       }
 
       const extracted = hybrid.data;
       const classified = await classifyOrReject(req, extracted, "job_description");
       if (!classified.ok) {
+        await refundIfCharged({
+          userId,
+          cost: PARSE_DOCUMENT_COST,
+          reason: `parse_document_unrelated:${jdId}`,
+          idempotencyKey: `parse-doc-unrelated-ref:${creditIdempotencyKey}`,
+        });
+        await persistJdParseError(db, jdId, documentErrorMessage("DOCUMENT_UNRELATED"));
         return classified.response;
       }
 
@@ -652,7 +696,7 @@ Deno.serve(async (req) => {
     }
 
     // Derive storage path server-side — never trust client-supplied paths (IDOR).
-    const storagePrefix = `${userId}/cover-letters`;
+    const storagePrefix = storagePrefixForDocument(userId, doc);
     const { data: objects, error: listError } = await db.storage
       .from("documents")
       .list(storagePrefix, { search: documentId, limit: 10 });
@@ -690,21 +734,31 @@ Deno.serve(async (req) => {
       .download(filePath);
 
     if (downloadError || !fileData) {
-      return new Response(
-        JSON.stringify({ error: "Failed to download file from storage", code: "SERVICE_UNAVAILABLE" }),
-        { status: 502, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
-      );
+      const msg = documentErrorMessage("PARSER_UNAVAILABLE", "Failed to download file from storage");
+      await persistCoverParseError(db, documentId, msg);
+      return response(req, { error: msg, code: "PARSER_UNAVAILABLE" }, 503);
     }
 
     const buf = await fileData.arrayBuffer();
-    if (!buf.byteLength || buf.byteLength > MAX_FILE_BYTES) {
-      return new Response(
-        JSON.stringify({ error: "File empty or too large", code: "BAD_REQUEST" }),
-        { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
-      );
+    const coverSize = sizeFailureResponse(req, buf.byteLength);
+    if (coverSize) {
+      await persistCoverParseError(db, documentId, buf.byteLength ? "This file is too large to process." : "This file is empty.");
+      return coverSize;
     }
 
     const fileBytes = new Uint8Array(buf);
+    const resolvedMime = resolveUploadMime(mimeType, {
+      filePath: match.name,
+      bytes: fileBytes,
+    });
+    if (!resolvedMime.ok) {
+      await persistCoverParseError(db, documentId, resolvedMime.reason);
+      return response(req, {
+        error: resolvedMime.reason,
+        code: "CORRUPT_FILE",
+      }, 400);
+    }
+
     const hashBuf = await crypto.subtle.digest("SHA-256", buf);
     const contentHash = Array.from(new Uint8Array(hashBuf))
       .map((b) => b.toString(16).padStart(2, "0"))
@@ -756,13 +810,14 @@ Deno.serve(async (req) => {
       base64: safeBase64(fileBytes),
       bytes: fileBytes,
       filename: match.name,
-      mimeType: mimeCheck.mimeType,
+      mimeType: resolvedMime.mimeType,
       documentKind: Array.isArray(doc.keywords) && doc.keywords.includes("portfolio")
         ? "portfolio"
         : (doc.type ?? "other"),
     });
 
     if (!hybrid.ok) {
+      await persistCoverParseError(db, documentId, documentErrorMessage("PARSER_FAILED"));
       return hybrid.response;
     }
 
@@ -775,6 +830,13 @@ Deno.serve(async (req) => {
         : (doc.type ?? "other"),
     );
     if (!classified.ok) {
+      await refundIfCharged({
+        userId,
+        cost: PARSE_DOCUMENT_COST,
+        reason: `parse_document_unrelated:${documentId}`,
+        idempotencyKey: `parse-doc-unrelated-ref:${creditIdempotencyKey}`,
+      });
+      await persistCoverParseError(db, documentId, documentErrorMessage("DOCUMENT_UNRELATED"));
       return classified.response;
     }
 

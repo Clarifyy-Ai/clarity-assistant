@@ -58,9 +58,14 @@ import { notifySessionsChanged } from "@/lib/session/sessionReuse";
 import {
   activateSession,
   aiModeForSessionType,
+  normalizeSessionLifecycleError,
   type SessionType,
 } from "@/lib/session/sessionLifecycle";
-import { startSession as startSessionApi, finalizeSession as finalizeSessionApi } from "@/lib/api/sessions";
+import {
+  startSession as startSessionApi,
+  finalizeSession as finalizeSessionApi,
+  endSession as endSessionApi,
+} from "@/lib/api/sessions";
 import { ApiClientError } from "@/lib/api/apiClient";
 import { toDbModel } from "@/lib/ai/modelMapping";
 import { markFirstListening, startAnswerLatencySpan, markAnswerLatency } from "@/lib/analytics/uxMetrics";
@@ -127,6 +132,7 @@ export function useLiveCopilot({
   existingSessionIdRef.current = existingSessionId ?? null;
   /** Shared across double-click; cleared when the session ends so Start New Session is a new row. */
   const startAttemptKeyRef = useRef<string | null>(null);
+  const startInFlightRef = useRef(false);
 
   const [isPreparingSession, setIsPreparingSession] = useState(false);
   const [prepStepIndex, setPrepStepIndex] = useState(0);
@@ -818,9 +824,12 @@ export function useLiveCopilot({
   }, [submitManualQuestion]);
 
   const startLiveSession = useCallback(async () => {
+    if (startInFlightRef.current) return;
+
     const userId = profile?.id || user?.id;
     if (!userId) throw new Error("Please sign in to start a live session.");
 
+    startInFlightRef.current = true;
     const cfg = configRef.current;
     setIsPreparingSession(true);
     setPrepStepIndex(0);
@@ -843,6 +852,9 @@ export function useLiveCopilot({
       resetStores: !willRestore,
     });
     overlayGenerationRef.current = generation;
+
+    /** Fresh server session to cancel if client init fails after start-session succeeds. */
+    let cancelSessionOnFailure: string | null = null;
 
     try {
       const privateMode = getPrivateMode();
@@ -901,6 +913,9 @@ export function useLiveCopilot({
             code: "SESSION_NOT_AVAILABLE",
           });
         }
+        if (result.reused !== true) {
+          cancelSessionOnFailure = result.session_id;
+        }
         sessionIdRef.current = result.session_id;
       } else {
         sessionIdRef.current = generateId();
@@ -930,13 +945,14 @@ export function useLiveCopilot({
       markOverlayProductSessionReady(generation);
       useOverlayStore.getState().showOverlay();
       useOverlayStore.getState().setSessionPipelineState("connecting");
-      await audio.start();
+      await audio.start({ restore: restoringExisting });
       if (!getOverlaySessionAuthority().matchesGeneration(generation)) {
         audio.stop();
         return;
       }
       markOverlayProductSessionActive(generation);
       markFirstListening();
+      cancelSessionOnFailure = null;
 
       if (restoringExisting) {
         const checkpoint = loadLiveSessionCheckpoint(reusableSessionId!);
@@ -986,11 +1002,24 @@ export function useLiveCopilot({
       checkpointLiveSession();
     } catch (err) {
       console.error("[useLiveCopilot] Failed to start live session:", err);
+      if (cancelSessionOnFailure && !getPrivateMode()) {
+        void endSessionApi({
+          session_id: cancelSessionOnFailure,
+          terminal_reason: "CANCELLED",
+        }).catch((cancelErr) => {
+          console.warn(
+            "[useLiveCopilot] could not cancel session after init failure:",
+            cancelErr,
+          );
+        });
+      }
       audio.stop();
       markOverlayProductSessionTerminal(generation, "FAILED");
       teardownOverlayProductSession(generation);
-      throw err instanceof Error ? err : new Error("Failed to start live session");
+      const normalized = normalizeSessionLifecycleError(err);
+      throw normalized;
     } finally {
+      startInFlightRef.current = false;
       setIsPreparingSession(false);
       setPrepStepIndex(0);
     }
@@ -1020,7 +1049,7 @@ export function useLiveCopilot({
     markOverlayProductSessionTerminal(gen, "USER_ENDED");
     // STT / mic teardown must never block session history persistence.
     try {
-      audio.stop();
+      audio.stop({ releaseToken: true });
     } catch (stopErr) {
       console.warn("[useLiveCopilot] audio stop during end (non-fatal):", stopErr);
     }
@@ -1102,12 +1131,12 @@ export function useLiveCopilot({
   }, [audio, profile?.id]);
 
   const pauseLiveSession = useCallback(() => {
-    audio.stop();
+    audio.pause();
     useSessionStore.getState().setStatus("paused");
   }, [audio]);
 
   const resumeLiveSession = useCallback(async () => {
-    await audio.start();
+    await audio.start({ restore: true });
     useSessionStore.getState().setStatus("active");
   }, [audio]);
 

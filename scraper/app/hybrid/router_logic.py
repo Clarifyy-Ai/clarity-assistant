@@ -104,6 +104,18 @@ _CAPABILITIES: dict[str, dict[str, Any]] = {
         "category": "prep",
         "inputs": ["topic", "prompt"],
     },
+    "prep_answer_outline": {
+        "engine": "python_template",
+        "requires_ai": False,
+        "category": "prep",
+        "inputs": ["text", "input", "category", "question", "user_draft"],
+    },
+    "prep_raw_prompt": {
+        "engine": "python_template",
+        "requires_ai": False,
+        "category": "prep",
+        "inputs": ["text", "input", "category", "question", "user_draft"],
+    },
     "ping": {
         "engine": "identity",
         "requires_ai": False,

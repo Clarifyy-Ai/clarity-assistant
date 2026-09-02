@@ -123,7 +123,7 @@ def live_copilot_cases() -> list[dict]:
            "1. Desktop path available or N/A.\n2. Classification honest.",
            "Electron-specific overlay tested only when desktop build provided.",
            priority="P2", severity="Minor", account="SUFFICIENT_CREDIT_01",
-           notes="Web testers mark Electron-only as Blocked by Environment."),
+           notes="Web QA: Blocked by Environment (QA-GAP-001). See docs/qa/QA_ENVIRONMENT_GAPS.md."),
     ]
 
 

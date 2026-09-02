@@ -23,7 +23,7 @@ import {
 } from "./officialDomainAllowlist";
 
 export const COLLECTOR_USER_AGENT =
-  "ClarifyAI-GovExamBot/1.0 (+https://clarify.ai/bot; contact@clarify.ai)";
+  "CareerPilot-GovExamBot/1.0 (+https://clarify.ai/bot; hello@trycareerpilot.com)";
 
 export const DEFAULT_MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024; // 50MB
 export const DEFAULT_TIMEOUT_MS = 20000; // 20s

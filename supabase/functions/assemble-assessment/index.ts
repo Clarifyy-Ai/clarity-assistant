@@ -57,12 +57,28 @@ function json(
 }
 
 function fail(req: Request, code: StartCode, extra?: Record<string, unknown>): Response {
+  const hintDetails =
+    extra?.details && typeof extra.details === "object"
+      ? extra.details as Record<string, unknown>
+      : undefined;
+  const inventory =
+    code === "INSUFFICIENT_QUESTION_INVENTORY" && hintDetails
+      ? {
+          available_count: hintDetails.available_count,
+          requested_count: hintDetails.requested_count,
+          available: hintDetails.available_count,
+          requested: hintDetails.requested_count,
+          required: hintDetails.requested_count,
+        }
+      : {};
+
   return json(
     req,
     {
       error: USER_MESSAGE[code],
       code,
       ...(extra ?? {}),
+      ...inventory,
     },
     HTTP_FOR[code],
   );

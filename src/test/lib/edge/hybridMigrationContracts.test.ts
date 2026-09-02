@@ -31,7 +31,7 @@ const HYBRID_MIGRATIONS: Array<{
   { fn: "process-sprint-transcript", operation: "sprint_review_transcript" },
   {
     fn: "prep-tool",
-    operation: /operation:\s*"(prep_rephrase|prep_coding|prep_project|star_builder|system_design)"/,
+    operation: /operation:\s*"(prep_rephrase|prep_coding|prep_project|prep_raw_prompt|star_builder|system_design)"/,
     label: "prep hybrid op",
   },
 ];
@@ -60,6 +60,7 @@ describe("hybrid migration source contracts (Edge → executeHybridOperation)", 
     expect(source).toContain("prep_rephrase");
     expect(source).toContain("prep_coding");
     expect(source).toContain("prep_project");
+    expect(source).toContain('operation: "prep_raw_prompt"');
   });
 
   it("migrated functions do not bypass hybrid with direct AI-only credit deduct", () => {

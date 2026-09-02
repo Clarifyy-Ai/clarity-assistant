@@ -869,6 +869,134 @@ def prep_project(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _parse_answer_bank_prompt(text: str) -> dict[str, str]:
+    """Parse Answer Bank raw_prompt / Technical prep input into structured fields."""
+    raw = text or ""
+
+    category = ""
+    cat_match = re.search(r"Interview category:\s*(.+)", raw, re.I)
+    if cat_match:
+        category = cat_match.group(1).strip()
+    else:
+        alt = re.search(r"^Category:\s*(.+)", raw, re.I | re.M)
+        if alt:
+            category = alt.group(1).strip()
+
+    question = ""
+    q_match = re.search(
+        r"Interview question:\s*([\s\S]*?)(?:\n\nUser draft|\n\nWrite|\n\nImprove|$)",
+        raw,
+        re.I,
+    )
+    if q_match:
+        question = q_match.group(1).strip()
+    elif not category:
+        question = raw.strip()
+
+    user_draft = ""
+    draft_match = re.search(
+        r"User draft \(optional\):\s*([\s\S]*?)(?:\n\nWrite|\n\nImprove|$)",
+        raw,
+        re.I,
+    )
+    if draft_match:
+        user_draft = draft_match.group(1).strip()
+        if user_draft.lower() in {"(none yet)", "(none)", "none"}:
+            user_draft = ""
+
+    return {
+        "category": (category or "General")[:80],
+        "question": (question or "this question")[:500],
+        "user_draft": user_draft[:2500],
+    }
+
+
+def prep_answer_outline(payload: dict[str, Any]) -> dict[str, Any]:
+    """Structured interview answer outline for Answer Bank Technical / raw_prompt.
+
+    Parses Interview category, question, and optional user draft from the prompt
+    text. Never invents facts — uses [NEEDS EVIDENCE] placeholders where needed.
+    """
+    text = _str(payload, "text", "input", "prompt", "content")
+    explicit_category = _str(payload, "category", "interview_category", "interviewCategory")
+    explicit_question = _str(payload, "question", "question_text", "questionText")
+    explicit_draft = _str(payload, "user_draft", "userDraft", "draft")
+
+    parsed = _parse_answer_bank_prompt(text) if text else {
+        "category": "General",
+        "question": "",
+        "user_draft": "",
+    }
+    category = explicit_category or parsed["category"]
+    question = explicit_question or parsed["question"]
+    user_draft = explicit_draft or parsed["user_draft"]
+
+    if not question.strip():
+        question = "this question"
+
+    sections = {
+        "opening": (
+            "Briefly confirm you understand the question and frame your answer."
+        ),
+        "core_response": [
+            "State your relevant experience or approach",
+            "Walk through 2–3 concrete points tied to the question",
+            (
+                "Use [NEEDS EVIDENCE] where you should add real examples "
+                "from your background"
+            ),
+        ],
+        "closing": (
+            "Summarize your key takeaway and how it applies to the role."
+        ),
+    }
+
+    outline_lines = [
+        f"**{category} interview answer (structured outline)**",
+        "",
+        f"**Question:** {question}",
+        "",
+    ]
+    if user_draft:
+        outline_lines.extend(
+            [
+                "**Your draft (use as source of truth):**",
+                user_draft,
+                "",
+            ]
+        )
+    outline_lines.extend(
+        [
+            f"**Opening:** {sections['opening']}",
+            "",
+            "**Core response:**",
+            *[f"- {point}" for point in sections["core_response"]],
+            "",
+            f"**Closing:** {sections['closing']}",
+            "",
+            (
+                "_AI polish is temporarily unavailable — this outline helps you "
+                "structure a draft. Replace placeholders with your real experience "
+                "before saving._"
+            ),
+        ]
+    )
+    outline = "\n".join(outline_lines)
+
+    return {
+        "format": "interview_answer_outline",
+        "category": category,
+        "question": question,
+        "user_draft": user_draft or None,
+        "outline": outline,
+        "sections": sections,
+        "evidence_only": True,
+        "invented_facts": False,
+        "needs_ai_polish": True,
+        "source": "python_template",
+    }
+
+
 # ── Ping ─────────────────────────────────────────────────────────────────────
 
 def ping(_payload: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -900,6 +1028,8 @@ _HANDLERS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "prep_rephrase": prep_rephrase,
     "prep_coding": prep_coding,
     "prep_project": prep_project,
+    "prep_answer_outline": prep_answer_outline,
+    "prep_raw_prompt": prep_answer_outline,
     "ping": ping,
 }
 

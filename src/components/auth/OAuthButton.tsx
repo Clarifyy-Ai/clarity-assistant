@@ -147,7 +147,7 @@ export const OAuthButton = ({
           }
           className={cn(
             "w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg",
-            "border border-border bg-muted/30 text-muted-foreground/50",
+            "border border-border bg-muted/30 text-muted-foreground",
             "cursor-not-allowed opacity-60 select-none"
           )}
         >

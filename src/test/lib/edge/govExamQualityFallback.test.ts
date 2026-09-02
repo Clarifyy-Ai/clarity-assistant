@@ -37,15 +37,18 @@ describe("gov exam quality + fallback contracts", () => {
     expect(client).toContain("accepted: true");
   });
 
-  it("select-test-questions validates selected payloads via Python and does not pad", () => {
+  it("select-test-questions validates selected payloads via Python, AI-fills shortages, and does not pad", () => {
     const src = fs.readFileSync(
       path.join(root, "supabase/functions/select-test-questions/index.ts"),
       "utf8",
     );
     expect(src).toContain("pythonGovValidateQuestions");
     expect(src).toContain("isPythonGovExamConfigured");
-    expect(src).toContain("CONTENT_INSUFFICIENT");
+    expect(src).toContain("shouldInvokeAiFill");
+    expect(src).toContain("QUESTION_INVENTORY_INSUFFICIENT");
+    expect(src).toContain("decideSelectTestOutcome");
     expect(src).not.toMatch(/pad.*fake|fake.*question/i);
+    expect(src).not.toMatch(/status:\s*422/);
   });
 
   it("extract-question-paper queues heavy PDFs and never auto-publishes", () => {

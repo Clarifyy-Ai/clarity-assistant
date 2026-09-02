@@ -12,6 +12,7 @@ import {
 } from "./cors.ts";
 import { deductCreditsAtomic, refundCredits } from "./supabase.ts";
 import { isBillingPastDue, isPastDueAllowedPath } from "./billingPastDue.ts";
+import { isAuthUserEmailConfirmed } from "./emailVerification.ts";
 
 import type {
   AuthContext, EdgeSuccess,
@@ -123,6 +124,15 @@ export async function requireAuth(req: Request): Promise<AuthContext> {
       expired ? "Session expired. Please sign in again." : "Invalid or expired token",
       expired ? "AUTH_EXPIRED" : "AUTH_INVALID",
       401,
+      req,
+    );
+  }
+
+  if (!isAuthUserEmailConfirmed(user)) {
+    throw errorResponse(
+      "Email address not verified. Check your inbox for the confirmation link.",
+      "EMAIL_NOT_VERIFIED",
+      403,
       req,
     );
   }

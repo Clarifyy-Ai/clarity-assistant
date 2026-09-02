@@ -56,3 +56,9 @@ export const ALLOWED_ATTACHMENT_TYPES = [
   "image/jpeg",
   "text/csv",
 ] as const;
+
+/** Canonical user-facing module label (sidebar, breadcrumbs, page titles). */
+export const COMMUNITY_MODULE_LABEL = "Community";
+
+export const COMMUNITY_MODULE_DESCRIPTION =
+  "Ask questions, share answers, and report content for moderation.";

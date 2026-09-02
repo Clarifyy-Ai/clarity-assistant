@@ -118,7 +118,7 @@ export default function Shortcuts() {
                       {shortcut.keys.map((key, ki) => (
                         <span key={ki} className="flex items-center gap-1">
                           <KeyBadge>{key}</KeyBadge>
-                          {ki < shortcut.keys.length - 1 && <span className="text-muted-foreground/50 text-xs">+</span>}
+                          {ki < shortcut.keys.length - 1 && <span className="text-muted-foreground text-xs">+</span>}
                         </span>
                       ))}
                     </div>

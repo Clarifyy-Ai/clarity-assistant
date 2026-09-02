@@ -28,7 +28,8 @@ import { readCachedAuthSession } from "@/lib/supabase/sessionCache";
 import { profilesDB, userRolesDB } from "@/lib/supabase/database";
 import { useOverlayStore } from "@/store/overlayStore";
 import { normalizePreferredModel } from "@/lib/ai/modelOptions";
-import { ACCOUNT_SUSPENDED_MESSAGE, formatSupabaseAuthError, isAccountSuspendedAuthError } from "@/lib/errors";
+import { ACCOUNT_SUSPENDED_MESSAGE, isAccountSuspendedAuthError } from "@/lib/errors";
+import { classifyLoginFailure } from "@/lib/auth/loginFailure";
 import { isOAuthProviderEnabled } from "@/lib/auth/oauthProviders";
 import { isElectronApp } from "@/lib/platform/isElectron";
 import { clearBYOKVault } from "@/lib/security/byokVault";
@@ -49,6 +50,8 @@ import {
   SIGNED_OUT_ELSEWHERE_REASON,
 } from "@/lib/auth/sessionErrors";
 import { buildAuthRedirectUrl } from "@/lib/auth/redirectUrl";
+import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
+import { buildOAuthCallbackUrl } from "@/lib/auth/oauthCallbackUrl";
 import {
   clearTabLocalLogout,
   isTabLocalLogout,
@@ -594,6 +597,18 @@ export const useAuthStore = create<AuthStore>()(
                 return;
               }
 
+              if (!isUserEmailConfirmed(session.user)) {
+                await supabase.auth.signOut({ scope: "local" });
+                dset((state) => {
+                  state.status = "unauthenticated";
+                  state.session = null;
+                  state.user = null;
+                  state.profile = null;
+                  state.isProfileLoaded = false;
+                });
+                return;
+              }
+
               dset((state) => {
                 state.session = session as unknown as SupabaseSession;
                 state.user = session.user as unknown as SupabaseUser;
@@ -859,18 +874,16 @@ export const useAuthStore = create<AuthStore>()(
             });
 
             if (error) {
-              const friendly = formatSupabaseAuthError(error);
+              const classified = classifyLoginFailure(error);
               dset((state) => {
                 state.status = "unauthenticated";
                 state.session = null;
                 state.user = null;
-                state.error = friendly;
+                state.error = classified.message;
               });
 
-              throw Object.assign(new Error(friendly), {
-                cause: error,
-                code: (error as { code?: string }).code,
-                status: (error as { status?: number }).status,
+              throw Object.assign(new Error(classified.message), {
+                code: classified.code,
               });
             }
 
@@ -949,7 +962,7 @@ export const useAuthStore = create<AuthStore>()(
               throw error;
             }
 
-            if (data.session) {
+            if (data.session && data.user && isUserEmailConfirmed(data.user)) {
               dset((state) => {
                 state.session = data.session as unknown as SupabaseSession;
                 state.user = data.user as unknown as SupabaseUser;
@@ -961,7 +974,16 @@ export const useAuthStore = create<AuthStore>()(
                 throw new Error(get().error ?? "Failed to load your account profile.");
               }
             } else {
+              if (data.session) {
+                // Supabase may return a JWT before email confirmation — revoke locally so
+                // protected routes and edge APIs cannot be used until the link is clicked.
+                await supabase.auth.signOut({ scope: "local" });
+              }
               dset((state) => {
+                state.session = null;
+                state.user = null;
+                state.profile = null;
+                state.isProfileLoaded = false;
                 state.status = "unauthenticated";
               });
             }
@@ -986,24 +1008,23 @@ export const useAuthStore = create<AuthStore>()(
             const { error } = await supabase.auth.signInWithOAuth({
               provider: provider as any,
               options: {
-                redirectTo: buildAuthRedirectUrl({
-                  path: "/auth/callback",
-                  configuredAppUrl: import.meta.env.VITE_APP_URL,
-                  appEnv: import.meta.env.VITE_APP_ENV,
-                  windowOrigin:
-                    typeof window !== "undefined" ? window.location.origin : null,
-                }),
+                redirectTo: buildOAuthCallbackUrl(
+                  typeof window !== "undefined" ? window.location.origin : null,
+                ),
                 scopes: provider === "google" ? "email profile" : undefined,
               },
             });
 
             if (error) {
+              const classified = classifyLoginFailure(error);
               dset((state) => {
                 state.status = "error";
-                state.error = error.message;
+                state.error = classified.message;
               });
 
-              throw error;
+              throw Object.assign(new Error(classified.message), {
+                code: classified.code,
+              });
             }
           },
 

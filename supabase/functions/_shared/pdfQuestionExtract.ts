@@ -3,7 +3,7 @@
  * Keep in sync with src/lib/gov-exam/extractQuestionPaper.ts for payload rules.
  */
 
-export const EXTRACT_PARSER_VERSION = "1.0.0";
+export const EXTRACT_PARSER_VERSION = "1.1.0";
 export const MAX_PDF_BASE64_CHARS = 22_000_000;
 export const MAX_TEXT_PAYLOAD_CHARS = 200_000;
 export const MAX_STORAGE_PATH_LEN = 500;
@@ -345,14 +345,56 @@ Schema:
 
 /**
  * Deterministic MCQ parser for pasted OCR / plain text.
- * Supports blocks like:
- *   Q1. Stem?
- *   A) opt
- *   B) opt
- *   C) opt
- *   D) opt
- *   Answer: B
+ * Supports Q1. / 1. / 1) stems and A) A. (A) (a) options.
  */
+const MCQ_OPTION_LINE = /^[\(\[]?([A-Da-d])[\)\].:\-]\s*(.+)$/;
+const MCQ_ANSWER_LINE =
+  /^(?:answer|ans|correct(?:\s*option)?)\s*[:\-]\s*[\(\[]?([A-Da-d])(?:[\)\]]|\b)/i;
+const MCQ_STEM_PREFIX = /^(?:Q(?:uestion)?\s*)?\d+[.)]\s*/i;
+
+function parseOnePlainTextMcq(block: string): Record<string, unknown> | null {
+  const lines = block
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length < 2) return null;
+
+  const firstOpt = lines.findIndex((line) => MCQ_OPTION_LINE.test(line));
+  if (firstOpt < 1) return null;
+
+  const stem = lines
+    .slice(0, firstOpt)
+    .join(" ")
+    .replace(MCQ_STEM_PREFIX, "")
+    .trim();
+  if (stem.length < 8) return null;
+
+  const optionMap: Record<string, string> = {};
+  let answerLetter: string | null = null;
+  for (const line of lines.slice(firstOpt)) {
+    const opt = line.match(MCQ_OPTION_LINE);
+    if (opt) {
+      optionMap[opt[1].toUpperCase()] = opt[2].trim();
+      continue;
+    }
+    const ans = line.match(MCQ_ANSWER_LINE);
+    if (ans) answerLetter = ans[1].toUpperCase();
+  }
+
+  const options = ["A", "B", "C", "D"].map((k) => optionMap[k] || "");
+  if (options.filter((o) => o.length > 0).length < 4) return null;
+
+  return {
+    question_text: stem,
+    options,
+    correct_answer: answerLetter ?? "",
+    explanation: "",
+    subject: "General",
+    topic: "Extracted",
+    difficulty: "MEDIUM",
+  };
+}
+
 export function parsePlainTextMcqs(text: string): unknown[] {
   const cleaned = String(text || "")
     .replace(/\r\n/g, "\n")
@@ -362,46 +404,95 @@ export function parsePlainTextMcqs(text: string): unknown[] {
 
   const blocks = cleaned.split(/\n(?=(?:Q(?:uestion)?\s*)?\d+[.)]\s)/i);
   const out: unknown[] = [];
-
   for (const block of blocks) {
-    const lines = block
-      .split("\n")
-      .map((l) => l.trim())
-      .filter(Boolean);
-    if (lines.length < 5) continue;
-
-    const stemLine = lines[0].replace(/^(?:Q(?:uestion)?\s*)?\d+[.)]\s*/i, "").trim();
-    if (stemLine.length < 8) continue;
-
-    const optionMap: Record<string, string> = {};
-    let answerLetter: string | null = null;
-
-    for (const line of lines.slice(1)) {
-      const opt = line.match(/^([A-Da-d])[).:\-]\s*(.+)$/);
-      if (opt) {
-        optionMap[opt[1].toUpperCase()] = opt[2].trim();
-        continue;
-      }
-      const ans = line.match(/^(?:answer|ans|correct)\s*[:\-]\s*([A-Da-d])\b/i);
-      if (ans) answerLetter = ans[1].toUpperCase();
-    }
-
-    const options = ["A", "B", "C", "D"].map((k) => optionMap[k] || "");
-    if (options.filter((o) => o.length > 0).length < 4) continue;
-
-    out.push({
-      question_text: stemLine,
-      options,
-      // Never guess a missing key — empty answer flags needs_review.
-      correct_answer: answerLetter ?? "",
-      explanation: "",
-      subject: "General",
-      topic: "Extracted",
-      difficulty: "MEDIUM",
-    });
+    const parsed = parseOnePlainTextMcq(block);
+    if (parsed) out.push(parsed);
   }
-
   return out;
+}
+
+/** True when base64 decodes to a %PDF header (validate before charging credits). */
+export function isPdfMagicBase64(b64: string): boolean {
+  const compact = String(b64 || "").replace(/\s/g, "");
+  if (compact.length < 8) return false;
+  try {
+    const head = atob(compact.slice(0, 24));
+    return head.startsWith("%PDF");
+  } catch {
+    return false;
+  }
+}
+
+/** Python document_extract returns `extracted_text` — not `full_text`. */
+export function pythonDocumentExtractText(data: unknown): string {
+  if (!data || typeof data !== "object") return "";
+  const rec = data as Record<string, unknown>;
+  const nested =
+    rec.data && typeof rec.data === "object" && !Array.isArray(rec.data)
+      ? (rec.data as Record<string, unknown>)
+      : rec;
+  const candidates = [
+    nested.extracted_text,
+    nested.full_text,
+    nested.text,
+    rec.extracted_text,
+    rec.full_text,
+    rec.text,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c;
+  }
+  return "";
+}
+
+export function pythonExtractLooksScanned(data: unknown): boolean {
+  if (!data || typeof data !== "object") return false;
+  const rec = data as Record<string, unknown>;
+  const nested =
+    rec.data && typeof rec.data === "object" && !Array.isArray(rec.data)
+      ? (rec.data as Record<string, unknown>)
+      : rec;
+  const warnings = Array.isArray(nested.warnings) ? nested.warnings : rec.warnings;
+  const joined = Array.isArray(warnings)
+    ? warnings.map((w) => (typeof w === "string" ? w : JSON.stringify(w))).join(" ")
+    : "";
+  const text = pythonDocumentExtractText(data);
+  return (
+    (!text || text.trim().length < 20) &&
+    /NO_TEXT_EXTRACTED|OCR_UNAVAILABLE|OCR_FAILED|LOW_OCR/i.test(joined)
+  );
+}
+
+export type PdfImportFailureCode =
+  | "INVALID_PDF"
+  | "PDF_TOO_LARGE"
+  | "EMPTY_PDF"
+  | "SCANNED_PDF"
+  | "ZERO_QUESTIONS"
+  | "PARSER_TIMEOUT"
+  | "AI_ERROR";
+
+export function userMessageForPdfImportFailure(
+  code: PdfImportFailureCode,
+  refunded: boolean,
+): string {
+  const refund = refunded ? " Credits refunded." : "";
+  switch (code) {
+    case "INVALID_PDF":
+      return "This file is not a valid PDF. Choose a .pdf file that starts with a PDF header.";
+    case "PDF_TOO_LARGE":
+      return "PDF exceeds the 15 MB upload limit. Split the paper or paste the questions as text.";
+    case "EMPTY_PDF":
+      return "This PDF is empty.";
+    case "SCANNED_PDF":
+      return `This looks like a scanned/image PDF with no selectable text. Use a text-based PDF or paste OCR text.${refund}`;
+    case "ZERO_QUESTIONS":
+      return `No MCQ questions (options A–D) were found in this PDF.${refund} Try another paper or paste the questions as text.`;
+    case "PARSER_TIMEOUT":
+      return `PDF parsing timed out.${refund} Retry with a smaller file.`;
+    default:
+      return `PDF parsing failed.${refund}`;
+  }
 }
 
 export function bufferToBase64(buf: ArrayBuffer): string {

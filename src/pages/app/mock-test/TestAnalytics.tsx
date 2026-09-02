@@ -22,6 +22,7 @@ import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { Card, CardContent } from "@/components/ui/Card";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { clampMockTestDisplayScore } from "@/lib/gov-exam/mockTestScoring";
 import { cn } from "@/lib/utils";
 
 interface MockTestSummary {
@@ -46,6 +47,11 @@ interface TestAnalysisSummary {
   attempt_percentage: number;
   subject_breakdown: Record<string, SubjectBreakdownEntry>;
   topic_breakdown: Record<string, unknown>;
+  time_analysis?: {
+    score_summary?: {
+      score_percentage?: number;
+    };
+  };
   created_at: string;
 }
 
@@ -103,7 +109,7 @@ export default function TestAnalytics() {
         supabase
           .from("test_analyses")
           .select(
-            "test_id, total_score, max_score, accuracy, attempt_percentage, subject_breakdown, topic_breakdown, created_at"
+            "test_id, total_score, max_score, accuracy, attempt_percentage, subject_breakdown, topic_breakdown, time_analysis, created_at"
           )
           .eq("user_id", user!.id)
           .order("created_at", { ascending: false })
@@ -161,10 +167,16 @@ export default function TestAnalytics() {
         const point: TrendDataPoint = {
           name: (testNameMap[analysis.test_id] ?? `Test ${index + 1}`).slice(0, 12),
           accuracy: Number(analysis.accuracy ?? 0),
-          score_pct:
-            Number(analysis.max_score ?? 0) > 0
+          score_pct: Number.isFinite(
+            Number(analysis.time_analysis?.score_summary?.score_percentage),
+          )
+            ? clampMockTestDisplayScore(
+                Number(analysis.time_analysis?.score_summary?.score_percentage),
+              )
+            : Number(analysis.max_score ?? 0) > 0
               ? Math.round(
-                  (Number(analysis.total_score ?? 0) / Number(analysis.max_score ?? 1)) *
+                  (clampMockTestDisplayScore(Number(analysis.total_score ?? 0)) /
+                    Number(analysis.max_score ?? 1)) *
                     100
                 )
               : 0,

@@ -20,7 +20,7 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 const VARIANTS = {
   primary:     "bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground border-transparent shadow-sm hover:shadow-md",
   secondary:   "bg-secondary hover:bg-secondary/80 active:bg-secondary/70 text-secondary-foreground border-border",
-  ghost:       "bg-transparent hover:bg-secondary active:bg-secondary/80 text-muted-foreground hover:text-foreground border-transparent",
+  ghost:       "bg-transparent hover:bg-secondary active:bg-secondary/80 text-foreground border-transparent",
   danger:      "bg-destructive/15 hover:bg-destructive/25 active:bg-destructive/30 text-destructive border-destructive/30",
   destructive: "bg-destructive/15 hover:bg-destructive/25 active:bg-destructive/30 text-destructive border-destructive/30",
   success:     "bg-emerald-600/15 hover:bg-emerald-600/25 active:bg-emerald-600/30 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",

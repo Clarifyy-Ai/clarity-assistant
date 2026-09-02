@@ -79,8 +79,13 @@ export function handleSessionStartError(error: unknown): boolean {
     return true;
   }
 
-  if (code === "PROVIDER_UNAVAILABLE") {
+  if (code === "PROVIDER_UNAVAILABLE" || code === "DEPENDENCY_UNAVAILABLE" || code === "SCHEMA_OUTDATED") {
     toast.error("The coaching service is temporarily unavailable. Please try again shortly.");
+    return true;
+  }
+
+  if (code === "SESSION_EXPIRED") {
+    toast.error("This practice session has expired. Start a new one.");
     return true;
   }
 
@@ -93,7 +98,8 @@ export function handleSessionStartError(error: unknown): boolean {
     error instanceof ApiClientError &&
     (error.code === "SESSION_CREATE_FAILED" ||
       error.code === "SESSION_START_FAILED" ||
-      error.code === "SESSION_NOT_AVAILABLE")
+      error.code === "SESSION_NOT_AVAILABLE" ||
+      error.code === "SESSION_STATE_CONFLICT")
   ) {
     toast.error(
       "Could not start your session. Please try again in a moment. If this keeps happening, contact support.",
@@ -101,7 +107,7 @@ export function handleSessionStartError(error: unknown): boolean {
     return true;
   }
 
-  if (error instanceof ApiClientError && (error.status === 502 || error.status === 500)) {
+  if (error instanceof ApiClientError && (error.status === 502 || error.status === 500 || error.status === 503)) {
     toast.error("Could not start your session. Please try again in a moment.");
     return true;
   }

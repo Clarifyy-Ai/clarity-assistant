@@ -8,6 +8,10 @@ import { isPythonPaperFactoryGenerator } from "./govGeneratorRouting.ts";
 
 export const PAPER_JOB_LEASE_MS = 180_000;
 export const PAPER_JOB_MAX_ATTEMPTS = 3;
+/** Queued jobs with no worker claim past this age are failed (worker unavailable). */
+export const PAPER_JOB_QUEUED_TTL_MS = 10 * 60 * 1000;
+/** In-flight jobs past this runtime are terminalized (success path should finish sooner). */
+export const PAPER_JOB_MAX_RUNTIME_MS = 20 * 60 * 1000;
 
 export const PAPER_JOB_TERMINAL = new Set([
   "completed",
@@ -26,6 +30,7 @@ export const PAPER_JOB_HARD_TERMINAL = new Set([
 export const PAPER_JOB_IN_FLIGHT = new Set([
   "queued",
   "leased",
+  "checking_availability",
   "selecting",
   "generating",
   "validating",
@@ -40,6 +45,10 @@ export const PAPER_JOB_IN_FLIGHT = new Set([
   "validating_questions",
   "checking_similarity",
   "validating_paper",
+  "blueprint",
+  "select",
+  "optional_ai_fill",
+  "assemble",
 ]);
 
 export type ServiceDb = SupabaseClient;
@@ -375,17 +384,153 @@ export async function reclaimExpiredPaperJobs(
         })
         .eq("id", row.id)
         .in("status", [...PAPER_JOB_IN_FLIGHT]);
-      if (row.user_id) {
-        await refundClaimedPaperCredits(
-          db,
-          String(row.id),
-          String(row.user_id),
-          "refund_paper_gen_failed_retryable",
-        );
-      }
       reclaimed += 1;
     }
   }
 
   return { reclaimed, permanentlyFailed };
+}
+
+const PAPER_JOB_NON_TERMINAL = new Set([
+  ...PAPER_JOB_IN_FLIGHT,
+  "failed",
+]);
+
+/**
+ * Per-job reconcile on poll: expire queued orphans, runtime timeouts, and stale leases
+ * so clients never spin on a row that will only be fixed by cron.
+ */
+export async function reconcileStuckPaperJob(
+  db: ServiceDb,
+  jobId: string,
+): Promise<boolean> {
+  const { data: job, error } = await db
+    .from("gov_paper_generation_jobs")
+    .select(
+      "id, user_id, status, attempt_count, created_at, started_at, lease_expires_at",
+    )
+    .eq("id", jobId)
+    .maybeSingle();
+
+  if (error || !job) return false;
+
+  const status = String(job.status ?? "");
+  if (PAPER_JOB_HARD_TERMINAL.has(status) || status === "completed") {
+    return false;
+  }
+
+  const now = Date.now();
+  const createdMs = Date.parse(String(job.created_at ?? ""));
+  const startedMs = Date.parse(String(job.started_at ?? job.created_at ?? ""));
+  const leaseMs = job.lease_expires_at
+    ? Date.parse(String(job.lease_expires_at))
+    : 0;
+  const leaseExpired = Number.isFinite(leaseMs) && leaseMs > 0 && leaseMs < now;
+  const attempts = Number(job.attempt_count) || 0;
+  const nowIso = new Date().toISOString();
+
+  let patch: Record<string, unknown> | null = null;
+
+  if (status === "queued" && Number.isFinite(createdMs) && now - createdMs >= PAPER_JOB_QUEUED_TTL_MS) {
+    patch = {
+      status: "failed_retryable",
+      progress_stage: "failed_retryable",
+      retryable: true,
+      error_code: "WORKER_UNAVAILABLE",
+      error_message:
+        "Paper generation could not start — the generator is unavailable. Retry when service is restored.",
+      worker_id: null,
+      lease_expires_at: null,
+      updated_at: nowIso,
+    };
+  } else if (
+    PAPER_JOB_IN_FLIGHT.has(status) &&
+    status !== "queued" &&
+    Number.isFinite(startedMs) &&
+    now - startedMs >= PAPER_JOB_MAX_RUNTIME_MS
+  ) {
+    if (attempts >= PAPER_JOB_MAX_ATTEMPTS) {
+      patch = {
+        status: "expired",
+        progress_stage: "expired",
+        retryable: false,
+        error_code: "JOB_EXPIRED",
+        error_message: "Paper generation exceeded the maximum allowed time.",
+        worker_id: null,
+        lease_expires_at: null,
+        completed_at: nowIso,
+        updated_at: nowIso,
+      };
+    } else {
+      patch = {
+        status: "failed_retryable",
+        progress_stage: "failed_retryable",
+        retryable: true,
+        error_code: "GENERATION_TIMEOUT",
+        error_message: "Paper generation timed out. Retry is available.",
+        worker_id: null,
+        lease_expires_at: null,
+        updated_at: nowIso,
+      };
+    }
+  } else if (
+    PAPER_JOB_IN_FLIGHT.has(status) &&
+    status !== "queued" &&
+    leaseExpired
+  ) {
+    if (attempts >= PAPER_JOB_MAX_ATTEMPTS) {
+      patch = {
+        status: "failed_permanent",
+        progress_stage: "failed_permanent",
+        retryable: false,
+        error_code: "GENERATION_TIMEOUT",
+        error_message: "Generation worker lease expired too many times.",
+        worker_id: null,
+        lease_expires_at: null,
+        completed_at: nowIso,
+        updated_at: nowIso,
+      };
+    } else {
+      patch = {
+        status: "failed_retryable",
+        progress_stage: "failed_retryable",
+        retryable: true,
+        error_code: "WORKER_LEASE_EXPIRED",
+        error_message: "Generation worker lost its lease. Retry is available.",
+        worker_id: null,
+        lease_expires_at: null,
+        updated_at: nowIso,
+      };
+    }
+  }
+
+  if (!patch) return false;
+
+  const { data: updated, error: updateErr } = await db
+    .from("gov_paper_generation_jobs")
+    .update(patch)
+    .eq("id", jobId)
+    .in("status", [...PAPER_JOB_NON_TERMINAL])
+    .select("id")
+    .maybeSingle();
+
+  if (updateErr) {
+    console.error("[govPaperJobLease] reconcileStuckPaperJob:", updateErr.message);
+    return false;
+  }
+
+  const terminalized =
+    patch.status === "failed_permanent" ||
+    patch.status === "cancelled" ||
+    patch.status === "expired";
+  if (updated?.id && job.user_id && terminalized) {
+    await refundClaimedPaperCredits(
+      db,
+      jobId,
+      String(job.user_id),
+      `refund_paper_reconcile:${String(patch.error_code ?? "reconcile")}`,
+    );
+  }
+
+  return Boolean(updated?.id);
 }

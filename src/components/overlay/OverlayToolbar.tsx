@@ -41,6 +41,8 @@ import {
   Crop,
   ScrollText,
   BarChart3,
+  Pause,
+  Play,
 } from "lucide-react";
 
 import { OverlayActivityTimer } from "./OverlayActivityTimer";
@@ -97,6 +99,9 @@ interface OverlayToolbarProps {
   onAdjustRegion?: () => void;
   onEndSession?: () => void;
   onSetupNewSession?: () => void;
+  onPauseSession?: () => void;
+  onResumeSession?: () => void;
+  onReconnectAudio?: () => void;
   interviewType?: string;
   /** Slim toolbar for mobile expanded overlay — secondary tools stay in More menu */
   compactMobile?: boolean;
@@ -110,6 +115,9 @@ export function OverlayToolbar({
   onAdjustRegion,
   onEndSession,
   onSetupNewSession,
+  onPauseSession,
+  onResumeSession,
+  onReconnectAudio,
   interviewType = "behavioral",
   compactMobile = false,
 }: OverlayToolbarProps) {
@@ -144,8 +152,15 @@ export function OverlayToolbar({
 
   const sessionStatus = useSessionStore((s) => s.status);
   const isSessionActive = sessionStatus === "active";
+  const isSessionPaused = sessionStatus === "paused";
   const showSessionTools =
     sessionStatus === "active" || sessionStatus === "paused" || sessionStatus === "warming_up";
+  const providerStatus = useAudioStore((s) => s.transcription_provider_status);
+  const showReconnect =
+    Boolean(onReconnectAudio) &&
+    (providerStatus === "error" ||
+      providerStatus === "unavailable" ||
+      providerStatus === "reconnecting");
 
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showHotkeyRef, setShowHotkeyRef] = useState(false);
@@ -244,6 +259,42 @@ export function OverlayToolbar({
       aria-label="Overlay controls"
     >
       <MicButton isMuted={isMuted} isCapturing={isCapturing} onClick={onToggleMic} />
+
+      {showSessionTools && isSessionPaused && onResumeSession && (
+        <button
+          type="button"
+          onClick={() => void onResumeSession()}
+          title="Resume session"
+          aria-label="Resume session"
+          className="w-8 h-8 flex items-center justify-center rounded-xl border border-emerald-500/25 bg-emerald-500/15 text-emerald-400 shrink-0"
+        >
+          <Play className="w-3.5 h-3.5" aria-hidden />
+        </button>
+      )}
+
+      {showSessionTools && isSessionActive && onPauseSession && (
+        <button
+          type="button"
+          onClick={onPauseSession}
+          title="Pause session"
+          aria-label="Pause session"
+          className="w-8 h-8 flex items-center justify-center rounded-xl border border-amber-500/25 bg-amber-500/15 text-amber-400 shrink-0"
+        >
+          <Pause className="w-3.5 h-3.5" aria-hidden />
+        </button>
+      )}
+
+      {showSessionTools && showReconnect && (
+        <button
+          type="button"
+          onClick={() => void onReconnectAudio?.()}
+          title="Reconnect audio"
+          aria-label="Reconnect audio"
+          className="w-8 h-8 flex items-center justify-center rounded-xl border border-sky-500/25 bg-sky-500/15 text-sky-300 shrink-0"
+        >
+          <RefreshCw className="w-3.5 h-3.5" aria-hidden />
+        </button>
+      )}
 
       <div className="flex items-center gap-1.5 flex-1 justify-center">
         <PrimaryButton
@@ -406,6 +457,44 @@ export function OverlayToolbar({
               />
 
               <div className="my-2 border-t border-white/[0.06] mx-2" />
+
+              {showSessionTools && onPauseSession && isSessionActive && (
+                <MenuRow
+                  icon={Pause}
+                  label="Pause session"
+                  active={false}
+                  onClick={() => {
+                    onPauseSession();
+                    setShowMoreMenu(false);
+                  }}
+                />
+              )}
+
+              {showSessionTools && onResumeSession && isSessionPaused && (
+                <MenuRow
+                  icon={Play}
+                  label="Resume session"
+                  active={false}
+                  activeColor="text-emerald-400"
+                  onClick={() => {
+                    void onResumeSession();
+                    setShowMoreMenu(false);
+                  }}
+                />
+              )}
+
+              {showSessionTools && onReconnectAudio && showReconnect && (
+                <MenuRow
+                  icon={RefreshCw}
+                  label="Reconnect audio"
+                  active={false}
+                  activeColor="text-sky-400"
+                  onClick={() => {
+                    void onReconnectAudio();
+                    setShowMoreMenu(false);
+                  }}
+                />
+              )}
 
               {onSetupNewSession && (
                 <MenuRow
@@ -682,13 +771,13 @@ export function OverlayToolbar({
           <button
             type="button"
             onClick={() => setEndConfirmOpen((open) => !open)}
-            disabled={!onEndSession || !isSessionActive}
-            title={!isSessionActive ? "Session not active" : "End session"}
-            aria-label={!isSessionActive ? "Session not active" : "End session"}
+            disabled={!onEndSession || !showSessionTools}
+            title={!showSessionTools ? "Session not active" : "End session"}
+            aria-label={!showSessionTools ? "Session not active" : "End session"}
             aria-expanded={endConfirmOpen}
             className={cn(
               "flex items-center gap-1 px-2 py-1 h-7 border text-[11px] font-bold rounded-lg transition-all shrink-0",
-              !onEndSession || !isSessionActive
+              !onEndSession || !showSessionTools
                 ? "bg-white/5 border-white/10 text-white/20 cursor-not-allowed"
                 : endConfirmOpen
                   ? "bg-red-600/25 border-red-500/35 text-red-300"
@@ -699,7 +788,7 @@ export function OverlayToolbar({
             <span>End</span>
           </button>
 
-          {endConfirmOpen && onEndSession && isSessionActive && (
+          {endConfirmOpen && onEndSession && showSessionTools && (
             <div className="absolute top-full right-0 mt-1.5 w-52 rounded-xl border border-red-500/25 bg-[#0f0f1e] shadow-2xl z-[60] p-3 space-y-2.5 animate-fade-in">
               <p className="text-[11px] text-white/70 leading-snug">
                 End this session? Progress will be saved.

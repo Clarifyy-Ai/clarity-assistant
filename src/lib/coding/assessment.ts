@@ -1,4 +1,7 @@
-import { runVisibleJavascriptTests, type VisibleTestCase } from "@/lib/interview/jsVisibleRunner";
+import {
+  runJavascriptSolveTests,
+  type SolveTestCase,
+} from "@/lib/coding/javascriptSolveRunner";
 
 export type CodingTestCase = {
   id: string;
@@ -36,8 +39,17 @@ export type AuthoritativeScore = {
   passed_tests: number;
   failed_tests: number;
   score: number;
-  execution_status: "passed" | "failed" | "blocked" | "unsupported";
+  execution_status:
+    | "passed"
+    | "failed"
+    | "blocked"
+    | "unsupported"
+    | "runtime_error"
+    | "compile_error"
+    | "timeout"
+    | "service_error";
   blocked_reason?: string;
+  primary_error?: string;
 };
 
 export function scoreJavascriptSolve(
@@ -45,30 +57,24 @@ export function scoreJavascriptSolve(
   cases: CodingTestCase[],
   timeoutMs = 800,
 ): AuthoritativeScore {
-  const mapped: VisibleTestCase[] = cases.map((testCase) => ({
+  const mapped: SolveTestCase[] = cases.map((testCase) => ({
     id: testCase.id,
     name: testCase.is_hidden ? "hidden" : testCase.name,
     input: testCase.input,
     expected: testCase.expected,
   }));
-  const outcome = runVisibleJavascriptTests(source, mapped, timeoutMs);
-  if (outcome.blockedReason) {
-    return {
-      passed_tests: 0,
-      failed_tests: cases.length,
-      score: 0,
-      execution_status: "blocked",
-      blocked_reason: outcome.blockedReason,
-    };
-  }
+  const outcome = runJavascriptSolveTests(source, mapped, timeoutMs);
   const passed = outcome.results.filter((r) => r.passed).length;
   const failed = outcome.results.length - passed;
-  const score = outcome.results.length === 0 ? 0 : Math.round((passed / outcome.results.length) * 100);
+  const score =
+    outcome.results.length === 0 ? 0 : Math.round((passed / outcome.results.length) * 100);
   return {
     passed_tests: passed,
     failed_tests: failed,
     score,
-    execution_status: failed === 0 && passed > 0 ? "passed" : "failed",
+    execution_status: outcome.execution_status,
+    blocked_reason: outcome.blockedReason,
+    primary_error: outcome.primary_error,
   };
 }
 

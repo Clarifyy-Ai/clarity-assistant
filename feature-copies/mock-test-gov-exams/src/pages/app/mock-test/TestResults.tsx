@@ -54,6 +54,9 @@ import {
   resolvePaperClassPresentation,
 } from "@/lib/gov-exam/disclaimers";
 import { shouldRevealAnswerKeys } from "@/lib/gov-exam/playableQuestions";
+import {
+  clampMockTestDisplayScore,
+} from "@/lib/gov-exam/mockTestScoring";
 
 type QuestionFilter = "all" | "wrong" | "marked";
 
@@ -83,6 +86,9 @@ interface TimeTrap {
 interface TimeAnalysis {
   avg_seconds: number;
   time_traps: TimeTrap[];
+  score_summary?: {
+    score_percentage?: number;
+  };
 }
 
 interface TestAnalysis {
@@ -256,6 +262,33 @@ export default function TestResults() {
         questionMap[question.id] = question;
       }
 
+      const paperId = String(loadedTest.config?.gov_paper_id ?? "").trim();
+      if (paperId) {
+        const { data: frozenRows } = await supabase
+          .from("gov_generated_paper_questions")
+          .select("question_id, snapshot_json")
+          .eq("paper_id", paperId);
+        for (const row of frozenRows ?? []) {
+          const record = row as {
+            question_id: string;
+            snapshot_json: Record<string, unknown> | null;
+          };
+          const snapshot = record.snapshot_json;
+          if (!snapshot) continue;
+          const live = questionMap[record.question_id];
+          questionMap[record.question_id] = {
+            id: record.question_id,
+            question_text: String(snapshot.question_text ?? live?.question_text ?? ""),
+            question_type: String(snapshot.question_type ?? live?.question_type ?? "MCQ"),
+            correct_answer: String(snapshot.correct_answer ?? live?.correct_answer ?? ""),
+            explanation: String(snapshot.explanation ?? live?.explanation ?? ""),
+            subject: String(snapshot.subject ?? live?.subject ?? "General"),
+            topic: String(snapshot.topic ?? live?.topic ?? "General"),
+            difficulty: String(snapshot.difficulty ?? live?.difficulty ?? "MEDIUM"),
+          };
+        }
+      }
+
       const orderedQuestions = loadedTest.question_ids
         .map((id) => questionMap[id])
         .filter(Boolean);
@@ -423,7 +456,7 @@ export default function TestResults() {
           kind === "weak" ? Math.min(questionCount, 10) : questionCount,
         duration_minutes: durationMinutes,
         marks_positive: normalizeNumber(originalConfig.marks_positive, 4),
-        marks_negative: normalizeNumber(originalConfig.marks_negative, 1),
+        marks_negative: normalizeNumber(originalConfig.marks_negative, 0),
         randomize_order: true,
         shuffle_options: true,
         allow_shortfall: true,
@@ -536,9 +569,17 @@ export default function TestResults() {
   }
 
   const rankPublication = getRankPublication(analysis, test);
+  // Submitted analysis is immutable and authoritative; never re-score mutable question rows.
+  const rawTotalScore = analysis.total_score ?? 0;
+  const displayTotalScore = clampMockTestDisplayScore(rawTotalScore);
+  const displayMaxScore = analysis.max_score ?? 0;
+  const displayAccuracy = analysis.accuracy ?? 0;
+  const displayAttemptPercentage = analysis.attempt_percentage ?? 0;
   const scorePercent =
-    analysis.max_score > 0
-      ? Math.round((Math.max(0, analysis.total_score ?? 0) / analysis.max_score) * 100)
+    Number.isFinite(Number(analysis.time_analysis?.score_summary?.score_percentage))
+      ? Math.max(0, Number(analysis.time_analysis.score_summary?.score_percentage))
+      : displayMaxScore > 0
+      ? Math.round((displayTotalScore / displayMaxScore) * 100)
       : 0;
   const isPractice = test.config?.practice_mode === true;
   const paperMeta = resolvePaperClassPresentation(test.config);
@@ -591,19 +632,23 @@ export default function TestResults() {
         {[
           {
             label: "Score",
-            value: `${Math.max(0, analysis.total_score ?? 0)}/${analysis.max_score ?? 0}`,
+            value: `${displayTotalScore}/${displayMaxScore}`,
+            footnote:
+              rawTotalScore < 0
+                ? `Raw score: ${rawTotalScore} (displayed as 0)`
+                : undefined,
             icon: <Trophy className="h-5 w-5 text-amber-400" />,
             color: "text-amber-400",
           },
           {
             label: "Accuracy",
-            value: `${analysis.accuracy ?? 0}%`,
+            value: `${displayAccuracy}%`,
             icon: <Target className="h-5 w-5 text-green-400" />,
             color: "text-green-400",
           },
           {
             label: "Attempted",
-            value: `${analysis.attempt_percentage ?? 0}%`,
+            value: `${displayAttemptPercentage}%`,
             icon: <CheckCircle className="h-5 w-5 text-blue-400" />,
             color: "text-blue-400",
           },
@@ -620,6 +665,9 @@ export default function TestResults() {
             <CardContent className="space-y-1 p-0">
               <div className="flex justify-center">{item.icon}</div>
               <p className={cn("text-xl font-black", item.color)}>{item.value}</p>
+              {"footnote" in item && item.footnote ? (
+                <p className="text-[10px] leading-tight text-muted-foreground">{item.footnote}</p>
+              ) : null}
               <p className="text-xs text-muted-foreground">{item.label}</p>
             </CardContent>
           </Card>

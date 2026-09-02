@@ -23,14 +23,20 @@ import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 import { answerBankDB } from "@/lib/supabase/database";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { generateCompanyBrief, userFacingCompanyBriefError, cancelCompanyResearchJob, isCompanyBriefInFlight, type CompanyBriefJob } from "@/lib/company/companyResearchJob";
+import { saveActiveCompanyJob, clearActiveCompanyJob } from "@/lib/company/companyResearchSession";
 import { normalizeCompanyName } from "@/lib/company/normalizeCompanyName";
+import { companyProfilePath } from "@/lib/company/slug";
+import { supabase } from "@/lib/supabase/client";
 import { createIdempotencyKey } from "@/lib/api/functions";
+import { prepToolContentIdempotencyKey } from "@/lib/network/idempotency";
+import { sha256 } from "@/lib/utils/hashUtils";
 import {
   getAiUserFacingError,
   isAiProviderUnavailableError,
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { HybridSourceLine } from "@/components/hybrid/HybridSourceLine";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
@@ -38,6 +44,8 @@ import {
   StarBuilderForm,
   type StarFieldKey,
   type StarFields,
+  parseStarResponse,
+  buildStarAnswerText,
 } from "@/components/prep/StarBuilderForm";
 // Default prep-tool cost for tools without an explicit AI_CREDIT_COSTS entry.
 const PREP_TOOL_DEFAULT_COST = 3;
@@ -168,26 +176,32 @@ function STARBuilder() {
     setAiLoading(key);
     originalSectionRef.current[key] = star[key];
 
+    const sectionLabel =
+      key === "situation" ? "Situation" :
+      key === "task" ? "Task" :
+      key === "action" ? "Action" : "Result";
+    const input =
+      `Polish only the ${sectionLabel} section of this STAR answer.\n` +
+      `Question: ${question || "(general behavioral)"}\n\n` +
+      `Current ${sectionLabel}:\n${star[key]}\n\n` +
+      `Return only the improved ${sectionLabel} text without labels.`;
+    const contentHash = await sha256(input);
     const idempotencyKey =
-      polishKeysRef.current[key] ?? createIdempotencyKey(`polish-star:${key}`);
+      polishKeysRef.current[key] ??
+      prepToolContentIdempotencyKey("raw_prompt", contentHash);
     polishKeysRef.current[key] = idempotencyKey;
 
     try {
-      const data = await fetchEdgeJson<{ polished?: string; original?: string }>(
-        "polish-star-section",
-        {
-          section: key,
-          currentText: star[key],
-          questionText: question || undefined,
+      const data = await fetchEdgeJson<Record<string, unknown>>("prep-tool", {
+        tool_id: "raw_prompt",
+        input,
+      }, {
+        headers: {
+          "x-idempotency-key": idempotencyKey,
         },
-        {
-          headers: {
-            "x-idempotency-key": idempotencyKey,
-          },
-        },
-      );
+      });
 
-      const polished = typeof data.polished === "string" ? data.polished.trim() : "";
+      const polished = typeof data?.result === "string" ? data.result.trim() : "";
       if (!polished) throw new Error("AI rewrite returned empty content.");
       setStar((p) => ({ ...p, [key]: polished }));
       polishKeysRef.current[key] = undefined;
@@ -216,39 +230,36 @@ function STARBuilder() {
     setLoading(true);
     originalStarSnapshotRef.current = { ...star };
 
+    const input =
+      `Question: ${question || "(general behavioral)"}\n\n` +
+      `Situation: ${star.situation}\nTask: ${star.task}\nAction: ${star.action}\nResult: ${star.result}\n\n` +
+      `Resume context:\n${docStore.active_context?.resume?.content || "(none)"}`;
+    const contentHash = await sha256(input);
     const idempotencyKey =
-      generateKeyRef.current ?? createIdempotencyKey("generate-star-answer");
+      generateKeyRef.current ??
+      prepToolContentIdempotencyKey("star_method", contentHash);
     generateKeyRef.current = idempotencyKey;
 
     try {
-      const data = await fetchEdgeJson<{
-        fullAnswer?: string;
-        situation?: string;
-        task?: string;
-        action?: string;
-        result?: string;
-      }>("generate-star-answer", {
-        questionText: question,
-        resumeText: [
-          docStore.active_context?.resume?.content || "",
-          "",
-          "User STAR draft (polish and integrate — do not invent facts beyond this draft):",
-          `Situation: ${star.situation}`,
-          `Task: ${star.task}`,
-          `Action: ${star.action}`,
-          `Result: ${star.result}`,
-        ]
-          .filter(Boolean)
-          .join("\n"),
+      const data = await fetchEdgeJson<Record<string, unknown>>("prep-tool", {
+        tool_id: "star_method",
+        input,
       }, {
         headers: {
           "x-idempotency-key": idempotencyKey,
         },
       });
 
-      const full = typeof data.fullAnswer === "string" ? data.fullAnswer.trim() : "";
-      if (!full) throw new Error("AI rewrite returned empty content.");
-      setGenerated(full);
+      const text = typeof data?.result === "string" ? data.result.trim() : "";
+      if (!text) throw new Error("AI rewrite returned empty content.");
+      const parts = parseStarResponse(text);
+      setStar((p) => ({
+        situation: parts.situation || p.situation,
+        task: parts.task || p.task,
+        action: parts.action || p.action,
+        result: parts.result || p.result,
+      }));
+      setGenerated(buildStarAnswerText(parts) || text);
       generateKeyRef.current = null;
       await refreshCredits();
     } catch (err) {
@@ -598,6 +609,7 @@ const AI_TOOLS: Array<{
 
 function AITools({ initialToolId }: { initialToolId?: string }) {
   const { profile } = useAuthStore();
+  const navigate = useNavigate();
   const [activeToolId, setActiveToolId] = useState<string | null>(initialToolId ?? null);
 
   useEffect(() => {
@@ -613,7 +625,14 @@ function AITools({ initialToolId }: { initialToolId?: string }) {
           <Card
             key={tool.id}
             hover={!locked}
-            onClick={locked ? undefined : () => setActiveToolId(tool.id)}
+            onClick={locked ? undefined : () => {
+              if (tool.id === "jd_fit") {
+                toast.message("Upload a resume and job description to run gap analysis.");
+                navigate("/app/documents?highlight=gap-analysis");
+                return;
+              }
+              setActiveToolId(tool.id);
+            }}
             className={cn(
               "flex flex-col gap-3 relative",
               locked && "opacity-60"
@@ -646,7 +665,7 @@ function AITools({ initialToolId }: { initialToolId?: string }) {
 
       {/* Tool modal */}
       <AIToolModal
-        toolId={activeToolId}
+        toolId={activeToolId === "jd_fit" ? null : activeToolId}
         onClose={() => setActiveToolId(null)}
       />
     </div>
@@ -750,54 +769,133 @@ function AIToolModal({
 
 function CompanyPrep() {
   const credits = useCredits();
+  const { user } = useAuthStore();
+  const navigate = useNavigate();
   const [company,  setCompany]  = useState("");
   const [role,     setRole]     = useState("");
   const [loading,  setLoading]  = useState(false);
   const [brief,    setBrief]    = useState<any>(null);
   const [briefSource, setBriefSource] = useState<string | null>(null);
+  const [job, setJob] = useState<CompanyBriefJob | null>(null);
+  const [savedBriefs, setSavedBriefs] = useState<Array<{ id: string; company_name: string; role_title: string | null; created_at: string }>>([]);
+  const abortRef = useRef(false);
+  const jobIdRef = useRef<string | null>(null);
+  const inFlightRef = useRef(false);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    void supabase
+      .from("company_research")
+      .select("id, company_name, role_title, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(3)
+      .then(({ data }) => setSavedBriefs(data ?? []));
+  }, [user?.id, brief]);
 
   async function generate() {
     if (!company.trim() || !role.trim()) return;
-    if (loading) return;
+    if (loading || inFlightRef.current) return;
+    inFlightRef.current = true;
+    abortRef.current = false;
     setLoading(true);
     setBrief(null);
     setBriefSource(null);
+    setJob(null);
     try {
-      const result = await fetchEdgeJson<{
-        success?: boolean;
-        id?: string;
-        persisted?: boolean;
-        brief?: Record<string, unknown>;
-        source?: string;
-      }>(
-        "company-research",
-        { company: company.trim(), role: role.trim(), force: true },
-        { headers: { "x-idempotency-key": `company-research:${normalizeCompanyName(company.trim()).replace(/\s+/g, "-")}:prep` } },
-      );
+      const result = await generateCompanyBrief({
+        company: company.trim(),
+        role: role.trim(),
+        force: true,
+        userId: user?.id,
+        shouldAbort: () => abortRef.current,
+        onJob: (next) => {
+          jobIdRef.current = next.jobId || jobIdRef.current;
+          setJob(next);
+          if (next.jobId && user?.id && isCompanyBriefInFlight(next.status)) {
+            saveActiveCompanyJob({
+              jobId: next.jobId,
+              company: company.trim(),
+              role: role.trim(),
+              userId: user.id,
+              companyNormalized: normalizeCompanyName(company.trim()),
+            });
+          }
+        },
+      });
 
-      // The Edge Function is the only writer — never show an unsaved brief.
-      if (!result?.persisted || !result.brief) {
+      if (!result?.brief) {
         toast.error("Research was generated, but we couldn't save it. Please retry.");
         return;
       }
 
+      clearActiveCompanyJob(jobIdRef.current ?? undefined);
       setBrief(result.brief);
       setBriefSource(result.source ?? null);
       await refreshCredits();
     } catch (err) {
       openUpgradeIfInsufficientCredits(err);
-      toast.error(getAiUserFacingError(err));
+      toast.error(userFacingCompanyBriefError(err));
     } finally {
+      inFlightRef.current = false;
       setLoading(false);
     }
   }
 
+  async function cancelGenerate() {
+    abortRef.current = true;
+    const id = jobIdRef.current;
+    if (id) {
+      try {
+        await cancelCompanyResearchJob(id);
+      } catch {
+        /* ignore */
+      }
+      clearActiveCompanyJob(id);
+    }
+    inFlightRef.current = false;
+    setLoading(false);
+    setJob(null);
+    toast.message("Generation cancelled.");
+  }
+
+  const progressLabel = job
+    ? String(job.progressStage ?? job.status ?? "processing")
+    : null;
+
   return (
     <div className="space-y-5">
+      {savedBriefs.length > 0 && (
+        <Card>
+          <h3 className="text-sm font-semibold text-foreground mb-3">Recent briefs</h3>
+          <div className="space-y-2">
+            {savedBriefs.map((row) => (
+              <button
+                key={row.id}
+                type="button"
+                onClick={() => navigate(companyProfilePath(row.company_name))}
+                className="w-full text-left flex items-center justify-between gap-2 rounded-xl border border-border px-3 py-2 hover:bg-secondary/50 text-sm"
+              >
+                <span className="font-medium truncate">{row.company_name}</span>
+                <ChevronRight className="w-4 h-4 shrink-0 text-muted-foreground" />
+              </button>
+            ))}
+          </div>
+          <Link to="/app/companies" className="text-xs text-primary hover:underline mt-3 inline-block">
+            View all company research →
+          </Link>
+        </Card>
+      )}
+
       <Card>
         <h3 className="text-sm font-semibold text-foreground mb-4">
           Generate company prep brief
         </h3>
+        {loading && progressLabel && (
+          <p className="text-xs text-muted-foreground mb-3 capitalize">
+            {progressLabel.replace(/_/g, " ")}…
+          </p>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Company name</p>
@@ -823,11 +921,21 @@ function CompanyPrep() {
           size="md"
           loading={loading}
           disabled={!company.trim() || !role.trim() || loading || !credits.canAfford("company_brief")}
-          onClick={generate}
+          onClick={() => void generate()}
           leftIcon={<Building2 className="w-4 h-4" />}
         >
           Generate prep brief ({AI_CREDIT_COSTS.company_research} credits)
         </Button>
+        {loading && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-2"
+            onClick={() => void cancelGenerate()}
+          >
+            Cancel
+          </Button>
+        )}
       </Card>
 
       {brief && (

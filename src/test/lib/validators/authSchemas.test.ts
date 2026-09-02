@@ -92,3 +92,86 @@ describe("loginSchema — email normalize, password preservation", () => {
     }
   });
 });
+
+describe("loginSchema — TC-AUTH-004 required-field validation", () => {
+  it("rejects empty email", () => {
+    const result = loginSchema.safeParse({ email: "", password: "secret" });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.email?.[0]).toBe(
+        "Email is required.",
+      );
+    }
+  });
+
+  it("rejects empty password", () => {
+    const result = loginSchema.safeParse({
+      email: "user@example.com",
+      password: "",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.password?.[0]).toBe(
+        "Password is required.",
+      );
+    }
+  });
+
+  it("rejects when both fields are empty", () => {
+    const result = loginSchema.safeParse({ email: "", password: "" });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const fieldErrors = result.error.flatten().fieldErrors;
+      expect(fieldErrors.email?.[0]).toBe("Email is required.");
+      expect(fieldErrors.password?.[0]).toBe("Password is required.");
+    }
+  });
+
+  it("rejects invalid email format", () => {
+    const result = loginSchema.safeParse({
+      email: "not-an-email",
+      password: "secret",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.email?.[0]).toBe(
+        "Enter a valid email address.",
+      );
+    }
+  });
+
+  it("rejects whitespace-only email", () => {
+    const result = loginSchema.safeParse({ email: "   ", password: "secret" });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.email?.[0]).toBe(
+        "Email is required.",
+      );
+    }
+  });
+
+  it("rejects whitespace-only password", () => {
+    const result = loginSchema.safeParse({
+      email: "user@example.com",
+      password: "   ",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.password?.[0]).toBe(
+        "Password is required.",
+      );
+    }
+  });
+
+  it("accepts valid credentials", () => {
+    const result = loginSchema.safeParse({
+      email: "User@Example.com",
+      password: "any-password",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.email).toBe("user@example.com");
+      expect(result.data.password).toBe("any-password");
+    }
+  });
+});

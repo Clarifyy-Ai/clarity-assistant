@@ -17,11 +17,18 @@ import {
   ExternalLink, Edit2, Trash2, CheckCircle,
   ClipboardList, FileQuestion,
 } from "lucide-react";
-import { format, isPast, isToday } from "date-fns";
+import { format, isPast } from "date-fns";
 import { cn } from "@/lib/utils";
 import { companyProfilePath } from "@/lib/company/slug";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useCalendarSync } from "@/hooks/useCalendarSync";
+import {
+  setupInterviewReminders,
+  reminderOutcomeMessage,
+} from "@/lib/interviews/scheduleReminders";
+import { resolveSchedulerTimezoneKey } from "@/lib/interviews/schedulerTimezone";
+import { isInterviewScheduledToday } from "@/lib/interviews/roundHelpers";
+import { teardownInterviewSideEffects } from "@/lib/interviews/interviewTeardown";
 
 // ─────────────────────────────────────────────────────────────────
 // InterviewDetail — single interview view + prep checklist
@@ -47,6 +54,8 @@ export default function InterviewDetail() {
     PREP_CHECKLIST.map(() => false)
   );
   const [deleting, setDeleting] = useState(false);
+  const [retryingReminders, setRetryingReminders] = useState(false);
+  const [retryingCalendar, setRetryingCalendar] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -120,8 +129,11 @@ export default function InterviewDetail() {
   const round = iv.next_round ?? iv.rounds?.[0] ?? null;
   const scheduledAt = round?.scheduled_at ?? iv.scheduled_at ?? iv.created_at;
   const d         = new Date(scheduledAt);
-  const isNow     = isToday(d);
+  const isNow     = isInterviewScheduledToday(iv);
   const isPassed  = isPast(d) && !isNow;
+  const calendarSyncStatus = String(iv.calendar_sync_status ?? "");
+  const calendarSyncError = String(iv.calendar_sync_error ?? "").trim();
+  const calendarEventId = (iv as { calendar_event_id?: string | null }).calendar_event_id;
   const ivStatus =
     iv.status === "cancelled"
       ? "cancelled"
@@ -129,9 +141,48 @@ export default function InterviewDetail() {
         ? "completed"
         : (round?.status ?? iv.status ?? "scheduled");
 
+  async function handleRetryReminders() {
+    if (!round?.scheduled_at) {
+      toast.error("Add a scheduled time before setting up reminders.");
+      return;
+    }
+    setRetryingReminders(true);
+    try {
+      const timezone = resolveSchedulerTimezoneKey(round.timezone, iv.timezone);
+      const outcome = await setupInterviewReminders({
+        interviewId: iv.id,
+        company: iv.company_name,
+        role: iv.role_title,
+        scheduledAt: new Date(round.scheduled_at).toISOString(),
+        timezone,
+      });
+      if (outcome.status === "success") {
+        toast.success(reminderOutcomeMessage(outcome));
+      } else {
+        toast.error(reminderOutcomeMessage(outcome));
+      }
+    } finally {
+      setRetryingReminders(false);
+    }
+  }
+
   async function handleDelete() {
     setDeleting(true);
     try {
+      const teardown = await teardownInterviewSideEffects(
+        {
+          interviewId: iv.id,
+          companyName: iv.company_name,
+          roleTitle: iv.role_title,
+          calendarEventId,
+        },
+        {
+          calendarSyncAvailable: calendar.syncAvailable,
+          calendarConnected: calendar.isConnected,
+          deleteCalendarEvent: calendar.deleteEvent,
+        },
+      );
+      if (teardown.calendarWarning) toast.message(teardown.calendarWarning);
       await scheduler.deleteInterview(iv.id);
       navigate("/app/interviews");
     } catch (err) {
@@ -139,6 +190,46 @@ export default function InterviewDetail() {
       toast.error("Failed to delete interview. Please try again.");
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function handleRetryCalendarSync() {
+    if (!round?.scheduled_at) {
+      toast.error("Add a scheduled time before syncing to calendar.");
+      return;
+    }
+    if (!calendar.syncAvailable) {
+      toast.info("Google Calendar sync isn't configured on this deployment.");
+      return;
+    }
+    setRetryingCalendar(true);
+    try {
+      const timezone = resolveSchedulerTimezoneKey(round.timezone, iv.timezone);
+      const start = new Date(round.scheduled_at);
+      const durationMinutes = round.duration_minutes ?? iv.duration_minutes ?? 60;
+      const end = new Date(start.getTime() + durationMinutes * 60_000);
+      const wrote = await calendar.writeEvent({
+        interviewId: iv.id,
+        summary: `Interview: ${iv.company_name}`,
+        description: iv.role_title,
+        startIso: start.toISOString(),
+        endIso: end.toISOString(),
+        timeZone: timezone === "local" ? undefined : timezone,
+        location: round.meeting_link ?? iv.meeting_link ?? undefined,
+        eventId: calendarEventId ?? undefined,
+      });
+      if (wrote.error) {
+        if (wrote.code === "REAUTH_REQUIRED") {
+          toast.error("Reconnect Google Calendar in Settings → Integrations.");
+        } else {
+          toast.error(wrote.error);
+        }
+      } else {
+        toast.success("Calendar event synced.");
+        await scheduler.reload();
+      }
+    } finally {
+      setRetryingCalendar(false);
     }
   }
 
@@ -222,6 +313,27 @@ export default function InterviewDetail() {
                 onClick={() => void handleCancel()}
               >
                 Cancel interview
+              </Button>
+            )}
+            {ivStatus === "scheduled" && round?.scheduled_at && new Date(round.scheduled_at).getTime() > Date.now() && (
+              <Button
+                variant="ghost"
+                size="sm"
+                loading={retryingReminders}
+                onClick={() => void handleRetryReminders()}
+              >
+                Retry reminders
+              </Button>
+            )}
+            {calendar.syncAvailable &&
+              (calendarSyncStatus === "sync_error" || calendarSyncStatus === "reauth_required") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                loading={retryingCalendar}
+                onClick={() => void handleRetryCalendarSync()}
+              >
+                Retry calendar sync
               </Button>
             )}
             <Button
@@ -322,6 +434,46 @@ export default function InterviewDetail() {
             </div>
           ))}
         </div>
+
+        {(calendarSyncStatus || calendarEventId) && (
+          <div className="mt-4 pt-4 border-t border-border flex flex-wrap items-center gap-2">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-widest w-full">
+              Google Calendar
+            </p>
+            <Badge
+              variant={
+                calendarSyncStatus === "synced"
+                  ? "emerald"
+                  : calendarSyncStatus === "reauth_required"
+                    ? "amber"
+                    : calendarSyncStatus === "sync_error"
+                      ? "red"
+                      : "default"
+              }
+              size="sm"
+            >
+              {calendarSyncStatus === "synced"
+                ? "Synced"
+                : calendarSyncStatus === "reauth_required"
+                  ? "Reconnect required"
+                  : calendarSyncStatus === "sync_error"
+                    ? "Sync failed"
+                    : calendarSyncStatus || "Not synced"}
+            </Badge>
+            {calendarSyncError && (
+              <p className="text-xs text-muted-foreground w-full">{calendarSyncError}</p>
+            )}
+            {calendarSyncStatus === "reauth_required" && calendar.syncAvailable && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => navigate("/app/settings/integrations")}
+              >
+                Reconnect in Settings
+              </Button>
+            )}
+          </div>
+        )}
 
         {/* Interviewer */}
         {(round?.interviewer_name ?? iv.interviewer_name) && (
@@ -431,7 +583,7 @@ export default function InterviewDetail() {
           <ClipboardList className="w-5 h-5 text-blue-400 shrink-0" />
           <div>
             <p className="text-xs font-semibold text-foreground">Mock session</p>
-            <p className="text-[10px] text-muted-foreground">Practise for this interview</p>
+            <p className="text-[10px] text-muted-foreground">Practice for this interview</p>
           </div>
         </Card>
         <Card

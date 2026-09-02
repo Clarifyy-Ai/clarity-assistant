@@ -534,6 +534,7 @@ export type Database = {
           category: string | null
           created_at: string
           deleted_at: string | null
+          folder_id: string | null
           id: string
           is_favourite: boolean
           last_used_at: string | null
@@ -549,6 +550,7 @@ export type Database = {
           category?: string | null
           created_at?: string
           deleted_at?: string | null
+          folder_id?: string | null
           id?: string
           is_favourite?: boolean
           last_used_at?: string | null
@@ -564,6 +566,7 @@ export type Database = {
           category?: string | null
           created_at?: string
           deleted_at?: string | null
+          folder_id?: string | null
           id?: string
           is_favourite?: boolean
           last_used_at?: string | null
@@ -571,6 +574,41 @@ export type Database = {
           source?: string | null
           tags?: string[] | null
           times_used?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "answer_bank_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "answer_bank_folders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      answer_bank_folders: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          sort_order: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          sort_order?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          sort_order?: number
           updated_at?: string
           user_id?: string
         }
@@ -1550,6 +1588,87 @@ export type Database = {
           prep_tips?: string | null
           raw_data?: Json | null
           role_title?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      company_research_jobs: {
+        Row: {
+          attempt_count: number
+          brief: Json | null
+          cancel_requested_at: string | null
+          company_name: string
+          company_name_normalized: string
+          completed_at: string | null
+          created_at: string
+          credit_reservation: string | null
+          credits_finalized_at: string | null
+          credits_released_at: string | null
+          credits_reserved: number
+          error_code: string | null
+          error_message: string | null
+          force: boolean
+          id: string
+          idempotency_key: string
+          progress_stage: string | null
+          research_id: string | null
+          retryable: boolean
+          role_title: string | null
+          source: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attempt_count?: number
+          brief?: Json | null
+          cancel_requested_at?: string | null
+          company_name: string
+          company_name_normalized: string
+          completed_at?: string | null
+          created_at?: string
+          credit_reservation?: string | null
+          credits_finalized_at?: string | null
+          credits_released_at?: string | null
+          credits_reserved?: number
+          error_code?: string | null
+          error_message?: string | null
+          force?: boolean
+          id?: string
+          idempotency_key: string
+          progress_stage?: string | null
+          research_id?: string | null
+          retryable?: boolean
+          role_title?: string | null
+          source?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attempt_count?: number
+          brief?: Json | null
+          cancel_requested_at?: string | null
+          company_name?: string
+          company_name_normalized?: string
+          completed_at?: string | null
+          created_at?: string
+          credit_reservation?: string | null
+          credits_finalized_at?: string | null
+          credits_released_at?: string | null
+          credits_reserved?: number
+          error_code?: string | null
+          error_message?: string | null
+          force?: boolean
+          id?: string
+          idempotency_key?: string
+          progress_stage?: string | null
+          research_id?: string | null
+          retryable?: boolean
+          role_title?: string | null
+          source?: string | null
+          status?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
@@ -5199,6 +5318,84 @@ export type Database = {
         }
         Relationships: []
       }
+      prep_coding_history: {
+        Row: {
+          created_at: string
+          depth: string | null
+          hint_text: string
+          id: string
+          problem_slug: string
+          provider: string | null
+          solution_text: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          depth?: string | null
+          hint_text?: string
+          id?: string
+          problem_slug: string
+          provider?: string | null
+          solution_text?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          depth?: string | null
+          hint_text?: string
+          id?: string
+          problem_slug?: string
+          provider?: string | null
+          solution_text?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      prep_projects: {
+        Row: {
+          created_at: string
+          description: string
+          github_url: string
+          id: string
+          impact: string
+          project_name: string
+          role: string
+          showcase: string
+          tech_stack: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string
+          github_url?: string
+          id?: string
+          impact?: string
+          project_name: string
+          role?: string
+          showcase?: string
+          tech_stack?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          github_url?: string
+          id?: string
+          impact?: string
+          project_name?: string
+          role?: string
+          showcase?: string
+          tech_stack?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       prep_rephrase_history: {
         Row: {
           alternatives: Json
@@ -8719,6 +8916,10 @@ export type Database = {
         }[]
       }
       complete_learning_lesson: { Args: { p_lesson_id: string }; Returns: Json }
+      record_quiz_progress: {
+        Args: { p_passed: boolean; p_quiz_id: string; p_score: number }
+        Returns: Json
+      }
       complete_onboarding: {
         Args: {
           p_audio_input_device?: string
@@ -8789,6 +8990,7 @@ export type Database = {
         Returns: Json
       }
       ensure_my_referral_code: { Args: never; Returns: string }
+      finalize_company_research_credits: { Args: { p_job_id: string }; Returns: Json }
       finalize_gov_paper_credits: { Args: { p_job_id: string }; Returns: Json }
       finalize_owned_session: {
         Args: {
@@ -9016,8 +9218,21 @@ export type Database = {
         Args: { p_job_id: string; p_reason?: string }
         Returns: Json
       }
+      release_company_research_credits: {
+        Args: { p_job_id: string; p_reason?: string }
+        Returns: Json
+      }
       release_gov_paper_credits: {
         Args: { p_job_id: string; p_reason?: string }
+        Returns: Json
+      }
+      reserve_company_research_credits: {
+        Args: {
+          p_cost: number
+          p_idempotency_key: string
+          p_job_id: string
+          p_user_id: string
+        }
         Returns: Json
       }
       reserve_gov_paper_credits: {

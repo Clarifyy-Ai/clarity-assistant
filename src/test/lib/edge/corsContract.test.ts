@@ -21,6 +21,7 @@ vi.hoisted(() => {
 
 import {
   applyCors,
+  BusinessError,
   corsError,
   getCorsHeaders,
   handleCors,
@@ -200,7 +201,54 @@ describe("shared Edge Function CORS contract", () => {
     const body = await res.json();
     expect(typeof body.error).toBe("string");
     expect(body.code).toBe("PAYMENT_REQUIRED");
+    expect(res.headers.get("x-error-code")).toBe("PAYMENT_REQUIRED");
     expect(acao(res)).toBe(APPROVED);
+  });
+
+  it("maps BusinessError through withBrowserCors instead of 500", async () => {
+    const handler = withBrowserCors("submit-test", async () => {
+      throw new BusinessError(409, "SUBMISSION_CONFLICT", "Attempt cannot be submitted.");
+    });
+    const res = await handler(makeReq("POST", APPROVED));
+    expect(res.status).toBe(409);
+    expect(res.headers.get("x-error-code")).toBe("SUBMISSION_CONFLICT");
+    expect(acao(res)).toBe(APPROVED);
+    const body = await res.json();
+    expect(body.code).toBe("SUBMISSION_CONFLICT");
+    expect(body.error).toBe("Attempt cannot be submitted.");
+  });
+
+  it("logs one JSON observability line without reading the response body", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const handler = withBrowserCors("deduct-credits", async () => {
+      return corsError(makeReq("POST", APPROVED), 402, "PAYMENT_REQUIRED", "Credits required.");
+    });
+    const res = await handler(makeReq("POST", APPROVED, { "x-correlation-id": "obs-1" }));
+    expect(res.status).toBe(402);
+    const body = await res.text();
+    expect(body).toContain("PAYMENT_REQUIRED");
+
+    const lines = [...logSpy.mock.calls, ...warnSpy.mock.calls, ...errorSpy.mock.calls]
+      .map((args) => String(args[0] ?? ""))
+      .filter((line) => {
+        try {
+          const parsed = JSON.parse(line) as Record<string, unknown>;
+          return parsed.functionName === "deduct-credits" && parsed.correlation_id === "obs-1";
+        } catch {
+          return false;
+        }
+      });
+    expect(lines).toHaveLength(1);
+    const parsed = JSON.parse(lines[0]) as Record<string, unknown>;
+    expect(parsed.level).toBe("info");
+    expect(parsed.status).toBe(402);
+    expect(parsed.code).toBe("PAYMENT_REQUIRED");
+    expect(typeof parsed.duration_ms).toBe("number");
+    logSpy.mockRestore();
+    warnSpy.mockRestore();
+    errorSpy.mockRestore();
   });
 
   it("handleCors returns null for non-OPTIONS so auth can run next", () => {

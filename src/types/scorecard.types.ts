@@ -38,7 +38,7 @@ export interface Scorecard {
   id: string;
   session_id: string;
   user_id: string;
-  overall_score: number;
+  overall_score: number | null;
   confidence_score: number;
   clarity_score: number;
   structure_score: number;
@@ -87,6 +87,64 @@ function parseDetails(raw: unknown): ScorecardDetails {
   return {};
 }
 
+export const SCORECARD_PANEL_DIMENSION_KEYS = [
+  "communication",
+  "confidence",
+  "technical",
+  "problem_solving",
+] as const;
+
+export type ScorecardPanelDimensionKey = (typeof SCORECARD_PANEL_DIMENSION_KEYS)[number];
+
+function finiteScore(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** Map Scorecard domain fields (or legacy DB columns) to debrief panel dimension keys. */
+export function scorecardDimensionValues(
+  scorecard: Partial<Scorecard> | Record<string, unknown> | null | undefined,
+): Record<ScorecardPanelDimensionKey, number | null> {
+  const sc = (scorecard ?? {}) as Record<string, unknown>;
+  return {
+    communication: finiteScore(sc.clarity_score) ?? finiteScore(sc.communication),
+    confidence: finiteScore(sc.confidence_score) ?? finiteScore(sc.confidence),
+    technical: finiteScore(sc.relevance_score) ?? finiteScore(sc.technical),
+    problem_solving: finiteScore(sc.structure_score) ?? finiteScore(sc.problem_solving),
+  };
+}
+
+/** Prefer mapped scorecard dimensions, then session fields, then AI report fallbacks. */
+export function resolveDebriefCategoryScores(input: {
+  scorecard: Partial<Scorecard> | Record<string, unknown> | null | undefined;
+  session: Record<string, unknown> | null | undefined;
+  reportCategoryScores?: Record<string, number> | null | undefined;
+}): Record<ScorecardPanelDimensionKey, number | null> {
+  const fromScorecard = scorecardDimensionValues(input.scorecard);
+  const report = input.reportCategoryScores ?? {};
+  const session = input.session ?? null;
+
+  return {
+    communication:
+      fromScorecard.communication ??
+      finiteScore(session?.clarity_score) ??
+      finiteScore(report.communication) ??
+      null,
+    confidence:
+      fromScorecard.confidence ??
+      finiteScore(session?.confidence_score) ??
+      finiteScore(report.confidence) ??
+      null,
+    technical:
+      fromScorecard.technical ??
+      finiteScore(report.technical) ??
+      null,
+    problem_solving:
+      fromScorecard.problem_solving ??
+      finiteScore(report.problem_solving) ??
+      null,
+  };
+}
+
 export function mapRowToScorecard(row: ScorecardRow): Scorecard {
   const details = parseDetails(row.details);
 
@@ -94,7 +152,7 @@ export function mapRowToScorecard(row: ScorecardRow): Scorecard {
     id: row.id,
     session_id: row.session_id ?? "",
     user_id: row.user_id,
-    overall_score: row.overall_score ?? 0,
+    overall_score: row.overall_score ?? null,
     confidence_score: details.confidence_score ?? row.confidence ?? 0,
     clarity_score: details.clarity_score ?? row.communication ?? 0,
     structure_score: details.structure_score ?? row.problem_solving ?? 0,

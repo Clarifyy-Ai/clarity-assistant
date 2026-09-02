@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   buildOcrConfidenceFlags,
+  classifyAnswerKeyStatus,
   normalizePdfExtractedQuestions,
+  parsePlainTextMcqs,
   validateExtractQuestionPaperPayload,
 } from "@/lib/gov-exam/extractQuestionPaper";
 
@@ -150,5 +155,121 @@ describe("buildOcrConfidenceFlags", () => {
     expect(flags[0].score).toBeLessThan(0.7);
     expect(flags[1].flags).toHaveLength(0);
     expect(flags[1].score).toBe(1);
+  });
+});
+
+describe("classifyAnswerKeyStatus", () => {
+  it("flags missing or conflicting keys as needs_review and never guesses", () => {
+    expect(
+      classifyAnswerKeyStatus({
+        raw: [],
+        acceptedCount: 0,
+        rejected: [],
+        confidence: [],
+      }),
+    ).toBe("none");
+
+    expect(
+      classifyAnswerKeyStatus({
+        raw: [{ question_text: "2+2?", options: ["1", "2", "3", "4"], correct_answer: "B" }],
+        acceptedCount: 1,
+        rejected: [],
+        confidence: [{ index: 0, flags: [], score: 1 }],
+      }),
+    ).toBe("mapped");
+
+    expect(
+      classifyAnswerKeyStatus({
+        raw: [{ question_text: "Hi?", options: ["a", "b", "c", "d"] }],
+        acceptedCount: 1,
+        rejected: [],
+        confidence: [{ index: 0, flags: ["missing_answer"], score: 0.6 }],
+      }),
+    ).toBe("needs_review");
+
+    expect(
+      classifyAnswerKeyStatus({
+        raw: [{ question_text: "2+2?", options: ["3", "4", "5", "6"], correct_index: 1, correct_answer: "C" }],
+        acceptedCount: 1,
+        rejected: [],
+        confidence: [{ index: 0, flags: [], score: 1 }],
+      }),
+    ).toBe("needs_review");
+  });
+});
+
+describe("parsePlainTextMcqs", () => {
+  it("does not guess A when the answer line is missing", () => {
+    const parsed = parsePlainTextMcqs(
+      [
+        "1. What is 2+2?",
+        "A) 1",
+        "B) 2",
+        "C) 3",
+        "D) 4",
+      ].join("\n"),
+    ) as Array<{ correct_answer?: string }>;
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].correct_answer).toBe("");
+    const flags = buildOcrConfidenceFlags(parsed);
+    expect(flags[0].flags).toContain("missing_answer");
+    expect(
+      classifyAnswerKeyStatus({
+        raw: parsed,
+        acceptedCount: 1,
+        rejected: [],
+        confidence: flags,
+      }),
+    ).toBe("needs_review");
+  });
+
+  it("maps a clean Answer: B line", () => {
+    const parsed = parsePlainTextMcqs(
+      [
+        "1. What is 2+2?",
+        "A) 1",
+        "B) 4",
+        "C) 3",
+        "D) 5",
+        "Answer: B",
+      ].join("\n"),
+    ) as Array<{ correct_answer?: string }>;
+    expect(parsed[0].correct_answer).toBe("B");
+  });
+
+  it("accepts parenthetical lowercase options and a multi-line stem", () => {
+    const parsed = parsePlainTextMcqs(
+      [
+        "1. Consider the following statements about the Finance Commission.",
+        "It is a constitutional body.",
+        "(a) 1 only",
+        "(b) 2 only",
+        "(c) Both 1 and 2",
+        "(d) Neither 1 nor 2",
+        "Answer: C",
+      ].join("\n"),
+    ) as Array<{ question_text?: string; options?: string[]; correct_answer?: string }>;
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].question_text).toMatch(/Finance Commission/i);
+    expect(parsed[0].options?.[0]).toBe("1 only");
+    expect(parsed[0].correct_answer).toBe("C");
+  });
+});
+
+describe("extract-question-paper answer_key_status default", () => {
+  it("defaults omitted status to needs_review when questions were processed", () => {
+    const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+    const src = fs.readFileSync(
+      path.join(root, "supabase/functions/extract-question-paper/index.ts"),
+      "utf8",
+    );
+    expect(src).toContain("function defaultAnswerKeyStatus");
+    expect(src).toMatch(/questionsProcessed[\s\S]{0,80}needs_review/);
+    expect(src).not.toMatch(/answer_key_status:\s*args\.answerKeyStatus\s*\?\?\s*"none"/);
+    const parser = fs.readFileSync(
+      path.join(root, "supabase/functions/_shared/pdfQuestionExtract.ts"),
+      "utf8",
+    );
+    expect(parser).not.toMatch(/correct_answer:\s*answerLetter\s*\?\?\s*"A"/);
   });
 });

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useAuthStore } from "@/store/authStore";
 
 const mockSignIn = vi.fn();
+const mockSignOut = vi.fn().mockResolvedValue({ error: null });
 const mockGetSession = vi.fn();
 const mockOnAuthStateChange = vi.fn(() => ({
   data: { subscription: { unsubscribe: vi.fn() } },
@@ -16,7 +17,7 @@ vi.mock("@/lib/supabase/client", () => ({
       signInWithPassword: (...a: unknown[]) => mockSignIn(...a),
       getSession: (...a: unknown[]) => mockGetSession(...a),
       onAuthStateChange: (...a: unknown[]) => mockOnAuthStateChange(...a),
-      signOut: vi.fn().mockResolvedValue({ error: null }),
+      signOut: (...a: unknown[]) => mockSignOut(...a),
       signUp: vi.fn(),
       signInWithOAuth: vi.fn(),
       resetPasswordForEmail: vi.fn(),
@@ -55,6 +56,7 @@ const mockProfile = {
 const mockUser = {
   id: "u1",
   email: "free@example.com",
+  email_confirmed_at: "2026-01-01T00:00:00Z",
   app_metadata: {},
   user_metadata: { full_name: "Free User" },
 };
@@ -165,6 +167,27 @@ describe("authStore account bootstrap", () => {
     expect(mockGetByIdMaybe).toHaveBeenCalledTimes(1);
   });
 
+  it("revokes local session when password login returns an unverified user", async () => {
+    mockSignIn.mockResolvedValueOnce({
+      data: {
+        session: mockSession,
+        user: { ...mockUser, email_confirmed_at: null },
+      },
+      error: null,
+    });
+
+    await expect(
+      useAuthStore.getState().signInWithEmail("a@b.com", "password123"),
+    ).rejects.toMatchObject({
+      code: "AUTH_EMAIL_NOT_VERIFIED",
+      message: expect.stringMatching(/verify your email/i),
+    });
+    expect(mockSignOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(useAuthStore.getState().status).toBe("unauthenticated");
+    expect(useAuthStore.getState().session).toBeNull();
+    expect(mockGetByIdMaybe).not.toHaveBeenCalled();
+  });
+
   it("maps invalid credentials to a safe user-facing error", async () => {
     mockSignIn.mockResolvedValueOnce({
       data: { session: null, user: null },
@@ -173,11 +196,36 @@ describe("authStore account bootstrap", () => {
 
     await expect(
       useAuthStore.getState().signInWithEmail("a@b.com", "wrong"),
-    ).rejects.toThrow(/Incorrect email or password|Invalid email or password/i);
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/Incorrect email or password/i),
+      code: "AUTH_INVALID_CREDENTIALS",
+    });
     expect(useAuthStore.getState().error).toMatch(
       /Incorrect email or password|Invalid email or password/i,
     );
     expect(useAuthStore.getState().status).toBe("unauthenticated");
+  });
+
+  it("maps unknown-email token errors to the same safe copy without GoTrue status", async () => {
+    mockSignIn.mockResolvedValueOnce({
+      data: { session: null, user: null },
+      error: {
+        message: "password token invalid",
+        code: "otp_expired",
+        status: 400,
+      },
+    });
+
+    let thrown: { status?: number; code?: string; message?: string } | undefined;
+    try {
+      await useAuthStore.getState().signInWithEmail("missing@example.com", "any-password");
+    } catch (error) {
+      thrown = error as { status?: number; code?: string; message?: string };
+    }
+    expect(thrown?.message).toMatch(/Incorrect email or password/i);
+    expect(thrown?.code).toBe("AUTH_INVALID_CREDENTIALS");
+    expect(thrown?.status).toBeUndefined();
+    expect(useAuthStore.getState().error).toMatch(/Incorrect email or password/i);
   });
 
   it("does not trim or case-fold the password", async () => {

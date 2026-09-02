@@ -159,6 +159,7 @@ class TestRunOperationDispatch:
             "prep_rephrase",
             "prep_coding",
             "prep_project",
+            "prep_raw_prompt",
             "company_research_skeleton",
         ],
     )

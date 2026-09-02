@@ -92,7 +92,7 @@ export function OverlayTabBar({ compactMobile = false }: OverlayTabBarProps) {
         className={cn(
           "px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all shrink-0",
           compactMobile && "px-3 py-1.5 text-xs",
-          "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40",
+          "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           activeTab === "answer"
             ? "bg-indigo-600/20 text-indigo-300 shadow-[0_0_0_1px_rgba(99,102,241,0.3)]"
             : "text-white/30 hover:text-white/60 hover:bg-white/[0.05]",
@@ -121,7 +121,7 @@ export function OverlayTabBar({ compactMobile = false }: OverlayTabBarProps) {
           className={cn(
             "inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all",
             compactMobile && "px-3 py-1.5 text-xs",
-            "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40",
+            "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             isOnTool || moreOpen
               ? "bg-white/10 text-white/85"
               : "text-white/35 hover:text-white/65 hover:bg-white/[0.05]",

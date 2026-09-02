@@ -1,5 +1,7 @@
 import { supabase } from "@/lib/supabase/client";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { ApiClientError } from "@/lib/api/apiClient";
+import { formatGovExamOperationError } from "@/lib/gov-exam/examOperationErrors";
 import { PLAYABLE_QUESTIONS_VIEW } from "@/lib/gov-exam/playableQuestions";
 import { normalizeExamTypeForStorage, resolveExamConfigId } from "@/lib/mock-test/examTypes";
 
@@ -18,6 +20,9 @@ export interface MockTestLaunchConfig {
   randomize_order?: boolean;
   shuffle_options?: boolean;
   practice_mode?: boolean;
+  allow_shortfall?: boolean;
+  quick_drill?: boolean;
+  allow_ai_fill?: boolean;
 }
 
 export interface LaunchMockTestResult {
@@ -25,6 +30,32 @@ export interface LaunchMockTestResult {
   question_count: number;
   warning?: string;
   ai_generated_count?: number;
+}
+
+function errFromSelectPayload(payload: {
+  error?: string;
+  code?: string;
+  available?: number;
+  requested?: number;
+  required?: number;
+  question_ids?: string[];
+}): ApiClientError {
+  const available =
+    typeof payload.available === "number"
+      ? payload.available
+      : Array.isArray(payload.question_ids)
+        ? payload.question_ids.length
+        : 0;
+  return new ApiClientError({
+    message: payload.error || "Not enough questions are available for this configuration.",
+    status: 409,
+    code: payload.code || "QUESTION_INVENTORY_INSUFFICIENT",
+    details: {
+      ...payload,
+      available,
+      requested: payload.requested ?? payload.required,
+    },
+  });
 }
 
 /** Launch a mock test: select questions from bank then create test record. */
@@ -46,20 +77,29 @@ export async function launchMockTest(
     topics: config.topics ?? [],
   };
 
-  const selectData = await fetchEdgeJson<{
+  let selectData: {
     question_ids?: string[];
     count?: number;
     warning?: string;
     ai_generated_count?: number;
     gap_fill_failed?: boolean;
     error?: string;
-  }>("select-test-questions", { config: normalizedConfig }, { timeoutMs: 180_000 });
+  };
+  try {
+    selectData = await fetchEdgeJson<typeof selectData>(
+      "select-test-questions",
+      { config: normalizedConfig },
+      { timeoutMs: 180_000 },
+    );
+  } catch (err) {
+    throw new Error(formatGovExamOperationError(err));
+  }
 
   if (selectData.error && (!selectData.question_ids || selectData.question_ids.length === 0)) {
-    const msg = selectData.error.includes("Pro plan") || selectData.error.includes("upgrade")
-      ? selectData.error
-      : selectData.error;
-    throw new Error(msg);
+    const mapped = formatGovExamOperationError(
+      errFromSelectPayload(selectData),
+    );
+    throw new Error(mapped);
   }
 
   const questionIds = Array.isArray(selectData.question_ids)
@@ -71,6 +111,23 @@ export async function launchMockTest(
       ? "Question bank is short — ask an admin to import more official papers."
       : "Upload questions via Admin → Seed Question Bank, or use Collect from public sources.";
     throw new Error(`No questions available for this paper. ${hint}`);
+  }
+
+  const isQuickDrill =
+    Boolean(config.quick_drill) ||
+    String(config.test_name ?? "").toLowerCase().includes("quick drill");
+
+  if (isQuickDrill && questionIds.length !== config.question_count) {
+    const mapped = formatGovExamOperationError(
+      errFromSelectPayload({
+        error: `Only ${questionIds.length} of ${config.question_count} questions are available after bank + AI fill.`,
+        code: "QUESTION_INVENTORY_INSUFFICIENT",
+        available: questionIds.length,
+        requested: config.question_count,
+        question_ids: questionIds,
+      }),
+    );
+    throw new Error(mapped);
   }
 
   if (

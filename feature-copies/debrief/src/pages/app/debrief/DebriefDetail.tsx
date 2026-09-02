@@ -1,5 +1,5 @@
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import {
@@ -27,6 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { formatSessionScore } from "@/lib/analytics/scoreStatus";
 import { HybridSourceLine } from "@/components/hybrid/HybridSourceLine";
 import { getAiUserFacingError } from "@/lib/network/aiErrorUx";
 import { DebriefExtras } from "@/components/session/DebriefExtras";
@@ -59,49 +60,23 @@ export default function DebriefDetail() {
   const [scorecard, setScorecard] = useState<any>(null);
   const [transcriptSegments, setTranscriptSegments] = useState<any[]>([]);
   const [debriefSource, setDebriefSource] = useState<string | null>(null);
+  const generateInFlightRef = useRef(false);
 
-  // ── Generate debrief from edge function ──────────────────────
-  // FIX 1: fetchEdge returns parsed data directly — no .ok / .json()
-  // FIX 5: removed user_id from body — derived server-side from auth token
-  const generateDebrief = useCallback(async (sessionId: string) => {
-    setGenning(true);
-    setLoadStep(2);
-    try {
-      const data = await fetchEdgeJson<{
-        debrief?: unknown;
-        session?: unknown;
-        source?: string;
-        meta?: { source?: string };
-      }>(
-        "generate-debrief",
-        { session_id: sessionId }
-      );
-      setLoadStep(3);
-      if (data?.debrief) setDebrief(data.debrief);
-      if (data?.session) setSession(data.session);
-      setDebriefSource(data?.source ?? data?.meta?.source ?? null);
-    } catch (err: unknown) {
-      const msg = getAiUserFacingError(err);
-      console.error("[DebriefDetail] generateDebrief error:", err);
-      toast.error(msg);
-      setFetchError(msg);
-    } finally {
-      setGenning(false);
-    }
-  }, []);
-
-  // ── Fetch existing debrief from DB ────────────────────────────
-  // FIX 2: separate error from "not found" — only generate if truly not found
-  // FIX 4: wrapped in useCallback with proper deps
-  const fetchDebrief = useCallback(async () => {
+  // Persist-first: load DB only. Missing debriefs wait for an explicit Generate click.
+  const fetchDebrief = useCallback(async (options?: { silent?: boolean }) => {
     if (!id || !user) return;
-    setLoading(true);
-    setFetchError(null);
-    setLoadStep(0);
+    if (!options?.silent) {
+      setLoading(true);
+      setFetchError(null);
+      setLoadStep(0);
+    }
 
     try {
-      setLoadStep(1);
-      const db = await sessionDebriefsDB.getByIdForUser(id, user.id);
+      if (!options?.silent) setLoadStep(1);
+      let db = await sessionDebriefsDB.getByIdForUser(id, user.id);
+      if (!db) {
+        db = await sessionDebriefsDB.getBySessionIdForUser(id, user.id);
+      }
 
       if (db) {
         setDebrief(db);
@@ -110,15 +85,15 @@ export default function DebriefDetail() {
             const [sess, ans, sc, segments] = await Promise.all([
               sessionsDB.getByIdForUser(db.session_id, user.id),
               sessionAnswersDB.listBySessionIdForUser(db.session_id, user.id),
-              scorecardsDB.getBySessionId(db.session_id).catch(() => null),
-              sessionTranscriptsDB.listSegmentsBySessionId(db.session_id).catch(() => []),
+              scorecardsDB.getBySessionIdForUser(db.session_id, user.id).catch(() => null),
+              sessionTranscriptsDB.listSegmentsBySessionIdForUser(db.session_id, user.id).catch(() => []),
             ]);
             setSession(sess);
             setAnswers(ans);
             setScorecard(sc);
             setTranscriptSegments(segments);
             try {
-              const tx = await sessionTranscriptsDB.getBySessionId(db.session_id);
+              const tx = await sessionTranscriptsDB.getBySessionIdForUser(db.session_id, user.id);
               setTranscript(tx ?? sess?.notes ?? null);
             } catch {
               setTranscript(sess?.notes ?? null);
@@ -132,18 +107,71 @@ export default function DebriefDetail() {
           }
         }
       } else {
-        // No debrief found by debrief ID — treat `id` as a session_id
-        // and generate a new debrief for that session
-        await generateDebrief(id);
+        const sess = await sessionsDB.getByIdForUser(id, user.id);
+        if (!sess) {
+          setFetchError("Session not found.");
+          return;
+        }
+        setSession(sess);
+        try {
+          const [ans, sc, segments] = await Promise.all([
+            sessionAnswersDB.listBySessionIdForUser(id, user.id),
+            scorecardsDB.getBySessionIdForUser(id, user.id).catch(() => null),
+            sessionTranscriptsDB.listSegmentsBySessionIdForUser(id, user.id).catch(() => []),
+          ]);
+          setAnswers(ans);
+          setScorecard(sc);
+          setTranscriptSegments(segments);
+          try {
+            const tx = await sessionTranscriptsDB.getBySessionIdForUser(id, user.id);
+            setTranscript(tx ?? sess?.notes ?? null);
+          } catch {
+            setTranscript(sess?.notes ?? null);
+          }
+        } catch {
+          // Artifacts are optional; user can still generate a debrief.
+        }
+        // Persist-first: never spend AI credits just because this page mounted.
       }
     } catch (err: unknown) {
       const msg = getAiUserFacingError(err);
       console.error("[DebriefDetail] fetchDebrief error:", err);
       setFetchError(msg);
     } finally {
-      setLoading(false);
+      if (!options?.silent) setLoading(false);
     }
-  }, [id, user?.id, generateDebrief]);
+  }, [id, user?.id]);
+
+  // ── Generate debrief from edge function ──────────────────────
+  const generateDebrief = useCallback(async (sessionId: string) => {
+    if (generateInFlightRef.current) return;
+    generateInFlightRef.current = true;
+    setFetchError(null);
+    setGenning(true);
+    setLoadStep(2);
+    try {
+      const data = await fetchEdgeJson<{
+        debrief?: unknown;
+        session?: unknown;
+        source?: string;
+        meta?: { source?: string };
+      }>(
+        "generate-debrief",
+        { session_id: sessionId }
+      );
+      setLoadStep(3);
+      setDebriefSource(data?.source ?? data?.meta?.source ?? null);
+      await fetchDebrief({ silent: true });
+    } catch (err: unknown) {
+      const msg = getAiUserFacingError(err);
+      console.error("[DebriefDetail] generateDebrief error:", err);
+      toast.error(msg);
+      setFetchError(msg);
+    } finally {
+      generateInFlightRef.current = false;
+      setGenning(false);
+    }
+  }, [fetchDebrief]);
 
   // FIX 3: include user?.id in dep array so it re-runs if user loads after id
   useEffect(() => {
@@ -172,7 +200,7 @@ export default function DebriefDetail() {
     await sessionDebriefsDB.updateShareToken(debrief.id, user.id, token);
     if (debrief.session_id) {
       try {
-        await scorecardsDB.markShared(debrief.session_id, token);
+        await scorecardsDB.markShared(debrief.session_id, user.id, token);
       } catch {
         /* debrief share still succeeds if scorecard row is missing */
       }
@@ -244,8 +272,12 @@ export default function DebriefDetail() {
             icon={AlertTriangle}
             title="Couldn't load debrief"
             description={fetchError}
-            actionLabel="Retry"
-            onAction={fetchDebrief}
+            actionLabel={session && id ? "Generate debrief" : "Retry"}
+            onAction={
+              session && id
+                ? () => void generateDebrief(id)
+                : fetchDebrief
+            }
             secondaryActionLabel="Back to debriefs"
             onSecondaryAction={() => navigate("/app/debriefs")}
           />
@@ -255,6 +287,28 @@ export default function DebriefDetail() {
   }
 
   // ── Not found state ───────────────────────────────────────────
+  if (!debrief && session && id) {
+    return (
+      <div className="max-w-3xl space-y-5">
+        <PageHeader
+          title="Session Debrief"
+          breadcrumbs={debriefBreadcrumbs.slice(0, 2).concat([{ label: "Not generated" }])}
+        />
+        <Card>
+          <EmptyState
+            icon={Brain}
+            title="No debrief yet"
+            description="This session has no saved debrief. Generate one when you are ready — it uses AI credits."
+            actionLabel="Generate debrief"
+            onAction={() => void generateDebrief(id)}
+            secondaryActionLabel="Back to debriefs"
+            onSecondaryAction={() => navigate("/app/debriefs")}
+          />
+        </Card>
+      </div>
+    );
+  }
+
   if (!debrief) {
     return (
       <div className="max-w-3xl space-y-5">
@@ -356,7 +410,10 @@ export default function DebriefDetail() {
             report={detailedReport}
             onShareToken={handleShareToken}
             previewTitle={debriefTitle + (session?.target_company ? ` — ${session.target_company}` : "")}
-            previewScore={debrief.overall_grade ?? scorecard?.overall_score ?? null}
+            previewScore={formatSessionScore(
+              scorecard?.overall_score,
+              scorecard?.score_status ?? "scored",
+            )}
             previewSummary={debrief.summary ?? null}
           />
         </div>
@@ -617,7 +674,7 @@ export default function DebriefDetail() {
           variant="secondary"
           size="md"
           fullWidth
-          onClick={() => navigate(`/app/sessions/${debrief.session_id}`)}
+          onClick={() => navigate(`/app/scorecard/${debrief.session_id}`)}
           leftIcon={<BarChart2 className="w-4 h-4" />}
         >
           View scorecard

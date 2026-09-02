@@ -20,12 +20,16 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuthStore } from "@/store/authStore";
 import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
-import { isOAuthCancelledError } from "@/lib/auth/oauthProviders";
+import { getAuthenticatedEntryPath } from "@/lib/auth/postAuthRedirect";
+import {
+  isOAuthCancelledError,
+  isOAuthNotConfiguredError,
+  isOAuthStateMismatchError,
+} from "@/lib/auth/oauthProviders";
+import { classifyLoginFailure } from "@/lib/auth/loginFailure";
 
 type CallbackError = {
-  message: string;
-  description?: string;
-  code: "cancelled" | "auth_failed";
+  loginQueryError: string;
 };
 
 const AUTH_CALLBACK_TIMEOUT_MS = 12_000;
@@ -51,37 +55,32 @@ function getCallbackError(search: string, hash: string): CallbackError | null {
   }
 
   if (isOAuthCancelledError(error, errorDescription ?? errorCode)) {
-    return {
-      message: "Sign-in was cancelled.",
-      description: "Sign-in was cancelled.",
-      code: "cancelled",
-    };
+    return { loginQueryError: "cancelled" };
   }
 
-  return {
-    message: "Authentication failed.",
-    description:
-      errorDescription ||
-      errorCode ||
-      error ||
-      "Please try signing in again.",
-    code: "auth_failed",
-  };
+  if (isOAuthStateMismatchError(error, errorDescription, errorCode)) {
+    return { loginQueryError: "AUTH_OAUTH_STATE_MISMATCH" };
+  }
+
+  if (isOAuthNotConfiguredError(error, errorDescription, errorCode)) {
+    return { loginQueryError: "not_configured" };
+  }
+
+  const classified = classifyLoginFailure({
+    message: errorDescription || error || "",
+    code: errorCode || error || undefined,
+    error_description: errorDescription ?? undefined,
+    error_code: errorCode ?? undefined,
+  });
+
+  return { loginQueryError: classified.code };
 }
 
 function getSafeRedirectTarget(options: {
   isAdmin: boolean;
   isOnboarded: boolean;
 }): string {
-  if (options.isAdmin) {
-    return "/app/admin";
-  }
-
-  if (!options.isOnboarded) {
-    return "/onboarding";
-  }
-
-  return "/app/dashboard";
+  return getAuthenticatedEntryPath(options);
 }
 
 export default function AuthCallback(): JSX.Element {
@@ -104,17 +103,9 @@ export default function AuthCallback(): JSX.Element {
 
   useEffect(() => {
     if (callbackError) {
-      if (callbackError.code === "cancelled") {
-        navigate("/login?error=cancelled", { replace: true });
-        return;
-      }
-
-      const params = new URLSearchParams({
-        error: "auth_failed",
-        message: callbackError.description ?? callbackError.message,
+      navigate(`/login?error=${encodeURIComponent(callbackError.loginQueryError)}`, {
+        replace: true,
       });
-
-      navigate(`/login?${params.toString()}`, { replace: true });
     }
   }, [callbackError, navigate]);
 

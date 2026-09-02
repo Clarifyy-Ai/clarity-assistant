@@ -731,6 +731,25 @@ export const sessionTranscriptsDB = {
     return data.map((row) => row.content).filter(Boolean).join("\n\n");
   },
 
+  async getBySessionIdForUser(sessionId: string, userId: string): Promise<string | null> {
+    const { data, error } = await supabase
+      .from("session_transcripts")
+      .select("content")
+      .eq("session_id", sessionId)
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "session_transcripts",
+        operation: "getBySessionIdForUser",
+      });
+    }
+
+    if (!data?.length) return null;
+    return data.map((row) => row.content).filter(Boolean).join("\n\n");
+  },
+
   async listSegmentsBySessionId(sessionId: string): Promise<
     Array<{
       content: string;
@@ -751,6 +770,35 @@ export const sessionTranscriptsDB = {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
         table: "session_transcripts",
         operation: "listSegmentsBySessionId",
+      });
+    }
+    return data ?? [];
+  },
+
+  async listSegmentsBySessionIdForUser(
+    sessionId: string,
+    userId: string,
+  ): Promise<
+    Array<{
+      content: string;
+      offset_ms?: number | null;
+      speaker?: string;
+      wpm?: number | null;
+      filler_count?: number | null;
+    }>
+  > {
+    const { data, error } = await supabase
+      .from("session_transcripts")
+      .select("content, offset_ms, speaker, wpm, filler_count")
+      .eq("session_id", sessionId)
+      .eq("user_id", userId)
+      .order("offset_ms", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "session_transcripts",
+        operation: "listSegmentsBySessionIdForUser",
       });
     }
     return data ?? [];
@@ -955,6 +1003,28 @@ export const documentsDB = {
     return data ?? [];
   },
 
+  async getByContentHash(
+    userId: string,
+    contentHash: string,
+  ): Promise<Tables<"documents"> | null> {
+    const { data, error } = await supabase
+      .from("documents")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("content_hash", contentHash)
+      .not("content", "is", null)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "documents",
+        operation: "getByContentHash",
+      });
+    }
+    return data;
+  },
+
   async getById(docId: string): Promise<Tables<"documents">> {
     return query(
       () => supabase.from("documents").select("id, title, type, user_id, is_primary, is_active, file_name, file_size, file_url, mime_type, company_name, job_title, job_location, salary_range, keywords, requirements, parsed_skills, parsed_summary, parsed_education, parsed_experience, is_remote, created_at, updated_at").eq("id", docId).single(),
@@ -1007,11 +1077,11 @@ export const documentsDB = {
     type: string
   ): Promise<Pick<
     Tables<"documents">,
-    "title" | "parsed_summary" | "content" | "updated_at"
+    "id" | "title" | "parsed_summary" | "content" | "updated_at" | "file_url" | "mime_type"
   > | null> {
     const { data, error } = await supabase
       .from("documents")
-      .select("title, parsed_summary, content, updated_at")
+      .select("id, title, parsed_summary, content, updated_at, file_url, mime_type")
       .eq("user_id", userId)
       .eq("type", type as Tables<"documents">["type"])
       .eq("is_primary", true)
@@ -1329,6 +1399,26 @@ export const sessionDebriefsDB = {
     return data;
   },
 
+  async getBySessionIdForUser(
+    sessionId: string,
+    userId: string,
+  ): Promise<Tables<"session_debriefs"> | null> {
+    const { data, error } = await supabase
+      .from("session_debriefs")
+      .select("*")
+      .eq("session_id", sessionId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "session_debriefs",
+        operation: "getBySessionIdForUser",
+      });
+    }
+    return data;
+  },
+
   async listSummariesByUserId(
     userId: string,
     limit = 50,
@@ -1529,7 +1619,7 @@ export const feedbackDB = {
 
 export type CreditTransactionRow = Pick<
   Tables<"credit_transactions">,
-  "id" | "user_id" | "amount" | "action" | "created_at" | "session_id" | "description"
+  "id" | "user_id" | "amount" | "action" | "created_at" | "session_id" | "description" | "stripe_payment_id"
 >;
 
 // ─── Credits ──────────────────────────────────────────────────────────────────
@@ -1577,7 +1667,7 @@ export const creditsDB = {
   async listByUserId(userId: string, limit = 50): Promise<CreditTransactionRow[]> {
     const { data, error } = await supabase
       .from("credit_transactions")
-      .select("id, user_id, amount, action, created_at, session_id, description")
+      .select("id, user_id, amount, action, created_at, session_id, description, stripe_payment_id")
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(limit);
@@ -1865,6 +1955,208 @@ export const answerBankDB = {
         operation: "deleteAllByUserId",
       });
     }
+  },
+
+  async incrementUsage(userId: string, id: string): Promise<void> {
+    const row = await answerBankDB.getById(userId, id);
+    await answerBankDB.update(userId, id, {
+      times_used: (row.times_used ?? 0) + 1,
+      last_used_at: new Date().toISOString(),
+    });
+  },
+};
+
+export const answerBankFoldersDB = {
+  async listByUserId(userId: string): Promise<Tables<"answer_bank_folders">[]> {
+    const { data, error } = await supabase
+      .from("answer_bank_folders")
+      .select("*")
+      .eq("user_id", userId)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "answer_bank_folders",
+        operation: "listByUserId",
+      });
+    }
+    return data ?? [];
+  },
+
+  async create(
+    userId: string,
+    row: Omit<TablesInsert<"answer_bank_folders">, "user_id">,
+  ): Promise<Tables<"answer_bank_folders">> {
+    return query(
+      () =>
+        supabase
+          .from("answer_bank_folders")
+          .insert({ ...row, user_id: userId })
+          .select()
+          .single(),
+      { table: "answer_bank_folders", operation: "create" },
+    );
+  },
+
+  async update(
+    userId: string,
+    id: string,
+    updates: TablesUpdate<"answer_bank_folders">,
+  ): Promise<Tables<"answer_bank_folders">> {
+    return query(
+      () =>
+        supabase
+          .from("answer_bank_folders")
+          .update({ ...updates, updated_at: new Date().toISOString() })
+          .eq("id", id)
+          .eq("user_id", userId)
+          .select()
+          .single(),
+      { table: "answer_bank_folders", operation: "update" },
+    );
+  },
+
+  async delete(userId: string, id: string): Promise<void> {
+    const { error } = await supabase
+      .from("answer_bank_folders")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId);
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "answer_bank_folders",
+        operation: "delete",
+      });
+    }
+  },
+};
+
+export const prepProjectsDB = {
+  async listByUserId(userId: string): Promise<Tables<"prep_projects">[]> {
+    const { data, error } = await supabase
+      .from("prep_projects")
+      .select("*")
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false });
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "prep_projects",
+        operation: "listByUserId",
+      });
+    }
+    return data ?? [];
+  },
+
+  async upsert(
+    userId: string,
+    row: Omit<TablesInsert<"prep_projects">, "user_id"> & { id?: string },
+  ): Promise<Tables<"prep_projects">> {
+    const now = new Date().toISOString();
+    return query(
+      () =>
+        supabase
+          .from("prep_projects")
+          .upsert(
+            {
+              ...row,
+              user_id: userId,
+              updated_at: now,
+            } as TablesInsert<"prep_projects">,
+            { onConflict: "id" },
+          )
+          .select()
+          .single(),
+      { table: "prep_projects", operation: "upsert" },
+    );
+  },
+
+  async delete(userId: string, id: string): Promise<void> {
+    const { error } = await supabase
+      .from("prep_projects")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId);
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "prep_projects",
+        operation: "delete",
+      });
+    }
+  },
+};
+
+export const prepCodingHistoryDB = {
+  async getForProblem(
+    userId: string,
+    problemSlug: string,
+  ): Promise<Tables<"prep_coding_history"> | null> {
+    const { data, error } = await supabase
+      .from("prep_coding_history")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("problem_slug", problemSlug)
+      .maybeSingle();
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "prep_coding_history",
+        operation: "getForProblem",
+      });
+    }
+    return data;
+  },
+
+  async upsert(
+    userId: string,
+    row: Omit<TablesInsert<"prep_coding_history">, "user_id">,
+  ): Promise<Tables<"prep_coding_history">> {
+    const now = new Date().toISOString();
+    const { data: existing } = await supabase
+      .from("prep_coding_history")
+      .select("id, hint_text, solution_text, depth")
+      .eq("user_id", userId)
+      .eq("problem_slug", row.problem_slug)
+      .maybeSingle();
+
+    const merged = {
+      hint_text: row.hint_text ?? existing?.hint_text ?? "",
+      solution_text: row.solution_text ?? existing?.solution_text ?? "",
+      depth: row.depth ?? existing?.depth ?? null,
+      provider: row.provider ?? null,
+      updated_at: now,
+    };
+
+    if (existing?.id) {
+      return query(
+        () =>
+          supabase
+            .from("prep_coding_history")
+            .update(merged)
+            .eq("id", existing.id)
+            .eq("user_id", userId)
+            .select()
+            .single(),
+        { table: "prep_coding_history", operation: "upsert" },
+      );
+    }
+
+    return query(
+      () =>
+        supabase
+          .from("prep_coding_history")
+          .insert({
+            user_id: userId,
+            problem_slug: row.problem_slug,
+            ...merged,
+          })
+          .select()
+          .single(),
+      { table: "prep_coding_history", operation: "upsert" },
+    );
   },
 };
 
@@ -3122,7 +3414,7 @@ export const scorecardsDB = {
     }
   },
 
-  async markShared(sessionId: string, token: string): Promise<void> {
+  async markShared(sessionId: string, userId: string, token: string): Promise<void> {
     const patch: ScorecardShareUpdate = {
       is_shared: true,
       share_token: token,
@@ -3130,7 +3422,8 @@ export const scorecardsDB = {
     const { error } = await supabase
       .from("scorecards")
       .update(patch as TablesUpdate<"scorecards">)
-      .eq("session_id", sessionId);
+      .eq("session_id", sessionId)
+      .eq("user_id", userId);
     if (error) {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
         table: "scorecards",

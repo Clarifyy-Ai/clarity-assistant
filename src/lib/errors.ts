@@ -3,7 +3,11 @@
 // All custom error classes, error codes, guards, and formatters live here.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ─── Error Codes ─────────────────────────────────────────────────────────────
+import {
+  AUTH_ACCOUNT_SUSPENDED_MESSAGE,
+  assertSafeLoginMessage,
+  classifyLoginFailure,
+} from "@/lib/auth/loginFailure";
 
 export enum ErrorCode {
   // Auth
@@ -439,8 +443,7 @@ function collectAuthErrorHaystack(error: unknown): { code: string; haystack: str
 }
 
 /** Shown for banned / Auth-disabled accounts (never raw SQL or "wrong password"). */
-export const ACCOUNT_SUSPENDED_MESSAGE =
-  "Your account has been suspended. Contact support if you need help.";
+export const ACCOUNT_SUSPENDED_MESSAGE = AUTH_ACCOUNT_SUSPENDED_MESSAGE;
 
 /**
  * Detect Auth/API failures that mean the account is banned or disabled.
@@ -486,71 +489,21 @@ export function isAccountSuspendedAuthError(error: unknown): boolean {
 
 /**
  * Map Supabase Auth API errors (signInWithPassword, signUp, etc.) to user-facing copy.
+ * Login credential failures always share one generic message; token/provider
+ * internals never reach the UI. HTTP status is not used for copy.
  */
 export function formatSupabaseAuthError(error: unknown): string {
-  if (isAccountSuspendedAuthError(error)) {
-    return ACCOUNT_SUSPENDED_MESSAGE;
-  }
-
   const { code, haystack } = collectAuthErrorHaystack(error);
-  const message =
-    typeof error === "string"
-      ? error.trim()
-      : error && typeof error === "object"
-        ? ((error as SupabaseAuthErrorShape).message?.trim() ?? "")
-        : "";
 
-  if (
-    haystack.includes("failed to fetch") ||
-    haystack.includes("networkerror") ||
-    haystack.includes("load failed")
-  ) {
-    return "Cannot reach the sign-in service. Check your internet connection, or verify Supabase URL/keys are set correctly for this deployment.";
+  if (code === "user_already_exists" || haystack.includes("user already registered")) {
+    return "An account with this email already exists. Try signing in.";
+  }
+  if (code === "weak_password" || haystack.includes("weak_password")) {
+    return "Choose a stronger password and try again.";
   }
 
-  if (haystack.includes("invalid api key")) {
-    return "Sign-in is misconfigured (invalid Supabase API key). Redeploy with correct VITE_SUPABASE_ANON_KEY.";
-  }
-
-  if (
-    code === "email_not_confirmed" ||
-    haystack.includes("email_not_confirmed") ||
-    haystack.includes("email not confirmed") ||
-    haystack.includes("email not verified")
-  ) {
-    return USER_MESSAGES[ErrorCode.AUTH_EMAIL_NOT_VERIFIED]!;
-  }
-
-  if (
-    code === "provider_disabled" ||
-    code === "oauth_provider_not_found" ||
-    haystack.includes("provider is not enabled") ||
-    haystack.includes("unsupported provider") ||
-    haystack.includes("oauth_provider_not_found")
-  ) {
-    return USER_MESSAGES[ErrorCode.AUTH_OAUTH_FAILED]!;
-  }
-
-  switch (code) {
-    case "invalid_credentials":
-    case "invalid_grant":
-      return USER_MESSAGES[ErrorCode.AUTH_INVALID_CREDENTIALS]!;
-    case "user_banned":
-    case "user_disabled":
-      return ACCOUNT_SUSPENDED_MESSAGE;
-    case "over_request_rate_limit":
-    case "too_many_requests":
-      return "Too many sign-in attempts. Please wait a few minutes and try again.";
-    default:
-      break;
-  }
-
-  if (/invalid login credentials/i.test(message) || haystack.includes("invalid login credentials")) {
-    return USER_MESSAGES[ErrorCode.AUTH_INVALID_CREDENTIALS]!;
-  }
-
-  // Never surface raw GoTrue / PostgREST / Postgres text to the user.
-  return USER_MESSAGES[ErrorCode.AUTH_INVALID_CREDENTIALS]!;
+  const classified = classifyLoginFailure(error);
+  return assertSafeLoginMessage(classified.message);
 }
 
 /** Transport / config failures that must not be shown as a fake success. */

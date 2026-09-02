@@ -17,6 +17,7 @@ import { creditCost } from "../_shared/creditEconomics.ts";
 import { executeHybridOperation } from "../_shared/hybridExecute.ts";
 import { pythonExecuteOperation } from "../_shared/pythonClient.ts";
 import { httpStatusForDomainCode } from "../_shared/domainErrors.ts";
+import { httpStatusForDocumentError, mapHybridDocumentCode } from "../_shared/documentErrors.ts";
 
 const GAP_ANALYSIS_COST = creditCost("gap_analysis");
 
@@ -529,23 +530,28 @@ ${safeJD}
     });
 
     if (!hybrid.ok) {
-      const status = httpStatusForDomainCode(
-        String(hybrid.code || "AI_PROVIDER_UNAVAILABLE"),
-      );
       if (
         hybrid.code === "INSUFFICIENT_CREDITS" ||
         hybrid.code === "CAPABILITY_REQUIRED"
       ) {
         return hybrid.response;
       }
-      return errorResponse(
-        hybrid.code === "INSUFFICIENT_CREDITS"
-          ? `Insufficient credits. Gap analysis costs ${GAP_ANALYSIS_COST} credits.`
-          : "Gap analysis unavailable. Credits refunded.",
-        String(hybrid.code || "PROVIDER_UNAVAILABLE"),
-        status,
-        req,
-      );
+      const mapped = mapHybridDocumentCode(hybrid.code || "AI_PROVIDER_UNAVAILABLE");
+      const envelopeCode =
+        mapped === "MALFORMED_OUTPUT" || mapped === "PARSER_TIMEOUT"
+          ? mapped
+          : String(hybrid.code || "PROVIDER_UNAVAILABLE");
+      const status =
+        mapped === "MALFORMED_OUTPUT" || mapped === "PARSER_TIMEOUT" || mapped === "PARSER_UNAVAILABLE"
+          ? httpStatusForDocumentError(mapped)
+          : httpStatusForDomainCode(String(hybrid.code || "AI_PROVIDER_UNAVAILABLE"));
+      const message =
+        mapped === "MALFORMED_OUTPUT"
+          ? "Gap analysis returned unusable output. Credits refunded. You can retry."
+          : mapped === "PARSER_TIMEOUT"
+          ? "Gap analysis timed out. Credits refunded. You can retry."
+          : "Gap analysis unavailable. Credits refunded.";
+      return errorResponse(message, envelopeCode, status, req);
     }
 
     const analysis = {

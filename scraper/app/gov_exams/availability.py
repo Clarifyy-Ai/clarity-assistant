@@ -284,6 +284,7 @@ def compute_availability(
         language_available=language_available,
         blocked_reason=blocked_reason,
         mode=mode,
+        correlation_id=correlation_id,
     )
 
     gov_exam_log(

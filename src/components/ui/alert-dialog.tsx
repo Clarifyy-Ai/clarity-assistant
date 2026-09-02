@@ -1,6 +1,7 @@
 import * as React from "react";
 import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog";
 
+import { hasNamedChild } from "@/lib/a11y/namedChild";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/Button";
 
@@ -28,7 +29,10 @@ AlertDialogOverlay.displayName = AlertDialogPrimitive.Overlay.displayName;
 const AlertDialogContent = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content>
->(({ className, ...props }, ref) => (
+>(({ className, children, ...props }, ref) => {
+  const hasTitle = hasNamedChild(children, ["AlertDialogTitle", "Title"]);
+  const hasDescription = hasNamedChild(children, ["AlertDialogDescription", "Description"]);
+  return (
   <AlertDialogPortal>
     <AlertDialogOverlay />
     <AlertDialogPrimitive.Content
@@ -38,9 +42,20 @@ const AlertDialogContent = React.forwardRef<
         className,
       )}
       {...props}
-    />
+    >
+      {!hasTitle && (
+        <AlertDialogPrimitive.Title className="sr-only">Alert</AlertDialogPrimitive.Title>
+      )}
+      {!hasDescription && (
+        <AlertDialogPrimitive.Description className="sr-only">
+          Confirm this action
+        </AlertDialogPrimitive.Description>
+      )}
+      {children}
+    </AlertDialogPrimitive.Content>
   </AlertDialogPortal>
-));
+  );
+});
 AlertDialogContent.displayName = AlertDialogPrimitive.Content.displayName;
 
 const AlertDialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (

@@ -34,7 +34,7 @@ function uuidOrNull(v: unknown): string | null {
 }
 
 const AFFILIATION =
-  "Clarify AI is an independent preparation platform and is not affiliated with or endorsed by any government recruiting body. Candidates must verify notifications, eligibility, dates, syllabus, and examination rules on the official website.";
+  "Career Pilot is an independent preparation platform and is not affiliated with or endorsed by any government recruiting body. Candidates must verify notifications, eligibility, dates, syllabus, and examination rules on the official website.";
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);

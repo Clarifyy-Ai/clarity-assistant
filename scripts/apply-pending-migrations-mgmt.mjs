@@ -1,13 +1,19 @@
+#!/usr/bin/env node
 /**
- * Apply pending local SQL migrations via Management API database/query.
- * Requires a valid SUPABASE_ACCESS_TOKEN in .env.local or env.
+ * Apply pending local migrations via Supabase Management API when db push is blocked.
+ * Records migration in schema_migrations via POST /v1/projects/{ref}/database/migrations
  */
 import fs from "node:fs";
+import https from "node:https";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const REF = process.env.SUPABASE_PROJECT_REF || "qzgvjrvtkwlzxpmlddkx";
+
+if (process.env.NODE_TLS_REJECT_UNAUTHORIZED !== "1") {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+}
 
 function loadEnv(file) {
   const p = path.join(ROOT, file);
@@ -37,70 +43,123 @@ if (!token) {
   process.exit(1);
 }
 
-const pending = [
-  "20260823180638_admin_portal_production_repair.sql",
-  "20260823184317_coach_conversations.sql",
-  "20260824010000_gov_exam_hybrid_registry.sql",
-  "20260824020000_backend_operation_log.sql",
-  "20260824120000_gov_exam_paper_engine_provenance.sql",
-  "20260824120100_gov_exam_practice_bank_seeds.sql",
-  "20260824140000_moderator_role.sql",
-  "20260824190000_algorithm_security_consistency.sql",
-  "20260824200000_razorpay_refund_atomicity.sql",
-  "20260824213000_gov_question_quality_versions.sql",
-  "20260824223000_question_lifecycle_hardening.sql",
-  "20260824230000_account_deletion_retention.sql",
-  "20260824231000_learning_community_coding_hardening.sql",
-  "20260824233000_settings_contract_hardening.sql",
-  "20260824234500_atomic_session_finalization.sql",
-  "20260824240000_scorecards_server_authority.sql",
-  "20260825090000_practice_plan_idempotency.sql",
-  "20260825120000_wave2_p1_coach_session_rls.sql",
-];
+function mgmtRequest(method, apiPath, bodyObj) {
+  const body = bodyObj ? JSON.stringify(bodyObj) : null;
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: "api.supabase.com",
+        path: apiPath,
+        method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+          ...(body
+            ? {
+                "Content-Type": "application/json",
+                "Content-Length": Buffer.byteLength(body),
+              }
+            : {}),
+        },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () =>
+          resolve({ status: res.statusCode ?? 0, body: data }),
+        );
+      },
+    );
+    req.on("error", reject);
+    if (body) req.write(body);
+    req.end();
+  });
+}
 
 async function runQuery(sql) {
-  const urls = [
-    `https://api.supabase.com/v1/projects/${REF}/database/query`,
-    `https://api.supabase.com/v1/projects/${REF}/db/query`,
-  ];
-  let last = null;
-  for (const url of urls) {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ query: sql }),
-    });
-    const text = await res.text();
-    last = { url, status: res.status, text: text.slice(0, 500) };
-    if (res.ok) return last;
-  }
-  return last;
+  const res = await mgmtRequest(
+    "POST",
+    `/v1/projects/${REF}/database/query`,
+    { query: sql },
+  );
+  return res;
 }
 
-const probe = await runQuery("select 1 as ok");
-console.log("probe", probe);
-if (!probe || probe.status === 401 || probe.status === 403) {
-  console.error("Access token unauthorized. Create a new PAT at https://supabase.com/dashboard/account/tokens");
-  process.exit(2);
+async function applyMigration(fileName) {
+  const filePath = path.join(ROOT, "supabase", "migrations", fileName);
+  const sql = fs.readFileSync(filePath, "utf8");
+  const version = fileName.split("_")[0];
+  const name = fileName.replace(/\.sql$/, "").replace(/^\d+_/, "");
+
+  console.log(`APPLY ${fileName} (${sql.length} bytes)`);
+
+  const res = await mgmtRequest(
+    "POST",
+    `/v1/projects/${REF}/database/migrations`,
+    { name, query: sql },
+  );
+
+  const snippet = res.body.slice(0, 300);
+  console.log(`  -> ${res.status} ${snippet}`);
+
+  if (res.status >= 200 && res.status < 300) {
+    return { fileName, version, ok: true };
+  }
+
+  // Already applied or duplicate version — verify version row exists
+  if (res.status === 409 || /already exists|duplicate/i.test(res.body)) {
+    const check = await runQuery(
+      `SELECT version FROM supabase_migrations.schema_migrations WHERE version = '${version}' LIMIT 1`,
+    );
+    if (check.status >= 200 && check.status < 300 && check.body.includes(version)) {
+      console.log(`  -> skip (already recorded as ${version})`);
+      return { fileName, version, ok: true, skipped: true };
+    }
+  }
+
+  return { fileName, version, ok: false, status: res.status, body: snippet };
 }
 
-for (const name of pending) {
-  const file = path.join(ROOT, "supabase", "migrations", name);
-  if (!fs.existsSync(file)) {
-    console.log("SKIP missing", name);
-    continue;
+async function main() {
+  const appliedRes = await runQuery(
+    "SELECT version FROM supabase_migrations.schema_migrations ORDER BY version",
+  );
+  let applied = new Set();
+  if (appliedRes.status >= 200 && appliedRes.status < 300) {
+    try {
+      const rows = JSON.parse(appliedRes.body);
+      applied = new Set(rows.map((r) => r.version));
+    } catch {
+      console.warn("Could not parse applied migrations list");
+    }
   }
-  const sql = fs.readFileSync(file, "utf8");
-  console.log("APPLY", name, `(${sql.length} bytes)`);
-  const result = await runQuery(sql);
-  console.log(" ", result?.status, (result?.text || "").slice(0, 200));
-  if (result && result.status >= 400 && result.status !== 409) {
-    // continue — some may already be applied
-    console.warn("  warn: non-2xx (may already be applied)");
+
+  const files = fs
+    .readdirSync(path.join(ROOT, "supabase", "migrations"))
+    .filter((f) => f.endsWith(".sql"))
+    .sort();
+
+  const pending = files.filter((f) => !applied.has(f.split("_")[0]));
+  console.log(`Pending migrations: ${pending.length}\n`);
+
+  const results = [];
+  for (const file of pending) {
+    const result = await applyMigration(file);
+    results.push(result);
+    if (!result.ok) {
+      console.error(`FAILED on ${file}`);
+      break;
+    }
   }
+
+  const failed = results.filter((r) => !r.ok);
+  console.log(
+    `\nDone: ${results.filter((r) => r.ok).length}/${pending.length} applied`,
+  );
+  process.exit(failed.length ? 1 : 0);
 }
 
-console.log("done");
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

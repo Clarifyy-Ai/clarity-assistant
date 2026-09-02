@@ -1,3 +1,5 @@
+import { ApiClientError } from "@/lib/api/apiClient";
+
 export const ASSESSMENT_START_ERROR_CODES = [
   "INVALID_PAYLOAD",
   "ASSESSMENT_NOT_FOUND",
@@ -321,4 +323,55 @@ export function assessmentStartIdempotencyKey(userId: string, templateId: string
   const uid = userId.replace(/[^A-Za-z0-9._:-]/g, "").slice(0, 64) || "user";
   const tid = templateId.replace(/[^A-Za-z0-9._:-]/g, "").slice(0, 64) || "template";
   return `assess-start:${uid}:${tid}`.slice(0, 150);
+}
+
+export function extractAssessmentInventoryDetails(
+  payload: unknown,
+): AssessmentStartErrorBody["details"] | undefined {
+  if (!payload || typeof payload !== "object") return undefined;
+  const record = payload as Record<string, unknown>;
+  const nested =
+    record.details && typeof record.details === "object"
+      ? (record.details as Record<string, unknown>)
+      : record;
+  const requested = Number(nested.requested_count ?? nested.required ?? nested.requested);
+  const available = Number(nested.available_count ?? nested.available ?? nested.count);
+  if (!Number.isFinite(requested) && !Number.isFinite(available)) return undefined;
+  return {
+    requested_count: Number.isFinite(requested) ? requested : undefined,
+    available_count: Number.isFinite(available) ? available : undefined,
+    template_id: typeof nested.template_id === "string" ? nested.template_id : undefined,
+    template_slug: typeof nested.template_slug === "string" ? nested.template_slug : undefined,
+    template_title: typeof nested.template_title === "string" ? nested.template_title : undefined,
+  };
+}
+
+export function messageFromAssessmentStartError(err: unknown): {
+  text: string;
+  retryable: boolean;
+} {
+  if (err instanceof ApiClientError) {
+    const code = isAssessmentStartErrorCode(err.code) ? err.code : "ASSESSMENT_START_FAILED";
+    const details = extractAssessmentInventoryDetails(err.details);
+    return {
+      text: userMessageForAssessmentError(code as AssessmentStartErrorCode, details),
+      retryable: isRetryableAssessmentStartCode(code),
+    };
+  }
+  if (err && typeof err === "object" && "message" in err) {
+    const code =
+      "details" in err && typeof (err as { details?: string }).details === "string"
+        ? (err as { details: string }).details
+        : "";
+    if (isAssessmentStartErrorCode(code)) {
+      return {
+        text: userMessageForAssessmentError(code),
+        retryable: isRetryableAssessmentStartCode(code),
+      };
+    }
+  }
+  return {
+    text: err instanceof Error ? err.message : userMessageForAssessmentError("ASSESSMENT_START_FAILED"),
+    retryable: true,
+  };
 }

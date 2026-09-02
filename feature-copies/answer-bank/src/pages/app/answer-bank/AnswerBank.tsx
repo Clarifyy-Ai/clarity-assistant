@@ -21,12 +21,17 @@ import {
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
-import { createIdempotencyKey } from "@/lib/api/functions";
+import { parsePrepToolResponse } from "@/lib/network/edgeResult";
+import {
+  prepToolContentIdempotencyKey,
+} from "@/lib/network/idempotency";
+import { sha256 } from "@/lib/utils/hashUtils";
 import {
   getAiUserFacingError,
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
 import { refreshCredits } from "@/lib/billing/creditsManager";
+import { useCredits, type CreditAction } from "@/hooks/useCredits";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import {
   answerBankEmptyTitle,
@@ -467,37 +472,69 @@ function AddAnswerModal({
   const [saving,   setSaving]   = useState(false);
   const [generating, setGenerating] = useState(false);
   const [aiDraft, setAiDraft] = useState(false);
+  const generateInFlightRef = useRef(false);
+  const generateKeyRef = useRef<string | null>(null);
+  const credits = useCredits();
 
   async function handleGenerateWithAi() {
-    if (!question.trim() || generating) return;
+    if (!question.trim() || generating || generateInFlightRef.current) return;
+    const cat = category.trim() || "Behavioural";
+    const useStar =
+      cat === "Behavioural" || cat === "Leadership" || cat === "HR";
+    const creditAction: CreditAction = useStar ? "star_generate" : "rephrase";
+    if (!credits.canAfford(creditAction)) {
+      openUpgradeIfInsufficientCredits(
+        Object.assign(new Error("Insufficient credits."), { code: "INSUFFICIENT_CREDITS" }),
+      );
+      return;
+    }
+
+    generateInFlightRef.current = true;
     setGenerating(true);
     try {
-      const cat = category.trim() || "Behavioural";
-      const useStar =
-        cat === "Behavioural" || cat === "Leadership" || cat === "HR";
       const tool_id = useStar ? "star_method" : "raw_prompt";
       const input = useStar
         ? `Interview question:\n${question.trim()}\n\nCategory: ${cat}\n\nUser draft (optional):\n${answer.trim() || "(none yet)"}\n\nImprove structure into a STAR answer for THIS exact question. Only use facts from the draft. If evidence is missing, use [NEEDS EVIDENCE] or [Add measurable result if available]. Never invent employers, metrics, technologies, or outcomes.`
         : `Interview category: ${cat}\nInterview question:\n${question.trim()}\n\nUser draft (optional):\n${answer.trim() || "(none yet)"}\n\nWrite a strong interview-ready answer for this exact question. Match the category. Do NOT invent employers, metrics, or unsupported claims. Use [NEEDS EVIDENCE] where facts are missing.`;
 
-      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
+      const contentHash = await sha256(`${tool_id}\n${input}`);
+      const idempotencyKey =
+        generateKeyRef.current ??
+        prepToolContentIdempotencyKey(tool_id, contentHash);
+      generateKeyRef.current = idempotencyKey;
+
+      const data = await fetchEdgeJson<Record<string, unknown>>("prep-tool", {
         tool_id,
         input,
       }, {
         headers: {
-          "x-idempotency-key": createIdempotencyKey("answer-bank-ai"),
+          "x-idempotency-key": idempotencyKey,
         },
+        timeoutMs: 90_000,
       });
-      const text = (data.result ?? "").trim();
+      const parsed = parsePrepToolResponse(data);
+      const text = parsed.result;
       if (!text) throw new Error("AI returned an empty answer.");
-      setAnswer(text);
+      setAnswer(text.slice(0, MAX_ANSWER_LENGTH));
       setAiDraft(true);
-      await refreshCredits();
-      toast.success("Draft generated — review before saving");
+      generateKeyRef.current = null;
+      await refreshCredits().catch(() => undefined);
+      const usedFallback =
+        parsed.source === "deterministic" ||
+        parsed.source === "fallback" ||
+        parsed.source === "python";
+      toast.success(
+        usedFallback
+          ? "Draft outline generated — review and add your real experience before saving"
+          : "Draft generated — review before saving",
+      );
     } catch (err) {
+      generateKeyRef.current = null;
       openUpgradeIfInsufficientCredits(err);
       toast.error(getAiUserFacingError(err));
+      await refreshCredits().catch(() => undefined);
     } finally {
+      generateInFlightRef.current = false;
       setGenerating(false);
     }
   }

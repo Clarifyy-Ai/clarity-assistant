@@ -17,6 +17,10 @@ import {
   timingSafeEqual,
   type PaymentOrderRow,
 } from "../_shared/razorpayFulfill.ts";
+import {
+  assertPaymentStatusTransition,
+  type PaymentOrderStatus,
+} from "../_shared/paymentStateMachine.ts";
 
 const KEY_ID = Deno.env.get("RAZORPAY_KEY_ID") ?? "";
 const KEY_SECRET = Deno.env.get("RAZORPAY_KEY_SECRET") ?? "";
@@ -57,7 +61,11 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    assertBillingConfigOrThrow({ requireRazorpay: true, requireStripe: false });
+    assertBillingConfigOrThrow({
+      requireRazorpay: true,
+      requireStripe: false,
+      requireRazorpayWebhook: true,
+    });
   } catch {
     return json(req, { error: "Billing configuration invalid" }, 503);
   }
@@ -97,7 +105,10 @@ Deno.serve(async (req: Request) => {
   // Entitlements are granted only after Razorpay confirms capture. An
   // authorized payment may still be cancelled or expire without settlement.
   if (status !== "captured") {
-    return json(req, { error: `Payment is ${status || "incomplete"}` }, 409);
+    return json(req, {
+      error: "Payment has not been captured yet. Complete checkout and try again.",
+      code: "PAYMENT_NOT_CAPTURED",
+    }, 409);
   }
 
   const { data: order, error: orderErr } = await db
@@ -112,6 +123,24 @@ Deno.serve(async (req: Request) => {
     return json(req, { error: "Order not found" }, 404);
   }
 
+  const currentStatus = order.status as PaymentOrderStatus;
+  if (currentStatus === "fulfilled" || currentStatus === "paid") {
+    return json(req, {
+      ok: true,
+      duplicate: true,
+      status: currentStatus,
+    });
+  }
+
+  try {
+    assertPaymentStatusTransition(currentStatus, "fulfilled");
+  } catch {
+    return json(req, {
+      error: "Order is not in a payable state.",
+      code: "INVALID_ORDER_STATE",
+    }, 409);
+  }
+
   try {
     const result = await fulfillCapturedRazorpayOrder(db, {
       order: order as PaymentOrderRow,
@@ -120,7 +149,7 @@ Deno.serve(async (req: Request) => {
     return json(req, {
       ok: true,
       duplicate: result.duplicate,
-      status: "paid",
+      status: "fulfilled",
     });
   } catch (error) {
     console.error(

@@ -10,6 +10,19 @@ function readFn(name: string): string {
 }
 
 describe("gov exam credit/inventory contracts", () => {
+  it("keeps availability free and separates official/PYQ inventory from mocks", () => {
+    const src = readFn("check-exam-paper-availability");
+    expect(src).toContain('sourcePolicy: mode === "official_previous" ? "public_pyp" : "approved_bank"');
+    expect(src).toContain('mode !== "official_previous" && isPythonGovExamConfigured()');
+    expect(src).toContain('inventoryClass:');
+    expect(src).toContain('billable: false');
+    expect(src).toContain('creditCost: 0');
+    expect(src).toContain('creditsCharged: 0');
+    expect(src).toContain('decideRoute({ operation: "gov_exam_assemble" })');
+    expect(src).toContain("isPythonForceUnavailable");
+    expect(src).not.toContain("reservePaperJobCredits");
+  });
+
   it("create-exam-paper checks inventory and attempt limits before charging", () => {
     const src = readFn("create-exam-paper");
     expect(src).toContain("countEligibleGovQuestions");
@@ -26,28 +39,84 @@ describe("gov exam credit/inventory contracts", () => {
       "MAX_ATTEMPTS_REACHED",
     );
     const inventoryIdx = src.indexOf("countEligibleGovQuestions");
-    const creditIdx = src.indexOf("reservePaperJobCredits(");
+    const creditIdx = src.indexOf("createReservedPaperJob(");
     expect(inventoryIdx).toBeGreaterThan(0);
     expect(creditIdx).toBeGreaterThan(inventoryIdx);
-    expect(src).toContain("credits_reserved");
-    expect(src).toContain("reservePaperJobCredits");
+    expect(src).toContain("createReservedPaperJob");
     const claimSrc = fs.readFileSync(
       path.join(root, "supabase/functions/_shared/claimJobCredits.ts"),
       "utf8",
     );
     expect(claimSrc).toContain("reserve_gov_paper_credits");
+    expect(claimSrc).toContain("refundClaimedPaperCredits");
+    expect(claimSrc).toContain("markJobCreditsReleased");
+    expect(claimSrc).not.toMatch(
+      /return claimJobCreditsForRefund\(db, jobId\)/,
+    );
     expect(src).not.toMatch(/error:\s*"Insufficient credits"[\s\S]{0,80}code:\s*"INSUFFICIENT_CREDITS"/);
   });
 
-  it("generate-topic-practice does not charge before inventory is known", () => {
+  it("create-exam-paper prefetches spendable credits before job insert", () => {
+    const src = readFn("create-exam-paper");
+    expect(src).toContain("preflightSpendableCredits");
+    const preflightIdx = src.indexOf("preflightSpendableCredits");
+    const enqueueIdx = src.indexOf("createReservedPaperJob(db,");
+    expect(preflightIdx).toBeGreaterThan(0);
+    expect(preflightIdx).toBeLessThan(enqueueIdx);
+    const claimSrc = fs.readFileSync(
+      path.join(root, "supabase/functions/_shared/claimJobCredits.ts"),
+      "utf8",
+    );
+    expect(claimSrc).toContain("get_spendable_credits");
+    const preflightFn = claimSrc.slice(
+      claimSrc.indexOf("preflightSpendableCredits"),
+      claimSrc.indexOf("export async function finalizePaperJobCredits"),
+    );
+    expect(preflightFn).not.toContain("reserve_gov_paper_credits");
+  });
+
+  it("create-exam-paper leaves retryable assembly credits reserved", () => {
+    const src = readFn("create-exam-paper");
+    expect(src).not.toContain("refundClaimedPaperCredits");
+    expect(src).toContain("scheduleWithWaitUntil");
+    expect(src).toContain("failed_retryable");
+  });
+
+  it("get-paper-generation-job refunds via refundClaimedPaperCredits on terminal failure", () => {
+    const src = readFn("get-paper-generation-job");
+    expect(src).toContain("refundClaimedPaperCredits");
+    expect(src).toContain("finalizePaperJobCredits");
+    expect(src).not.toContain("releasePaperJobCredits");
+    const releaseBranch = src.slice(
+      src.indexOf('publicStatus === "completed"'),
+      src.indexOf("return json(req", src.indexOf('publicStatus === "completed"')),
+    );
+    expect(releaseBranch).not.toContain('publicStatus === "failed_retryable"');
+  });
+
+  it("release_gov_paper_credits migration fails closed when refund_credits fails", () => {
+    const migration = fs.readFileSync(
+      path.join(root, "supabase/migrations/20260902231000_gov_paper_atomic_enqueue_and_sweeper.sql"),
+      "utf8",
+    );
+    expect(migration).toContain("REFUND_FAILED");
+    expect(migration).toContain("COALESCE((v_refund->>'success')::boolean, false) IS NOT TRUE");
+  });
+
+  it("generate-topic-practice refunds on inventory shortfall", () => {
     const src = readFn("generate-topic-practice");
+    expect(src).toContain("refund_topic_practice_insufficient");
+    expect(src).toContain("refundClaimedPaperCredits");
+    expect(src).toContain("finalizePaperJobCredits");
     const inventoryIdx = src.indexOf("countEligibleGovQuestions");
-    const insertIdx = src.indexOf(".from(\"gov_paper_generation_jobs\")");
-    const creditIdx = src.indexOf("reservePaperJobCredits(");
+    const creditIdx = src.indexOf("createReservedPaperJob(db,");
     expect(inventoryIdx).toBeGreaterThan(0);
-    expect(insertIdx).toBeGreaterThan(inventoryIdx);
-    expect(creditIdx).toBeGreaterThan(insertIdx);
+    expect(creditIdx).toBeGreaterThan(inventoryIdx);
     expect(src).toContain("creditDenialResponse");
+    expect(src).toContain("preflightSpendableCredits");
+    const topicPreflightIdx = src.indexOf("preflightSpendableCredits");
+    expect(topicPreflightIdx).toBeGreaterThan(0);
+    expect(topicPreflightIdx).toBeLessThan(creditIdx);
     expect(src).toContain("pythonGovAvailability");
     expect(src).toContain("pythonGovProcessJob");
     expect(src).not.toContain("fillUntilCount");
@@ -64,13 +133,16 @@ describe("gov exam credit/inventory contracts", () => {
     expect(src).toContain("checkGovExamAttemptLimit");
     expect(src).toContain("attemptLimitPayload");
     expect(src).toMatch(/status:\s*429/);
+    expect(src).toContain("QUESTION_INVENTORY_INSUFFICIENT");
+    expect(src).toContain("shouldInvokeAiFill");
+    expect(src).toContain("fillUntilCount");
   });
 
   it("paper jobs treat unique idempotency conflicts as replays, not refunds", () => {
     const createSrc = readFn("create-exam-paper");
     const topicSrc = readFn("generate-topic-practice");
-    expect(createSrc).toContain("isUniqueViolation");
-    expect(topicSrc).toContain("isUniqueViolation");
+    expect(createSrc).toContain("createReservedPaperJob");
+    expect(topicSrc).toContain("createReservedPaperJob");
     expect(createSrc).toContain("idempotentReplay");
   });
 
@@ -99,20 +171,52 @@ describe("gov exam credit/inventory contracts", () => {
 
   it("save-test-answer rejects stale client_updated_at and expired attempts", () => {
     const src = readFn("save-test-answer");
+    expect(src).toContain("save_owned_test_answer");
+    expect(src).toContain("createUserScopedClient");
     expect(src).toContain("client_updated_at");
-    expect(src).toContain("staleQuestionIds");
     expect(src).toContain("ATTEMPT_NOT_STARTED");
     expect(src).toContain("ATTEMPT_EXPIRED");
     expect(src).toContain("SUBMISSION_CONFLICT");
+    expect(src).toContain("ATTEMPT_INVALIDATED");
   });
 });
 
 describe("gov exam runner client contracts", () => {
+  it("GovExamDetail persists and resumes topic-practice jobs without a second charge", () => {
+    const page = fs.readFileSync(
+      path.join(root, "src/pages/app/mock-test/GovExamDetail.tsx"),
+      "utf8",
+    );
+    expect(page).toContain('kind: "topic_practice"');
+    expect(page).toContain("saveActivePaperJob");
+    expect(page).toContain('loadActivePaperJob(userId, "topic_practice")');
+    expect(page).toContain("getPaperGenerationJob");
+    expect(page).toContain("retryTopicPractice");
+    expect(page).toContain("processPaperGenerationJob");
+  });
+
+  it("GenerateGovPaper gates generation on spendable credits", () => {
+    const page = fs.readFileSync(
+      path.join(root, "src/pages/app/mock-test/GenerateGovPaper.tsx"),
+      "utf8",
+    );
+    expect(page).toContain("evaluateGovExamCreditGate");
+    expect(page).toContain('kind: "paper"');
+    expect(page).toContain("ensureSufficientCreditsForGeneration");
+    expect(page).toContain("openUpgradeIfInsufficientCredits");
+    expect(page).toContain("fetchSpendableCredits");
+    const creditCheckIdx = page.indexOf("ensureSufficientCreditsForGeneration");
+    const setBusyIdx = page.indexOf("setBusy(true)", creditCheckIdx);
+    expect(creditCheckIdx).toBeGreaterThan(0);
+    expect(setBusyIdx).toBeGreaterThan(creditCheckIdx);
+  });
+
   it("TestSession starts and autosaves through start-exam / save-test-answer", () => {
     const session = fs.readFileSync(path.join(root, "src/pages/app/mock-test/TestSession.tsx"), "utf8");
     const api = fs.readFileSync(path.join(root, "src/lib/gov-exam/api.ts"), "utf8");
     expect(session).toContain("startExam(");
     expect(session).toContain("saveTestAnswers(");
+    expect(session).toContain("attemptAnswerPersistence");
     expect(session).not.toContain("startExamAttempt");
     expect(session).not.toContain("saveAttemptAnswers");
     expect(api).toContain('fetchEdgeJson("start-exam"');

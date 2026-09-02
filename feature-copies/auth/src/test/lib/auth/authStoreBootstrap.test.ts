@@ -173,11 +173,36 @@ describe("authStore account bootstrap", () => {
 
     await expect(
       useAuthStore.getState().signInWithEmail("a@b.com", "wrong"),
-    ).rejects.toThrow(/Incorrect email or password|Invalid email or password/i);
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/Incorrect email or password/i),
+      code: "AUTH_INVALID_CREDENTIALS",
+    });
     expect(useAuthStore.getState().error).toMatch(
       /Incorrect email or password|Invalid email or password/i,
     );
     expect(useAuthStore.getState().status).toBe("unauthenticated");
+  });
+
+  it("maps unknown-email token errors to the same safe copy without GoTrue status", async () => {
+    mockSignIn.mockResolvedValueOnce({
+      data: { session: null, user: null },
+      error: {
+        message: "password token invalid",
+        code: "otp_expired",
+        status: 400,
+      },
+    });
+
+    let thrown: { status?: number; code?: string; message?: string } | undefined;
+    try {
+      await useAuthStore.getState().signInWithEmail("missing@example.com", "any-password");
+    } catch (error) {
+      thrown = error as { status?: number; code?: string; message?: string };
+    }
+    expect(thrown?.message).toMatch(/Incorrect email or password/i);
+    expect(thrown?.code).toBe("AUTH_INVALID_CREDENTIALS");
+    expect(thrown?.status).toBeUndefined();
+    expect(useAuthStore.getState().error).toMatch(/Incorrect email or password/i);
   });
 
   it("does not trim or case-fold the password", async () => {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { useForm } from "react-hook-form";
+import { PUBLIC_CTAS } from "@/lib/constants/publicCtas";
+import { useForm, type FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Eye,
@@ -13,20 +14,19 @@ import { supabase } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 
-import {
-  GoogleOAuthButton,
-  GithubOAuthButton,
-  LinkedInOAuthButton,
-  AzureOAuthButton,
-} from "@/components/auth/OAuthButton";
-import { isOAuthProviderEnabled, OAUTH_NOT_CONFIGURED_MESSAGE } from "@/lib/auth/oauthProviders";
+import { OAuthProviderSection } from "@/components/auth/OAuthProviderSection";
+import { OAUTH_NOT_CONFIGURED_MESSAGE } from "@/lib/auth/oauthProviders";
 
 import {
   ACCOUNT_SUSPENDED_MESSAGE,
-  formatSupabaseAuthError,
   isAccountSuspendedAuthError,
   isSupabaseConfigAuthError,
 } from "@/lib/errors";
+import {
+  AUTH_DEVICE_LOCK_MESSAGE,
+  classifyLoginFailure,
+  loginFailureFromUrl,
+} from "@/lib/auth/loginFailure";
 import { loginSchema, type LoginInput } from "@/lib/validators";
 import { getCSRFHiddenInputProps, validateCSRFToken } from "@/lib/security";
 import { usePageMeta } from "@/hooks/usePageMeta";
@@ -121,7 +121,7 @@ function getStoredAttemptCount(): number {
 function formatLockMessage(lockMinsLeft: number): string {
   return `Too many failed attempts on this device. Try again in ${lockMinsLeft} minute${
     lockMinsLeft === 1 ? "" : "s"
-  }. Supabase Auth also rate-limits sign-in on the server.`;
+  }.`;
 }
 
 export default function Login(): JSX.Element {
@@ -180,12 +180,25 @@ export default function Login(): JSX.Element {
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting, isValid },
+    setFocus,
+    formState: { errors, isSubmitting },
   } = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
-    mode: "onChange",
+    mode: "onSubmit",
+    reValidateMode: "onChange",
+    shouldFocusError: true,
     defaultValues: { email: "", password: "" },
   });
+
+  function focusFirstInvalidLoginField(fieldErrors: FieldErrors<LoginInput>): void {
+    if (fieldErrors.email) {
+      setFocus("email");
+      return;
+    }
+    if (fieldErrors.password) {
+      setFocus("password");
+    }
+  }
 
   useEffect(() => {
     setPendingPlan(searchParams.get("plan"), searchParams.get("interval"));
@@ -194,6 +207,7 @@ export default function Login(): JSX.Element {
   useEffect(() => {
     const message = searchParams.get("message");
     const errorCode = searchParams.get("error");
+    const errorDescription = searchParams.get("error_description");
     const storedReason = consumeAuthEndReason();
     const queryReason =
       searchParams.get("reason") ??
@@ -211,16 +225,17 @@ export default function Login(): JSX.Element {
       setAuthError("Sign-in was cancelled. You can try again whenever you are ready.");
     } else if (errorCode === "not_configured") {
       setAuthError(OAUTH_NOT_CONFIGURED_MESSAGE);
-    } else if (message) {
-      const decoded = decodeURIComponent(message.replace(/\+/g, " "));
-      if (isAccountSuspendedAuthError(decoded)) {
+    } else if (errorCode || message || errorDescription) {
+      const classified = loginFailureFromUrl({
+        error: errorCode,
+        errorCode: searchParams.get("error_code"),
+        errorDescription,
+        message,
+      });
+      if (classified.code === "AUTH_ACCOUNT_SUSPENDED") {
         setAccountSuspended(true);
-        setAuthError(ACCOUNT_SUSPENDED_MESSAGE);
-      } else {
-        setAuthError(formatSupabaseAuthError({ message: decoded, code: errorCode ?? undefined }));
       }
-    } else if (errorCode) {
-      setAuthError(formatSupabaseAuthError({ code: errorCode, message: errorCode }));
+      setAuthError(classified.message);
     } else {
       try {
         const banMessage = sessionStorage.getItem("clarify_auth_ban_message");
@@ -400,7 +415,6 @@ export default function Login(): JSX.Element {
     return Math.ceil((lockedUntil - Date.now()) / 60_000);
   }, [lockedUntil, lockTick]);
 
-  const isFormValid = isValid;
   const displayedError = authError ?? storeError;
 
   function handleRememberMeChange(checked: boolean): void {
@@ -445,19 +459,32 @@ export default function Login(): JSX.Element {
       // Do not continue to the dashboard from this handler.
     } catch (error) {
       setMfaGateResolved(true);
-      const message = formatSupabaseAuthError(error);
+      const classified = classifyLoginFailure(error);
 
-      if (isAccountSuspendedAuthError(error) || isAccountSuspendedAuthError(message)) {
+      if (classified.code === "AUTH_ACCOUNT_SUSPENDED" || isAccountSuspendedAuthError(error)) {
         setAccountSuspended(true);
         setAuthError(ACCOUNT_SUSPENDED_MESSAGE);
         return;
       }
 
-      if (isSupabaseConfigAuthError(error)) {
+      if (classified.code === "AUTH_EMAIL_NOT_VERIFIED") {
+        navigate("/verify-email", {
+          replace: true,
+          state: { email: data.email.trim().toLowerCase() },
+        });
+        return;
+      }
+
+      if (classified.code === "AUTH_CONFIG" || isSupabaseConfigAuthError(error)) {
         if (import.meta.env.DEV) {
-          console.error("[Login] Supabase client misconfigured:", error);
+          console.error("[Login] Sign-in client misconfigured:", error);
         }
-        setAuthError(message);
+        setAuthError(classified.message);
+        return;
+      }
+
+      if (classified.code !== "AUTH_INVALID_CREDENTIALS") {
+        setAuthError(classified.message);
         return;
       }
 
@@ -472,20 +499,18 @@ export default function Login(): JSX.Element {
         safeSetLocalStorageItem(LOCK_KEY, String(until));
         setLockedUntil(until);
 
-        setAuthError(
-          "Too many failed attempts on this device. Locked for 30 minutes. Supabase Auth also rate-limits sign-in on the server."
-        );
+        setAuthError(AUTH_DEVICE_LOCK_MESSAGE);
         return;
       }
 
       const remainingAttempts = MAX_ATTEMPTS - nextAttempts;
 
       if (import.meta.env.DEV) {
-        console.error("[Login] signInWithPassword failed:", error);
+        console.error("[Login] signInWithPassword failed:", classified.code);
       }
 
       setAuthError(
-        `${message} (${remainingAttempts} attempt${
+        `${classified.message} (${remainingAttempts} attempt${
           remainingAttempts === 1 ? "" : "s"
         } remaining)`
       );
@@ -514,7 +539,7 @@ export default function Login(): JSX.Element {
       setMfaFactorId(null);
       setMfaCode("");
     } catch (error) {
-      setAuthError(formatSupabaseAuthError(error));
+      setAuthError(classifyLoginFailure(error).message);
     } finally {
       setMfaVerifying(false);
     }
@@ -560,7 +585,7 @@ export default function Login(): JSX.Element {
                   to="/help"
                   className="inline-flex items-center justify-center rounded-xl border border-border px-4 py-2.5 text-sm font-medium hover:bg-secondary transition"
                 >
-                  Help Center
+                  {PUBLIC_CTAS.help}
                 </Link>
                 <Button
                   type="button"
@@ -608,32 +633,15 @@ export default function Login(): JSX.Element {
             </div>
           ) : (
           <div>
-          {(isOAuthProviderEnabled("google") ||
-            isOAuthProviderEnabled("github") ||
-            isOAuthProviderEnabled("linkedin_oidc") ||
-            isOAuthProviderEnabled("azure")) && (
-            <>
-              <div className="grid grid-cols-2 gap-2">
-                {isOAuthProviderEnabled("google") ? <GoogleOAuthButton /> : null}
-                {isOAuthProviderEnabled("github") ? <GithubOAuthButton /> : null}
-                {isOAuthProviderEnabled("linkedin_oidc") ? <LinkedInOAuthButton /> : null}
-                {isOAuthProviderEnabled("azure") ? <AzureOAuthButton /> : null}
-              </div>
-
-              <div className="flex items-center gap-3 my-5">
-                <div className="flex-1 h-px bg-border" />
-                <span className="text-xs text-muted-foreground">
-                  or sign in with email
-                </span>
-                <div className="flex-1 h-px bg-border" />
-              </div>
-            </>
-          )}
+          <OAuthProviderSection dividerLabel="or sign in with email" />
 
           <form
             className="space-y-4"
             noValidate
-            onSubmit={handleSubmit((data, event) => handleLogin(data, event))}
+            onSubmit={handleSubmit(
+              (data, event) => handleLogin(data, event),
+              focusFirstInvalidLoginField,
+            )}
           >
             <input {...getCSRFHiddenInputProps()} />
             <Input
@@ -709,7 +717,7 @@ export default function Login(): JSX.Element {
                     <Link to="/forgot-password" className="underline">
                       reset your password
                     </Link>
-                    . Server-side Supabase Auth rate limits still apply even
+                    . Server-side rate limits still apply even
                     if this device lock is cleared.
                   </p>
                 </div>
@@ -717,7 +725,10 @@ export default function Login(): JSX.Element {
             )}
 
             {displayedError && !isLocked && (
-              <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-3 py-2.5">
+              <div
+                role="alert"
+                className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-3 py-2.5"
+              >
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{displayedError}</span>
               </div>
@@ -728,12 +739,7 @@ export default function Login(): JSX.Element {
               variant="primary"
               size="md"
               loading={isSubmitting}
-              disabled={
-                isLocked ||
-                isSubmitting ||
-                authStatus === "loading" ||
-                !isFormValid
-              }
+              disabled={isLocked || isSubmitting || authStatus === "loading"}
               fullWidth
             >
               {isLocked ? `Locked (${lockMinsLeft}m)` : "Sign in"}
@@ -746,7 +752,7 @@ export default function Login(): JSX.Element {
               to={signupHref}
               className="text-primary font-medium hover:opacity-80 transition-opacity"
             >
-              Sign up free
+              {PUBLIC_CTAS.signup}
             </Link>
           </p>
           </div>

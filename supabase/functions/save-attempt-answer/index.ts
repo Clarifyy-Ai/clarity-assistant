@@ -3,7 +3,7 @@
  * Owner-only. Rejects stale versions. Does not score.
  */
 import { handleCors, getCorsHeaders, withBrowserCors, applyCors } from "../_shared/cors.ts";
-import { authenticateRequest } from "../_shared/auth.ts";
+import { authenticateRequest, createUserScopedClient } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { isUserBanned, bannedResponse } from "../_shared/banCheck.ts";
 import {
@@ -34,6 +34,7 @@ type AnswerPayload = {
   markedForReview: boolean;
   timeSpentSeconds: number;
   version: number;
+  clientUpdatedAt: string;
 };
 
 function parseAnswers(raw: unknown): AnswerPayload[] | null {
@@ -52,6 +53,11 @@ function parseAnswers(raw: unknown): AnswerPayload[] | null {
       markedForReview: rec.markedForReview === true || rec.is_marked_review === true,
       timeSpentSeconds: Math.max(0, Math.floor(Number(rec.timeSpentSeconds ?? rec.time_spent_seconds) || 0)),
       version: Math.floor(version),
+      clientUpdatedAt: typeof rec.clientUpdatedAt === "string"
+        ? rec.clientUpdatedAt
+        : typeof rec.client_updated_at === "string"
+        ? rec.client_updated_at
+        : new Date().toISOString(),
     });
   }
   return out;
@@ -89,79 +95,52 @@ Deno.serve(withBrowserCors("save-attempt-answer", async (req) => {
       return json(req, { error: "attemptId and answers[] are required", code: "VALIDATION_ERROR" }, 400);
     }
 
-    const { data: test, error: testErr } = await db
-      .from("mock_tests")
-      .select("id, user_id, status, started_at, expires_at")
-      .eq("id", attemptId)
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (testErr || !test) {
-      return json(req, { error: "Attempt not found", code: "ATTEMPT_NOT_FOUND" }, 404);
-    }
-    if (test.status === "COMPLETED" || test.status === "ABANDONED") {
-      return json(req, { error: "Attempt is locked.", code: "SUBMISSION_CONFLICT" }, 409);
-    }
-    if (test.expires_at && new Date(String(test.expires_at)).getTime() < Date.now() - 2000) {
-      return json(req, { error: "Attempt time has expired.", code: "ATTEMPT_EXPIRED" }, 409);
-    }
-
-    const { data: existing } = await db
-      .from("test_responses")
-      .select("question_id, answer_version")
-      .eq("test_id", attemptId)
-      .eq("user_id", user.id)
-      .in("question_id", answers.map((a) => a.questionId));
-
-    const currentVer = new Map<string, number>();
-    for (const row of existing ?? []) {
-      currentVer.set(String(row.question_id), Number(row.answer_version) || 0);
-    }
-
+    const userDb = createUserScopedClient(auth.context.accessToken);
     const stale: string[] = [];
-    const rows: Record<string, unknown>[] = [];
-    const now = new Date().toISOString();
+    const nextVersions: Record<string, number> = {};
+    let saved = 0;
     for (const ans of answers) {
-      const dbVer = currentVer.get(ans.questionId) ?? 0;
-      if (ans.version < dbVer) {
+      const { data, error } = await userDb.rpc("save_owned_test_answer", {
+        p_test_id: attemptId,
+        p_question_id: ans.questionId,
+        p_user_answer: ans.answer,
+        p_is_attempted: Boolean(ans.answer),
+        p_is_marked_review: ans.markedForReview,
+        p_time_spent_seconds: ans.timeSpentSeconds,
+        p_client_updated_at: ans.clientUpdatedAt,
+        p_expected_version: ans.version,
+      });
+      if (error) {
+        console.error("[save-attempt-answer] rpc", ans.questionId, error.message);
+        return json(req, { error: "Save failed", code: "INTERNAL_ERROR" }, 500);
+      }
+      const result = (data ?? {}) as {
+        success?: boolean;
+        stale?: boolean;
+        code?: string;
+        answer_version?: number;
+      };
+      if (result.success === false) {
+        const code = String(result.code ?? "SAVE_FAILED");
+        const status = code === "NOT_FOUND" ? 404
+          : code === "UNAUTHORIZED" ? 401
+          : code === "CLIENT_CLOCK_INVALID" || code === "QUESTION_NOT_IN_ATTEMPT" ? 400
+          : 409;
+        return json(req, { error: "Save failed", code }, status);
+      }
+      nextVersions[ans.questionId] = Number(result.answer_version ?? ans.version);
+      if (result.stale) {
         stale.push(ans.questionId);
         continue;
       }
-      rows.push({
-        test_id: attemptId,
-        user_id: user.id,
-        question_id: ans.questionId,
-        user_answer: ans.answer,
-        is_attempted: Boolean(ans.answer),
-        is_marked_review: ans.markedForReview,
-        time_spent_seconds: ans.timeSpentSeconds,
-        answer_version: ans.version + 1,
-        answered_at: now,
-        updated_at: now,
-      });
-    }
-
-    if (rows.length) {
-      const { error: upErr } = await db
-        .from("test_responses")
-        .upsert(rows, { onConflict: "test_id,question_id" });
-      if (upErr) {
-        console.error("[save-attempt-answer]", upErr);
-        return json(req, { error: "Save failed", code: "INTERNAL_ERROR" }, 500);
-      }
+      saved += 1;
     }
 
     return json(req, {
       attemptId,
-      saved: rows.length,
+      saved,
       staleQuestionIds: stale,
-      nextVersions: Object.fromEntries(
-        answers.map((a) => {
-          const saved = rows.find((r) => String(r.question_id) === a.questionId);
-          if (saved) return [a.questionId, saved.answer_version];
-          return [a.questionId, currentVer.get(a.questionId) ?? a.version];
-        }),
-      ),
+      nextVersions,
     });
   } catch (err) {
     console.error("[save-attempt-answer]", err);

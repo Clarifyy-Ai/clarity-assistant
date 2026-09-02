@@ -1,5 +1,15 @@
 // ─── Audio Capture ────────────────────────────────────────────────────────────
 export { enumerateAudioDevices, watchAudioDevices, captureMicrophone } from "./audioCapture";
+export {
+  acquireMicrophoneStream,
+  canHydrateDeviceLabels,
+  microphoneSetupHint,
+  restoredSessionToast,
+  shouldShowMicrophonePrompt,
+  MicrophoneAccessError,
+  isMicrophoneAccessError,
+} from "./micPermission";
+export type { AcquireMicrophoneResult, MicPermissionState } from "./micPermission";
 
 // ─── Mic Capture ─────────────────────────────────────────────────────────────
 export { startMicCapture, stopMicCapture } from "./micCapture";
@@ -29,6 +39,24 @@ export {
 } from "./deepgramToken";
 export { TranscriptionState, TRANSCRIPTION_STATUS_COPY, deepgramStatusToTranscription, sttHealthToTranscription } from "./transcriptionStates";
 export type { DeepgramStreamOptions } from "./deepgramStream";
+
+// ─── Live transcription (Parakeet boundary) ───────────────────────────────────
+export {
+  ParakeetTranscriptionService,
+  createParakeetTranscriptionService,
+  loadParakeetTranscriptionConfig,
+  channelToSpeaker,
+  newUtteranceFromSegment,
+  partialTextToSegment,
+  utteranceToSegment,
+} from "./transcription";
+export type {
+  ParakeetTranscriptionCallbacks,
+  ParakeetTranscriptionServiceOptions,
+  TranscriptSegment,
+  TranscriptionChannel,
+  TranscriptionProviderStatus,
+} from "./transcription";
 
 // ─── Speech Analysis ──────────────────────────────────────────────────────────
 export { classifySpeaker, extractLatestQuestion, detectSpeakerChange, buildDiarizationSegment, processUtteranceForDiarization, getTranscriptBySpeaker, getSpeakingTimeSummary } from "./diarization";

@@ -148,6 +148,57 @@ describe("ensureAuthSession", () => {
     expect(forcedResult.session?.access_token).toBe("rotated-jwt");
     expect(softResult.session?.access_token).toBe("stale-jwt");
   });
+
+  it("refreshes instead of logging out when getSession is empty but the refresh token works", async () => {
+    const next = {
+      access_token: "new",
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      user: { id: "u1" },
+    };
+    getSession.mockResolvedValue({ data: { session: null }, error: null });
+    refreshSession.mockResolvedValue({ data: { session: next }, error: null });
+
+    const result = await ensureAuthSession();
+    expect(result.expired).toBe(false);
+    expect(result.refreshed).toBe(true);
+    expect(result.session?.access_token).toBe("new");
+    expect(reset).not.toHaveBeenCalled();
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("does not log out when getSession is empty and refresh hits a network error", async () => {
+    getSession.mockResolvedValue({ data: { session: null }, error: null });
+    refreshSession.mockResolvedValue({
+      data: { session: null },
+      error: new Error("Failed to fetch"),
+    });
+
+    const result = await ensureAuthSession();
+    expect(result.expired).toBe(false);
+    expect(result.probeFailed).toBe(true);
+    expect(reset).not.toHaveBeenCalled();
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("logs out when getSession is empty and the refresh token is invalid", async () => {
+    getSession.mockResolvedValue({ data: { session: null }, error: null });
+    refreshSession.mockResolvedValue({
+      data: { session: null },
+      error: new Error("Invalid Refresh Token: Refresh Token Not Found"),
+    });
+
+    const result = await ensureAuthSession();
+    expect(result.expired).toBe(true);
+    expect(reset).toHaveBeenCalled();
+    expect(redirect).toHaveBeenCalled();
+  });
+
+  it("does not hang forever when getSession never settles", async () => {
+    getSession.mockReturnValue(new Promise(() => {}));
+    const result = await ensureAuthSession();
+    expect(result.probeFailed).toBe(true);
+    expect(reset).not.toHaveBeenCalled();
+  });
 });
 
 describe("isSessionNearExpiry", () => {

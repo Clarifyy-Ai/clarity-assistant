@@ -97,3 +97,38 @@ export function normalizeExamTypeForStorage(configOrRaw: string | null | undefin
 export function examConfigIdToPapersRoute(configId: string): string {
   return resolveExamConfigId(configId);
 }
+
+/**
+ * Wizard / storage id → live registry `gov_exams.code`.
+ * Alias mapping only — does not encode exam-specific generation logic.
+ * CUSTOM returns null so the configure wizard stays.
+ */
+const CONFIG_TO_REGISTRY: Record<string, string> = {
+  JEE_MAIN: "JEE_MAIN",
+  JEE_ADV: "JEE_ADV",
+  NEET: "NEET",
+  HPCL_ENGINEER: "HPCL_ENGINEER",
+  PSU: "PSU",
+  SSC_CGL: "SSC_CGL",
+  IBPS_PO: "IBPS_PO",
+  RRB_NTPC: "RRB_NTPC",
+  UPSC: "UPSC_CSE_PRELIMS",
+  UPSC_CSE_PRELIMS: "UPSC_CSE_PRELIMS",
+  APPSC_GROUP: "APPSC_GROUP2",
+  APPSC_GROUP2: "APPSC_GROUP2",
+  TSPSC_GROUP: "TSPSC_GROUP2",
+  TSPSC_GROUP2: "TSPSC_GROUP2",
+};
+
+export function registryCodeForConfigId(configId: string): string | null {
+  const raw = (configId ?? "").trim();
+  if (!raw || raw === "CUSTOM") return null;
+  if (CONFIG_TO_REGISTRY[raw]) return CONFIG_TO_REGISTRY[raw];
+
+  const fromLabel = CONFIG_ID_FROM_LABEL[raw];
+  if (fromLabel && CONFIG_TO_REGISTRY[fromLabel]) return CONFIG_TO_REGISTRY[fromLabel];
+
+  const resolved = resolveExamConfigId(raw);
+  if (resolved === "CUSTOM") return null;
+  return CONFIG_TO_REGISTRY[resolved] ?? null;
+}

@@ -7,7 +7,7 @@ Priority (mock / hybrid modes):
   4. generated_practice (deterministic Python)
   5. ai_generated_practice
 
-Official previous-year mode may only use tiers 1–3.
+Official previous-year mode may only use verified official/PYQ rows.
 Never relabel generated/AI content as official.
 """
 from __future__ import annotations
@@ -34,15 +34,7 @@ SOURCE_PRIORITY: tuple[SourceType, ...] = (
     "ai_generated_practice",
 )
 
-OFFICIAL_MODE_ALLOWED = frozenset(
-    {
-        "official_verified",
-        "verified_public_source",
-        "approved_bank",
-        "internal_question_bank",
-        "admin_uploaded",
-    }
-)
+OFFICIAL_MODE_ALLOWED = frozenset({"official_verified"})
 
 # Map legacy source_class + questions.source / source_type → canonical type
 _LEGACY_SOURCE_MAP: dict[str, SourceType] = {

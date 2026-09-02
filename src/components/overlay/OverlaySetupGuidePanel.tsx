@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, Monitor, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AdvisoryBanner } from "@/components/common/AdvisoryBanner";
 import { DesktopDownloadButton } from "@/components/common/DesktopDownloadButton";
 import { isElectronApp } from "@/lib/platform/isElectron";
 import { openInBrowser } from "@/lib/platform/openInBrowser";
@@ -26,13 +27,13 @@ export function OverlaySetupGuidePanel({
 }: OverlaySetupGuidePanelProps) {
   return (
     <div className={cn("space-y-6", className)}>
-      <div className="flex gap-2.5 rounded-xl border border-indigo-500/25 bg-indigo-500/8 px-3 py-2.5">
-        <AlertTriangle className="w-4 h-4 text-indigo-300 shrink-0 mt-0.5" aria-hidden="true" />
-        <p className={cn("text-indigo-100/90 leading-relaxed", compact ? "text-[11px]" : "text-xs")}>
-          <span className="font-semibold text-indigo-100">Visible on screen share.</span>{" "}
-          {OVERLAY_VISIBILITY_WARNING}
-        </p>
-      </div>
+      <AdvisoryBanner
+        icon={AlertTriangle}
+        title="Visible on screen share."
+        compact={compact}
+      >
+        {OVERLAY_VISIBILITY_WARNING}
+      </AdvisoryBanner>
 
       <section id="system-checklist" className="scroll-mt-24 space-y-3">
         <h3 className={cn("font-semibold text-foreground flex items-center gap-2", compact ? "text-xs" : "text-sm")}>

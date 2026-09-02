@@ -10,6 +10,8 @@
  */
 
 import { createServiceClient } from "./supabase.ts";
+import { withTimeout } from "./withTimeout.ts";
+import { PROFILE_LOOKUP_TIMEOUT_MS } from "./indiaRegion.ts";
 import { finalizePaperJobCredits, refundClaimedPaperCredits } from "./claimJobCredits.ts";
 import {
   buildBlueprint,
@@ -266,12 +268,6 @@ async function failJob(
         ...extra,
       },
       { workerId },
-    );
-    await refundClaimedPaperCredits(
-      db,
-      job.id,
-      job.user_id,
-      `refund_paper_gen_${errorCode.toLowerCase()}`,
     );
     return;
   }
@@ -755,11 +751,23 @@ export async function assembleClaimedPaperJob(
     }
 
     // Enforce server-side capability check for AI fill — direct edge invocations cannot bypass
-    const { data: userProfile } = await db
-      .from("profiles")
-      .select("plan_id")
-      .eq("id", job.user_id)
-      .maybeSingle();
+    let userProfile: { plan_id?: string | null } | null = null;
+    try {
+      const result = await withTimeout(
+        db
+          .from("profiles")
+          .select("plan_id")
+          .eq("id", job.user_id)
+          .maybeSingle(),
+        PROFILE_LOOKUP_TIMEOUT_MS,
+      );
+      userProfile = result.data;
+    } catch (profileErr) {
+      console.warn(
+        "[govPaperAssembly] profile lookup timed out — skipping AI fill",
+        profileErr instanceof Error ? profileErr.message : "unknown",
+      );
+    }
 
     const requestJson = (jobInput.request_json ?? {}) as Record<string, unknown>;
     const skipAiFill = requestJson.skipAiFill === true || requestJson.allowAiFill === false;

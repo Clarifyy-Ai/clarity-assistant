@@ -211,6 +211,8 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
   ]);
 
   async function handleConnect() {
+    if (isProbingSync || isCheckingConnection) return;
+    if (!syncAvailable) return;
     const result = await connectGoogle();
     if (result.error) {
       toast.error(result.error);
@@ -299,9 +301,13 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
               Sync now
             </Button>
           )}
-          {!syncAvailable ? (
+          {connectionStatus === "not_configured" ? (
             <Button variant="ghost" size="sm" disabled title="Calendar sync is not configured">
               Not configured
+            </Button>
+          ) : isProbingSync || isCheckingConnection ? (
+            <Button variant="ghost" size="sm" disabled>
+              Checking…
             </Button>
           ) : isConnected ? (
             <Button
@@ -312,7 +318,7 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
             >
               Disconnect
             </Button>
-          ) : (
+          ) : syncAvailable ? (
             <Button
               variant="secondary"
               size="sm"
@@ -320,7 +326,11 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
               onClick={handleConnect}
               leftIcon={<ExternalLink className="w-3.5 h-3.5" />}
             >
-              {isCheckingConnection ? "…" : reauthRequired ? "Reconnect" : "Connect"}
+              {reauthRequired ? "Reconnect" : "Connect"}
+            </Button>
+          ) : (
+            <Button variant="ghost" size="sm" disabled>
+              Not configured
             </Button>
           )}
         </div>

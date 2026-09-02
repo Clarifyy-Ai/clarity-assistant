@@ -57,6 +57,7 @@ interface RevisionItem {
   question_id: string;
   interval_days: number;
   review_count: number;
+  question_snapshot?: Record<string, unknown> | null;
   question: RevisionQuestion;
 }
 
@@ -141,6 +142,7 @@ export default function TestRevision() {
             question_id,
             interval_days,
             review_count,
+            question_snapshot,
             question:questions!revision_list_question_id_fkey (
               id,
               question_text,
@@ -166,13 +168,14 @@ export default function TestRevision() {
 
       const normalized: RevisionItem[] = Array.isArray(data)
         ? data
-            .filter((item: any) => item?.question)
+            .filter((item: any) => item?.question_snapshot || item?.question)
             .map((item: any) => ({
               id: String(item.id),
               question_id: String(item.question_id),
               interval_days: Number(item.interval_days ?? 1),
               review_count: Number(item.review_count ?? 0),
-              question: normalizeQuestion(item.question),
+              question_snapshot: item.question_snapshot ?? null,
+              question: normalizeQuestion(item.question_snapshot ?? item.question),
             }))
             .filter(
               (item) =>

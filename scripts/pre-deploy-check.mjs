@@ -34,6 +34,19 @@ const REQUIRED_MIGRATIONS = [
   "20260628163000_fix_questions_index.sql",
   "20260628164000_ai_usage_logs_rls_fix.sql",
   "20260628165000_retention_cron_jobs.sql",
+  // Sep-2026 QA wave (gov credits, answer persistence, email gate, session RLS)
+  "20260902120000_email_verification_server_gate.sql",
+  "20260902120100_start_session_expire_hardening.sql",
+  "20260902120200_record_quiz_progress.sql",
+  "20260902140000_company_research_jobs.sql",
+  "20260902210000_assessment_response_write_rls.sql",
+  "20260902220000_answer_persistence_lifecycle.sql",
+  "20260902220100_help_articles_inr_credit_parity.sql",
+  "20260902230000_release_gov_paper_credits_fail_closed.sql",
+  "20260902231000_gov_paper_atomic_enqueue_and_sweeper.sql",
+  "20260902240000_attempt_submission_lifecycle.sql",
+  "20260902260000_session_artifact_session_ownership_rls.sql",
+  "20260902280000_session_debriefs_session_user_unique.sql",
 ];
 
 const SCRAPER_MIGRATION_PREFIX = "20260614015211_";

@@ -5,6 +5,10 @@ import {
   redirectToSessionExpiredLogin,
 } from "@/lib/auth/sessionErrors";
 import { useAuthStore } from "@/store/authStore";
+import {
+  AUTH_SESSION_TIMEOUT_MS_WEB,
+  withTimeout,
+} from "@/lib/auth/accountBootstrap";
 
 export interface SessionRefreshResult {
   session: Session | null;
@@ -14,6 +18,10 @@ export interface SessionRefreshResult {
 }
 
 const SESSION_SKEW_MS = 60_000;
+
+function sessionProbeTimeoutMs(): number {
+  return import.meta.env.MODE === "test" ? 80 : AUTH_SESSION_TIMEOUT_MS_WEB;
+}
 
 let inFlight: Promise<SessionRefreshResult> | null = null;
 /** True when the current inFlight was started with forceRefresh. */
@@ -51,9 +59,6 @@ export async function ensureAuthSession(options?: {
   now?: number;
 }): Promise<SessionRefreshResult> {
   const forceRefresh = options?.forceRefresh === true;
-  // #region agent log
-  fetch('http://127.0.0.1:7572/ingest/ea82b87b-41ef-4cec-a41d-f9c122e76fc2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6cff84'},body:JSON.stringify({sessionId:'6cff84',runId:'post-fix',hypothesisId:'H1',location:'sessionRefresh.ts:ensureAuthSession',message:'ensureAuthSession_enter',data:{forceRefresh,joiningInFlight:Boolean(inFlight),inFlightForced},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
 
   if (inFlight) {
     // Soft → join any in-flight. Force → join only another force.
@@ -93,7 +98,11 @@ async function runEnsure(options?: {
     const {
       data: { session },
       error,
-    } = await supabase.auth.getSession();
+    } = await withTimeout(
+      supabase.auth.getSession(),
+      sessionProbeTimeoutMs(),
+      "Session probe",
+    );
 
     if (error) {
       if (isInvalidRefreshTokenError(error)) {
@@ -106,7 +115,9 @@ async function runEnsure(options?: {
 
     if (!session) {
       if (prior.status === "authenticated" && prior.session) {
-        return expireLocalSession();
+        // getSession() can return null mid-refresh or while the access JWT is
+        // expired. The refresh token is still valid — try it before logout.
+        return recoverFromMissingSession(prior.session as unknown as Session);
       }
       return toResult(null, { expired: prior.status === "authenticated" });
     }
@@ -117,15 +128,15 @@ async function runEnsure(options?: {
       options?.forceRefresh ||
       isSessionNearExpiry(session.expires_at, now);
 
-    // #region agent log
-    fetch('http://127.0.0.1:7572/ingest/ea82b87b-41ef-4cec-a41d-f9c122e76fc2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6cff84'},body:JSON.stringify({sessionId:'6cff84',runId:'pre-fix',hypothesisId:'H1',location:'sessionRefresh.ts:runEnsure',message:'ensure_decision',data:{forceRefresh:options?.forceRefresh===true,needsRefresh:Boolean(needsRefresh),expiresAt:session.expires_at??null,nearExpiry:isSessionNearExpiry(session.expires_at,now),tokenTail:typeof session.access_token==='string'?session.access_token.slice(-6):null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
     if (!needsRefresh) {
       return toResult(session);
     }
 
-    const refreshed = await supabase.auth.refreshSession();
+    const refreshed = await withTimeout(
+      supabase.auth.refreshSession(),
+      sessionProbeTimeoutMs(),
+      "Session refresh",
+    );
     if (refreshed.error) {
       if (isInvalidRefreshTokenError(refreshed.error)) {
         return expireLocalSession();
@@ -146,6 +157,50 @@ async function runEnsure(options?: {
     return toResult(prior.session as unknown as Session | null, {
       probeFailed: true,
     });
+  }
+}
+
+async function recoverFromMissingSession(
+  priorSession: Session,
+): Promise<SessionRefreshResult> {
+  try {
+    const refreshed = await withTimeout(
+      supabase.auth.refreshSession(),
+      sessionProbeTimeoutMs(),
+      "Session refresh",
+    );
+    if (refreshed.error) {
+      if (isInvalidRefreshTokenError(refreshed.error)) {
+        return expireLocalSession();
+      }
+      return toResult(priorSession, { probeFailed: true });
+    }
+    if (refreshed.data.session) {
+      applySession(refreshed.data.session, true);
+      return toResult(refreshed.data.session, { refreshed: true });
+    }
+
+    const retry = await withTimeout(
+      supabase.auth.getSession(),
+      sessionProbeTimeoutMs(),
+      "Session probe",
+    );
+    if (retry.data.session) {
+      applySession(retry.data.session, false);
+      return toResult(retry.data.session);
+    }
+    if (retry.error && isInvalidRefreshTokenError(retry.error)) {
+      return expireLocalSession();
+    }
+    if (retry.error) {
+      return toResult(priorSession, { probeFailed: true });
+    }
+    return expireLocalSession();
+  } catch (err) {
+    if (isInvalidRefreshTokenError(err)) {
+      return expireLocalSession();
+    }
+    return toResult(priorSession, { probeFailed: true });
   }
 }
 

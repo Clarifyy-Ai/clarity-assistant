@@ -38,6 +38,7 @@ from app.paper_factory.repository import BankQuestion, PaperRepository
 from app.paper_factory.validate import CandidateValidator
 
 AI_ELIGIBLE_MODES = frozenset({"generated_mock", "custom_mock", "adaptive"})
+SUPPORTED_MODES = AI_ELIGIBLE_MODES | {"official_previous"}
 GOV_QUESTION_COUNT_MIN = 5
 GOV_QUESTION_COUNT_MAX = 100
 
@@ -51,6 +52,52 @@ def _clamp_question_count(raw: int | None, *, default: int = 25) -> int:
 def _request_json(job: dict[str, Any]) -> dict[str, Any]:
     payload = job.get("request_json") or {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _validate_job_row(job: Any) -> tuple[str, dict[str, Any]]:
+    if not isinstance(job, dict):
+        raise PaperFactoryError(
+            "MALFORMED_JOB_PAYLOAD", "Job payload must be an object.", retryable=False
+        )
+    job_id = str(job.get("id") or "").strip()
+    if not job_id:
+        raise PaperFactoryError(
+            "MALFORMED_JOB_PAYLOAD", "Job payload is missing id.", retryable=False
+        )
+    if not str(job.get("exam_id") or "").strip():
+        raise PaperFactoryError(
+            "MALFORMED_JOB_PAYLOAD",
+            "Job payload is missing exam_id.",
+            retryable=False,
+        )
+    raw_payload = job.get("request_json")
+    if raw_payload is not None and not isinstance(raw_payload, dict):
+        raise PaperFactoryError(
+            "MALFORMED_JOB_PAYLOAD",
+            "request_json must be an object.",
+            retryable=False,
+        )
+    payload = raw_payload or {}
+    mode = str(job.get("mode") or payload.get("mode") or "generated_mock")
+    if mode not in SUPPORTED_MODES:
+        raise PaperFactoryError(
+            "MALFORMED_JOB_PAYLOAD",
+            f"Unsupported paper mode '{mode}'.",
+            retryable=False,
+        )
+    for key in ("questionCount", "question_count", "durationMinutes", "duration_minutes"):
+        if key not in payload or payload[key] is None:
+            continue
+        try:
+            if int(payload[key]) <= 0:
+                raise ValueError
+        except (TypeError, ValueError) as exc:
+            raise PaperFactoryError(
+                "MALFORMED_JOB_PAYLOAD",
+                f"{key} must be a positive integer.",
+                retryable=False,
+            ) from exc
+    return job_id, payload
 
 
 def _allow_ai_fill(job: dict[str, Any], mode: str, *, has_provider: bool) -> bool:
@@ -178,7 +225,7 @@ def _granular_mix(questions: list[PaperQuestion], deterministic_ids: set[str]) -
     return {k: v for k, v in summarize_source_mix(types).items() if v > 0}
 
 
-async def process_gov_exam_job(
+async def _process_gov_exam_job(
     job: dict[str, Any],
     *,
     settings: FactorySettings,
@@ -335,16 +382,18 @@ async def process_gov_exam_job(
         questions = [q for items in bank_selected.values() for q in items]
         used_ids = {q.question_id for q in questions if q.question_id}
         leftovers = [q for q in leftovers if q.id not in used_ids]
-        questions, leftovers, det_pre = repair_paper(
+        questions, leftovers, _ = repair_paper(
             blueprint,
             questions,
             leftovers,
             mode=mode,
-            allow_det=allow_det,
+            # Exhaust safe bank leftovers first. Deterministic practice is a
+            # fallback after an exact-shortage AI request, never a pre-AI fill.
+            allow_det=False,
             seed=seed,
             max_rounds=1,
         )
-        deterministic_count = det_pre
+        deterministic_count = 0
         deterministic_ids: set[str] = set()
         for q in questions:
             if q.python_generated and q.question_id:
@@ -575,6 +624,17 @@ async def process_gov_exam_job(
             and q.source_class in ("generated", "deterministic")
         ]
         if pending_insert:
+            try:
+                from uuid import UUID
+
+                UUID(str(settings.system_user_id))
+            except (ValueError, AttributeError, TypeError) as exc:
+                raise PaperFactoryError(
+                    "CONFIGURATION_ERROR",
+                    "SYSTEM_USER_ID must identify the publishing user before "
+                    "generated questions can be persisted.",
+                    retryable=False,
+                ) from exc
             ids = await asyncio.to_thread(
                 repo.insert_questions,
                 pending_insert,
@@ -730,3 +790,110 @@ async def process_gov_exam_job(
             error_message=str(exc),
             retryable=True,
         )
+
+
+async def _run_with_heartbeat(
+    job: dict[str, Any],
+    *,
+    settings: FactorySettings,
+    repo: PaperRepository,
+    correlation_id: str,
+) -> ProcessJobResponse:
+    job_id = str(job["id"])
+    interval = float(getattr(settings, "heartbeat_interval_seconds", 30.0))
+
+    async def heartbeat_loop() -> None:
+        while True:
+            await asyncio.sleep(interval)
+            try:
+                await asyncio.to_thread(repo.heartbeat, job_id)
+            except Exception as exc:  # noqa: BLE001
+                raise PaperFactoryError(
+                    "WORKER_UNAVAILABLE",
+                    f"Worker heartbeat infrastructure is unavailable: {exc}",
+                    retryable=True,
+                ) from exc
+
+    process_task = asyncio.create_task(
+        _process_gov_exam_job(
+            job, settings=settings, repo=repo, correlation_id=correlation_id
+        )
+    )
+    heartbeat_task = asyncio.create_task(heartbeat_loop())
+    try:
+        done, _ = await asyncio.wait(
+            {process_task, heartbeat_task}, return_when=asyncio.FIRST_COMPLETED
+        )
+        if process_task in done:
+            return process_task.result()
+        process_task.cancel()
+        await asyncio.gather(process_task, return_exceptions=True)
+        heartbeat_task.result()
+        raise AssertionError("unreachable")
+    finally:
+        heartbeat_task.cancel()
+        await asyncio.gather(heartbeat_task, return_exceptions=True)
+
+
+async def process_gov_exam_job(
+    job: dict[str, Any],
+    *,
+    settings: FactorySettings,
+    repo: PaperRepository,
+    correlation_id: str | None = None,
+) -> ProcessJobResponse:
+    """Validate, heartbeat, and time-bound one claimed durable job."""
+    fallback_id = str(job.get("id") or "unknown") if isinstance(job, dict) else "unknown"
+    correlation = correlation_id or (
+        str(_request_json(job).get("correlationId") or fallback_id)
+        if isinstance(job, dict)
+        else fallback_id
+    )
+    try:
+        job_id, _ = _validate_job_row(job)
+        timeout = float(getattr(settings, "job_timeout_seconds", 900.0))
+        result = await asyncio.wait_for(
+            _run_with_heartbeat(
+                job,
+                settings=settings,
+                repo=repo,
+                correlation_id=correlation,
+            ),
+            timeout=timeout,
+        )
+        result.correlation_id = correlation
+        return result
+    except asyncio.TimeoutError:
+        error = PaperFactoryError(
+            "JOB_TIMEOUT",
+            "Paper generation exceeded the configured overall job timeout.",
+            retryable=True,
+        )
+    except PaperFactoryError as exc:
+        error = exc
+
+    if fallback_id != "unknown":
+        try:
+            await asyncio.to_thread(
+                repo.fail_job,
+                fallback_id,
+                code=error.code,
+                message=error.message,
+                retryable=error.retryable,
+            )
+        except Exception as fail_exc:  # noqa: BLE001
+            log.error(
+                "gov_exam_fail_job_unavailable",
+                job_id=fallback_id,
+                correlation_id=correlation,
+                error=str(fail_exc),
+            )
+    return ProcessJobResponse(
+        success=False,
+        job_id=fallback_id,
+        status="failed_retryable" if error.retryable else "failed_permanent",
+        error_code=error.code,
+        error_message=error.message,
+        retryable=error.retryable,
+        correlation_id=correlation,
+    )

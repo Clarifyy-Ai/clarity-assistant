@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   ExternalLink,
   FileText,
@@ -13,21 +13,37 @@ import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { GovExamReadinessPanel } from "@/components/gov-exam/GovExamReadinessPanel";
 import {
   analyzePaperTrends,
+  CREATE_EXAM_PAPER_CREDIT_COST,
   generateTopicPractice,
   getExamDetails,
   getExamPattern,
   getExamSyllabus,
+  getPaperGenerationJob,
   listPreviousPapers,
+  processPaperGenerationJob,
   type ExamReadinessSummary,
   type GovExamDetails,
   type GovExamPatternResponse,
   type GovExamSyllabusResponse,
   type PaperTrendsResponse,
   type PreparationPlanSummary,
+  type PaperJobResult,
   type PreviousYearPaper,
   type TopicMasterySummary,
 } from "@/lib/gov-exam/api";
+import {
+  getOrLoadPaperTrends,
+  paperTrendsCacheKey,
+} from "@/lib/gov-exam/paperTrendsCache";
 import { formatGovExamOperationError } from "@/lib/gov-exam/examOperationErrors";
+import { pollPaperJobUntilTerminal } from "@/lib/gov-exam/pollPaperJob";
+import {
+  clearActivePaperJob,
+  isPaperJobTerminal,
+  loadActivePaperJob,
+  mapPaperJobPublicStatus,
+  saveActivePaperJob,
+} from "@/lib/gov-exam/paperJobStatus";
 import {
   bankReadinessLabel,
   formatBankCoverage,
@@ -45,6 +61,11 @@ import {
 } from "@/lib/gov-exam/masteryClient";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
+import { resolveCreditBalance } from "@/lib/billing/resolveCreditBalance";
+import { fetchSpendableCredits } from "@/lib/billing/fetchSpendableCredits";
+import { evaluateGovExamCreditGate } from "@/lib/gov-exam/govExamCreditGate";
+import { openUpgradeIfInsufficientCredits } from "@/lib/network/aiErrorUx";
+import { ApiClientError } from "@/lib/api/apiClient";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -114,8 +135,21 @@ function formatVerifiedDate(value: string | null | undefined): string {
 
 export default function GovExamDetail(): React.ReactElement {
   const { examCode = "" } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlJobId = searchParams.get("jobId");
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const profile = useAuthStore((s) => s.profile);
+  const storeCredits = useAuthStore((s) => (s as { credits?: number }).credits);
+  const isProfileLoaded = useAuthStore(
+    (s) => (s as { isProfileLoaded?: boolean }).isProfileLoaded,
+  );
+  const cachedCredits = resolveCreditBalance({
+    isProfileLoaded,
+    profileCredits: profile?.credits,
+    storeCredits,
+  });
+  const [serverCredits, setServerCredits] = useState<number | null>(null);
 
   const [details, setDetails] = useState<GovExamDetails | null>(null);
   const [registryPapers, setRegistryPapers] = useState<PreviousYearPaper[]>([]);
@@ -133,9 +167,39 @@ export default function GovExamDetail(): React.ReactElement {
   const [masteryRows, setMasteryRows] = useState<TopicMasterySummary[]>([]);
   const [prepPlan, setPrepPlan] = useState<PreparationPlanSummary | null>(null);
   const [tabLoading, setTabLoading] = useState(false);
+  const [patternTabError, setPatternTabError] = useState<string | null>(null);
+  const [syllabusTabError, setSyllabusTabError] = useState<string | null>(null);
 
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [topicBusy, setTopicBusy] = useState(false);
+  const [topicJob, setTopicJob] = useState<PaperJobResult | null>(null);
+  const paperTrendsCacheRef = useRef(new Map<string, PaperTrendsResponse>());
+  const paperTrendsInflightRef = useRef(new Map<string, Promise<PaperTrendsResponse>>());
+  const topicPollAbortRef = useRef(false);
+  const topicResumeStartedRef = useRef<string | null>(null);
+  const lastExamCodeRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const userId = user?.id ?? profile?.id;
+    if (!userId) return;
+    let cancelled = false;
+    void fetchSpendableCredits(userId).then((balance) => {
+      if (!cancelled && balance != null) setServerCredits(balance);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, profile?.id]);
+
+  const displayCredits =
+    serverCredits ?? (cachedCredits.known ? cachedCredits.balance : null);
+  const topicCreditGate = evaluateGovExamCreditGate({
+    balance: displayCredits,
+    balanceKnown: displayCredits != null,
+    cost: CREATE_EXAM_PAPER_CREDIT_COST,
+  });
+  const topicCreditsInsufficient =
+    "reason" in topicCreditGate && topicCreditGate.reason === "insufficient";
 
   async function load() {
     setLoading(true);
@@ -190,7 +254,22 @@ export default function GovExamDetail(): React.ReactElement {
     setReadiness(null);
     setMasteryRows([]);
     setPrepPlan(null);
+    paperTrendsCacheRef.current.clear();
+    paperTrendsInflightRef.current.clear();
     setSelectedTopics([]);
+    setTopicJob(null);
+    topicResumeStartedRef.current = null;
+    topicPollAbortRef.current = true;
+    const examChanged =
+      lastExamCodeRef.current != null && lastExamCodeRef.current !== examCode;
+    lastExamCodeRef.current = examCode;
+    if (examChanged) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("jobId");
+        return next;
+      }, { replace: true });
+    }
     setRegistryPapers([]);
     setBankEmpty(false);
     setBankMessage(null);
@@ -213,12 +292,36 @@ export default function GovExamDetail(): React.ReactElement {
       setTabLoading(true);
       try {
         if (tab === "pattern" && stageId) {
-          const res = await getExamPattern({ examId, stageId });
-          if (!cancelled) setPatternDetail(res);
+          setPatternTabError(null);
+          try {
+            const res = await getExamPattern({ examId, stageId });
+            if (!cancelled) setPatternDetail(res);
+          } catch (e) {
+            if (!cancelled) {
+              setPatternDetail(null);
+              setPatternTabError(
+                e instanceof Error && /PATTERN_NOT/i.test(String(e.message))
+                  ? "Approved exam pattern is not configured for this stage yet."
+                  : "Could not load exam pattern.",
+              );
+            }
+          }
         } else if (tab === "syllabus" || tab === "topic") {
           if (stageId) {
-            const res = await getExamSyllabus({ examId, stageId });
-            if (!cancelled) setSyllabusDetail(res);
+            setSyllabusTabError(null);
+            try {
+              const res = await getExamSyllabus({ examId, stageId });
+              if (!cancelled) setSyllabusDetail(res);
+            } catch (e) {
+              if (!cancelled) {
+                setSyllabusDetail(null);
+                setSyllabusTabError(
+                  e instanceof Error && /SYLLABUS_NOT/i.test(String(e.message))
+                    ? "Approved syllabus is not configured for this stage yet."
+                    : "Could not load syllabus.",
+                );
+              }
+            }
           }
         } else if (tab === "previous") {
           // registry already loaded with details; refresh lightly
@@ -266,11 +369,19 @@ export default function GovExamDetail(): React.ReactElement {
               .filter((y) => Number.isFinite(y))
               .sort((a, b) => b - a)
               .slice(0, 5);
-            const res = await analyzePaperTrends({
-              examId,
-              stageId,
-              sourceYears: years.length ? years : [2024, 2023, 2022],
-            });
+            const sourceYears = years.length ? years : [2024, 2023, 2022];
+            const cacheKey = paperTrendsCacheKey(examId, stageId, sourceYears);
+            const res = await getOrLoadPaperTrends(
+              paperTrendsCacheRef.current,
+              paperTrendsInflightRef.current,
+              cacheKey,
+              () =>
+                analyzePaperTrends({
+                  examId,
+                  stageId,
+                  sourceYears,
+                }),
+            );
             if (!cancelled) setTrends(res);
           }
         } else if (tab === "sources") {
@@ -324,9 +435,94 @@ export default function GovExamDetail(): React.ReactElement {
     );
   }
 
+  function syncTopicJobIdInUrl(jobId: string | null) {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (jobId) next.set("jobId", jobId);
+      else next.delete("jobId");
+      return next;
+    }, { replace: true });
+  }
+
+  function persistTopicPracticeJob(jobId: string, examId: string) {
+    const userId = user?.id ?? profile?.id;
+    if (!userId) return;
+    saveActivePaperJob({
+      jobId,
+      examId,
+      userId,
+      kind: "topic_practice",
+    });
+    syncTopicJobIdInUrl(jobId);
+  }
+
+  async function awaitTopicPracticeJob(
+    jobId: string,
+    seed: PaperJobResult,
+  ): Promise<PaperJobResult> {
+    return pollPaperJobUntilTerminal(jobId, seed, {
+      setJob: setTopicJob,
+      shouldAbort: () => topicPollAbortRef.current,
+      nudge: (id) => processPaperGenerationJob(id).then(() => undefined),
+    });
+  }
+
+  function completeTopicPracticeJob(terminal: PaperJobResult): boolean {
+    setTopicJob(terminal);
+    const status = mapPaperJobPublicStatus(terminal.status);
+    if (status === "completed" && terminal.mockTestId) {
+      clearActivePaperJob(terminal.jobId ?? undefined);
+      syncTopicJobIdInUrl(null);
+      toast.success("Topic practice set ready.");
+      navigate(`/app/mock-test/session/${terminal.mockTestId}`);
+      return true;
+    }
+    if (status === "failed_retryable" || status === "failed") {
+      toast.error(
+        terminal.errorMessage ??
+          terminal.error ??
+          "Topic practice failed. Retry uses the same reserved job.",
+      );
+      return false;
+    }
+    clearActivePaperJob(terminal.jobId ?? undefined);
+    syncTopicJobIdInUrl(null);
+    throw new Error(
+      terminal.errorMessage ?? terminal.error ?? "Topic practice failed.",
+    );
+  }
+
   async function startTopicPractice() {
     if (!exam || selectedTopics.length === 0) {
       toast.error("Select at least one syllabus topic.");
+      return;
+    }
+    const userId = user?.id ?? profile?.id;
+    let freshBalance = displayCredits;
+    if (userId) {
+      const fetched = await fetchSpendableCredits(userId);
+      if (fetched != null) {
+        freshBalance = fetched;
+        setServerCredits(fetched);
+      }
+    }
+    const freshGate = evaluateGovExamCreditGate({
+      balance: freshBalance,
+      balanceKnown: freshBalance != null,
+      cost: CREATE_EXAM_PAPER_CREDIT_COST,
+    });
+    if ("reason" in freshGate) {
+      if (freshGate.reason === "insufficient") {
+        openUpgradeIfInsufficientCredits(
+          new ApiClientError({
+            message: `You need ${freshGate.cost} credits but only have ${freshGate.balance ?? 0}.`,
+            code: "INSUFFICIENT_CREDITS",
+            status: 402,
+          }),
+        );
+      } else {
+        toast.error("Could not verify your credit balance. Please try again.");
+      }
       return;
     }
     setTopicBusy(true);
@@ -344,10 +540,12 @@ export default function GovExamDetail(): React.ReactElement {
         return;
       }
       if (result.jobId) {
+        topicPollAbortRef.current = false;
+        topicResumeStartedRef.current = result.jobId;
+        persistTopicPracticeJob(result.jobId, exam.examId);
         toast.message("Assembling topic practice…");
-        navigate(
-          `${generateBase}&basis=topic&topics=${encodeURIComponent(selectedTopics.join(","))}`,
-        );
+        const terminal = await awaitTopicPracticeJob(result.jobId, result);
+        if (completeTopicPracticeJob(terminal)) return;
         return;
       }
       throw new Error(result.errorMessage ?? result.error ?? "Topic practice failed.");
@@ -367,6 +565,94 @@ export default function GovExamDetail(): React.ReactElement {
       setTopicBusy(false);
     }
   }
+
+  async function retryTopicPractice() {
+    const jobId = topicJob?.jobId;
+    if (!jobId) return;
+    topicPollAbortRef.current = false;
+    topicResumeStartedRef.current = jobId;
+    setTopicBusy(true);
+    try {
+      await processPaperGenerationJob(jobId).catch(() => undefined);
+      const latest = await getPaperGenerationJob(jobId);
+      const terminal = await awaitTopicPracticeJob(jobId, latest);
+      completeTopicPracticeJob(terminal);
+    } catch (e) {
+      toast.error(formatGovExamOperationError(e));
+    } finally {
+      setTopicBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    const userId = user?.id ?? profile?.id;
+    if (!userId) return;
+    const stored = loadActivePaperJob(userId, "topic_practice");
+    const jobId = urlJobId || stored?.jobId;
+    if (!jobId) return;
+    if (
+      !urlJobId &&
+      stored?.examId &&
+      exam?.examId &&
+      stored.examId !== exam.examId
+    ) {
+      return;
+    }
+    if (topicResumeStartedRef.current === jobId) {
+      if (exam?.examId) persistTopicPracticeJob(jobId, exam.examId);
+      return;
+    }
+    topicResumeStartedRef.current = jobId;
+
+    let cancelled = false;
+    topicPollAbortRef.current = false;
+    setTopicBusy(true);
+    setTab("topic");
+
+    void (async () => {
+      try {
+        let current: PaperJobResult;
+        try {
+          current = await getPaperGenerationJob(jobId);
+        } catch (firstErr) {
+          const status = (firstErr as { status?: number })?.status;
+          if (status === 429 || status === 409) {
+            current = { jobId, status: "queued" };
+          } else {
+            throw firstErr;
+          }
+        }
+        if (cancelled) return;
+        setTopicJob(current);
+        const status = mapPaperJobPublicStatus(current.status);
+        if (isPaperJobTerminal(status)) {
+          completeTopicPracticeJob(current);
+          return;
+        }
+        if (exam?.examId) persistTopicPracticeJob(jobId, exam.examId);
+        toast.message("Resuming topic practice…");
+        const terminal = await awaitTopicPracticeJob(jobId, current);
+        if (cancelled) return;
+        completeTopicPracticeJob(terminal);
+      } catch (e) {
+        if (cancelled) return;
+        toast.error(formatGovExamOperationError(e));
+      } finally {
+        if (!cancelled) setTopicBusy(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      topicPollAbortRef.current = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, profile?.id, exam?.examId, urlJobId]);
+
+  const topicJobRetryable =
+    topicJob != null &&
+    (mapPaperJobPublicStatus(topicJob.status) === "failed_retryable" ||
+      mapPaperJobPublicStatus(topicJob.status) === "failed");
 
   const fullMockDisabledReason = !stage
     ? "No stage configured for this exam yet."
@@ -532,6 +818,11 @@ export default function GovExamDetail(): React.ReactElement {
                 {exam!.description && (
                   <p className="text-sm text-muted-foreground">{exam!.description}</p>
                 )}
+                {exam!.aliases?.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Also known as: {exam!.aliases.slice(0, 6).join(", ")}
+                  </p>
+                )}
                 <p className="text-xs text-amber-700 dark:text-amber-400/90">{aiLabel}</p>
                 <p className="text-xs text-muted-foreground">{customLabel}</p>
               </section>
@@ -562,7 +853,18 @@ export default function GovExamDetail(): React.ReactElement {
             </div>
           )}
 
-          {tab === "pattern" && !tabLoading && patternDetail && (
+          {tab === "pattern" && !tabLoading && patternTabError && (
+            <InlineErrorRetry
+              message={patternTabError}
+              onRetry={() => {
+                setPatternTabError(null);
+                setTab("overview");
+                window.setTimeout(() => setTab("pattern"), 0);
+              }}
+            />
+          )}
+
+          {tab === "pattern" && !tabLoading && !patternTabError && patternDetail && (
             <section className="space-y-4 rounded-xl border border-border p-5">
               <div>
                 <h3 className="text-sm font-semibold">
@@ -609,7 +911,18 @@ export default function GovExamDetail(): React.ReactElement {
             </section>
           )}
 
-          {tab === "syllabus" && !tabLoading && (
+          {tab === "syllabus" && !tabLoading && syllabusTabError && (
+            <InlineErrorRetry
+              message={syllabusTabError}
+              onRetry={() => {
+                setSyllabusTabError(null);
+                setTab("overview");
+                window.setTimeout(() => setTab("syllabus"), 0);
+              }}
+            />
+          )}
+
+          {tab === "syllabus" && !tabLoading && !syllabusTabError && (
             <section className="space-y-3 rounded-xl border border-border p-5">
               <h3 className="text-sm font-semibold">
                 Syllabus {syllabusDetail?.syllabus.version ?? details.syllabusSummary?.version ?? ""}
@@ -687,6 +1000,16 @@ export default function GovExamDetail(): React.ReactElement {
                       >
                         {p.label === "official" ? "Official" : "Practice"}
                       </Badge>
+                      {p.label === "official" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-1 h-7 text-[11px]"
+                          onClick={() => navigate(`${generateBase}&basis=official_previous`)}
+                        >
+                          Start official paper
+                        </Button>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -795,9 +1118,29 @@ export default function GovExamDetail(): React.ReactElement {
                   })}
                 </ul>
               )}
+              {topicBusy && (
+                <p className="text-sm text-muted-foreground" aria-live="polite">
+                  {topicJob?.jobId
+                    ? "Assembling your topic practice. You can refresh — this job will resume."
+                    : "Starting topic practice…"}
+                </p>
+              )}
+              {topicJobRetryable && !topicBusy && (
+                <p className="text-sm text-muted-foreground">
+                  {topicJob?.errorMessage ??
+                    topicJob?.error ??
+                    "Generation paused. Retry continues the same reserved job."}
+                </p>
+              )}
               <div className="flex flex-wrap gap-2">
                 <Button
-                  disabled={topicBusy || selectedTopics.length === 0}
+                  disabled={
+                    topicBusy ||
+                    selectedTopics.length === 0 ||
+                    topicJobRetryable ||
+                    ("reason" in topicCreditGate &&
+                      topicCreditGate.reason === "unknown_balance")
+                  }
                   onClick={() => void startTopicPractice()}
                 >
                   {topicBusy ? (
@@ -805,8 +1148,21 @@ export default function GovExamDetail(): React.ReactElement {
                   ) : (
                     <Sparkles className="h-4 w-4 mr-2" />
                   )}
-                  Start topic practice
+                  {topicCreditsInsufficient
+                    ? `Top up to start (${CREATE_EXAM_PAPER_CREDIT_COST} credits)`
+                    : topicCreditGate.allowed
+                      ? `Start topic practice (${CREATE_EXAM_PAPER_CREDIT_COST} credits)`
+                      : "Checking credits…"}
                 </Button>
+                {topicJobRetryable && (
+                  <Button
+                    variant="secondary"
+                    disabled={topicBusy}
+                    onClick={() => void retryTopicPractice()}
+                  >
+                    Retry same job
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   disabled={!stage}
@@ -823,6 +1179,23 @@ export default function GovExamDetail(): React.ReactElement {
                   Open generator
                 </Button>
               </div>
+              {topicCreditsInsufficient && (
+                <div
+                  className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/30"
+                  role="alert"
+                >
+                  <p className="text-amber-800 dark:text-amber-200">
+                    You need {CREATE_EXAM_PAPER_CREDIT_COST} credits, but only have{" "}
+                    {topicCreditGate.balance ?? 0}. Top up or upgrade to continue.
+                  </p>
+                  <Link
+                    to="/app/settings/billing"
+                    className="mt-2 inline-flex min-h-9 items-center justify-center rounded-lg border border-border bg-background px-3 text-xs font-medium hover:bg-secondary"
+                  >
+                    Billing settings
+                  </Link>
+                </div>
+              )}
               <p className="text-xs text-muted-foreground">{customLabel}</p>
             </section>
           )}
@@ -940,7 +1313,7 @@ export default function GovExamDetail(): React.ReactElement {
             <section className="space-y-3 rounded-xl border border-border p-5">
               <h3 className="text-sm font-semibold">Official sources</h3>
               <p className="text-xs text-muted-foreground">
-                Link-first provenance from the registry. Clarify AI does not display government
+                Link-first provenance from the registry. Career Pilot does not display government
                 logos or claim affiliation.
               </p>
               {details.officialSources.length === 0 ? (

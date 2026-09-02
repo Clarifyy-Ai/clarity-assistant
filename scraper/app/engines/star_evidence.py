@@ -18,6 +18,145 @@ _PLACEHOLDER_PATTERNS = (
     re.compile(r"\b(revenue|budget|cost\s+savings)\b", re.I),
 )
 
+_INTERVIEW_QUESTION_RE = re.compile(
+    r"Interview question:\s*([\s\S]*?)(?=\n\nCategory:|\n\nUser draft|\n\nImprove|\Z)",
+    re.I,
+)
+_CATEGORY_RE = re.compile(r"Category:\s*(.+)", re.I)
+_USER_DRAFT_RE = re.compile(
+    r"User draft \(optional\):\s*([\s\S]*?)(?=\n\nImprove|\n\nWrite|\Z)",
+    re.I,
+)
+_STAR_SECTION_RE = re.compile(
+    r"(Situation|Task|Action|Result)\s*:\s*",
+    re.I,
+)
+_EMPTY_DRAFTS = frozenset({"(none yet)", "none", "(none)", ""})
+
+
+def _str_field(payload: dict[str, Any], key: str) -> str:
+    value = payload.get(key)
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _parse_star_labeled_sections(text: str) -> dict[str, str]:
+    """Parse Situation:/Task:/Action:/Result: blocks from freeform text."""
+    if not _STAR_SECTION_RE.search(text):
+        return {"situation": "", "task": "", "action": "", "result": ""}
+
+    sections: dict[str, str] = {}
+    matches = list(_STAR_SECTION_RE.finditer(text))
+    for index, match in enumerate(matches):
+        label = match.group(1).lower()
+        start = match.end()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        sections[label] = text[start:end].strip()
+
+    return {
+        "situation": sections.get("situation", ""),
+        "task": sections.get("task", ""),
+        "action": sections.get("action", ""),
+        "result": sections.get("result", ""),
+    }
+
+
+def _looks_like_answer_bank_prompt(text: str) -> bool:
+    lowered = text.lower()
+    return "interview question:" in lowered and (
+        "category:" in lowered or "user draft" in lowered
+    )
+
+
+def _parse_answer_bank_prompt(text: str) -> dict[str, str]:
+    """
+    Map Answer Bank / prep-tool star_method prompts into STAR fields.
+
+    Expected shape (from AnswerBank.tsx):
+      Interview question: ...
+      Category: Behavioural
+      User draft (optional): ...
+    """
+    question = ""
+    category = ""
+    draft = ""
+
+    question_match = _INTERVIEW_QUESTION_RE.search(text)
+    if question_match:
+        question = question_match.group(1).strip()
+
+    category_match = _CATEGORY_RE.search(text)
+    if category_match:
+        category = category_match.group(1).strip()
+
+    draft_match = _USER_DRAFT_RE.search(text)
+    if draft_match:
+        draft = draft_match.group(1).strip()
+        if draft.lower() in _EMPTY_DRAFTS:
+            draft = ""
+
+    if draft:
+        labeled = _parse_star_labeled_sections(draft)
+        if any(labeled.values()):
+            return labeled
+
+    task = question or "[NEEDS EVIDENCE — restate the interview question as your goal]"
+    if category and question:
+        situation = f"[NEEDS EVIDENCE — context for a {category} answer]"
+    elif category:
+        situation = f"[NEEDS EVIDENCE — context for a {category} answer]"
+    else:
+        situation = "[NEEDS EVIDENCE — describe the situation]"
+
+    if draft:
+        action = draft
+    else:
+        action = "[NEEDS EVIDENCE — describe the actions you took]"
+
+    return {
+        "situation": situation[:2000],
+        "task": task[:2000],
+        "action": action[:2000],
+        "result": "[Add measurable result if available]",
+    }
+
+
+def _normalize_star_fields(payload: dict[str, Any]) -> dict[str, str]:
+    """Resolve STAR fields from explicit sections or Answer Bank prompt blobs."""
+    situation = _str_field(payload, "situation")
+    task = _str_field(payload, "task")
+    action = _str_field(payload, "action")
+    result = _str_field(payload, "result")
+    raw_input = _str_field(payload, "input")
+
+    candidate_blob = raw_input or action
+    if candidate_blob and _looks_like_answer_bank_prompt(candidate_blob):
+        return _parse_answer_bank_prompt(candidate_blob)
+
+    if any((situation, task, action, result)):
+        return {
+            "situation": situation,
+            "task": task,
+            "action": action,
+            "result": result,
+        }
+
+    if raw_input:
+        labeled = _parse_star_labeled_sections(raw_input)
+        if any(labeled.values()):
+            return labeled
+
+    if action:
+        labeled = _parse_star_labeled_sections(action)
+        if any(labeled.values()):
+            return labeled
+
+    return {
+        "situation": situation,
+        "task": task,
+        "action": action,
+        "result": result,
+    }
+
 
 def _sentences(value: str | None) -> list[str]:
     if not value or not str(value).strip():
@@ -37,14 +176,16 @@ def _needs_placeholder(claim: str) -> bool:
 def run_star_evidence(payload: dict[str, Any], *, operation_id: str, correlation_id: str) -> dict[str, Any]:
     log.info("[STAR] evidence_extraction", operation_id=operation_id, correlation_id=correlation_id)
 
-    situation = payload.get("situation")
-    task = payload.get("task")
-    action = payload.get("action")
-    result = payload.get("result")
+    normalized = _normalize_star_fields(payload)
+    situation = normalized["situation"]
+    task = normalized["task"]
+    action = normalized["action"]
+    result = normalized["result"]
+
     resume_facts = payload.get("resume_facts") or {}
     jd_facts = payload.get("jd_facts") or {}
 
-    if not any(isinstance(v, str) and v.strip() for v in (situation, task, action, result)):
+    if not any((situation, task, action, result)):
         raise EngineError("STAR_INPUT_REQUIRED", retryable=False)
 
     claims: list[dict[str, str]] = []
@@ -54,7 +195,7 @@ def run_star_evidence(payload: dict[str, Any], *, operation_id: str, correlation
         ("action", action),
         ("result", result),
     ):
-        claims.extend(_extract_claims(field, value if isinstance(value, str) else None))
+        claims.extend(_extract_claims(field, value))
 
     supplemental: list[dict[str, str]] = []
     for source_label, facts in (("resume_facts", resume_facts), ("jd_facts", jd_facts)):
@@ -71,9 +212,13 @@ def run_star_evidence(payload: dict[str, Any], *, operation_id: str, correlation
     all_claims = claims + supplemental
     follow_up_questions: list[str] = []
 
-    for field in ("situation", "task", "action", "result"):
-        field_text = payload.get(field)
-        if not isinstance(field_text, str) or not field_text.strip():
+    for field, field_text in (
+        ("situation", situation),
+        ("task", task),
+        ("action", action),
+        ("result", result),
+    ):
+        if not field_text.strip() or field_text.strip().startswith("[NEEDS EVIDENCE"):
             follow_up_questions.append(f"Provide the {field} in your own words.")
 
     for claim in claims:
@@ -83,10 +228,10 @@ def run_star_evidence(payload: dict[str, Any], *, operation_id: str, correlation
             )
 
     draft = {
-        "situation": situation if isinstance(situation, str) else "",
-        "task": task if isinstance(task, str) else "",
-        "action": action if isinstance(action, str) else "",
-        "result": result if isinstance(result, str) else "",
+        "situation": situation,
+        "task": task,
+        "action": action,
+        "result": result,
         "draft_kind": "input_based",
         "verification": "input_based_draft",
     }

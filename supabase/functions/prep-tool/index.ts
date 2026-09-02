@@ -414,6 +414,48 @@ function deterministicProjectContent(input: string): string {
   ].join("\n");
 }
 
+function deterministicRawPromptContent(input: string): string {
+  const questionMatch = input.match(
+    /Interview question:\s*([\s\S]*?)(?:\n\n|$)/i,
+  );
+  const categoryMatch =
+    input.match(/Interview category:\s*(.+)/i) ||
+    input.match(/Category:\s*(.+)/i);
+  const question = (questionMatch?.[1] ?? input).trim().slice(0, 500) ||
+    "this question";
+  const category = (categoryMatch?.[1] ?? "General").trim().slice(0, 80);
+
+  return [
+    `**${category} interview answer (structured outline)**`,
+    "",
+    `**Question:** ${question}`,
+    "",
+    "**Opening:** Briefly confirm you understand the question and frame your answer.",
+    "",
+    "**Core response:**",
+    "- State your relevant experience or approach",
+    "- Walk through 2–3 concrete points tied to the question",
+    "- Use [NEEDS EVIDENCE] where you should add real examples from your background",
+    "",
+    "**Closing:** Summarize your key takeaway and how it applies to the role.",
+    "",
+    "_AI polish is temporarily unavailable — this outline helps you structure a draft. Replace placeholders with your real experience before saving._",
+  ].join("\n");
+}
+
+function formatRawPromptFromPython(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const obj = data as Record<string, unknown>;
+  const narrative =
+    (typeof obj.outline === "string" && obj.outline) ||
+    (typeof obj.content === "string" && obj.content) ||
+    (typeof obj.result === "string" && obj.result) ||
+    (typeof obj.text === "string" && obj.text) ||
+    "";
+  const trimmed = narrative.trim();
+  return trimmed.length >= 80 ? trimmed : null;
+}
+
 function formatProjectFromPython(data: unknown): string | null {
   if (!data || typeof data !== "object") return null;
   const obj = data as Record<string, unknown>;
@@ -872,7 +914,21 @@ Deno.serve(async (req: Request) => {
         requestHash,
       });
 
-      return hybrid.response;
+      return successResponse(
+        {
+          result: payload.result,
+          alternatives: null,
+          source: payload.source ?? hybrid.source,
+          draft_kind: payload.draft_kind,
+          situation: payload.situation,
+          task: payload.task,
+          action: payload.action,
+          result_section: payload.result_section,
+        },
+        { creditsCharged: toolCost },
+        200,
+        req,
+      );
     }
 
     /* ---- Hybrid path: system_design (credits via executeHybridOperation) ---- */
@@ -1194,6 +1250,127 @@ Deno.serve(async (req: Request) => {
       });
 
       return hybrid.response;
+    }
+
+    /* ---- Hybrid path: raw_prompt (Answer Bank non-STAR categories) ---- */
+    if (tool_id === "raw_prompt") {
+      type RawPromptPayload = {
+        result: string;
+        alternatives: null;
+        source: string;
+      };
+
+      const hybrid = await executeHybridOperation<RawPromptPayload>({
+        req,
+        auth,
+        operation: "prep_raw_prompt",
+        idempotencyKey,
+        creditCost: toolCost,
+        creditAction: `prep_tool_${tool_id}`,
+        body: { input: sanitizedInput, tool_id },
+        runDeterministic: async () => {
+          const outline = deterministicRawPromptContent(sanitizedInput);
+          if (outline.trim().length < 80) return null;
+          return {
+            result: outline,
+            alternatives: null,
+            source: "deterministic",
+          };
+        },
+        runPython: async (ctx) => {
+          const py = await pythonExecuteOperation(
+            {
+              operation: "prep_raw_prompt",
+              operation_id: ctx.operationId,
+              correlation_id: ctx.correlationId,
+              user_id: userId,
+              payload: {
+                input: sanitizedInput,
+                text: sanitizedInput,
+                prompt: sanitizedInput,
+              },
+            },
+            { requestId: ctx.correlationId },
+          );
+          if (!py.ok) return null;
+          const raw = extractPythonPayload(py.json);
+          const result = formatRawPromptFromPython(raw);
+          if (!result) return null;
+          return {
+            result,
+            alternatives: null,
+            source: "python",
+          };
+        },
+        runAi: async () => {
+          const ai = await generateWithFallback({
+            prompt,
+            maxTokens: PREP_AI_POLICY.maxOutputTokens,
+            skipSecondaryOnQuota: PREP_AI_POLICY.skipSecondaryOnQuota,
+            temperature: 0.6,
+            userId,
+            action: "prep_tool",
+          });
+          const aiText = sanitizeAIOutput(ai.text ?? "");
+          if (!aiText.trim()) {
+            throw new Error("AI returned empty response");
+          }
+          return {
+            result: aiText,
+            alternatives: null,
+            source: "ai",
+          };
+        },
+        validate: (data) => {
+          if (!data?.result?.trim()) {
+            throw new Error(AI_RESPONSE_INVALID_MESSAGE);
+          }
+          return data;
+        },
+      });
+
+      if (!hybrid.ok) {
+        await db.from("idempotency_log").delete().eq("key", idempotencyKey);
+        if (
+          hybrid.code === "INSUFFICIENT_CREDITS" ||
+          hybrid.code === "CAPABILITY_REQUIRED"
+        ) {
+          return hybrid.response;
+        }
+        return hybridPublicFailure(
+          req,
+          String(hybrid.code ?? ""),
+          correlationId,
+          "Answer drafting is temporarily unavailable. Credits refunded.",
+        );
+      }
+
+      const payload = hybrid.data;
+      await storeIdempotentResponse(db, idempotencyKey, {
+        success: true,
+        payload: {
+          result: payload.result,
+          alternatives: null,
+          tool_id,
+          parse_status: "completed",
+          source: payload.source ?? hybrid.source,
+        },
+      }, {
+        userId,
+        action: `prep_tool_${tool_id}`,
+        requestHash,
+      });
+
+      return successResponse(
+        {
+          result: payload.result,
+          alternatives: null,
+          source: payload.source ?? hybrid.source,
+        },
+        { creditsCharged: toolCost },
+        200,
+        req,
+      );
     }
 
     const creditResult = await deductCreditsAtomic({

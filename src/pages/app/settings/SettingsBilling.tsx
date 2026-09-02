@@ -593,14 +593,6 @@ export default function SettingsBilling(): JSX.Element {
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
-              loading={razorpayLoading === "pro_monthly"}
-              disabled={checkoutBusy}
-              onClick={() => void handleUpgrade("pro")}
-            >
-              {checkoutBusyLabel(razorpayLoading, checkoutPhase, "pro_monthly", "Pro — one-time (Razorpay)")}
-            </Button>
-            <Button
-              size="sm"
               variant="secondary"
               loading={razorpayLoading === "enterprise_monthly"}
               disabled={checkoutBusy}

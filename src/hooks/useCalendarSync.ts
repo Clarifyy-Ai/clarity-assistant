@@ -41,9 +41,26 @@ function isCalendarUnavailableError(err: Error & { code?: string; status?: numbe
 
 const SYNC_PROBE_TTL_MS = 5 * 60 * 1000;
 let syncProbeCache: { available: boolean; checkedAt: number; unavailable: boolean } | null = null;
-let syncProbeInflight: Promise<{ available: boolean; unavailable: boolean }> | null = null;
+let syncProbeInflight: Promise<{ available: boolean; unavailable: boolean; inconclusive?: boolean }> | null = null;
 
-async function probeSyncAvailabilityCached(): Promise<{ available: boolean; unavailable: boolean }> {
+function clearSyncProbeCache(): void {
+  syncProbeCache = null;
+  syncProbeInflight = null;
+}
+
+function shouldCacheProbeFailure(err: Error & { code?: string; status?: number }): boolean {
+  // Unauthenticated / forbidden probe — session may not be ready yet; never poison cache.
+  if (err.status === 401 || err.status === 403) return false;
+  return isCalendarUnavailableError(err);
+}
+
+async function probeSyncAvailabilityCached(
+  hasUser: boolean,
+): Promise<{ available: boolean; unavailable: boolean; inconclusive?: boolean }> {
+  if (!hasUser) {
+    return { available: false, unavailable: false, inconclusive: true };
+  }
+
   const now = Date.now();
   if (syncProbeCache && now - syncProbeCache.checkedAt < SYNC_PROBE_TTL_MS) {
     return {
@@ -61,11 +78,16 @@ async function probeSyncAvailabilityCached(): Promise<{ available: boolean; unav
     } catch (err) {
       const e = err as Error & { code?: string; status?: number };
       const unavailable = isCalendarUnavailableError(e);
-      syncProbeCache = {
-        available: false,
-        checkedAt: Date.now(),
-        unavailable,
-      };
+      if (shouldCacheProbeFailure(e)) {
+        syncProbeCache = {
+          available: false,
+          checkedAt: Date.now(),
+          unavailable,
+        };
+      }
+      if (e.status === 401 || e.status === 403) {
+        return { available: false, unavailable: false, inconclusive: true };
+      }
       return { available: false, unavailable };
     } finally {
       syncProbeInflight = null;
@@ -150,7 +172,14 @@ export function useCalendarSync() {
         setSyncAvailable(false);
         setConnectionStatus("not_configured");
         setGoogleEmail(null);
+        syncProbeCache = { available: false, checkedAt: Date.now(), unavailable: true };
         return;
+      }
+
+      if (data?.configured === true) {
+        setSyncAvailable(true);
+        setError(null);
+        syncProbeCache = { available: true, checkedAt: Date.now(), unavailable: false };
       }
 
       if (data?.reauth_required || data?.status === "reauth_required") {
@@ -182,33 +211,47 @@ export function useCalendarSync() {
   }, [user, applyUnavailable]);
 
   const probeSyncAvailability = useCallback(async (): Promise<void> => {
+    if (!user?.id) return;
     setIsProbingSync(true);
     try {
-      const result = await probeSyncAvailabilityCached();
-      setSyncAvailable(result.available);
-      if (result.unavailable) {
-        setConnectionStatus("not_configured");
-        setError(CALENDAR_UNAVAILABLE_MSG);
+      const result = await probeSyncAvailabilityCached(true);
+      if (!result.inconclusive) {
+        setSyncAvailable(result.available);
+        if (result.unavailable) {
+          setConnectionStatus("not_configured");
+          setError(CALENDAR_UNAVAILABLE_MSG);
+        }
       }
     } finally {
       setIsProbingSync(false);
     }
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
+    if (!user?.id) {
+      setIsCheckingConnection(false);
+      return;
+    }
     checkConnection();
     void probeSyncAvailability();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event) => {
+        if (event === "SIGNED_OUT") {
+          clearSyncProbeCache();
+          setSyncAvailable(false);
+          setConnectionStatus("disconnected");
+        }
         if (CONNECTION_CHECK_EVENTS.includes(event)) {
+          if (event === "SIGNED_IN") clearSyncProbeCache();
           checkConnection();
+          void probeSyncAvailability();
         }
       },
     );
 
     return () => subscription.unsubscribe();
-  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user?.id, checkConnection, probeSyncAvailability]);
 
   const connectGoogle = useCallback(async (): Promise<{ error: string | null }> => {
     if (!syncAvailable) {

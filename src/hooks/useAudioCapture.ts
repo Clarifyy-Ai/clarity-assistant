@@ -2,6 +2,7 @@
 import { useCallback, useRef } from "react";
 import { useAudioStore } from "@/store/audioStore";
 import { startMicCapture, stopMicCapture } from "@/lib/audio/micCapture";
+import { isMicrophoneAccessError } from "@/lib/audio/micPermission";
 import { startSystemAudioCapture, stopSystemAudioCapture } from "@/lib/audio/systemAudioCapture";
 import { mixStreams } from "@/lib/audio/audioMixer";
 
@@ -26,13 +27,16 @@ export function useAudioCapture() {
 
       return { error: null };
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Mic access denied";
-      store.setStreamError({
-        code: "PERMISSION_DENIED",
-        message: msg,
-        recoverable: true,
-        suggestion: "Check your browser permissions",
-      });
+      const access = isMicrophoneAccessError(err) ? err.toAudioError() : null;
+      const msg = access?.message ?? (err instanceof Error ? err.message : "Mic access denied");
+      store.setStreamError(
+        access ?? {
+          code: "PERMISSION_DENIED",
+          message: msg,
+          recoverable: true,
+          suggestion: "Check your browser permissions",
+        },
+      );
       return { error: msg };
     }
   }, []);

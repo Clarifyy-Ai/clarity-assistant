@@ -6,6 +6,10 @@ import type {
 import { useAudioStore } from "@/store/audioStore";
 import { captureSystemAudioViaTabShare } from "@/lib/capture/tabAudioCapture";
 import { getCachedAudioDevices } from "@/lib/audio/audioDeviceCache";
+import {
+  acquireMicrophoneStream,
+  isMicrophoneAccessError,
+} from "@/lib/audio/micPermission";
 
 // ─────────────────────────────────────────────────────────────────
 // Audio Capture Engine
@@ -57,22 +61,15 @@ export async function captureMicrophone(
   deviceId?: string | null,
   options?: { noiseSuppression?: boolean; autoGainControl?: boolean },
 ): Promise<MediaStream> {
-  const constraints: MediaStreamConstraints = {
-    audio: {
-      deviceId: deviceId ? { exact: deviceId } : undefined,
-      echoCancellation: true,
-      noiseSuppression: options?.noiseSuppression ?? true,
-      autoGainControl: options?.autoGainControl ?? true,
-      sampleRate: 16000, // Deepgram optimal
-      channelCount: 1,
-    },
-    video: false,
-  };
-
   try {
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    return stream;
+    const result = await acquireMicrophoneStream({
+      deviceId,
+      noiseSuppression: options?.noiseSuppression,
+      autoGainControl: options?.autoGainControl,
+    });
+    return result.stream;
   } catch (err) {
+    if (isMicrophoneAccessError(err)) throw err;
     const code = getPermissionErrorCode(err);
     throw buildAudioError(code, err);
   }

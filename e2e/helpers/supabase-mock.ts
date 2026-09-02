@@ -11,6 +11,31 @@ export const E2E_TEST_USER = {
 export const E2E_USER_A_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1";
 export const E2E_USER_B_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2";
 export const E2E_COMPLETED_SESSION_ID = "11111111-2222-4333-8444-555555555555";
+export const E2E_OWNER_DEBRIEF_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+export const E2E_VALID_SHARE_TOKEN = "e2e-valid-share-token";
+
+export const E2E_SHARED_DEBRIEF = {
+  id: "debrief-share-e2e-1",
+  overall_grade: "B+",
+  summary: "Strong opener with clear experience and relevant examples.",
+  strengths: ["Clear structure", "Confident delivery"],
+  improvements: ["Add more metrics", "Shorten closing answers"],
+  created_at: "2026-08-30T10:25:00.000Z",
+  detailed_report: {
+    category_scores: { confidence: 81 },
+  },
+};
+
+export const E2E_SHARED_SCORECARD = {
+  id: "scorecard-share-e2e-1",
+  user_id: E2E_TEST_USER.id,
+  session_id: E2E_COMPLETED_SESSION_ID,
+  overall_score: 81,
+  strengths: ["Concise answers"],
+  improvements: ["More STAR detail"],
+  feedback: "Solid technical depth with room to tighten pacing.",
+  created_at: "2026-08-30T10:20:00.000Z",
+};
 
 export type MockAuthOptions = {
   onboarded?: boolean;
@@ -33,6 +58,8 @@ export type MockAuthOptions = {
   calendarConfigured?: boolean;
   /** Profile/subscription billing status for PAST_DUE fixtures. */
   subscriptionStatus?: "active" | "past_due" | "canceled" | "trialing";
+  /** Grant admin role via user_roles for /app/admin e2e. */
+  isAdmin?: boolean;
 };
 
 type ResumeRow = Record<string, unknown>;
@@ -303,6 +330,7 @@ export async function setupSupabaseMocks(
   const mfaEnrolled = options.mfaEnrolled === true;
   const calendarConfigured = options.calendarConfigured === true;
   const subscriptionStatus = options.subscriptionStatus ?? "active";
+  const isAdmin = options.isAdmin === true;
   let spendableCredits = credits;
 
   await page.route("**/*supabase.co/**", async (route) => {
@@ -367,8 +395,17 @@ export async function setupSupabaseMocks(
       }
       email = email.toLowerCase();
 
-      if (email === "bad@example.com" || password === "wrong-password") {
+      if (email === "nobody@example.com") {
         return fulfillJson(route, 400, {
+          error: "invalid_grant",
+          error_code: "otp_expired",
+          msg: "Password recovery token is invalid",
+          error_description: "password token invalid",
+        });
+      }
+
+      if (email === "bad@example.com" || password === "wrong-password") {
+        return fulfillJson(route, 401, {
           error: "invalid_grant",
           error_description: "Invalid login credentials",
         });
@@ -472,12 +509,52 @@ export async function setupSupabaseMocks(
     }
 
     if (url.includes("/rest/v1/user_roles")) {
+      if (isAdmin) {
+        return fulfillJson(route, 200, [{ user_id: userId, role: "admin" }]);
+      }
       return fulfillJson(route, 200, []);
     }
 
     // Admin bootstrap uses SECURITY DEFINER is_admin() — Free accounts are non-admin.
     if (url.includes("/rest/v1/rpc/is_admin")) {
-      return fulfillJson(route, 200, false);
+      return fulfillJson(route, 200, isAdmin);
+    }
+
+    if (url.includes("/rest/v1/help_articles")) {
+      if (method === "GET") {
+        return fulfillJson(route, 200, []);
+      }
+      if (method === "POST") {
+        const body = route.request().postDataJSON() as Record<string, unknown>;
+        return fulfillJson(route, 201, {
+          id: `help-${Date.now()}`,
+          ...body,
+          created_at: new Date().toISOString(),
+        });
+      }
+      if (method === "PATCH") {
+        return fulfillJson(route, 200, {});
+      }
+    }
+
+    if (url.includes("/rest/v1/courses") && method === "GET") {
+      return fulfillJson(route, 200, [
+        {
+          id: "course-e2e-1",
+          title: "E2E Course",
+          slug: "e2e-course",
+          status: "draft",
+          created_at: new Date().toISOString(),
+        },
+      ]);
+    }
+
+    if (url.includes("/rest/v1/course_modules") && method === "GET") {
+      return fulfillJson(route, 200, []);
+    }
+
+    if (url.includes("/rest/v1/course_lessons") && method === "GET") {
+      return fulfillJson(route, 200, []);
     }
 
     if (url.includes("/rest/v1/rpc/get_spendable_credits")) {
@@ -490,6 +567,32 @@ export async function setupSupabaseMocks(
 
     if (url.includes("/rest/v1/rpc/complete_onboarding")) {
       return fulfillJson(route, 200, { success: true });
+    }
+
+    if (url.includes("/rest/v1/rpc/get_shared_debrief")) {
+      let pToken = "";
+      try {
+        pToken = String(
+          (route.request().postDataJSON() as { p_token?: string } | null)?.p_token ?? "",
+        );
+      } catch {
+        pToken = "";
+      }
+      const row = pToken === E2E_VALID_SHARE_TOKEN ? E2E_SHARED_DEBRIEF : null;
+      return fulfillJson(route, 200, row ? [row] : []);
+    }
+
+    if (url.includes("/rest/v1/rpc/get_shared_scorecard")) {
+      let pToken = "";
+      try {
+        pToken = String(
+          (route.request().postDataJSON() as { p_token?: string } | null)?.p_token ?? "",
+        );
+      } catch {
+        pToken = "";
+      }
+      const row = pToken === E2E_VALID_SHARE_TOKEN ? E2E_SHARED_SCORECARD : null;
+      return fulfillJson(route, 200, row ? [row] : []);
     }
 
     if (url.includes("/rest/v1/rpc/get_owned_session_detail")) {
@@ -988,6 +1091,45 @@ Result: Checkout failures dropped using the metrics already in my draft.`,
       };
       const accept = route.request().headers()["accept"] ?? "";
       return fulfillJson(route, 200, accept.includes("object") ? card : [card]);
+    }
+
+    if (url.includes("/rest/v1/session_debriefs")) {
+      const accept = route.request().headers()["accept"] ?? "";
+      const wantObject = accept.includes("object");
+      const asksForOwnedDebrief = url.includes(E2E_OWNER_DEBRIEF_ID);
+      const owned = userId === sessionOwnerId;
+      if (method === "GET") {
+        if (asksForOwnedDebrief) {
+          if (!owned) return fulfillJson(route, 200, wantObject ? null : []);
+          return fulfillJson(route, 200, wantObject ? {
+            id: E2E_OWNER_DEBRIEF_ID,
+            user_id: sessionOwnerId,
+            session_id: E2E_COMPLETED_SESSION_ID,
+            overall_grade: "B+",
+            priority_focus: "Structure",
+            detailed_report: { summary: "Strong opener with clear experience." },
+            created_at: "2026-08-30T10:25:00.000Z",
+          } : []);
+        }
+        return fulfillJson(route, 200, owned ? [{
+          id: E2E_OWNER_DEBRIEF_ID,
+          user_id: sessionOwnerId,
+          session_id: E2E_COMPLETED_SESSION_ID,
+          overall_grade: "B+",
+          priority_focus: "Structure",
+          created_at: "2026-08-30T10:25:00.000Z",
+        }] : []);
+      }
+      return fulfillJson(route, 200, wantObject ? null : []);
+    }
+
+    if (url.includes("/rest/v1/session_transcripts")) {
+      if (userId !== sessionOwnerId) return fulfillJson(route, 200, []);
+      return fulfillJson(route, 200, [{
+        content: "I am a software engineer with eight years of experience.",
+        offset_ms: 0,
+        speaker: "candidate",
+      }]);
     }
 
     if (url.includes("/rest/v1/subscriptions")) {

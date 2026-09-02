@@ -31,6 +31,9 @@ const TOPIC_MATCH = (topics: string[]) =>
     .filter(Boolean)
     .slice(0, 20);
 
+const OFFICIAL_SOURCE_FILTER =
+  "is_verified.eq.true,source_type.in.(official_verified,verified_public_source),source.eq.OFFICIAL_PYP,source.eq.PYP,source.eq.previous_year";
+
 export async function countEligibleGovQuestions(
   db: SupabaseClient,
   input: ExamInventoryInput,
@@ -40,7 +43,11 @@ export async function countEligibleGovQuestions(
   const sourcePolicy =
     input.sourcePolicy === "public_pyp" ? "public_pyp" : "approved_bank";
 
-  if (examId) {
+  // The deployed v1 RPC treats `public_pyp` as a wider policy than
+  // `approved_bank`. Until that database implementation is corrected, use the
+  // explicit verified-source query below for official/PYQ requests so a mock
+  // bank can never be reported as official inventory.
+  if (examId && sourcePolicy !== "public_pyp") {
     const { data, error } = await db.rpc("count_gov_exam_eligible_questions", {
       p_exam_id: examId,
       p_language: input.language ?? "en",
@@ -78,13 +85,17 @@ export async function countEligibleGovQuestions(
   const needsRowScan = topics.length > 0 || Boolean(input.difficulty);
 
   if (!needsRowScan) {
-    const { count, error } = await db
+    let countQuery = db
       .from("questions")
       .select("id", { count: "exact", head: true })
       .eq("is_public", true)
       .eq("publish_status", "published")
       .eq("review_status", "approved")
       .in("exam_type", examTypeKeys);
+    if (sourcePolicy === "public_pyp") {
+      countQuery = countQuery.or(OFFICIAL_SOURCE_FILTER);
+    }
+    const { count, error } = await countQuery;
     if (error) throw new Error(error.message);
     return {
       available: count ?? 0,
@@ -101,6 +112,9 @@ export async function countEligibleGovQuestions(
     .eq("review_status", "approved")
     .in("exam_type", examTypeKeys)
     .limit(2000);
+  if (sourcePolicy === "public_pyp") {
+    query = query.or(OFFICIAL_SOURCE_FILTER);
+  }
   if (input.difficulty) {
     query = query.eq("difficulty", input.difficulty);
   }

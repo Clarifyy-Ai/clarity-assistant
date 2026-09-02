@@ -9,11 +9,12 @@ import { useDocumentStore } from "@/store/documentStore";
 import { useAnswerBankStore } from "@/store/answerBankStore";
 import { useAuthStore } from "@/store/userStore";
 import { subscribeFocusRecovery } from "@/lib/focusRecovery";
-import { callGemini } from "@/lib/ai/geminiClient";
 import { generateId } from "@/lib/utils";
 import { getMimeType } from "@/lib/utils/fileUtils";
 import { sha256, sha256Buffer } from "@/lib/utils/hashUtils";
-import { validateDocumentFile } from "@/lib/documents/uploadValidation";
+import { inspectDocumentFile } from "@/lib/documents/uploadValidation";
+import { userFacingDocumentError } from "@/lib/documents/processingJobs";
+import { clearSessionAiContext } from "@/lib/ai/sessionAiContext";
 import { toast } from "sonner";
 import type {
   ResumeDocument,
@@ -22,9 +23,7 @@ import type {
   SavedAnswer,
   AnswerCategory,
 } from "@/types/document.types";
-import type { ParsedJD } from "@/types/ai.types";
 import type { Tables } from "@/integrations/supabase";
-import type { Json } from "@/integrations/supabase/types";
 
 // ─────────────────────────────────────────────────────────────────
 // answer_bank row → SavedAnswer adapter
@@ -160,8 +159,8 @@ export function useDocuments(options?: UseDocumentsOptions) {
   ): Promise<{ resumeId: string | null; error: string | null }> => {
     if (!user) return { resumeId: null, error: "Not authenticated" };
 
-    const validationError = validateDocumentFile(file, "resume");
-    if (validationError) return { resumeId: null, error: validationError };
+    const inspected = await inspectDocumentFile(file, "resume");
+    if (inspected.error) return { resumeId: null, error: inspected.error };
 
     const resumeId = generateId();
     const ext      = (file.name.split(".").pop() ?? "pdf").toLowerCase();
@@ -174,7 +173,9 @@ export function useDocuments(options?: UseDocumentsOptions) {
     docStore.setUploadProgress(0);
 
     try {
-      const contentHash = await sha256Buffer(await file.arrayBuffer());
+      const contentHash = await sha256Buffer(
+        (inspected.bytes ?? new Uint8Array(await file.arrayBuffer())).slice().buffer as ArrayBuffer,
+      );
       const existing = await resumesDB.getByContentHash(user.id, contentHash);
       if (existing) {
         const { toast: notify } = await import("sonner");
@@ -232,16 +233,28 @@ export function useDocuments(options?: UseDocumentsOptions) {
     async (file: File): Promise<{ documentId: string | null; error: string | null }> => {
       if (!user) return { documentId: null, error: "Not authenticated" };
 
+      const inspected = await inspectDocumentFile(file, "cover_letter");
+      if (inspected.error) return { documentId: null, error: inspected.error };
+
       const documentId = generateId();
-      const ext = file.name.split(".").pop()?.toLowerCase() ?? "pdf";
+      const ext = (file.name.split(".").pop() ?? "pdf").toLowerCase();
       const path = `${user.id}/cover-letters/${documentId}.${ext}`;
       const mimeType =
-        ext === "pdf"
-          ? "application/pdf"
-          : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        (file.type && file.type !== "application/octet-stream"
+          ? file.type
+          : getMimeType(file.name)) || "application/pdf";
 
       docStore.setUploadProgress(0);
       try {
+        const contentHash = await sha256Buffer(
+          (inspected.bytes ?? new Uint8Array(await file.arrayBuffer())).slice().buffer as ArrayBuffer,
+        );
+        const existing = await documentsDB.getByContentHash(user.id, contentHash);
+        if (existing && existing.type === "cover_letter") {
+          toast.message("This file was already uploaded. Reusing it — no extra charge.");
+          return { documentId: existing.id, error: null };
+        }
+
         const uploaded = await uploadFile(
           STORAGE_BUCKETS.DOCUMENTS,
           path,
@@ -262,6 +275,7 @@ export function useDocuments(options?: UseDocumentsOptions) {
           mime_type: mimeType,
           content: null,
           parsed_summary: null,
+          content_hash: contentHash,
           is_primary: true,
           is_active: true,
         });
@@ -276,6 +290,7 @@ export function useDocuments(options?: UseDocumentsOptions) {
               mime_type: mimeType,
             },
             {
+              timeoutMs: 90_000,
               headers: {
                 "x-idempotency-key": documentParseIdempotencyKey(
                   "parse-document",
@@ -285,10 +300,10 @@ export function useDocuments(options?: UseDocumentsOptions) {
               },
             },
           );
+          clearSessionAiContext();
         } catch (parseErr) {
           console.warn("[useDocuments] parse-document:", parseErr);
-          parseError =
-            "File uploaded but text extraction failed. Retry or paste text manually.";
+          parseError = userFacingDocumentError(parseErr);
         }
 
         return {
@@ -355,6 +370,7 @@ export function useDocuments(options?: UseDocumentsOptions) {
               mime_type: mimeType,
             },
             {
+              timeoutMs: 90_000,
               headers: {
                 "x-idempotency-key": documentParseIdempotencyKey(
                   "parse-document",
@@ -366,8 +382,8 @@ export function useDocuments(options?: UseDocumentsOptions) {
           );
         } catch (parseErr) {
           console.warn("[useDocuments] parse-document portfolio:", parseErr);
-          parseError =
-            "File saved but text extraction failed. You can retry from Documents.";
+          const { getAiUserFacingError } = await import("@/lib/network/aiErrorUx");
+          parseError = getAiUserFacingError(parseErr);
         }
 
         return { documentId, error: parseError };
@@ -419,6 +435,7 @@ export function useDocuments(options?: UseDocumentsOptions) {
       if (mountedRef.current) {
         await loadDocuments();
         docStore.setActiveResumeId(resumeId);
+        clearSessionAiContext();
         if ((data as { duplicate?: boolean })?.duplicate) {
           const { toast } = await import("sonner");
           toast.message("This file was already parsed. Reusing the existing document — no extra charge.");
@@ -447,11 +464,11 @@ export function useDocuments(options?: UseDocumentsOptions) {
         (err as { status?: number })?.status === 502 ||
         (err as { status?: number })?.status === 503;
 
-      const { getAiUserFacingError, openUpgradeIfInsufficientCredits } = await import(
+      const { openUpgradeIfInsufficientCredits } = await import(
         "@/lib/network/aiErrorUx"
       );
       openUpgradeIfInsufficientCredits(err);
-      const message = getAiUserFacingError(err);
+      const message = userFacingDocumentError(err);
 
       if (isCredits) {
         toast.error(message);
@@ -459,14 +476,7 @@ export function useDocuments(options?: UseDocumentsOptions) {
         throw err instanceof Error ? err : new Error(message);
       }
 
-      // Only persist parse/provider failures as document parse status — never credit failures.
-      const parseLabel = code === "FILE_TOO_LARGE"
-        ? "This file is too large. Maximum size is 10 MB."
-        : isProvider
-        ? "Parser temporarily unavailable. Please retry."
-        : code === "PARSE_FAILED" || code === "PARSER_FAILED"
-          ? "We could not read this resume. Try PDF, DOCX, or TXT."
-          : message;
+      const parseLabel = message;
       try {
         await resumesDB.update(resumeId, {
           content: JSON.stringify({
@@ -568,6 +578,9 @@ export function useDocuments(options?: UseDocumentsOptions) {
   }): Promise<{ jdId: string | null; error: string | null }> => {
     if (!user) return { jdId: null, error: "Not authenticated" };
 
+    const inspected = await inspectDocumentFile(params.file, "job_description");
+    if (inspected.error) return { jdId: null, error: inspected.error };
+
     const jdId = generateId();
     const ext = (params.file.name.split(".").pop() ?? "pdf").toLowerCase();
     const mimeType =
@@ -577,13 +590,18 @@ export function useDocuments(options?: UseDocumentsOptions) {
     const path = `${user.id}/job-descriptions/${jdId}.${ext}`;
 
     try {
-      const contentHash = await sha256Buffer(await params.file.arrayBuffer());
+      const contentHash = await sha256Buffer(
+        (inspected.bytes ?? new Uint8Array(await params.file.arrayBuffer())).slice().buffer as ArrayBuffer,
+      );
       const existing = await jobDescriptionsDB.getByContentHash(user.id, contentHash);
       if (existing) {
         toast.message("This job description was already saved. Opening the existing document.");
         await loadDocuments();
         return { jdId: existing.id, error: null };
       }
+
+      const uploaded = await uploadFile(STORAGE_BUCKETS.DOCUMENTS, path, params.file);
+      if (!uploaded) throw new Error("Upload failed");
 
       await jobDescriptionsDB.create({
         id: jdId,
@@ -594,94 +612,69 @@ export function useDocuments(options?: UseDocumentsOptions) {
         content: `[Uploaded file: ${params.file.name}]`,
         content_hash: contentHash,
         input_method: "upload",
-        file_url: null,
+        file_url: uploaded.url,
         is_active: true,
         parse_status: "parsing",
         parsed_data: null,
         parse_error: null,
       });
 
-      const uploaded = await uploadFile(STORAGE_BUCKETS.DOCUMENTS, path, params.file);
-      if (!uploaded) throw new Error("Upload failed");
-      await jobDescriptionsDB.update(jdId, { file_url: uploaded.url });
-
-      const parsed = await fetchEdgeJson<{ content?: string }>(
-        "parse-document",
-        { jd_id: jdId, mime_type: mimeType },
-        {
-          timeoutMs: 90_000,
-          headers: {
-            "x-idempotency-key": documentParseIdempotencyKey(
-              "parse-document",
-              jdId,
-              contentHash,
-            ),
+      try {
+        await fetchEdgeJson<{ content?: string }>(
+          "parse-document",
+          { jd_id: jdId, mime_type: mimeType },
+          {
+            timeoutMs: 90_000,
+            headers: {
+              "x-idempotency-key": documentParseIdempotencyKey(
+                "parse-document",
+                jdId,
+                contentHash,
+              ),
+            },
           },
-        },
-      );
-
-      const extracted = parsed.content?.trim() ?? "";
-      if (extracted.length >= 20) {
-        parseJobDescription(jdId, extracted);
+        );
+        clearSessionAiContext();
+      } catch (parseErr) {
+        const message = userFacingDocumentError(parseErr);
+        await jobDescriptionsDB.update(jdId, {
+          parse_status: "error",
+          parse_error: message,
+        });
+        await loadDocuments();
+        return { jdId, error: message };
       }
+
       await loadDocuments();
       return { jdId, error: null };
     } catch (err) {
+      try {
+        await jobDescriptionsDB.delete(jdId, user.id);
+      } catch {
+        /* best-effort cleanup if the row was created */
+      }
       return {
-        jdId,
-        error:
-          err instanceof Error
-            ? err.message
-            : "File uploaded but text extraction failed. Paste the job description text if needed.",
+        jdId: null,
+        error: err instanceof Error ? err.message : "Upload failed",
       };
     }
   }, [user]);
 
-  // ── Parse JD via AI ───────────────────────────────────────────
-
+  // Persist pasted JD text as ready — structured skills come from gap-analysis.
   async function parseJobDescription(jdId: string, rawText: string): Promise<void> {
     try {
       await jobDescriptionsDB.update(jdId, {
-        parse_status: "parsing",
-        parse_error: null,
-      });
-
-      const prompt = `Extract structured data from this job description.
-Return ONLY valid JSON matching this schema:
-{
-  "role_title": string,
-  "company_name": string | null,
-  "required_skills": string[],
-  "preferred_skills": string[],
-  "responsibilities": string[],
-  "experience_required": string,
-  "education_required": string | null,
-  "seniority_level": "junior" | "mid" | "senior" | "lead" | "manager" | "director" | "unknown",
-  "key_phrases": string[],
-  "salary_range": string | null,
-  "location": string | null,
-  "is_remote": boolean
-}
-
-Job description:
-${rawText.slice(0, 4000)}`;
-
-      const text  = await callGemini({ prompt, model: "gemini-2.0-flash", max_tokens: 2048 });
-      const clean = text.replace(/```json|```/g, "").trim();
-      const data: ParsedJD = JSON.parse(clean);
-
-      await jobDescriptionsDB.update(jdId, {
-        parsed_data: data as unknown as Json,
+        content: rawText,
         parse_status: "ready",
         parse_error: null,
       });
-
+      clearSessionAiContext();
       if (mountedRef.current) await loadDocuments();
     } catch (err) {
       console.error("[useDocuments] parseJD failed:", err);
       await jobDescriptionsDB.update(jdId, {
         parse_status: "error",
-        parse_error: String(err),
+        parse_error: err instanceof Error ? err.message : "Could not save job description.",
       });
       if (mountedRef.current) await loadDocuments();
     }
@@ -694,12 +687,46 @@ ${rawText.slice(0, 4000)}`;
       const fromDb = fromStore
         ? null
         : await jobDescriptionsDB.getByIdMaybe(jdId).catch(() => null);
+      const row = (fromStore ?? fromDb) as {
+        raw_text?: string;
+        content?: string;
+        input_method?: string;
+        content_hash?: string | null;
+      } | null;
       const raw =
         (fromStore?.raw_text ?? "").trim() ||
-        (typeof (fromDb as { content?: string } | null)?.content === "string"
-          ? String((fromDb as { content: string }).content)
-          : "");
-      if (!raw.trim() || raw.startsWith("[Uploaded file:")) {
+        (typeof row?.content === "string" ? row.content : "");
+      const isUpload =
+        row?.input_method === "upload" || raw.startsWith("[Uploaded file:");
+      if (isUpload) {
+        try {
+          await fetchEdgeJson(
+            "parse-document",
+            { jd_id: jdId, mime_type: "application/pdf" },
+            {
+              timeoutMs: 90_000,
+              headers: {
+                "x-idempotency-key": documentParseIdempotencyKey(
+                  "parse-document",
+                  jdId,
+                  row?.content_hash ?? `retry:${jdId}`,
+                ),
+              },
+            },
+          );
+          clearSessionAiContext();
+          await loadDocuments();
+          return { error: null };
+        } catch (err) {
+          const message = userFacingDocumentError(err);
+          await jobDescriptionsDB.update(jdId, {
+            parse_status: "error",
+            parse_error: message,
+          });
+          return { error: message };
+        }
+      }
+      if (!raw.trim()) {
         return {
           error:
             "No parseable text on this job description. Replace it with pasted text, or continue without a JD.",
@@ -709,6 +736,48 @@ ${rawText.slice(0, 4000)}`;
       return { error: null };
     },
     [user, docStore.jds],
+  );
+
+  const retryCoverLetterParse = useCallback(
+    async (documentId: string): Promise<{ error: string | null }> => {
+      if (!user) return { error: "Not authenticated" };
+      try {
+        const row = await documentsDB.getById(documentId).catch(() => null);
+        const mimeType = row?.mime_type || "application/pdf";
+        await fetchEdgeJson(
+          "parse-document",
+          { document_id: documentId, mime_type: mimeType },
+          {
+            timeoutMs: 90_000,
+            headers: {
+              "x-idempotency-key": documentParseIdempotencyKey(
+                "parse-document",
+                documentId,
+                `retry:${documentId}`,
+              ),
+            },
+          },
+        );
+        clearSessionAiContext();
+        return { error: null };
+      } catch (err) {
+        return { error: userFacingDocumentError(err) };
+      }
+    },
+    [user],
+  );
+
+  const deleteCoverLetter = useCallback(
+    async (documentId: string): Promise<{ error: string | null }> => {
+      try {
+        await documentsDB.delete(documentId);
+        clearSessionAiContext();
+        return { error: null };
+      } catch (err) {
+        return { error: err instanceof Error ? err.message : "Failed to delete cover letter" };
+      }
+    },
+    [],
   );
 
   // ── Gap analysis ──────────────────────────────────────────────
@@ -831,6 +900,8 @@ ${rawText.slice(0, 4000)}`;
 
     uploadResume,
     uploadCoverLetter,
+    retryCoverLetterParse,
+    deleteCoverLetter,
     uploadPortfolio,
     deleteResume,
     setActiveResume,

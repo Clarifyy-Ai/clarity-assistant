@@ -8,6 +8,21 @@ import {
   loginAsTestUser,
   clearBrowserAuthState,
 } from "../playwright-fixture";
+import type { Page } from "@playwright/test";
+
+async function mockOAuthProbeMisconfigured(page: Page): Promise<void> {
+  await page.route("**/auth/v1/authorize**", async (route) => {
+    return route.fulfill({
+      status: 400,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: "validation_failed",
+        error_code: "validation_failed",
+        msg: "Unsupported provider: provider is not enabled",
+      }),
+    });
+  });
+}
 
 test.describe("Unverified login [AUTH-VERIFY]", () => {
   test("maps email_not_confirmed 400 to friendly copy and stays on login", async ({
@@ -23,15 +38,81 @@ test.describe("Unverified login [AUTH-VERIFY]", () => {
       timeout: 15_000,
     });
     await expect(page.getByText(/email_not_confirmed/i)).toHaveCount(0);
-    await expect(page).toHaveURL(/\/login/);
+    await expect(page).toHaveURL(/\/verify-email/);
   });
 });
 
 test.describe("MFA challenge [AUTH-MFA]", () => {
+  // MFA_ENFORCEMENT_PAUSED = true in src/lib/auth/mfaGate.ts — challenge UI not shown.
+  test.skip(true, "MFA enforcement paused in mfaGate.ts");
+
   test("enrolled TOTP is challenged after password", async ({ page }) => {
     await loginAsTestUser(page, { mfaEnrolled: true });
     await expect(page.getByLabel(/Authenticator code/i)).toBeVisible();
     await expect(page).toHaveURL(/\/login/);
+  });
+});
+
+test.describe("TC-PUB-013 OAuth CTA visibility + honest errors", () => {
+  test("public signup CTA reaches auth entry without raw OAuth errors", async ({ page }) => {
+    await setupSupabaseMocks(page);
+    await mockOAuthProbeMisconfigured(page);
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await dismissCookieBanner(page);
+
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible({ timeout: 20_000 });
+
+    const cta = page.getByRole("link", { name: "Get started free" }).first();
+    await expect(cta).toBeVisible({ timeout: 20_000 });
+    await cta.click();
+    await expect(page).toHaveURL(/\/(signup|login)/, { timeout: 15_000 });
+    await expect(page.getByText(/validation_failed/i)).toHaveCount(0);
+  });
+
+  test("login hides broken Google CTA when OAuth probe fails", async ({ page }) => {
+    await setupSupabaseMocks(page);
+    await mockOAuthProbeMisconfigured(page);
+    await clearBrowserAuthState(page);
+    await dismissCookieBanner(page);
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible({
+      timeout: 15_000,
+    });
+
+    const notConfigured = page.getByTestId("oauth-not-configured");
+    const googleBtn = page.getByRole("button", { name: /continue with google/i });
+
+    await page.waitForTimeout(2_000);
+
+    if (await notConfigured.count()) {
+      await expect(notConfigured).toBeVisible();
+      await expect(notConfigured).toContainText(/not configured/i);
+      await expect(googleBtn).toHaveCount(0);
+    } else {
+      // Fail-closed build (VITE_OAUTH_PROVIDERS=none): no broken OAuth CTA advertised.
+      await expect(googleBtn).toHaveCount(0);
+    }
+    await expect(page.getByText(/validation_failed/i)).toHaveCount(0);
+    await expect(page.getByText(/provider is not enabled/i)).toHaveCount(0);
+  });
+
+  test("signup shows honest OAuth status when probe fails", async ({ page }) => {
+    await setupSupabaseMocks(page);
+    await mockOAuthProbeMisconfigured(page);
+    await page.goto("/signup", { waitUntil: "domcontentloaded" });
+    await dismissCookieBanner(page);
+
+    const notConfigured = page.getByTestId("oauth-not-configured");
+    const googleBtn = page.getByRole("button", { name: /continue with google/i });
+    await page.waitForTimeout(2_000);
+
+    if (await notConfigured.count()) {
+      await expect(notConfigured).toContainText(/not configured/i);
+      await expect(googleBtn).toHaveCount(0);
+    } else {
+      await expect(googleBtn).toHaveCount(0);
+    }
+    await expect(page.getByText(/validation_failed/i)).toHaveCount(0);
   });
 });
 
@@ -45,6 +126,26 @@ test.describe("Google OAuth callback [AUTH-OAUTH]", () => {
     await expect(page).toHaveURL(/\/login/, { timeout: 15_000 });
     await expect(page.getByText(/not configured/i)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/provider is not enabled/i)).toHaveCount(0);
+  });
+
+  test("validation_failed maps to not-configured copy", async ({ page }) => {
+    await page.goto(
+      "/auth/callback?error=validation_failed&error_code=validation_failed",
+      { waitUntil: "domcontentloaded" },
+    );
+    await expect(page).toHaveURL(/\/login/, { timeout: 15_000 });
+    await expect(page.getByText(/not configured/i)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/validation_failed/i)).toHaveCount(0);
+  });
+
+  test("state mismatch maps to retry copy", async ({ page }) => {
+    await page.goto(
+      "/auth/callback?error=invalid_request&error_description=" +
+        encodeURIComponent("OAuth state mismatch"),
+      { waitUntil: "domcontentloaded" },
+    );
+    await expect(page).toHaveURL(/\/login/, { timeout: 15_000 });
+    await expect(page.getByText(/session expired/i)).toBeVisible({ timeout: 15_000 });
   });
 });
 

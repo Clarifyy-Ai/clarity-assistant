@@ -45,4 +45,83 @@ describe("gov exam operation error mapping", () => {
     const msg = formatGovExamOperationError(err);
     expect(msg).not.toMatch(/HTTP 402|503|PostgREST|SQL/i);
   });
+
+  it("maps LANGUAGE_UNAVAILABLE without leaking internals", () => {
+    const err = new ApiClientError({
+      message: "psycopg2 traceback",
+      status: 409,
+      code: "LANGUAGE_UNAVAILABLE",
+    });
+    expect(formatGovExamOperationError(err)).toMatch(/not available in the selected language/i);
+    expect(formatGovExamOperationError(err)).not.toMatch(/psycopg2|traceback/i);
+  });
+
+  it("maps attempt and submission conflicts", () => {
+    expect(
+      formatGovExamOperationError(
+        new ApiClientError({ message: "x", status: 409, code: "ATTEMPT_NOT_STARTED" }),
+      ),
+    ).toMatch(/start the exam/i);
+    expect(
+      formatGovExamOperationError(
+        new ApiClientError({ message: "x", status: 409, code: "SUBMISSION_CONFLICT" }),
+      ),
+    ).toMatch(/already submitted/i);
+  });
+
+  it("maps remaining user-safe generation and runner codes", () => {
+    expect(
+      formatGovExamOperationError(
+        new ApiClientError({ message: "x", status: 400, code: "INVALID_COUNT" }),
+      ),
+    ).toMatch(/between 5 and 100/i);
+    expect(
+      formatGovExamOperationError(
+        new ApiClientError({ message: "x", status: 404, code: "NO_RESULTS" }),
+      ),
+    ).toMatch(/no exams matched/i);
+    expect(
+      formatGovExamOperationError(
+        new ApiClientError({ message: "x", status: 404, code: "JOB_NOT_FOUND" }),
+      ),
+    ).toMatch(/generation job/i);
+    expect(
+      formatGovExamOperationError(
+        new ApiClientError({ message: "x", status: 503, code: "PYTHON_UNAVAILABLE" }),
+      ),
+    ).toMatch(/temporarily unavailable/i);
+    expect(
+      formatGovExamOperationError(
+        new ApiClientError({ message: "x", status: 503, code: "AI_UNAVAILABLE" }),
+      ),
+    ).toMatch(/ai generation is unavailable/i);
+    expect(
+      formatGovExamOperationError(
+        new ApiClientError({ message: "x", status: 409, code: "PAPER_VALIDATION_FAILED" }),
+      ),
+    ).toMatch(/did not pass validation/i);
+    expect(
+      formatGovExamOperationError(
+        new ApiClientError({ message: "x", status: 409, code: "ATTEMPT_EXPIRED" }),
+      ),
+    ).toMatch(/time is up/i);
+    expect(
+      formatGovExamOperationError(
+        new ApiClientError({ message: "x", status: 403, code: "REGION_RESTRICTED" }),
+      ),
+    ).toMatch(/india accounts/i);
+    expect(
+      formatGovExamOperationError(
+        new ApiClientError({ message: "x", status: 409, code: "JOB_TERMINAL_FAILURE" }),
+      ),
+    ).toMatch(/failed/i);
+  });
+
+  it("never renders [object Object] for a plain error payload", () => {
+    expect(formatGovExamOperationError({ error: "Python worker failed" })).not.toMatch(
+      /\[object Object\]/,
+    );
+    expect(formatGovExamOperationError({ foo: 1 })).not.toMatch(/\[object Object\]/);
+    expect(formatGovExamOperationError({})).toMatch(/try again/i);
+  });
 });

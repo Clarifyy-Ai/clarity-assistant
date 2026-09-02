@@ -24,6 +24,7 @@ import {
   getCurrentRound,
   getCurrentRoundDate,
   getCurrentRoundStatus,
+  isInterviewScheduledToday,
 } from "@/lib/interviews/roundHelpers";
 import { format, differenceInMinutes } from "date-fns";
 import type { LucideIcon } from "lucide-react";
@@ -85,12 +86,8 @@ export default function InterviewDay() {
 
   // All interviews scheduled for today
   const todayInterviews = store.interviews.filter((iv) => {
-    const d = new Date(getCurrentRoundDate(iv));
-    const now = new Date();
     return (
-      d.getFullYear() === now.getFullYear() &&
-      d.getMonth()    === now.getMonth()    &&
-      d.getDate()     === now.getDate()     &&
+      isInterviewScheduledToday(iv) &&
       getCurrentRoundStatus(iv) === "scheduled"
     );
   }).sort(
@@ -102,12 +99,8 @@ export default function InterviewDay() {
   useEffect(() => {
     const list = store.interviews
       .filter((iv) => {
-        const d = new Date(getCurrentRoundDate(iv));
-        const now = new Date();
         return (
-          d.getFullYear() === now.getFullYear() &&
-          d.getMonth() === now.getMonth() &&
-          d.getDate() === now.getDate() &&
+          isInterviewScheduledToday(iv) &&
           getCurrentRoundStatus(iv) === "scheduled"
         );
       })

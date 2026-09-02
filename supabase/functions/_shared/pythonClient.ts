@@ -4,7 +4,7 @@
  * Env (Supabase Dashboard → Edge Functions → Secrets):
  * - PYTHON_SERVICE_URL or SCRAPER_URL — FastAPI base URL (no trailing slash)
  * - DOCUMENT_INTELLIGENCE_AUTH_SECRET or PYTHON_SERVICE_AUTH_SECRET — HMAC secret
- * - PYTHON_REQUEST_TIMEOUT_MS — default 25000
+ * - PYTHON_REQUEST_TIMEOUT_MS — default 25000 (always applied in pythonFetch)
  * - PYTHON_LIVE_TIMEOUT_MS — overlay hint/answer fallback (default 5000)
  * - HYBRID_FORCE_PYTHON_UNAVAILABLE=1 — failure simulation
  *
@@ -366,6 +366,7 @@ export async function pythonFetch(
         status: res.status,
         ok: res.ok,
         latencyMs,
+        duration_ms: latencyMs,
         attempt,
       });
 
@@ -396,6 +397,7 @@ export async function pythonFetch(
         status: 0,
         ok: false,
         latencyMs,
+        duration_ms: latencyMs,
         attempt,
         errorCode: code,
       });
@@ -502,6 +504,7 @@ async function pythonPublicGet(
         status: res.status,
         ok: res.ok,
         latencyMs,
+        duration_ms: latencyMs,
         attempt,
       });
       if (res.ok || !safeRetry || attempt >= totalAttempts) return last;
@@ -524,6 +527,7 @@ async function pythonPublicGet(
         status: 0,
         ok: false,
         latencyMs,
+        duration_ms: latencyMs,
         attempt,
         errorCode: code,
       });
@@ -595,6 +599,7 @@ const OPERATION_TYPE_MAP: Record<string, string> = {
   prep_rephrase: "prep_rephrase",
   prep_coding: "prep_coding",
   prep_project: "prep_project",
+  prep_raw_prompt: "prep_raw_prompt",
 };
 
 function isUserFacingCoachPayload(payload: Record<string, unknown>): boolean {
@@ -899,7 +904,7 @@ export async function callPythonProcess(opts: {
     });
 
     console.log(
-      `[python] response operation=${opts.operation} correlation=${opts.correlationId} status=${result.status} ok=${result.ok} attempt=${attempt + 1}`,
+      `[python] response operation=${opts.operation} correlation=${opts.correlationId} status=${result.status} ok=${result.ok} attempt=${attempt + 1} duration_ms=${result.latencyMs}`,
     );
 
     if (result.ok) {

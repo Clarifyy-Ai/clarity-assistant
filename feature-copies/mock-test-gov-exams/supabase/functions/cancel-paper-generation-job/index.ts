@@ -9,8 +9,8 @@ import {
   applyCors,
 } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
-import { createServiceClient, refundCredits } from "../_shared/supabase.ts";
-import { claimJobCreditsForRefund } from "../_shared/claimJobCredits.ts";
+import { createServiceClient } from "../_shared/supabase.ts";
+import { refundClaimedPaperCredits } from "../_shared/claimJobCredits.ts";
 import { isUserBanned, bannedResponse } from "../_shared/banCheck.ts";
 import {
   checkRateLimitAsync,
@@ -105,13 +105,14 @@ Deno.serve(withBrowserCors("cancel-paper-generation-job", async (req) => {
       });
     }
 
-    const { error: updErr } = await db
+    const now = new Date().toISOString();
+    const { data: cancelledJob, error: updErr } = await db
       .from("gov_paper_generation_jobs")
       .update({
         status: "cancelled",
         progress_stage: "cancelled",
-        completed_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        completed_at: now,
+        updated_at: now,
         error_code: "CANCELLED_BY_USER",
         error_message: "Cancelled by user before completion",
         retryable: false,
@@ -120,29 +121,36 @@ Deno.serve(withBrowserCors("cancel-paper-generation-job", async (req) => {
       })
       .eq("id", jobId)
       .eq("user_id", user.id)
-      .neq("status", "completed");
+      .filter("status", "not.in", "(completed,cancelled,expired,failed_permanent)")
+      .select("id")
+      .maybeSingle();
 
     if (updErr) {
       console.error("[cancel-paper-generation-job]", updErr);
       return json(req, { error: "Cancel failed", code: "INTERNAL_ERROR" }, 500);
     }
-
-    let creditsRefunded = 0;
-    const claimed = await claimJobCreditsForRefund(db, jobId);
-    if (claimed > 0) {
-      const refund = await refundCredits({
-        userId: user.id,
-        cost: claimed,
-        reason: "refund_cancel_paper_generation_job",
-        idempotencyKey: `refund_paper_job:${jobId}`,
-      }).catch((e) => {
-        console.warn("[cancel-paper-generation-job] refund:", e);
-        return { success: false as const };
-      });
-      if (refund?.success) {
-        creditsRefunded = claimed;
-      }
+    if (!cancelledJob) {
+      const { data: current } = await db
+        .from("gov_paper_generation_jobs")
+        .select("status")
+        .eq("id", jobId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      return json(req, {
+        jobId,
+        status: current?.status ?? "cancelled",
+        cancelled: current?.status === "cancelled",
+        creditsRefunded: 0,
+        message: "Job reached a terminal state before cancellation.",
+      }, current?.status === "completed" ? 409 : 200);
     }
+
+    const creditsRefunded = await refundClaimedPaperCredits(
+      db,
+      jobId,
+      user.id,
+      "refund_cancel_paper_generation_job",
+    );
 
     return json(req, {
       jobId,

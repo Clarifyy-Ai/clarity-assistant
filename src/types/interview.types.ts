@@ -43,6 +43,7 @@ export interface InterviewRound {
   round_label: string;             // e.g. "Round 1 - Technical Screen"
   interview_type: InterviewType;
   scheduled_at: string | null;     // ISO datetime
+  timezone: string | null;         // IANA zone used when scheduling (null = local browser)
   duration_minutes: number | null;
   interviewer_name: string | null;
   interviewer_title: string | null;
@@ -184,4 +185,5 @@ export interface RoundFormValues {
   platform: InterviewPlatform;
   meeting_link: string;
   notes: string;
+  timezone?: string;
 }

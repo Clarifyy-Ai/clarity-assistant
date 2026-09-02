@@ -13,6 +13,7 @@
  * - **bulk-import-questions** — `x-ingest-key` / `INGEST_API_KEY` (server worker only).
  */
 import { supabase } from "@/lib/supabase/client";
+import { resolveProductionSafeUrl } from "@/lib/env/serviceUrl";
 
 export type ScrapeJobStatus =
   | "queued"
@@ -117,7 +118,10 @@ export interface PaperFactoryProcessJobResponse {
   quality_score?: number;
 }
 
-const BASE = (import.meta.env.VITE_SCRAPER_URL as string | undefined)?.replace(/\/$/, "") ?? "";
+const BASE = resolveProductionSafeUrl(import.meta.env.VITE_SCRAPER_URL, {
+  prod:
+    import.meta.env.VITE_APP_ENV === "production" || Boolean(import.meta.env.PROD),
+});
 
 export class ScraperNotConfiguredError extends Error {
   constructor() {

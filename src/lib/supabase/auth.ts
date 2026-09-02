@@ -6,7 +6,9 @@
 
 import { supabase } from "@/lib/supabase/client";
 import { AuthError, ErrorCode, formatSupabaseAuthError, tryCatch } from "@/lib/errors";
+import { classifyLoginFailure } from "@/lib/auth/loginFailure";
 import { buildAuthRedirectUrl } from "@/lib/auth/redirectUrl";
+import { buildOAuthCallbackUrl } from "@/lib/auth/oauthCallbackUrl";
 import type { User, Session, AuthChangeEvent } from "@supabase/supabase-js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -136,19 +138,17 @@ export async function signIn(credentials: SignInCredentials): Promise<AuthResult
   });
 
   if (err) {
-    const isInvalidCreds =
-      err.message?.toLowerCase().includes("invalid") ||
-      err.message?.toLowerCase().includes("credentials");
-
-    throw new AuthError(
-      isInvalidCreds
-        ? "Incorrect email or password."
-        : (err.message ?? "Sign in failed."),
-      isInvalidCreds
+    const classified = classifyLoginFailure(err);
+    const appCode =
+      classified.code === "AUTH_INVALID_CREDENTIALS"
         ? ErrorCode.AUTH_INVALID_CREDENTIALS
-        : ErrorCode.AUTH_NOT_AUTHENTICATED,
-      { email: credentials.email }
-    );
+        : classified.code === "AUTH_EMAIL_NOT_VERIFIED"
+          ? ErrorCode.AUTH_EMAIL_NOT_VERIFIED
+          : classified.code === "AUTH_SESSION_EXPIRED"
+            ? ErrorCode.AUTH_SESSION_EXPIRED
+            : ErrorCode.AUTH_NOT_AUTHENTICATED;
+
+    throw new AuthError(classified.message, appCode, { email: credentials.email });
   }
 
   return { user: data?.user ?? null, session: data?.session ?? null };
@@ -165,13 +165,9 @@ export async function signInWithOAuth(provider: OAuthProvider): Promise<void> {
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: buildAuthRedirectUrl({
-          path: "/auth/callback",
-          configuredAppUrl: import.meta.env.VITE_APP_URL,
-          appEnv: import.meta.env.VITE_APP_ENV,
-          windowOrigin:
-            typeof window !== "undefined" ? window.location.origin : null,
-        }),
+        redirectTo: buildOAuthCallbackUrl(
+          typeof window !== "undefined" ? window.location.origin : null,
+        ),
         scopes: provider === "google" ? "email profile" : undefined,
       },
     });

@@ -21,6 +21,7 @@ import { logger } from "@/lib/logger";
 import { getCSRFHeaders } from "@/lib/security";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
+import { coalesceKey, singleFlight } from "@/lib/network/singleFlight";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -366,7 +367,7 @@ function shouldRetry(
   }
 
   if (error instanceof TypeError) {
-    return true;
+    return false;
   }
 
   return true;
@@ -461,6 +462,21 @@ async function executeRequest<T>(
 }
 
 export async function apiRequest<T>(
+  path: string,
+  options: ApiClientOptions = {}
+): Promise<T> {
+  if (options.signal) {
+    return apiRequestUncached<T>(path, options);
+  }
+  const key = coalesceKey({
+    method: options.method ?? "GET",
+    fnName: path,
+    body: options.body,
+  });
+  return singleFlight(key, () => apiRequestUncached<T>(path, options));
+}
+
+async function apiRequestUncached<T>(
   path: string,
   options: ApiClientOptions = {}
 ): Promise<T> {

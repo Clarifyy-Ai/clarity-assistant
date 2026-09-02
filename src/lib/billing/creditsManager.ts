@@ -178,6 +178,8 @@ export function checkCredits(model: PreferredAIModel): CreditCheckResult {
   };
 }
 
+const deductInflightKeys = new Map<string, string>();
+
 export async function deductCreditsForAction(
   action: CreditAction,
   sessionId?: string,
@@ -211,9 +213,13 @@ export async function deductCreditsForAction(
     };
   }
 
+  const flight = `dc:${action}:${cost}:${sessionId ?? ""}`;
   try {
     const { fetchEdge } = await import("@/lib/network/fetchEdge");
-    const idempotencyKey = `dc-${(crypto as any)?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+    const idempotencyKey =
+      deductInflightKeys.get(flight) ??
+      `dc-${(crypto as { randomUUID?: () => string })?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+    deductInflightKeys.set(flight, idempotencyKey);
 
     const response = await fetchEdge(
       "deduct-credits",
@@ -282,6 +288,8 @@ export async function deductCreditsForAction(
       creditsRemaining: useAuthStore.getState().profile?.credits ?? 0,
       error:            err instanceof Error ? err.message : "Unknown error",
     };
+  } finally {
+    deductInflightKeys.delete(flight);
   }
 }
 

@@ -1,7 +1,9 @@
 // Cache enumerateDevices results for 30s. Request getUserMedia only when labels
-// are missing so we do not stop another owner's live tracks.
+// are missing AND permission is already granted so we never prompt for labels.
 
 import type { AudioDevice } from "@/types/audio.types";
+import { canHydrateDeviceLabels } from "@/lib/audio/micPermission";
+import { getMicPermissionState } from "@/lib/validators/audioValidator";
 
 const CACHE_TTL_MS = 30_000;
 
@@ -18,7 +20,10 @@ async function enumerateFresh(): Promise<AudioDevice[]> {
     const inputs = existing.filter((d) => d.kind === "audioinput");
     const hasLabels = inputs.some((d) => Boolean(d.label));
     if (!hasLabels && navigator.mediaDevices.getUserMedia) {
-      tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const permission = await getMicPermissionState();
+      if (canHydrateDeviceLabels(permission)) {
+        tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
     }
 
     const devices = await navigator.mediaDevices.enumerateDevices();

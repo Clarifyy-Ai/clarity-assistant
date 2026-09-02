@@ -1,13 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/Badge";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
+import {
+  COMMUNITY_MODULE_DESCRIPTION,
+  COMMUNITY_MODULE_LABEL,
+} from "@/lib/community/moderation";
+import { submitCommunityReport } from "@/lib/community/reportContent";
 
 type Post = {
   id: string;
@@ -33,6 +39,9 @@ const REPORT_REASONS = [
 export default function CommunityPostPage() {
   const { postId } = useParams<{ postId: string }>();
   const user = useAuthStore((s) => s.user);
+  const isAdmin = useAuthStore((s) => s.isAdmin);
+  const isModerator = useAuthStore((s) => s.isModerator);
+  const isStaff = isAdmin || isModerator;
   const [post, setPost] = useState<Post | null>(null);
   const [answers, setAnswers] = useState<Answer[]>([]);
   const [reply, setReply] = useState("");
@@ -40,6 +49,7 @@ export default function CommunityPostPage() {
   const [reportNotes, setReportNotes] = useState("");
   const [replyBusy, setReplyBusy] = useState(false);
   const [reportBusy, setReportBusy] = useState(false);
+  const reportInFlightRef = useRef(false);
 
   const load = useCallback(async () => {
     if (!postId) return;
@@ -91,26 +101,24 @@ export default function CommunityPostPage() {
   }
 
   async function submitReport() {
-    if (!user?.id || !postId) return;
+    if (!user?.id || !postId || reportInFlightRef.current) return;
+    reportInFlightRef.current = true;
     setReportBusy(true);
     const reason = [reportReason, reportNotes.trim()].filter(Boolean).join(": ").slice(0, 500);
-    const { data, error } = await supabase
-      .from("community_reports")
-      .insert({
-        reporter_id: user.id,
-        target_type: "post",
-        target_id: postId,
-        reason,
-      })
-      .select("id,status")
-      .maybeSingle();
+    const result = await submitCommunityReport({
+      reporterId: user.id,
+      targetType: "post",
+      targetId: postId,
+      reason,
+    });
+    reportInFlightRef.current = false;
     setReportBusy(false);
-    if (error) {
-      if (/duplicate|unique/i.test(error.message)) {
-        toast.error("You already reported this post.");
-      } else {
-        toast.error(error.message);
-      }
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
+    if (result.alreadyReported) {
+      toast.error("You already reported this post.");
       return;
     }
     toast.success("Report submitted for moderation.");
@@ -121,13 +129,25 @@ export default function CommunityPostPage() {
     <div className={PAGE_SHELL}>
       <PageHeader
         title={post?.title ?? "Question"}
-        breadcrumbs={[{ label: "Q&A", href: "/app/community" }, { label: post?.title ?? "Question" }]}
-        description="Reply to help others, or report content that needs moderation."
+        breadcrumbs={[
+          { label: COMMUNITY_MODULE_LABEL, href: "/app/community" },
+          { label: post?.title ?? "Question" },
+        ]}
+        description={COMMUNITY_MODULE_DESCRIPTION}
       />
       <Card className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          {post?.status === "REPORTED" &&
+            (isStaff || (user?.id && post.user_id === user.id)) && (
+              <Badge variant="amber" size="sm" dot>
+                Reported — under moderation review
+              </Badge>
+            )}
+        </div>
         <p className="whitespace-pre-wrap text-sm">{post?.body}</p>
         <p className="mt-2 text-xs text-muted-foreground">
-          {post?.category} · {post?.status}
+          {post?.category}
+          {isStaff && post?.status ? ` · ${post.status}` : ""}
           {post?.locked ? " · locked" : ""}
         </p>
       </Card>

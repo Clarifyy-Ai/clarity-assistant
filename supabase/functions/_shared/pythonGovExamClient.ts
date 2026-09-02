@@ -4,13 +4,16 @@
  *
  * Signing is delegated to pythonClient.signInternalRequest
  * (METHOD, path, timestamp, requestId, sha256(body) — same as FastAPI).
+ *
+ * Profile/auth lookups live on Edge callers, not this client. Every HTTP call
+ * goes through signedFetch with AbortController + timeoutMs.
  */
 
 import { signInternalRequest } from "./pythonClient.ts";
 
-const DEFAULT_TIMEOUT_MS = 25_000;
+export const DEFAULT_TIMEOUT_MS = 25_000;
 /** Ack-only: Python claims (or worker already owns) and continues in background. */
-const PROCESS_JOB_TIMEOUT_MS = 8_000;
+export const PROCESS_JOB_TIMEOUT_MS = 8_000;
 
 export type PythonGovExamError = {
   code: string;
@@ -207,6 +210,7 @@ function logDispatch(operation: string, correlationId: string, extra: Record<str
   );
 }
 
+/** Every outbound call, including health, must pass timeoutMs (AbortController). */
 async function signedFetch(
   method: "GET" | "POST",
   path: string,
@@ -245,6 +249,7 @@ async function signedFetch(
     };
   }
 
+  const startedAt = Date.now();
   logDispatch(opts.operation, opts.correlationId, {
     path,
     request_id: requestId,
@@ -273,6 +278,14 @@ async function signedFetch(
         json = { raw: text.slice(0, 200) };
       }
     }
+
+    logDispatch(opts.operation, opts.correlationId, {
+      path,
+      request_id: requestId,
+      job_id: bodyObj?.job_id ?? null,
+      status: res.status,
+      duration_ms: Date.now() - startedAt,
+    });
 
     if (!res.ok) {
       const detail = (json.error ?? json.detail ?? json) as Record<string, unknown>;
@@ -303,6 +316,13 @@ async function signedFetch(
     return { ok: true, status: res.status, json };
   } catch (err) {
     const aborted = err instanceof Error && err.name === "AbortError";
+    logDispatch(opts.operation, opts.correlationId, {
+      path,
+      request_id: requestId,
+      job_id: bodyObj?.job_id ?? null,
+      status: 0,
+      duration_ms: Date.now() - startedAt,
+    });
     return {
       ok: false,
       error: {
@@ -324,6 +344,19 @@ async function signedFetch(
 function asInt(v: unknown, fallback = 0): number {
   const n = Number(v);
   return Number.isFinite(n) ? Math.floor(n) : fallback;
+}
+
+/** Lightweight health probe before enqueueing Python-owned jobs. */
+export async function pythonGovHealth(
+  correlationId: string = crypto.randomUUID(),
+): Promise<{ ok: true } | { ok: false; error: PythonGovExamError }> {
+  const result = await signedFetch("GET", "/internal/gov-exams/health", null, {
+    timeoutMs: 5_000,
+    correlationId,
+    operation: "health",
+  });
+  if (!result.ok) return result;
+  return { ok: true };
 }
 
 export async function pythonGovAvailability(

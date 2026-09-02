@@ -13,10 +13,10 @@ import {
 
 import {
   authenticateRequest,
-  enforceResourceOwnership,
   requireOnboardingComplete,
   resolveUserPlanId,
 } from "../_shared/auth.ts";
+import { enforceAiSessionAccess } from "../_shared/sessionEnforcement.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 
 import {
@@ -451,22 +451,21 @@ Deno.serve(async (req: Request) => {
 
   const body = validation.data;
 
-  const ownershipFailure = await enforceResourceOwnership({
-    table: "sessions",
-    resourceId: body.session_id,
+  const sessionEnforcementFailure = await enforceAiSessionAccess({
+    sessionId: body.session_id,
     authenticatedUserId: user.id,
   });
 
-  if (ownershipFailure) {
+  if (sessionEnforcementFailure) {
     await logPermissionDenied({
       req,
       userId: user.id,
       functionName: FUNCTION_NAME,
       resourceType: "session",
       resourceId: body.session_id,
-      reason: "Session ownership check failed.",
+      reason: "Session type not permitted for AI generation.",
     });
-    return withCorsHeaders(req, ownershipFailure);
+    return withCorsHeaders(req, sessionEnforcementFailure);
   }
 
   const { data: sessionData, error: sessionError } = await db

@@ -2,6 +2,7 @@ import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 
+import { hasNamedChild } from "@/lib/a11y/namedChild";
 import { cn } from "@/lib/utils";
 
 const Dialog = DialogPrimitive.Root;
@@ -33,7 +34,10 @@ const DialogContent = React.forwardRef<
     overlayClassName?: string;
     showClose?: boolean;
   }
->(({ className, children, overlayClassName, showClose = false, onPointerDownOutside, onEscapeKeyDown, ...props }, ref) => (
+>(({ className, children, overlayClassName, showClose = false, onPointerDownOutside, onEscapeKeyDown, ...props }, ref) => {
+  const hasTitle = hasNamedChild(children, ["DialogTitle", "Title"]);
+  const hasDescription = hasNamedChild(children, ["DialogDescription", "Description"]);
+  return (
   <DialogPortal>
     <DialogOverlay className={overlayClassName} />
     <DialogPrimitive.Content
@@ -46,6 +50,14 @@ const DialogContent = React.forwardRef<
       onEscapeKeyDown={onEscapeKeyDown}
       {...props}
     >
+      {!hasTitle && (
+        <DialogPrimitive.Title className="sr-only">Dialog</DialogPrimitive.Title>
+      )}
+      {!hasDescription && (
+        <DialogPrimitive.Description className="sr-only">
+          Dialog content
+        </DialogPrimitive.Description>
+      )}
       {children}
       {showClose && (
         <DialogPrimitive.Close
@@ -58,7 +70,8 @@ const DialogContent = React.forwardRef<
       )}
     </DialogPrimitive.Content>
   </DialogPortal>
-));
+  );
+});
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (

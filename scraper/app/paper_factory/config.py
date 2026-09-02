@@ -7,6 +7,8 @@ scraper service's internal-auth secrets.
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
+from uuid import UUID
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -43,9 +45,23 @@ class FactorySettings(BaseSettings):
     temperature: float = Field(0.85, alias="PAPER_FACTORY_TEMPERATURE")
 
     # Worker loop
-    lease_seconds: int = Field(600, alias="PAPER_FACTORY_LEASE_SECONDS")
+    # Defaults align with govPaperJobLease.ts (180s lease / 20m max runtime).
+    lease_seconds: int = Field(180, alias="PAPER_FACTORY_LEASE_SECONDS")
+    heartbeat_interval_seconds: float = Field(
+        30.0, alias="PAPER_FACTORY_HEARTBEAT_SECONDS"
+    )
+    job_timeout_seconds: float = Field(
+        1200.0, alias="PAPER_FACTORY_JOB_TIMEOUT_SECONDS"
+    )
     poll_interval_seconds: float = Field(5.0, alias="PAPER_FACTORY_POLL_SECONDS")
     max_job_attempts: int = Field(3, alias="PAPER_FACTORY_MAX_JOB_ATTEMPTS")
+    max_claim_failures: int = Field(3, alias="PAPER_FACTORY_MAX_CLAIM_FAILURES")
+    worker_mode: Literal["embedded", "dedicated", "disabled"] = Field(
+        "embedded", alias="PAPER_FACTORY_WORKER_MODE"
+    )
+    worker_queue: str = Field(
+        "python_paper_factory", alias="PAPER_FACTORY_WORKER_QUEUE"
+    )
 
     @field_validator("supabase_url", mode="after")
     @classmethod
@@ -85,9 +101,72 @@ class FactorySettings(BaseSettings):
             raise ValueError("PAPER_FACTORY_MAX_REPAIR_ROUNDS must be between 0 and 10")
         return v
 
+    @field_validator("lease_seconds")
+    @classmethod
+    def _validate_lease(cls, v: int) -> int:
+        if v < 30 or v > 3600:
+            raise ValueError("PAPER_FACTORY_LEASE_SECONDS must be between 30 and 3600")
+        return v
+
+    @field_validator("heartbeat_interval_seconds")
+    @classmethod
+    def _validate_heartbeat(cls, v: float) -> float:
+        if v < 1:
+            raise ValueError("PAPER_FACTORY_HEARTBEAT_SECONDS must be at least 1")
+        return v
+
+    @field_validator("job_timeout_seconds")
+    @classmethod
+    def _validate_job_timeout(cls, v: float) -> float:
+        if v < 5 or v > 7200:
+            raise ValueError(
+                "PAPER_FACTORY_JOB_TIMEOUT_SECONDS must be between 5 and 7200"
+            )
+        return v
+
+    @field_validator("max_claim_failures")
+    @classmethod
+    def _validate_claim_failures(cls, v: int) -> int:
+        if v < 1 or v > 20:
+            raise ValueError("PAPER_FACTORY_MAX_CLAIM_FAILURES must be between 1 and 20")
+        return v
+
+    @field_validator("worker_queue")
+    @classmethod
+    def _validate_worker_queue(cls, v: str) -> str:
+        value = v.strip().lower()
+        if not value:
+            raise ValueError("PAPER_FACTORY_WORKER_QUEUE must not be empty")
+        return value
+
     @property
     def has_ai_provider(self) -> bool:
         return bool(self.gemini_api_key or self.openai_api_key or self.anthropic_api_key)
+
+    @property
+    def worker_enabled(self) -> bool:
+        return self.worker_mode != "disabled"
+
+    def worker_configuration_errors(self) -> list[str]:
+        """Return deployment errors that would make queued publication impossible."""
+        errors: list[str] = []
+        if not self.worker_enabled:
+            errors.append("PAPER_FACTORY_WORKER_MODE is disabled")
+        try:
+            UUID(self.system_user_id)
+        except (ValueError, AttributeError):
+            errors.append("SYSTEM_USER_ID must be a valid publishing user UUID")
+        if self.heartbeat_interval_seconds >= self.lease_seconds / 2:
+            errors.append(
+                "PAPER_FACTORY_HEARTBEAT_SECONDS must be less than half "
+                "PAPER_FACTORY_LEASE_SECONDS"
+            )
+        return errors
+
+    def require_worker_configuration(self) -> None:
+        errors = self.worker_configuration_errors()
+        if errors:
+            raise RuntimeError("; ".join(errors))
 
 
 @lru_cache

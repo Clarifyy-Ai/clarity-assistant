@@ -599,10 +599,19 @@ export type QuestionReviewFilterStatus =
   | "all"
   | "public_unverified";
 
+export function questionMissingSource(row: Pick<QuestionReviewRow, "source" | "source_type" | "metadata">): boolean {
+  const source = String(row.source ?? "").trim();
+  const sourceType = String(row.source_type ?? "").trim();
+  const meta = row.metadata ?? {};
+  const metaSource = String(meta.source ?? meta.source_url ?? "").trim();
+  return !source && !sourceType && !metaSource;
+}
+
 export async function listQuestionsForReview(filters: {
   examType?: string;
   topic?: string;
   status?: QuestionReviewFilterStatus;
+  missingSourceOnly?: boolean;
   /** When true, forces is_public=true AND is_verified=false (certification runway). */
   publicUnverifiedOnly?: boolean;
   limit?: number;
@@ -647,6 +656,9 @@ export async function listQuestionsForReview(filters: {
     rows = rows.filter((r) => deriveQuestionQueueStatus(r) === "pending");
   } else if (!publicUnverified && status === "rejected") {
     rows = rows.filter((r) => deriveQuestionQueueStatus(r) === "rejected");
+  }
+  if (filters.missingSourceOnly) {
+    rows = rows.filter((r) => questionMissingSource(r));
   }
   rows = rows.slice(0, filters.limit ?? 100);
 
@@ -859,6 +871,7 @@ export type ExtractQuestionPaperResult = {
   sourceId?: string;
   paperId?: string | null;
   status?: string;
+  async?: boolean;
   questionsImported?: number;
   confidenceFlags?: Array<{ index: number; flags: string[]; score: number }>;
   lowConfidenceCount?: number;
@@ -1206,3 +1219,303 @@ export async function fetchApprovedTranslations(
 
   return { byQuestionId, error: null };
 }
+
+// ── Auto-approval rules & manual overrides ───────────────────────────────────
+
+export type AutoApprovalRuleRow = {
+  id: string;
+  entity_type: "question" | "paper";
+  rule_version: number;
+  enabled: boolean;
+  min_quality_score: number;
+  duplicate_threshold: number;
+  auto_publish: boolean;
+  allowed_source_types: string[];
+  allowed_exam_ids: string[] | null;
+  allowed_languages: string[] | null;
+  allow_verified_public: boolean;
+  allow_internal_bank: boolean;
+  allow_generated_practice: boolean;
+  allow_ai_generated_practice: boolean;
+  require_provenance: boolean;
+  manual_review_flags: string[];
+  notes: string | null;
+  updated_at: string;
+};
+
+export type AdminOverrideAction =
+  | "approve"
+  | "reject"
+  | "send_to_review"
+  | "unpublish"
+  | "restore"
+  | "publish";
+
+export async function listAutoApprovalRules(entityType?: "question" | "paper"): Promise<{
+  data: AutoApprovalRuleRow[];
+  error: string | null;
+}> {
+  let q = db()
+    .from("gov_auto_approval_rules")
+    .select("*")
+    .order("entity_type", { ascending: true })
+    .order("rule_version", { ascending: false });
+
+  if (entityType) q = q.eq("entity_type", entityType);
+
+  const { data, error } = await q;
+  return { data: (data ?? []) as AutoApprovalRuleRow[], error: error?.message ?? null };
+}
+
+export async function updateAutoApprovalRule(
+  id: string,
+  patch: Partial<Omit<AutoApprovalRuleRow, "id" | "updated_at">>,
+  previous?: AutoApprovalRuleRow,
+): Promise<{ error: string | null }> {
+  const { error } = await db()
+    .from("gov_auto_approval_rules")
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("id", id);
+
+  if (error) return { error: error.message };
+
+  await writeAdminAudit({
+    action: "gov_auto_approval_rule.update",
+    targetType: "gov_auto_approval_rules",
+    targetId: id,
+    oldValue: previous ?? null,
+    newValue: patch,
+  });
+
+  return { error: null };
+}
+
+export async function createAutoApprovalRuleVersion(
+  entityType: "question" | "paper",
+  patch: Partial<Omit<AutoApprovalRuleRow, "id" | "entity_type" | "updated_at">>,
+): Promise<{ id?: string; error: string | null }> {
+  const { data: latest } = await db()
+    .from("gov_auto_approval_rules")
+    .select("rule_version")
+    .eq("entity_type", entityType)
+    .order("rule_version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const nextVersion = (Number(latest?.rule_version) || 0) + 1;
+  const row = {
+    entity_type: entityType,
+    rule_version: nextVersion,
+    enabled: false,
+    min_quality_score: 40,
+    duplicate_threshold: 0.92,
+    auto_publish: false,
+    ...patch,
+  };
+
+  const { data, error } = await db()
+    .from("gov_auto_approval_rules")
+    .insert(row)
+    .select("id")
+    .single();
+
+  if (error) return { error: error.message };
+
+  await writeAdminAudit({
+    action: "gov_auto_approval_rule.create",
+    targetType: "gov_auto_approval_rules",
+    targetId: data.id as string,
+    newValue: { ...row, rule_version: nextVersion },
+  });
+
+  return { id: data.id as string, error: null };
+}
+
+async function insertQuestionReview(
+  questionId: string,
+  action: string,
+  notes: string,
+): Promise<void> {
+  const { data: auth } = await supabase.auth.getUser();
+  await db().from("question_reviews").insert({
+    question_id: questionId,
+    reviewer_id: auth.user?.id ?? null,
+    action,
+    notes,
+  });
+}
+
+/** Manual admin override — requires reason; writes immutable audit. */
+export async function adminOverrideQuestion(
+  id: string,
+  action: AdminOverrideAction,
+  reason: string,
+  previous?: {
+    is_verified?: boolean | null;
+    is_public?: boolean | null;
+    review_status?: string | null;
+    publish_status?: string | null;
+    metadata?: Record<string, unknown> | null;
+  },
+): Promise<{ error: string | null }> {
+  const trimmedReason = reason.trim();
+  if (!trimmedReason) return { error: "Override reason is required." };
+
+  const prevStatus = previous?.review_status ?? "unknown";
+  let patch: Record<string, unknown>;
+  let auditAction: string;
+
+  switch (action) {
+    case "approve":
+      patch = {
+        ...questionPatchForStatus("approved", previous?.metadata),
+        review_status: "approved",
+        approval_mode: "MANUAL",
+        publish_status: previous?.publish_status ?? "draft",
+      };
+      auditAction = "gov_question.manual_approve";
+      break;
+    case "reject":
+      patch = {
+        ...questionPatchForStatus("rejected", previous?.metadata),
+        review_status: "rejected",
+        approval_mode: null,
+      };
+      auditAction = "gov_question.manual_reject";
+      break;
+    case "send_to_review":
+      patch = {
+        is_verified: false,
+        is_public: false,
+        review_status: "review_required",
+        approval_mode: null,
+        metadata: { ...(previous?.metadata ?? {}), needs_review: true },
+      };
+      auditAction = "gov_question.send_to_review";
+      break;
+    case "unpublish":
+      patch = {
+        is_public: false,
+        publish_status: "draft",
+        metadata: { ...(previous?.metadata ?? {}), unpublished_via: "admin_override" },
+      };
+      auditAction = "gov_question.unpublish";
+      break;
+    case "restore":
+      patch = {
+        is_public: true,
+        publish_status: "published",
+        metadata: { ...(previous?.metadata ?? {}), restored_via: "admin_override" },
+      };
+      auditAction = "gov_question.restore";
+      break;
+    case "publish":
+      if (previous?.review_status !== "approved" && !previous?.is_verified) {
+        return { error: "Cannot publish unapproved content." };
+      }
+      patch = {
+        is_public: true,
+        publish_status: "published",
+      };
+      auditAction = "gov_question.publish";
+      break;
+    default:
+      return { error: `Unknown override action: ${action}` };
+  }
+
+  const result = await mutateWithAudit({
+    table: "questions",
+    id,
+    patch: { ...patch, updated_at: new Date().toISOString() },
+    action: auditAction,
+    targetType: "questions",
+    oldValue: { ...previous, override_reason: trimmedReason, previous_status: prevStatus },
+  });
+
+  if (!result.error) {
+    await insertQuestionReview(id, action, trimmedReason);
+  }
+
+  return result;
+}
+
+/** Manual paper override — separate APPROVED from PUBLISHED. */
+export async function adminOverridePaper(
+  id: string,
+  action: AdminOverrideAction,
+  reason: string,
+  previous?: {
+    review_state?: PaperReviewState | null;
+    publish_status?: string | null;
+  },
+): Promise<{ error: string | null }> {
+  const trimmedReason = reason.trim();
+  if (!trimmedReason) return { error: "Override reason is required." };
+
+  const prevState = previous?.review_state ?? "unknown";
+  let patch: Record<string, unknown>;
+  let auditAction: string;
+
+  switch (action) {
+    case "approve":
+      if (
+        previous?.review_state &&
+        !["machine_validated", "needs_review", "expert_reviewed"].includes(previous.review_state)
+      ) {
+        return { error: "Paper must be validated before manual approval." };
+      }
+      patch = { review_state: "approved", approval_mode: "MANUAL", publish_status: "draft" };
+      auditAction = "gov_paper.manual_approve";
+      break;
+    case "reject":
+      patch = { review_state: "rejected", approval_mode: null };
+      auditAction = "gov_paper.manual_reject";
+      break;
+    case "send_to_review":
+      patch = { review_state: "needs_review", approval_mode: null };
+      auditAction = "gov_paper.send_to_review";
+      break;
+    case "unpublish":
+      patch = { publish_status: "draft" };
+      auditAction = "gov_paper.unpublish";
+      break;
+    case "publish":
+      if (previous?.review_state !== "approved") {
+        return { error: "Cannot publish unapproved paper." };
+      }
+      patch = { publish_status: "published" };
+      auditAction = "gov_paper.publish";
+      break;
+    case "restore":
+      patch = { publish_status: "published", review_state: previous?.review_state ?? "approved" };
+      auditAction = "gov_paper.restore";
+      break;
+    default:
+      return { error: `Unknown override action: ${action}` };
+  }
+
+  return mutateWithAudit({
+    table: "gov_generated_papers",
+    id,
+    patch,
+    action: auditAction,
+    targetType: "gov_generated_papers",
+    oldValue: { ...previous, override_reason: trimmedReason, previous_status: prevState },
+  });
+}
+
+export async function listAutoApprovalEvents(
+  entityType: "question" | "paper",
+  entityId: string,
+): Promise<{ data: unknown[]; error: string | null }> {
+  const { data, error } = await db()
+    .from("gov_auto_approval_events")
+    .select("*")
+    .eq("entity_type", entityType)
+    .eq("entity_id", entityId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  return { data: data ?? [], error: error?.message ?? null };
+}
+

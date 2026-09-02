@@ -4,7 +4,7 @@ import { Command as CommandPrimitive } from "cmdk";
 import { Search } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const Command = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive>,
@@ -25,14 +25,20 @@ interface CommandDialogProps extends DialogProps {
   shouldFilter?: boolean;
 }
 
+const COMMAND_DIALOG_TITLE = "Global search";
+const COMMAND_DIALOG_DESCRIPTION =
+  "Search pages and actions. Use arrow keys to navigate results, Enter to open, Escape to close.";
+
 const CommandDialog = ({ children, shouldFilter, ...props }: CommandDialogProps) => {
   return (
     <Dialog {...props}>
       <DialogContent showClose className="overflow-hidden p-0 shadow-lg">
-        <DialogTitle className="sr-only">Quick search</DialogTitle>
-        <DialogDescription className="sr-only">
-          Search pages and actions. Use arrow keys to navigate results.
-        </DialogDescription>
+        <DialogHeader className="sr-only">
+          <DialogTitle>{COMMAND_DIALOG_TITLE}</DialogTitle>
+          <DialogDescription className="sr-only">
+            {COMMAND_DIALOG_DESCRIPTION}
+          </DialogDescription>
+        </DialogHeader>
         <Command
           shouldFilter={shouldFilter}
           className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-group]]:px-2 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5"

@@ -45,7 +45,7 @@ function LiveTranscriptStreamInner() {
   return (
     <div
       ref={scrollRef}
-      className="h-48 space-y-1.5 overflow-y-auto font-mono text-xs"
+      className="flex-1 min-h-[8rem] space-y-1.5 overflow-y-auto font-mono text-xs"
       style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(255,255,255,0.08) transparent" }}
     >
       {utterances.length === 0 && !interim && (

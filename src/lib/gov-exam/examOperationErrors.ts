@@ -161,6 +161,10 @@ export function formatGovExamOperationError(err: unknown): string {
     return "This exam is already submitted. Open your results instead.";
   }
 
+  if (code === "ATTEMPT_INVALIDATED") {
+    return "This exam attempt is no longer active. Start a new test from the hub.";
+  }
+
   if (code === "JOB_TERMINAL_FAILURE") {
     return "Paper generation failed. Credits were not kept. You can retry.";
   }

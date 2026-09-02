@@ -8,18 +8,14 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { PUBLIC_CTAS } from "@/lib/constants/publicCtas";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import {
-  CREDIT_PACK_DEFINITIONS,
-  PLAN_MONTHLY_CREDITS,
-} from "@/lib/constants/creditEconomics";
+  HELP_CREDITS_OVERVIEW_ANSWER,
+  HELP_PAID_PLANS_ANSWER,
+} from "@/lib/help/helpCatalogCopy";
 
 const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
-
-const FREE_CREDITS = PLAN_MONTHLY_CREDITS.free;
-const PRO_CREDITS = PLAN_MONTHLY_CREDITS.pro;
-const MAX_CREDITS = PLAN_MONTHLY_CREDITS.enterprise;
-const PACK_LIST = CREDIT_PACK_DEFINITIONS.map((p) => `${p.credits}`).join(", ");
 
 const FAQS: Array<{ q: string; a: string }> = [
   {
@@ -28,7 +24,7 @@ const FAQS: Array<{ q: string; a: string }> = [
   },
   {
     q: "How do credits work?",
-    a: `Credits pay for AI-powered actions. Free includes ${FREE_CREDITS} credits per month. Pro includes ${PRO_CREDITS} credits (one-time). Max includes ${MAX_CREDITS} credits (one-time). Extra packs (${PACK_LIST} credits) are sold from Settings → Billing.`,
+    a: HELP_CREDITS_OVERVIEW_ANSWER,
   },
   {
     q: "How does Practice Coach work?",
@@ -44,7 +40,7 @@ const FAQS: Array<{ q: string; a: string }> = [
   },
   {
     q: "How much do paid plans cost?",
-    a: `Pro is ₹2,499 one-time (${PRO_CREDITS.toLocaleString()} credits). Max is ₹6,799 one-time (${MAX_CREDITS.toLocaleString()} credits). Pay in INR with Razorpay — checkout does not auto-renew.`,
+    a: HELP_PAID_PLANS_ANSWER,
   },
 ];
 
@@ -70,7 +66,7 @@ export default function Faq() {
           <p className="text-sm text-muted-foreground leading-relaxed">
             Short answers from the product. Longer articles are in the{" "}
             <Link to="/help" className="text-primary font-medium hover:underline">
-              Help Center
+              {PUBLIC_CTAS.help}
             </Link>
             .
           </p>
@@ -96,20 +92,6 @@ export default function Faq() {
             </AccordionItem>
           ))}
         </Accordion>
-
-        <div className="flex flex-wrap justify-center gap-3 text-sm">
-          <Link to="/help" className="text-primary font-medium hover:underline">
-            Help Center
-          </Link>
-          <span className="text-muted-foreground">·</span>
-          <Link to="/pricing" className="text-primary font-medium hover:underline">
-            Pricing
-          </Link>
-          <span className="text-muted-foreground">·</span>
-          <Link to="/" className="text-primary font-medium hover:underline">
-            Home
-          </Link>
-        </div>
       </div>
     </MarketingLayout>
   );

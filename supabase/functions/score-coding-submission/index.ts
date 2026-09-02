@@ -2,6 +2,10 @@ import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { enforceSessionRateLimitAsync } from "../_shared/rateLimit.ts";
+import {
+  runJavascriptSolveTests,
+  type SolveTestCase,
+} from "../_shared/javascriptSolveRunner.ts";
 
 function json(req: Request, payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -13,97 +17,28 @@ function json(req: Request, payload: unknown, status = 200) {
 /** Languages the product executes. Only javascript is auto-executed. */
 export const APPROVED_CODING_LANGUAGES = ["javascript"] as const;
 
-type VisibleTestCase = { id: string; name: string; input: unknown; expected: unknown };
+type VisibleTestCase = SolveTestCase;
 
-type RunResult = {
-  ok: boolean;
-  results: Array<{ passed: boolean; error?: string }>;
-  execution_status: "passed" | "failed" | "compile_error" | "runtime_error" | "timeout" | "blocked";
-  blockedReason?: string;
-};
-
-function runVisibleJavascriptTests(
-  source: string,
-  cases: VisibleTestCase[],
-  timeoutMs = 800,
-): RunResult {
-  if (typeof source !== "string" || source.trim().length === 0) {
-    return {
-      ok: false,
-      results: [],
-      execution_status: "compile_error",
-      blockedReason: "No source to run.",
-    };
+function buildSampleMessage(
+  execution_status: string,
+  passed: number,
+  failed: number,
+  outcome: ReturnType<typeof runJavascriptSolveTests>,
+): string {
+  switch (execution_status) {
+    case "compile_error":
+      return `Compile error: ${outcome.blockedReason ?? "could not compile"}`;
+    case "service_error":
+      return outcome.primary_error ?? "The code runner could not load test cases.";
+    case "timeout":
+      return outcome.primary_error ?? "Sample run timed out.";
+    case "runtime_error":
+      return outcome.primary_error ?? "Sample run hit a runtime error.";
+    case "passed":
+      return `Sample: ${passed} passed, 0 failed.`;
+    default:
+      return outcome.primary_error ?? `Sample: ${passed} passed, ${failed} failed.`;
   }
-  if (/\bwhile\s*\(\s*true\s*\)|\bfor\s*\(\s*;\s*;\s*\)/.test(source)) {
-    return {
-      ok: false,
-      results: [{ passed: false, error: "timeout" }],
-      execution_status: "timeout",
-      blockedReason: "Execution timed out.",
-    };
-  }
-  if (/\bimport\s+|require\s*\(|fetch\s*\(|XMLHttpRequest|process\.|Deno\./.test(source)) {
-    return {
-      ok: false,
-      results: [],
-      execution_status: "blocked",
-      blockedReason: "Network, imports, and host APIs are not allowed.",
-    };
-  }
-
-  let fn: ((input: unknown) => unknown) | null = null;
-  try {
-    const factory = new Function(`${source}; return typeof solve === "function" ? solve : null;`);
-    fn = factory() as ((input: unknown) => unknown) | null;
-  } catch (error) {
-    return {
-      ok: false,
-      results: [{ passed: false, error: error instanceof Error ? error.message : "Could not compile." }],
-      execution_status: "compile_error",
-      blockedReason: error instanceof Error ? error.message : "Could not compile.",
-    };
-  }
-  if (typeof fn !== "function") {
-    return {
-      ok: false,
-      results: [],
-      execution_status: "compile_error",
-      blockedReason:
-        "Define solve(input). Example: function solve(input) { return input; }",
-    };
-  }
-
-  let sawRuntime = false;
-  let sawTimeout = false;
-  const results = cases.map((testCase) => {
-    const started = Date.now();
-    try {
-      const actual = fn!(testCase.input);
-      if (Date.now() - started > timeoutMs) {
-        sawTimeout = true;
-        return { passed: false, error: "timeout" };
-      }
-      return { passed: JSON.stringify(actual) === JSON.stringify(testCase.expected) };
-    } catch (error) {
-      sawRuntime = true;
-      return {
-        passed: false,
-        error: error instanceof Error ? error.message : "Runtime error",
-      };
-    }
-  });
-
-  const allPassed = results.length > 0 && results.every((r) => r.passed);
-  const execution_status = sawTimeout
-    ? "timeout"
-    : sawRuntime
-      ? "runtime_error"
-      : allPassed
-        ? "passed"
-        : "failed";
-
-  return { ok: allPassed, results, execution_status };
 }
 
 Deno.serve(async (req) => {
@@ -270,7 +205,7 @@ Deno.serve(async (req) => {
     }));
   }
 
-  const outcome = runVisibleJavascriptTests(code, mapped, Number(question.time_limit_ms ?? 800));
+  const outcome = runJavascriptSolveTests(code, mapped, Number(question.time_limit_ms ?? 800));
   const passed = outcome.results.filter((r) => r.passed).length;
   const failed = outcome.results.length - passed;
   const score = mapped.length === 0 ? 0 : Math.round((passed / mapped.length) * 100);
@@ -284,14 +219,19 @@ Deno.serve(async (req) => {
       failed_tests: failed,
       execution_status,
       blocked_reason: outcome.blockedReason ?? undefined,
-      message:
-        execution_status === "compile_error"
-          ? `Compile error: ${outcome.blockedReason ?? "could not compile"}`
-          : execution_status === "timeout"
-            ? "Sample run timed out."
-            : execution_status === "runtime_error"
-              ? "Sample run hit a runtime error."
-              : `Sample: ${passed} passed, ${failed} failed.`,
+      primary_error: outcome.primary_error ?? undefined,
+      case_results: outcome.results.map((r) => ({
+        id: r.id,
+        name: r.name,
+        passed: r.passed,
+        actual: r.actual,
+        error: r.error,
+        error_kind: r.error_kind,
+        input_preview: r.input_preview,
+        stdout: r.stdout,
+        stderr: r.stderr,
+      })),
+      message: buildSampleMessage(execution_status, passed, failed, outcome),
     });
   }
 
@@ -305,8 +245,22 @@ Deno.serve(async (req) => {
       failed_tests: 0,
       execution_status,
       blocked_reason: outcome.blockedReason ?? undefined,
+      primary_error: outcome.primary_error ?? undefined,
       message: `Compile error: ${outcome.blockedReason ?? "could not compile"}`,
     });
+  }
+
+  if (execution_status === "service_error") {
+    return json(req, {
+      status: "service_error",
+      score: null,
+      passed_tests: 0,
+      failed_tests: 0,
+      execution_status,
+      blocked_reason: outcome.blockedReason ?? undefined,
+      primary_error: outcome.primary_error ?? undefined,
+      message: outcome.primary_error ?? "The code runner is temporarily unavailable.",
+    }, 503);
   }
 
   const { data: row, error: insErr } = await db.from("coding_submissions").insert({
@@ -324,6 +278,7 @@ Deno.serve(async (req) => {
       failed_tests: failed,
       execution_status,
       blocked_reason: outcome.blockedReason ?? null,
+      primary_error: outcome.primary_error ?? null,
     },
   }).select("id").maybeSingle();
   if (insErr) return json(req, { error: insErr.message }, 500);
@@ -336,5 +291,17 @@ Deno.serve(async (req) => {
     failed_tests: failed,
     execution_status,
     blocked_reason: outcome.blockedReason ?? undefined,
+    primary_error: outcome.primary_error ?? undefined,
+    case_results: outcome.results.map((r) => ({
+      id: r.id,
+      name: r.name,
+      passed: r.passed,
+      actual: r.actual,
+      error: r.error,
+      error_kind: r.error_kind,
+      input_preview: r.input_preview,
+      stdout: r.stdout,
+      stderr: r.stderr,
+    })),
   });
 });

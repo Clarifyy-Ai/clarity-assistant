@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Check, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { ExamSearchCombobox } from "@/components/gov-exam/ExamSearchCombobox";
+import { GovPaperReviewGenerationTimer } from "@/components/gov-exam/GovPaperReviewGenerationTimer";
 import {
   CREATE_EXAM_PAPER_CREDIT_COST,
   cancelPaperGenerationJob,
@@ -15,7 +16,6 @@ import {
   getPaperGenerationJob,
   processPaperGenerationJob,
   requestGovExam,
-  type ExamPaperAvailability,
   type GovExamSearchResult,
   type PaperJobResult,
 } from "@/lib/gov-exam/api";
@@ -43,6 +43,8 @@ import { debugLog4a9592 } from "@/lib/debug/debugLog4a9592";
 import { useAuthStore } from "@/store/userStore";
 import { resolveCreditBalance } from "@/lib/billing/resolveCreditBalance";
 import { fetchSpendableCredits } from "@/lib/billing/fetchSpendableCredits";
+import { evaluateGovExamCreditGate } from "@/lib/gov-exam/govExamCreditGate";
+import { openUpgradeIfInsufficientCredits } from "@/lib/network/aiErrorUx";
 import {
   GOV_EXAM_AFFILIATION_DISCLAIMER,
 } from "@/lib/gov-exam/disclaimers";
@@ -51,14 +53,34 @@ import {
   PAPER_JOB_UI_LABEL,
   PAPER_JOB_UI_STATES,
   clearActivePaperJob,
+  clearPaperJobPollTimedOut,
+  isPaperJobPollTimedOut,
+  isPaperJobPollTimeoutError,
   isPaperJobTerminal,
   loadActivePaperJob,
   mapPaperJobPublicStatus,
   mapProgressToUiState,
   mapProgressToUserStage,
+  markPaperJobPollTimedOut,
   saveActivePaperJob,
 } from "@/lib/gov-exam/paperJobStatus";
 import { pollPaperJobUntilTerminal } from "@/lib/gov-exam/pollPaperJob";
+import {
+  availabilityRequestKey,
+  availabilityResult,
+  beginAvailabilityCheck,
+  beginGenerationSession,
+  completeAvailabilityCheck,
+  completeGenerationSession,
+  failAvailabilityCheck,
+  failGenerationSession,
+  initialAvailabilitySession,
+  initialGenerationSession,
+  resetAvailabilitySession,
+  resetGenerationSession,
+  type GovPaperAvailabilitySession,
+  type GovPaperGenerationSession,
+} from "@/lib/gov-exam/govPaperReviewSession";
 import {
   parseGovQuestionCount,
   syncQuestionCountForBasis,
@@ -119,6 +141,13 @@ function paperJobErrorMessage(job: PaperJobResult): string {
     balance: job.balance,
     cost: job.creditsCharged,
   });
+}
+
+function rememberPollTimeoutIfNeeded(job: PaperJobResult): void {
+  if (!job.jobId) return;
+  if (isPaperJobPollTimeoutError(job) || job.errorCode === "GENERATION_POLL_TIMEOUT") {
+    markPaperJobPollTimedOut(job.jobId);
+  }
 }
 
 function examCategoryLabel(exam: GovExamSearchResult): string | null {
@@ -188,7 +217,11 @@ export default function GenerateGovPaper(): React.ReactElement {
   const [difficulty, setDifficulty] = useState<"" | "EASY" | "MEDIUM" | "HARD">("");
   const [busy, setBusy] = useState(false);
   const [job, setJob] = useState<PaperJobResult | null>(null);
-  const [serverAvailability, setServerAvailability] = useState<ExamPaperAvailability | null>(null);
+  const [availabilitySession, setAvailabilitySession] =
+    useState<GovPaperAvailabilitySession>(initialAvailabilitySession);
+  const [generationSession, setGenerationSession] =
+    useState<GovPaperGenerationSession>(initialGenerationSession);
+  const serverAvailability = availabilityResult(availabilitySession);
   const pollAbortRef = useRef(false);
   const generatingRef = useRef(false);
   const idempotencyKeyRef = useRef<string | null>(null);
@@ -216,6 +249,18 @@ export default function GenerateGovPaper(): React.ReactElement {
   }, [profile?.id]);
 
   const displayCredits = serverCredits ?? (creditBalance.known ? creditBalance.balance : null);
+  const creditsKnown = displayCredits != null;
+  const creditGate = useMemo(
+    () =>
+      evaluateGovExamCreditGate({
+        balance: displayCredits,
+        balanceKnown: creditsKnown,
+        cost: CREATE_EXAM_PAPER_CREDIT_COST,
+      }),
+    [displayCredits, creditsKnown],
+  );
+  const insufficientCredits =
+    creditGate.allowed === false && creditGate.reason === "insufficient";
 
   const selected = selectedExam;
 
@@ -326,7 +371,7 @@ export default function GenerateGovPaper(): React.ReactElement {
     setExamId(exam.examId);
     setStageId(exam.stage?.id ?? exam.stages[0]?.id ?? "");
     setLanguage(exam.languages?.[0] ?? "en");
-    setServerAvailability(null);
+    setAvailabilitySession(resetAvailabilitySession());
     setSelectedTopics([]);
     setTopicChoices([]);
     setTopicDraft("");
@@ -343,7 +388,7 @@ export default function GenerateGovPaper(): React.ReactElement {
     setSelectedExam(null);
     setExamId("");
     setStageId("");
-    setServerAvailability(null);
+    setAvailabilitySession(resetAvailabilitySession());
     setSelectedTopics([]);
     setTopicChoices([]);
     setTopicDraft("");
@@ -463,13 +508,62 @@ export default function GenerateGovPaper(): React.ReactElement {
     if (!userId) return;
     if (generatingRef.current) return;
     const fromUrl = urlJobId;
-    const stored = loadActivePaperJob(userId);
+    const stored = loadActivePaperJob(userId, "paper");
     const jobId = fromUrl || stored?.jobId;
     if (!jobId) return;
     if (stored?.idempotencyKey) {
       idempotencyKeyRef.current = stored.idempotencyKey;
     }
     let cancelled = false;
+
+    if (isPaperJobPollTimedOut(jobId)) {
+      setStep(3);
+      void (async () => {
+        try {
+          const current = await getPaperGenerationJob(jobId);
+          if (cancelled) return;
+          setJob(current);
+          if (stored?.examId) setExamId(stored.examId);
+          if (!isPaperJobTerminal(current.status)) {
+            setGenerationSession(beginGenerationSession(jobId, {
+              idempotencyKey: stored?.idempotencyKey,
+            }));
+          }
+          const status = mapPaperJobPublicStatus(current.status);
+          if (isPaperJobTerminal(status)) {
+            clearPaperJobPollTimedOut();
+            clearActivePaperJob();
+            syncJobIdInUrl(null);
+            if (status === "completed" && current.mockTestId) {
+              navigate(`/app/mock-test/session/${current.mockTestId}`);
+            }
+          }
+        } catch (err) {
+          if (cancelled) return;
+          setJob({
+            jobId,
+            status: "failed_retryable",
+            errorCode: "GENERATION_POLL_TIMEOUT",
+            errorMessage: paperJobErrorMessage({
+              jobId,
+              status: "failed_retryable",
+              errorCode: "GENERATION_POLL_TIMEOUT",
+            }),
+          });
+          setGenerationSession(
+            failGenerationSession(initialGenerationSession(), jobId, {
+              errorCode: "GENERATION_POLL_TIMEOUT",
+              errorMessage: "Paper generation timed out. Tap Retry to try again.",
+              retryable: true,
+            }),
+          );
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
     pollAbortRef.current = false;
     setBusy(true);
     setStep(3);
@@ -512,12 +606,30 @@ export default function GenerateGovPaper(): React.ReactElement {
         setJob(current);
         if (stored?.examId) setExamId(stored.examId);
         const status = mapPaperJobPublicStatus(current.status);
+        if (!isPaperJobTerminal(status)) {
+          setGenerationSession(
+            beginGenerationSession(jobId, {
+              idempotencyKey: stored?.idempotencyKey,
+            }),
+          );
+        }
         if (isPaperJobTerminal(status)) {
           clearActivePaperJob();
           syncJobIdInUrl(null);
           setBusy(false);
           if (status === "completed" && current.mockTestId) {
+            setGenerationSession((prev) =>
+              completeGenerationSession(prev, jobId, current.mockTestId),
+            );
             navigate(`/app/mock-test/session/${current.mockTestId}`);
+          } else if (status !== "completed") {
+            setGenerationSession((prev) =>
+              failGenerationSession(prev, jobId, {
+                errorCode: current.errorCode,
+                errorMessage: current.errorMessage ?? current.error,
+                retryable: status === "failed_retryable" || status === "failed",
+              }),
+            );
           }
           return;
         }
@@ -530,12 +642,26 @@ export default function GenerateGovPaper(): React.ReactElement {
         if (current.status === "completed" && current.mockTestId) {
           clearActivePaperJob();
           syncJobIdInUrl(null);
+          setGenerationSession((prev) =>
+            completeGenerationSession(prev, jobId, current.mockTestId),
+          );
           navigate(`/app/mock-test/session/${current.mockTestId}`);
         } else if (isPaperJobTerminal(current.status)) {
           clearActivePaperJob();
           syncJobIdInUrl(null);
           if (publicStatus === "failed_retryable" || publicStatus === "failed_permanent" || publicStatus === "failed") {
+            rememberPollTimeoutIfNeeded(current);
+            setGenerationSession((prev) =>
+              failGenerationSession(prev, jobId, {
+                errorCode: current.errorCode,
+                errorMessage: current.errorMessage ?? current.error,
+                retryable:
+                  publicStatus === "failed_retryable" || publicStatus === "failed",
+              }),
+            );
             toast.error(current.errorMessage || "We couldn't generate this paper. Try again.");
+          } else if (publicStatus === "cancelled") {
+            setGenerationSession(resetGenerationSession());
           }
         }
         // #region agent log
@@ -685,6 +811,18 @@ export default function GenerateGovPaper(): React.ReactElement {
     const safeRequested = parsedQuestionCount.valid
       ? parsedQuestionCount.value
       : requestedForConfig;
+    const topicsKey =
+      basis === "topic" ? resolvedTopicsSafe().join("|") : "";
+    const requestKey = availabilityRequestKey({
+      examId,
+      stageId,
+      mode,
+      language,
+      questionCount: safeRequested,
+      basis,
+      topicsKey,
+    });
+    setAvailabilitySession(beginAvailabilityCheck(requestKey));
     const timer = window.setTimeout(() => {
       void checkExamPaperAvailability({
         examId,
@@ -710,7 +848,9 @@ export default function GenerateGovPaper(): React.ReactElement {
       })
         .then((avail) => {
           if (cancelled) return;
-          setServerAvailability(avail);
+          setAvailabilitySession((prev) =>
+            completeAvailabilityCheck(prev, requestKey, avail),
+          );
           // Mirror approved count into selection so coverage labels stay truthful.
           setSelectedExam((prev) => {
             if (!prev || prev.examId !== examId) return prev;
@@ -737,8 +877,15 @@ export default function GenerateGovPaper(): React.ReactElement {
             };
           });
         })
-        .catch(() => {
-          if (!cancelled) setServerAvailability(null);
+        .catch((err) => {
+          if (cancelled) return;
+          const message =
+            err instanceof Error ? err.message : "Availability check failed.";
+          const code =
+            err instanceof ApiClientError ? err.code : "AVAILABILITY_FAILED";
+          setAvailabilitySession((prev) =>
+            failAvailabilityCheck(prev, requestKey, code, message),
+          );
         });
     }, 400);
     return () => {
@@ -800,7 +947,9 @@ export default function GenerateGovPaper(): React.ReactElement {
       const res = await cancelPaperGenerationJob(job.jobId);
       setJob({ ...job, status: res.status || "cancelled" });
       clearActivePaperJob();
+      clearPaperJobPollTimedOut();
       syncJobIdInUrl(null);
+      setGenerationSession(resetGenerationSession());
       toast.message("Generation cancelled.");
     } catch (e) {
       toast.error(formatGovExamOperationError(e));
@@ -808,6 +957,36 @@ export default function GenerateGovPaper(): React.ReactElement {
       generatingRef.current = false;
       setBusy(false);
     }
+  }
+
+  async function ensureSufficientCreditsForGeneration(): Promise<boolean> {
+    const userId = user?.id ?? profile?.id;
+    let balance = displayCredits;
+    if (userId) {
+      const fresh = await fetchSpendableCredits(userId);
+      if (fresh != null) {
+        setServerCredits(fresh);
+        balance = fresh;
+      }
+    }
+    const gate = evaluateGovExamCreditGate({
+      balance,
+      balanceKnown: balance != null,
+      cost: CREATE_EXAM_PAPER_CREDIT_COST,
+    });
+    if (!("reason" in gate)) return true;
+    if (gate.reason === "insufficient") {
+      openUpgradeIfInsufficientCredits(
+        new ApiClientError({
+          message: `You need ${gate.cost} credits but only have ${gate.balance ?? 0}.`,
+          code: "INSUFFICIENT_CREDITS",
+          status: 402,
+        }),
+      );
+    } else {
+      toast.error("Could not verify your credit balance. Please try again.");
+    }
+    return false;
   }
 
   async function handleGenerate(overrideCount?: number) {
@@ -847,97 +1026,95 @@ export default function GenerateGovPaper(): React.ReactElement {
       return;
     }
     const requested = overrideCount ?? requestedForConfig;
-    // Lock before preflight as well as generation. Otherwise rapid clicks can
-    // run duplicate availability checks and race into the create request.
     generatingRef.current = true;
     setBusy(true);
-
-    // Preflight — never charge when insufficiency is already known.
     try {
-      const avail = await checkExamPaperAvailability({
-        examId,
-        stageId,
-        mode: overrideCount != null ? "custom_mock" : mode,
-        language,
-        questionCount: requested,
-        topics: basis === "topic" ? resolvedTopics : [],
-        difficulty: difficulty || null,
-      });
-      setServerAvailability(avail);
-      if (avail.blocked && overrideCount == null && (mode === "generated_mock" || mode === "official_previous")) {
-        toast.error(
-          avail.blockCode === "LANGUAGE_UNAVAILABLE"
-            ? "This exam paper is not available in the selected language."
-            : inventoryAvailabilityMessage(avail.available) +
-              (avail.customPracticeMax > 0
-                ? " Try Custom Practice Set."
-                : ""),
-        );
-        generatingRef.current = false;
-        setBusy(false);
-        return;
-      }
-      if (
-        overrideCount == null &&
-        (mode === "generated_mock" || mode === "official_previous") &&
-        (!avail.fullMockAllowed || avail.blocked)
-      ) {
-        toast.error(
-          inventoryAvailabilityMessage(avail.available) +
-            " Try Custom Practice Set.",
-        );
-        generatingRef.current = false;
-        setBusy(false);
-        return;
-      }
-      // Credit fail-closed: never charge Full Mock when bank is short unless AI fill
-      // is explicitly allowed. Ignore hybrid_deterministic heuristics.
-      if (
-        overrideCount == null &&
-        mode === "generated_mock" &&
-        avail.available < requested &&
-        !avail.aiFillAllowed
-      ) {
-        toast.error(
-          inventoryAvailabilityMessage(avail.available) +
-            " Try Custom Practice Set.",
-        );
-        generatingRef.current = false;
-        setBusy(false);
-        return;
-      }
-      const liveInventory = decideQuestionInventory({
-        available: avail.available,
-        requested,
-        aiFillAvailable: avail.aiFillAllowed,
-      });
-      if (
-        overrideCount == null &&
-        mode === "generated_mock" &&
-        !liveInventory.canGenerateRequested
-      ) {
-        toast.error(
-          inventoryAvailabilityMessage(liveInventory.available) +
-            " Try Custom Practice Set.",
-        );
-        generatingRef.current = false;
-        setBusy(false);
-        return;
-      }
-      if (!liveInventory.canGenerateRequested) {
-        toast.error(inventoryAvailabilityMessage(liveInventory.available));
-        generatingRef.current = false;
-        setBusy(false);
-        return;
-      }
-    } catch (e) {
-      toast.error(formatGovExamOperationError(e));
-      generatingRef.current = false;
-      setBusy(false);
-      return;
-    }
+      const creditsOk = await ensureSufficientCreditsForGeneration();
+      if (!creditsOk) return;
 
-    setJob(null);
+      clearPaperJobPollTimedOut();
+
+      try {
+        const avail = await checkExamPaperAvailability({
+          examId,
+          stageId,
+          mode: overrideCount != null ? "custom_mock" : mode,
+          language,
+          questionCount: requested,
+          topics: basis === "topic" ? resolvedTopics : [],
+          difficulty: difficulty || null,
+        });
+        setAvailabilitySession((prev) =>
+          completeAvailabilityCheck(prev, availabilityRequestKey({
+            examId,
+            stageId,
+            mode: overrideCount != null ? "custom_mock" : mode,
+            language,
+            questionCount: requested,
+            basis,
+            topicsKey: basis === "topic" ? resolvedTopics.join("|") : "",
+          }), avail),
+        );
+        if (avail.blocked && overrideCount == null && (mode === "generated_mock" || mode === "official_previous")) {
+          toast.error(
+            avail.blockCode === "LANGUAGE_UNAVAILABLE"
+              ? "This exam paper is not available in the selected language."
+              : inventoryAvailabilityMessage(avail.available) +
+                (avail.customPracticeMax > 0
+                  ? " Try Custom Practice Set."
+                  : ""),
+          );
+          return;
+        }
+        if (
+          overrideCount == null &&
+          (mode === "generated_mock" || mode === "official_previous") &&
+          (!avail.fullMockAllowed || avail.blocked)
+        ) {
+          toast.error(
+            inventoryAvailabilityMessage(avail.available) +
+              " Try Custom Practice Set.",
+          );
+          return;
+        }
+        if (
+          overrideCount == null &&
+          mode === "generated_mock" &&
+          avail.available < requested &&
+          !avail.aiFillAllowed
+        ) {
+          toast.error(
+            inventoryAvailabilityMessage(avail.available) +
+              " Try Custom Practice Set.",
+          );
+          return;
+        }
+        const liveInventory = decideQuestionInventory({
+          available: avail.available,
+          requested,
+          aiFillAvailable: avail.aiFillAllowed,
+        });
+        if (
+          overrideCount == null &&
+          mode === "generated_mock" &&
+          !liveInventory.canGenerateRequested
+        ) {
+          toast.error(
+            inventoryAvailabilityMessage(liveInventory.available) +
+              " Try Custom Practice Set.",
+          );
+          return;
+        }
+        if (!liveInventory.canGenerateRequested) {
+          toast.error(inventoryAvailabilityMessage(liveInventory.available));
+          return;
+        }
+      } catch (e) {
+        toast.error(formatGovExamOperationError(e));
+        return;
+      }
+
+      setJob(null);
     if (!idempotencyKeyRef.current) {
       idempotencyKeyRef.current = crypto.randomUUID();
     }
@@ -955,7 +1132,6 @@ export default function GenerateGovPaper(): React.ReactElement {
       },
     });
     // #endregion
-    try {
       const result =
         basis === "topic"
           ? await generateTopicPractice({
@@ -991,6 +1167,13 @@ export default function GenerateGovPaper(): React.ReactElement {
               }),
             });
       setJob(result);
+      if (result.jobId && !isPaperJobTerminal(result.status)) {
+        setGenerationSession(
+          beginGenerationSession(result.jobId, {
+            idempotencyKey: idempotencyKeyRef.current ?? undefined,
+          }),
+        );
+      }
       const resumeUserId = user?.id ?? profile?.id;
       if (resumeUserId && result.jobId) {
         saveActivePaperJob({
@@ -998,6 +1181,7 @@ export default function GenerateGovPaper(): React.ReactElement {
           examId,
           userId: resumeUserId,
           idempotencyKey: idempotencyKeyRef.current ?? undefined,
+          kind: "paper",
         });
         syncJobIdInUrl(result.jobId);
       }
@@ -1023,6 +1207,18 @@ export default function GenerateGovPaper(): React.ReactElement {
         idempotencyKeyRef.current = null;
         clearActivePaperJob();
         syncJobIdInUrl(null);
+        if (
+          result.errorCode === "INSUFFICIENT_CREDITS" &&
+          openUpgradeIfInsufficientCredits(
+            new ApiClientError({
+              message: paperJobErrorMessage(result),
+              code: "INSUFFICIENT_CREDITS",
+              status: 402,
+            }),
+          )
+        ) {
+          return;
+        }
         toast.error(paperJobErrorMessage(result));
         return;
       }
@@ -1068,6 +1264,9 @@ export default function GenerateGovPaper(): React.ReactElement {
       if (terminal === "completed" && current.mockTestId) {
         clearActivePaperJob();
         syncJobIdInUrl(null);
+        setGenerationSession((prev) =>
+          completeGenerationSession(prev, current.jobId ?? result.jobId, current.mockTestId),
+        );
         const expected =
           isExactPatternBasis(basis) ? selected?.pattern?.totalQuestions : questionCount;
         const actual = current.questionCount;
@@ -1097,19 +1296,50 @@ export default function GenerateGovPaper(): React.ReactElement {
         }
         navigate(`/app/mock-test/session/${current.mockTestId}`);
       } else if (terminal === "failed_retryable") {
+        rememberPollTimeoutIfNeeded(current);
+        setGenerationSession((prev) =>
+          failGenerationSession(prev, current.jobId ?? result.jobId, {
+            errorCode: current.errorCode,
+            errorMessage: current.errorMessage ?? current.error,
+            retryable: true,
+          }),
+        );
         toast.error(paperJobErrorMessage(current));
+        void ensureSufficientCreditsForGeneration();
       } else if (terminal === "failed_permanent" || terminal === "failed") {
         idempotencyKeyRef.current = null;
         clearActivePaperJob();
+        clearPaperJobPollTimedOut();
         syncJobIdInUrl(null);
+        setGenerationSession((prev) =>
+          failGenerationSession(prev, current.jobId ?? result.jobId, {
+            errorCode: current.errorCode,
+            errorMessage: current.errorMessage ?? current.error,
+            retryable: false,
+          }),
+        );
         toast.error(paperJobErrorMessage(current));
+        void ensureSufficientCreditsForGeneration();
       } else if (terminal === "cancelled") {
         clearActivePaperJob();
+        clearPaperJobPollTimedOut();
         syncJobIdInUrl(null);
+        setGenerationSession(resetGenerationSession());
         toast.message("Generation cancelled.");
       } else {
-        toast.message(
-          "Paper generation is still running. Refresh this page to resume monitoring — it will not restart.",
+        rememberPollTimeoutIfNeeded(current);
+        setGenerationSession((prev) =>
+          failGenerationSession(prev, current.jobId ?? result.jobId, {
+            errorCode: current.errorCode ?? "GENERATION_POLL_TIMEOUT",
+            errorMessage:
+              current.errorMessage ??
+              "Paper generation timed out. Tap Retry to try again.",
+            retryable: true,
+          }),
+        );
+        toast.error(
+          current.errorMessage ??
+            "Paper generation timed out. Tap Retry to try again.",
         );
       }
     } catch (e) {
@@ -1127,7 +1357,9 @@ export default function GenerateGovPaper(): React.ReactElement {
         },
       });
       // #endregion
-      toast.error(formatGovExamOperationError(e));
+      if (!openUpgradeIfInsufficientCredits(e)) {
+        toast.error(formatGovExamOperationError(e));
+      }
     } finally {
       generatingRef.current = false;
       setBusy(false);
@@ -1136,6 +1368,7 @@ export default function GenerateGovPaper(): React.ReactElement {
 
   async function handleRetry() {
     if (generatingRef.current) return;
+    clearPaperJobPollTimedOut();
     const jobId = job?.jobId;
     if (jobId) {
       generatingRef.current = true;
@@ -1152,6 +1385,11 @@ export default function GenerateGovPaper(): React.ReactElement {
         }
         if (latest && !isPaperJobTerminal(latest.status)) {
           setJob(latest);
+          setGenerationSession(
+            beginGenerationSession(jobId, {
+              idempotencyKey: idempotencyKeyRef.current ?? undefined,
+            }),
+          );
           await processPaperGenerationJob(jobId).catch(() => undefined);
           const current = await pollJobUntilTerminal(jobId, latest);
           const terminal = mapPaperJobPublicStatus(current.status);
@@ -1179,7 +1417,10 @@ export default function GenerateGovPaper(): React.ReactElement {
   }
 
   const generateDisabled =
-    busy || (job != null && !isPaperJobTerminal(job.status)) || !stageId;
+    busy ||
+    (job != null && !isPaperJobTerminal(job.status)) ||
+    !stageId ||
+    !creditGate.allowed;
   // #region agent log
   useEffect(() => {
     debugLog4a9592({
@@ -1284,6 +1525,9 @@ export default function GenerateGovPaper(): React.ReactElement {
                       ? ` · ${selected.languages.join(", ")}`
                       : ""}
                   </p>
+                  {selected.aliases?.length > 0 && (
+                    <p>Also known as: {selected.aliases.slice(0, 4).join(", ")}</p>
+                  )}
                   {selected.stages && selected.stages.length > 1 && (
                     <label className="block space-y-1">
                       <span className="font-medium text-foreground">Stage</span>
@@ -1292,7 +1536,7 @@ export default function GenerateGovPaper(): React.ReactElement {
                         value={stageId}
                         onChange={(e) => {
                           setStageId(e.target.value);
-                          setServerAvailability(null);
+                          setAvailabilitySession(resetAvailabilitySession());
                         }}
                       >
                         {selected.stages.map((st) => (
@@ -1485,6 +1729,8 @@ export default function GenerateGovPaper(): React.ReactElement {
                   inputMode="numeric"
                   pattern="[0-9]*"
                   disabled={isExactPatternBasis(basis)}
+                  aria-invalid={Boolean(questionCountError)}
+                  aria-describedby={questionCountError ? "gov-question-count-error" : undefined}
                   className="w-full rounded-lg border border-border bg-background px-3 py-2"
                   value={questionCountInput}
                   onChange={(e) => {
@@ -1532,7 +1778,7 @@ export default function GenerateGovPaper(): React.ReactElement {
                     : `Allowed: ${QUESTION_COUNT_MIN}–${questionCountMax}`}
                 </p>
                 {questionCountError ? (
-                  <p className="text-xs text-destructive">{questionCountError}</p>
+                  <p id="gov-question-count-error" className="text-xs text-destructive">{questionCountError}</p>
                 ) : null}
               </label>
               {basis !== "topic" && (
@@ -1700,6 +1946,45 @@ export default function GenerateGovPaper(): React.ReactElement {
                   )}
                 </p>
               )}
+              {creditGate.allowed === false && creditGate.reason === "unknown_balance" && (
+                <p className="text-sm text-muted-foreground" role="status">
+                  Checking your credit balance before generation can start.
+                </p>
+              )}
+              {insufficientCredits && (
+                <div
+                  className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/30"
+                  role="alert"
+                >
+                  <p className="text-amber-800 dark:text-amber-200">
+                    You need {CREATE_EXAM_PAPER_CREDIT_COST} credits to generate this paper, but you
+                    only have {creditGate.balance ?? 0}. Top up or upgrade to continue.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() =>
+                        openUpgradeIfInsufficientCredits(
+                          new ApiClientError({
+                            message: "Insufficient credits.",
+                            code: "INSUFFICIENT_CREDITS",
+                            status: 402,
+                          }),
+                        )
+                      }
+                    >
+                      Upgrade / top up
+                    </Button>
+                    <Link
+                      to="/app/settings/billing"
+                      className="inline-flex min-h-9 items-center justify-center rounded-lg border border-border bg-background px-3 text-xs font-medium hover:bg-secondary"
+                    >
+                      Billing settings
+                    </Link>
+                  </div>
+                </div>
+              )}
               {serverAvailability && (
                 <p className="text-sm text-muted-foreground" aria-live="polite">
                   Server check — Available: {serverAvailability.available}, Requested:{" "}
@@ -1712,6 +1997,7 @@ export default function GenerateGovPaper(): React.ReactElement {
 
               {job && (
                 <div className="space-y-2 mt-4">
+                  <GovPaperReviewGenerationTimer session={generationSession} />
                   <ul className="space-y-1.5" aria-live="polite">
                     {PAPER_JOB_UI_STATES.map((s, i) => {
                       const done =
@@ -1789,13 +2075,17 @@ export default function GenerateGovPaper(): React.ReactElement {
                     ? handleRetry()
                     : handleGenerate())
                 }
-                disabled={busy || (job != null && !isPaperJobTerminal(job.status)) || !stageId}
+                disabled={generateDisabled}
               >
                 {busy ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Generating…
                   </>
+                ) : insufficientCredits ? (
+                  "Top up to generate"
+                ) : !creditGate.allowed ? (
+                  "Checking credits…"
                 ) : job &&
                   (mapPaperJobPublicStatus(job.status) === "failed_retryable" ||
                     mapPaperJobPublicStatus(job.status) === "failed") ? (
@@ -1813,13 +2103,17 @@ export default function GenerateGovPaper(): React.ReactElement {
             ) : (
               <Button
                 onClick={() => void handleGenerate(customPracticeMax)}
-                disabled={busy || !stageId || customPracticeMax < 5}
+                disabled={generateDisabled || customPracticeMax < 5}
               >
                 {busy ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Generating…
                   </>
+                ) : insufficientCredits ? (
+                  "Top up to generate"
+                ) : !creditGate.allowed ? (
+                  "Checking credits…"
                 ) : (
                   customPracticeSetLabel(customPracticeMax)
                 )}

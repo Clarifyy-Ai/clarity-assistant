@@ -10,6 +10,7 @@ import {
   Link2, BookOpen, ListChecks, FileStack, Languages, FileUp, Factory, ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { COMMUNITY_MODULE_LABEL } from "@/lib/community/moderation";
 import { AppLoadingFallback } from "@/components/layout/AppLoadingFallback";
 import {
   Sheet,
@@ -48,7 +49,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { to: "/app/admin/questions",      icon: FileText,       label: "Questions", staff: "staff" },
       { to: "/app/admin/bulk-upload",    icon: Upload,         label: "Bulk Upload"   },
       { to: "/app/admin/seed-questions", icon: Database,       label: "Seed / Import" },
-      { to: "/app/admin/community",      icon: MessageSquare,  label: "Q&A", staff: "staff" },
+      { to: "/app/admin/community",      icon: MessageSquare,  label: COMMUNITY_MODULE_LABEL, staff: "staff" },
       { to: "/app/admin/learning",       icon: BookOpen,       label: "Learning Hub"  },
       { to: "/app/admin/blog",           icon: FileText,       label: "Blog"          },
       { to: "/app/admin/help-articles",  icon: BookOpen,       label: "Help Articles" },

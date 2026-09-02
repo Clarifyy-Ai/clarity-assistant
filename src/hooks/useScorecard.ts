@@ -62,6 +62,18 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
   }, []);
 
   const loadScorecard = useCallback(async (): Promise<void> => {
+    const userId = useAuthStore.getState().user?.id;
+    if (!userId) {
+      setState((s) => ({
+        ...s,
+        isLoading: false,
+        isGenerating: false,
+        status: "failed",
+        error: "You must be signed in to view this scorecard.",
+      }));
+      return;
+    }
+
     setState((s) => ({
       ...s,
       isLoading: true,
@@ -70,13 +82,15 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
     }));
 
     try {
-      const existing = await scorecardsDB.getBySessionId(sessionId);
+      const existing = await scorecardsDB.getBySessionIdForUser(sessionId, userId);
       if (existing) {
         applyScorecard(existing);
         return;
       }
 
-      const answers = await sessionAnswersDB.listBySessionId(sessionId).catch(() => []);
+      const answers = await sessionAnswersDB
+        .listBySessionIdForUser(sessionId, userId)
+        .catch(() => []);
       const hasAnswers = (answers ?? []).some(
         (row: { answer?: string | null }) => (row.answer ?? "").trim().length > 0,
       );
@@ -112,7 +126,8 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
   }, [sessionId, applyScorecard]);
 
   const generateScorecard = useCallback(async (): Promise<void> => {
-    if (!sessionId || generateInFlightRef.current) return;
+    const userId = useAuthStore.getState().user?.id;
+    if (!sessionId || !userId || generateInFlightRef.current) return;
     generateInFlightRef.current = true;
 
     setState((s) => ({
@@ -124,7 +139,9 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
     }));
 
     try {
-      const answers = await sessionAnswersDB.listBySessionId(sessionId).catch(() => []);
+      const answers = await sessionAnswersDB
+        .listBySessionIdForUser(sessionId, userId)
+        .catch(() => []);
       const hasAnswers = (answers ?? []).some(
         (row: { answer?: string | null }) => (row.answer ?? "").trim().length > 0,
       );
@@ -141,7 +158,7 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
       }
 
       await fetchEdgeJson("generate-scorecard", { session_id: sessionId }, { timeoutMs: 60_000 });
-      const created = await scorecardsDB.getBySessionId(sessionId);
+      const created = await scorecardsDB.getBySessionIdForUser(sessionId, userId);
       if (created) {
         applyScorecard(created);
         return;
@@ -178,7 +195,8 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
   }, [sessionId, loadScorecard]);
 
   const shareScorecard = useCallback(async (): Promise<string | null> => {
-    if (!state.scorecard) return null;
+    const userId = useAuthStore.getState().user?.id;
+    if (!state.scorecard || !userId) return null;
     if (!canShareScorecard(useAuthStore.getState().profile?.privacy_prefs)) {
       const reason =
         "Scorecard sharing is turned off in Settings → Privacy. Turn on “Allow scorecard sharing” to create a public link.";
@@ -188,7 +206,7 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
     const token = generateShareToken();
     const url = buildShareUrl(token);
     try {
-      await scorecardsDB.markShared(sessionId, token);
+      await scorecardsDB.markShared(sessionId, userId, token);
     } catch {
       setState((s) => ({
         ...s,

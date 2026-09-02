@@ -109,6 +109,7 @@ const ALLOWED_HEADERS = [
 const EXPOSE_HEADERS = [
   "x-request-id",
   "x-correlation-id",
+  "x-error-code",
   "retry-after",
   "x-ratelimit-limit",
   "x-ratelimit-remaining",
@@ -478,6 +479,54 @@ export function corsSuccess(
   });
 }
 
+/** Expected business conflict (inventory, credits, submission, idempotency). */
+export class BusinessError extends Error {
+  status: number;
+  code: string;
+
+  constructor(status: number, code: string, message: string) {
+    super(message);
+    this.name = "BusinessError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+function safePublicErrorCode(code: string): string {
+  const trimmed = String(code ?? "").trim().slice(0, 64);
+  if (!trimmed) return "ERROR";
+  return /^[A-Za-z0-9._-]+$/.test(trimmed) ? trimmed : "ERROR";
+}
+
+function observabilityLevel(status: number): "info" | "warn" | "error" {
+  if (status === 409 || status === 402) return "info";
+  if (status >= 500) return "error";
+  if (status >= 400) return "warn";
+  return "info";
+}
+
+function logBrowserCorsOutcome(fields: {
+  functionName: string;
+  correlation_id: string;
+  status: number;
+  duration_ms: number;
+  code?: string;
+}): void {
+  const level = observabilityLevel(fields.status);
+  const payload: Record<string, unknown> = {
+    level,
+    functionName: fields.functionName,
+    correlation_id: fields.correlation_id,
+    status: fields.status,
+    duration_ms: fields.duration_ms,
+  };
+  if (fields.code) payload.code = fields.code;
+  const line = JSON.stringify(payload);
+  if (level === "error") console.error(line);
+  else if (level === "warn") console.warn(line);
+  else console.log(line);
+}
+
 export function corsError(
   req: Request,
   status: number,
@@ -485,13 +534,18 @@ export function corsError(
   message: string,
 ): Response {
   const correlationId = resolveCorrelationId(req);
-  return corsJson(req, status, {
-    success: false,
-    error: message,
-    code,
-    correlation_id: correlationId,
-    correlationId,
-  });
+  return corsJson(
+    req,
+    status,
+    {
+      success: false,
+      error: message,
+      code,
+      correlation_id: correlationId,
+      correlationId,
+    },
+    { "x-error-code": safePublicErrorCode(code) },
+  );
 }
 
 export function unexpectedErrorResponse(
@@ -531,20 +585,37 @@ export function withBrowserCors(
   handler: (req: Request) => Promise<Response> | Response,
 ): (req: Request) => Promise<Response> {
   return async (req: Request): Promise<Response> => {
+    const startedAt = Date.now();
     const correlationId = resolveCorrelationId(req);
     const name = functionName || functionNameFromRequest(req);
+
+    const finish = (response: Response): Response => {
+      const headerCode = response.headers.get("x-error-code")?.trim();
+      logBrowserCorsOutcome({
+        functionName: name,
+        correlation_id: correlationId,
+        status: response.status,
+        duration_ms: Date.now() - startedAt,
+        code: headerCode || undefined,
+      });
+      return response;
+    };
+
     try {
       const preflight = handleCors(req);
       if (preflight) {
-        return applyCors(req, preflight, correlationId);
+        return finish(applyCors(req, preflight, correlationId));
       }
       const response = await handler(req);
-      return applyCors(req, response, correlationId);
+      return finish(applyCors(req, response, correlationId));
     } catch (error) {
-      if (error instanceof Response) {
-        return applyCors(req, error, correlationId);
+      if (error instanceof BusinessError) {
+        return finish(corsError(req, error.status, error.code, error.message));
       }
-      return unexpectedErrorResponse(req, name, error);
+      if (error instanceof Response) {
+        return finish(applyCors(req, error, correlationId));
+      }
+      return finish(unexpectedErrorResponse(req, name, error));
     }
   };
 }

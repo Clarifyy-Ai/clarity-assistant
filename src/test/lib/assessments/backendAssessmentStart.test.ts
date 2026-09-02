@@ -6,10 +6,13 @@ import {
   inventoryAllowsStart,
   type ExamBlueprint,
 } from "@/lib/assessments/examTemplateEngine";
+import { ApiClientError } from "@/lib/api/apiClient";
 import {
   assessmentStartIdempotencyKey,
   decideAssembleAssessmentResponse,
+  extractAssessmentInventoryDetails,
   mapAssessmentRpcError,
+  messageFromAssessmentStartError,
   parseAssessmentStartRequest,
   userMessageForAssessmentError,
 } from "@/lib/assessments/assessmentStart";
@@ -316,6 +319,24 @@ describe("assemble-assessment edge contract", () => {
       body: { template_id: "c6c64819-d48c-4e9b-a278-dd41aaba3e76" },
       rpc: { ok: false, error: { details: "INSUFFICIENT_QUESTION_INVENTORY", message: "not enough", hint: JSON.stringify({ requested_count: 6, available_count: 1 }) } },
     }).status).toBe(409);
+
+    expect(
+      extractAssessmentInventoryDetails({
+        requested_count: 6,
+        available_count: 2,
+      })?.available_count,
+    ).toBe(2);
+
+    expect(
+      messageFromAssessmentStartError(
+        new ApiClientError({
+          message: "short",
+          status: 409,
+          code: "INSUFFICIENT_QUESTION_INVENTORY",
+          details: { requested_count: 6, available_count: 2 },
+        }),
+      ).text,
+    ).toContain("only 2 are available");
 
     expect(decideAssembleAssessmentResponse({
       method: "POST",

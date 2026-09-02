@@ -22,6 +22,8 @@ import {
   forbiddenResponse,
 } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
+import { withTimeout } from "../_shared/withTimeout.ts";
+import { AUTH_LOOKUP_TIMEOUT_MS } from "../_shared/indiaRegion.ts";
 import {
   assembleClaimedPaperJob,
 } from "../_shared/govPaperAssembly.ts";
@@ -32,6 +34,10 @@ import {
   reclaimExpiredPaperJobs,
   releasePaperJobForPythonFactory,
 } from "../_shared/govPaperJobLease.ts";
+import {
+  isPythonGovExamConfigured,
+  pythonGovProcessJob,
+} from "../_shared/pythonGovExamClient.ts";
 
 function json(req: Request, payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -98,10 +104,27 @@ Deno.serve(async (req) => {
     let userId: string | null = null;
 
     if (!internal) {
-      const auth = await authenticateRequest(req);
+      let auth: Awaited<ReturnType<typeof authenticateRequest>>;
+      try {
+        auth = await withTimeout(authenticateRequest(req), AUTH_LOOKUP_TIMEOUT_MS);
+      } catch {
+        return json(req, {
+          error: "Authentication timed out.",
+          code: "AUTH_TIMEOUT",
+        }, 503);
+      }
       if (auth.error) return auth.error;
       userId = auth.context.user.id;
-      if (await isAdmin(userId)) {
+      let admin = false;
+      try {
+        admin = await withTimeout(isAdmin(userId), AUTH_LOOKUP_TIMEOUT_MS);
+      } catch {
+        return json(req, {
+          error: "Authorization lookup timed out.",
+          code: "AUTH_TIMEOUT",
+        }, 503);
+      }
+      if (admin) {
         actor = "admin";
       } else if (jobId) {
         actor = "owner";
@@ -129,9 +152,41 @@ Deno.serve(async (req) => {
 
     if (!claimed.ok) {
       if (claimed.message === "PYTHON_FACTORY_OWNED" && jobId) {
+        const { data: owned } = await db
+          .from("gov_paper_generation_jobs")
+          .select(
+            "id, status, mock_test_id, generated_paper_id, error_code, user_id, request_json, lease_expires_at, started_at",
+          )
+          .eq("id", jobId)
+          .maybeSingle();
+
+        const leaseActive =
+          owned?.lease_expires_at &&
+          new Date(String(owned.lease_expires_at)).getTime() > Date.now();
+        const createdMs = owned?.started_at
+          ? Date.parse(String(owned.started_at))
+          : NaN;
+        const queuedStale =
+          owned?.status === "queued" &&
+          Number.isFinite(createdMs) &&
+          Date.now() - createdMs > 120_000;
+        if (
+          queuedStale &&
+          !leaseActive &&
+          isPythonGovExamConfigured()
+        ) {
+          await pythonGovProcessJob({
+            job_id: jobId,
+            correlation_id: crypto.randomUUID(),
+          }).catch((err) => {
+            console.warn("[process-paper-generation-job] python_redispatch:", err);
+          });
+        }
         return json(req, {
           jobId,
-          status: "queued",
+          status: owned?.status ?? "queued",
+          mockTestId: owned?.mock_test_id ?? null,
+          paperId: owned?.generated_paper_id ?? null,
           code: "PYTHON_FACTORY_OWNED",
           error: "This job is owned by the Python paper-factory worker.",
         }, 202);
@@ -185,6 +240,51 @@ Deno.serve(async (req) => {
             error: "This job is owned by the Python paper-factory worker.",
             generator: routedGenerator,
           }, 202);
+        }
+        if (
+          existing.status === "queued" ||
+          existing.status === "failed_retryable" ||
+          existing.status === "failed"
+        ) {
+          await db
+            .from("gov_paper_generation_jobs")
+            .update({
+              worker_id: null,
+              lease_expires_at: null,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", jobId)
+            .in("status", ["queued", "failed_retryable", "failed"]);
+          const stolen = await claimPaperGenerationJob(db, {
+            jobId,
+            workerId,
+            userId: actor === "owner" && userId ? userId : undefined,
+          });
+          if (stolen.ok) {
+            claimedJobId = String(stolen.job.id);
+            claimedWorkerId = stolen.workerId;
+            const result = await assembleClaimedPaperJob(db, stolen.job, stolen.workerId);
+            if (result.ok) {
+              return json(req, {
+                jobId: stolen.job.id,
+                status: "completed",
+                mockTestId: result.mockTestId,
+                paperId: result.paperId,
+                questionCount: result.questionCount,
+                paperClass: result.paperClass,
+                workerId: stolen.workerId,
+                attemptCount: stolen.attemptCount,
+                recovered: true,
+              });
+            }
+            return json(req, {
+              jobId: stolen.job.id,
+              status: result.status,
+              errorCode: result.errorCode,
+              error: result.error,
+              recovered: true,
+            }, result.status === "cancelled" ? 202 : (result.httpStatus ?? 500));
+          }
         }
       }
       return json(req, {

@@ -7,6 +7,7 @@ import { AppTopBar } from "@/components/layout/AppTopBar";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { NetworkBanner } from "@/components/layout/NetworkBanner";
 import { useAuthStore } from "@/store/authStore";
+import { PUBLIC_CTAS } from "@/lib/constants/publicCtas";
 import { Button } from "@/components/ui/Button";
 import { ArrowLeft, Home, LayoutDashboard, HelpCircle } from "lucide-react";
 
@@ -44,7 +45,7 @@ function NotFoundContent({ isAuthenticated }: { isAuthenticated: boolean }) {
 
         <Link to="/help">
           <Button variant="outline" size="md" leftIcon={<HelpCircle className="w-4 h-4" />}>
-            Help center
+            {PUBLIC_CTAS.help}
           </Button>
         </Link>
 

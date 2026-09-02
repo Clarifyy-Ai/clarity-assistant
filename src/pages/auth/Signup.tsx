@@ -20,14 +20,9 @@ import { AuthShell } from "@/components/layout/AuthShell";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 
-import {
-  GoogleOAuthButton,
-  GithubOAuthButton,
-  LinkedInOAuthButton,
-  AzureOAuthButton,
-} from "@/components/auth/OAuthButton";
-import { isOAuthProviderEnabled } from "@/lib/auth/oauthProviders";
+import { OAuthProviderSection } from "@/components/auth/OAuthProviderSection";
 import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
+import { getAuthenticatedEntryPath } from "@/lib/auth/postAuthRedirect";
 
 import { signupSchema } from "@/lib/validators";
 import { getCSRFHiddenInputProps, validateCSRFToken } from "@/lib/security";
@@ -182,12 +177,15 @@ export default function Signup(): JSX.Element {
 
   useEffect(() => {
     if (authStatus !== "authenticated") return;
-    // Email/password signup often returns a session before confirm — never skip verify-email.
     if (!isUserEmailConfirmed(useAuthStore.getState().user)) {
       navigate("/verify-email", { replace: true });
       return;
     }
-    navigate("/app/dashboard", { replace: true });
+    const { isOnboarded, isAdmin } = useAuthStore.getState();
+    navigate(
+      getAuthenticatedEntryPath({ isAdmin, isOnboarded }),
+      { replace: true },
+    );
   }, [authStatus, navigate]);
 
   useEffect(() => {
@@ -298,27 +296,7 @@ export default function Signup(): JSX.Element {
             </div>
           )}
 
-          {(isOAuthProviderEnabled("google") ||
-            isOAuthProviderEnabled("github") ||
-            isOAuthProviderEnabled("linkedin_oidc") ||
-            isOAuthProviderEnabled("azure")) && (
-            <>
-              <div className="grid grid-cols-2 gap-2">
-                {isOAuthProviderEnabled("google") ? <GoogleOAuthButton /> : null}
-                {isOAuthProviderEnabled("github") ? <GithubOAuthButton /> : null}
-                {isOAuthProviderEnabled("linkedin_oidc") ? <LinkedInOAuthButton /> : null}
-                {isOAuthProviderEnabled("azure") ? <AzureOAuthButton /> : null}
-              </div>
-
-              <div className="flex items-center gap-3 my-5">
-                <div className="flex-1 h-px bg-border" />
-                <span className="text-xs text-muted-foreground">
-                  or sign up with email
-                </span>
-                <div className="flex-1 h-px bg-border" />
-              </div>
-            </>
-          )}
+          <OAuthProviderSection dividerLabel="or sign up with email" />
 
           <form
             className="space-y-4"
@@ -468,6 +446,7 @@ export default function Signup(): JSX.Element {
             <label className="flex items-start gap-2.5 cursor-pointer select-none">
               <input
                 type="checkbox"
+                name="acceptTerms"
                 checked={Boolean(acceptTerms)}
                 onChange={(event) =>
                   setValue("acceptTerms", event.target.checked, {
@@ -475,6 +454,8 @@ export default function Signup(): JSX.Element {
                   })
                 }
                 required
+                aria-invalid={Boolean(errors.acceptTerms?.message)}
+                aria-describedby={errors.acceptTerms?.message ? "signup-accept-terms-error" : undefined}
                 className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/40 cursor-pointer"
               />
 
@@ -502,7 +483,7 @@ export default function Signup(): JSX.Element {
             </label>
 
             {errors.acceptTerms?.message && (
-              <p role="alert" className="text-xs text-destructive">
+              <p id="signup-accept-terms-error" role="alert" className="text-xs text-destructive">
                 {errors.acceptTerms.message}
               </p>
             )}

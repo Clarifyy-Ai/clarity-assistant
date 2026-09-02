@@ -20,6 +20,15 @@ import {
   type SessionComparisonPayload,
   type SessionComparisonSide,
 } from "@/lib/analytics/sessionComparison";
+import {
+  buildActivityByDay,
+  buildUnifiedScoreTrend,
+  countScoredSessions,
+  DEFAULT_ANALYTICS_PERIOD,
+  normalizeAnalyticsDashboard,
+  resolveAnalyticsLoadStatus,
+  resolveScoreTrendSource,
+} from "@/lib/analytics/dashboardDerivations";
 
 // ─────────────────────────────────────────────────────────────────
 // useAnalytics
@@ -34,7 +43,7 @@ export function useAnalytics() {
   const [error,        setError]        = useState<string | null>(null);
   const [isStale,      setIsStale]      = useState(false);
   const [filter,       setFilterState]  = useState<AnalyticsFilter>({
-    period:         "30d",
+    period:         DEFAULT_ANALYTICS_PERIOD,
     session_filter: "all",
     interview_type: "all",
   });
@@ -43,6 +52,8 @@ export function useAnalytics() {
   const [compareError, setCompareError] = useState<string | null>(null);
 
   const hasDataRef = useRef(false);
+  const analyticsInflightRef = useRef<Promise<void> | null>(null);
+  const compareInflightRef = useRef(false);
 
   // ── Load on mount + filter change ────────────────────────────
 
@@ -63,42 +74,50 @@ export function useAnalytics() {
   }, [user?.id]);
 
   async function loadAnalytics(): Promise<void> {
-    if (!hasDataRef.current) {
-      setIsLoading(true);
-    }
-    setError(null);
+    if (analyticsInflightRef.current) return analyticsInflightRef.current;
 
-    try {
-      const result = await fetchEdgeJson<AnalyticsDashboardData>(
-        "analytics-dashboard",
-        {
-          filter,
-          timezone: resolveDisplayTimeZone(
-            useAuthStore.getState().profile?.timezone,
-          ),
-        },
-        { timeoutMs: 25_000 },
-      );
-      if (result?.recent_sessions) {
-        result.recent_sessions = result.recent_sessions.filter(
-          (s) => !(s as { tags?: string[] }).tags?.includes("private"),
-        );
+    analyticsInflightRef.current = (async () => {
+      if (!hasDataRef.current) {
+        setIsLoading(true);
       }
-      setData(result);
-      setComparison(null);
-      setCompareError(null);
-      hasDataRef.current = true;
-      setIsStale(false);
-    } catch (err) {
-      // Keep last-known data so optional 503s do not blank the shell.
-      setError(toSafeUiError(err, "We couldn't load your analytics."));
-      setData((prev) => {
-        setIsStale(Boolean(prev));
-        return prev;
-      });
-    } finally {
-      setIsLoading(false);
-    }
+      setError(null);
+
+      try {
+        const result = normalizeAnalyticsDashboard(
+          await fetchEdgeJson<AnalyticsDashboardData>(
+            "analytics-dashboard",
+            {
+              filter,
+              timezone: resolveDisplayTimeZone(
+                useAuthStore.getState().profile?.timezone,
+              ),
+            },
+            { timeoutMs: 25_000 },
+          ),
+        );
+        if (result?.recent_sessions) {
+          result.recent_sessions = result.recent_sessions.filter(
+            (s) => !(s as { tags?: string[] }).tags?.includes("private"),
+          );
+        }
+        setData(result);
+        setComparison(null);
+        setCompareError(null);
+        hasDataRef.current = true;
+        setIsStale(false);
+      } catch (err) {
+        // Keep last-known data so optional 503s do not blank the shell.
+        setError(toSafeUiError(err, "We couldn't load your analytics."));
+        setData((prev) => {
+          setIsStale(Boolean(prev));
+          return prev;
+        });
+      } finally {
+        setIsLoading(false);
+        analyticsInflightRef.current = null;
+      }
+    })();
+    return analyticsInflightRef.current;
   }
 
   // ── Filter setters ────────────────────────────────────────────
@@ -121,6 +140,8 @@ export function useAnalytics() {
     sessionAId: string,
     sessionBId: string
   ): Promise<void> => {
+    if (compareInflightRef.current) return;
+    compareInflightRef.current = true;
     setIsComparing(true);
     setCompareError(null);
     setComparison(null);
@@ -144,6 +165,7 @@ export function useAnalytics() {
       setCompareError(compareErrorUserMessage(code, raw));
       setComparison(null);
     } finally {
+      compareInflightRef.current = false;
       setIsComparing(false);
     }
   }, []);
@@ -207,8 +229,8 @@ export function useAnalytics() {
     ? Math.round(data.avg_filler_rate * 10) / 10
     : null;
   const fillerDelta   = data?.avg_filler_delta_30d ?? null;
-  const wpmDelta      = null;
-  const avgConfidence = data?.avg_confidence_score ?? null;
+  const wpmDelta      = data?.avg_wpm_delta_30d ?? null;
+  const avgConfidence = data?.dimension_averages?.confidence ?? null;
 
   const sessionsThisWeek = (() => {
     if (!data?.recent_sessions) return 0;
@@ -218,18 +240,38 @@ export function useAnalytics() {
       (s) => new Date(s.date) >= weekAgo
     ).length;
   })();
-  // The dashboard response is already scoped to the selected period. Using the
-  // profile's lifetime counter here made the filter appear not to work.
-  const sessionsInSelectedPeriod = data?.total_sessions ?? 0;
+  const displayTimeZone = resolveDisplayTimeZone(
+    useAuthStore.getState().profile?.timezone,
+  );
 
-  const scoreTrend = (data?.confidence_trend ?? []).map((p) => ({
-    date: p.date,
-    score: p.score,
-  }));
+  const sessionsInSelectedPeriod =
+    data?.recent_sessions?.length ?? data?.total_sessions ?? 0;
 
-  const dimensionAverages: Record<string, number> | undefined = data?.weak_spot_radar
-    ? Object.fromEntries(data.weak_spot_radar.map((w) => [w.label, w.avg_score]))
-    : undefined;
+  const sessionsScored =
+    data?.sessions_scored ??
+    countScoredSessions(data?.recent_sessions ?? []);
+
+  const scoreTrend = buildUnifiedScoreTrend({
+    recentSessions: data?.recent_sessions ?? [],
+    confidenceTrend: data?.confidence_trend ?? [],
+  });
+
+  const scoreTrendSource = resolveScoreTrendSource({
+    recentSessions: data?.recent_sessions ?? [],
+    confidenceTrend: data?.confidence_trend ?? [],
+  });
+
+  const activityByDay =
+    data?.activity_by_day ??
+    buildActivityByDay(data?.recent_sessions ?? [], displayTimeZone);
+
+  const loadStatus = resolveAnalyticsLoadStatus({
+    isLoading,
+    error,
+    data,
+  });
+
+  const dimensionAverages = data?.dimension_averages ?? undefined;
 
   const categoryScores = (data?.weak_spot_radar ?? []).map((w) => ({
     category: w.label,
@@ -240,33 +282,33 @@ export function useAnalytics() {
   const fillerBreakdown: Record<string, number> = {};
   if (data?.filler_trend) {
     for (const fp of data.filler_trend) {
-      if (fp.top_filler) {
-        // Prefer real counts; otherwise count one occurrence of the top filler.
-        const weight =
-          typeof fp.total_fillers === "number" && Number.isFinite(fp.total_fillers)
-            ? fp.total_fillers
-            : 1;
+      if (
+        fp.top_filler &&
+        typeof fp.total_fillers === "number" &&
+        Number.isFinite(fp.total_fillers)
+      ) {
         fillerBreakdown[fp.top_filler] =
-          (fillerBreakdown[fp.top_filler] ?? 0) + weight;
+          (fillerBreakdown[fp.top_filler] ?? 0) + fp.total_fillers;
       }
     }
   }
 
-  const activityByDay: Record<string, number> = {};
-  if (data?.recent_sessions) {
-    for (const s of data.recent_sessions) {
-      const day = s.date.slice(0, 10);
-      activityByDay[day] = (activityByDay[day] ?? 0) + 1;
-    }
-  }
+  const filtersActive =
+    filter.period !== DEFAULT_ANALYTICS_PERIOD ||
+    filter.session_filter !== "all" ||
+    filter.interview_type !== "all";
 
   return {
     data,
     isLoading,
     error,
     isStale,
+    loadStatus,
     filter,
+    filtersActive,
     comparison,
+    displayTimeZone,
+    sessionsScored,
 
     setPeriod,
     setSessionFilter,
@@ -294,6 +336,7 @@ export function useAnalytics() {
     wpmDelta,
     avgConfidence,
     scoreTrend,
+    scoreTrendSource,
     dimensionAverages,
     categoryScores,
     fillerBreakdown,

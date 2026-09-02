@@ -236,6 +236,24 @@ describe("parsePlainTextMcqs", () => {
     ) as Array<{ correct_answer?: string }>;
     expect(parsed[0].correct_answer).toBe("B");
   });
+
+  it("accepts parenthetical lowercase options and a multi-line stem", () => {
+    const parsed = parsePlainTextMcqs(
+      [
+        "1. Consider the following statements about the Finance Commission.",
+        "It is a constitutional body.",
+        "(a) 1 only",
+        "(b) 2 only",
+        "(c) Both 1 and 2",
+        "(d) Neither 1 nor 2",
+        "Answer: C",
+      ].join("\n"),
+    ) as Array<{ question_text?: string; options?: string[]; correct_answer?: string }>;
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].question_text).toMatch(/Finance Commission/i);
+    expect(parsed[0].options?.[0]).toBe("1 only");
+    expect(parsed[0].correct_answer).toBe("C");
+  });
 });
 
 describe("extract-question-paper answer_key_status default", () => {

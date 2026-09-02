@@ -46,6 +46,7 @@ import {
   jobDescriptionsDB,
 } from "@/lib/supabase/database";
 import { useDocumentStore } from "@/store/documentStore";
+import { buildResumeContextForAI } from "@/lib/documents/interviewContext";
 import { getOrCreateSession, activateSession, isServerExpired } from "@/lib/session/sessionLifecycle";
 import { sessionDurationSeconds as sharedSessionDurationSeconds } from "@/lib/session/sessionStartEligibility";
 import { handleSessionStartError } from "@/lib/billing/sessionStartErrors";
@@ -74,13 +75,15 @@ import {
   reduceMockSessionLifecycle,
   type MockSessionLifecycle,
 } from "@/lib/mock/mockSessionLifecycle";
-import { speakQuestionText, stopBrowserTts, unlockBrowserTts } from "@/lib/mock/mockTts";
+import { speakQuestionText, stopBrowserTts, unlockBrowserTts, questionTtsIdentity } from "@/lib/mock/mockTts";
 import type { TtsOutcomeStatus } from "@/lib/mock/mockTts";
 import {
   isDuplicateQuestionText,
   normalizeQuestionText,
 } from "@/lib/mock/validateGeneratedQuestion";
 import { getAiUserFacingError } from "@/lib/network/aiErrorUx";
+import { microphoneSetupHint } from "@/lib/audio/micPermission";
+import { getMicPermissionState } from "@/lib/validators/audioValidator";
 import { isOverlayGhostClickSuppressed } from "@/lib/overlay/ghostClickGuard";
 import {
   answerNextStatusLabel,
@@ -213,19 +216,31 @@ function pickJdText(row: Record<string, unknown> | null): string {
   return "";
 }
 
-async function loadResumeContextText(config: MockConfig): Promise<string> {
+async function loadResumeContextText(config: MockConfig, userId?: string | null): Promise<string> {
   const active = useDocumentStore.getState().active_context.resume;
   const fromActive = typeof active?.content === "string" ? active.content.trim() : "";
-  if (fromActive) return fromActive;
+  let resumeContent = fromActive;
 
-  if (!config.resume_id) return "";
-  try {
-    const row = await resumesDB.getByIdMaybe(config.resume_id);
-    return row?.content?.trim() ?? "";
-  } catch (err) {
-    console.warn("[MockSession] resume load failed:", err);
-    return "";
+  if (!resumeContent && config.resume_id) {
+    try {
+      const row = await resumesDB.getByIdMaybe(config.resume_id);
+      resumeContent = row?.content?.trim() ?? "";
+    } catch (err) {
+      console.warn("[MockSession] resume load failed:", err);
+    }
   }
+
+  if (userId) {
+    try {
+      return await buildResumeContextForAI(userId, {
+        resumeContent: resumeContent || null,
+      });
+    } catch (err) {
+      console.warn("[MockSession] interview context build failed:", err);
+    }
+  }
+
+  return resumeContent;
 }
 
 async function loadJobDescriptionText(config: MockConfig): Promise<string> {
@@ -250,6 +265,7 @@ export default function MockSession() {
   const location = useLocation();
   const { sessionId: sessionIdParam } = useParams<{ sessionId?: string }>();
   const profile = useAuthStore((s) => s.profile);
+  const userId = useAuthStore((s) => s.user?.id);
   const planId = profile?.plan_id ?? "free";
   const { checkPostSessionAchievements } = useGamification();
 
@@ -316,9 +332,13 @@ export default function MockSession() {
     onFillerDetected: (count) => useSessionStore.getState().setFillerCount(count),
     onWPMUpdate: (wpm) => useSessionStore.getState().setCurrentWPM(wpm),
   });
+  const audioRef = useRef(audio);
+  audioRef.current = audio;
 
   const startTimeRef = useRef<string>(new Date().toISOString());
   const sessionIdFromStore = useSessionStore((s) => s.session_id);
+  const currentQuestion = useSessionStore((s) => s.current_question);
+  const currentQuestionIndex = useSessionStore((s) => s.current_question_index) ?? 0;
 
   const [phase, setPhase] = useState<MockSessionPhase>("idle");
   const [summaryStats, setSummaryStats] = useState<MockSessionSummaryStats | null>(null);
@@ -328,6 +348,7 @@ export default function MockSession() {
   const [endConfirm, setEndConfirm] = useState(false);
   const [questionsError, setQuestionsError] = useState<string | null>(null);
   const [setupStep, setSetupStep] = useState<MockSetupStep>("session");
+  const [audioSetupHint, setAudioSetupHint] = useState("Preparing your mock interview session");
   const [usedLocalQuestions, setUsedLocalQuestions] = useState(false);
   const [sessionNotes, setSessionNotes] = useState("");
   const [targetQuestionCount, setTargetQuestionCount] = useState(5);
@@ -337,7 +358,11 @@ export default function MockSession() {
   const [nextQuestionError, setNextQuestionError] = useState<string | null>(null);
   const [overlayInitState, setOverlayInitState] = useState<OverlayInitState>("waiting_session");
   const [ttsState, setTtsState] = useState<TtsOutcomeStatus | "idle">("idle");
+  const [pendingTtsQuestion, setPendingTtsQuestion] = useState<{ qId: string; qText: string } | null>(
+    null,
+  );
   const pendingTtsQuestionRef = useRef<{ qId: string; qText: string } | null>(null);
+  const ttsGenerationRef = useRef(0);
 
   const questionsCacheRef = useRef<SessionQuestion[] | null>(null);
   const isStartingRef = useRef(false);
@@ -395,12 +420,12 @@ export default function MockSession() {
       return { resume: mockDocCacheRef.current.resume, jd: mockDocCacheRef.current.jd };
     }
     const [resume, jd] = await Promise.all([
-      loadResumeContextText(config),
+      loadResumeContextText(config, userId),
       loadJobDescriptionText(config),
     ]);
     mockDocCacheRef.current = { key, resume, jd };
     return { resume, jd };
-  }, []);
+  }, [userId]);
 
   // Overlay mount only after authoritative mock session context is ready — one instance per session.
   useEffect(() => {
@@ -439,7 +464,7 @@ export default function MockSession() {
 
     if (isPaused) {
       try {
-        await audio.start();
+        await audio.start({ restore: true });
         setIsPaused(false);
         toast.message("Session resumed");
       } catch (err) {
@@ -522,8 +547,12 @@ export default function MockSession() {
     },
   });
 
-  const question = orchestrator.currentQuestion;
-  const qIndex = orchestrator.currentQuestionIndex ?? 0;
+  const question = currentQuestion;
+  const qIndex = currentQuestionIndex;
+  const ttsIdentity = questionTtsIdentity(
+    typeof question === "string" ? question : question,
+    qIndex,
+  );
   const totalQ = targetQuestionCount;
   const isLastQ = qIndex >= totalQ - 1;
   const generationInFlight = isQuestionGenerationInFlight(generationSnap.state);
@@ -538,7 +567,7 @@ export default function MockSession() {
       }
       interviewerAudioActiveRef.current = false;
       setTtsState("idle");
-      audio.resumeCandidateCapture();
+      audioRef.current.resumeCandidateCapture();
       listeningStartedAtRef.current = Date.now();
       if (getOverlaySessionAuthority().canAcceptSessionMutations()) {
         useOverlayStore.getState().setSessionPipelineState("candidate_answering");
@@ -586,7 +615,7 @@ export default function MockSession() {
         /* Next falls back to runQuestionGeneration */
       });
     },
-    [audio, getCachedMockDocuments, totalQ],
+    [getCachedMockDocuments, totalQ],
   );
 
   const handleRequestHint = useCallback(async (questionText?: string) => {
@@ -612,23 +641,27 @@ export default function MockSession() {
   const playInterviewerVoice = useCallback(
     (qText: string, qId: string, fromGesture = false) => {
       if (!isMockSessionMutable(lifecycleRef.current)) return;
+      const generation = ++ttsGenerationRef.current;
       if (fromGesture) unlockBrowserTts();
       pendingTtsQuestionRef.current = { qId, qText };
+      setPendingTtsQuestion({ qId, qText });
       setTtsState("playing");
       speakingQuestionIdRef.current = qId;
       interviewerAudioActiveRef.current = true;
-      audio.suspendCandidateCapture();
+      audioRef.current.suspendCandidateCapture();
 
       void speakQuestionText(qText, {
         questionId: qId,
         isCurrent: (id) =>
+          ttsGenerationRef.current === generation &&
           speakingQuestionIdRef.current === id &&
           isMockSessionMutable(lifecycleRef.current) &&
           getOverlaySessionAuthority().canAcceptSessionMutations(),
         onStart: () => {
+          if (ttsGenerationRef.current !== generation) return;
           interviewerAudioActiveRef.current = true;
           setTtsState("playing");
-          audio.suspendCandidateCapture();
+          audioRef.current.suspendCandidateCapture();
           if (getOverlaySessionAuthority().canAcceptSessionMutations()) {
             useOverlayStore.getState().setSessionPipelineState("question_spoken");
           }
@@ -637,7 +670,9 @@ export default function MockSession() {
           /* beginCandidateListening handles pipeline transition */
         },
       }).then((outcome) => {
+        if (ttsGenerationRef.current !== generation) return;
         if (speakingQuestionIdRef.current !== qId) return;
+        if (outcome.status === "cancelled") return;
         if (outcome.status === "blocked") {
           setTtsState("blocked");
           interviewerAudioActiveRef.current = false;
@@ -651,54 +686,47 @@ export default function MockSession() {
         }
         if (outcome.status === "ended") {
           setTtsState("idle");
+          setPendingTtsQuestion(null);
+          pendingTtsQuestionRef.current = null;
           beginCandidateListening(qId);
         }
       });
     },
-    [audio, beginCandidateListening],
+    [beginCandidateListening],
   );
 
+  const playInterviewerVoiceRef = useRef(playInterviewerVoice);
+  playInterviewerVoiceRef.current = playInterviewerVoice;
+
   useEffect(() => {
-    if (phase !== "active" || !question) return;
+    if (phase !== "active") return;
     if (!isMockSessionMutable(lifecycleRef.current)) return;
+    if (!ttsIdentity.text) return;
 
-    const qText = typeof question === "string" ? question : question.question_text ?? "";
-    const qId =
-      typeof question === "string"
-        ? `q-${qIndex}`
-        : question.id || `q-${qIndex}`;
-
-    if (!qText) return;
-
-    // Clean prior question audio / finalization timers before new question.
-    stopBrowserTts();
-    interviewerAudioActiveRef.current = false;
-    listeningStartedAtRef.current = null;
-    setTtsState("idle");
-    pendingTtsQuestionRef.current = null;
-
-    injectInterviewerQuestion(qText, qIndex);
+    injectInterviewerQuestion(ttsIdentity.text, qIndex);
     const overlay = useOverlayStore.getState();
     overlay.setSessionPipelineState("question_generated");
-    overlay.setCurrentQuestion(qText);
+    overlay.setCurrentQuestion(ttsIdentity.text);
     setAnswerNextState((s) => reduceAnswerNext(s, { type: "QUESTION_READY" }));
 
     if (overlay.auto_generate) {
-      const autoFp = questionFingerprint(qText) || qText;
+      const autoFp = questionFingerprint(ttsIdentity.text) || ttsIdentity.text;
       if (beginAutoHintIfIdle(autoHintInflightFingerprintsRef, autoFp)) {
-        void handleRequestHint(qText);
+        void handleRequestHint(ttsIdentity.text);
       }
     }
 
-    speakingQuestionIdRef.current = qId;
+    speakingQuestionIdRef.current = ttsIdentity.id;
     setAnswerNextState((s) => reduceAnswerNext(s, { type: "START_SPEAKING" }));
-    playInterviewerVoice(qText, qId);
+    playInterviewerVoiceRef.current(ttsIdentity.text, ttsIdentity.id);
 
     return () => {
+      ttsGenerationRef.current += 1;
       stopBrowserTts();
     };
+    // Question id+text only — timer, transcript, and audio-level ticks must not remount TTS.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, question, qIndex, injectInterviewerQuestion, playInterviewerVoice]);
+  }, [phase, ttsIdentity.id, ttsIdentity.text, qIndex]);
 
   const timeColor =
     timerMode === "countup"
@@ -813,10 +841,10 @@ export default function MockSession() {
     });
 
     try {
-      await sessionsDB.update(sessionId, {
+      await sessionsDB.updateForUser(sessionId, userId, {
         notes: progressNotes,
         questions_asked: targetQuestionCount,
-      } as Parameters<typeof sessionsDB.update>[1]);
+      } as Parameters<typeof sessionsDB.updateForUser>[2]);
     } catch (err) {
       console.warn("[MockSession] progress checkpoint failed:", err);
     }
@@ -990,13 +1018,14 @@ export default function MockSession() {
   }
 
   function cleanupQuestionAudio(options?: { preserveListeningWindow?: boolean }) {
+    ttsGenerationRef.current += 1;
     speakingQuestionIdRef.current = null;
     interviewerAudioActiveRef.current = false;
     if (!options?.preserveListeningWindow) {
       listeningStartedAtRef.current = null;
     }
     stopBrowserTts();
-    audio.resumeCandidateCapture();
+    audioRef.current.resumeCandidateCapture();
     useAudioStore.getState().updateInterimText("");
   }
 
@@ -1233,6 +1262,7 @@ export default function MockSession() {
     }
 
     let dbSessionId: string | null = existingSessionId ?? null;
+    let restored = false;
     try {
       if (dbSessionId) {
         await activateSession(dbSessionId);
@@ -1278,7 +1308,7 @@ export default function MockSession() {
       }
 
       setSetupStep("questions");
-      const restored = await tryRestoreMockProgress(dbSessionId!, mockConfig);
+      restored = await tryRestoreMockProgress(dbSessionId!, mockConfig);
       if (!restored) {
         await loadQuestions(dbSessionId!, mockConfig);
       }
@@ -1299,12 +1329,12 @@ export default function MockSession() {
           : message,
       );
       setOverlayInitState("error");
-      if (dbSessionId) {
+      if (dbSessionId && userId) {
         try {
-          await sessionsDB.update(dbSessionId, {
+          await sessionsDB.updateForUser(dbSessionId, userId, {
             status: "abandoned",
             ended_at: new Date().toISOString(),
-          } as Parameters<typeof sessionsDB.update>[1]);
+          } as Parameters<typeof sessionsDB.updateForUser>[2]);
         } catch {
           /* ignore */
         }
@@ -1321,8 +1351,11 @@ export default function MockSession() {
         return;
       }
       markOverlayProductSessionReady(generation);
+      const permission = await getMicPermissionState();
+      setAudioSetupHint(microphoneSetupHint(permission, { restore: restored }));
       setSetupStep("audio");
-      await audio.start();
+      unlockBrowserTts();
+      await audio.start({ restore: restored });
       const restoredElapsed = restoredElapsedRef.current;
       sessionElapsedRef.current = restoredElapsed;
       setSessionElapsed(restoredElapsed);
@@ -1815,7 +1848,7 @@ export default function MockSession() {
             <p className="text-sm font-medium text-foreground">{setupLabel}</p>
             <p className="text-xs text-muted-foreground">
               {setupStep === "audio"
-                ? "Allow microphone access when prompted"
+                ? audioSetupHint
                 : "Preparing your mock interview session"}
             </p>
           </div>
@@ -1837,7 +1870,9 @@ export default function MockSession() {
                 isStartingRef.current = true;
                 setSetupStep("questions");
                 void loadQuestions(sid, cfg, { forceLocal: true })
-                  .then(() => {
+                  .then(async () => {
+                    const permission = await getMicPermissionState();
+                    setAudioSetupHint(microphoneSetupHint(permission));
                     setSetupStep("audio");
                     return audio.start();
                   })
@@ -2203,7 +2238,7 @@ export default function MockSession() {
               )}
           </p>
 
-          <div className="rounded-2xl border border-border bg-card/60 px-4 py-3 text-left">
+          <div className="rounded-2xl border border-border bg-card/60 px-4 py-3 text-left min-h-[7.5rem]">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
               {generationInFlight ? "Current question (generating next…)" : "Current question"}
             </p>
@@ -2219,14 +2254,19 @@ export default function MockSession() {
                 Generating next question…
               </p>
             )}
-            {ttsState === "blocked" && pendingTtsQuestionRef.current && (
-              <div className="mt-3">
+            {ttsState === "playing" && (
+              <p className="mt-2 text-xs text-muted-foreground" data-testid="mock-tts-playing">
+                Playing interviewer voice…
+              </p>
+            )}
+            {ttsState === "blocked" && pendingTtsQuestion && (
+              <div className="mt-3" data-testid="mock-tts-blocked">
                 <Button
                   variant="secondary"
                   size="xs"
                   data-testid="mock-play-interviewer-voice"
                   onClick={() => {
-                    const pending = pendingTtsQuestionRef.current;
+                    const pending = pendingTtsQuestionRef.current ?? pendingTtsQuestion;
                     if (!pending) return;
                     playInterviewerVoice(pending.qText, pending.qId, true);
                   }}
@@ -2239,7 +2279,7 @@ export default function MockSession() {
               </div>
             )}
             {ttsState === "unavailable" && (
-              <p className="mt-2 text-[10px] text-muted-foreground">
+              <p className="mt-2 text-[10px] text-muted-foreground" data-testid="mock-tts-unavailable">
                 Interviewer voice unavailable — read the question above.
               </p>
             )}
@@ -2356,7 +2396,6 @@ export default function MockSession() {
       {/* Overlay — one instance per session; ErrorBoundary prevents blank app crash */}
       {phase === "active" &&
         overlayInitState === "ready" &&
-        canMountOverlay &&
         Boolean(sessionIdFromStore) && (
           <ErrorBoundary
             fallback={(_error, retry) => (

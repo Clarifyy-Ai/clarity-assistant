@@ -33,6 +33,7 @@ class AvailabilityResponse(BaseModel):
     language_available: bool = True
     blocked_reason: str | None = None
     mode: str = "generated_mock"
+    correlation_id: str | None = None
 
 
 class SelectRequest(BaseModel):
@@ -58,6 +59,7 @@ class SelectResponse(BaseModel):
     exam_type_keys: list[str] = Field(default_factory=list)
     rejected_duplicates: int = 0
     section_counts: dict[str, int] = Field(default_factory=dict)
+    correlation_id: str | None = None
 
 
 class QuestionPayload(BaseModel):
@@ -97,6 +99,7 @@ class ValidateQuestionsResponse(BaseModel):
     rejected: list[QuestionValidationResult]
     accepted_count: int
     rejected_count: int
+    correlation_id: str | None = None
 
 
 class ProcessJobRequest(BaseModel):
@@ -128,6 +131,7 @@ class ProcessJobResponse(BaseModel):
     blueprint_version: str | None = None
     source_summary: dict[str, int] | None = None
     validation_result: str | None = None
+    correlation_id: str | None = None
 
 
 class BuildPaperRequest(BaseModel):
@@ -168,6 +172,7 @@ class BuildPaperResponse(BaseModel):
     blueprint_version: str | None = None
     source_summary: dict[str, int] | None = None
     validation_result: str | None = None
+    correlation_id: str | None = None
 
 
 def fields_from_job_row(job: dict[str, Any]) -> dict[str, Any]:
@@ -188,31 +193,6 @@ def fields_from_job_row(job: dict[str, Any]) -> dict[str, Any]:
         "source_summary": mix or None,
         "validation_result": "passed" if str(job.get("status") or "") == "completed" else None,
         "paper_source": bp.get("paper_class"),
-    }
-
-
-def paper_mix_from_result(result: ProcessJobResponse) -> dict[str, int]:
-    """Prefer granular engine mix; never collapse official/verified into approved_bank."""
-    granular = result.source_mix or result.source_summary or {}
-    if isinstance(granular, dict) and granular:
-        out: dict[str, int] = {}
-        for key, value in granular.items():
-            try:
-                count = int(value)
-            except (TypeError, ValueError):
-                continue
-            if count:
-                out[str(key)] = count
-        if out:
-            return out
-    return {
-        k: v
-        for k, v in {
-            "approved_bank": result.bank_count or 0,
-            "ai_generated_practice": result.ai_count or 0,
-            "generated_practice": result.deterministic_count or 0,
-        }.items()
-        if v
     }
 
 

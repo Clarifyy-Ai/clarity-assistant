@@ -87,11 +87,11 @@ export function PageHeader({
       className={cn("space-y-4 mb-6 md:mb-8", className)}
     >
       {displayBreadcrumbs && displayBreadcrumbs.length > 0 && (
-        <nav className="flex items-center gap-1 text-xs sm:text-sm" aria-label="Breadcrumb">
+        <nav className="flex items-center gap-1 text-xs sm:text-sm min-w-0" aria-label="Breadcrumb">
           {displayBreadcrumbs.map((breadcrumb, index) => (
-            <div key={index} className="flex items-center gap-1">
+            <div key={index} className="flex items-center gap-1 min-w-0">
               {index > 0 && (
-                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground mx-0.5" />
+                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground mx-0.5 shrink-0" />
               )}
               {breadcrumb.label === "…" ? (
                 <span
@@ -105,20 +105,27 @@ export function PageHeader({
                 isInternalAppPath(breadcrumb.href) ? (
                   <Link
                     to={breadcrumb.href}
-                    className="text-primary hover:text-primary/80 transition-colors duration-150"
+                    title={breadcrumb.label}
+                    className="text-primary hover:text-primary/80 transition-colors duration-150 min-w-0 truncate"
                   >
                     {breadcrumb.label}
                   </Link>
                 ) : (
                   <a
                     href={breadcrumb.href}
-                    className="text-primary hover:text-primary/80 transition-colors duration-150"
+                    title={breadcrumb.label}
+                    className="text-primary hover:text-primary/80 transition-colors duration-150 min-w-0 truncate"
                   >
                     {breadcrumb.label}
                   </a>
                 )
               ) : (
-                <span className="text-muted-foreground">{breadcrumb.label}</span>
+                <span
+                  title={breadcrumb.label}
+                  className="text-muted-foreground min-w-0 truncate"
+                >
+                  {breadcrumb.label}
+                </span>
               )}
             </div>
           ))}

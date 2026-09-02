@@ -80,3 +80,12 @@ export function deleteSavedProject(userId: string, id: string): void {
     readAll(userId).filter((p) => p.id !== id)
   );
 }
+
+/** One-time migration helper — clears localStorage after DB import. */
+export function clearSavedProjects(userId: string): void {
+  try {
+    localStorage.removeItem(storageKey(userId));
+  } catch {
+    /* ignore */
+  }
+}

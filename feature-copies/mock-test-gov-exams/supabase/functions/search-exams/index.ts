@@ -13,7 +13,8 @@ import {
   rateLimitResponse,
   RATE_LIMIT_PRESETS,
 } from "../_shared/rateLimit.ts";
-import { resolveIsIndiaProfile } from "../_shared/indiaRegion.ts";
+import { indiaUserAfterProfileLookup, PROFILE_LOOKUP_TIMEOUT_MS } from "../_shared/indiaRegion.ts";
+import { withTimeout } from "../_shared/withTimeout.ts";
 import {
   type BankReadinessPayload,
 } from "../_shared/govBankReadiness.ts";
@@ -40,7 +41,7 @@ import {
 } from "../_shared/govExamSearch.ts";
 
 const DISCLAIMER =
-  "Clarify AI is an independent preparation platform and is not affiliated with or endorsed by any government recruiting body. Candidates must verify notifications, eligibility, dates, syllabus, and examination rules on the official website.";
+  "Career Pilot is an independent preparation platform and is not affiliated with or endorsed by any government recruiting body. Candidates must verify notifications, eligibility, dates, syllabus, and examination rules on the official website.";
 
 /** Families hidden from non-India profiles. */
 const INDIA_ONLY_FAMILIES = new Set(["state_psc"]);
@@ -168,14 +169,6 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
     if (auth.error) return applyCors(req, auth.error);
     const user = auth.context.user;
 
-    const rateLimitResult = await checkRateLimitAsync(db, {
-      key: createRateLimitKey("search-exams", user.id),
-      ...RATE_LIMIT_PRESETS.SEARCH_BROWSE,
-    });
-    if (!rateLimitResult.allowed) {
-      return rateLimitResponse(rateLimitResult, req);
-    }
-
     const url = new URL(req.url);
     let rawQuery: unknown = url.searchParams.get("q") ?? "";
     let rawFamily: unknown = url.searchParams.get("family") ?? "";
@@ -232,18 +225,45 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
       return corsError(req, 422, queryValidation.code, queryValidation.message);
     }
     const q = queryValidation.query;
+
+    // Rate-limit only validated searches — invalid/empty payloads must not burn quota.
+    const rateLimitResult = await checkRateLimitAsync(db, {
+      key: createRateLimitKey("search-exams", user.id),
+      ...RATE_LIMIT_PRESETS.SEARCH_BROWSE,
+    });
+    if (!rateLimitResult.allowed) {
+      return rateLimitResponse(rateLimitResult, req);
+    }
+
     const cursorPage = decodeSearchCursor(rawCursor);
     const pageRequest = resolvePagination({
       page: cursorPage ?? rawPage,
       pageSize: rawPageSize,
     });
 
-    const { data: profileRow } = await db
-      .from("profiles")
-      .select("region, timezone, locale")
-      .eq("id", user.id)
-      .maybeSingle();
-    const isIndiaUser = resolveIsIndiaProfile(profileRow);
+    let isIndiaUser = true;
+    let profileLookup: "ok" | "timed_out" | "failed" = "ok";
+    try {
+      const { data: profileRow } = await withTimeout(
+        db
+          .from("profiles")
+          .select("region, timezone, locale")
+          .eq("id", user.id)
+          .maybeSingle(),
+        PROFILE_LOOKUP_TIMEOUT_MS,
+      );
+      isIndiaUser = indiaUserAfterProfileLookup(profileRow, "ok");
+    } catch (profileErr) {
+      const timedOut =
+        profileErr instanceof Error && /timeout/i.test(profileErr.message);
+      profileLookup = timedOut ? "timed_out" : "failed";
+      isIndiaUser = indiaUserAfterProfileLookup(null, profileLookup);
+      console.warn(
+        "[search-exams] profile lookup",
+        profileLookup,
+        profileErr instanceof Error ? profileErr.message : "unknown",
+      );
+    }
 
     // Alias / stage / body / cycle year hits cannot all be expressed as a single
     // PostgREST filter on gov_exams — resolve matching exam ids then union.
@@ -456,6 +476,7 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
         results: [],
         pagination,
         isIndiaUser,
+        profileLookup,
         disclaimer: DISCLAIMER,
       });
     }
@@ -567,6 +588,7 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
       results: enriched,
       pagination,
       isIndiaUser,
+      profileLookup,
       disclaimer: DISCLAIMER,
     });
   } catch (err) {

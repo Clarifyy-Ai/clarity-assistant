@@ -1,6 +1,9 @@
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 
+/** Typeahead budget — must include auth/session probe, not only the HTTP round-trip. */
+export const GOV_SEARCH_TIMEOUT_MS = 12_000;
+
 export const CREATE_EXAM_PAPER_CREDIT_COST = AI_CREDIT_COSTS.create_mock_test;
 
 export type BankReadinessStatus = "ready" | "partial" | "empty";
@@ -117,7 +120,7 @@ export async function searchGovExams(
       pageSize: params.pageSize ?? 20,
       cursor: params.cursor ?? undefined,
     },
-    { signal: options?.signal, timeoutMs: 45_000 },
+    { signal: options?.signal, timeoutMs: GOV_SEARCH_TIMEOUT_MS },
   );
 
   if (payload?.success === false) {
@@ -181,8 +184,16 @@ export function isSearchUnavailableError(err: unknown): boolean {
   );
 }
 
+export type GovSearchErrorCode =
+  | "RATE_LIMITED"
+  | "INVALID_QUERY"
+  | "SEARCH_UNAVAILABLE"
+  | "SEARCH_FAILED"
+  | "SEARCH_TIMEOUT"
+  | "AUTH_REQUIRED";
+
 export function mapGovSearchError(err: unknown): {
-  code: "RATE_LIMITED" | "INVALID_QUERY" | "SEARCH_UNAVAILABLE" | "SEARCH_FAILED";
+  code: GovSearchErrorCode;
   message: string;
 } {
   const code = String(
@@ -197,6 +208,18 @@ export function mapGovSearchError(err: unknown): {
     return {
       code: "RATE_LIMITED",
       message: "Too many searches. Please wait a moment and try again.",
+    };
+  }
+  if (
+    status === 401 ||
+    code === "AUTH_REQUIRED" ||
+    code === "AUTH_EXPIRED" ||
+    code === "AUTH_INVALID" ||
+    code === "UNAUTHORIZED"
+  ) {
+    return {
+      code: "AUTH_REQUIRED",
+      message: "Sign in to search exams.",
     };
   }
   // Rate-limit RPC outage used to be mapped as "Too many searches" (false throttle).
@@ -225,10 +248,16 @@ export function mapGovSearchError(err: unknown): {
     };
   }
   const msg = err instanceof Error ? err.message : "";
-  if (/timed out|timeout/i.test(msg)) {
+  if (code === "SEARCH_TIMEOUT" || /timed out|timeout/i.test(msg)) {
     return {
-      code: "SEARCH_UNAVAILABLE",
-      message: "Exam search is temporarily unavailable. Please try again.",
+      code: "SEARCH_TIMEOUT",
+      message: "Search timed out. Please try again.",
+    };
+  }
+  if (status === 500 || status === 504 || code === "SEARCH_FAILED") {
+    return {
+      code: "SEARCH_FAILED",
+      message: "Exam search failed. Please try again.",
     };
   }
   return {
@@ -348,12 +377,18 @@ export type SaveTestAnswerInput = {
   isMarkedReview: boolean;
   timeSpentSeconds: number;
   clientUpdatedAt: string;
+  version?: number;
 };
 
 export async function saveTestAnswers(
   testId: string,
   answers: SaveTestAnswerInput[],
-): Promise<{ success: boolean; savedCount: number; staleQuestionIds: string[] }> {
+): Promise<{
+  success: boolean;
+  savedCount: number;
+  staleQuestionIds: string[];
+  nextVersions: Record<string, number>;
+}> {
   return fetchEdgeJson("save-test-answer", { testId, answers });
 }
 
@@ -622,6 +657,12 @@ export type ExamPaperAvailability = {
   eligible?: number;
   available: number;
   missing: number;
+  inventoryClass?: "official_pyq" | "approved_practice";
+  inventorySource?: "canonical_rpc" | "python_authoritative";
+  /** Availability is a read-only preflight and never charges credits. */
+  billable?: false;
+  creditCost?: 0;
+  creditsCharged?: 0;
   fullMockAllowed: boolean;
   customPracticeMax: number;
   aiFillAllowed: boolean;

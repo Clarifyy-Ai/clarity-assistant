@@ -7,6 +7,11 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.internal_auth import InternalRequest, require_internal_auth
+from app.core.bounded import (
+    GOV_EXAM_CLAIM_TIMEOUT_SECONDS,
+    GOV_EXAM_DB_TIMEOUT_SECONDS,
+    await_bounded,
+)
 from app.gov_exams.availability import compute_availability
 from app.gov_exams.engine import process_gov_exam_job
 from app.gov_exams.observability import gov_exam_log
@@ -70,16 +75,96 @@ def _http_error(exc: PaperFactoryError, correlation_id: str | None) -> HTTPExcep
     )
 
 
+async def _worker_dependency(
+    awaitable,
+    timeout_seconds: float,
+    *,
+    stage: str,
+    correlation_id: str | None,
+):
+    """Convert queue/database failures into the stable worker error contract."""
+    try:
+        return await await_bounded(
+            awaitable,
+            timeout_seconds,
+            code="WORKER_UNAVAILABLE",
+            message="Paper-factory infrastructure timed out.",
+            stage=stage,
+            correlation_id=correlation_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "WORKER_UNAVAILABLE",
+                "message": "Paper-factory infrastructure is unavailable.",
+                "retryable": True,
+                "stage": stage,
+                "correlation_id": correlation_id,
+            },
+        ) from exc
+
+
 @router.get("/health")
 async def health(
     request: InternalRequest = Depends(require_internal_auth),
 ) -> dict[str, object]:
     """Authenticated health probe for Edge Functions."""
     settings = get_factory_settings()
+    config_errors = settings.worker_configuration_errors()
+    if config_errors:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "CONFIGURATION_ERROR",
+                "message": "; ".join(config_errors),
+                "retryable": False,
+                "stage": "worker_readiness",
+                "correlation_id": request.request_id,
+            },
+        )
+    try:
+        queue_ok = await await_bounded(
+            asyncio.to_thread(PaperRepository(settings).check_connection),
+            GOV_EXAM_CLAIM_TIMEOUT_SECONDS,
+            code="WORKER_UNAVAILABLE",
+            message="Paper-factory queue health check timed out.",
+            stage="worker_readiness",
+            correlation_id=request.request_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "WORKER_UNAVAILABLE",
+                "message": "Paper-factory queue is unavailable.",
+                "retryable": True,
+                "stage": "worker_readiness",
+                "correlation_id": request.request_id,
+            },
+        ) from exc
+    if not queue_ok:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "WORKER_UNAVAILABLE",
+                "message": "Paper-factory queue is unavailable.",
+                "retryable": True,
+                "stage": "worker_readiness",
+                "correlation_id": request.request_id,
+            },
+        )
     return {
         "ok": True,
         "service": "gov-exams",
         "has_ai_provider": settings.has_ai_provider,
+        "worker_mode": settings.worker_mode,
+        "worker_queue": settings.worker_queue,
+        "lease_seconds": settings.lease_seconds,
         "request_id": request.request_id,
     }
 
@@ -92,11 +177,16 @@ async def availability(
     correlation = body.correlation_id or request.request_id
     operation_id = correlation or str(uuid.uuid4())
     try:
-        return await asyncio.to_thread(
-            compute_availability,
-            _repo(),
-            body.model_copy(update={"correlation_id": correlation}),
-            operation_id=operation_id,
+        return await await_bounded(
+            asyncio.to_thread(
+                compute_availability,
+                _repo(),
+                body.model_copy(update={"correlation_id": correlation}),
+                operation_id=operation_id,
+            ),
+            GOV_EXAM_DB_TIMEOUT_SECONDS,
+            stage="availability",
+            correlation_id=correlation,
         )
     except PaperFactoryError as exc:
         raise _http_error(exc, correlation) from exc
@@ -110,11 +200,16 @@ async def select(
     correlation = body.correlation_id or request.request_id
     operation_id = correlation or str(uuid.uuid4())
     try:
-        return await asyncio.to_thread(
-            select_questions,
-            _repo(),
-            body.model_copy(update={"correlation_id": correlation}),
-            operation_id=operation_id,
+        return await await_bounded(
+            asyncio.to_thread(
+                select_questions,
+                _repo(),
+                body.model_copy(update={"correlation_id": correlation}),
+                operation_id=operation_id,
+            ),
+            GOV_EXAM_DB_TIMEOUT_SECONDS,
+            stage="select",
+            correlation_id=correlation,
         )
     except PaperFactoryError as exc:
         raise _http_error(exc, correlation) from exc
@@ -142,7 +237,12 @@ async def process_job(
     settings = get_factory_settings()
     repo = PaperRepository(settings)
 
-    job = await asyncio.to_thread(repo.get_job, body.job_id)
+    job = await _worker_dependency(
+        asyncio.to_thread(repo.get_job, body.job_id),
+        GOV_EXAM_CLAIM_TIMEOUT_SECONDS,
+        stage="job_lookup",
+        correlation_id=correlation,
+    )
     if not job:
         gov_exam_log(
             "job_received",
@@ -163,9 +263,19 @@ async def process_job(
         )
 
     worker_id = f"http_{uuid.uuid4().hex[:12]}"
-    claimed = await asyncio.to_thread(repo.claim_job, body.job_id, worker_id)
+    claimed = await _worker_dependency(
+        asyncio.to_thread(repo.claim_job, body.job_id, worker_id),
+        GOV_EXAM_CLAIM_TIMEOUT_SECONDS,
+        stage="claim",
+        correlation_id=correlation,
+    )
     if not claimed:
-        current = await asyncio.to_thread(repo.get_job, body.job_id)
+        current = await _worker_dependency(
+            asyncio.to_thread(repo.get_job, body.job_id),
+            GOV_EXAM_CLAIM_TIMEOUT_SECONDS,
+            stage="job_lookup",
+            correlation_id=correlation,
+        )
         if current and str(current.get("status") or "") in {"completed", "cancelled"}:
             extra = fields_from_job_row(current) if current["status"] == "completed" else {}
             return ProcessJobResponse(
@@ -242,7 +352,12 @@ async def build_paper(
         sources=body.question_sources,
     )
 
-    job = await asyncio.to_thread(repo.get_job, body.job_id)
+    job = await _worker_dependency(
+        asyncio.to_thread(repo.get_job, body.job_id),
+        GOV_EXAM_CLAIM_TIMEOUT_SECONDS,
+        stage="build_paper",
+        correlation_id=correlation,
+    )
     if not job:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -258,9 +373,19 @@ async def build_paper(
     # The durable job row is authoritative. Claim it before doing any work so
     # concurrent HTTP retries cannot generate/publish the same paper twice.
     worker_id = f"http_{uuid.uuid4().hex[:12]}"
-    claimed = await asyncio.to_thread(repo.claim_job, body.job_id, worker_id)
+    claimed = await _worker_dependency(
+        asyncio.to_thread(repo.claim_job, body.job_id, worker_id),
+        GOV_EXAM_CLAIM_TIMEOUT_SECONDS,
+        stage="claim",
+        correlation_id=correlation,
+    )
     if not claimed:
-        current = await asyncio.to_thread(repo.get_job, body.job_id)
+        current = await _worker_dependency(
+            asyncio.to_thread(repo.get_job, body.job_id),
+            GOV_EXAM_CLAIM_TIMEOUT_SECONDS,
+            stage="job_lookup",
+            correlation_id=correlation,
+        )
         if current and str(current.get("status") or "") in {"completed", "cancelled"}:
             extra = fields_from_job_row(current) if current["status"] == "completed" else {}
             return BuildPaperResponse(
@@ -314,12 +439,17 @@ async def build_paper(
     generated: list[str] = []
     if result.paper_id:
         try:
-            links = await asyncio.to_thread(
-                lambda: repo.db.table("gov_generated_paper_questions")
-                .select("question_id, source_class, question_source_type")
-                .eq("paper_id", result.paper_id)
-                .order("sort_order")
-                .execute()
+            links = await await_bounded(
+                asyncio.to_thread(
+                    lambda: repo.db.table("gov_generated_paper_questions")
+                    .select("question_id, source_class, question_source_type")
+                    .eq("paper_id", result.paper_id)
+                    .order("sort_order")
+                    .execute()
+                ),
+                GOV_EXAM_DB_TIMEOUT_SECONDS,
+                stage="paper_questions",
+                correlation_id=correlation,
             )
             for row in links.data or []:
                 qid = str(row.get("question_id") or "")

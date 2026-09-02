@@ -73,7 +73,7 @@ test.describe("Public + auth visual regression (plan viewports)", () => {
       { path: "/forgot-password", heading: /Reset|Forgot|password/i },
       { path: "/help", heading: /Help Center/i },
       { path: "/", heading: /.+/ },
-      { path: "/pricing", heading: /Pricing|Plans|Clarify/i },
+      { path: "/pricing", heading: /Pricing|Plans|Career Pilot/i },
       { path: "/contact-sales", heading: /Contact Sales/i },
       { path: "/share/invalid-token", heading: /unavailable|invalid|expired/i },
     ] as const;

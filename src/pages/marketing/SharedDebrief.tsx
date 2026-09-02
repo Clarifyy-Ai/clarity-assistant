@@ -1,53 +1,19 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { sessionDebriefsDB, scorecardsDB } from "@/lib/supabase/database";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { BrandLogo } from "@/components/marketing";
-import { Loader2 } from "lucide-react";
+import { PublicShareLayout } from "@/components/layout/PublicShareLayout";
 import { PublicErrorState } from "@/components/common/PublicErrorState";
+import { Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { formatSessionScore } from "@/lib/analytics/scoreStatus";
 import { cn } from "@/lib/utils";
 import type { DetailedReport } from "@/components/debrief/DebriefAnalyticsPanels";
-
-function SharedShell({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
-      <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
-        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
-          <Link to="/" className="flex items-center gap-2 min-w-0">
-            <BrandLogo size="sm" />
-          </Link>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <Link
-              to="/signup"
-              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:opacity-90"
-            >
-              Get started
-            </Link>
-          </div>
-        </div>
-      </header>
-      <div className="flex-1 min-h-0">{children}</div>
-      <footer className="border-t border-border py-8 px-4 text-center space-y-3">
-        <p className="text-sm text-muted-foreground">
-          Shared via {PRODUCT_NAMES.brand} — practice-only interview coaching
-        </p>
-        <Link
-          to="/signup"
-          className="inline-flex text-sm font-semibold px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:opacity-90"
-        >
-          Start practicing free
-        </Link>
-      </footer>
-    </div>
-  );
-}
+import { scorecardDimensionValues } from "@/types/scorecard.types";
 
 export default function SharedDebrief() {
   const { token } = useParams<{ token: string }>();
@@ -58,7 +24,7 @@ export default function SharedDebrief() {
 
   usePageMeta({
     title: `Shared session · ${PRODUCT_NAMES.brand}`,
-    description: "Review a shared practice session scorecard and debrief on Career Pilot.",
+    description: `Review a shared practice session scorecard and debrief on ${PRODUCT_NAMES.brand}.`,
     ogType: "website",
   });
 
@@ -78,9 +44,11 @@ export default function SharedDebrief() {
         ]);
         if (db) {
           setDebrief(db as unknown as Record<string, unknown>);
-        } else if (sc) {
+        }
+        if (sc) {
           setScorecard(sc as unknown as Record<string, unknown>);
-        } else {
+        }
+        if (!db && !sc) {
           setError("This shared link is invalid or has expired.");
         }
       } catch {
@@ -93,58 +61,91 @@ export default function SharedDebrief() {
 
   if (loading) {
     return (
-      <SharedShell>
+      <PublicShareLayout>
         <div className="flex flex-col items-center justify-center gap-3 py-24">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
           <p className="text-sm text-muted-foreground">Loading shared debrief…</p>
         </div>
-      </SharedShell>
+      </PublicShareLayout>
     );
   }
 
   if (error || (!debrief && !scorecard)) {
     return (
-      <SharedShell>
+      <PublicShareLayout>
         <PublicErrorState
           title="Shared link unavailable"
           description={
             error ??
             "This shared link is invalid, expired, or has been revoked. No private session or account data is shown."
           }
-          homeLabel="Go to Career Pilot"
+          homeLabel={`Go to ${PRODUCT_NAMES.brand}`}
         />
         <p className="max-w-md mx-auto px-4 -mt-6 mb-10 text-center text-xs text-muted-foreground leading-relaxed">
           Share links are created from your signed-in Debrief or Scorecard page
           (Share button). Guests can only open a link someone already shared —
           there is no create-share control on this public page.
         </p>
-      </SharedShell>
+      </PublicShareLayout>
     );
   }
 
+  const isScorecardOnly = !debrief && !!scorecard;
+  const pageTitle = isScorecardOnly ? "Shared scorecard" : "Session Debrief";
   const report = (debrief?.detailed_report ?? {}) as DetailedReport;
-  const overallScore =
-    (scorecard?.overall_score as number | undefined) ??
-    (report.category_scores?.confidence as number | undefined);
+  const overallGrade = debrief?.overall_grade as string | undefined;
+  const scorecardDimensions = scorecard ? scorecardDimensionValues(scorecard) : null;
+  const scoredDimensions = scorecardDimensions
+    ? Object.values(scorecardDimensions).filter((v): v is number => v != null)
+    : [];
+  const avgDimensionScore = scoredDimensions.length
+    ? Math.round(scoredDimensions.reduce((sum, value) => sum + value, 0) / scoredDimensions.length)
+    : null;
+  const rawScore =
+    scorecard != null
+      ? ((scorecard.overall_score as number | null | undefined) ??
+          avgDimensionScore ??
+          null)
+      : ((report.category_scores?.confidence as number | undefined) ?? null);
+  const scoreStatus = (scorecard?.score_status as string | undefined) ?? "scored";
+  const scoreLabel = formatSessionScore(rawScore, scoreStatus);
+  const numericScore =
+    typeof rawScore === "number" && scoreLabel !== "Not scored" ? rawScore : null;
+
+  const summary =
+    (debrief?.summary as string | undefined) ??
+    (scorecard?.coach_note as string | undefined) ??
+    (scorecard?.feedback as string | undefined);
+  const strengths = (debrief?.strengths ?? scorecard?.strengths) as string[] | undefined;
+  const improvements = (debrief?.improvements ?? scorecard?.improvements) as
+    | string[]
+    | undefined;
 
   const scoreColor =
-    (overallScore ?? 0) >= 75 ? "emerald" :
-    (overallScore ?? 0) >= 55 ? "amber" : "red";
+    (numericScore ?? 0) >= 75 ? "emerald" :
+    (numericScore ?? 0) >= 55 ? "amber" : "red";
+
+  const createdAt = debrief?.created_at ?? scorecard?.created_at ?? scorecard?.generated_at;
 
   return (
-    <SharedShell>
+    <PublicShareLayout>
       <div className="max-w-2xl mx-auto px-4 py-10 space-y-6">
         <div className="text-center space-y-2">
           <Badge variant="primary" size="sm">Shared read-only</Badge>
-          <h1 className="text-2xl font-bold">Session Debrief</h1>
-          {debrief?.created_at && (
+          <h1 className="text-2xl font-bold">{pageTitle}</h1>
+          {createdAt && (
             <p className="text-xs text-muted-foreground">
-              {format(new Date(String(debrief.created_at)), "MMMM d, yyyy")}
+              {format(new Date(String(createdAt)), "MMMM d, yyyy")}
             </p>
+          )}
+          {overallGrade && (
+            <Badge variant="primary" size="sm">
+              Grade {overallGrade}
+            </Badge>
           )}
         </div>
 
-        {overallScore != null && (
+        {numericScore != null && (
           <Card className="text-center py-6">
             <div
               className={cn(
@@ -156,11 +157,11 @@ export default function SharedDebrief() {
                     : "text-red-400",
               )}
             >
-              {overallScore}
+              {scoreLabel}
             </div>
             <p className="text-xs text-muted-foreground mt-1">Overall score</p>
             <ProgressBar
-              value={overallScore}
+              value={numericScore}
               max={100}
               color={scoreColor}
               size="sm"
@@ -169,18 +170,18 @@ export default function SharedDebrief() {
           </Card>
         )}
 
-        {debrief?.summary && (
+        {summary && (
           <Card>
             <h2 className="text-sm font-semibold mb-2">Summary</h2>
-            <p className="text-sm leading-relaxed">{String(debrief.summary)}</p>
+            <p className="text-sm leading-relaxed">{String(summary)}</p>
           </Card>
         )}
 
-        {Array.isArray(debrief?.strengths) && debrief.strengths.length > 0 && (
+        {Array.isArray(strengths) && strengths.length > 0 && (
           <Card>
             <h2 className="text-sm font-semibold mb-2">Strengths</h2>
             <ul className="space-y-1">
-              {(debrief.strengths as string[]).map((s, i) => (
+              {strengths.map((s, i) => (
                 <li key={i} className="text-xs text-foreground">
                   ✓ {s}
                 </li>
@@ -189,11 +190,11 @@ export default function SharedDebrief() {
           </Card>
         )}
 
-        {Array.isArray(debrief?.improvements) && debrief.improvements.length > 0 && (
+        {Array.isArray(improvements) && improvements.length > 0 && (
           <Card>
             <h2 className="text-sm font-semibold mb-2">Improvements</h2>
             <ul className="space-y-1">
-              {(debrief.improvements as string[]).map((s, i) => (
+              {improvements.map((s, i) => (
                 <li key={i} className="text-xs text-foreground">
                   → {s}
                 </li>
@@ -202,29 +203,15 @@ export default function SharedDebrief() {
           </Card>
         )}
 
-        <div className="text-center pt-6 space-y-3 border-t border-border mt-2">
+        <div className="text-center pt-6 space-y-2 border-t border-border mt-2">
           <p className="text-sm font-medium text-foreground">
             Ready to improve your next interview?
           </p>
           <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-            Practice with Career Pilot — live coaching, mock interviews, and scorecards like this one.
+            Practice with {PRODUCT_NAMES.brand} — live coaching, mock interviews, and scorecards like this one.
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            <Link
-              to="/signup"
-              className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 min-h-11"
-            >
-              Get started free
-            </Link>
-            <Link
-              to="/login"
-              className="inline-flex text-sm font-medium text-primary hover:underline min-h-11 items-center"
-            >
-              Log in
-            </Link>
-          </div>
         </div>
       </div>
-    </SharedShell>
+    </PublicShareLayout>
   );
 }

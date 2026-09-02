@@ -15,6 +15,11 @@ import {
   planIdForRazorpayProductType,
 } from "../_shared/billingCatalog.ts";
 import { enforcePaymentRateLimitAsync } from "../_shared/rateLimit.ts";
+import {
+  assertPaymentStatusTransition,
+  REUSABLE_CHECKOUT_STATUSES,
+  type PaymentOrderStatus,
+} from "../_shared/paymentStateMachine.ts";
 
 const KEY_ID = Deno.env.get("RAZORPAY_KEY_ID") ?? "";
 const KEY_SECRET = Deno.env.get("RAZORPAY_KEY_SECRET") ?? "";
@@ -27,11 +32,27 @@ const PRODUCT_TYPES = [
   "credits_500",
 ] as const;
 
-const schema = z.object({
+const createSchema = z.object({
   product_type: z.enum(PRODUCT_TYPES),
   promo_code: z.string().trim().max(32).optional(),
   idempotency_key: z.string().trim().min(8).max(120).optional(),
 });
+
+const cancelSchema = z.object({
+  action: z.literal("cancel"),
+  payment_order_id: z.string().uuid(),
+});
+
+const failSchema = z.object({
+  action: z.literal("fail"),
+  payment_order_id: z.string().uuid(),
+});
+
+const TERMINAL_ORDER_STATUSES = new Set<PaymentOrderStatus>([
+  "fulfilled",
+  "paid",
+  "refunded",
+]);
 
 type BillingSettings = {
   pro_monthly_inr_paise: number;
@@ -41,12 +62,6 @@ type BillingSettings = {
   credits_500_inr_paise: number;
   razorpay_enabled: boolean;
 };
-
-const REUSABLE_STATUSES = [
-  "pending",
-  "provider_created",
-  "created",
-] as const;
 
 function json(req: Request, payload: unknown, status: number) {
   return new Response(JSON.stringify(payload), {
@@ -131,7 +146,11 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    assertBillingConfigOrThrow({ requireRazorpay: true, requireStripe: false });
+    assertBillingConfigOrThrow({
+      requireRazorpay: true,
+      requireStripe: false,
+      requireRazorpayWebhook: true,
+    });
   } catch {
     opsLog({
       function_name: "razorpay-create-order",
@@ -158,7 +177,60 @@ Deno.serve(async (req: Request) => {
   );
   if (rateLimited) return rateLimited;
 
-  const parsed = schema.safeParse(await parseJsonBody(req));
+  const rawBody = await parseJsonBody(req);
+
+  async function transitionOrder(
+    paymentOrderId: string,
+    target: "cancelled" | "failed",
+  ): Promise<Response> {
+    const { data: row } = await db
+      .from("payment_orders")
+      .select("id, status")
+      .eq("id", paymentOrderId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!row?.id) {
+      return json(req, { error: "Order not found", code: "ORDER_NOT_FOUND" }, 404);
+    }
+
+    const current = row.status as PaymentOrderStatus;
+    if (current === target) {
+      return json(req, { ok: true, status: current, duplicate: true }, 200);
+    }
+    if (TERMINAL_ORDER_STATUSES.has(current)) {
+      return json(req, { ok: true, status: current, duplicate: true }, 200);
+    }
+
+    try {
+      assertPaymentStatusTransition(current, target);
+    } catch {
+      return json(req, {
+        error: `Order cannot be marked ${target} in its current state.`,
+        code: "INVALID_TRANSITION",
+      }, 409);
+    }
+
+    const patch: Record<string, unknown> = { status: target };
+    if (target === "cancelled") {
+      patch.cancelled_at = new Date().toISOString();
+    }
+
+    await db.from("payment_orders").update(patch).eq("id", paymentOrderId).eq("user_id", userId);
+    return json(req, { ok: true, status: target }, 200);
+  }
+
+  const cancelParsed = cancelSchema.safeParse(rawBody);
+  if (cancelParsed.success) {
+    return await transitionOrder(cancelParsed.data.payment_order_id, "cancelled");
+  }
+
+  const failParsed = failSchema.safeParse(rawBody);
+  if (failParsed.success) {
+    return await transitionOrder(failParsed.data.payment_order_id, "failed");
+  }
+
+  const parsed = createSchema.safeParse(rawBody);
   if (!parsed.success) {
     return json(req, {
       error: "Invalid product_type. Use a supported plan or credit pack.",
@@ -248,7 +320,7 @@ Deno.serve(async (req: Request) => {
     .select("id, provider_order_id, amount_paise, status, promo_code")
     .eq("user_id", userId)
     .eq("idempotency_key", idempotencyKey)
-    .in("status", [...REUSABLE_STATUSES])
+    .in("status", [...REUSABLE_CHECKOUT_STATUSES])
     .maybeSingle();
 
   if (existing?.provider_order_id && existing.id) {

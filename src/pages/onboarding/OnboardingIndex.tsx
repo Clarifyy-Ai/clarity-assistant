@@ -502,7 +502,7 @@ export default function OnboardingIndex() {
           >
             Skip optional setup — go to Dashboard
           </button>
-          <p className="text-[10px] text-muted-foreground/50 max-w-sm mx-auto">
+          <p className="text-[10px] text-muted-foreground max-w-sm mx-auto">
             Skip still needs a target role and experience level. You can start Practice Coach from the Dashboard anytime.
           </p>
         </div>

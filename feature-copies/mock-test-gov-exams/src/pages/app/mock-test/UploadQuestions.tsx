@@ -19,6 +19,16 @@ import { normalizeExamTypeForStorage } from "@/lib/mock-test/examTypes";
 import { supabase } from "@/lib/supabase/client";
 import { questionsDB } from "@/lib/supabase/database";
 import { SUPABASE_URL } from "@/lib/env";
+import { unwrapEdgePayload } from "@/lib/network/edgeResult";
+import {
+  isParseQuestionPdfQueuedPayload,
+  pollParseQuestionPdfJob,
+} from "@/lib/gov-exam/parseQuestionPdfJob";
+import {
+  validatePdfImportFile,
+  userMessageForPdfImportFailure,
+} from "@/lib/gov-exam/extractQuestionPaper";
+import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { useAuthStore } from "@/store/userStore";
 
 import { Button } from "@/components/ui/Button";
@@ -697,13 +707,16 @@ function ReviewModal({
 function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
   const user = useAuthStore((s) => s.user);
   const fileRef = useRef<HTMLInputElement>(null);
+  const lastFileRef = useRef<File | null>(null);
 
   const [dragging, setDragging] = useState(false);
   const [parsing, setParsing] = useState(false);
+  const [backgroundParse, setBackgroundParse] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [reviewItems, setReviewItems] = useState<ReviewItem[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
+  const [canRetry, setCanRetry] = useState(false);
 
   function handleDrop(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault();
@@ -723,19 +736,20 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
       return;
     }
 
-    if (file.type !== "application/pdf") {
-      toast.error("Only PDF files are supported.");
+    const gate = validatePdfImportFile(file);
+    if (!gate.ok) {
+      setCanRetry(false);
+      setParseError(gate.message);
+      toast.error(gate.message);
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("PDF must be under 10 MB.");
-      return;
-    }
-
+    lastFileRef.current = file;
     setParsing(true);
+    setBackgroundParse(false);
     setParseError(null);
     setSummary(null);
+    setCanRetry(false);
 
     try {
       const formData = new FormData();
@@ -756,22 +770,70 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
 
       const responseJson = await response.json().catch(() => ({}));
 
-      if (!response.ok) {
+      if (response.status === 504 || response.status === 502 || response.status === 422) {
+        const message =
+          responseJson?.error ||
+          responseJson?.message ||
+          userMessageForPdfImportFailure(
+            response.status === 504 ? "PARSER_TIMEOUT" : "AI_ERROR",
+            true,
+          );
+        throw new Error(message);
+      }
+
+      if (!response.ok && response.status !== 202) {
         const message =
           responseJson?.error || responseJson?.message || "Parse failed";
         throw new Error(message);
       }
 
-      if (responseJson?.success === false || responseJson?.error) {
+      if (responseJson?.success === false || (response.status !== 202 && responseJson?.error)) {
         throw new Error(responseJson?.error ?? "Parse failed");
       }
 
-      const payload = responseJson?.data ?? responseJson;
+      let payload = unwrapEdgePayload<{
+        questions?: unknown[];
+        summary?: string;
+        accepted?: boolean;
+        jobId?: string;
+        status?: string;
+        persistedToBank?: boolean;
+        count?: number;
+        message?: string;
+      }>(responseJson);
+
+      if (response.status === 202 || isParseQuestionPdfQueuedPayload(payload)) {
+        const jobId = payload.jobId;
+        if (!jobId) {
+          throw new Error("PDF queued but no job id was returned. Please retry.");
+        }
+        setBackgroundParse(true);
+        const job = await pollParseQuestionPdfJob(jobId);
+        if (job.status === "failed") {
+          throw new Error(job.error || job.message || "PDF parsing failed. Credits refunded.");
+        }
+        payload = {
+          questions: job.questions,
+          count: job.count,
+          persistedToBank: job.persistedToBank,
+          summary: job.message,
+        };
+      }
+
       const questions = Array.isArray(payload?.questions) ? payload.questions : [];
       const parseSummary = payload?.summary;
 
+      if (payload?.persistedToBank && (payload.count ?? questions.length) > 0) {
+        const saved = payload.count ?? questions.length;
+        toast.success(`${saved} questions saved to your bank.`);
+        setSummary(`${saved} questions saved to your bank.`);
+        setCanRetry(false);
+        onImported(saved);
+        return;
+      }
+
       if (questions.length === 0) {
-        throw new Error("No questions found in this PDF.");
+        throw new Error(userMessageForPdfImportFailure("ZERO_QUESTIONS", true));
       }
 
       const items: ReviewItem[] = (questions as ParsedQuestion[]).map((question, index) => ({
@@ -782,13 +844,16 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
 
       setReviewItems(items);
       setSummary(parseSummary ?? `${items.length} questions parsed.`);
+      setCanRetry(false);
     } catch (error) {
       console.error("[PDFImportTab] parse error:", error);
       const message = error instanceof Error ? error.message : "Failed to parse PDF.";
       setParseError(message);
+      setCanRetry(true);
       toast.error(message);
     } finally {
       setParsing(false);
+      setBackgroundParse(false);
       if (fileRef.current) fileRef.current.value = "";
     }
   }
@@ -858,7 +923,7 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
         <input
           ref={fileRef}
           type="file"
-          accept="application/pdf"
+          accept=".pdf,application/pdf"
           className="sr-only"
           onChange={handleFileChange}
         />
@@ -866,15 +931,21 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
         {parsing ? (
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="h-10 w-10 animate-spin text-primary" />
-            <p className="font-medium text-foreground">Parsing PDF with AI…</p>
-            <p className="text-sm text-muted-foreground">This may take 15–30 seconds.</p>
+            <p className="font-medium text-foreground">
+              {backgroundParse ? "Parsing in background…" : "Parsing PDF with AI…"}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {backgroundParse
+                ? "Large PDFs keep processing after upload. Credits stay reserved until parsing finishes."
+                : "This may take 15–30 seconds."}
+            </p>
           </div>
         ) : (
           <>
             <Upload className="mb-3 h-10 w-10 text-muted-foreground" />
             <p className="font-medium text-foreground">Drop your PDF here</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              or click to browse · Max 10 MB
+              or click to browse · Max 15 MB
             </p>
             <p className="mt-3 text-xs text-muted-foreground">
               Supports JEE, NEET, UPSC, SSC, IBPS papers and more
@@ -884,9 +955,26 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
       </div>
 
       {parseError && (
-        <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          {parseError}
+        <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span>{parseError}</span>
+            {canRetry && lastFileRef.current && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  const retryFile = lastFileRef.current;
+                  if (retryFile) void processFile(retryFile);
+                }}
+              >
+                Retry
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
@@ -900,8 +988,8 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
       <div className="flex items-start gap-2 rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
         <span>
-          Each PDF import costs <strong>5 credits</strong>. The AI will extract
-          questions automatically and let you review before saving.
+          Each PDF import costs <strong>{AI_CREDIT_COSTS.parse_question_pdf} credits</strong>.
+          Credits are refunded if parsing fails. Review extracted questions before saving.
         </span>
       </div>
 

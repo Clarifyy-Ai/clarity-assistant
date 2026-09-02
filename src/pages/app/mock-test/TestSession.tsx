@@ -20,6 +20,14 @@ import { supabase } from "@/lib/supabase/client";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { formatGovExamOperationError } from "@/lib/gov-exam/examOperationErrors";
 import { saveTestAnswers, startExam } from "@/lib/gov-exam/api";
+import { ApiClientError } from "@/lib/api/apiClient";
+import {
+  buildPersistableAnswerRows,
+  canPersistExamAnswers,
+  isTerminalAnswerSaveRejection,
+  mergeServerAnswerVersions,
+  shouldBlockAnswerAutosave,
+} from "@/lib/gov-exam/attemptAnswerPersistence";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/env";
 import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/Button";
@@ -53,6 +61,61 @@ function resultsPathForTest(testId: string, config: unknown): string {
   return source === "exam_template"
     ? `/app/assessments/results/${testId}`
     : `/app/mock-test/results/${testId}`;
+}
+
+type LearningQuizConfig = {
+  course_id: string;
+  quiz_id: string;
+  passing_percentage: number;
+};
+
+function parseLearningQuizConfig(config: unknown): LearningQuizConfig | null {
+  if (!config || typeof config !== "object") return null;
+  const record = config as Record<string, unknown>;
+  if (String(record.source ?? "") !== "learning_quiz") return null;
+  const courseId = String(record.course_id ?? "").trim();
+  const quizId = String(record.quiz_id ?? "").trim();
+  if (!courseId || !quizId) return null;
+  return {
+    course_id: courseId,
+    quiz_id: quizId,
+    passing_percentage: Number(record.passing_percentage ?? 60),
+  };
+}
+
+function scoreFromSubmitResult(result: unknown): number {
+  if (!result || typeof result !== "object") return 0;
+  const payload = result as Record<string, unknown>;
+  const analysis =
+    payload.analysis && typeof payload.analysis === "object"
+      ? (payload.analysis as Record<string, unknown>)
+      : null;
+  const timeAnalysis =
+    analysis?.time_analysis && typeof analysis.time_analysis === "object"
+      ? (analysis.time_analysis as Record<string, unknown>)
+      : null;
+  const scoreSummary =
+    timeAnalysis?.score_summary && typeof timeAnalysis.score_summary === "object"
+      ? (timeAnalysis.score_summary as Record<string, unknown>)
+      : null;
+  const scorePercentage = Number(scoreSummary?.score_percentage);
+  if (Number.isFinite(scorePercentage)) return scorePercentage;
+  const attemptPercentage = Number(payload.attempt_percentage);
+  return Number.isFinite(attemptPercentage) ? attemptPercentage : 0;
+}
+
+async function persistLearningQuizProgress(
+  learningQuiz: LearningQuizConfig,
+  submitResult: unknown,
+): Promise<void> {
+  const score = scoreFromSubmitResult(submitResult);
+  const passed = score >= learningQuiz.passing_percentage;
+  const { error } = await supabase.rpc("record_quiz_progress", {
+    p_quiz_id: learningQuiz.quiz_id,
+    p_score: score,
+    p_passed: passed,
+  });
+  if (error) throw error;
 }
 import {
   clearAttemptRecovery,
@@ -370,10 +433,12 @@ export default function TestSession() {
 
   const lastTimerWarnRef = useRef<number | null>(null);
   const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const responsesRef = useRef<Record<string, ResponseState>>({});
   const questionsRef = useRef<Question[]>([]);
   const testRef = useRef<MockTest | null>(null);
   const answerVersionRef = useRef<Record<string, number>>({});
+  const staleAnswerIdsRef = useRef<Set<string>>(new Set());
   const saveInFlightRef = useRef(false);
   const saveAgainRef = useRef(false);
   const questionEnterTsRef = useRef<number>(Date.now());
@@ -381,6 +446,11 @@ export default function TestSession() {
   const timeSpentMapRef = useRef<Record<string, number>>({});
   const mountedRef = useRef(true);
   const submittingRef = useRef(false);
+  const submitIntentRef = useRef(false);
+  const answersLockedRef = useRef(false);
+  const saveIdleWaitersRef = useRef<Array<() => void>>([]);
+  const beforeUnloadRef = useRef<((event: BeforeUnloadEvent) => void) | null>(null);
+  const [lifecycleEpoch, setLifecycleEpoch] = useState(0);
 
   const currentQuestion = questions[currentIndex] ?? null;
   const currentResponse = currentQuestion
@@ -474,11 +544,14 @@ export default function TestSession() {
     };
 
     tick();
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
+    timerRef.current = window.setInterval(tick, 1000);
+    return () => {
+      if (timerRef.current) window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    };
     // Official clock keeps running while paused; submit is guarded by submittingRef.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [test?.id, test?.status, test?.started_at, test?.time_limit_minutes]);
+  }, [test?.id, test?.status, test?.started_at, test?.time_limit_minutes, lifecycleEpoch]);
 
   useEffect(() => {
     if (!testId || !user?.id) return;
@@ -494,6 +567,13 @@ export default function TestSession() {
 
   useEffect(() => {
     if (!testId || !user?.id) return;
+    if (!test || !canPersistExamAnswers(test) || answersLockedRef.current) {
+      if (autoSaveRef.current) {
+        clearInterval(autoSaveRef.current);
+        autoSaveRef.current = null;
+      }
+      return;
+    }
 
     autoSaveRef.current = setInterval(() => {
       void saveResponses();
@@ -501,25 +581,47 @@ export default function TestSession() {
 
     return () => {
       if (autoSaveRef.current) clearInterval(autoSaveRef.current);
+      autoSaveRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [testId, user?.id]);
+  }, [testId, user?.id, test?.id, test?.status, test?.started_at, test?.attempt_phase, lifecycleEpoch]);
+
+  function lockAnswerPersistence(code: string) {
+    if (!isTerminalAnswerSaveRejection(code)) return false;
+    answersLockedRef.current = true;
+    if (autoSaveRef.current) {
+      clearInterval(autoSaveRef.current);
+      autoSaveRef.current = null;
+    }
+    if (code === "ATTEMPT_INVALIDATED") {
+      setTest((prev) =>
+        prev ? { ...prev, status: "ABANDONED", attempt_phase: "INVALIDATED" } : prev,
+      );
+    } else if (code === "SUBMISSION_CONFLICT" || code === "ATTEMPT_EXPIRED") {
+      setTest((prev) =>
+        prev ? { ...prev, status: "COMPLETED", attempt_phase: "RESULT_AVAILABLE" } : prev,
+      );
+    }
+    return true;
+  }
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (submittingRef.current) return;
+      if (submitIntentRef.current || submittingRef.current) return;
       void saveResponses();
       event.preventDefault();
       event.returnValue = "";
     };
 
+    beforeUnloadRef.current = handleBeforeUnload;
     window.addEventListener("beforeunload", handleBeforeUnload);
 
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
+      if (beforeUnloadRef.current === handleBeforeUnload) beforeUnloadRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [lifecycleEpoch]);
 
   useEffect(() => {
     if (!currentQuestion) return;
@@ -782,11 +884,21 @@ export default function TestSession() {
 
   async function saveResponses(options?: { throwOnError?: boolean }) {
     if (!testId || !user?.id || questionsRef.current.length === 0) return;
+    if (
+      shouldBlockAnswerAutosave({
+        submitting: submittingRef.current,
+        answersLocked: answersLockedRef.current,
+      })
+    ) {
+      return;
+    }
     const live = testRef.current;
-    if (!live || live.status === "DRAFT" || live.status === "COMPLETED" || !live.started_at) {
+    if (!live || !canPersistExamAnswers(live)) {
       return;
     }
     if (saveInFlightRef.current) {
+      await new Promise<void>((resolve) => saveIdleWaitersRef.current.push(resolve));
+      if (options?.throwOnError) return saveResponses(options);
       saveAgainRef.current = true;
       return;
     }
@@ -805,32 +917,30 @@ export default function TestSession() {
         questionEnterTsRef.current = Date.now();
       }
 
-      const responsesNow = responsesRef.current;
       const clientUpdatedAt = new Date().toISOString();
-      const answers = questionsRef.current.map((question) => {
-        const response = responsesNow[question.id] ?? {
-          answer: "",
-          state: "unattempted" as QuestionState,
-        };
-        const marked =
-          response.state === "marked" || response.state === "answered-marked";
-
-        return {
-          questionId: question.id,
-          userAnswer: response.answer || null,
-          isAttempted: Boolean(response.answer) || response.state !== "unattempted",
-          isMarkedReview: marked,
-          timeSpentSeconds: timeSpentMapRef.current[question.id] ?? 0,
-          clientUpdatedAt,
-        };
-      });
+      const answers = buildPersistableAnswerRows(
+        questionsRef.current,
+        responsesRef.current,
+        timeSpentMapRef.current,
+        clientUpdatedAt,
+        answerVersionRef.current,
+      ).filter((answer) => !staleAnswerIdsRef.current.has(answer.questionId));
+      if (answers.length === 0) return;
 
       const result = await saveTestAnswers(testId, answers);
-      for (const qid of result.staleQuestionIds ?? []) {
-        answerVersionRef.current[qid] = (answerVersionRef.current[qid] ?? 0) + 1;
+      answerVersionRef.current = mergeServerAnswerVersions(
+        answerVersionRef.current,
+        result.nextVersions ?? {},
+      );
+      for (const questionId of result.staleQuestionIds ?? []) {
+        staleAnswerIdsRef.current.add(questionId);
       }
       if (user?.id) clearAttemptRecovery(testId, user.id);
     } catch (error) {
+      const code = error instanceof ApiClientError ? error.code : undefined;
+      if (code && lockAnswerPersistence(code)) {
+        if (!options?.throwOnError) return;
+      }
       if (user?.id && testId) {
         saveAttemptRecovery({
           test_id: testId,
@@ -851,6 +961,9 @@ export default function TestSession() {
           }),
         });
       }
+      if (!options?.throwOnError && code && isTerminalAnswerSaveRejection(code)) {
+        return;
+      }
       console.warn("[TestSession] autosave failed:", error);
       if (options?.throwOnError) {
         throw error instanceof Error
@@ -859,6 +972,7 @@ export default function TestSession() {
       }
     } finally {
       saveInFlightRef.current = false;
+      for (const resolve of saveIdleWaitersRef.current.splice(0)) resolve();
       if (saveAgainRef.current) {
         saveAgainRef.current = false;
         void saveResponses(options);
@@ -873,6 +987,7 @@ export default function TestSession() {
 
   function updateAnswer(answer: string) {
     if (!currentQuestion) return;
+    staleAnswerIdsRef.current.delete(currentQuestion.id);
 
     setResponses((prev) => {
       const existing = prev[currentQuestion.id] ?? {
@@ -903,6 +1018,7 @@ export default function TestSession() {
 
   function clearResponse() {
     if (!currentQuestion) return;
+    staleAnswerIdsRef.current.delete(currentQuestion.id);
 
     setResponses((prev) => {
       const existing = prev[currentQuestion.id] ?? {
@@ -925,6 +1041,7 @@ export default function TestSession() {
 
   function toggleMarkCurrent() {
     if (!currentQuestion) return;
+    staleAnswerIdsRef.current.delete(currentQuestion.id);
 
     setResponses((prev) => {
       const existing = prev[currentQuestion.id] ?? {
@@ -1023,19 +1140,47 @@ export default function TestSession() {
   async function handleSubmit(autoSubmit = false) {
     if (!testId) return;
     // Compare-and-set: block concurrent manual + timer auto-submit races.
-    if (submittingRef.current) return;
-    submittingRef.current = true;
+    if (submitIntentRef.current || submittingRef.current) return;
+    submitIntentRef.current = true;
     setSubmitting(true);
     setShowSubmitModal(false);
 
     try {
       await saveResponses({ throwOnError: true });
+      submittingRef.current = true;
+      answersLockedRef.current = true;
+      saveAgainRef.current = false;
+      if (autoSaveRef.current) clearInterval(autoSaveRef.current);
+      if (timerRef.current) clearInterval(timerRef.current);
+      autoSaveRef.current = null;
+      timerRef.current = null;
+      if (beforeUnloadRef.current) {
+        window.removeEventListener("beforeunload", beforeUnloadRef.current);
+        beforeUnloadRef.current = null;
+      }
 
-      await fetchEdgeJson("submit-test", {
+      const learningQuiz = parseLearningQuizConfig(test?.config);
+      const submitResult = await fetchEdgeJson("submit-test", {
         test_id: testId,
         idempotencyKey: `submit:${testId}`,
       }, { timeoutMs: 90_000 });
       if (user?.id) clearAttemptRecovery(testId, user.id);
+
+      if (learningQuiz) {
+        await persistLearningQuizProgress(learningQuiz, submitResult);
+        const score = scoreFromSubmitResult(submitResult);
+        const passed = score >= learningQuiz.passing_percentage;
+        toast.success(
+          passed
+            ? `Quiz passed with ${Math.round(score)}%.`
+            : autoSubmit
+              ? `Time's up! Quiz submitted with ${Math.round(score)}%.`
+              : `Quiz submitted with ${Math.round(score)}%.`,
+          { position: "top-center" },
+        );
+        navigate(`/app/learn/${learningQuiz.course_id}`);
+        return;
+      }
 
       toast.success(autoSubmit ? "Time's up! Test submitted." : "Test submitted.", {
         position: "top-center",
@@ -1051,6 +1196,22 @@ export default function TestSession() {
           .maybeSingle();
         if (row && String((row as { status?: string }).status ?? "").toUpperCase() === "COMPLETED") {
           if (user?.id) clearAttemptRecovery(testId, user.id);
+          const learningQuiz = parseLearningQuizConfig(test?.config);
+          if (learningQuiz) {
+            try {
+              const { data: analysis } = await supabase
+                .from("test_analyses")
+                .select("attempt_percentage,time_analysis")
+                .eq("test_id", testId)
+                .maybeSingle();
+              await persistLearningQuizProgress(learningQuiz, { analysis });
+              toast.success("Quiz already submitted.", { position: "top-center" });
+              navigate(`/app/learn/${learningQuiz.course_id}`);
+              return;
+            } catch (quizError) {
+              console.error("[TestSession] learning quiz progress failed:", quizError);
+            }
+          }
           toast.success("Test already submitted.", { position: "top-center" });
           navigate(resultsPathForTest(testId, test?.config));
           return;
@@ -1059,7 +1220,10 @@ export default function TestSession() {
         /* fall through to error UX */
       }
       submittingRef.current = false;
+      submitIntentRef.current = false;
+      answersLockedRef.current = false;
       setSubmitting(false);
+      setLifecycleEpoch((epoch) => epoch + 1);
       console.error("[TestSession] submit failed:", error);
       toast.error(formatGovExamOperationError(error), {
         position: "top-center",

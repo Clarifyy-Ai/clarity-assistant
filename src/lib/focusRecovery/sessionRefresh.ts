@@ -5,6 +5,10 @@ import {
   redirectToSessionExpiredLogin,
 } from "@/lib/auth/sessionErrors";
 import { useAuthStore } from "@/store/authStore";
+import {
+  AUTH_SESSION_TIMEOUT_MS_WEB,
+  withTimeout,
+} from "@/lib/auth/accountBootstrap";
 
 export interface SessionRefreshResult {
   session: Session | null;
@@ -14,6 +18,10 @@ export interface SessionRefreshResult {
 }
 
 const SESSION_SKEW_MS = 60_000;
+
+function sessionProbeTimeoutMs(): number {
+  return import.meta.env.MODE === "test" ? 80 : AUTH_SESSION_TIMEOUT_MS_WEB;
+}
 
 let inFlight: Promise<SessionRefreshResult> | null = null;
 /** True when the current inFlight was started with forceRefresh. */
@@ -90,7 +98,11 @@ async function runEnsure(options?: {
     const {
       data: { session },
       error,
-    } = await supabase.auth.getSession();
+    } = await withTimeout(
+      supabase.auth.getSession(),
+      sessionProbeTimeoutMs(),
+      "Session probe",
+    );
 
     if (error) {
       if (isInvalidRefreshTokenError(error)) {
@@ -120,7 +132,11 @@ async function runEnsure(options?: {
       return toResult(session);
     }
 
-    const refreshed = await supabase.auth.refreshSession();
+    const refreshed = await withTimeout(
+      supabase.auth.refreshSession(),
+      sessionProbeTimeoutMs(),
+      "Session refresh",
+    );
     if (refreshed.error) {
       if (isInvalidRefreshTokenError(refreshed.error)) {
         return expireLocalSession();
@@ -148,7 +164,11 @@ async function recoverFromMissingSession(
   priorSession: Session,
 ): Promise<SessionRefreshResult> {
   try {
-    const refreshed = await supabase.auth.refreshSession();
+    const refreshed = await withTimeout(
+      supabase.auth.refreshSession(),
+      sessionProbeTimeoutMs(),
+      "Session refresh",
+    );
     if (refreshed.error) {
       if (isInvalidRefreshTokenError(refreshed.error)) {
         return expireLocalSession();
@@ -160,7 +180,11 @@ async function recoverFromMissingSession(
       return toResult(refreshed.data.session, { refreshed: true });
     }
 
-    const retry = await supabase.auth.getSession();
+    const retry = await withTimeout(
+      supabase.auth.getSession(),
+      sessionProbeTimeoutMs(),
+      "Session probe",
+    );
     if (retry.data.session) {
       applySession(retry.data.session, false);
       return toResult(retry.data.session);

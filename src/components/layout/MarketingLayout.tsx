@@ -7,17 +7,24 @@ import {
   SUPPORT_EMAIL,
   LEGAL_ENTITY_NAME,
   GITHUB_ORG_URL,
+  STATUS_PAGE_URL,
+  STATUS_REPORT_MAILTO,
+  PUBLIC_STATUS_FOOTER_LABEL,
 } from "@/lib/constants/contact";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { PUBLIC_CTAS } from "@/lib/constants/publicCtas";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { cn } from "@/lib/utils";
 import { SupportChatWidget } from "@/components/support/SupportChatWidget";
 import { MARKETING_SHELL } from "@/lib/ui/responsivePage";
 import { hydrateBillingCatalog } from "@/lib/billing/liveCatalog";
+import {
+  MARKETING_FOOTER_BOTTOM_LINKS,
+  MARKETING_FOOTER_COMPANY_LINKS,
+  type MarketingFooterLink,
+} from "@/lib/routes/publicMarketing";
 
-type NavItem =
-  | { to: string; label: string; hash?: string }
-  | { href: string; label: string; external?: boolean };
+type NavItem = MarketingFooterLink;
 
 /** Header nav — short labels for narrow / tablet drawer (PUBLIC-002). */
 const NAV_LINKS: NavItem[] = [
@@ -28,7 +35,7 @@ const NAV_LINKS: NavItem[] = [
   { to: "/blog", label: "Blog" },
 ];
 
-const HELP_NAV: NavItem = { to: "/help", label: "Help" };
+const HELP_NAV: NavItem = { to: "/help", label: PUBLIC_CTAS.helpShort };
 
 const FOOTER_COLUMNS: Array<{
   heading: string;
@@ -41,40 +48,34 @@ const FOOTER_COLUMNS: Array<{
       { to: "/gov-exams", label: PRODUCT_NAMES.govExams },
       { to: "/pricing", label: "Pricing" },
       { to: "/shortcuts", label: "Shortcuts" },
-      { to: "/signup", label: "Get started free" },
+      { to: "/signup", label: PUBLIC_CTAS.signup },
     ],
   },
   {
     heading: "Resources",
     links: [
       { to: "/blog", label: "Blog" },
-      { to: "/help", label: "Help Center" },
+      { to: "/help", label: PUBLIC_CTAS.help },
       { to: "/help/getting-started", label: "Getting started" },
       { to: "/verify-certificate", label: "Verify certificate" },
-      { to: "/shortcuts", label: "Keyboard shortcuts" },
     ],
   },
   {
     heading: "Company",
     links: [
-      { to: "/about", label: "About" },
-      { to: "/industries", label: "Industries" },
-      { to: "/contact-sales", label: "Contact Sales" },
-      { to: "/careers", label: "Careers" },
-      { to: "/cookies", label: "Cookies" },
-      { to: "/faq", label: "FAQ" },
+      ...MARKETING_FOOTER_COMPANY_LINKS,
       { to: "/terms", label: "Terms of Service" },
       { to: "/privacy", label: "Privacy Policy" },
-      { to: "/signup", label: "Sign up free" },
-      { to: "/login", label: "Log in" },
+      { to: "/login", label: PUBLIC_CTAS.login },
     ],
   },
   {
     heading: "Support",
     links: [
       { href: `mailto:${SUPPORT_EMAIL}`, label: "Email support" },
-      { to: "/help", label: "Help Center" },
-      { href: `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Career Pilot system status")}`, label: "Report an outage" },
+      STATUS_PAGE_URL
+        ? { href: STATUS_PAGE_URL, label: PUBLIC_STATUS_FOOTER_LABEL, external: true }
+        : { href: STATUS_REPORT_MAILTO, label: PUBLIC_STATUS_FOOTER_LABEL },
       { href: GITHUB_ORG_URL, label: "GitHub", external: true },
     ],
   },
@@ -220,14 +221,14 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
               to="/login"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors shrink-0"
             >
-              Log in
+              {PUBLIC_CTAS.login}
             </Link>
             <Link
               to="/signup"
               className="text-xs sm:text-sm font-semibold px-2.5 sm:px-5 py-2 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity whitespace-nowrap shrink-0"
             >
-              <span className="sm:hidden">Sign up</span>
-              <span className="hidden sm:inline">Get started free</span>
+              <span className="sm:hidden">{PUBLIC_CTAS.signupShort}</span>
+              <span className="hidden sm:inline">{PUBLIC_CTAS.signup}</span>
             </Link>
             <button
               type="button"
@@ -283,7 +284,7 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
               onClick={() => setMenuOpen(false)}
               className="block px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors sm:hidden"
             >
-              Log in
+              {PUBLIC_CTAS.login}
             </Link>
           </div>
         </div>
@@ -293,7 +294,7 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
         {children}
       </main>
 
-      <footer className="border-t border-border bg-background">
+      <footer className="border-t border-border bg-background" role="contentinfo">
         <div className={`${MARKETING_SHELL} px-4 sm:px-6 pt-12 pb-8`}>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-6 gap-y-10 mb-10 text-left items-start">
             <div className="col-span-2 sm:col-span-3 lg:col-span-1">
@@ -349,30 +350,13 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
               &copy; {new Date().getFullYear()} {LEGAL_ENTITY_NAME}. All rights reserved.
             </span>
             <div className="flex gap-4 flex-wrap justify-center sm:justify-end">
-              <Link to="/terms" className="hover:text-foreground transition-colors">
-                Terms
-              </Link>
-              <Link to="/privacy" className="hover:text-foreground transition-colors">
-                Privacy
-              </Link>
-              <Link to="/help" className="hover:text-foreground transition-colors">
-                Help
-              </Link>
-              <Link to="/pricing" className="hover:text-foreground transition-colors">
-                Pricing
-              </Link>
-              <Link to="/blog" className="hover:text-foreground transition-colors">
-                Blog
-              </Link>
-              <Link to="/gov-exams" className="hover:text-foreground transition-colors">
-                {PRODUCT_NAMES.govExams}
-              </Link>
-              <Link to="/shortcuts" className="hover:text-foreground transition-colors">
-                Shortcuts
-              </Link>
-              <Link to="/login" className="hover:text-foreground transition-colors">
-                Log in
-              </Link>
+              {MARKETING_FOOTER_BOTTOM_LINKS.map((link) => (
+                <MarketingNavLink
+                  key={link.label}
+                  item={link}
+                  className="hover:text-foreground transition-colors"
+                />
+              ))}
             </div>
           </div>
         </div>

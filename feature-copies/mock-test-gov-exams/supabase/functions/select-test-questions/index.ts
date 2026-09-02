@@ -19,13 +19,28 @@ import { fillUntilCount, type GapFillRow } from "../_shared/govAiGapFill.ts";
 import { type WeakTopicStat } from "../_shared/examAIPrompts.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
-import { requireCapabilityAsync } from "../_shared/requireCapability.ts";
+import { hasCapability, requireCapabilityAsync } from "../_shared/requireCapability.ts";
 import {
   attemptLimitPayload,
   checkGovExamAttemptLimit,
 } from "../_shared/govAttemptLimits.ts";
-import { conflictsWithSelected } from "../_shared/govMcqValidator.ts";
+import {
+  conflictsWithSelected,
+  normalizeMcqOptions,
+  resolveCorrectIndex,
+} from "../_shared/govMcqValidator.ts";
 import { DEDUP_POLICY } from "../_shared/algorithmCatalog.ts";
+import {
+  isPythonGovExamConfigured,
+  pythonGovValidateQuestions,
+} from "../_shared/pythonGovExamClient.ts";
+import {
+  decideSelectTestOutcome,
+  isQuickDrillConfig,
+  mergeUniqueQuestionIds,
+  selectAdaptiveQuestionIds,
+  shouldInvokeAiFill,
+} from "../_shared/selectTestQuestionAssembly.ts";
 /* ─── SANITIZATION ───────────────────────────────────────────────────────── */
 //
 // REGEX ESCAPING RULE for RegExp constructor strings:
@@ -96,6 +111,8 @@ async function fetchBankQuestions(
     wantsAI: boolean;
     includeUserUploads: boolean;
     userId: string;
+    /** Quick Drill uses the full approved bank, not PYP-only. */
+    quickDrill: boolean;
   },
 ): Promise<QuestionRow[]> {
   const baseSelect =
@@ -135,10 +152,19 @@ async function fetchBankQuestions(
     }
   }
 
-  if (opts.wantsPYP) {
-    await addFromQuery(
-      db.from("questions").select(baseSelect).eq("is_public", true).eq("publish_status", "published").eq("review_status", "approved").in("source", PYP_SOURCES),
-    );
+  const approvedPublic = () =>
+    db
+      .from("questions")
+      .select(baseSelect)
+      .eq("is_public", true)
+      .eq("publish_status", "published")
+      .eq("review_status", "approved");
+
+  if (opts.quickDrill) {
+    // Adaptive drill: all approved bank items. Do not relabel AI / uploads as official.
+    await addFromQuery(approvedPublic());
+  } else if (opts.wantsPYP) {
+    await addFromQuery(approvedPublic().in("source", PYP_SOURCES));
   }
   if (opts.wantsAI) {
     await addFromQuery(
@@ -156,10 +182,8 @@ async function fetchBankQuestions(
   }
 
   // Default: public bank when no source flags (should not happen after validation)
-  if (!opts.wantsPYP && !opts.wantsAI && !opts.includeUserUploads) {
-    await addFromQuery(
-      db.from("questions").select(baseSelect).eq("is_public", true).eq("publish_status", "published").eq("review_status", "approved"),
-    );
+  if (!opts.quickDrill && !opts.wantsPYP && !opts.wantsAI && !opts.includeUserUploads) {
+    await addFromQuery(approvedPublic());
   }
 
   let questions = [...merged.values()];
@@ -183,7 +207,15 @@ async function fetchBankQuestions(
         merged.set(row.id, row);
       }
     };
-    if (opts.wantsPYP) {
+    if (opts.quickDrill) {
+      await addFallback(
+        db.from("questions")
+          .select(baseSelect)
+          .eq("is_public", true)
+          .eq("publish_status", "published")
+          .eq("review_status", "approved"),
+      );
+    } else if (opts.wantsPYP) {
       await addFallback(
         db.from("questions")
           .select(baseSelect)
@@ -289,9 +321,20 @@ Deno.serve(async (req: Request) => {
 
     const includeUserUploads = source_types.includes("USER_UPLOAD");
     const wantsPYP = source_types.includes("OFFICIAL_PYP");
-    const wantsAI = source_types.includes("AI_GENERATED");
+    const wantsAIExplicit = source_types.includes("AI_GENERATED");
+    const quickDrill = isQuickDrillConfig(config);
+    const allowAiFillFlag = config.allow_ai_fill === true;
+    const hasAiFillCapability = hasCapability(planId, "gov_exam_ai_fill");
+    const invokeAiFill = shouldInvokeAiFill({
+      sourceTypes: source_types,
+      quickDrill,
+      allowAiFill: allowAiFillFlag,
+      hasAiFillCapability,
+    });
 
-    if (wantsAI) {
+    // Explicit AI source is a paid opt-in. Quick Drill may fill without that flag
+    // when the plan already has gov_exam_ai_fill — do not 403 the whole drill.
+    if (wantsAIExplicit) {
       const capabilityGate = await requireCapabilityAsync(planId, "gov_exam_ai_fill", req);
       if (capabilityGate) return capabilityGate;
     }
@@ -375,153 +418,193 @@ Deno.serve(async (req: Request) => {
       topics,
       year_range,
       wantsPYP,
-      wantsAI,
+      wantsAI: wantsAIExplicit || invokeAiFill,
       includeUserUploads,
       userId,
+      quickDrill,
     });
-    /* ── SMART BUCKETING ───────────────────────────────────────────────── */
-    type Pool = { priority: string[]; normal: string[] };
-    const pools: Record<string, Pool> = {
-      EASY:   { priority: [], normal: [] },
-      MEDIUM: { priority: [], normal: [] },
-      HARD:   { priority: [], normal: [] },
-    };
 
-    for (const q of questions) {
-      if (recentQ.has(q.id as string)) continue;
+    const picked = selectAdaptiveQuestionIds({
+      questions,
+      questionCount: question_count,
+      recentIds: recentQ,
+      easyPct,
+      hardPct,
+      topicAcc,
+      conflictsWithSelected: (stem, selected) =>
+        conflictsWithSelected(stem, selected, DEDUP_POLICY.stem_only_conflict),
+      shuffle,
+    });
 
-      const rawDiff = String(q.difficulty ?? "").toUpperCase();
-      const diff    = ["EASY", "MEDIUM", "HARD"].includes(rawDiff)
-        ? rawDiff
-        : "MEDIUM";
-      const acc     = topicAcc[q.topic as string];
-
-      if (acc === undefined || acc < 60) {
-        pools[diff].priority.push(q.id as string);
-      } else {
-        pools[diff].normal.push(q.id as string);
-      }
-    }
-
-    const countEasy = Math.round(question_count * easyPct / 100);
-    const countHard = Math.round(question_count * hardPct / 100);
-    const countMed  = question_count - countEasy - countHard;
-
-    const selectedStems: string[] = [];
-    const usedIds = new Set<string>();
-
-    function pickUnique(pool: Pool, target: number): string[] {
-      if (target <= 0) return [];
-      const combined = [...shuffle(pool.priority), ...shuffle(pool.normal)];
-      const picked: string[] = [];
-      for (const id of combined) {
-        if (picked.length >= target) break;
-        if (usedIds.has(id)) continue;
-        const row = questions.find((q) => q.id === id);
-        const stem = String(row?.question_text ?? "").trim();
-        if (stem && conflictsWithSelected(stem, selectedStems, DEDUP_POLICY.stem_only_conflict)) continue;
-        usedIds.add(id);
-        if (stem) selectedStems.push(stem);
-        picked.push(id);
-      }
-      return picked;
-    }
-
-    const selectedIds = [
-      ...pickUnique(pools.EASY,   countEasy),
-      ...pickUnique(pools.MEDIUM, countMed),
-      ...pickUnique(pools.HARD,   countHard),
-    ];
-
-    /* ── Top up from remaining bank before any AI generation ───────────── */
-    let finalIds = [...selectedIds];
-    if (finalIds.length < question_count) {
-      const leftover = shuffle(
-        questions
-          .map((q) => q.id as string)
-          .filter((id) => !usedIds.has(id) && !recentQ.has(id)),
-      );
-      for (const id of leftover) {
-        if (finalIds.length >= question_count) break;
-        const row = questions.find((q) => q.id === id);
-        const stem = String(row?.question_text ?? "").trim();
-        if (stem && conflictsWithSelected(stem, selectedStems, DEDUP_POLICY.stem_only_conflict)) continue;
-        usedIds.add(id);
-        if (stem) selectedStems.push(stem);
-        finalIds.push(id);
-      }
-    }
-
-    /* ── AI GAP-FILL only when the user opted into AI-generated questions ─ */
-    const gap            = question_count - finalIds.length;
-    let generatedCount   = 0;
+    let finalIds = [...picked.ids];
+    const aiInsertedIds = new Set<string>();
     let gapFillError: string | undefined;
+    let aiCreditsDeducted = false;
+    let aiCreditCost = 0;
+    let aiFillAttempted = false;
 
-    if (gap > 0 && wantsAI) {
-      const aiCreditCost = creditCost("mock_test_ai_gap_fill");
-      const creditResult = await deductCreditsAtomic({
-        userId,
-        action: "mock_test_ai_gap_fill",
-        cost: aiCreditCost,
-        idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
-      });
-      if (!creditResult.success) {
-        gapFillError =
-          creditResult.code === "INSUFFICIENT_CREDITS"
-            ? `Need ${aiCreditCost} credits to generate remaining questions (have ${creditResult.balance ?? profile?.credits ?? 0}). Bank provided ${finalIds.length} of ${question_count}.`
-            : (creditResult.error ?? "Credit deduction failed.");
-      } else {
-        const priorityTopics =
-          topics.length > 0
-            ? topics
-            : weakTopics.slice(0, 5).map((w) => w.topic);
+    const gapFillSelect =
+      "id, question_text, options, correct_answer, subject, topic, difficulty, source, source_year, is_public, is_verified";
 
-        let existingRows: GapFillRow[] = [];
-        if (finalIds.length > 0) {
-          const { data: stemRows } = await db
-            .from("questions")
-            .select(
-              "id, question_text, options, correct_answer, subject, topic, difficulty, source, source_year, is_public, is_verified",
-            )
-            .in("id", finalIds);
-          existingRows = (stemRows ?? []) as GapFillRow[];
-        }
+    async function loadGapFillRows(ids: string[]): Promise<GapFillRow[]> {
+      if (ids.length === 0) return [];
+      const { data: stemRows } = await db
+        .from("questions")
+        .select(gapFillSelect)
+        .in("id", ids);
+      return (stemRows ?? []) as GapFillRow[];
+    }
 
-        const fill = await fillUntilCount({
-          db,
-          targetCount: question_count,
-          existing: existingRows,
-          examType: exam_type && exam_type !== "CUSTOM" ? exam_type : "General Competitive Exam",
-          subjects: subjects.length > 0 ? subjects : ["General Subject"],
-          topics: priorityTopics,
-          difficultyMix: { EASY: easyPct, MEDIUM: medPct, HARD: hardPct },
-          weakTopics,
-          strongTopics,
+    async function attemptAiFill(existingIds: string[]): Promise<void> {
+      if (!invokeAiFill || existingIds.length >= question_count) return;
+      aiFillAttempted = true;
+
+      if (!aiCreditsDeducted) {
+        aiCreditCost = creditCost("mock_test_ai_gap_fill");
+        const creditResult = await deductCreditsAtomic({
           userId,
+          action: "mock_test_ai_gap_fill",
+          cost: aiCreditCost,
+          idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
         });
-
-        if (fill.added.length > 0) {
-          finalIds.push(...fill.added.map((r) => r.id));
-          generatedCount = fill.added.length;
+        if (!creditResult.success) {
+          gapFillError =
+            creditResult.code === "INSUFFICIENT_CREDITS"
+              ? `Need ${aiCreditCost} credits to generate remaining questions (have ${creditResult.balance ?? profile?.credits ?? 0}). Bank provided ${existingIds.length} of ${question_count}.`
+              : (creditResult.error ?? "Credit deduction failed.");
+          return;
         }
-        if (fill.error && fill.added.length === 0) {
-          gapFillError = fill.error;
+        aiCreditsDeducted = true;
+      }
+
+      const priorityTopics =
+        topics.length > 0
+          ? topics
+          : weakTopics.slice(0, 5).map((w) => w.topic);
+
+      const fill = await fillUntilCount({
+        db,
+        targetCount: question_count,
+        existing: await loadGapFillRows(existingIds),
+        examType: exam_type && exam_type !== "CUSTOM" ? exam_type : "General Competitive Exam",
+        subjects: subjects.length > 0 ? subjects : ["General Subject"],
+        topics: priorityTopics,
+        difficultyMix: { EASY: easyPct, MEDIUM: medPct, HARD: hardPct },
+        weakTopics,
+        strongTopics,
+        userId,
+      });
+
+      for (const row of fill.added) {
+        aiInsertedIds.add(row.id);
+        existingIds.push(row.id);
+      }
+      if (fill.error && fill.added.length === 0) {
+        gapFillError = fill.error;
+        if (aiCreditsDeducted && aiInsertedIds.size === 0) {
           try {
             await refundCredits({
               userId,
               cost: aiCreditCost,
               reason: "select-test-questions AI gap-fill failure",
             });
+            aiCreditsDeducted = false;
           } catch {
             /* best-effort refund */
           }
-        } else if (fill.error) {
-          gapFillError = fill.error;
         }
+      } else if (fill.error) {
+        gapFillError = fill.error;
       }
     }
+
+    await attemptAiFill(finalIds);
+
     /* ── FINAL DEDUP, SHUFFLE & TRIM ─────────────────────────────────── */
-    finalIds = shuffle([...new Set(finalIds)]).slice(0, question_count);
+    finalIds = mergeUniqueQuestionIds(finalIds, [], question_count, shuffle);
+
+    /* ── Python validation (drop rejected; never invent placeholder items) ───── */
+    async function dropRejectedByPython(ids: string[]): Promise<string[]> {
+      if (!isPythonGovExamConfigured() || ids.length === 0) return ids;
+      const { data: validateRows, error: validateErr } = await db
+        .from("questions")
+        .select(
+          "id, question_text, options, correct_answer, subject, topic, difficulty, source",
+        )
+        .in("id", ids);
+
+      if (validateErr) {
+        console.warn(JSON.stringify({
+          tag: "[GOV_EXAM] select_test_python_validate_fetch_failed",
+          message: validateErr.message,
+        }));
+        return ids;
+      }
+
+      const byId = new Map(
+        ((validateRows ?? []) as Array<{
+          id: string;
+          question_text?: string | null;
+          options?: unknown;
+          correct_answer?: unknown;
+          subject?: string | null;
+          topic?: string | null;
+          difficulty?: string | null;
+          source?: string | null;
+        }>).map((row) => [row.id, row]),
+      );
+      const ordered = ids
+        .map((id) => byId.get(id))
+        .filter((row): row is NonNullable<typeof row> => Boolean(row));
+
+      if (ordered.length === 0) return [];
+
+      const payloads = ordered.map((row) => {
+        const options = normalizeMcqOptions(row.options);
+        const correctIndex = resolveCorrectIndex(row.correct_answer, options.length);
+        return {
+          id: String(row.id ?? ""),
+          question_text: String(row.question_text ?? ""),
+          options,
+          correct_index: correctIndex,
+          correct_answer: correctIndex != null ? String.fromCharCode(65 + correctIndex) : null,
+          subject: row.subject != null ? String(row.subject) : null,
+          topic: row.topic != null ? String(row.topic) : null,
+          difficulty: row.difficulty != null ? String(row.difficulty) : null,
+          language: "en",
+          source: row.source != null ? String(row.source) : null,
+        };
+      });
+      const pyVal = await pythonGovValidateQuestions({
+        questions: payloads,
+        correlation_id: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+        language: "en",
+        reject_near_duplicates: true,
+      });
+      if (pyVal.ok && pyVal.data.rejected_indices.length > 0) {
+        const drop = new Set(pyVal.data.rejected_indices);
+        return ordered.filter((_, idx) => !drop.has(idx)).map((row) => row.id);
+      }
+      if (pyVal.ok) return ordered.map((row) => row.id);
+      console.warn(JSON.stringify({
+        tag: "[GOV_EXAM] select_test_python_validate_failed",
+        code: pyVal.error.code,
+      }));
+      return ids;
+    }
+
+    finalIds = await dropRejectedByPython(finalIds);
+
+    // Validation may drop a full bank set. If AI fill is allowed, fill the gap
+    // instead of treating a valid fallback as unprocessable (422).
+    if (invokeAiFill && finalIds.length < question_count) {
+      await attemptAiFill(finalIds);
+      finalIds = mergeUniqueQuestionIds(finalIds, [], question_count, shuffle);
+      finalIds = await dropRejectedByPython(finalIds);
+    }
+
+    finalIds = mergeUniqueQuestionIds(finalIds, [], question_count, shuffle);
+    const generatedCount = finalIds.filter((id) => aiInsertedIds.has(id)).length;
 
     if (finalIds.length === 0) {
       console.warn(
@@ -530,38 +613,50 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    if (!allow_shortfall && finalIds.length !== question_count && generatedCount === 0) {
-      const pypOnlyHasSet =
-        wantsPYP && !wantsAI && finalIds.length >= Math.min(10, question_count);
-      if (!pypOnlyHasSet) {
+    const outcome = decideSelectTestOutcome({
+      selectedIds: finalIds,
+      questionCount: question_count,
+      allowShortfall: allow_shortfall,
+      aiFillEnabled: invokeAiFill,
+      aiFillAttempted,
+      aiGeneratedCount: generatedCount,
+      aiFillError: gapFillError,
+      pypOnly: wantsPYP && !wantsAIExplicit && !invokeAiFill,
+    });
+
+    if (outcome.status === "unprocessable" || outcome.status === "shortage") {
+      const creditShortage =
+        outcome.status === "shortage" &&
+        typeof gapFillError === "string" &&
+        /credits/i.test(gapFillError);
       return new Response(
         JSON.stringify({
-          question_ids: finalIds,
-          count: finalIds.length,
-          required: question_count,
-          code: "INSUFFICIENT_APPROVED_QUESTIONS",
-          error:
-            gapFillError ??
-            `Only ${finalIds.length} of ${question_count} questions are available after bank + AI fill.`,
+          question_ids: outcome.questionIds,
+          count: outcome.available,
+          required: outcome.requested,
+          available: outcome.available,
+          requested: outcome.requested,
+          code: creditShortage
+            ? "INSUFFICIENT_CREDITS"
+            : (outcome.code ?? "QUESTION_INVENTORY_INSUFFICIENT"),
+          error: outcome.error,
+          ai_generated_count: outcome.aiGeneratedCount,
+          gap_fill_failed: !!gapFillError,
         }),
-        { status: 422, headers },
+        { status: creditShortage ? 402 : outcome.httpStatus, headers },
       );
-      }
     }
 
     return new Response(
       JSON.stringify({
-        question_ids:       finalIds,
-        count:              finalIds.length,
-        ai_generated_count: generatedCount,
+        question_ids:       outcome.questionIds,
+        count:              outcome.questionIds.length,
+        ai_generated_count: outcome.aiGeneratedCount,
         gap_fill_failed:    !!gapFillError,
-        error:              gapFillError ?? (finalIds.length === 0
+        error:              gapFillError ?? (outcome.questionIds.length === 0
           ? "No questions in bank for this paper. Run Admin → Collect from public sources or upload PDFs."
           : undefined),
-        warning:
-          finalIds.length < question_count
-            ? `Only ${finalIds.length} of ${question_count} questions available.`
-            : undefined,
+        warning:            outcome.warning,
       }),
       { status: 200, headers },
     );

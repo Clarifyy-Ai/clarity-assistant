@@ -1,16 +1,15 @@
 // Static FAQ content used when help_articles DB is empty or unreachable.
 // Slug pattern matches migration 20260531174228: {prefix}-{n} (gs-, li-, mt-, bi-).
-// Credit numbers come from creditEconomics — do not hardcode a second catalog.
+// Billing/credit numbers come from helpCatalogCopy — do not hardcode a second catalog.
 
 import {
-  CREDIT_PACK_DEFINITIONS,
-  PLAN_MONTHLY_CREDITS,
-} from "@/lib/constants/creditEconomics";
-
-const FREE_CREDITS = PLAN_MONTHLY_CREDITS.free;
-const PRO_CREDITS = PLAN_MONTHLY_CREDITS.pro;
-const MAX_CREDITS = PLAN_MONTHLY_CREDITS.enterprise;
-const PACK_LIST = CREDIT_PACK_DEFINITIONS.map((p) => `${p.credits}`).join(", ");
+  HELP_CATALOG_SNIPPETS,
+  HELP_CREDIT_COSTS,
+  HELP_PACK_LIST,
+  HELP_PLAN_CREDITS,
+  HELP_PLAN_PRICES,
+  helpCopyLooksStale,
+} from "@/lib/help/helpCatalogCopy";
 
 export type HelpArticleItem = {
   slug: string;
@@ -27,6 +26,16 @@ export type HelpFaqCategory = {
   slug: string;
   items: HelpArticleItem[];
 };
+
+const gs3 = HELP_CATALOG_SNIPPETS["gs-3"];
+const gs2 = HELP_CATALOG_SNIPPETS["gs-2"];
+const li4 = HELP_CATALOG_SNIPPETS["li-4"];
+const mp2 = HELP_CATALOG_SNIPPETS["mp-2"];
+const bi1 = HELP_CATALOG_SNIPPETS["bi-1"];
+const bi2 = HELP_CATALOG_SNIPPETS["bi-2"];
+const bi3 = HELP_CATALOG_SNIPPETS["bi-3"];
+const bi4 = HELP_CATALOG_SNIPPETS["bi-4"];
+const bi5 = HELP_CATALOG_SNIPPETS["bi-5"];
 
 export const HELP_ARTICLES_FALLBACK: HelpArticleItem[] = [
   {
@@ -51,33 +60,18 @@ Career Pilot is for practice only. Using AI assistance covertly during a real in
     slug: "gs-2",
     category_slug: "getting-started",
     category_title: "Getting Started",
-    question: "How do I create an account?",
-    answer:
-      "Click 'Get started free' on the homepage. You can sign up with your email or use Google OAuth. No credit card required for the free plan.",
-    body_md: `Creating an account takes less than a minute:
-
-1. Visit the Career Pilot homepage and click **Get started free**
-2. Enter your email and create a password, or sign in with Google
-3. Verify your email address
-4. Complete the quick onboarding flow (role, experience, target companies)
-
-No credit card is required. You'll start on the Free plan with ${FREE_CREDITS} credits per month.`,
+    question: gs2.question,
+    answer: gs2.answer,
+    body_md: gs2.body_md,
     sort_order: 20,
   },
   {
     slug: "gs-3",
     category_slug: "getting-started",
     category_title: "Getting Started",
-    question: "Is there a free plan?",
-    answer:
-      `Yes. The Free plan includes ${FREE_CREDITS} credits per month — enough to try Practice Coach and a mock session. Pro is ₹2,499 one-time. Max is ₹6,799 one-time.`,
-    body_md: `Yes. The Free plan includes:
-
-- **${FREE_CREDITS} credits** per month
-- Practice sessions with the live AI coach (limited)
-- STAR builder and answer bank (limited)
-
-No credit card required. Upgrade to **Pro** (₹2,499 one-time, ${PRO_CREDITS} credits) or **Max** (₹6,799 one-time, ${MAX_CREDITS} credits) anytime.`,
+    question: gs3.question,
+    answer: gs3.answer,
+    body_md: gs3.body_md,
     sort_order: 30,
   },
   {
@@ -113,6 +107,15 @@ Using AI assistance covertly during a live interview:
 
 The Career Pilot overlay is a normal on-screen window and is visible to screen-sharing tools by design.`,
     sort_order: 20,
+  },
+  {
+    slug: "li-4",
+    category_slug: "live-interview",
+    category_title: "Live Interview",
+    question: li4.question,
+    answer: li4.answer,
+    body_md: li4.body_md,
+    sort_order: 40,
   },
   {
     slug: "mt-1",
@@ -153,59 +156,72 @@ Scores are tracked over time in your Analytics dashboard for trend analysis.`,
     slug: "mt-3",
     category_slug: "mock-tests",
     category_title: "Mock Tests",
-    question: "Can I practice with others?",
-    answer:
-      "Group Practice is coming soon. Collaborative rooms with shared scorecards are not available yet.",
-    body_md: `**Group Practice is coming soon.**
-
-We're building collaborative mock interviews where you and peers can:
-
-- Create a room and share a link
-- Practice together with shared scorecards
-- Get real-time AI coaching for every participant
-
-Until then, use solo mock interviews and practice sessions. Check Help again when Group Practice launches.`,
+    question: mp2.question,
+    answer: mp2.answer,
+    body_md: mp2.body_md,
     sort_order: 30,
+  },
+  {
+    slug: "mp-2",
+    category_slug: "mock-practice",
+    category_title: "Mock Practice",
+    question: mp2.question,
+    answer: mp2.answer,
+    body_md: mp2.body_md,
+    sort_order: 20,
   },
   {
     slug: "bi-1",
     category_slug: "billing",
     category_title: "Billing & Credits",
-    question: "How do credits work?",
-    answer:
-      `Credits are the currency for AI-powered features. Free includes ${FREE_CREDITS} credits/month, Pro includes ${PRO_CREDITS} one-time, and Max includes ${MAX_CREDITS} one-time.`,
-    body_md: `Credits are the currency for AI features. Each action has a set cost:
-
-- Live hint: 2 credits
-- Full answer: 8 credits
-- Mock session debrief: 15 credits
-- STAR builder: 10 credits
-- Company research: 20 credits
-
-Free credits refresh monthly. Pro and Max are one-time purchases. Extra credit packs (${PACK_LIST} credits) are available from Settings → Billing.`,
+    question: bi1.question,
+    answer: bi1.answer,
+    body_md: bi1.body_md,
     sort_order: 10,
   },
   {
     slug: "bi-2",
     category_slug: "billing",
     category_title: "Billing & Credits",
-    question: "How much do paid plans cost?",
-    answer:
-      `Pro is ₹2,499 one-time (${PRO_CREDITS} credits). Max is ₹6,799 one-time (${MAX_CREDITS} credits). Pay in INR with Razorpay — no auto-renew.`,
-    body_md: `Pro is **₹2,499 one-time** for ${PRO_CREDITS} credits and unlocks the full feature set. Max is **₹6,799 one-time** for ${MAX_CREDITS} credits and priority model access. Pay in INR with Razorpay — checkout does not auto-renew. Upgrade anytime from **Settings → Billing**.`,
+    question: bi2.question,
+    answer: bi2.answer,
+    body_md: bi2.body_md,
     sort_order: 20,
+  },
+  {
+    slug: "bi-3",
+    category_slug: "billing",
+    category_title: "Billing & Credits",
+    question: bi3.question,
+    answer: bi3.answer,
+    body_md: bi3.body_md,
+    sort_order: 30,
+  },
+  {
+    slug: "bi-4",
+    category_slug: "billing",
+    category_title: "Billing & Credits",
+    question: bi4.question,
+    answer: bi4.answer,
+    body_md: bi4.body_md,
+    sort_order: 40,
   },
   {
     slug: "bi-5",
     category_slug: "billing",
     category_title: "Billing & Credits",
-    question: "Can I buy extra credits?",
-    answer:
-      `Yes. Buy extra credit packs (${PACK_LIST} credits) from Settings → Billing, or upgrade to Pro (${PRO_CREDITS} credits) or Max (${MAX_CREDITS} credits).`,
-    body_md: `Yes. Extra credit packs of **${PACK_LIST} credits** are available from **Settings → Billing**. You can also upgrade to **Pro** (₹2,499 one-time, ${PRO_CREDITS} credits) or **Max** (₹6,799 one-time, ${MAX_CREDITS} credits).`,
+    question: bi5.question,
+    answer: bi5.answer,
+    body_md: bi5.body_md,
     sort_order: 50,
   },
 ];
+
+const FALLBACK_SLUG_ALIASES: Record<string, string> = {
+  "gs-4": "gs-3",
+  "mp-1": "mt-1",
+  "mp-3": "mt-2",
+};
 
 /** Fix common UTF-8 mojibake (e.g. Ã / Â sequences, corrupted À la carte). */
 export function sanitizeHelpText(text: string): string {
@@ -234,25 +250,22 @@ export function sanitizeHelpText(text: string): string {
     .replace(/Settings\s*[\u0000-\u001f\u007f]\s*Billing/gi, "Settings → Billing");
 }
 
-/** Prefer clean fallback copy when a published row looks corrupted or mismatched. */
+/** Prefer clean fallback copy when a published row looks corrupted or stale. */
 export function resolveHelpArticleDisplay(row: HelpArticleItem): HelpArticleItem {
   const fallback = getFallbackArticleBySlug(row.slug);
   const answer = sanitizeHelpText(row.answer ?? "");
   const body = sanitizeHelpText(row.body_md ?? "");
-  const rawCombined = `${row.answer ?? ""}${row.body_md ?? ""}`;
+  const rawCombined = `${row.question ?? ""}\n${row.answer ?? ""}\n${row.body_md ?? ""}`;
   const looksCorrupt =
     /Ã.|â€|Â[₹· ]|Ã\u0080/.test(rawCombined) ||
-    // Stripped currency or control chars between Settings → Billing (DB encoding damage)
     /\?(?=\s*[\d,]{3,})|Settings\s*[\u0000-\u001f\u007f]\s*Billing/i.test(rawCombined) ||
     (row.slug === "gs-3" &&
       /what happens after i sign up/i.test(row.question) &&
       /free plan/i.test(answer)) ||
-    // Stale bi-5 seed: mojibake-prone "À la carte" and/or obsolete Enterprise unlimited copy
     (row.slug === "bi-5" &&
       (/À\s*la carte|Ã€\s*la carte|Enterprise.*unlimited|unlimited credits/i.test(rawCombined)));
 
-
-  if (looksCorrupt && fallback) {
+  if ((looksCorrupt || helpCopyLooksStale(rawCombined)) && fallback) {
     return fallback;
   }
 
@@ -302,8 +315,34 @@ export function dedupeHelpArticlesByQuestion(
   return Array.from(seen.values()).sort((a, b) => a.sort_order - b.sort_order);
 }
 
+const CRITICAL_FALLBACK_SLUGS = [
+  "gs-2",
+  "gs-3",
+  "li-4",
+  "mp-2",
+  "bi-1",
+  "bi-2",
+  "bi-3",
+  "bi-4",
+  "bi-5",
+] as const;
+
+/** Sanitize CMS rows and fill any missing India billing/credit articles. */
+export function mergePublishedHelpRows(rows: HelpArticleItem[]): HelpArticleItem[] {
+  const cleaned = rows.map(resolveHelpArticleDisplay);
+  const have = new Set(cleaned.map((a) => a.slug));
+  for (const slug of CRITICAL_FALLBACK_SLUGS) {
+    if (!have.has(slug)) {
+      const fb = HELP_ARTICLES_FALLBACK.find((a) => a.slug === slug);
+      if (fb) cleaned.push(fb);
+    }
+  }
+  return dedupeHelpArticlesByQuestion(cleaned);
+}
+
 export function getFallbackArticleBySlug(slug: string): HelpArticleItem | null {
-  return HELP_ARTICLES_FALLBACK.find((a) => a.slug === slug) ?? null;
+  const aliased = FALLBACK_SLUG_ALIASES[slug] ?? slug;
+  return HELP_ARTICLES_FALLBACK.find((a) => a.slug === aliased) ?? null;
 }
 
 export function getFallbackArticlesByCategory(categorySlug: string): HelpArticleItem[] {
@@ -311,4 +350,14 @@ export function getFallbackArticlesByCategory(categorySlug: string): HelpArticle
 }
 
 export const HELP_FAQ_CATEGORIES_FALLBACK =
-  groupHelpArticlesIntoCategories(HELP_ARTICLES_FALLBACK);
+  groupHelpArticlesIntoCategories(
+    HELP_ARTICLES_FALLBACK.filter((a) => a.slug !== "mp-2"),
+  );
+
+// Re-export catalog tokens so marketing pages can import from one Help module.
+export {
+  HELP_CREDIT_COSTS,
+  HELP_PACK_LIST,
+  HELP_PLAN_CREDITS,
+  HELP_PLAN_PRICES,
+};

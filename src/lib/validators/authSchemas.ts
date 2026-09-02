@@ -58,9 +58,18 @@ const fullNameSchema = z
   .max(NAME_MAX_LENGTH, `Name must be at most ${NAME_MAX_LENGTH} characters.`)
   .transform((value) => sanitizeText(value));
 
+/** Login accepts any non-empty password; strength rules apply at signup only. */
+const loginPasswordSchema = z
+  .string()
+  .max(
+    PASSWORD_MAX_LENGTH,
+    `Password must be at most ${PASSWORD_MAX_LENGTH} characters.`,
+  )
+  .refine((value) => value.trim().length > 0, "Password is required.");
+
 export const loginSchema = z.object({
   email: emailSchema,
-  password: passwordSchema,
+  password: loginPasswordSchema,
 });
 
 export const signupSchema = z

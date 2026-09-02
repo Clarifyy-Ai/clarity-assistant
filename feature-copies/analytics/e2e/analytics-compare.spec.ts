@@ -38,6 +38,11 @@ test.describe("Reports / Compare sessions", () => {
     await expect(page.getByText("Globex", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Delta summary")).toBeVisible();
     await expect(page.getByText("Overall score").first()).toBeVisible();
+    const sessionKpi = page.getByTestId("analytics-kpi-sessions");
+    await expect(sessionKpi).toHaveAttribute("data-kpi-scope", "compare");
+    await expect(sessionKpi).toContainText("Sessions in this comparison");
+    await expect(sessionKpi).toContainText("2");
+    await expect(sessionKpi).not.toContainText(/sessions overall/i);
     expect(badStatuses.every((status) => status < 400)).toBe(true);
     expect(consoleErrors.join("\n")).not.toMatch(/PGRST200|session_questions/i);
   });

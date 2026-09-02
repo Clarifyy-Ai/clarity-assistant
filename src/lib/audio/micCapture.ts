@@ -3,22 +3,13 @@
 // Minimal microphone capture utility — used in onboarding and tests
 // ─────────────────────────────────────────────────────────────────
 
+import { acquireMicrophoneStream } from "@/lib/audio/micPermission";
+
 export async function startMicCapture(
   deviceId?: string | null
 ): Promise<MediaStream> {
-  const constraints: MediaStreamConstraints = {
-    audio: deviceId
-      ? { deviceId: { exact: deviceId } }
-      : { echoCancellation: true, noiseSuppression: true },
-    video: false,
-  };
-
-  try {
-    return await navigator.mediaDevices.getUserMedia(constraints);
-  } catch (err) {
-    // Allow the caller to handle errors or map them centrally
-    throw err;
-  }
+  const result = await acquireMicrophoneStream({ deviceId });
+  return result.stream;
 }
 
 export function stopMicCapture(stream: MediaStream | null): void {

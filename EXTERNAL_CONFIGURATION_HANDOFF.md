@@ -37,6 +37,21 @@ This cannot be enabled from the repository.
 3. Confirm signup/password-update with a known compromised password is rejected with a non-technical message.
 4. Record evidence in the implementation ledger as `IMPLEMENTED_AND_RUNTIME_VERIFIED` only after that check.
 
+## Razorpay webhook + secrets (billing lifecycle)
+
+Production checkout requires all three Edge secrets: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, and `RAZORPAY_WEBHOOK_SECRET`. Use **live** keys (`rzp_live_*`) in production; `rzp_test_*` is blocked by `billingConfig` and `npm run billing:preflight` when `APP_ENV=production`.
+
+1. **Dashboard → Razorpay → Settings → Webhooks** — create a webhook pointing to:
+   `https://qzgvjrvtkwlzxpmlddkx.supabase.co/functions/v1/razorpay-webhook`
+2. Enable at least `payment.captured` and `payment.failed`.
+3. Copy the webhook signing secret into Supabase Edge secrets as `RAZORPAY_WEBHOOK_SECRET` (`npm run qa:sync-secrets` or Dashboard → Edge Functions → Secrets).
+4. Set `PUBLIC_URL` / `SITE_URL` to the production app origin (used for CORS and billing preflight).
+5. Ensure `billing_settings.razorpay_enabled = true` with INR paise ≥ 100 per pack.
+6. Deploy `razorpay-create-order`, `razorpay-verify-payment`, and `razorpay-webhook` after secret changes.
+7. Verify: `node scripts/billing-catalog-parity.mjs`, `APP_ENV=production npm run billing:preflight`, `npx vitest run src/test/lib/billing/`, and `node scripts/_tmp_billing_deploy_verify.mjs` (secrets + function versions, no values printed).
+
+Client checkout uses Razorpay India sandbox test cards in staging only — not Stripe `4242` test cards.
+
 ## After keys are added
 
 1. Validate configuration without printing values (`npm run validate-env`, `npm run billing:preflight`).

@@ -21,16 +21,19 @@ import {
 } from "../_shared/rateLimit.ts";
 import { validateIngestQuestionsPayload } from "../_shared/ingestJsonQuestions.ts";
 import { geminiGenerate, geminiGenerateWithPdf, parseJSON } from "../_shared/gemini.ts";
+import { getAiFeaturePolicy } from "../_shared/aiFeaturePolicy.ts";
 import {
   EXTRACT_PARSER_VERSION,
   PDF_QUESTION_EXTRACT_PROMPT,
   bufferToBase64,
   buildOcrConfidenceFlags,
+  classifyAnswerKeyStatus,
   normalizePdfExtractedQuestions,
   parsePlainTextMcqs,
   validateExtractQuestionPaperPayload,
   type ExtractPayloadOk,
 } from "../_shared/pdfQuestionExtract.ts";
+import { callPythonProcess, isPythonConfigured } from "../_shared/pythonClient.ts";
 
 type JobStatus =
   | "queued"
@@ -43,6 +46,35 @@ type JobStatus =
   | "completed"
   | "failed";
 
+async function tryPythonPdfText(
+  pdfBase64: string,
+  correlationId: string,
+): Promise<string | null> {
+  if (!isPythonConfigured()) return null;
+  const result = await callPythonProcess({
+    operation: "document_extract",
+    operationId: correlationId,
+    correlationId,
+    payload: {
+      base64: pdfBase64,
+      filename: "gov-exam-paper.pdf",
+      mime_type: "application/pdf",
+      document_kind: "exam_paper",
+      category_hint: "exam_paper",
+    },
+  });
+  if (!result.ok) {
+    console.warn("[extract-question-paper] python document_extract failed:", result.message);
+    return null;
+  }
+  const data = result.data as Record<string, unknown>;
+  const text =
+    (typeof data.full_text === "string" && data.full_text) ||
+    (typeof data.text === "string" && data.text) ||
+    "";
+  return text.trim() ? text : null;
+}
+
 async function setJob(
   db: ReturnType<typeof createServiceClient>,
   jobId: string,
@@ -52,6 +84,15 @@ async function setJob(
     .from("source_ingestion_jobs")
     .update({ ...patch, updated_at: new Date().toISOString() })
     .eq("id", jobId);
+}
+
+/** "none" only when status is omitted AND no questions were processed. */
+function defaultAnswerKeyStatus(
+  status: "mapped" | "needs_review" | "none" | undefined,
+  questionsProcessed: number | null | undefined,
+): "mapped" | "needs_review" | "none" {
+  if (status) return status;
+  return (questionsProcessed ?? 0) > 0 ? "needs_review" : "none";
 }
 
 async function findOrCreatePaperShell(
@@ -69,6 +110,7 @@ async function findOrCreatePaperShell(
     officialStatus: string;
     questionCount: number | null;
     metadata: Record<string, unknown>;
+    answerKeyStatus?: "mapped" | "needs_review" | "none";
   },
 ): Promise<string | null> {
   let q = db
@@ -92,6 +134,7 @@ async function findOrCreatePaperShell(
         official_status: args.officialStatus,
         question_count: args.questionCount ?? undefined,
         review_status: "in_review",
+        answer_key_status: defaultAnswerKeyStatus(args.answerKeyStatus, args.questionCount),
         metadata: args.metadata,
         updated_at: new Date().toISOString(),
       })
@@ -111,7 +154,7 @@ async function findOrCreatePaperShell(
       language: args.language,
       source_id: args.sourceId,
       official_status: args.officialStatus,
-      answer_key_status: "none",
+      answer_key_status: defaultAnswerKeyStatus(args.answerKeyStatus, args.questionCount),
       review_status: "in_review",
       title: args.title,
       question_count: args.questionCount,
@@ -159,6 +202,27 @@ async function resolvePdfBase64(
     return { base64: null, error: "Stored PDF exceeds 15MB limit" };
   }
   return { base64: bufferToBase64(buf) };
+}
+
+const ASYNC_PDF_B64_CHARS = 500_000;
+
+function scheduleWaitUntil(task: Promise<unknown>): boolean {
+  try {
+    const er = (globalThis as unknown as {
+      EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void };
+    }).EdgeRuntime;
+    if (er && typeof er.waitUntil === "function") {
+      er.waitUntil(
+        task.catch((err) => {
+          console.error("[extract-question-paper] background:", err);
+        }),
+      );
+      return true;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
 }
 
 Deno.serve(async (req) => {
@@ -278,6 +342,12 @@ Deno.serve(async (req) => {
     }
 
     const jobId = job.id as string;
+    const pdfChars = typeof payload.pdfBase64 === "string" ? payload.pdfBase64.length : 0;
+    const heavyPdf =
+      pdfChars > ASYNC_PDF_B64_CHARS ||
+      Boolean(payload.storagePath && !payload.hasQuestionsArray && !payload.textPayload);
+
+    const runProcess = async (): Promise<Response> => {
     let rawOcrText: string | null = null;
     let rawQuestions: unknown[] = [];
 
@@ -311,7 +381,7 @@ Deno.serve(async (req) => {
                 textPrompt,
                 undefined,
                 0.2,
-                8192,
+                getAiFeaturePolicy("extract_question_paper").maxOutputTokens,
               );
               rawOcrText = rawText;
               const parsed = parseJSON<{ questions?: unknown[] }>(rawText, {
@@ -341,16 +411,41 @@ Deno.serve(async (req) => {
               req,
             );
           }
-          const rawText = await geminiGenerateWithPdf(
-            PDF_QUESTION_EXTRACT_PROMPT,
-            pdf.base64,
-            { temperature: 0.2, maxTokens: 8192 },
-          );
-          rawOcrText = rawText;
-          const parsed = parseJSON<{ questions?: unknown[] }>(rawText, {
-            questions: [],
-          });
-          rawQuestions = Array.isArray(parsed.questions) ? parsed.questions : [];
+          const correlationId = String(jobId);
+          const extractPolicy = getAiFeaturePolicy("extract_question_paper");
+          let rawText: string | null = await tryPythonPdfText(pdf.base64, correlationId);
+          if (rawText) {
+            const deterministic = parsePlainTextMcqs(rawText);
+            if (deterministic.length > 0) {
+              rawOcrText = rawText;
+              rawQuestions = deterministic;
+            }
+          }
+          if (rawQuestions.length === 0) {
+            try {
+              rawText = await geminiGenerateWithPdf(
+                PDF_QUESTION_EXTRACT_PROMPT,
+                pdf.base64,
+                { temperature: 0.2, maxTokens: extractPolicy.maxOutputTokens },
+              );
+            } catch (geminiErr) {
+              console.warn("[extract-question-paper] Gemini PDF extract failed:", geminiErr);
+              if (!rawText) throw geminiErr;
+            }
+            if (!rawText) {
+              throw new Error("PDF extraction failed via AI and Python services.");
+            }
+            rawOcrText = rawText;
+            const deterministic = parsePlainTextMcqs(rawText);
+            if (deterministic.length > 0) {
+              rawQuestions = deterministic;
+            } else {
+              const parsed = parseJSON<{ questions?: unknown[] }>(rawText, {
+                questions: [],
+              });
+              rawQuestions = Array.isArray(parsed.questions) ? parsed.questions : [];
+            }
+          }
         }
       }
 
@@ -388,10 +483,19 @@ Deno.serve(async (req) => {
             rejected: validatedQs.rejected,
             confidence,
             raw_ocr_preview: rawOcrText ? rawOcrText.slice(0, 4000) : null,
+            answer_key_status: "needs_review",
           },
         });
         return errorResponse(validatedQs.message, validatedQs.code, 400, req);
       }
+
+      const answerKeyStatus = classifyAnswerKeyStatus({
+        raw: normalizedRaw,
+        acceptedCount: validatedQs.questions.length,
+        rejected: validatedQs.rejected,
+        confidence,
+      });
+      const answerUncertain = answerKeyStatus === "needs_review";
 
       await setJob(db, jobId, {
         status: "inserting_questions" satisfies JobStatus,
@@ -429,6 +533,8 @@ Deno.serve(async (req) => {
           latex_present: /[=+\-*/^$\\]/.test(q.question_text),
           metadata: {
             needs_review: true,
+            answer_key_uncertain: answerUncertain,
+            answer_key_status: answerKeyStatus,
             provenance: "pdf_extract",
             parser_version: EXTRACT_PARSER_VERSION,
             license_class: payload.licenseClass,
@@ -485,6 +591,7 @@ Deno.serve(async (req) => {
           title: payload.title || `${exam.code} ${payload.year}`,
           officialStatus: "admin_attested",
           questionCount: insertedQs.length,
+          answerKeyStatus,
           metadata: {
             parser_version: EXTRACT_PARSER_VERSION,
             extract_mode: payload.mode,
@@ -582,15 +689,46 @@ Deno.serve(async (req) => {
         /timeout|gemini|openai|provider|api key|INVALID_ARGUMENT|fetch failed|AbortError|timed out|AI text extraction/i.test(
           msg,
         );
+      const isTimeout = /timeout|timed out|AbortError|504|deadline exceeded/i.test(msg);
       return errorResponse(
         parserish
           ? "PDF/text parsing failed. Use clearer pasted MCQ text, a smaller PDF, or check AI provider configuration."
           : "Ingestion failed. Please retry or contact support.",
         parserish ? "PARSER_FAILED" : "INTERNAL",
-        parserish ? 502 : 500,
+        isTimeout ? 504 : parserish ? 502 : 500,
         req,
       );
     }
+    };
+
+    if (heavyPdf) {
+      const background = runProcess().then((res) => {
+        if (!res.ok) {
+          console.warn("[extract-question-paper] async finished", jobId, res.status);
+        }
+      });
+      if (!scheduleWaitUntil(background)) {
+        void background;
+      }
+      return successResponse(
+        {
+          jobId,
+          sourceId,
+          paperId: null,
+          status: "queued",
+          async: true,
+          questionsImported: 0,
+          autoPublish: false,
+          message:
+            "Ingestion queued. Poll Recent jobs for completion. Questions stay unpublished until review.",
+        },
+        undefined,
+        202,
+        req,
+      );
+    }
+
+    return await runProcess();
   } catch (err) {
     console.error("[extract-question-paper]", err);
     const message = err instanceof Error ? err.message : "Internal error";

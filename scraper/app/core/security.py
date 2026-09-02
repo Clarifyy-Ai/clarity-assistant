@@ -1,6 +1,7 @@
 """Supabase JWT verification + admin-role enforcement."""
 from __future__ import annotations
 
+import asyncio
 from functools import lru_cache
 from typing import Any
 
@@ -10,17 +11,31 @@ from fastapi import Depends, Header, HTTPException, status
 from jwt import PyJWKClient
 from supabase import Client, create_client
 
+from app.core.bounded import ADMIN_AUTH_TIMEOUT_SECONDS, await_bounded, SUPABASE_HTTP_TIMEOUT_SECONDS
+
 from app.core.config import Settings, get_settings
 
 
 @lru_cache
 def _jwks_client(jwks_url: str) -> PyJWKClient:
-    return PyJWKClient(jwks_url, cache_keys=True)
+    return PyJWKClient(jwks_url, cache_keys=True, timeout=int(ADMIN_AUTH_TIMEOUT_SECONDS))
+
+
+def _client_options(timeout_seconds: float):
+    try:
+        from supabase.lib.client_options import ClientOptions
+
+        return ClientOptions(postgrest_client_timeout=timeout_seconds)
+    except Exception:  # noqa: BLE001 - older supabase-py
+        return None
 
 
 @lru_cache
 def _service_client(url: str, key: str) -> Client:
-    return create_client(url, key)
+    options = _client_options(SUPABASE_HTTP_TIMEOUT_SECONDS)
+    if options is None:
+        return create_client(url, key)
+    return create_client(url, key, options=options)
 
 
 def verify_jwt(token: str, settings: Settings) -> dict[str, Any]:
@@ -52,7 +67,13 @@ async def get_admin_user(
         )
 
     token = authorization.split(" ", 1)[1].strip()
-    claims = verify_jwt(token, settings)
+    claims = await await_bounded(
+        asyncio.to_thread(verify_jwt, token, settings),
+        ADMIN_AUTH_TIMEOUT_SECONDS,
+        code="AUTH_TIMEOUT",
+        message="JWT verification timed out.",
+        stage="jwt",
+    )
     user_id = claims.get("sub")
     if not user_id:
         raise HTTPException(
@@ -60,21 +81,35 @@ async def get_admin_user(
         )
 
     # Cross-check the admin role via the service-role client (RLS bypass).
-    db = _service_client(settings.supabase_url, settings.supabase_service_role_key)
-    res = (
-        db.table("user_roles")
-        .select("role")
-        .eq("user_id", user_id)
-        .eq("role", "admin")
-        .limit(1)
-        .execute()
+    def _role_lookup() -> object:
+        db = _service_client(settings.supabase_url, settings.supabase_service_role_key)
+        return (
+            db.table("user_roles")
+            .select("role")
+            .eq("user_id", user_id)
+            .eq("role", "admin")
+            .limit(1)
+            .execute()
+        )
+
+    res = await await_bounded(
+        asyncio.to_thread(_role_lookup),
+        ADMIN_AUTH_TIMEOUT_SECONDS,
+        code="AUTH_TIMEOUT",
+        message="Admin role lookup timed out.",
+        stage="roles",
     )
-    if not res.data:
+    if not getattr(res, "data", None):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required"
         )
 
     return {"id": user_id, "claims": claims}
+
+
+def create_bounded_supabase_client(url: str, key: str) -> Client:
+    """Service-role client with a PostgREST HTTP timeout (no infinite wait)."""
+    return _service_client(url, key)
 
 
 def supabase_admin(settings: Settings = Depends(get_settings)) -> Client:

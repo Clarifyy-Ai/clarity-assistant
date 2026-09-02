@@ -84,6 +84,7 @@ export default function JDDetail() {
   const [gapResult, setGapResult] = useState<GapAnalysisResult | null>(null);
   const [gapStale, setGapStale] = useState(false);
   const [gapUpdatedAt, setGapUpdatedAt] = useState<string | null>(null);
+  const [gapError, setGapError] = useState<string | null>(null);
 
   const loadJd = useCallback(async () => {
     if (!id || !user?.id) return;
@@ -167,6 +168,7 @@ export default function JDDetail() {
       return;
     }
     setGapRunning(true);
+    setGapError(null);
     try {
       const result = await fetchEdgeJson<GapAnalysisResult>(
         "gap-analysis",
@@ -190,7 +192,9 @@ export default function JDDetail() {
     } catch (err: unknown) {
       openUpgradeIfInsufficientCredits(err);
       openUpgradeIfCapabilityRequired(err);
-      toast.error(getAiUserFacingError(err));
+      const message = getAiUserFacingError(err);
+      setGapError(message);
+      toast.error(message);
     } finally {
       setGapRunning(false);
     }
@@ -508,6 +512,16 @@ export default function JDDetail() {
             </div>
           )}
 
+          {gapError && (
+            <div className="mt-3">
+              <InlineErrorRetry
+                message={gapError}
+                onRetry={() => void handleGapAnalysis()}
+                compact
+              />
+            </div>
+          )}
+
           {gapResult && (
             <div className="mt-4 space-y-3 border-t border-border pt-4">
               <HybridSourceLine data={gapResult} />
@@ -521,6 +535,17 @@ export default function JDDetail() {
                   <span className="rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 px-2 py-0.5 text-[10px] font-semibold uppercase">
                     Stale
                   </span>
+                )}
+                {gapStale && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleGapAnalysis()}
+                    disabled={gapRunning}
+                  >
+                    Re-run
+                  </Button>
                 )}
               </div>
               <div className="flex items-center gap-3">

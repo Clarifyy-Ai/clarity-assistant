@@ -13,7 +13,8 @@ import {
   rateLimitResponse,
   RATE_LIMIT_PRESETS,
 } from "../_shared/rateLimit.ts";
-import { resolveIsIndiaProfile } from "../_shared/indiaRegion.ts";
+import { indiaUserAfterProfileLookup, PROFILE_LOOKUP_TIMEOUT_MS } from "../_shared/indiaRegion.ts";
+import { withTimeout } from "../_shared/withTimeout.ts";
 import {
   type BankReadinessPayload,
 } from "../_shared/govBankReadiness.ts";
@@ -240,12 +241,29 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
       pageSize: rawPageSize,
     });
 
-    const { data: profileRow } = await db
-      .from("profiles")
-      .select("region, timezone, locale")
-      .eq("id", user.id)
-      .maybeSingle();
-    const isIndiaUser = resolveIsIndiaProfile(profileRow);
+    let isIndiaUser = true;
+    let profileLookup: "ok" | "timed_out" | "failed" = "ok";
+    try {
+      const { data: profileRow } = await withTimeout(
+        db
+          .from("profiles")
+          .select("region, timezone, locale")
+          .eq("id", user.id)
+          .maybeSingle(),
+        PROFILE_LOOKUP_TIMEOUT_MS,
+      );
+      isIndiaUser = indiaUserAfterProfileLookup(profileRow, "ok");
+    } catch (profileErr) {
+      const timedOut =
+        profileErr instanceof Error && /timeout/i.test(profileErr.message);
+      profileLookup = timedOut ? "timed_out" : "failed";
+      isIndiaUser = indiaUserAfterProfileLookup(null, profileLookup);
+      console.warn(
+        "[search-exams] profile lookup",
+        profileLookup,
+        profileErr instanceof Error ? profileErr.message : "unknown",
+      );
+    }
 
     // Alias / stage / body / cycle year hits cannot all be expressed as a single
     // PostgREST filter on gov_exams — resolve matching exam ids then union.
@@ -458,6 +476,7 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
         results: [],
         pagination,
         isIndiaUser,
+        profileLookup,
         disclaimer: DISCLAIMER,
       });
     }
@@ -569,6 +588,7 @@ Deno.serve(withBrowserCors("search-exams", async (req) => {
       results: enriched,
       pagination,
       isIndiaUser,
+      profileLookup,
       disclaimer: DISCLAIMER,
     });
   } catch (err) {

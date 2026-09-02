@@ -14,6 +14,8 @@
 // - BYOK Gemini support
 // - prompt-injection protection
 // - safe JSON parsing/normalization
+// - idempotent return of persisted debrief (mirrors generate-scorecard)
+// - 422 NOT_SCORED when no answers and no transcript
 // - audit logging
 // - safe JSON responses
 
@@ -67,6 +69,7 @@ import { executeHybridOperation } from "../_shared/hybridExecute.ts";
 import { pythonExecuteOperation } from "../_shared/pythonClient.ts";
 import { DomainError, httpStatusForDomainCode } from "../_shared/domainErrors.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
+import { hybridSuccess } from "../_shared/hybridResponse.ts";
 
 const FUNCTION_NAME = "generate-debrief";
 
@@ -723,6 +726,74 @@ function deterministicDebrief(input: {
   });
 }
 
+function hasScorableAnswers(answers: AnswerRow[]): boolean {
+  return answers.some((row) =>
+    sanitizeText(row.transcript ?? row.answer, 20_000).length > 0
+  );
+}
+
+function hasTranscriptContent(transcripts: TranscriptRow[]): boolean {
+  return transcripts.some((row) =>
+    sanitizeText(row.content, 20_000).length > 0
+  );
+}
+
+type DebriefHybridData = {
+  request_id: string;
+  debrief: Record<string, unknown>;
+  session: SessionRow;
+  success: true;
+  idempotent?: boolean;
+};
+
+function debriefResponseBody(
+  requestId: string,
+  debrief: Record<string, unknown>,
+  session: SessionRow,
+  extra: { idempotent: boolean },
+): DebriefHybridData {
+  return {
+    success: true,
+    request_id: requestId,
+    debrief,
+    session,
+    idempotent: extra.idempotent,
+  };
+}
+
+async function persistDebrief(
+  db: ReturnType<typeof createServiceClient>,
+  userId: string,
+  sessionId: string,
+  payload: DebriefPayload,
+): Promise<Record<string, unknown>> {
+  const { data, error } = await db
+    .from("session_debriefs")
+    .insert({
+      session_id: sessionId,
+      user_id: userId,
+      ...payload,
+    })
+    .select()
+    .single();
+
+  if (!error && data) {
+    return data as Record<string, unknown>;
+  }
+
+  if (error && /duplicate|unique/i.test(error.message)) {
+    const { data: raced } = await db
+      .from("session_debriefs")
+      .select("*")
+      .eq("session_id", sessionId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (raced) return raced as Record<string, unknown>;
+  }
+
+  throw new Error(error?.message ?? "Failed to save debrief");
+}
+
 function debriefFromPython(raw: unknown, fallback: DebriefPayload): DebriefPayload {
   if (!raw || typeof raw !== "object") return fallback;
   const obj = raw as Record<string, unknown>;
@@ -862,6 +933,28 @@ Deno.serve(async (req: Request) => {
 
     const session = sessionData as SessionRow;
 
+    const { data: existingDebrief } = await db
+      .from("session_debriefs")
+      .select("*")
+      .eq("session_id", session_id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (existingDebrief) {
+      return hybridSuccess({
+        req,
+        data: debriefResponseBody(
+          requestId,
+          existingDebrief as Record<string, unknown>,
+          session,
+          { idempotent: true },
+        ),
+        source: "database",
+        operationId: requestId,
+        meta: { cached: true, idempotent: true },
+      });
+    }
+
     const { data: answersData } = await db
       .from("session_answers")
       .select("*")
@@ -871,19 +964,28 @@ Deno.serve(async (req: Request) => {
 
     const answers = (answersData ?? []) as AnswerRow[];
 
+    const { data: transcriptsData } = await db
+      .from("session_transcripts")
+      .select("content")
+      .eq("session_id", session_id)
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true })
+      .limit(20);
+
+    const transcripts = (transcriptsData ?? []) as TranscriptRow[];
+
+    if (!hasScorableAnswers(answers) && !hasTranscriptContent(transcripts)) {
+      return json(corsHeaders, 422, {
+        error:
+          "No answers or transcript were recorded for this session, so a debrief cannot be generated.",
+        code: "NOT_SCORED",
+        request_id: requestId,
+      });
+    }
+
     let answerSummary = buildAnswerSummary(answers);
 
     if (!answerSummary) {
-      const { data: transcriptsData } = await db
-        .from("session_transcripts")
-        .select("content")
-        .eq("session_id", session_id)
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: true })
-        .limit(20);
-
-      const transcripts = (transcriptsData ?? []) as TranscriptRow[];
-
       const joinedTranscript = transcripts
         .map((item) => sanitizeText(item.content, 1_000))
         .filter(Boolean)
@@ -891,7 +993,7 @@ Deno.serve(async (req: Request) => {
 
       answerSummary = joinedTranscript
         ? `Full session transcript, no per-question answers recorded:\n${joinedTranscript}`
-        : "No transcript or answers were recorded. Provide general guidance based on session metadata only.";
+        : "";
     }
 
     const unsafeResponse = validateUntrustedText(
@@ -927,13 +1029,6 @@ Deno.serve(async (req: Request) => {
       answerCount: answers.length,
     });
 
-    type DebriefHybridData = {
-      request_id: string;
-      debrief: Record<string, unknown>;
-      session: SessionRow;
-      success: true;
-    };
-
     const hybrid = await executeHybridOperation<DebriefHybridData>({
       req,
       auth: { userId: user.id, planId },
@@ -948,30 +1043,31 @@ Deno.serve(async (req: Request) => {
         highlights: [],
         improvements: [],
       },
+      runDatabase: async () => {
+        const { data: cached } = await db
+          .from("session_debriefs")
+          .select("*")
+          .eq("session_id", session_id)
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (!cached) return null;
+        return debriefResponseBody(
+          requestId,
+          cached as Record<string, unknown>,
+          session,
+          { idempotent: true },
+        );
+      },
       runDeterministic: async () => {
         const payload = deterministicDebrief({
           session,
           answers,
           durationSeconds,
         });
-        const { data: debrief, error: debriefError } = await db
-          .from("session_debriefs")
-          .insert({
-            session_id,
-            user_id: user.id,
-            ...payload,
-          })
-          .select()
-          .single();
-        if (debriefError || !debrief) {
-          throw new Error(debriefError?.message ?? "Failed to save debrief");
-        }
-        return {
-          success: true as const,
-          request_id: requestId,
-          debrief,
-          session,
-        };
+        const debrief = await persistDebrief(db, user.id, session_id, payload);
+        return debriefResponseBody(requestId, debrief, session, {
+          idempotent: false,
+        });
       },
       runPython: async (ctx) => {
         const baseline = deterministicDebrief({
@@ -1003,24 +1099,10 @@ Deno.serve(async (req: Request) => {
             ? (envelope as { data: unknown }).data
             : envelope;
         const payload = debriefFromPython(raw, baseline);
-        const { data: debrief, error: debriefError } = await db
-          .from("session_debriefs")
-          .insert({
-            session_id,
-            user_id: user.id,
-            ...payload,
-          })
-          .select()
-          .single();
-        if (debriefError || !debrief) {
-          throw new Error(debriefError?.message ?? "Failed to save debrief");
-        }
-        return {
-          success: true as const,
-          request_id: requestId,
-          debrief,
-          session,
-        };
+        const debrief = await persistDebrief(db, user.id, session_id, payload);
+        return debriefResponseBody(requestId, debrief, session, {
+          idempotent: false,
+        });
       },
       runAi: async () => {
         const debriefAi = await generateDebriefText({
@@ -1039,24 +1121,15 @@ Deno.serve(async (req: Request) => {
             "Debrief AI returned invalid or empty JSON.",
           );
         }
-        const { data: debrief, error: debriefError } = await db
-          .from("session_debriefs")
-          .insert({
-            session_id,
-            user_id: user.id,
-            ...debriefPayload,
-          })
-          .select()
-          .single();
-        if (debriefError || !debrief) {
-          throw new Error(debriefError?.message ?? "Failed to save debrief");
-        }
-        return {
-          success: true as const,
-          request_id: requestId,
-          debrief,
-          session,
-        };
+        const debrief = await persistDebrief(
+          db,
+          user.id,
+          session_id,
+          debriefPayload,
+        );
+        return debriefResponseBody(requestId, debrief, session, {
+          idempotent: false,
+        });
       },
       validate: (data, source) => {
         if (source !== "ai") return data;

@@ -61,20 +61,6 @@ export default function Careers() {
             .
           </p>
         </div>
-
-        <div className="flex flex-wrap justify-center gap-3 text-sm">
-          <Link to="/help" className="text-primary font-medium hover:underline">
-            Help Center
-          </Link>
-          <span className="text-muted-foreground">·</span>
-          <Link to="/pricing" className="text-primary font-medium hover:underline">
-            Pricing
-          </Link>
-          <span className="text-muted-foreground">·</span>
-          <Link to="/" className="text-primary font-medium hover:underline">
-            Home
-          </Link>
-        </div>
       </div>
     </MarketingLayout>
   );

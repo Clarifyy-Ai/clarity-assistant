@@ -252,6 +252,13 @@ describe("search-exams edge contract", () => {
     expect(EDGE).toContain("results.map((r) =>");
     expect(EDGE).not.toContain("results.slice(0, 40)");
   });
+
+  it("bounds profile lookup and fails open so search is not blocked", () => {
+    expect(EDGE).toContain("withTimeout");
+    expect(EDGE).toContain("PROFILE_LOOKUP_TIMEOUT_MS");
+    expect(EDGE).toContain("indiaUserAfterProfileLookup");
+    expect(EDGE).toContain("profileLookup");
+  });
 });
 
 describe("client search mapping", () => {
@@ -292,5 +299,13 @@ describe("MockTestHub search states", () => {
     expect(COMBO).toContain("abortRef.current?.abort()");
     expect(COMBO).toContain("reqId !== reqIdRef.current");
     expect(COMBO).toContain("onResultsChangeRef");
+    expect(COMBO).toContain("classifyGovSearchFailure");
+    expect(COMBO).toContain("GOV_SEARCH_WATCHDOG_MS");
+  });
+
+  it("keeps profile recovery separate from the search spinner", () => {
+    expect(HUB).toContain("RECOVERY_REQUIRED");
+    expect(HUB).toContain("retryAccountLoad");
+    expect(HUB).not.toContain("if (!isProfileLoaded) setSearching(true)");
   });
 });

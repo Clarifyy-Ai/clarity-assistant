@@ -31,6 +31,15 @@ export interface WPMTrendPoint {
   session_id: string;
 }
 
+// ── Scorecard dimension averages ──────────────────────────────────
+
+export interface DimensionAverages {
+  communication: number | null;
+  technical: number | null;
+  problem_solving: number | null;
+  confidence: number | null;
+}
+
 // ── Radar / Category Breakdown ────────────────────────────────────
 
 export interface WeakSpotRadarData {
@@ -151,6 +160,7 @@ export interface AnalyticsDashboardData {
   avg_filler_rate: number | null;
   avg_filler_delta_30d: number | null;
   avg_wpm: number | null;
+  avg_wpm_delta_30d: number | null;
   current_streak: number | null;
   longest_streak: number | null;
   total_xp: number;
@@ -160,6 +170,8 @@ export interface AnalyticsDashboardData {
   filler_trend: FillerWordTrendPoint[];
   wpm_trend: WPMTrendPoint[];
   weak_spot_radar: WeakSpotRadarData[];
+  /** Avg scorecard dimension scores for the selected period (null when absent). */
+  dimension_averages: DimensionAverages | null;
 
   // Reports
   strengths: StrengthArea[];
@@ -170,6 +182,11 @@ export interface AnalyticsDashboardData {
 
   // Session list for comparison
   recent_sessions: SessionAnalyticsSummary[];
+
+  /** Sessions per local calendar day (display timezone) — same set as recent_sessions. */
+  activity_by_day?: Record<string, number>;
+  /** Sessions with a numeric scorecard score in the selected period. */
+  sessions_scored?: number;
 
   // Period
   period_start: string;

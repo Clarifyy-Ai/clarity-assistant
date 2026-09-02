@@ -8,6 +8,8 @@ import { logger } from "@/lib/logger";
 import { isTabLocalLogout } from "@/lib/auth/tabLocalLogout";
 import { ApiClientError } from "@/lib/api/apiClient";
 import { ensureAuthSession } from "@/lib/focusRecovery/sessionRefresh";
+import { debugLog161d95 } from "@/lib/debug/debugLog161d95";
+import { debugLog4a9592 } from "@/lib/debug/debugLog4a9592";
 
 /** Functions that may run without a user JWT (gateway still gets apikey + anon Bearer). */
 const ANON_OK_EDGE_FNS = new Set([
@@ -15,12 +17,17 @@ const ANON_OK_EDGE_FNS = new Set([
   "hybrid-health",
   "hybrid-ping",
   "ai-key-check",
+  "billing-catalog",
+  "contact-sales",
+  // Public support/live-chat widget: guests chat without an account.
+  "support-chat",
+
 ]);
 
 /** Edge calls blocked while private mode is on (no cloud AI / analysis). */
 const PRIVATE_MODE_ALLOWLIST = new Set([
   "ping",
-  // Live Chat is human support, not cloud AI — keep available in private mode.
+  // Live Chat is hybrid support (account lookups first). Keep available in private mode.
   "support-chat",
   "razorpay-create-order",
   "razorpay-verify-payment",
@@ -39,15 +46,27 @@ const PRIVATE_MODE_ALLOWLIST = new Set([
   "issue-course-certificate",
   "create-test",
   "submit-test",
+  "save-test-answer",
+  "start-exam",
+  "start-exam-attempt",
+  "save-test-answer",
+  "save-attempt-answer",
+  "billing-catalog",
+  "contact-sales",
 ]);
 
 /** Edge functions that do not deduct credits — skip balance refresh. */
 const CREDIT_REFRESH_SKIP = new Set([
   "ping",
+  "billing-catalog",
+  "contact-sales",
+  "schedule-interview",
+  "sync-calendar",
+  "disconnect-calendar",
   "deepgram-token",
   "stripe-webhook",
   "create-checkout",
-  "create-portal-session",
+  "create-billing-portal",
   "razorpay-create-order",
   "ai-hub-router",
   "support-chat",
@@ -71,14 +90,24 @@ const CREDIT_REFRESH_SKIP = new Set([
   "get-exam-syllabus",
   "list-previous-papers",
   "check-exam-paper-availability",
+  "get-paper-generation-job",
+  "cancel-paper-generation-job",
   "score-coding-submission",
   "issue-course-certificate",
   "submit-test",
+  "save-attempt-answer",
+  "save-test-answer",
+  "start-exam-attempt",
+  "start-exam",
 ]);
 
 /** Non-AI functions should not blame an "AI request" on CORS / network failure. */
 const OPERATIONAL_EDGE_FNS = new Set([
   "submit-test",
+  "save-attempt-answer",
+  "save-test-answer",
+  "start-exam-attempt",
+  "start-exam",
   "create-test",
   "create-exam-paper",
   "generate-topic-practice",
@@ -90,7 +119,7 @@ const OPERATIONAL_EDGE_FNS = new Set([
   "assemble-assessment",
   "ping",
   "create-checkout",
-  "create-portal-session",
+  "create-billing-portal",
   "razorpay-create-order",
   "razorpay-verify-payment",
   "record-referral",
@@ -108,6 +137,8 @@ const OPERATIONAL_EDGE_FNS = new Set([
   "run-daily-exam-scrape",
   "moderate-content",
   "issue-course-certificate",
+  "sync-calendar",
+  "disconnect-calendar",
 ]);
 
 /** Mutating calls that must not be retried by the browser after a network/CORS glitch. */
@@ -137,10 +168,51 @@ const NO_NETWORK_RETRY_FNS = new Set([
   "razorpay-verify-payment",
   "moderate-content",
   "score-coding-submission",
-  // Typeahead / availability: retries amplify rate-limit and spinner storms.
+  // Typeahead / availability: retries are kept to a single attempt to avoid
+  // spinner storms while still recovering from transient network blips.
   "search-exams",
   "check-exam-paper-availability",
+  "get-paper-generation-job",
+  "sync-calendar",
+  "disconnect-calendar",
 ]);
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (!signal.aborted) return;
+  const reason = signal.reason;
+  if (reason instanceof DOMException && reason.name === "AbortError") throw reason;
+  if (reason instanceof Error && reason.name === "AbortError") throw reason;
+  throw new DOMException("The operation was aborted.", "AbortError");
+}
+
+/** Race a promise against an AbortSignal so auth/session probes cannot outlive the request budget. */
+function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) {
+    return Promise.reject(
+      signal.reason instanceof Error
+        ? new DOMException("The operation was aborted.", "AbortError")
+        : new DOMException("The operation was aborted.", "AbortError"),
+    );
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException("The operation was aborted.", "AbortError"));
+    };
+    const cleanup = () => signal.removeEventListener("abort", onAbort);
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        cleanup();
+        resolve(value);
+      },
+      (err) => {
+        cleanup();
+        reject(err);
+      },
+    );
+  });
+}
 
 function unreachableUserMessage(fnName: string): string {
   if (fnName === "delete-account") {
@@ -179,6 +251,9 @@ async function readToken(options?: {
     const ensured = await ensureAuthSession({
       forceRefresh: options?.forceRefresh === true,
     });
+    if (ensured.expired) {
+      return undefined;
+    }
     const ensuredToken = ensured.session?.access_token;
     if (typeof ensuredToken === "string" && ensuredToken.trim()) {
       return ensuredToken.trim();
@@ -187,19 +262,17 @@ async function readToken(options?: {
     logger.warn("auth.session.recovery.failed", {
       error: error instanceof Error ? error.message : String(error),
     });
+    return undefined;
   }
 
   const { data, error } = await supabase.auth.getSession();
   if (error) {
     logger.warn("auth.session.recovery.failed", { error: error.message });
+    return undefined;
   }
   const fresh = data?.session?.access_token;
   if (typeof fresh === "string" && fresh.trim()) return fresh.trim();
 
-  const storeToken = useAuthStore.getState().session?.access_token;
-  if (typeof storeToken === "string" && storeToken.trim()) {
-    return storeToken.trim();
-  }
   return undefined;
 }
 
@@ -318,19 +391,18 @@ export async function fetchEdge(
       { forceRefresh, allowAnonBearer },
     );
 
-  let headers = await buildHeaders(false);
-
-  if (!headers.Authorization && !allowAnonBearer) {
-    if (timeout) clearTimeout(timeout);
-    throw new ApiClientError({
-      message: "Sign in to continue.",
-      status: 401,
-      code: "AUTH_REQUIRED",
-    });
-  }
-
-
   try {
+    let headers = await raceAbort(buildHeaders(false), signal);
+    throwIfAborted(signal);
+
+    if (!headers.Authorization && !allowAnonBearer) {
+      throw new ApiClientError({
+        message: "Sign in to continue.",
+        status: 401,
+        code: "AUTH_REQUIRED",
+      });
+    }
+
     const url = buildEdgeUrl(fnName);
     const payload =
       body === undefined
@@ -384,20 +456,11 @@ export async function fetchEdge(
                 : undefined;
           if (isAuthRetryableStatus(401, code, message)) {
             authRetried = true;
-            // #region agent log
-            fetch('http://127.0.0.1:7572/ingest/ea82b87b-41ef-4cec-a41d-f9c122e76fc2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6cff84'},body:JSON.stringify({sessionId:'6cff84',runId:'pre-fix',hypothesisId:'H2',location:'fetchEdge.ts:401-retry',message:'auth_401_retry',data:{fnName,code:code??null,message:typeof message==='string'?message.slice(0,120):null,willForceRefresh:true},timestamp:Date.now()})}).catch(()=>{});
-            // #endregion
-            headers = await buildHeaders(true);
+            headers = await raceAbort(buildHeaders(true), signal);
+            throwIfAborted(signal);
             if (headers.Authorization) {
               response = await doFetch(headers);
-              // #region agent log
-              fetch('http://127.0.0.1:7572/ingest/ea82b87b-41ef-4cec-a41d-f9c122e76fc2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6cff84'},body:JSON.stringify({sessionId:'6cff84',runId:'pre-fix',hypothesisId:'H2',location:'fetchEdge.ts:401-retry-result',message:'auth_401_retry_result',data:{fnName,status:response.status},timestamp:Date.now()})}).catch(()=>{});
-              // #endregion
             }
-          } else {
-            // #region agent log
-            fetch('http://127.0.0.1:7572/ingest/ea82b87b-41ef-4cec-a41d-f9c122e76fc2',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'6cff84'},body:JSON.stringify({sessionId:'6cff84',runId:'pre-fix',hypothesisId:'H3',location:'fetchEdge.ts:401-no-retry',message:'auth_401_not_retryable',data:{fnName,code:code??null,message:typeof message==='string'?message.slice(0,120):null,bodyPreview:peekText.slice(0,160)},timestamp:Date.now()})}).catch(()=>{});
-            // #endregion
           }
         }
 
@@ -418,7 +481,16 @@ export async function fetchEdge(
     }
     throw lastErr;
   } catch (err: unknown) {
-    if (err instanceof Error && err.name === "AbortError") {
+    const abortName =
+      err && typeof err === "object" && "name" in err
+        ? String((err as { name?: unknown }).name ?? "")
+        : "";
+    const abortMessage = err instanceof Error ? err.message : String(err ?? "");
+    const isAbort =
+      abortName === "AbortError" ||
+      abortName === "TimeoutError" ||
+      abortMessage === "The operation was aborted.";
+    if (isAbort) {
       if (options?.signal?.aborted) {
         throw new Error(
           fnName === "delete-account"
@@ -490,6 +562,59 @@ export async function fetchEdgeJson<T>(
   // read text first so we never lose the body
   const text = await response.text().catch(() => "");
   const payload = text ? safeJsonParse(text) ?? { error: text } : {};
+
+  // #region agent log
+  {
+    const code =
+      typeof (payload as { code?: unknown })?.code === "string"
+        ? (payload as { code: string }).code
+        : typeof (payload as { error?: { code?: unknown } })?.error?.code === "string"
+          ? (payload as { error: { code: string } }).error.code
+          : null;
+    debugLog161d95({
+      hypothesisId: "H1-H4",
+      location: "fetchEdge.ts:fetchEdgeJson",
+      message: "edge_response",
+      data: {
+        fnName,
+        status: response.status,
+        ok: response.ok,
+        code,
+        message:
+          typeof (payload as { message?: unknown })?.message === "string"
+            ? String((payload as { message: string }).message).slice(0, 160)
+            : typeof (payload as { error?: unknown })?.error === "string"
+              ? String((payload as { error: string }).error).slice(0, 160)
+              : null,
+      },
+    });
+    if (
+      fnName === "create-exam-paper" ||
+      fnName === "get-paper-generation-job" ||
+      fnName === "check-exam-paper-availability" ||
+      fnName === "generate-topic-practice" ||
+      fnName === "cancel-paper-generation-job"
+    ) {
+      const rec = payload as Record<string, unknown>;
+      debugLog4a9592({
+        hypothesisId: response.status === 429 ? "H-A" : "H-B",
+        location: "fetchEdge.ts:fetchEdgeJson",
+        message: "gov_edge_response",
+        data: {
+          fnName,
+          status: response.status,
+          ok: response.ok,
+          code,
+          jobId: typeof rec.jobId === "string" ? rec.jobId.slice(0, 8) : null,
+          jobStatus: typeof rec.status === "string" ? rec.status : null,
+          creditsCharged: typeof rec.creditsCharged === "number" ? rec.creditsCharged : null,
+          async: rec.async === true,
+          idempotentReplay: rec.idempotentReplay === true,
+        },
+      });
+    }
+  }
+  // #endregion
 
   if (!response.ok) {
     const fallback =

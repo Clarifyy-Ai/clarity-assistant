@@ -115,7 +115,7 @@ const QA_ACCOUNTS = [
     admin: false,
     emailConfirm: true,
     onboardingCompleted: false,
-    notes: "ONBOARD-001 incomplete onboarding",
+    notes: "ONBOARD-001 incomplete onboarding — reset with npm run qa:reset-fixtures",
   },
   {
     key: "BANNED",
@@ -198,7 +198,7 @@ const QA_ACCOUNTS = [
     admin: false,
     emailConfirm: true,
     onboardingCompleted: true,
-    notes: "AUTH-MFA — enroll TOTP in Settings once; login must challenge",
+    notes: "TC-AUTH-015 — run npm run qa:seed-mfa after seed-accounts",
   },
   {
     key: "RESET_INBOX",
@@ -210,28 +210,6 @@ const QA_ACCOUNTS = [
     emailConfirm: true,
     onboardingCompleted: true,
     notes: "AUTH-RESET deliverable mailbox (not .test). Set QA_RESET_INBOX_EMAIL.",
-  },
-  {
-    key: "LOW_CREDIT",
-    email: "qa.low@clarify.ai.test",
-    fullName: "QA Low Credit User",
-    planId: "pro",
-    credits: 5,
-    admin: false,
-    emailConfirm: true,
-    onboardingCompleted: true,
-    notes: "CREDIT low-balance fixture (≤5)",
-  },
-  {
-    key: "EXACT",
-    email: "qa.exact@clarify.ai.test",
-    fullName: "QA Exact Boundary User",
-    planId: "pro",
-    credits: 12,
-    admin: false,
-    emailConfirm: true,
-    onboardingCompleted: true,
-    notes: "CREDIT exact-boundary — balance equals generate_questions cost",
   },
 ];
 

@@ -1,0 +1,124 @@
+/** Shared scheduler timezone picker values and persistence helpers. */
+
+export const SCHEDULER_TIMEZONE_OPTIONS = [
+  { value: "Asia/Kolkata", label: "Asia/Kolkata (India)", offset: "+05:30" },
+  { value: "UTC", label: "UTC", offset: "Z" },
+  { value: "America/New_York", label: "America/New_York", offset: "local" },
+  { value: "Europe/London", label: "Europe/London", offset: "local" },
+  { value: "local", label: "Local browser time", offset: "local" },
+] as const;
+
+export type SchedulerTimezoneKey = (typeof SCHEDULER_TIMEZONE_OPTIONS)[number]["value"];
+
+const PICKER_VALUES = new Set(
+  SCHEDULER_TIMEZONE_OPTIONS.map((z) => z.value),
+);
+
+/** Resolve stored DB timezone to a picker key (round wins over interview). */
+export function resolveSchedulerTimezoneKey(
+  roundTimezone?: string | null,
+  interviewTimezone?: string | null,
+): SchedulerTimezoneKey {
+  const stored = roundTimezone ?? interviewTimezone;
+  if (!stored) return "local";
+  if (PICKER_VALUES.has(stored as SchedulerTimezoneKey)) {
+    return stored as SchedulerTimezoneKey;
+  }
+  return stored as SchedulerTimezoneKey;
+}
+
+/** Map picker key to zonedWallTimeToUtc zoneOrOffset argument. */
+export function zoneOrOffsetForPicker(timeZoneKey: string): string {
+  const opt = SCHEDULER_TIMEZONE_OPTIONS.find((z) => z.value === timeZoneKey);
+  if (!opt) return "local";
+  if (opt.offset !== "local") return opt.offset;
+  if (opt.value === "local") return "local";
+  return opt.value;
+}
+
+/** Extract YYYY-MM-DD and HH:MM wall parts for a UTC ISO in the given zone. */
+export function utcIsoToZonedWallParts(
+  iso: string | null | undefined,
+  timeZoneKey: string,
+): { date: string; time: string } | null {
+  if (!iso) return null;
+  const when = new Date(iso);
+  if (Number.isNaN(when.getTime())) return null;
+
+  if (timeZoneKey === "local") {
+    const y = when.getFullYear();
+    const m = String(when.getMonth() + 1).padStart(2, "0");
+    const day = String(when.getDate()).padStart(2, "0");
+    const h = String(when.getHours()).padStart(2, "0");
+    const min = String(when.getMinutes()).padStart(2, "0");
+    return { date: `${y}-${m}-${day}`, time: `${h}:${min}` };
+  }
+
+  const ianaZone = timeZoneKey === "UTC" ? "UTC" : timeZoneKey;
+  return isoWallPartsFromDate(when, ianaZone);
+}
+
+function isoWallPartsFromDate(
+  when: Date,
+  timeZone?: string,
+): { date: string; time: string } | null {
+  try {
+    const dtf = new Intl.DateTimeFormat("en-CA", {
+      timeZone: timeZone ?? undefined,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
+    const parts = Object.fromEntries(
+      dtf
+        .formatToParts(when)
+        .filter((p) => p.type !== "literal")
+        .map((p) => [p.type, p.value]),
+    ) as Record<string, string>;
+    const year = parts.year;
+    const month = parts.month;
+    const day = parts.day;
+    const hour = parts.hour;
+    const minute = parts.minute;
+    if (!year || !month || !day || hour === undefined || minute === undefined) return null;
+    return { date: `${year}-${month}-${day}`, time: `${hour}:${minute}` };
+  } catch {
+    return null;
+  }
+}
+
+function calendarDateInZone(when: Date, timeZoneKey: string): string | null {
+  if (timeZoneKey === "local") {
+    const y = when.getFullYear();
+    const m = String(when.getMonth() + 1).padStart(2, "0");
+    const day = String(when.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+  const ianaZone = timeZoneKey === "UTC" ? "UTC" : timeZoneKey;
+  const wall = isoWallPartsFromDate(when, ianaZone);
+  return wall?.date ?? null;
+}
+
+/** True when the scheduled instant falls on today's calendar date in the interview timezone. */
+export function isScheduledToday(
+  iso: string | null | undefined,
+  timeZoneKey?: string | null,
+): boolean {
+  if (!iso) return false;
+  const when = new Date(iso);
+  if (Number.isNaN(when.getTime())) return false;
+  const zone = timeZoneKey && timeZoneKey !== "local" ? timeZoneKey : "local";
+  const scheduledDate = calendarDateInZone(when, zone);
+  const todayDate = calendarDateInZone(new Date(), zone);
+  return Boolean(scheduledDate && todayDate && scheduledDate === todayDate);
+}
+
+/** Infer picker key from ISO offset when no DB timezone column is set (legacy rows). */
+export function inferTimezoneKeyFromIso(iso: string): SchedulerTimezoneKey {
+  if (iso.endsWith("Z") || /[+-]00:00$/.test(iso)) return "UTC";
+  if (/[+-]05:30$/.test(iso)) return "Asia/Kolkata";
+  return "local";
+}

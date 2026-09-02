@@ -1,5 +1,6 @@
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { createIdempotencyKey } from "@/lib/network/idempotency";
+import { ApiClientError } from "@/lib/api/apiClient";
 
 export type RazorpayProductType =
   | "pro_monthly"
@@ -37,11 +38,16 @@ export const PAYMENT_UNAVAILABLE =
 export const RAZORPAY_QA_SANDBOX_HINT =
   "QA (Razorpay test mode): use Razorpay India test methods (test cards/UPI from the Razorpay dashboard). Do not use Stripe 4242 or unsupported international cards — those return international_transaction_not_allowed.";
 
-/** Show sandbox hints outside production builds. */
-export function showRazorpayQaSandboxHint(): boolean {
+/** Show sandbox hints outside production builds or when Razorpay test keys are active. */
+export function isRazorpaySandboxKey(keyId: string | null | undefined): boolean {
+  return typeof keyId === "string" && keyId.trim().startsWith("rzp_test_");
+}
+
+export function showRazorpayQaSandboxHint(keyId?: string | null): boolean {
   if (import.meta.env.DEV) return true;
   const env = String(import.meta.env.VITE_APP_ENV ?? "").toLowerCase();
-  return env === "development" || env === "test" || env === "staging";
+  if (env === "development" || env === "test" || env === "staging") return true;
+  return isRazorpaySandboxKey(keyId);
 }
 
 /** Require a non-empty internal payment order id before opening Razorpay. */
@@ -130,7 +136,30 @@ function razorpayDescription(productType: RazorpayProductType): string {
   }
 }
 
-export function toPaymentUserFacingError(err: unknown): string {
+export function parseRazorpayPaymentFailure(res: unknown): string | null {
+  if (!res || typeof res !== "object") return null;
+  const error = (res as { error?: Record<string, unknown> }).error;
+  if (!error || typeof error !== "object") return null;
+
+  const reason = String(error.reason ?? error.code ?? "").trim();
+  const description = String(error.description ?? error.message ?? "").trim();
+  const combined = `${reason} ${description}`.trim();
+
+  if (/international_transaction/i.test(combined)) {
+    return "This card is not allowed for Razorpay India checkout. Use Razorpay India test cards or UPI from the Razorpay dashboard — not Stripe 4242 or other international cards.";
+  }
+  if (/SERVER_ERROR|validate\/account|something went wrong/i.test(combined)) {
+    return "Razorpay could not validate the payment session. Refresh the page and retry. If this persists, confirm Razorpay sandbox keys and merchant activation — blocked checkout scripts (CSP) also cause this error.";
+  }
+  if (description) return description;
+  if (reason) return reason;
+  return null;
+}
+
+function errorMeta(err: unknown): { code: string; status: number; msg: string } {
+  if (err instanceof ApiClientError) {
+    return { code: err.code, status: err.status, msg: err.message };
+  }
   const code =
     err && typeof err === "object" && "code" in err
       ? String((err as { code?: unknown }).code ?? "")
@@ -140,6 +169,11 @@ export function toPaymentUserFacingError(err: unknown): string {
       ? Number((err as { status?: unknown }).status)
       : NaN;
   const msg = err instanceof Error ? err.message : String(err ?? "");
+  return { code, status, msg };
+}
+
+export function toPaymentUserFacingError(err: unknown): string {
+  const { code, status, msg } = errorMeta(err);
 
   // Auth failures must not be masked as a generic payment outage (TC-REG-006/013).
   if (
@@ -153,11 +187,45 @@ export function toPaymentUserFacingError(err: unknown): string {
   ) {
     return "Your session expired. Please sign in again and retry checkout.";
   }
-  if (code === "BILLING_PAST_DUE" || status === 403) {
+  if (code === "BILLING_PAST_DUE" || (status === 403 && !/disabled/i.test(msg))) {
     return msg || "Update your payment method to continue.";
   }
+  if (code === "PRICE_UNAVAILABLE" || /checkout is not available/i.test(msg)) {
+    return "Checkout is not available for this product right now. Please try again later.";
+  }
+  if (
+    code === "ORDER_PERSIST_FAILED" ||
+    code === "PROVIDER_ORDER_INVALID" ||
+    /could not start checkout/i.test(msg)
+  ) {
+    return "Checkout could not be prepared. Please try again.";
+  }
+  if (
+    status === 503 ||
+    code === "BILLING_CONFIG_INVALID" ||
+    /integration not configured|razorpay not configured|billing configuration invalid/i.test(
+      msg,
+    )
+  ) {
+    return "Payments are not configured on this environment. Contact support if you were trying to purchase.";
+  }
+  if (code === "PROVIDER_UNAVAILABLE" || status === 502) {
+    return "Payment provider is temporarily unavailable. Please try again in a moment.";
+  }
+  if (code === "PAYMENT_FULFILLMENT_FAILED") {
+    return "Payment was received but credits could not be granted. Contact support with your payment reference — you will not be charged twice.";
+  }
+  if (code === "PAYMENT_NOT_CAPTURED") {
+    return "Payment is not complete yet. Finish checkout and try again.";
+  }
+  if (code === "INVALID_ORDER_STATE" || status === 409) {
+    return "This checkout session is no longer valid. Start a new purchase.";
+  }
   if (/payment failed|international_transaction|card.*(declined|not allowed)/i.test(msg)) {
-    return "Payment was declined by the provider. Try another Razorpay test method (India cards/UPI), not an unsupported international card.";
+    return "Payment was declined by the provider. Use Razorpay India test cards or UPI — not Stripe 4242 or unsupported international cards.";
+  }
+  if (/uh oh|validate\/account|server_error/i.test(msg)) {
+    return "Razorpay checkout failed to open. Refresh and retry with India sandbox payment methods.";
   }
   if (/localhost|127\.0\.0\.1|cors|failed to fetch|network/i.test(msg)) {
     return PAYMENT_UNAVAILABLE;
@@ -181,6 +249,28 @@ function checkoutOrderKey(productType: RazorpayProductType, promoCode?: string):
   const generated = createIdempotencyKey(`razorpay-create-order:${productType}`);
   recentOrderKeys.set(key, { key: generated, createdAt: now });
   return generated;
+}
+
+export async function cancelRazorpayOrder(paymentOrderId: string): Promise<void> {
+  await fetchEdgeJson(
+    "razorpay-create-order",
+    {
+      action: "cancel",
+      payment_order_id: paymentOrderId,
+    },
+    { timeoutMs: 15_000 },
+  );
+}
+
+export async function failRazorpayOrder(paymentOrderId: string): Promise<void> {
+  await fetchEdgeJson(
+    "razorpay-create-order",
+    {
+      action: "fail",
+      payment_order_id: paymentOrderId,
+    },
+    { timeoutMs: 15_000 },
+  );
 }
 
 export async function createRazorpayOrder(
@@ -272,21 +362,19 @@ export async function openRazorpayCheckout(options: {
         },
         modal: {
           ondismiss: () => {
+            void cancelRazorpayOrder(order.payment_order_id!).catch(() => {
+              /* best-effort — user dismissed without paying */
+            });
             options.onDismiss?.();
             resolve();
           },
         },
       });
       rzp.on("payment.failed", (res: unknown) => {
-        const detail =
-          res && typeof res === "object" && "error" in res
-            ? String(
-                (res as { error?: { description?: string; reason?: string } }).error
-                  ?.description ??
-                  (res as { error?: { reason?: string } }).error?.reason ??
-                  "",
-              )
-            : "";
+        void failRazorpayOrder(order.payment_order_id!).catch(() => {
+          /* best-effort — mark order failed server-side */
+        });
+        const detail = parseRazorpayPaymentFailure(res);
         reject(
           new Error(
             detail

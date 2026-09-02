@@ -6,13 +6,15 @@ import {
   requireAuth,
   parseBody,
   errorResponse,
-  callAI,
   getAdminClient,
   log,
 } from "../_shared/utils.ts";
+import { generateWithFallback } from "../_shared/aiProvider.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
+import { decideAi, getAiFeaturePolicy } from "../_shared/aiFeaturePolicy.ts";
 import { executeHybridOperation } from "../_shared/hybridExecute.ts";
+import { hybridSuccess } from "../_shared/hybridResponse.ts";
 import { pythonExecuteOperation } from "../_shared/pythonClient.ts";
 import { httpStatusForDomainCode } from "../_shared/domainErrors.ts";
 
@@ -162,6 +164,21 @@ Deno.serve(async (req) => {
       );
     }
 
+    const cachedAnalysis = String(analysis.ai_analysis_text ?? "").trim();
+    if (cachedAnalysis) {
+      return hybridSuccess({
+        req,
+        data: {
+          success: true as const,
+          cached: true,
+          analysis: cachedAnalysis,
+        },
+        source: "database",
+        operationId: crypto.randomUUID(),
+        meta: { cached: true },
+      });
+    }
+
     const safe = (x: unknown, lim = 300) =>
       typeof x === "string" ? x.slice(0, lim) : JSON.stringify(x).slice(0, lim);
 
@@ -304,20 +321,24 @@ Use topic and subject names exactly as provided.
         return { success: true as const, cached: false, analysis: text };
       },
       runAi: async () => {
-        async function runAI() {
-          return callAI({
-            model: "gemini-2.0-flash",
-            messages: [
-              { role: "system", content: SYSTEM_PROMPT },
-              { role: "user", content: prompt },
-            ],
-            maxTokens: 2048,
-            temperature: 0.7,
-          }).catch(() => null);
+        const policy = getAiFeaturePolicy("analyze_test");
+        const decision = decideAi({
+          feature: policy.feature,
+          needed: true,
+          permitted: policy.aiAllowed,
+        });
+        if (decision !== "AI_REQUIRED") {
+          throw new Error("AI not required");
         }
-
-        let aiResult = await runAI();
-        if (!aiResult) aiResult = await runAI();
+        const aiResult = await generateWithFallback({
+          prompt,
+          systemPrompt: SYSTEM_PROMPT,
+          maxTokens: policy.maxOutputTokens,
+          temperature: 0.7,
+          userId,
+          action: "analyze_test",
+          skipSecondaryOnQuota: policy.skipSecondaryOnQuota,
+        });
         if (!aiResult?.text) {
           throw new Error("AI model failure");
         }

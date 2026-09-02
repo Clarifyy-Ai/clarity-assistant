@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import asyncio
-import re
+import time
+import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -45,6 +46,7 @@ async def lifespan(app: FastAPI):
         raise RuntimeError(f"Missing required env: {missing}")
     stop = asyncio.Event()
     background_tasks: list[asyncio.Task] = []
+    app.state.paper_factory_worker_running = False
 
     if settings.scrape_daily_enabled:
         background_tasks.append(
@@ -55,27 +57,24 @@ async def lifespan(app: FastAPI):
         )
 
     factory_settings = get_factory_settings()
-    # Bank-only / deterministic jobs must still run when AI keys are absent.
-    # Test and local health checks may intentionally use placeholder credentials.
-    # Do not let a background worker make the whole FastAPI lifespan fail because
-    # the Supabase SDK rejects those credentials before any job is processed.
-    service_key_is_jwt = bool(
-        re.match(
-            r"^[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*$",
-            settings.supabase_service_role_key,
-        )
-    )
+    if factory_settings.worker_enabled:
+        factory_settings.require_worker_configuration()
     start_factory_worker = (
         settings.paper_factory_embedded_worker
-        and service_key_is_jwt
+        and factory_settings.worker_mode == "embedded"
     )
     if start_factory_worker:
-        background_tasks.append(
-            asyncio.create_task(
-                worker_loop(settings=factory_settings, stop=stop),
-                name="paper-factory-worker",
-            )
+        factory_task = asyncio.create_task(
+            worker_loop(settings=factory_settings, stop=stop),
+            name="paper-factory-worker",
         )
+        app.state.paper_factory_worker_running = True
+
+        def _factory_worker_stopped(_task: asyncio.Task) -> None:
+            app.state.paper_factory_worker_running = False
+
+        factory_task.add_done_callback(_factory_worker_stopped)
+        background_tasks.append(factory_task)
         if not factory_settings.has_ai_provider:
             log.info(
                 "paper_factory_worker_bank_only",
@@ -86,7 +85,6 @@ async def lifespan(app: FastAPI):
     start_document_worker = (
         settings.document_worker_embedded
         and bool(settings.internal_auth_secret)
-        and service_key_is_jwt
     )
     if start_document_worker:
         try:
@@ -131,6 +129,7 @@ async def lifespan(app: FastAPI):
     )
     yield
     stop.set()
+    app.state.paper_factory_worker_running = False
     for task in background_tasks:
         task.cancel()
     for task in background_tasks:
@@ -164,10 +163,48 @@ app.add_middleware(
         "x-internal-timestamp",
         "x-internal-signature",
         "x-request-id",
+        "x-correlation-id",
     ],
     expose_headers=["content-type"],
     max_age=600,
 )
+
+
+def _http_log_level(status_code: int) -> str:
+    if status_code == 409:
+        return "info"
+    if status_code >= 500:
+        return "error"
+    if status_code >= 400:
+        return "warning"
+    return "info"
+
+
+@app.middleware("http")
+async def correlation_id_middleware(request: Request, call_next):
+    correlation_id = (
+        request.headers.get("x-correlation-id")
+        or request.headers.get("x-request-id")
+        or str(uuid.uuid4())
+    )
+    request.state.correlation_id = correlation_id
+    started = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = int(round((time.perf_counter() - started) * 1000))
+    response.headers["x-request-id"] = correlation_id
+    response.headers["x-correlation-id"] = correlation_id
+    status_code = response.status_code
+    http_log = get_logger("http")
+    log_fn = getattr(http_log, _http_log_level(status_code))
+    log_fn(
+        "http_request",
+        correlation_id=correlation_id,
+        status=status_code,
+        duration_ms=duration_ms,
+        method=request.method,
+        path=request.url.path,
+    )
+    return response
 
 app.include_router(health.router)
 app.include_router(metrics.router)
@@ -179,13 +216,43 @@ app.include_router(operations.router)
 app.include_router(process.router)
 
 
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    correlation_id = getattr(request.state, "correlation_id", None)
+    status_code = exc.status_code
+    http_log = get_logger("http")
+    log_fn = getattr(http_log, _http_log_level(status_code))
+    log_fn(
+        "http_exception",
+        correlation_id=correlation_id,
+        status=status_code,
+        method=request.method,
+        path=request.url.path,
+    )
+    detail = exc.detail
+    headers = dict(exc.headers) if exc.headers else {}
+    if correlation_id:
+        headers["x-request-id"] = correlation_id
+        headers["x-correlation-id"] = correlation_id
+    return JSONResponse(
+        status_code=status_code,
+        content={"detail": detail},
+        headers=headers or None,
+    )
+
+
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
-    correlation_id = request.headers.get("x-request-id")
+    correlation_id = getattr(request.state, "correlation_id", None)
+    safe_errors = [
+        {key: value for key, value in error.items() if key not in {"input", "ctx"}}
+        for error in exc.errors()
+    ]
     return JSONResponse(
         status_code=422,
+        headers={"x-request-id": correlation_id} if correlation_id else None,
         content={
             "success": False,
             "error": {
@@ -195,6 +262,6 @@ async def validation_error_handler(
                 "stage": "request_validation",
                 "correlation_id": correlation_id,
             },
-            "details": exc.errors(),
+            "details": safe_errors,
         },
     )

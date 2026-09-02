@@ -25,6 +25,24 @@ Or both: `npm run qa:setup`
 
 Passwords: **only** in `.env.qa.local` (gitignored). Template: `.env.qa.example`.
 
+**Environment gaps (not product bugs):** see [`docs/qa/QA_ENVIRONMENT_GAPS.md`](qa/QA_ENVIRONMENT_GAPS.md).
+
+### Boundary & journey fixtures (after seed)
+
+| Account ID | Email | Env prefix | Notes |
+|------------|-------|------------|-------|
+| NEW_USER_01 | `qa.onboarding@clarify.ai.test` | `QA_ONBOARDING_*` | Reset with `npm run qa:reset-fixtures` before TC-ONB-001 |
+| MFA_USER_01 | `qa.mfa@clarify.ai.test` | `QA_MFA_*` | Run `npm run qa:seed-mfa` for TC-AUTH-015 |
+| LOW_CREDIT_01 | `qa.lowcredit@clarify.ai.test` | `QA_LOW_CREDIT_*` | 5 credits |
+| EXACT_CREDIT_01 | `qa.exactcredit@clarify.ai.test` | `QA_EXACT_CREDIT_*` | 3 credits (gov paper cost) |
+| ZERO_CREDIT_01 | `qa.zero@clarify.ai.test` | `QA_ZERO_CREDIT_*` | 0 credits |
+
+```bash
+npm run qa:seed-accounts    # writes .env.qa.local
+npm run qa:reset-fixtures   # onboarding + credit boundaries
+npm run qa:seed-mfa         # TOTP for qa.mfa@ (optional)
+```
+
 ## Environments
 
 | Env | Base URL | Supabase |

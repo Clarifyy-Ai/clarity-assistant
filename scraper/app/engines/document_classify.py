@@ -71,6 +71,14 @@ def classify_document_text(
         return "RESUME", 0.85, ["category_hint_resume"]
     if lowered_hint in {"job_description", "jd", "job"}:
         return "JOB_DESCRIPTION", 0.85, ["category_hint_job_description"]
+    if lowered_hint in {
+        "cover_letter",
+        "personal_document",
+        "portfolio",
+        "library",
+        "other",
+    }:
+        return "PERSONAL_DOCUMENT", 0.85, ["category_hint_personal_document"]
 
     receipt_score = _score_signals(normalized, _RECEIPT)
     report_score = _score_signals(normalized, _REPORT)

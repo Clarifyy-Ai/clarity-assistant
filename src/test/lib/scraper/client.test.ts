@@ -148,4 +148,18 @@ describe("scraperApi — JWT admin paths", () => {
 
     await expect(scraperApi.sources()).rejects.toBeInstanceOf(ScraperNotConfiguredError);
   });
+
+  it("treats localhost VITE_SCRAPER_URL as unset in production", async () => {
+    const originalAppEnv = import.meta.env.VITE_APP_ENV;
+    import.meta.env.VITE_SCRAPER_URL = "http://127.0.0.1:8000";
+    import.meta.env.VITE_APP_ENV = "production";
+    vi.resetModules();
+    try {
+      const { scraperApi, ScraperNotConfiguredError } = await import("@/lib/scraper/client");
+      expect(scraperApi.isConfigured()).toBe(false);
+      await expect(scraperApi.sources()).rejects.toBeInstanceOf(ScraperNotConfiguredError);
+    } finally {
+      import.meta.env.VITE_APP_ENV = originalAppEnv;
+    }
+  });
 });

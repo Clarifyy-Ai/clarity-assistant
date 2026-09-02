@@ -192,16 +192,23 @@ Deno.serve(async (req) => {
     : "degraded";
 
   const billing = validateBillingConfig({
-    requireRazorpay: false,
+    requireRazorpay: true,
     requireStripe: false,
-    requireRazorpayWebhook: false,
+    requireRazorpayWebhook: true,
   });
   const razorpayId = present("RAZORPAY_KEY_ID");
   const razorpaySecret = present("RAZORPAY_KEY_SECRET");
+  const razorpayWebhookSecret = present("RAZORPAY_WEBHOOK_SECRET");
   const razorpayConfigured = razorpayId && razorpaySecret;
+  const razorpayKeyMode = razorpayId.startsWith("rzp_live_")
+    ? "live"
+    : razorpayId.startsWith("rzp_test_")
+    ? "test"
+    : "unknown";
   const razorpayChecks = billing.checks.filter((c) => c.name.startsWith("RAZORPAY_"));
   const razorpayValid =
     razorpayConfigured &&
+    razorpayWebhookSecret &&
     razorpayChecks.every((c) => !c.present || (c.formatValid && c.environmentCompatible));
 
   const body = {
@@ -249,12 +256,16 @@ Deno.serve(async (req) => {
       configured: razorpayConfigured,
       valid: razorpayValid,
       status: !razorpayConfigured ? "not_configured" : razorpayValid ? "ok" : "invalid",
+      webhook_secret_configured: razorpayWebhookSecret,
+      key_mode: razorpayKeyMode,
     },
     integrations: {
       deepgram: classifyOptional(present("DEEPGRAM_API_KEY")),
       resend: classifyOptional(present("RESEND_API_KEY")),
       calendar: classifyOptional(
-        present("GOOGLE_CALENDAR_CLIENT_ID") || present("GOOGLE_CLIENT_ID"),
+        present("GOOGLE_CLIENT_ID") ||
+          present("GOOGLE_OAUTH_CLIENT_ID") ||
+          present("GOOGLE_CALENDAR_CLIENT_ID"),
       ),
       sentry: classifyOptional(present("SENTRY_DSN")),
       posthog: classifyOptional(present("POSTHOG_KEY") || present("POSTHOG_API_KEY")),

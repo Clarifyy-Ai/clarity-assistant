@@ -31,8 +31,19 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { zonedWallTimeToUtc } from "@/lib/interviews/scheduleTime";
+import {
+  SCHEDULER_TIMEZONE_OPTIONS,
+  resolveSchedulerTimezoneKey,
+  zoneOrOffsetForPicker,
+  utcIsoToZonedWallParts,
+  inferTimezoneKeyFromIso,
+  type SchedulerTimezoneKey,
+} from "@/lib/interviews/schedulerTimezone";
+import {
+  setupInterviewReminders,
+  reminderOutcomeMessage,
+} from "@/lib/interviews/scheduleReminders";
 
 /* ─── CONSTANTS ─────────────────────────────────────────────────────────── */
 
@@ -100,13 +111,7 @@ function looksLikePlaceholderName(value: string): boolean {
   return false;
 }
 
-const TIMEZONE_OPTIONS = [
-  { value: "Asia/Kolkata", label: "Asia/Kolkata (India)", offset: "+05:30" },
-  { value: "UTC", label: "UTC", offset: "Z" },
-  { value: "America/New_York", label: "America/New_York", offset: "local" },
-  { value: "Europe/London", label: "Europe/London", offset: "local" },
-  { value: "local", label: "Local browser time", offset: "local" },
-] as const;
+const TIMEZONE_OPTIONS = SCHEDULER_TIMEZONE_OPTIONS;
 
 function getDefaultTimeSlot(date: string): string {
   const now = new Date();
@@ -188,27 +193,39 @@ export default function NewInterview() {
     meetingLink: string;
     calendarEventId?: string | null;
   }) {
-    try {
-      const reminder = await fetchEdgeJson<{
-        success?: boolean;
-        email_sent?: boolean;
-        email_configured?: boolean;
-      }>("schedule-interview", {
-        interview_id: input.interviewId,
-        company_name: input.company,
-        role_title: input.role,
-        scheduled_at: input.scheduledAt,
+    const reminderOutcome = await setupInterviewReminders({
+      interviewId: input.interviewId,
+      company: input.company,
+      role: input.role,
+      scheduledAt: input.scheduledAt,
+      timezone: input.timezone,
+    });
+
+    if (reminderOutcome.status === "failed") {
+      toast.warning(reminderOutcomeMessage(reminderOutcome), {
+        action: {
+          label: "Retry",
+          onClick: () => {
+            void setupInterviewReminders({
+              interviewId: input.interviewId,
+              company: input.company,
+              role: input.role,
+              scheduledAt: input.scheduledAt,
+              timezone: input.timezone,
+            }).then((retry) => {
+              if (retry.status === "success") {
+                toast.success(reminderOutcomeMessage(retry));
+              } else {
+                toast.error(reminderOutcomeMessage(retry));
+              }
+            });
+          },
+        },
       });
-      if (reminder?.email_sent) {
-        toast.message("Email reminder sent to your account address.");
-      } else if (reminder?.email_configured === false) {
-        toast.message(
-          "In-app reminder created. Email reminders are not configured on this environment (requires Resend).",
-        );
-      }
-    } catch (remErr) {
-      console.warn("[NewInterview] schedule-interview:", remErr);
-      toast.message("Interview saved. In-app reminder setup failed; email was not sent.");
+    } else if (reminderOutcome.kind === "email_failed") {
+      toast.warning(reminderOutcomeMessage(reminderOutcome));
+    } else {
+      toast.message(reminderOutcomeMessage(reminderOutcome));
     }
 
     if (calendar.syncAvailable && calendar.writeEvent) {
@@ -271,7 +288,7 @@ export default function NewInterview() {
   const [platform,        setPlatform]         = useState("zoom");
   const [scheduleDate,    setScheduleDate]      = useState(todayDateString());
   const [scheduleTime,    setScheduleTime]      = useState(() => getDefaultTimeSlot(todayDateString()));
-  const [timeZoneKey,     setTimeZoneKey]       = useState<(typeof TIMEZONE_OPTIONS)[number]["value"]>("local");
+  const [timeZoneKey,     setTimeZoneKey]       = useState<SchedulerTimezoneKey>("local");
   const [resumeId,        setResumeId]          = useState<string | null>(activeResumeId);
   const [jdId,            setJdId]              = useState<string | null>(activeJdId);
   const [duration,        setDuration]         = useState(45);
@@ -306,23 +323,25 @@ export default function NewInterview() {
     }
 
     if (editingRound && !roundPrefilledRef.current) {
+      const storedTz = resolveSchedulerTimezoneKey(
+        editingRound.timezone,
+        editingInterview.timezone,
+      );
+      const tzKey =
+        storedTz !== "local" || !editingRound.scheduled_at
+          ? storedTz
+          : inferTimezoneKeyFromIso(editingRound.scheduled_at);
+      setTimeZoneKey(tzKey);
+
+      const wall = utcIsoToZonedWallParts(editingRound.scheduled_at, tzKey);
       setInterviewType(fromInterviewTypeSlug(editingRound.interview_type ?? "behavioural"));
       setRoundNumber(editingRound.round_number ?? 1);
-      setScheduleDate(formatDateInput(editingRound.scheduled_at));
-      setScheduleTime(formatTimeInput(editingRound.scheduled_at));
+      setScheduleDate(wall?.date ?? formatDateInput(editingRound.scheduled_at));
+      setScheduleTime(wall?.time ?? formatTimeInput(editingRound.scheduled_at));
       setDuration(editingRound.duration_minutes ?? 45);
       setInterviewerName(editingRound.interviewer_name ?? "");
       setMeetingLink(editingRound.meeting_link ?? "");
       setPlatform(editingRound.platform ?? "zoom");
-      // Restore timezone from stored ISO offset when possible.
-      try {
-        const iso = editingRound.scheduled_at ?? "";
-        if (iso.endsWith("Z") || /[+-]00:00$/.test(iso)) setTimeZoneKey("UTC");
-        else if (/[+-]05:30$/.test(iso)) setTimeZoneKey("Asia/Kolkata");
-        else setTimeZoneKey("local");
-      } catch {
-        setTimeZoneKey("local");
-      }
       roundPrefilledRef.current = true;
     }
   }, [isEditMode, editingInterview, editingRound, editId]);
@@ -345,14 +364,10 @@ export default function NewInterview() {
     }
   }, [timeSlots, scheduleTime]);
 
-  const timeZoneOffset = useMemo(() => {
-    const opt = TIMEZONE_OPTIONS.find((z) => z.value === timeZoneKey);
-    if (!opt) return "local";
-    if (opt.offset !== "local") return opt.offset;
-    if (opt.value === "local") return "local";
-    // Pass canonical IANA id for zones without a fixed offset in the picker.
-    return opt.value;
-  }, [timeZoneKey]);
+  const timeZoneOffset = useMemo(
+    () => zoneOrOffsetForPicker(timeZoneKey),
+    [timeZoneKey],
+  );
 
   const scheduledAtIso = useMemo(() => {
     const dt = combineSchedule(scheduleDate, scheduleTime, timeZoneOffset);
@@ -466,17 +481,21 @@ export default function NewInterview() {
         return;
       }
 
-      const { error: roundErr } = await scheduler.updateRound(editingRound.id, {
-        round_number: roundNumber,
-        round_label: `Round ${roundNumber} — ${interviewType}`,
-        interview_type: toInterviewTypeSlug(interviewType),
-        scheduled_at: scheduledAtIso,
-        duration_minutes: duration,
-        interviewer_name: interviewerName.trim(),
-        platform,
-        meeting_link: meetingLink.trim(),
-        timezone: timeZoneKey,
-      });
+      const { error: roundErr } = await scheduler.updateRound(
+        editingRound.id,
+        {
+          round_number: roundNumber,
+          round_label: `Round ${roundNumber} — ${interviewType}`,
+          interview_type: toInterviewTypeSlug(interviewType),
+          scheduled_at: scheduledAtIso,
+          duration_minutes: duration,
+          interviewer_name: interviewerName.trim(),
+          platform,
+          meeting_link: meetingLink.trim(),
+          timezone: timeZoneKey,
+        },
+        { previousScheduledAt: editingRound.scheduled_at },
+      );
 
       if (roundErr) {
         toast.warning(`Interview updated, but round details failed: ${roundErr}`);
@@ -638,6 +657,9 @@ export default function NewInterview() {
     calendar.syncAvailable &&
     calendar.isConnected;
 
+  const showCalendarChecking =
+    (calendar.isCheckingConnection || calendar.isProbingSync) && !calendarBannerDismissed;
+
   /* ── Render ──────────────────────────────────────────────────────────── */
 
   return (
@@ -658,6 +680,15 @@ export default function NewInterview() {
           className="mb-0"
         />
       </div>
+
+      {/* Calendar availability probe */}
+      {showCalendarChecking && (
+        <Card className="border-border bg-secondary/30">
+          <p className="text-xs text-muted-foreground">
+            Checking Google Calendar availability…
+          </p>
+        </Card>
+      )}
 
       {/* Calendar not configured — honest coming-soon, not a broken Connect */}
       {showCalendarComingSoon && (

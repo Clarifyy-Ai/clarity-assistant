@@ -1,7 +1,7 @@
 import { handleCors, getCorsHeaders, withCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient, refundCredits } from "../_shared/supabase.ts";
-import { claimJobCreditsForRefund } from "../_shared/claimJobCredits.ts";
+import { claimJobCreditsForRefund, markJobCreditsReleased } from "../_shared/claimJobCredits.ts";
 import {
   enforceAccountDeletionRateLimitAsync,
 } from "../_shared/rateLimit.ts";
@@ -85,6 +85,7 @@ const WIPE_TABLES: WipeSpec[] = [
   { table: "answer_bank", column: "user_id" },
   { table: "answers", column: "user_id" },
   { table: "saved_answers", column: "user_id" },
+  { table: "company_research_jobs", column: "user_id" },
   { table: "company_research", column: "user_id" },
   { table: "calendar_integrations", column: "user_id" },
   { table: "google_calendar_refresh_tokens", column: "user_id" },
@@ -338,12 +339,21 @@ Deno.serve(async (req) => {
       }).eq("id", paperJob.id).eq("user_id", targetUserId);
       const claimed = await claimJobCreditsForRefund(db, String(paperJob.id));
       if (claimed > 0) {
-        await refundCredits({
+        const refund = await refundCredits({
           userId: targetUserId,
           cost: claimed,
           reason: "refund_account_deletion_paper_job",
           idempotencyKey: `refund_paper_job:${paperJob.id}`,
         });
+        if (refund.success) {
+          await markJobCreditsReleased(db, String(paperJob.id));
+        } else {
+          await db.from("gov_paper_generation_jobs").update({
+            credits_charged: claimed,
+            credits_reserved: claimed,
+            updated_at: new Date().toISOString(),
+          }).eq("id", paperJob.id).is("credits_released_at", null);
+        }
       }
     }
     const { error: documentJobsError } = await db.from("document_processing_jobs")

@@ -1,9 +1,10 @@
 /**
- * save-test-answer — versioned autosave for a live mock attempt.
- * Rejects stale client_updated_at so older network responses cannot overwrite newer answers.
+ * save-test-answer — versioned autosave for a live mock / assessment attempt.
+ * Persists through save_owned_test_answer (SECURITY DEFINER) so clients never
+ * need direct test_responses INSERT privileges or service-role keys.
  */
 import { handleCors, getCorsHeaders, withBrowserCors, applyCors } from "../_shared/cors.ts";
-import { authenticateRequest } from "../_shared/auth.ts";
+import { authenticateRequest, createUserScopedClient } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { isUserBanned, bannedResponse } from "../_shared/banCheck.ts";
 import {
@@ -41,24 +42,54 @@ type AnswerPayload = {
   time_spent_seconds?: unknown;
   clientUpdatedAt?: unknown;
   client_updated_at?: unknown;
+  version?: unknown;
+  answerVersion?: unknown;
+  answer_version?: unknown;
 };
+
+type SaveOwnedRpcResult = {
+  success?: boolean;
+  stale?: boolean;
+  code?: string;
+  answer_version?: number;
+  client_updated_at?: string;
+};
+
+function rpcStatusForCode(code: string | undefined): number {
+  switch (String(code ?? "").toUpperCase()) {
+    case "NOT_FOUND":
+      return 404;
+    case "SUBMISSION_CONFLICT":
+    case "ATTEMPT_NOT_STARTED":
+    case "ATTEMPT_EXPIRED":
+    case "ATTEMPT_INVALIDATED":
+      return 409;
+    case "UNAUTHORIZED":
+      return 401;
+    case "QUESTION_NOT_IN_ATTEMPT":
+    case "CLIENT_CLOCK_INVALID":
+      return 400;
+    default:
+      return 500;
+  }
+}
 
 Deno.serve(withBrowserCors("save-test-answer", async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
-  const db = createServiceClient();
+  const adminDb = createServiceClient();
 
   try {
     const auth = await authenticateRequest(req);
     if (auth.error) return applyCors(req, auth.error);
     const user = auth.context.user;
 
-    if (await isUserBanned(db, user.id)) {
+    if (await isUserBanned(adminDb, user.id)) {
       return bannedResponse(getCorsHeaders(req));
     }
 
-    const rateLimitResult = await checkRateLimitAsync(db, {
+    const rateLimitResult = await checkRateLimitAsync(adminDb, {
       key: createRateLimitKey("save-test-answer", user.id),
       ...RATE_LIMIT_PRESETS.SESSION_ACTION,
     });
@@ -87,28 +118,10 @@ Deno.serve(withBrowserCors("save-test-answer", async (req) => {
       return json(req, { error: "answers required", code: "VALIDATION_ERROR" }, 400);
     }
 
-    const { data: test, error: testErr } = await db
-      .from("mock_tests")
-      .select("id, status, started_at, expires_at")
-      .eq("id", testId)
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (testErr || !test) {
-      return json(req, { error: "Test not found", code: "NOT_FOUND" }, 404);
-    }
-    if (test.status === "COMPLETED") {
-      return json(req, { error: "This exam is already submitted.", code: "SUBMISSION_CONFLICT" }, 409);
-    }
-    if (test.status === "DRAFT" || !test.started_at) {
-      return json(req, { error: "Start the exam before saving answers.", code: "ATTEMPT_NOT_STARTED" }, 409);
-    }
-    if (test.expires_at && new Date(String(test.expires_at)).getTime() < Date.now() - 2000) {
-      return json(req, { error: "Attempt time has expired.", code: "ATTEMPT_EXPIRED" }, 409);
-    }
-
+    const userDb = createUserScopedClient(auth.context.accessToken);
     const saved: string[] = [];
     const stale: string[] = [];
+    const nextVersions: Record<string, number> = {};
 
     for (const item of rawAnswers.slice(0, 200)) {
       const questionId = uuidOrNull(String(item.questionId ?? item.question_id ?? ""));
@@ -118,48 +131,48 @@ Deno.serve(withBrowserCors("save-test-answer", async (req) => {
       const isAttempted = Boolean(item.isAttempted ?? item.is_attempted);
       const isMarkedReview = Boolean(item.isMarkedReview ?? item.is_marked_review);
       const timeSpent = Number(item.timeSpentSeconds ?? item.time_spent_seconds ?? 0);
+      const rawVersion = item.version ?? item.answerVersion ?? item.answer_version;
+      const expectedVersion = rawVersion == null ? null : Number(rawVersion);
 
-      const { data: existing } = await db
-        .from("test_responses")
-        .select("id, client_updated_at, answer_version")
-        .eq("test_id", testId)
-        .eq("question_id", questionId)
-        .eq("user_id", user.id)
-        .maybeSingle();
+      const { data, error } = await userDb.rpc("save_owned_test_answer", {
+        p_test_id: testId,
+        p_question_id: questionId,
+        p_user_answer: userAnswer == null || userAnswer === "" ? null : String(userAnswer),
+        p_is_attempted: isAttempted,
+        p_is_marked_review: isMarkedReview,
+        p_time_spent_seconds: Number.isFinite(timeSpent) ? Math.max(0, Math.floor(timeSpent)) : 0,
+        p_client_updated_at: clientUpdatedAt,
+        p_expected_version:
+          expectedVersion != null && Number.isFinite(expectedVersion)
+            ? Math.max(0, Math.floor(expectedVersion))
+            : null,
+      });
 
-      if (
-        existing?.client_updated_at &&
-        new Date(String(existing.client_updated_at)).getTime() > new Date(clientUpdatedAt).getTime()
-      ) {
-        stale.push(questionId);
-        continue;
-      }
-
-      const nextVersion = Number(existing?.answer_version ?? 0) + 1;
-      const payload = {
-        test_id: testId,
-        user_id: user.id,
-        question_id: questionId,
-        user_answer: userAnswer == null || userAnswer === "" ? null : String(userAnswer),
-        is_attempted: isAttempted,
-        is_marked_review: isMarkedReview,
-        time_spent_seconds: Number.isFinite(timeSpent) ? Math.max(0, Math.floor(timeSpent)) : 0,
-        client_updated_at: clientUpdatedAt,
-        answer_version: nextVersion,
-        updated_at: new Date().toISOString(),
-      };
-
-      const { error: upsertErr } = await db
-        .from("test_responses")
-        .upsert(payload, { onConflict: "test_id,question_id" });
-      if (upsertErr) {
-        console.error("[save-test-answer] upsert", questionId, upsertErr);
+      if (error) {
+        console.error("[save-test-answer] rpc", questionId, error.message);
         return json(req, { error: "Could not save answers.", code: "SAVE_FAILED" }, 500);
       }
+
+      const result = (data ?? {}) as SaveOwnedRpcResult;
+      if (result.success === false) {
+        const code = String(result.code ?? "SAVE_FAILED");
+        return json(req, { error: "Could not save answers.", code }, rpcStatusForCode(code));
+      }
+      if (result.stale) {
+        stale.push(questionId);
+        nextVersions[questionId] = Number(result.answer_version ?? 0);
+        continue;
+      }
       saved.push(questionId);
+      nextVersions[questionId] = Number(result.answer_version ?? 0);
     }
 
-    return json(req, { success: true, savedCount: saved.length, staleQuestionIds: stale });
+    return json(req, {
+      success: true,
+      savedCount: saved.length,
+      staleQuestionIds: stale,
+      nextVersions,
+    });
   } catch (err) {
     console.error("[save-test-answer]", err);
     return json(req, { error: "Could not save answers.", code: "SAVE_FAILED" }, 500);

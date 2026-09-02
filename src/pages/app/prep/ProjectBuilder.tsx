@@ -21,13 +21,45 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
-import { answerBankDB } from "@/lib/supabase/database";
+import { answerBankDB, prepProjectsDB } from "@/lib/supabase/database";
+import type { Tables } from "@/integrations/supabase";
 import {
   listSavedProjects,
-  saveProject,
-  deleteSavedProject,
+  clearSavedProjects,
   type SavedProject,
 } from "@/lib/prep/projectBuilderStorage";
+
+function rowToProject(row: Tables<"prep_projects">): SavedProject {
+  const stack = row.tech_stack;
+  return {
+    id: row.id,
+    projectName: row.project_name,
+    role: row.role,
+    techStack: Array.isArray(stack) ? (stack as string[]) : [],
+    description: row.description,
+    impact: row.impact,
+    githubUrl: row.github_url,
+    showcase: row.showcase,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function persistProject(
+  userId: string,
+  project: Omit<SavedProject, "id" | "updatedAt"> & { id?: string },
+): Promise<SavedProject> {
+  const row = await prepProjectsDB.upsert(userId, {
+    id: project.id,
+    project_name: project.projectName,
+    role: project.role,
+    tech_stack: project.techStack,
+    description: project.description,
+    impact: project.impact,
+    github_url: project.githubUrl,
+    showcase: project.showcase,
+  });
+  return rowToProject(row);
+}
 
 const EMPTY_FORM = {
   projectName: "",
@@ -61,8 +93,44 @@ export default function ProjectBuilder() {
 
   useEffect(() => {
     if (!user?.id) return;
-    setProjects(listSavedProjects(user.id));
+    let cancelled = false;
+    void (async () => {
+      try {
+        let dbRows = await prepProjectsDB.listByUserId(user.id);
+        if (dbRows.length === 0) {
+          const local = listSavedProjects(user.id);
+          if (local.length > 0) {
+            for (const p of local) {
+              await prepProjectsDB.upsert(user.id, {
+                id: p.id,
+                project_name: p.projectName,
+                role: p.role,
+                tech_stack: p.techStack,
+                description: p.description,
+                impact: p.impact,
+                github_url: p.githubUrl,
+                showcase: p.showcase,
+              });
+            }
+            clearSavedProjects(user.id);
+            dbRows = await prepProjectsDB.listByUserId(user.id);
+          }
+        }
+        if (!cancelled) {
+          setProjects(dbRows.map(rowToProject));
+        }
+      } catch {
+        if (!cancelled) setProjects(listSavedProjects(user.id));
+      }
+    })();
+    return () => { cancelled = true; };
   }, [user?.id]);
+
+  async function reloadProjects() {
+    if (!user?.id) return;
+    const dbRows = await prepProjectsDB.listByUserId(user.id);
+    setProjects(dbRows.map(rowToProject));
+  }
 
   function resetForm() {
     setEditingId(null);
@@ -112,19 +180,25 @@ export default function ProjectBuilder() {
 
   function persistDraft() {
     if (!user?.id || !projectName.trim()) return;
-    const entry = saveProject(user.id, {
-      id: editingId ?? undefined,
-      projectName: projectName.trim(),
-      role: role.trim(),
-      techStack,
-      description,
-      impact,
-      githubUrl,
-      showcase,
-    });
-    setEditingId(entry.id);
-    setProjects(listSavedProjects(user.id));
-    toast.success("Project saved");
+    void (async () => {
+      try {
+        const entry = await persistProject(user.id, {
+          id: editingId ?? undefined,
+          projectName: projectName.trim(),
+          role: role.trim(),
+          techStack,
+          description,
+          impact,
+          githubUrl,
+          showcase,
+        });
+        setEditingId(entry.id);
+        await reloadProjects();
+        toast.success("Project saved");
+      } catch {
+        toast.error("Failed to save project");
+      }
+    })();
   }
 
   function handleDelete(id: string) {
@@ -133,14 +207,20 @@ export default function ProjectBuilder() {
 
   function confirmDelete() {
     if (!user?.id || !deleteProjectId) return;
-    deleteSavedProject(user.id, deleteProjectId);
-    setProjects(listSavedProjects(user.id));
-    if (editingId === deleteProjectId) {
-      resetForm();
-      setShowForm(false);
-    }
-    toast.success("Project deleted");
-    setDeleteProjectId(null);
+    void (async () => {
+      try {
+        await prepProjectsDB.delete(user.id, deleteProjectId);
+        await reloadProjects();
+        if (editingId === deleteProjectId) {
+          resetForm();
+          setShowForm(false);
+        }
+        toast.success("Project deleted");
+        setDeleteProjectId(null);
+      } catch {
+        toast.error("Failed to delete project");
+      }
+    })();
   }
 
   async function generateShowcase() {
@@ -164,7 +244,7 @@ export default function ProjectBuilder() {
       const result = data.result ?? "Showcase generation unavailable.";
       setShowcase(result);
       if (user?.id) {
-        const entry = saveProject(user.id, {
+        const entry = await persistProject(user.id, {
           id: editingId ?? undefined,
           projectName: projectName.trim(),
           role: role.trim(),
@@ -175,7 +255,7 @@ export default function ProjectBuilder() {
           showcase: result,
         });
         setEditingId(entry.id);
-        setProjects(listSavedProjects(user.id));
+        await reloadProjects();
       }
       await refreshCredits();
     } catch (err) {

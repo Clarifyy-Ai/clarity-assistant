@@ -6,8 +6,12 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { creditsDB } from '@/lib/supabase/database';
 import { supabase } from '@/lib/supabase/client';
-import type { PaymentOrderRow } from '@/types/billing.types';
 import { formatInrPaise } from '@/lib/billing/priceCalculator';
+import {
+  mergeBillingHistoryTransactions,
+  type BillingHistoryTransaction,
+} from '@/lib/billing/billingHistoryMerge';
+import type { Tables } from '@/integrations/supabase/types';
 
 /**
  * BillingHistory Component
@@ -20,16 +24,7 @@ import { formatInrPaise } from '@/lib/billing/priceCalculator';
  * - Export to CSV
  */
 
-interface Transaction {
-  id: string;
-  date: Date;
-  type: 'purchase' | 'usage' | 'refund' | 'bonus';
-  description: string;
-  amount: number;  // Rupees (from amount_paise / 100)
-  credits: number;  // Credit count
-  invoice_url?: string;
-  status: 'completed' | 'pending' | 'failed';
-}
+type Transaction = BillingHistoryTransaction;
 
 interface BillingHistoryProps {
   /**
@@ -91,86 +86,43 @@ export function BillingHistory({
       if (!profile?.id) return;
       setLoading(true);
       try {
-        const data = await creditsDB.listByUserId(profile.id, 100);
+        const [ledger, paymentsResult] = await Promise.all([
+          creditsDB.listByUserId(profile.id, 100),
+          supabase
+            .from("payment_orders")
+            .select(
+              "id, product_type, amount_paise, status, created_at, paid_at, provider, credits_granted, provider_payment_id",
+            )
+            .eq("user_id", profile.id)
+            .order("created_at", { ascending: false })
+            .limit(50),
+        ]);
 
-        // `payment_orders` is not in the generated Supabase schema yet;
-        // cast the client to `any` to bypass the frozen type, keeping runtime behavior identical.
-        const { data: payments } = await (supabase as any)
-          .from("payment_orders")
-          .select("id, product_type, amount_paise, status, created_at, paid_at, provider")
-          .eq("user_id", profile.id)
-          .order("created_at", { ascending: false })
-          .limit(50) as { data: PaymentOrderRow[] | null };
+        if (paymentsResult.error) throw paymentsResult.error;
 
-        const mapped: Transaction[] = data.map((row) => {
-          const credits = (row.amount ?? 0) as number;
-          const reason: string = (row.action as string) ?? '';
-
-          let type: Transaction['type'] = 'usage';
-          if (reason.startsWith('purchase:') || reason.startsWith('subscription_grant:')) {
-            type = credits > 0 ? 'purchase' : 'usage';
-          } else if (reason.startsWith('refund:')) {
-            type = 'refund';
-          } else if (reason.startsWith('bonus:') || reason.startsWith('welcome') || reason === 'referral_reward') {
-            type = 'bonus';
-          } else if (credits < 0) {
-            type = 'usage';
-          }
-
-          const description = reason
-            .replace('subscription_grant:', 'Subscription: ')
-            .replace('purchase:', 'Credit purchase: ')
-            .replace('refund:', 'Refund: ')
-            .replace('bonus:', 'Bonus: ')
-            .replace('usage:', 'Used: ')
-            .replace(/_/g, ' ')
-            .replace(/^./, (c) => c.toUpperCase());
-
-          return {
-            id:          row.id,
-            date:        new Date(row.created_at),
-            type,
-            description: description || (credits < 0 ? 'Credits used' : 'Credits added'),
-            amount:      0,
-            credits,
-            status:      'completed',
-          };
-        });
-
-        // Fulfillment marks orders `fulfilled` (not `paid`). Treat both as completed.
-        const isCompleted = (status: string) =>
-          status === "paid" || status === "fulfilled";
-        const isFailed = (status: string) =>
-          status === "failed" || status === "cancelled" || status === "canceled";
-        const isRefunded = (status: string) => status === "refunded";
-
-        const paymentRows: Transaction[] = (payments ?? []).map((p: PaymentOrderRow) => {
-          const completed = isCompleted(p.status);
-          const refunded = isRefunded(p.status);
-          const failed = isFailed(p.status);
-          return {
-            id: p.id,
-            date: new Date(p.paid_at ?? p.created_at),
-            type: refunded
-              ? ("refund" as const)
-              : completed
-                ? ("purchase" as const)
-                : ("usage" as const),
-            description: `${p.provider} — ${p.product_type.replace(/_/g, " ")}`,
-            amount: p.amount_paise / 100,
-            credits: 0,
-            status: completed || refunded
-              ? ("completed" as const)
-              : failed
-                ? ("failed" as const)
-                : ("pending" as const),
-          };
-        });
-
+        const payments = (paymentsResult.data ?? []) as Tables<"payment_orders">[];
 
         setTransactions(
-          [...mapped, ...paymentRows].sort(
-            (a, b) => b.date.getTime() - a.date.getTime(),
+          mergeBillingHistoryTransactions(
+            ledger.map((row) => ({
+              id: row.id,
+              amount: row.amount,
+              action: String(row.action ?? ""),
+              created_at: row.created_at,
+              description: row.description,
+              stripe_payment_id: row.stripe_payment_id ?? null,
+            })),
+            payments.map((p) => ({
+              id: p.id,
+              product_type: p.product_type,
+              amount_paise: p.amount_paise,
+              status: p.status,
+              created_at: p.created_at,
+              paid_at: p.paid_at,
+              provider: p.provider,
+              credits_granted: p.credits_granted,
+              provider_payment_id: p.provider_payment_id,
+            })),
           ),
         );
       } catch {
@@ -377,6 +329,8 @@ export function BillingHistory({
                             ? 'bg-emerald-500/20 text-emerald-300'
                             : transaction.status === 'pending'
                             ? 'bg-amber-500/20 text-amber-300'
+                            : transaction.status === 'refunded'
+                            ? 'bg-violet-500/20 text-violet-300'
                             : 'bg-red-500/20 text-red-300'
                         )}
                       >
@@ -451,6 +405,8 @@ export function BillingHistory({
                         ? 'bg-emerald-500/20 text-emerald-300'
                         : transaction.status === 'pending'
                         ? 'bg-amber-500/20 text-amber-300'
+                        : transaction.status === 'refunded'
+                        ? 'bg-violet-500/20 text-violet-300'
                         : 'bg-red-500/20 text-red-300'
                     )}
                   >

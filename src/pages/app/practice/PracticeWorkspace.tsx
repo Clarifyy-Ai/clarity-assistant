@@ -79,6 +79,7 @@ export default function PracticeWorkspacePage() {
   const [staleTab, setStaleTab] = useState(false);
   const [ending, setEnding] = useState(false);
   const persistTimerRef = useRef<number | null>(null);
+  const startingRef = useRef(false);
 
   const counts = countAnswerStates(questions.length, answers, skipped);
 
@@ -240,7 +241,8 @@ export default function PracticeWorkspacePage() {
   }, [started, draftId, answers, skipped, index, notes, seconds, persistDraft]);
 
   async function startSession() {
-    if (!user?.id) return;
+    if (!user?.id || startingRef.current || loadingQuestions) return;
+    startingRef.current = true;
     setLoadingQuestions(true);
     try {
       // Close any leftover active draft before creating a new one
@@ -299,6 +301,7 @@ export default function PracticeWorkspacePage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not load practice questions.");
     } finally {
+      startingRef.current = false;
       setLoadingQuestions(false);
     }
   }

@@ -40,6 +40,7 @@ export default function CourseDetailPage() {
   const [completed, setCompleted] = useState<Set<string>>(new Set());
   const [certCode, setCertCode] = useState<string | null>(null);
   const [quizzes, setQuizzes] = useState<Array<{ id: string; title: string; question_ids: string[]; passing_percentage: number; is_final: boolean }>>([]);
+  const [quizProgress, setQuizProgress] = useState<Map<string, { score: number | null; completed_at: string | null }>>(new Map());
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -92,15 +93,39 @@ export default function CourseDetailPage() {
       .from("learning_quizzes")
       .select("id,title,question_ids,passing_percentage,is_final")
       .eq("course_id", courseId);
-    setQuizzes(
+    const loadedQuizzes =
       (quizRows ?? []) as Array<{
         id: string;
         title: string;
         question_ids: string[];
         passing_percentage: number;
         is_final: boolean;
-      }>,
-    );
+      }>;
+    setQuizzes(loadedQuizzes);
+    if (loadedQuizzes.length > 0) {
+      const { data: quizProgressRows, error: quizProgressError } = await supabase
+        .from("quiz_progress")
+        .select("quiz_id,score,completed_at")
+        .eq("user_id", user.id)
+        .in("quiz_id", loadedQuizzes.map((quiz) => quiz.id));
+      if (quizProgressError) {
+        setError("Your quiz progress could not be loaded.");
+        return;
+      }
+      setQuizProgress(
+        new Map(
+          (quizProgressRows ?? []).map((row) => [
+            row.quiz_id as string,
+            {
+              score: row.score == null ? null : Number(row.score),
+              completed_at: (row.completed_at as string | null) ?? null,
+            },
+          ]),
+        ),
+      );
+    } else {
+      setQuizProgress(new Map());
+    }
   }, [courseId, user?.id, isAdmin]);
 
   useEffect(() => {
@@ -120,8 +145,22 @@ export default function CourseDetailPage() {
     [modules, lessons],
   );
 
+  const quizRefs = useMemo(
+    () => quizzes.map((quiz) => ({ id: quiz.id, isFinal: quiz.is_final })),
+    [quizzes],
+  );
+  const passedQuizIds = useMemo(
+    () =>
+      new Set(
+        [...quizProgress.entries()]
+          .filter(([, progress]) => Boolean(progress.completed_at))
+          .map(([quizId]) => quizId),
+      ),
+    [quizProgress],
+  );
+
   const views = moduleProgressViews(moduleRefs, completed, course?.unlock_mode ?? "sequential");
-  const percent = coursePercentage(moduleRefs, completed);
+  const percent = coursePercentage(moduleRefs, completed, quizRefs, passedQuizIds);
 
   async function startQuiz(quiz: {
     id: string;
@@ -193,7 +232,7 @@ export default function CourseDetailPage() {
       <Card className="mb-4">
         <p className="text-lg font-semibold">Course progress: {percent}%</p>
         <p className="text-sm text-muted-foreground">Learner: {profile?.full_name || "You"}</p>
-        {canIssueCertificate(percent) && !certCode && (
+        {canIssueCertificate(percent, quizRefs, passedQuizIds) && !certCode && (
           <Button className="mt-3" onClick={() => void issueCert()}>Issue course completion certificate</Button>
         )}
         {certCode && (
@@ -201,16 +240,27 @@ export default function CourseDetailPage() {
             Verify {certCode}
           </Link>
         )}
-        {quizzes.map((quiz) => (
-          <Button
-            key={quiz.id}
-            className="mt-3 mr-2"
-            variant="outline"
-            onClick={() => void startQuiz(quiz)}
-          >
-            {quiz.is_final ? "Final assessment" : "Quiz"}: {quiz.title}
-          </Button>
-        ))}
+        {quizzes.map((quiz) => {
+          const progress = quizProgress.get(quiz.id);
+          const passed = Boolean(progress?.completed_at);
+          const attempted = progress?.score != null;
+          const badge = passed
+            ? `Passed (${Math.round(progress?.score ?? 0)}%)`
+            : attempted
+              ? `Attempted (${Math.round(progress?.score ?? 0)}%)`
+              : null;
+          return (
+            <Button
+              key={quiz.id}
+              className="mt-3 mr-2"
+              variant={passed ? "secondary" : "outline"}
+              onClick={() => void startQuiz(quiz)}
+            >
+              {quiz.is_final ? "Final assessment" : "Quiz"}: {quiz.title}
+              {badge ? ` — ${badge}` : ""}
+            </Button>
+          );
+        })}
       </Card>
       <div className="space-y-3">
         {views.map((view) => {

@@ -277,7 +277,7 @@ export async function generateWithFallback(
     }
 
     const isFallback = i > 0;
-    const attempts = isGemini ? 1 : MAX_RETRIES;
+    const attempts = MAX_RETRIES;
 
     for (let attempt = 0; attempt <= attempts; attempt++) {
       if (attempt > 0) {

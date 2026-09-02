@@ -30,8 +30,18 @@ describe("parse-question-pdf async contract", () => {
     expect(src).toContain("parse-question-pdf-refund:");
     expect(src).toContain("PDF parsing failed. Credits refunded.");
     expect(src).toContain("PARSER_TIMEOUT");
+    expect(src).toContain("ZERO_QUESTIONS");
+    expect(src).toContain("SCANNED_PDF");
     expect(src).not.toContain("fakeQuestions");
     expect(src).not.toContain("placeholder questions");
+  });
+
+  it("rejects invalid PDFs before charging and bounds extract with a deadline", () => {
+    expect(src).toContain("isPdfMagicBase64");
+    expect(src).toContain("pythonDocumentExtractText");
+    expect(src).toContain("EXTRACT_DEADLINE_MS");
+    expect(src).toContain("PYTHON_EXTRACT_TIMEOUT_MS");
+    expect(src.indexOf("if (!pdf.ok)")).toBeLessThan(src.indexOf("await deductCreditsAtomic"));
   });
 
   it("frontend polls 202 and shows background parsing copy", () => {
@@ -47,6 +57,8 @@ describe("parse-question-pdf async contract", () => {
     expect(page).toContain("pollParseQuestionPdfJob");
     expect(page).toContain("response.status === 202");
     expect(page).toContain("response.status === 504");
+    expect(page).toContain("lastFileRef");
+    expect(page).toContain("Retry");
     expect(poller).toContain("parse-question-pdf?jobId=");
   });
 

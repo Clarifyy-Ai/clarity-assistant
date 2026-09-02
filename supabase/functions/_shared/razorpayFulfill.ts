@@ -8,6 +8,10 @@ import {
   planIdForRazorpayProductType,
   monthlyCreditsForPlan,
 } from "./billingCatalog.ts";
+import {
+  assertPaymentStatusTransition,
+  type PaymentOrderStatus,
+} from "./paymentStateMachine.ts";
 
 type Db = ReturnType<typeof createServiceClient>;
 
@@ -102,6 +106,27 @@ export async function claimRazorpayWebhookEvent(
   return true;
 }
 
+/** Mark an open checkout order failed — no credits granted. */
+export async function markFailedRazorpayOrder(
+  db: Db,
+  opts: { orderId: string; currentStatus: string },
+): Promise<{ duplicate: boolean }> {
+  const current = opts.currentStatus as PaymentOrderStatus;
+  if (current === "failed" || current === "cancelled") {
+    return { duplicate: true };
+  }
+  if (current === "fulfilled" || current === "paid" || current === "refunded") {
+    return { duplicate: true };
+  }
+  assertPaymentStatusTransition(current, "failed");
+  const { error } = await db
+    .from("payment_orders")
+    .update({ status: "failed" })
+    .eq("id", opts.orderId);
+  if (error) throw error;
+  return { duplicate: false };
+}
+
 export async function fulfillCapturedRazorpayOrder(
   db: Db,
   opts: { order: PaymentOrderRow; paymentId: string },
@@ -111,6 +136,11 @@ export async function fulfillCapturedRazorpayOrder(
 
   const isNew = await claimPaymentIdempotency(db, paymentId);
   if (!isNew) return { duplicate: true };
+
+  const priorStatus = order.status as PaymentOrderStatus;
+  if (priorStatus !== "fulfilled" && priorStatus !== "paid") {
+    assertPaymentStatusTransition(priorStatus, "fulfilled");
+  }
 
   let grantCompleted = false;
 

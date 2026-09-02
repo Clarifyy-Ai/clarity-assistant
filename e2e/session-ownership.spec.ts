@@ -6,6 +6,7 @@ import {
 } from "../playwright-fixture";
 import {
   E2E_COMPLETED_SESSION_ID,
+  E2E_OWNER_DEBRIEF_ID,
   E2E_TEST_USER,
   E2E_USER_A_ID,
   E2E_USER_B_ID,
@@ -44,6 +45,20 @@ test.describe("User A / User B session isolation", () => {
     });
     await expect(page.getByText(/Tell me about yourself/i)).toHaveCount(0);
     await expect(page.getByText(/not found|couldn't load|Session not found/i)).toBeVisible({
+      timeout: 15_000,
+    });
+  });
+
+  test("User B cannot open User A's debrief", async ({ page }) => {
+    await loginAsTestUser(page, {
+      userId: E2E_USER_B_ID,
+      sessionOwnerId: E2E_USER_A_ID,
+    });
+    await page.goto(`/app/debriefs/${E2E_OWNER_DEBRIEF_ID}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(page.getByText(/Strong opener with clear experience/i)).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: /Couldn't load debrief/i })).toBeVisible({
       timeout: 15_000,
     });
   });

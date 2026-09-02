@@ -5,6 +5,7 @@ import {
   PLAN_MONTHLY_CREDITS,
 } from "@/lib/constants/creditEconomics";
 import { HELP_ARTICLES_FALLBACK } from "@/lib/constants/helpArticlesFallback";
+import { HELP_PACK_LIST, HELP_PLAN_PRICES } from "@/lib/help/helpCatalogCopy";
 
 describe("credit catalog parity", () => {
   it("exposes a versioned catalog", () => {
@@ -18,8 +19,10 @@ describe("credit catalog parity", () => {
   it("Help fallback uses the same plan and pack amounts", () => {
     const text = HELP_ARTICLES_FALLBACK.map((a) => `${a.answer}\n${a.body_md ?? ""}`).join("\n");
     expect(text).toContain(String(PLAN_MONTHLY_CREDITS.free));
-    expect(text).toContain(String(PLAN_MONTHLY_CREDITS.pro));
-    expect(text).toContain(String(PLAN_MONTHLY_CREDITS.enterprise));
+    expect(text).toContain(PLAN_MONTHLY_CREDITS.pro.toLocaleString("en-IN"));
+    expect(text).toContain(PLAN_MONTHLY_CREDITS.enterprise.toLocaleString("en-IN"));
+    expect(text).toContain(HELP_PLAN_PRICES.pro);
+    expect(text).toContain(HELP_PACK_LIST);
     expect(text).toMatch(/150/);
     expect(text).toMatch(/500/);
     expect(text).not.toMatch(/packs are not available/i);

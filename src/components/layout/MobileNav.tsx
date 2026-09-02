@@ -26,6 +26,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { COMMUNITY_MODULE_LABEL } from "@/lib/community/moderation";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { notifyOverlayVisibilityOnMobile } from "@/lib/overlay/overlayVisibilityNotice";
 import { assignLoginWithReturnTo } from "@/lib/auth/safeReturnTo";
@@ -81,7 +82,7 @@ const MORE_LINKS: MoreLink[] = [
   { to: "/app/assessments", icon: Brain, label: "Assessments" },
   { to: "/app/learn", icon: BookOpen, label: "Learning Hub" },
   { to: "/app/question-bank", icon: FileText, label: "Question bank" },
-  { to: "/app/community", icon: MessageSquare, label: "Q&A" },
+  { to: "/app/community", icon: MessageSquare, label: COMMUNITY_MODULE_LABEL },
   { to: "/app/coding", icon: FlaskConical, label: "Coding lab", featureFlag: "coding_hints" },
   { to: "/app/library", icon: FileText, label: "Document library" },
   { to: "/app/practice-workspace", icon: ClipboardList, label: "Practice workspace" },

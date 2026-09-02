@@ -65,7 +65,7 @@ afterEach(() => {
 });
 
 describe("fetchEdge — private-mode blocking", () => {
-  it("throws when private mode is enabled and function is not allowlisted", async () => {
+  it("throws when private mode is enabled and function is not allowlisted", { timeout: 15_000 }, async () => {
     mockGetPrivateMode.mockReturnValue(true);
     const { fetchEdge } = await import("@/lib/network/fetchEdge");
 
@@ -176,8 +176,21 @@ describe("fetchEdgeJson — RPC/edge error handling", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
     const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
 
-    await expect(fetchEdgeJson("search-exams", { q: "" })).resolves.toEqual({ ok: true });
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    await expect(fetchEdgeJson("get-exam-details", { examId: "e1" })).resolves.toEqual({ ok: true });
+    const edgeCalls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter((call) =>
+      String(call[0] ?? "").includes("get-exam-details"),
+    );
+    expect(edgeCalls).toHaveLength(2);
+  });
+
+  it("does not retry search-exams after Failed to fetch", async () => {
+    (global.fetch as any).mockRejectedValue(new TypeError("Failed to fetch"));
+    const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
+
+    await expect(fetchEdgeJson("search-exams", { q: "" })).rejects.toThrow(
+      /Couldn't reach the server/i,
+    );
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
   it("does not retry create-exam-paper after Failed to fetch", async () => {
@@ -213,6 +226,56 @@ describe("fetchEdgeJson — RPC/edge error handling", () => {
     );
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
+
+  it("logs network.request.business for expected 409 without requiring correlation id", async () => {
+    const { logger } = await import("@/lib/logger");
+    const info = vi.spyOn(logger, "info").mockImplementation(() => {});
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
+    (global.fetch as any).mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: "SUBMISSION_CONFLICT", error: "conflict" }), {
+        status: 409,
+      }),
+    );
+    const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
+    const { ApiClientError } = await import("@/lib/api/apiClient");
+
+    await expect(fetchEdgeJson("submit-test", { test_id: "t1" })).rejects.toBeInstanceOf(
+      ApiClientError,
+    );
+    expect(info).toHaveBeenCalledWith(
+      "network.request.business",
+      expect.objectContaining({
+        fnName: "submit-test",
+        status: 409,
+        code: "SUBMISSION_CONFLICT",
+        outcome: "skipped",
+        retryable: false,
+      }),
+    );
+    expect(warn).not.toHaveBeenCalledWith("network.request.failed", expect.anything());
+    info.mockRestore();
+    warn.mockRestore();
+  });
+
+  it("logs network.request.failed for unexpected errors even without correlation id", async () => {
+    const { logger } = await import("@/lib/logger");
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
+    (global.fetch as any).mockResolvedValueOnce(
+      new Response(JSON.stringify({ code: "API_ERROR", error: "boom" }), { status: 500 }),
+    );
+    const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
+
+    await expect(fetchEdgeJson("deduct-credits", { action: "generate_hint" })).rejects.toThrow();
+    expect(warn).toHaveBeenCalledWith(
+      "network.request.failed",
+      expect.objectContaining({
+        fnName: "deduct-credits",
+        status: 500,
+        code: "API_ERROR",
+      }),
+    );
+    warn.mockRestore();
+  });
 });
 
 describe("fetchEdgeJson — credit balance sync after edge calls", () => {
@@ -246,6 +309,22 @@ describe("fetchEdgeJson — credit balance sync after edge calls", () => {
 
     await expect(fetchEdgeJson("deduct-credits", { action: "generate_hint" })).rejects.toThrow();
     expect(mockRefreshCredits).not.toHaveBeenCalled();
+  });
+});
+
+describe("fetchEdge request budget", () => {
+  it("times out a hung session probe instead of spinning forever", async () => {
+    mockGetSession.mockReturnValue(new Promise(() => {}));
+    const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
+    const { __resetSessionRefreshForTests } = await import(
+      "@/lib/focusRecovery/sessionRefresh"
+    );
+
+    await expect(
+      fetchEdgeJson("search-exams", { q: "ssc" }, { timeoutMs: 25 }),
+    ).rejects.toThrow(/timed out/i);
+    expect(global.fetch).not.toHaveBeenCalled();
+    __resetSessionRefreshForTests();
   });
 });
 

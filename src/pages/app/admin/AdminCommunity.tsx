@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -7,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { supabase } from "@/lib/supabase/client";
-import { applyHide, applyRestore, applyResolve } from "@/lib/community/moderation";
+import { applyHide, applyRestore, applyResolve, COMMUNITY_MODULE_LABEL } from "@/lib/community/moderation";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { writeAdminAudit } from "@/lib/admin/writeAdminAudit";
 import { adminActionFailedMessage, toAdminUserMessage } from "@/lib/admin/adminErrors";
@@ -22,6 +23,7 @@ type Report = {
 };
 
 export default function AdminCommunityPage() {
+  const navigate = useNavigate();
   const [posts, setPosts] = useState<Post[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [filter, setFilter] = useState("");
@@ -64,8 +66,10 @@ export default function AdminCommunityPage() {
   }
 
   async function setStatus(id: string, status: string) {
+    const action =
+      status === "HIDDEN" ? "hide_post" : status === "RESOLVED" ? "resolve_post" : "restore_post";
     try {
-      await moderate(status === "HIDDEN" ? "hide_post" : "restore_post", id);
+      await moderate(action, id);
     } catch (err) {
       toast.error(adminActionFailedMessage(err));
       return;
@@ -142,11 +146,16 @@ export default function AdminCommunityPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">Q&A moderation</h1>
-        <p className="text-sm text-muted-foreground">
-          Hide, restore, lock, or delete community posts. Resolve open user reports. Hidden posts are removed from the public Q&A feed.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">{COMMUNITY_MODULE_LABEL} moderation</h1>
+          <p className="text-sm text-muted-foreground">
+            Hide, restore, lock, or delete community posts. Resolve open user reports. Hidden posts are removed from the public Community feed.
+          </p>
+        </div>
+        <Button size="sm" onClick={() => navigate("/app/community#community-create-question")}>
+          Create post
+        </Button>
       </div>
 
       {error && <InlineErrorRetry message={error} onRetry={() => void load()} />}

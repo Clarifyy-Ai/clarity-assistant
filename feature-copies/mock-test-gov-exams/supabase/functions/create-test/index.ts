@@ -1,6 +1,6 @@
 // supabase/functions/create-test/index.ts
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
-import { authenticateRequest } from "../_shared/auth.ts";
+import { authenticateRequest, requireOnboardingComplete } from "../_shared/auth.ts";
 import { createServiceClient, deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { creditDenialResponse } from "../_shared/creditAuthority.ts";
@@ -51,6 +51,9 @@ Deno.serve(async (req) => {
     const auth = await authenticateRequest(req);
     if (auth.error) return auth.error;
     const user = auth.context.user;
+
+    const onboardingBlock = await requireOnboardingComplete(user.id, req);
+    if (onboardingBlock) return onboardingBlock;
 
     const rateLimitResult = await checkRateLimitAsync(db, {
       key: createRateLimitKey("create-test", user.id),

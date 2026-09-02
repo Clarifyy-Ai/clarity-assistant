@@ -85,6 +85,33 @@ def test_process_star_evidence_requires_input(client):
     assert payload["code"] == "STAR_INPUT_REQUIRED"
 
 
+def test_process_star_evidence_answer_bank_prompt(client):
+    settings = Settings()
+    body = (
+        b'{"operation":"star_evidence","operation_id":"op-ab","correlation_id":"corr-ab",'
+        b'"payload":{"operation_type":"star_method","situation":"","task":"",'
+        b'"action":"Interview question:\\nTell me about a conflict.\\n\\nCategory: HR\\n\\n'
+        b'User draft (optional):\\n(none yet)","result":"","input":'
+        b'"Interview question:\\nTell me about a conflict.\\n\\nCategory: HR\\n\\n'
+        b'User draft (optional):\\n(none yet)"}}'
+    )
+    headers = _hmac_headers(
+        "POST",
+        "/v1/process",
+        body,
+        settings.internal_auth_secret,
+        "req-process-star-ab",
+        int(time.time()),
+    )
+    response = client.post("/v1/process", content=body, headers=headers)
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    draft = payload["data"]["star_draft"]
+    assert "Tell me about a conflict" in draft["task"]
+    assert draft["result"] == "[Add measurable result if available]"
+
+
 def test_process_mock_question_no_safe_fallback(client):
     settings = Settings()
     body = (

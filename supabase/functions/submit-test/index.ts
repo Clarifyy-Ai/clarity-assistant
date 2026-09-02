@@ -21,23 +21,21 @@ import {
 import { recomputeTopicMasteryFromAttempt } from "../_shared/recomputeTopicMastery.ts";
 import type { AttemptSignal } from "../_shared/masteryEngine.ts";
 import { isExamExpired } from "../_shared/examTimer.ts";
+import {
+  scoreMockTest,
+} from "../_shared/mockTestScoring.ts";
 
 /* -------------------------------------------------------------------------- */
 /*                                    TYPES                                   */
 /* -------------------------------------------------------------------------- */
 
-type NormalizedQuestionType =
-  | "MCQ"
-  | "NUMERICAL"
-  | "MULTI_SELECT"
-  | "TRUE_FALSE"
-  | "SHORT_ANSWER"
-  | "CODING";
-
 interface QuestionRow {
   id: string;
+  question_text?: string | null;
   question_type: string | null;
+  options?: unknown;
   correct_answer: unknown;
+  explanation?: string | null;
   marks_positive: number | null;
   marks_negative: number | null;
   subject: string | null;
@@ -83,19 +81,6 @@ interface TimeTrap {
 
 const FN = "submit-test";
 
-function normalizeQuestionType(raw: unknown): NormalizedQuestionType {
-  const value = String(raw ?? "")
-    .trim()
-    .toUpperCase();
-
-  if (value === "MCQ") return "MCQ";
-  if (value === "NUMERIC" || value === "NUMERICAL") return "NUMERICAL";
-  if (value === "MULTI_SELECT" || value === "MULTI-SELECT") return "MULTI_SELECT";
-  if (value === "TRUE_FALSE" || value === "TRUE/FALSE" || value === "BOOLEAN") return "TRUE_FALSE";
-  if (value === "CODE" || value === "CODING") return "CODING";
-  return "SHORT_ANSWER";
-}
-
 function safeNumber(value: unknown, fallback = 0): number {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
@@ -104,46 +89,6 @@ function safeNumber(value: unknown, fallback = 0): number {
 function safeString(value: unknown, fallback = ""): string {
   if (value === null || value === undefined) return fallback;
   return String(value).trim();
-}
-
-function normalizeStringArray(value: unknown): string[] {
-  if (Array.isArray(value)) {
-    return value
-      .map((v) => safeString(v))
-      .filter(Boolean)
-      .map((v) => v.toLowerCase())
-      .sort();
-  }
-
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-
-    // Try JSON array
-    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
-      try {
-        const parsed = JSON.parse(trimmed);
-        if (Array.isArray(parsed)) {
-          return parsed
-            .map((v) => safeString(v))
-            .filter(Boolean)
-            .map((v) => v.toLowerCase())
-            .sort();
-        }
-      } catch {
-        // ignore parse failure
-      }
-    }
-
-    // fallback comma-separated
-    return trimmed
-      .split(",")
-      .map((v) => v.trim())
-      .filter(Boolean)
-      .map((v) => v.toLowerCase())
-      .sort();
-  }
-
-  return [];
 }
 
 function normalizeAnswer(answer: unknown): string | string[] | number | null {
@@ -182,136 +127,6 @@ function normalizeAnswer(answer: unknown): string | string[] | number | null {
   }
 
   return safeString(answer) || null;
-}
-
-function isEmptyAnswer(answer: unknown): boolean {
-  if (answer === null || answer === undefined) return true;
-  if (typeof answer === "string") return answer.trim() === "";
-  if (Array.isArray(answer)) return answer.length === 0;
-  return false;
-}
-
-function compareStrings(a: unknown, b: unknown): boolean {
-  return safeString(a).toLowerCase() === safeString(b).toLowerCase();
-}
-
-function compareNumbers(a: unknown, b: unknown, tolerance = 1e-6): boolean {
-  const left = Number(a);
-  const right = Number(b);
-  return Number.isFinite(left) && Number.isFinite(right) && Math.abs(left - right) <= tolerance;
-}
-
-function scoreQuestion(
-  question: QuestionRow,
-  response: ResponseRow,
-  defaults: { positive: number; negative: number },
-): { correct: boolean; score: number } {
-  const positive = safeNumber(question.marks_positive, defaults.positive);
-  const negative = safeNumber(question.marks_negative, defaults.negative);
-
-  const attempted = Boolean(response.is_attempted) && !isEmptyAnswer(response.user_answer);
-  if (!attempted) {
-    return { correct: false, score: 0 };
-  }
-
-  const qType = normalizeQuestionType(question.question_type);
-  const userAnswer = normalizeAnswer(response.user_answer);
-  const correctAnswer = normalizeAnswer(question.correct_answer);
-
-  if (qType === "MCQ" || qType === "TRUE_FALSE" || qType === "SHORT_ANSWER" || qType === "CODING") {
-    const isCorrect = compareStrings(userAnswer, correctAnswer);
-    return isCorrect
-      ? { correct: true, score: positive }
-      : { correct: false, score: -negative };
-  }
-
-  if (qType === "NUMERICAL") {
-    const isCorrect = compareNumbers(userAnswer, correctAnswer);
-    return isCorrect
-      ? { correct: true, score: positive }
-      : { correct: false, score: -negative };
-  }
-
-  if (qType === "MULTI_SELECT") {
-    const ua = normalizeStringArray(userAnswer);
-    const ca = normalizeStringArray(correctAnswer);
-    const isCorrect =
-      ua.length === ca.length && ua.every((value, index) => value === ca[index]);
-
-    return isCorrect
-      ? { correct: true, score: positive }
-      : { correct: false, score: -negative };
-  }
-
-  return { correct: false, score: 0 };
-}
-
-/** RETIRED: non-transactional writes. Do not call — claim_and_complete_test is atomic. */
-async function completeTestFallback(
-  db: ReturnType<typeof createServiceClient>,
-  args: {
-    test_id: string;
-    user_id: string;
-    total_score: number;
-    max_score: number;
-    accuracy: number;
-    attempt_percentage: number;
-    subject_breakdown: Record<string, SubjectBreakdown>;
-    topic_breakdown: Record<string, TopicBreakdown>;
-    weak_topics: string[];
-    strong_topics: string[];
-    time_analysis: { avg_seconds: number; time_traps: TimeTrap[] };
-    predicted_percentile: number | null;
-    rank_status?: string;
-  }
-) {
-  const now = new Date().toISOString();
-
-  const updateTest = await db
-    .from("mock_tests")
-    .update({
-      status: "COMPLETED",
-      submitted_at: now,
-      attempt_phase: "RESULT_AVAILABLE",
-      rank_status: "unavailable",
-      evaluation_version: 1,
-      overall_score: args.total_score,
-    })
-    .eq("id", args.test_id)
-    .eq("user_id", args.user_id)
-    .neq("status", "COMPLETED");
-
-  if (updateTest.error) {
-    throw updateTest.error;
-  }
-
-  const upsertAnalysis = await db
-    .from("test_analyses")
-    .upsert(
-      {
-        test_id: args.test_id,
-        user_id: args.user_id,
-        total_score: args.total_score,
-        max_score: args.max_score,
-        accuracy: args.accuracy,
-        attempt_percentage: args.attempt_percentage,
-        subject_breakdown: args.subject_breakdown,
-        topic_breakdown: args.topic_breakdown,
-        weak_topics: args.weak_topics,
-        strong_topics: args.strong_topics,
-        time_analysis: args.time_analysis,
-        predicted_percentile: args.predicted_percentile,
-      },
-      { onConflict: "test_id" }
-    )
-    .select()
-    .single();
-
-  if (upsertAnalysis.error) {
-    throw upsertAnalysis.error;
-  }
-
-  return upsertAnalysis.data;
 }
 
 async function updateTopicPerformanceBestEffort(
@@ -391,6 +206,18 @@ async function updateTopicPerformanceBestEffort(
 Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;
+
+  let claimedDb: ReturnType<typeof createServiceClient> | null = null;
+  let claimedTestId = "";
+  let claimedUserId = "";
+  const releaseClaim = async () => {
+    if (!claimedDb || !claimedTestId || !claimedUserId) return;
+    await claimedDb.rpc("release_test_submission", {
+      p_test_id: claimedTestId,
+      p_user_id: claimedUserId,
+    }).catch(() => {});
+    claimedDb = null;
+  };
 
   try {
     const auth = await requireAuth(req);
@@ -496,6 +323,36 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
       return errorResponse("Test has no questions", "VALIDATION_ERROR", 400, req);
     }
 
+    const submissionClaim = await db.rpc("begin_test_submission", {
+      p_test_id: testId,
+      p_user_id: userId,
+    });
+    if (submissionClaim.error) {
+      log(FN, "error", "begin_test_submission failed", submissionClaim.error);
+      return errorResponse("Could not lock this test for submission.", "TEST_FINALIZE_FAILED", 503, req);
+    }
+    const claim = (submissionClaim.data ?? {}) as {
+      success?: boolean;
+      already_completed?: boolean;
+      code?: string;
+    };
+    if (claim.already_completed) {
+      const { data: existing } = await db.from("test_analyses").select("*").eq("test_id", testId).maybeSingle();
+      return successResponse({ success: true, already_completed: true, analysis: existing ?? null }, undefined, 200, req);
+    }
+    if (claim.success === false) {
+      const code = String(claim.code ?? "SUBMISSION_CONFLICT");
+      return errorResponse(
+        code === "SUBMISSION_IN_PROGRESS" ? "Submission is already in progress." : "Attempt cannot be submitted.",
+        code,
+        409,
+        req,
+      );
+    }
+    claimedDb = db;
+    claimedTestId = testId;
+    claimedUserId = userId;
+
     /* -------------------- FETCH QUESTIONS & RESPONSES -------------------- */
     const config = (testRaw.config && typeof testRaw.config === "object")
       ? testRaw.config as Record<string, unknown>
@@ -517,7 +374,7 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
       db
         .from("questions")
         .select(
-          "id, question_type, correct_answer, marks_positive, marks_negative, subject, topic, difficulty, exam_type"
+          "id, question_text, question_type, options, correct_answer, explanation, marks_positive, marks_negative, subject, topic, difficulty, exam_type"
         )
         .in("id", questionIds),
       paperId
@@ -529,10 +386,12 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
     ]);
 
     if (responseResult.error) {
+      await releaseClaim();
       return errorResponse("Failed to fetch test responses", "DB_ERROR", 500, req);
     }
 
     if (questionResult.error) {
+      await releaseClaim();
       return errorResponse("Failed to fetch questions", "DB_ERROR", 500, req);
     }
 
@@ -542,11 +401,13 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
       questionMap[question.id] = question;
     }
 
+    const frozenSnapshotByQuestion: Record<string, Record<string, unknown>> = {};
     for (const link of snapshotResult.data ?? []) {
       const rec = link as { question_id?: string; section_code?: string; snapshot_json?: Record<string, unknown> };
       const qid = safeString(rec.question_id);
       const snap = rec.snapshot_json && typeof rec.snapshot_json === "object" ? rec.snapshot_json : null;
       if (!qid || !snap) continue;
+      frozenSnapshotByQuestion[qid] = snap;
       const existing = questionMap[qid];
       questionMap[qid] = {
         id: qid,
@@ -570,141 +431,54 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
       };
     }
 
-    /* ----------------------------- SCORING ----------------------------- */
-    let totalScore = 0;
-    let maxScore = 0;
-    let attempted = 0;
-    let correct = 0;
-    let incorrect = 0;
-    let unanswered = 0;
-    let positiveMarks = 0;
-    let negativeMarks = 0;
-
-    const subjectBreakdown: Record<string, SubjectBreakdown> = {};
-    const topicBreakdownRaw: Record<
-      string,
-      TopicBreakdown & { _time_total: number; _time_count: number }
-    > = {};
-
-    const wrongQuestionIds: string[] = [];
-    const responseUpserts: Record<string, unknown>[] = [];
-    const timeEntries: TimeTrap[] = [];
-
-    for (const questionId of questionIds) {
-      const question = questionMap[questionId];
-      if (!question) continue;
-
-      const response: ResponseRow = responseMap[questionId] ?? {
-        question_id: questionId,
-        user_answer: null,
-        is_attempted: false,
-        time_spent_seconds: 0,
-      };
-
-      const subject = safeString(question.subject, "General");
-      const topic = safeString(question.topic, "General");
-      const marksPositive = safeNumber(question.marks_positive, scoringDefaults.positive);
-      const marksNegative = safeNumber(question.marks_negative, scoringDefaults.negative);
-      const timeSpent = Math.max(0, safeNumber(response.time_spent_seconds, 0));
-
-      maxScore += marksPositive;
-
-      if (!subjectBreakdown[subject]) {
-        subjectBreakdown[subject] = {
-          correct: 0,
-          wrong: 0,
-          attempted: 0,
-          total: 0,
-          accuracy: 0,
-          marks: 0,
-        };
-      }
-      subjectBreakdown[subject].total += 1;
-
-      if (!topicBreakdownRaw[topic]) {
-        topicBreakdownRaw[topic] = {
-          correct: 0,
-          wrong: 0,
-          attempted: 0,
-          total: 0,
-          accuracy: 0,
-          avg_time: 0,
-          subject,
-          _time_total: 0,
-          _time_count: 0,
-        };
-      }
-      topicBreakdownRaw[topic].total += 1;
-
-      const { correct: isCorrect, score } = scoreQuestion(question, response, scoringDefaults);
-      const isAttempted = Boolean(response.is_attempted) && !isEmptyAnswer(response.user_answer);
-
-      if (isAttempted) {
-        attempted += 1;
-        subjectBreakdown[subject].attempted += 1;
-        topicBreakdownRaw[topic].attempted += 1;
-      } else {
-        unanswered += 1;
-      }
-
-      if (isCorrect) {
-        correct += 1;
-        positiveMarks += marksPositive;
-        subjectBreakdown[subject].correct += 1;
-        topicBreakdownRaw[topic].correct += 1;
-        subjectBreakdown[subject].marks += marksPositive;
-      } else if (isAttempted) {
-        incorrect += 1;
-        negativeMarks += marksNegative;
-        wrongQuestionIds.push(questionId);
-        subjectBreakdown[subject].wrong += 1;
-        topicBreakdownRaw[topic].wrong += 1;
-        subjectBreakdown[subject].marks -= marksNegative;
-      }
-
-      totalScore += score;
-
-      if (timeSpent > 0) {
-        timeEntries.push({
-          question_id: questionId,
-          time_seconds: timeSpent,
-        });
-
-        topicBreakdownRaw[topic]._time_total += timeSpent;
-        topicBreakdownRaw[topic]._time_count += 1;
-      }
-
-      responseUpserts.push({
-        test_id: testId,
-        question_id: questionId,
-        user_id: userId,
-        user_answer: normalizeAnswer(response.user_answer),
-        is_attempted: isAttempted,
-        is_correct: isCorrect,
-        time_spent_seconds: timeSpent,
-      });
-    }
-
-    /* ----------------------------- METRICS ----------------------------- */
-    for (const subject of Object.keys(subjectBreakdown)) {
-      const row = subjectBreakdown[subject];
-      row.accuracy = row.attempted > 0 ? Math.round((row.correct / row.attempted) * 100) : 0;
-    }
-
-    const topicBreakdown: Record<string, TopicBreakdown> = {};
-    for (const topic of Object.keys(topicBreakdownRaw)) {
-      const row = topicBreakdownRaw[topic];
-      topicBreakdown[topic] = {
-        correct: row.correct,
-        wrong: row.wrong,
-        attempted: row.attempted,
-        total: row.total,
-        accuracy: row.attempted > 0 ? Math.round((row.correct / row.attempted) * 100) : 0,
-        avg_time:
-          row._time_count > 0 ? Math.round(row._time_total / row._time_count) : 0,
-        subject: row.subject,
-      };
-    }
+    /* ---------------- AUTHORITATIVE PER-QUESTION + AGGREGATE SCORING ---------------- */
+    const score = scoreMockTest(
+      questionIds.flatMap((questionId) => {
+        const question = questionMap[questionId];
+        return question ? [{
+          id: questionId,
+          questionType: question.question_type,
+          correctAnswer: question.correct_answer,
+          marksPositive: safeNumber(question.marks_positive, scoringDefaults.positive),
+          marksNegative: safeNumber(question.marks_negative, scoringDefaults.negative),
+          subject: question.subject,
+          topic: question.topic,
+          difficulty: question.difficulty,
+        }] : [];
+      }),
+      Object.values(responseMap).map((response) => ({
+        questionId: response.question_id,
+        userAnswer: response.user_answer,
+        isAttempted: response.is_attempted,
+        timeSpentSeconds: response.time_spent_seconds,
+      })),
+    );
+    const {
+      rawTotalScore: totalScore,
+      maxScore,
+      attempted,
+      correct,
+      incorrect,
+      unanswered,
+      positiveMarks,
+      negativeMarks,
+      accuracy,
+      attemptPercentage,
+    } = score;
+    const subjectBreakdown = score.subjectBreakdown as Record<string, SubjectBreakdown>;
+    const topicBreakdown = score.topicBreakdown as Record<string, TopicBreakdown>;
+    const wrongQuestionIds = score.perQuestion
+      .filter((row) => row.outcome === "wrong")
+      .map((row) => row.questionId);
+    const responseUpserts: Record<string, unknown>[] = score.perQuestion.map((row) => ({
+      question_id: row.questionId,
+      is_attempted: row.isAttempted,
+      is_correct: row.isCorrect,
+      time_spent_seconds: row.timeSpentSeconds,
+    }));
+    const timeEntries: TimeTrap[] = score.perQuestion
+      .filter((row) => row.timeSpentSeconds > 0)
+      .map((row) => ({ question_id: row.questionId, time_seconds: row.timeSpentSeconds }));
 
     const avgTime =
       timeEntries.length > 0
@@ -716,15 +490,9 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
     const timeTrapThreshold = Math.max(avgTime * 3, 120);
     const timeTraps = timeEntries.filter((entry) => entry.time_seconds > timeTrapThreshold);
 
-    const accuracy = attempted > 0 ? Math.round((correct / attempted) * 100) : 0;
-    const attemptPercentage =
-      questionIds.length > 0 ? Math.round((attempted / questionIds.length) * 100) : 0;
-
-    // Negative marking is part of the exam contract. Do not clamp a poor
-    // attempt to zero or the result no longer reflects the configured score.
+    // Negative marking is part of the exam contract. Store raw total_score;
+    // TestResults clamps display via clampMockTestDisplayScore().
     const boundedTotalScore = totalScore;
-    const pctScore =
-      maxScore > 0 ? (boundedTotalScore / maxScore) * 100 : 0;
     // Do not fabricate a cohort percentile from a single-attempt score.
     const predictedPercentile = null;
     const rankStatus = "unavailable";
@@ -759,6 +527,7 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
           unanswered,
           positive_marks: positiveMarks,
           negative_marks: negativeMarks,
+          score_percentage: score.percentage,
           scoring_version: safeString(config.scoring_version, "gov_exam_snapshot_v1"),
         },
       },
@@ -787,15 +556,22 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
       p_algorithm_version: "mock_test_score_v1",
     });
 
-    if (claimResult.error) {
+    const completion = (claimResult.data ?? {}) as {
+      already_completed?: boolean;
+      error?: string;
+      code?: string;
+    };
+    if (claimResult.error || completion.error) {
       log(FN, "error", "claim_and_complete_test failed; refusing partial write", claimResult.error);
+      await releaseClaim();
       return errorResponse(
         "Could not finalize this test. Please retry — no partial result was saved.",
-        "TEST_FINALIZE_FAILED",
+        completion.code ?? "TEST_FINALIZE_FAILED",
         503,
         req,
       );
-    } else if ((claimResult.data as { already_completed?: boolean } | null)?.already_completed) {
+    } else if (completion.already_completed) {
+      claimedDb = null;
       const { data: existing } = await db
         .from("test_analyses")
         .select("*")
@@ -819,6 +595,7 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
 
       return successResponse(alreadyPayload, undefined, 200, req);
     } else {
+      claimedDb = null;
       const { data: analysisRow } = await db
         .from("test_analyses")
         .select("*")
@@ -856,6 +633,7 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
               user_id: userId,
               question_id: questionId,
               added_from_test_id: testId,
+              question_snapshot: frozenSnapshotByQuestion[questionId] ?? questionMap[questionId] ?? null,
               next_review_date: nextReviewDate,
               interval_days: 1,
               review_count: 0,
@@ -908,19 +686,10 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
           const question = questionMap[questionId];
           if (!question) continue;
           const topic = safeString(question.topic, "General");
-          const response = responseMap[questionId];
-          const isAttempted =
-            Boolean(response?.is_attempted) && !isEmptyAnswer(response?.user_answer);
-          const { correct: isCorrect } = scoreQuestion(
-            question,
-            response ?? {
-              question_id: questionId,
-              user_answer: null,
-              is_attempted: false,
-              time_spent_seconds: 0,
-            },
-          );
-          const timeSpent = Math.max(0, safeNumber(response?.time_spent_seconds, 0));
+          const scored = score.perQuestion.find((row) => row.questionId === questionId);
+          const isAttempted = Boolean(scored?.isAttempted);
+          const isCorrect = Boolean(scored?.isCorrect);
+          const timeSpent = Math.max(0, safeNumber(scored?.timeSpentSeconds, 0));
           let quality = 1;
           if (isAttempted && avgTimeForQuality > 0 && timeSpent > 0) {
             if (timeSpent < Math.max(8, avgTimeForQuality * 0.25)) quality = 0.55;
@@ -985,6 +754,7 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
 
     return successResponse(finalPayload, undefined, 200, req);
   } catch (err) {
+    await releaseClaim();
     if (err instanceof Response) return err;
     log(FN, "error", "Unhandled error", err instanceof Error ? err.message : "unknown");
     return errorResponse("Something went wrong. Please try again.", "INTERNAL_ERROR", 500, req);

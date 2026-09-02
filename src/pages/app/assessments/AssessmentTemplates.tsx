@@ -11,14 +11,11 @@ import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { supabase } from "@/lib/supabase/client";
 import { PAGE_SHELL, STACK_GRID } from "@/lib/ui/responsivePage";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
-import { ApiClientError } from "@/lib/api/apiClient";
 import { useAuthStore } from "@/store/authStore";
 import {
   assessmentStartIdempotencyKey,
-  isAssessmentStartErrorCode,
-  isRetryableAssessmentStartCode,
+  messageFromAssessmentStartError,
   userMessageForAssessmentError,
-  type AssessmentStartErrorCode,
   type AssessmentStartSuccess,
 } from "@/lib/assessments/assessmentStart";
 
@@ -38,33 +35,7 @@ type Template = {
 };
 
 function messageFromStartError(err: unknown): { text: string; retryable: boolean } {
-  if (err instanceof ApiClientError) {
-    const code = isAssessmentStartErrorCode(err.code) ? err.code : "ASSESSMENT_START_FAILED";
-    const details =
-      err.details && typeof err.details === "object"
-        ? (err.details as { details?: { requested_count?: number; available_count?: number } }).details
-        : undefined;
-    return {
-      text: userMessageForAssessmentError(code as AssessmentStartErrorCode, details),
-      retryable: isRetryableAssessmentStartCode(code),
-    };
-  }
-  if (err && typeof err === "object" && "message" in err) {
-    const code =
-      "details" in err && typeof (err as { details?: string }).details === "string"
-        ? (err as { details: string }).details
-        : "";
-    if (isAssessmentStartErrorCode(code)) {
-      return {
-        text: userMessageForAssessmentError(code),
-        retryable: isRetryableAssessmentStartCode(code),
-      };
-    }
-  }
-  return {
-    text: err instanceof Error ? err.message : userMessageForAssessmentError("ASSESSMENT_START_FAILED"),
-    retryable: true,
-  };
+  return messageFromAssessmentStartError(err);
 }
 
 export default function AssessmentTemplatesPage() {

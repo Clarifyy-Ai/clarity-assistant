@@ -56,6 +56,7 @@ import {
 import type { FeatureFlagId, ProfileRow } from "@/types";
 import { getPlanDisplayName } from "@/lib/constants/pricing";
 import { PRODUCT_NAMES, NAV_SECTION_LABELS } from "@/lib/constants/productNames";
+import { COMMUNITY_MODULE_LABEL } from "@/lib/community/moderation";
 import { assignLoginWithReturnTo } from "@/lib/auth/safeReturnTo";
 import { useIndiaRegion } from "@/hooks/useIndiaRegion";
 import { useGlobalStore } from "@/store/globalStore";
@@ -236,7 +237,7 @@ const NAV_SECTIONS: NavSection[] = [
         to: "/app/community",
         icon: Inbox,
         stealthIcon: Inbox,
-        label: "Q&A",
+        label: COMMUNITY_MODULE_LABEL,
       },
       {
         to: "/app/coding",

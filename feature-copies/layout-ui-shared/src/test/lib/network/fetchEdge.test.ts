@@ -1,4 +1,7 @@
 // fetchEdge — private-mode blocking, RPC/edge error handling, credit-refresh sync
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const mockGetSession = vi.fn();
@@ -62,7 +65,7 @@ afterEach(() => {
 });
 
 describe("fetchEdge — private-mode blocking", () => {
-  it("throws when private mode is enabled and function is not allowlisted", async () => {
+  it("throws when private mode is enabled and function is not allowlisted", { timeout: 15_000 }, async () => {
     mockGetPrivateMode.mockReturnValue(true);
     const { fetchEdge } = await import("@/lib/network/fetchEdge");
 
@@ -173,8 +176,21 @@ describe("fetchEdgeJson — RPC/edge error handling", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }));
     const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
 
-    await expect(fetchEdgeJson("search-exams", { q: "" })).resolves.toEqual({ ok: true });
-    expect(global.fetch).toHaveBeenCalledTimes(2);
+    await expect(fetchEdgeJson("get-exam-details", { examId: "e1" })).resolves.toEqual({ ok: true });
+    const edgeCalls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter((call) =>
+      String(call[0] ?? "").includes("get-exam-details"),
+    );
+    expect(edgeCalls).toHaveLength(2);
+  });
+
+  it("does not retry search-exams after Failed to fetch", async () => {
+    (global.fetch as any).mockRejectedValue(new TypeError("Failed to fetch"));
+    const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
+
+    await expect(fetchEdgeJson("search-exams", { q: "" })).rejects.toThrow(
+      /Couldn't reach the server/i,
+    );
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
   it("does not retry create-exam-paper after Failed to fetch", async () => {
@@ -243,5 +259,32 @@ describe("fetchEdgeJson — credit balance sync after edge calls", () => {
 
     await expect(fetchEdgeJson("deduct-credits", { action: "generate_hint" })).rejects.toThrow();
     expect(mockRefreshCredits).not.toHaveBeenCalled();
+  });
+});
+
+describe("fetchEdge request budget", () => {
+  it("times out a hung session probe instead of spinning forever", async () => {
+    mockGetSession.mockReturnValue(new Promise(() => {}));
+    const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
+    const { __resetSessionRefreshForTests } = await import(
+      "@/lib/focusRecovery/sessionRefresh"
+    );
+
+    await expect(
+      fetchEdgeJson("search-exams", { q: "ssc" }, { timeoutMs: 25 }),
+    ).rejects.toThrow(/timed out/i);
+    expect(global.fetch).not.toHaveBeenCalled();
+    __resetSessionRefreshForTests();
+  });
+});
+
+describe("fetchEdge allowlists", () => {
+  it("does not reference the ghost create-portal-session slug", () => {
+    const source = readFileSync(
+      path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../lib/network/fetchEdge.ts"),
+      "utf8",
+    );
+    expect(source).not.toContain("create-portal-session");
+    expect(source).toContain("create-billing-portal");
   });
 });

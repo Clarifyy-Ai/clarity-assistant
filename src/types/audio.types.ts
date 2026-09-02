@@ -193,13 +193,26 @@ export interface AudioError {
 
 // ── Audio Store State ─────────────────────────────────────────────
 
+/** ParakeetTranscriptionService provider status — use in overlay UI, not raw Deepgram. */
+export type TranscriptionProviderStatus =
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "paused"
+  | "unavailable"
+  | "error"
+  | "ended";
+
 export interface AudioStoreState {
   streams: AudioStreamState;
   levels: AudioLevelBuffer;
   diarization: DiarizationState;
   transcript: TranscriptState;
   vad_config: VADConfig;
+  /** @deprecated Prefer transcription_provider_status in overlay UI. */
   deepgram_status: DeepgramConnectionStatus;
+  transcription_provider_status: TranscriptionProviderStatus;
   token_state: DeepgramTokenState;
   mic_state: RuntimeMicState;
   pipeline_status: AudioPipelineStatus;

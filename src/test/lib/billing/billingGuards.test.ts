@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { CREDIT_PACK_DEFINITIONS } from "@/lib/constants/creditEconomics";
 
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 /**
  * Pure billing guard assertions that mirror Edge Function catalog rules.
  */
@@ -43,6 +47,12 @@ function isExamplePricePlaceholder(value: string): boolean {
   );
 }
 
+function rejectRazorpayTestKeyInProduction(appEnv: string, keyId: string): boolean {
+  const prod = appEnv === "production" || appEnv === "prod";
+  if (!prod) return true;
+  return !keyId.trim().startsWith("rzp_test_");
+}
+
 describe("billing guards", () => {
   it("rejects .env.example Stripe price IDs as placeholders", () => {
     expect(isExamplePricePlaceholder("price_starter_monthly")).toBe(true);
@@ -71,11 +81,27 @@ describe("billing guards", () => {
     expect(rejectTestModeInProduction("development", false)).toBe(true);
   });
 
+  it("rejects Razorpay test keys in production", () => {
+    expect(rejectRazorpayTestKeyInProduction("production", "rzp_test_abc")).toBe(false);
+    expect(rejectRazorpayTestKeyInProduction("production", "rzp_live_abc")).toBe(true);
+    expect(rejectRazorpayTestKeyInProduction("development", "rzp_test_abc")).toBe(true);
+  });
+
   it("credit pack definitions are positive bounded amounts", () => {
     expect(CREDIT_PACK_DEFINITIONS.length).toBeGreaterThan(0);
     for (const pack of CREDIT_PACK_DEFINITIONS) {
       expect(pack.credits).toBeGreaterThan(0);
       expect(pack.credits).toBeLessThanOrEqual(500);
     }
+  });
+
+  it("billingConfig requires Razorpay webhook secret in production", () => {
+    const src = fs.readFileSync(
+      path.join(root, "supabase/functions/_shared/billingConfig.ts"),
+      "utf8",
+    );
+    expect(src).toContain("requireRazorpay && environment === \"production\"");
+    expect(src).toContain("RAZORPAY_WEBHOOK_SECRET");
+    expect(src).toContain("productionForbidsTestPrefix");
   });
 });

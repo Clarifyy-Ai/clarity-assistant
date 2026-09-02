@@ -2,48 +2,29 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Loader2, Search } from "lucide-react";
 import {
   mapGovSearchError,
-  searchGovExams,
   type GovExamSearchResult,
 } from "@/lib/gov-exam/api";
+import {
+  GOV_SEARCH_WATCHDOG_MS,
+  classifyGovSearchFailure,
+  inflightKeyFor,
+  isSearchRateLimited,
+  markSearchRateLimited,
+  readSearchCache,
+  resetGovSearchLifecycleForTests,
+  runSharedGovSearch,
+  searchUiStateFromResults,
+  writeSearchCache,
+} from "@/lib/gov-exam/searchLifecycle";
 import { formatBankCoverage } from "@/lib/gov-exam/bankReadiness";
 import { Button } from "@/components/ui/Button";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { debugLog161d95 } from "@/lib/debug/debugLog161d95";
 
 const DEBOUNCE_MS = 280;
-const SEARCH_CACHE_TTL_MS = 60_000;
 const MAX_QUERY_LENGTH = 120;
-const IDENTICAL_INFLIGHT_WINDOW_MS = 800;
-const RATE_LIMIT_COOLDOWN_MS = 8_000;
 
-type SearchCacheEntry = {
-  q: string;
-  family: string;
-  results: GovExamSearchResult[];
-  at: number;
-};
-
-type InFlightEntry = {
-  promise: Promise<{ results: GovExamSearchResult[] }>;
-  at: number;
-};
-
-/** Survives remounts so browse/search does not flash Searching… after a good hit. */
-let searchResultCache: SearchCacheEntry | null = null;
-/** Coalesce identical q+family requests so Abort storms do not burn rate-limit quota. */
-const inFlightSearches = new Map<string, InFlightEntry>();
-let rateLimitUntil = 0;
-
-function readSearchCache(q: string, family: string | undefined): GovExamSearchResult[] | null {
-  const entry = searchResultCache;
-  if (!entry) return null;
-  if (Date.now() - entry.at > SEARCH_CACHE_TTL_MS) return null;
-  if (entry.q !== q || entry.family !== (family || "")) return null;
-  return entry.results;
-}
-
-function writeSearchCache(q: string, family: string | undefined, results: GovExamSearchResult[]) {
-  searchResultCache = { q, family: family || "", results, at: Date.now() };
-}
+export { resetGovSearchLifecycleForTests };
 
 export type ExamSearchComboboxProps = {
   value: string;
@@ -65,6 +46,8 @@ export type ExamSearchComboboxProps = {
   initialQuery?: string;
   /** When this changes, the input query is replaced (e.g. recent chips). */
   syncQuery?: string;
+  /** Increment to force a re-search for the current query (e.g. hub retry). */
+  searchNonce?: number;
 };
 
 function examOptionId(listId: string, examId: string): string {
@@ -98,6 +81,18 @@ function examStageLabel(exam: GovExamSearchResult): string | null {
   return null;
 }
 
+function examAliasesLabel(exam: GovExamSearchResult): string | null {
+  const aliases = (exam.aliases ?? [])
+    .map((alias) => alias.trim())
+    .filter(
+      (alias) =>
+        alias &&
+        alias.toLowerCase() !== exam.name.trim().toLowerCase() &&
+        alias.toLowerCase() !== exam.shortName?.trim().toLowerCase(),
+    );
+  return aliases.length ? aliases.slice(0, 4).join(", ") : null;
+}
+
 export function ExamSearchCombobox({
   value,
   onSelect,
@@ -111,6 +106,7 @@ export function ExamSearchCombobox({
   browseWhenEmpty = true,
   initialQuery = "",
   syncQuery,
+  searchNonce = 0,
 }: ExamSearchComboboxProps): React.ReactElement {
   const listId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -122,6 +118,7 @@ export function ExamSearchCombobox({
   const [activeIndex, setActiveIndex] = useState(-1);
   const [picked, setPicked] = useState<GovExamSearchResult | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const inflightKeyRef = useRef<string | null>(null);
   const reqIdRef = useRef(0);
   const resultsRef = useRef<GovExamSearchResult[]>([]);
   resultsRef.current = results;
@@ -164,13 +161,14 @@ export function ExamSearchCombobox({
 
   const runSearch = useCallback(
     async (q: string) => {
-      abortRef.current?.abort();
       const ac = new AbortController();
-      abortRef.current = ac;
       const reqId = ++reqIdRef.current;
       const trimmed = q.trim().slice(0, MAX_QUERY_LENGTH);
       const notify = onResultsChangeRef.current;
       if (trimmed.length === 1) {
+        abortRef.current?.abort();
+        abortRef.current = ac;
+        inflightKeyRef.current = null;
         setResults([]);
         setState("idle");
         setError(null);
@@ -179,16 +177,23 @@ export function ExamSearchCombobox({
         return;
       }
       if (!browseWhenEmpty && !trimmed) {
+        abortRef.current?.abort();
+        abortRef.current = ac;
+        inflightKeyRef.current = null;
         setResults([]);
         setState("idle");
         notify?.([], { state: "idle", error: null, query: "" });
         return;
       }
       const cacheKey = trimmed.length >= 2 ? trimmed : "";
-      const familyKey = familyRef.current || "";
-      const inflightKey = `${cacheKey}::${familyKey}`;
-      // Only soft-refresh from a cache entry for THIS query — never reuse
-      // resultsRef from a different search (that caused stuck spinners / stale cards).
+      const nextKey = inflightKeyFor(cacheKey, familyRef.current);
+      // Abort stale queries only. Reusing the same q+family must not cancel
+      // the shared in-flight request (identical-key remount / nonce retry).
+      if (inflightKeyRef.current !== nextKey) {
+        abortRef.current?.abort();
+      }
+      abortRef.current = ac;
+      inflightKeyRef.current = nextKey;
       const cached = readSearchCache(cacheKey, familyRef.current);
       const softRefresh = Boolean(cached && cached.length > 0);
       if (!softRefresh) {
@@ -204,7 +209,7 @@ export function ExamSearchCombobox({
         }
       }
 
-      if (Date.now() < rateLimitUntil) {
+      if (isSearchRateLimited()) {
         const mapped = mapGovSearchError({ code: "RATE_LIMITED", status: 429 });
         setResults([]);
         setState("error");
@@ -213,41 +218,70 @@ export function ExamSearchCombobox({
         return;
       }
 
+      let timedOut = false;
+      const applyTimeoutUi = () => {
+        setResults([]);
+        setState("error");
+        setError("Search timed out. Please try again.");
+        notify?.([], {
+          state: "error",
+          error: "Search timed out. Please try again.",
+          query: trimmed,
+        });
+      };
+      const watchdog = window.setTimeout(() => {
+        if (reqId !== reqIdRef.current) return;
+        timedOut = true;
+        if (!ac.signal.aborted) ac.abort();
+        // Settle immediately — a hung fetch/auth probe may never reject.
+        applyTimeoutUi();
+      }, GOV_SEARCH_WATCHDOG_MS);
+
       try {
-        let data: { results: GovExamSearchResult[] };
-        const existing = inFlightSearches.get(inflightKey);
-        if (existing && Date.now() - existing.at < IDENTICAL_INFLIGHT_WINDOW_MS) {
-          data = await existing.promise;
-        } else {
-          const promise = searchGovExams(
-            {
-              q: trimmed.length >= 2 ? trimmed : "",
-              family: familyRef.current || undefined,
-            },
-            { signal: ac.signal },
-          ).finally(() => {
-            const cur = inFlightSearches.get(inflightKey);
-            if (cur?.promise === promise) inFlightSearches.delete(inflightKey);
-          });
-          inFlightSearches.set(inflightKey, { promise, at: Date.now() });
-          data = await promise;
-        }
-        if (reqId !== reqIdRef.current) {
+        const data = await runSharedGovSearch(
+          {
+            q: trimmed.length >= 2 ? trimmed : "",
+            family: familyRef.current || undefined,
+          },
+          { signal: ac.signal },
+        );
+        if (reqId !== reqIdRef.current || timedOut) {
           return;
         }
         if (ac.signal.aborted) {
-          setState("idle");
-          setError(null);
-          notify?.(resultsRef.current, {
-            state: "idle",
-            error: null,
-            query: trimmed,
+          const settled = classifyGovSearchFailure({
+            err: new Error("aborted"),
+            superseded: false,
+            currentAborted: true,
+            timedOut,
           });
+          if (settled.action === "error") {
+            setResults([]);
+            setState("error");
+            setError(settled.message);
+            notify?.([], { state: "error", error: settled.message, query: trimmed });
+          } else if (settled.action === "idle") {
+            setState("idle");
+            setError(null);
+            notify?.(resultsRef.current, {
+              state: "idle",
+              error: null,
+              query: trimmed,
+            });
+          }
           return;
         }
         writeSearchCache(cacheKey, familyRef.current, data.results);
         setResults(data.results);
-        const nextState = data.results.length === 0 ? "empty" : "idle";
+        const nextState = searchUiStateFromResults(data.results);
+        // #region agent log
+        debugLog161d95({
+          hypothesisId: "H1",
+          location: "ExamSearchCombobox.tsx:runSearch:ok",
+          message: "gov_search_terminal",
+          data: { query: trimmed.slice(0, 80), resultCount: data.results.length, nextState },
+        });
+        // #endregion
         setState(nextState);
         setActiveIndex(data.results.length > 0 ? 0 : -1);
         notify?.(data.results, {
@@ -256,14 +290,18 @@ export function ExamSearchCombobox({
           query: trimmed,
         });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err ?? "");
         const superseded = reqId !== reqIdRef.current;
         const aborted = ac.signal.aborted;
-        const cancelMsg = /cancelled|aborted/i.test(msg);
+        const settled = classifyGovSearchFailure({
+          err,
+          superseded: superseded || timedOut,
+          currentAborted: aborted,
+          timedOut,
+        });
         // Newer request owns UI state — do not clear its loading spinner.
-        if (superseded) return;
+        if (settled.action === "ignore") return;
         // Abort/cancel of the *current* request must not leave Searching… (DEF-001).
-        if (aborted || cancelMsg) {
+        if (settled.action === "idle") {
           setState("idle");
           setError(null);
           notify?.(resultsRef.current, {
@@ -275,21 +313,40 @@ export function ExamSearchCombobox({
         }
         // Never keep a stale / fake list after a search failure (e.g. 503).
         setResults([]);
-        const mapped = mapGovSearchError(err);
-        if (mapped.code === "RATE_LIMITED") {
-          rateLimitUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
+        if (settled.code === "RATE_LIMITED") {
+          markSearchRateLimited();
         }
         setState("error");
-        setError(mapped.message);
+        setError(settled.message);
+        // #region agent log
+        debugLog161d95({
+          hypothesisId: "H1",
+          location: "ExamSearchCombobox.tsx:runSearch:error",
+          message: "gov_search_error",
+          data: {
+            query: trimmed.slice(0, 80),
+            code: settled.code,
+            status: (err as { status?: number })?.status ?? null,
+            message: settled.message.slice(0, 160),
+          },
+        });
+        // #endregion
         notify?.([], {
           state: "error",
-          error: mapped.message,
+          error: settled.message,
           query: trimmed,
         });
+      } finally {
+        window.clearTimeout(watchdog);
       }
     },
     [browseWhenEmpty],
   );
+
+  useEffect(() => {
+    if (searchNonce <= 0) return;
+    void runSearch(typeof syncQuery === "string" ? syncQuery : query);
+  }, [searchNonce, syncQuery, query, runSearch]);
 
   useEffect(() => {
     const t = window.setTimeout(() => {
@@ -449,6 +506,7 @@ export function ExamSearchCombobox({
               const category = examCategoryLabel(exam);
               const stage = examStageLabel(exam);
               const verified = examVerificationLabel(exam);
+              const aliases = examAliasesLabel(exam);
               const approved = bank?.approvedPublicCount;
               return (
                 <button
@@ -477,6 +535,11 @@ export function ExamSearchCombobox({
                     {stage ? ` · ${stage}` : ""}
                     {exam.languages?.length ? ` · ${exam.languages.join("/")}` : ""}
                   </p>
+                  {aliases && (
+                    <p className="text-xs text-muted-foreground truncate">
+                      Also known as: {aliases}
+                    </p>
+                  )}
                   <p className="text-xs mt-0.5 text-muted-foreground">
                     {typeof approved === "number"
                       ? bank

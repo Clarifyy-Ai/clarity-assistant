@@ -35,8 +35,12 @@ describe("gov exam family allowlist", () => {
     for (const family of GOV_EXAM_FAMILIES) {
       expect(resolveFamily(family)).toEqual({ ok: true, family });
     }
+    expect(GOV_EXAM_FAMILIES).toContain("academic");
+    expect(GOV_EXAM_FAMILIES).toContain("professional");
     expect(resolveFamily("UPSC")).toEqual({ ok: true, family: "upsc" });
     expect(resolveFamily("  banking  ")).toEqual({ ok: true, family: "banking" });
+    expect(resolveFamily("academic")).toEqual({ ok: true, family: "academic" });
+    expect(resolveFamily("Professional")).toEqual({ ok: true, family: "professional" });
   });
 
   it("treats missing or empty family as all families", () => {
@@ -248,6 +252,13 @@ describe("search-exams edge contract", () => {
     expect(EDGE).toContain("results.map((r) =>");
     expect(EDGE).not.toContain("results.slice(0, 40)");
   });
+
+  it("bounds profile lookup and fails open so search is not blocked", () => {
+    expect(EDGE).toContain("withTimeout");
+    expect(EDGE).toContain("PROFILE_LOOKUP_TIMEOUT_MS");
+    expect(EDGE).toContain("indiaUserAfterProfileLookup");
+    expect(EDGE).toContain("profileLookup");
+  });
 });
 
 describe("client search mapping", () => {
@@ -288,5 +299,13 @@ describe("MockTestHub search states", () => {
     expect(COMBO).toContain("abortRef.current?.abort()");
     expect(COMBO).toContain("reqId !== reqIdRef.current");
     expect(COMBO).toContain("onResultsChangeRef");
+    expect(COMBO).toContain("classifyGovSearchFailure");
+    expect(COMBO).toContain("GOV_SEARCH_WATCHDOG_MS");
+  });
+
+  it("keeps profile recovery separate from the search spinner", () => {
+    expect(HUB).toContain("RECOVERY_REQUIRED");
+    expect(HUB).toContain("retryAccountLoad");
+    expect(HUB).not.toContain("if (!isProfileLoaded) setSearching(true)");
   });
 });

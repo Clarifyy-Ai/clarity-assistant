@@ -85,10 +85,10 @@ export function buildAuthRedirectUrl(
 
   if (configuredParsed) {
     const configuredIsLocalhost = isLocalhostUrl(configured);
-    // A localhost VITE_APP_URL is a dev convenience — never honor it in prod.
-    if (!(isProduction && configuredIsLocalhost)) {
-      return `${stripTrailingSlashes(configuredParsed.toString())}${normalizedPath}`;
+    if (isProduction && configuredIsLocalhost) {
+      return `${stripTrailingSlashes(productionFallbackUrl)}${normalizedPath}`;
     }
+    return `${stripTrailingSlashes(configuredParsed.toString())}${normalizedPath}`;
   } else if (isProduction) {
     // Missing/invalid VITE_APP_URL in a production build: never fall back to
     // window.location.origin here, since a misconfigured preview deploy can

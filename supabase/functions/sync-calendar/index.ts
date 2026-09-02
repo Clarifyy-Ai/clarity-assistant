@@ -26,6 +26,7 @@ import {
   fetchGoogleAccountProfile,
   googleCalendarWriteEvent,
   googleCalendarDeleteEvent,
+  googleCalendarFetch,
   mapGoogleCalendarHttpStatus,
   GOOGLE_CALENDAR_OAUTH_SCOPES,
   type GoogleCalendarDomainCode,
@@ -240,7 +241,7 @@ async function fetchEvents(
   url.searchParams.set("orderBy",       "startTime");
   url.searchParams.set("maxResults",    "50");
 
-  const res = await fetch(url.toString(), {
+  const res = await googleCalendarFetch(url.toString(), {
     headers: { Authorization: `Bearer ${token}` },
   });
 

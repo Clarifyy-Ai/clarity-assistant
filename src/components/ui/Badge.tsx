@@ -53,8 +53,9 @@ export function Badge({
   className,
   onClick,
 }: BadgeProps) {
+  const label = typeof children === "string" ? children : undefined;
   const classes = cn(
-    "inline-flex items-center gap-1.5 border rounded-full font-medium",
+    "inline-flex items-center gap-1.5 border rounded-full font-medium min-w-0 max-w-full",
     size === "sm" ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-xs",
     VARIANT_STYLES[variant],
     onClick && [
@@ -64,23 +65,29 @@ export function Badge({
     className,
   );
 
+  const text = (
+    <span className="min-w-0 max-w-full truncate" title={label}>
+      {children}
+    </span>
+  );
+
   if (onClick) {
     return (
-      <button type="button" onClick={onClick} className={classes}>
+      <button type="button" onClick={onClick} className={classes} title={label}>
         {dot && (
           <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", DOT_COLORS[variant])} aria-hidden="true" />
         )}
-        {children}
+        {text}
       </button>
     );
   }
 
   return (
-    <span className={classes}>
+    <span className={classes} title={label}>
       {dot && (
         <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", DOT_COLORS[variant])} aria-hidden="true" />
       )}
-      {children}
+      {text}
     </span>
   );
 }

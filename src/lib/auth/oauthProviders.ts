@@ -18,7 +18,7 @@ const KNOWN_PROVIDERS = new Set<OAuthProviderId>([
 // lists providers that are enabled in the Supabase Auth dashboard.
 function parseProviderList(raw: string | undefined): OAuthProviderId[] {
   if (raw === undefined) {
-    return ["google"];
+    return [];
   }
 
   const trimmed = raw.trim();
@@ -65,22 +65,80 @@ export function isOAuthCancelledError(
   );
 }
 
-/** True when Google/GitHub/etc. is not enabled in the Auth dashboard. */
+function buildOAuthErrorHaystack(
+  ...parts: Array<string | null | undefined>
+): string {
+  return parts
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" ")
+    .toLowerCase();
+}
+
+/** True when Google/GitHub/etc. is not enabled or misconfigured for this deployment. */
 export function isOAuthNotConfiguredError(
   error: string | null | undefined,
   description?: string | null,
   errorCode?: string | null,
 ): boolean {
-  const haystack = [error, description, errorCode]
-    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-    .join(" ")
-    .toLowerCase();
+  const haystack = buildOAuthErrorHaystack(error, description, errorCode);
   return (
     haystack.includes("provider is not enabled") ||
     haystack.includes("unsupported provider") ||
     haystack.includes("oauth_provider_not_found") ||
     haystack.includes("provider_disabled") ||
-    haystack.includes("validation_failed") && haystack.includes("provider")
+    haystack.includes("redirect_uri_mismatch") ||
+    haystack.includes("redirect url") ||
+    haystack.includes("redirect_to") ||
+    haystack.includes("invalid redirect") ||
+    haystack.includes("access blocked") ||
+    haystack.includes("oauth client") ||
+    haystack.includes("validation_failed")
+  );
+}
+
+/** True when an OAuth preflight (`skipBrowserRedirect`) proves the provider is broken. */
+export function isOAuthProbeMisconfiguredError(error: unknown): boolean {
+  if (!error) {
+    return false;
+  }
+
+  if (typeof error === "string") {
+    return isOAuthNotConfiguredError(error);
+  }
+
+  if (typeof error !== "object") {
+    return false;
+  }
+
+  const err = error as {
+    message?: string;
+    msg?: string;
+    error_description?: string;
+    code?: string;
+    error_code?: string;
+    status?: number;
+  };
+
+  return isOAuthNotConfiguredError(
+    err.message ?? err.msg ?? null,
+    err.error_description ?? null,
+    err.code ?? err.error_code ?? null,
+  );
+}
+
+/** True when the provider returned a state/PKCE mismatch (user should retry). */
+export function isOAuthStateMismatchError(
+  error: string | null | undefined,
+  description?: string | null,
+  errorCode?: string | null,
+): boolean {
+  const haystack = buildOAuthErrorHaystack(error, description, errorCode);
+  return (
+    haystack.includes("state mismatch") ||
+    haystack.includes("invalid state") ||
+    haystack.includes("bad_oauth_state") ||
+    haystack.includes("oauth state") ||
+    (haystack.includes("state") && haystack.includes("mismatch"))
   );
 }
 

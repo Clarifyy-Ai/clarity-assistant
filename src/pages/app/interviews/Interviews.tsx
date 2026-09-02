@@ -18,8 +18,10 @@ import { cn } from "@/lib/utils";
 import {
   getCurrentRoundDate,
   getCurrentRoundStatus,
+  isInterviewScheduledToday,
 } from "@/lib/interviews/roundHelpers";
-import { format, isToday, isFuture } from "date-fns";
+import { teardownInterviewSideEffects } from "@/lib/interviews/interviewTeardown";
+import { format, isFuture } from "date-fns";
 import { toast } from "sonner";
 import { useSwipeAction } from "@/hooks/useSwipeAction";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
@@ -44,8 +46,9 @@ export default function Interviews() {
   useEffect(() => { scheduler.reload(); }, []);
 
   async function handleCalendarAction() {
-    if (!calendar.syncAvailable) {
-      toast.info("Google Calendar sync isn't configured yet — coming soon.");
+    if (calendar.isCheckingConnection || calendar.isProbingSync) return;
+    if (calendar.connectionStatus === "not_configured") {
+      toast.info("Google Calendar sync isn't configured on this deployment.");
       return;
     }
     if (!calendar.isConnected) {
@@ -67,8 +70,8 @@ export default function Interviews() {
     const d = new Date(scheduledAt);
     // Active lists hide cancelled; history remains under the Cancelled tab.
     if (filter === "all")       return status !== "cancelled";
-    if (filter === "upcoming")  return isFuture(d) && !isToday(d) && status !== "cancelled";
-    if (filter === "today")     return isToday(d) && status !== "cancelled";
+    if (filter === "upcoming")  return isFuture(d) && !isInterviewScheduledToday(iv) && status !== "cancelled";
+    if (filter === "today")     return isInterviewScheduledToday(iv) && status !== "cancelled";
     if (filter === "completed") return status === "completed";
     if (filter === "cancelled") return status === "cancelled";
     return true;
@@ -99,21 +102,27 @@ export default function Interviews() {
               size="sm"
               onClick={handleCalendarAction}
               loading={calendar.isSyncing || calendar.isProbingSync}
-              disabled={calendar.isCheckingConnection || calendar.isProbingSync}
+              disabled={
+                calendar.connectionStatus === "not_configured" ||
+                calendar.isCheckingConnection ||
+                calendar.isProbingSync
+              }
               leftIcon={
                 calendar.isConnected && calendar.syncAvailable
                   ? <RefreshCw className="w-3.5 h-3.5" />
                   : <CalendarDays className="w-3.5 h-3.5" />
               }
               title={
-                !calendar.syncAvailable
+                calendar.connectionStatus === "not_configured"
                   ? "Calendar sync not configured"
                   : calendar.lastSynced
                     ? `Last synced ${format(calendar.lastSynced, "MMM d, h:mm a")}`
                     : undefined
               }
             >
-              {!calendar.syncAvailable
+              {calendar.isCheckingConnection || calendar.isProbingSync
+                ? "Checking…"
+                : !calendar.syncAvailable && calendar.connectionStatus === "not_configured"
                 ? "Calendar: Not configured"
                 : calendar.isConnected
                   ? "Sync calendar"
@@ -158,7 +167,7 @@ export default function Interviews() {
             {f}
             {f === "today" && store.interviews.some(
               (iv) =>
-                isToday(new Date(getCurrentRoundDate(iv))) &&
+                isInterviewScheduledToday(iv) &&
                 getCurrentRoundStatus(iv) !== "cancelled",
             ) && (
               <span className="ml-1.5 w-1.5 h-1.5 bg-primary rounded-full inline-block" />
@@ -217,6 +226,21 @@ export default function Interviews() {
         variant="destructive"
         onConfirm={async () => {
           if (!pendingDeleteId) return;
+          const iv = store.interviews.find((row) => row.id === pendingDeleteId);
+          const teardown = await teardownInterviewSideEffects(
+            {
+              interviewId: pendingDeleteId,
+              companyName: iv?.company_name,
+              roleTitle: iv?.role_title,
+              calendarEventId: (iv as { calendar_event_id?: string | null })?.calendar_event_id,
+            },
+            {
+              calendarSyncAvailable: calendar.syncAvailable,
+              calendarConnected: calendar.isConnected,
+              deleteCalendarEvent: calendar.deleteEvent,
+            },
+          );
+          if (teardown.calendarWarning) toast.message(teardown.calendarWarning);
           await scheduler.deleteInterview(pendingDeleteId);
           setPendingDeleteId(null);
         }}
@@ -241,7 +265,7 @@ function InterviewRow({
   const status    = getCurrentRoundStatus(iv);
   const round     = iv.next_round ?? iv.rounds?.[0] ?? null;
   const d         = new Date(getCurrentRoundDate(iv));
-  const isNow     = isToday(d);
+  const isNow     = isInterviewScheduledToday(iv);
   const isCancelled = status === "cancelled";
   const durationMinutes = round?.duration_minutes ?? iv.duration_minutes;
   const interviewerName = round?.interviewer_name ?? iv.interviewer_name;

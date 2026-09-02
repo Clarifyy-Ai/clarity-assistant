@@ -3,6 +3,7 @@ import { E2E_TEST_USER, loginAsTestUser } from "./helpers/auth-flow";
 
 const COMPANY = "Acme Corp";
 const COMPANY_PATH = `/app/companies/acme-corp?name=${encodeURIComponent(COMPANY)}`;
+const JOB_ID = "11111111-1111-4111-8111-111111111111";
 
 const BRIEF = {
   overview:
@@ -20,10 +21,12 @@ type EdgeOutcome =
   | { kind: "success"; delayMs?: number }
   | { kind: "provider_unavailable" }
   | { kind: "insufficient_credits" }
-  | { kind: "persist_failure" };
+  | { kind: "persist_failure" }
+  | { kind: "long_latency" };
 
 type Harness = {
   edgeCalls: () => number;
+  startCalls: () => number;
   idempotencyKeys: () => string[];
   setOutcome: (outcome: EdgeOutcome) => void;
   savedRow: () => Record<string, unknown> | null;
@@ -39,6 +42,15 @@ function corsHeaders(route: Route): Record<string, string> {
   };
 }
 
+function json(route: Route, body: unknown, status = 200) {
+  return route.fulfill({
+    status,
+    contentType: "application/json",
+    headers: corsHeaders(route),
+    body: JSON.stringify(body),
+  });
+}
+
 /**
  * Routes registered here win over the shared Supabase mock because Playwright
  * evaluates the most recently registered handler first.
@@ -49,79 +61,44 @@ async function installCompanyResearchHarness(
 ): Promise<Harness> {
   let outcome = initialOutcome;
   let edgeCalls = 0;
+  let startCalls = 0;
   const idempotencyKeys: string[] = [];
   let savedRow: Record<string, unknown> | null = null;
+  let jobStatus = "queued";
+  let jobError: { code: string; message: string } | null = null;
+  let jobBrief: typeof BRIEF | null = null;
+  let startedAt = 0;
 
-  await page.route("**/rest/v1/company_research*", async (route) => {
-    if (route.request().method() !== "GET") {
-      // The client must never write this table — the Edge Function owns it.
-      return route.fulfill({
-        status: 403,
-        contentType: "application/json",
-        headers: corsHeaders(route),
-        body: JSON.stringify({ message: "client writes are not allowed" }),
-      });
+  const settleJob = () => {
+    if (jobStatus !== "queued" && jobStatus !== "processing") return;
+    const waitMs = outcome.kind === "long_latency" ? 2_400 : outcome.kind === "success" && outcome.delayMs ? outcome.delayMs : 200;
+    if (Date.now() - startedAt < waitMs) {
+      jobStatus = "processing";
+      return;
     }
-    return route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      headers: corsHeaders(route),
-      body: JSON.stringify(savedRow ?? null),
-    });
-  });
-
-  await page.route("**/functions/v1/company-research", async (route) => {
-    if (route.request().method() === "OPTIONS") {
-      return route.fulfill({ status: 204, headers: corsHeaders(route), body: "" });
-    }
-    edgeCalls += 1;
-    const key = route.request().headers()["x-idempotency-key"];
-    if (key) idempotencyKeys.push(key);
-
-    if (outcome.kind === "insufficient_credits") {
-      return route.fulfill({
-        status: 402,
-        contentType: "application/json",
-        headers: corsHeaders(route),
-        body: JSON.stringify({
-          error: "You need 12 credits, but only 2 are available.",
-          code: "INSUFFICIENT_CREDITS",
-          balance: 2,
-          required: 12,
-        }),
-      });
-    }
-
     if (outcome.kind === "provider_unavailable") {
-      return route.fulfill({
-        status: 503,
-        contentType: "application/json",
-        headers: corsHeaders(route),
-        body: JSON.stringify({
-          success: false,
-          error: "Company research is temporarily unavailable. Your credits were not charged.",
-          code: "PROVIDER_UNAVAILABLE",
-        }),
-      });
+      jobStatus = "failed";
+      jobError = {
+        code: "PROVIDER_UNAVAILABLE",
+        message: "Company research is temporarily unavailable. Your credits were not charged.",
+      };
+      jobBrief = null;
+      savedRow = null;
+      return;
     }
-
     if (outcome.kind === "persist_failure") {
-      return route.fulfill({
-        status: 503,
-        contentType: "application/json",
-        headers: corsHeaders(route),
-        body: JSON.stringify({
-          success: false,
-          error: "Research was generated, but we couldn't save it. Please retry.",
-          code: "DATABASE_UNAVAILABLE",
-        }),
-      });
+      jobStatus = "failed";
+      jobError = {
+        code: "DATABASE_FAILURE",
+        message: "Research was generated, but we couldn't save it. Please retry.",
+      };
+      jobBrief = null;
+      savedRow = null;
+      return;
     }
-
-    if (outcome.delayMs) {
-      await new Promise((resolve) => setTimeout(resolve, outcome.delayMs));
-    }
-
+    jobStatus = "completed";
+    jobError = null;
+    jobBrief = BRIEF;
     savedRow = {
       id: "e2e-company-research-1",
       user_id: E2E_TEST_USER.id,
@@ -134,22 +111,132 @@ async function installCompanyResearchHarness(
       raw_data: BRIEF,
       created_at: new Date().toISOString(),
     };
+  };
 
-    return route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      headers: corsHeaders(route),
-      body: JSON.stringify({
+  await page.route("**/rest/v1/company_research*", async (route) => {
+    const url = route.request().url();
+    if (url.includes("company_research_jobs")) {
+      if (route.request().method() !== "GET") {
+        return json(route, { message: "client writes are not allowed" }, 403);
+      }
+      settleJob();
+      return json(route, {
+        id: JOB_ID,
+        status: jobStatus,
+        progress_stage: jobStatus,
+        research_id: savedRow?.id ?? null,
+        brief: jobBrief,
+        source: jobStatus === "completed" ? "ai" : null,
+        error_code: jobError?.code ?? null,
+        error_message: jobError?.message ?? null,
+        retryable: jobStatus !== "completed",
+        credits_released_at: jobStatus === "failed" ? new Date().toISOString() : null,
+      });
+    }
+    if (route.request().method() !== "GET") {
+      return json(route, { message: "client writes are not allowed" }, 403);
+    }
+    return json(route, savedRow ?? null);
+  });
+
+  await page.route("**/functions/v1/company-research", async (route) => {
+    if (route.request().method() === "OPTIONS") {
+      return route.fulfill({ status: 204, headers: corsHeaders(route), body: "" });
+    }
+    edgeCalls += 1;
+    const key = route.request().headers()["x-idempotency-key"];
+    let body: Record<string, unknown> = {};
+    try {
+      const parsed = route.request().postDataJSON();
+      if (parsed && typeof parsed === "object") body = parsed as Record<string, unknown>;
+    } catch {
+      body = {};
+    }
+    const action = String(body.action ?? "start");
+
+    if (action === "status") {
+      settleJob();
+      return json(route, {
         success: true,
-        id: savedRow.id,
-        persisted: true,
-        brief: BRIEF,
-      }),
-    });
+        data: {
+          jobId: JOB_ID,
+          status: jobStatus,
+          persisted: jobStatus === "completed",
+          brief: jobBrief,
+          errorCode: jobError?.code ?? null,
+          errorMessage: jobError?.message ?? null,
+          retryable: true,
+        },
+      });
+    }
+
+    if (action === "cancel") {
+      jobStatus = "cancelled";
+      jobError = { code: "CANCELLED", message: "Brief generation was cancelled. Credits were not charged." };
+      jobBrief = null;
+      savedRow = null;
+      return json(route, {
+        success: true,
+        data: { jobId: JOB_ID, status: "cancelled", errorCode: "CANCELLED", retryable: true },
+      });
+    }
+
+    if (action === "process") {
+      jobStatus = jobStatus === "queued" ? "processing" : jobStatus;
+      settleJob();
+      return json(route, {
+        success: true,
+        data: { jobId: JOB_ID, status: jobStatus, accepted: true, async: true },
+      }, 202);
+    }
+
+    if (action === "retry") {
+      jobStatus = "queued";
+      jobError = null;
+      jobBrief = null;
+      savedRow = null;
+      startedAt = Date.now();
+      return json(route, {
+        success: true,
+        data: { jobId: JOB_ID, status: "queued", accepted: true, async: true, persisted: false },
+      }, 202);
+    }
+
+    startCalls += 1;
+    if (key) idempotencyKeys.push(key);
+
+    if (outcome.kind === "insufficient_credits") {
+      return json(route, {
+        error: "You need 12 credits, but only 2 are available.",
+        code: "INSUFFICIENT_CREDITS",
+        balance: 2,
+        required: 12,
+      }, 402);
+    }
+
+    jobStatus = "queued";
+    jobError = null;
+    jobBrief = null;
+    savedRow = null;
+    startedAt = Date.now();
+    settleJob();
+
+    return json(route, {
+      success: true,
+      data: {
+        jobId: JOB_ID,
+        status: jobStatus === "completed" ? "completed" : "queued",
+        accepted: true,
+        async: jobStatus !== "completed",
+        persisted: jobStatus === "completed",
+        brief: jobBrief,
+      },
+    }, jobStatus === "completed" ? 200 : 202);
   });
 
   return {
     edgeCalls: () => edgeCalls,
+    startCalls: () => startCalls,
     idempotencyKeys: () => [...idempotencyKeys],
     setOutcome: (next) => {
       outcome = next;
@@ -177,13 +264,12 @@ test.describe("Company research persistence", () => {
     await confirmGeneration(page);
 
     await expect(page.getByText(BRIEF.overview)).toBeVisible({ timeout: 20_000 });
-    expect(harness.edgeCalls()).toBe(1);
+    expect(harness.startCalls()).toBe(1);
     expect(harness.savedRow()).not.toBeNull();
 
-    // Reload reads the saved row by canonical identity — no second charge.
     await page.reload();
     await expect(page.getByText(BRIEF.overview)).toBeVisible({ timeout: 20_000 });
-    expect(harness.edgeCalls()).toBe(1);
+    expect(harness.startCalls()).toBe(1);
   });
 
   test("provider failure shows a retry instead of an empty brief", async ({ page }) => {
@@ -199,7 +285,6 @@ test.describe("Company research persistence", () => {
     ).toBeVisible({ timeout: 20_000 });
     await expect(page.getByText(BRIEF.overview)).toHaveCount(0);
 
-    // Retry succeeds and renders the persisted brief.
     harness.setOutcome({ kind: "success" });
     await page.getByRole("button", { name: /try again|retry/i }).first().click();
     await expect(page.getByText(BRIEF.overview)).toBeVisible({ timeout: 20_000 });
@@ -236,17 +321,15 @@ test.describe("Company research persistence", () => {
   }) => {
     const harness = await installCompanyResearchHarness(page, {
       kind: "success",
-      delayMs: 1_200,
+      delayMs: 400,
     });
 
     await page.goto(COMPANY_PATH);
     await confirmGeneration(page);
     await expect(page.getByText(BRIEF.overview)).toBeVisible({ timeout: 20_000 });
-    expect(harness.edgeCalls()).toBe(1);
+    expect(harness.startCalls()).toBe(1);
 
     const refresh = page.getByRole("button", { name: /refresh/i }).first();
-    // Dispatch both clicks in one browser turn so Playwright cannot serialize a
-    // second click after the request finishes (disabled-button auto-wait).
     await refresh.evaluate((el) => {
       (el as HTMLButtonElement).click();
       (el as HTMLButtonElement).click();
@@ -254,13 +337,25 @@ test.describe("Company research persistence", () => {
 
     await expect(page.getByText(BRIEF.overview)).toBeVisible({ timeout: 20_000 });
     await expect(refresh).toBeEnabled({ timeout: 20_000 });
-    expect(harness.edgeCalls()).toBe(2);
+    expect(harness.startCalls()).toBe(2);
     expect(harness.idempotencyKeys()).toHaveLength(2);
     for (const key of harness.idempotencyKeys()) {
       expect(key.length).toBeGreaterThan(8);
     }
-    // Same intent ⇒ same key, so a repeat that slips past the client guard is
-    // collapsed by the credit ledger instead of charging twice.
     expect(new Set(harness.idempotencyKeys()).size).toBe(1);
+  });
+
+  test("long provider latency still saves the brief without a hard timeout", async ({ page }) => {
+    const harness = await installCompanyResearchHarness(page, { kind: "long_latency" });
+
+    await page.goto(COMPANY_PATH);
+    await confirmGeneration(page);
+
+    await expect(page.getByRole("button", { name: /cancel generation/i })).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByText(BRIEF.overview)).toBeVisible({ timeout: 20_000 });
+    expect(harness.savedRow()).not.toBeNull();
+    expect(harness.startCalls()).toBe(1);
   });
 });

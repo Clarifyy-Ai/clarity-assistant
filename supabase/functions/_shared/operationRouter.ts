@@ -30,7 +30,8 @@ export type HybridOperation =
   | "analyze_test"
   | "prep_rephrase"
   | "prep_coding"
-  | "prep_project";
+  | "prep_project"
+  | "prep_raw_prompt";
 
 export type RouteDecision = {
   operation: HybridOperation;
@@ -255,6 +256,18 @@ const MATRIX: Record<HybridOperation, Omit<RouteDecision, "operation" | "canUseP
     pythonFallbackOnAiFailure: true,
     aiFallbackOnPythonFailure: false,
     creditCostKey: "project_builder",
+    durableJob: false,
+  },
+  // Answer Bank / raw_prompt — AI preferred, python outline, deterministic fallback
+  prep_raw_prompt: {
+    canCompleteDeterministically: true,
+    canCompleteWithDatabase: false,
+    isAiOptional: true,
+    isAiRequired: false,
+    preferredOrder: ["ai", "python", "deterministic"],
+    pythonFallbackOnAiFailure: true,
+    aiFallbackOnPythonFailure: false,
+    creditCostKey: "rephraser",
     durableJob: false,
   },
 };

@@ -38,3 +38,20 @@ export function normalizeCompanyName(name: string | null | undefined): string {
 export function isBlankCompanyName(name: string | null | undefined): boolean {
   return normalizeCompanyName(name).length === 0;
 }
+
+/**
+ * Stable idempotency key for a company brief request.
+ * Must stay in sync with `supabase/functions/_shared/companyIdentity.ts`.
+ */
+export function companyResearchIdempotencyKey(input: {
+  userId: string;
+  normalizedCompany: string;
+  force?: boolean;
+  now?: Date;
+}): string {
+  const slug = input.normalizedCompany.replace(/\s+/g, "-").replace(/[^A-Za-z0-9._:-]/g, "_");
+  const base = `company-research:${input.userId}:${slug}`;
+  if (!input.force) return base;
+  const bucket = (input.now ?? new Date()).toISOString().slice(0, 16);
+  return `${base}:force:${bucket}`;
+}

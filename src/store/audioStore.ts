@@ -15,6 +15,7 @@ import type {
   AudioPipelineStatus,
   AudioError,
   VADConfig,
+  TranscriptionProviderStatus,
 } from "@/types/audio.types";
 
 // ─────────────────────────────────────────────────────────────────
@@ -57,8 +58,9 @@ interface AudioStore extends AudioStoreState {
     last_question?: string | null;
   }) => void;
 
-  // Deepgram actions
+  // Deepgram / transcription provider actions
   setDeepgramStatus: (status: DeepgramConnectionStatus) => void;
+  setTranscriptionProviderStatus: (status: TranscriptionProviderStatus) => void;
   setTokenState: (state: DeepgramTokenState) => void;
   setMicState: (state: RuntimeMicState) => void;
   setPipelineStatus: (status: AudioPipelineStatus) => void;
@@ -116,6 +118,7 @@ const INITIAL_AUDIO_STATE: AudioStoreState = {
     noise_floor: 0.05,
   },
   deepgram_status: "disconnected",
+  transcription_provider_status: "idle",
   token_state: "idle",
   mic_state: "not_checked",
   pipeline_status: "idle",
@@ -315,6 +318,14 @@ export const useAudioStore = create<AudioStore>()(
         // ✅ clear transient errors once deepgram reconnects successfully
         streams:
           deepgram_status === "connected"
+            ? { ...s.streams, error: null }
+            : s.streams,
+      })),
+    setTranscriptionProviderStatus: (transcription_provider_status) =>
+      set((s) => ({
+        transcription_provider_status,
+        streams:
+          transcription_provider_status === "connected"
             ? { ...s.streams, error: null }
             : s.streams,
       })),

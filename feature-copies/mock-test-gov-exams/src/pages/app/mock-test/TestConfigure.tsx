@@ -9,7 +9,8 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { SessionTrustBanner } from "@/components/session/SessionTrustBanner";
 import { toast } from "sonner";
-import { resolveExamConfigId } from "@/lib/mock-test/examTypes";
+import { registryCodeForConfigId, resolveExamConfigId } from "@/lib/mock-test/examTypes";
+import { getExamDetails } from "@/lib/gov-exam/api";
 import { launchMockTest } from "@/lib/mock-test/launchMockTest";
 import {
   planHasFeature,
@@ -70,18 +71,17 @@ const DIFFICULTY_PRESETS: Record<
 const QUESTION_COUNT_PRESETS = [10, 20, 30, 50];
 const DURATION_PRESETS = [10, 20, 30, 60];
 
+/** Fallback subject lists for CUSTOM / unregistered wizard only — not used by the hybrid engine. */
 const EXAM_SUBJECTS: Record<string, string[]> = {
   JEE_MAIN: ["Physics", "Chemistry", "Mathematics"],
   JEE_ADV: ["Physics", "Chemistry", "Mathematics"],
   NEET: ["Biology", "Physics", "Chemistry"],
-  UPSC: ["General Studies", "Current Affairs"],
-  SSC_CGL: ["Reasoning", "Quantitative Aptitude", "English", "General Awareness"],
-  IBPS_PO: ["Reasoning", "Quantitative Aptitude", "English", "Banking Awareness"],
   HPCL_ENGINEER: ["Technical", "English", "Quantitative Aptitude", "Reasoning"],
   PSU: ["General Awareness", "English", "Quantitative Aptitude", "Reasoning"],
   CUSTOM: [],
 };
 
+/** Fallback topic lists for CUSTOM / unregistered wizard only — not used by the hybrid engine. */
 const EXAM_TOPICS: Record<string, string[]> = {
   JEE_MAIN: [
     "Mechanics",
@@ -223,6 +223,45 @@ export default function TestConfigure() {
 
   const examFromURL = resolveExamConfigId(searchParams.get("exam"));
   const isQuick = searchParams.get("quick") === "true";
+  const registryGenerateCode = registryCodeForConfigId(examFromURL);
+  const [registryRedirecting, setRegistryRedirecting] = useState(
+    () => !isQuick && Boolean(registryGenerateCode),
+  );
+
+  useEffect(() => {
+    if (isQuick || !registryGenerateCode) {
+      setRegistryRedirecting(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const details = await getExamDetails({ code: registryGenerateCode });
+        const examId = details.exam?.examId;
+        const firstStage =
+          details.primaryStage ??
+          [...(details.stages ?? [])].sort(
+            (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0),
+          )[0];
+        if (cancelled) return;
+        if (examId) {
+          const params = new URLSearchParams({
+            code: registryGenerateCode,
+            examId,
+          });
+          if (firstStage?.id) params.set("stageId", firstStage.id);
+          navigate(`/app/mock-test/generate?${params.toString()}`, { replace: true });
+          return;
+        }
+      } catch {
+        // Exam not in the live registry yet — stay on the configure wizard.
+      }
+      if (!cancelled) setRegistryRedirecting(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isQuick, registryGenerateCode, navigate]);
   const yearMinFromURL = searchParams.get("year_min")
     ? Number(searchParams.get("year_min"))
     : null;
@@ -371,7 +410,10 @@ export default function TestConfigure() {
           test_name: config.test_name,
           subjects: config.subjects,
           topics: config.topics,
-          source_types: config.source_types,
+          source_types:
+            isQuick && canUseAiQuestions && !config.source_types.includes("AI_GENERATED")
+              ? [...config.source_types, "AI_GENERATED"]
+              : config.source_types,
           year_range: config.year_range,
           difficulty_distribution: config.difficulty_distribution,
           question_count: config.question_count,
@@ -380,6 +422,8 @@ export default function TestConfigure() {
           marks_negative: config.marks_negative,
           randomize_order: config.randomize_order,
           shuffle_options: config.shuffle_options,
+          quick_drill: isQuick,
+          allow_ai_fill: isQuick && canUseAiQuestions,
         });
 
       if (warning) toast.warning(warning);
@@ -403,6 +447,20 @@ export default function TestConfigure() {
     (sum, value) => sum + value,
     0
   );
+
+  if (registryRedirecting) {
+    return (
+      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="text-lg font-semibold text-foreground">
+          Opening the exam generator…
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Loading the live pattern for this exam.
+        </p>
+      </div>
+    );
+  }
 
   if (isQuick && loading) {
     return (

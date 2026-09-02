@@ -90,94 +90,32 @@ Deno.serve(withBrowserCors("start-exam", async (req) => {
       }, 403);
     }
 
-    try {
-      const userDb = createUserClient(auth.context.accessToken);
-      const { data: rpcData, error: rpcErr } = await userDb.rpc("start_owned_mock_test", {
-        p_test_id: testId,
-      });
-      if (!rpcErr && rpcData && typeof rpcData === "object") {
-        const rec = rpcData as Record<string, unknown>;
-        if (rec.success === false) {
-          const code = String(rec.code ?? "START_FAILED");
-          const status = code === "NOT_FOUND" ? 404 : code === "UNAUTHORIZED" ? 401 : 409;
-          return json(req, {
-            error: code === "SUBMISSION_CONFLICT"
-              ? "This exam is already submitted."
-              : "Could not start the exam.",
-            code,
-          }, status);
-        }
-        return json(req, {
-          success: true,
-          alreadyStarted: Boolean(rec.already_started),
-          startedAt: rec.started_at,
-          expiresAt: rec.expires_at ?? null,
-          status: rec.status,
-          attemptPhase: rec.attempt_phase ?? "ACTIVE",
-        });
-      }
-    } catch (rpcCatch) {
-      console.warn("[start-exam] RPC unavailable, using service-role clock", rpcCatch);
-    }
-
-    if (test.status === "COMPLETED") {
-      return json(req, {
-        error: "This exam is already submitted.",
-        code: "SUBMISSION_CONFLICT",
-      }, 409);
-    }
-
-    if (test.status === "IN_PROGRESS" && test.started_at) {
-      return json(req, {
-        success: true,
-        alreadyStarted: true,
-        startedAt: test.started_at,
-        expiresAt: test.expires_at,
-        status: test.status,
-        attemptPhase: test.attempt_phase ?? "ACTIVE",
-      });
-    }
-
-    const now = new Date();
-    const limitMins = Number(test.time_limit_minutes ?? 0);
-    const expiresAt =
-      Number.isFinite(limitMins) && limitMins > 0
-        ? new Date(now.getTime() + limitMins * 60_000).toISOString()
-        : null;
-
-    const { data: updated, error: updErr } = await db
-      .from("mock_tests")
-      .update({
-        status: "IN_PROGRESS",
-        started_at: now.toISOString(),
-        expires_at: expiresAt,
-        attempt_phase: "ACTIVE",
-      })
-      .eq("id", testId)
-      .eq("user_id", user.id)
-      .in("status", ["DRAFT", "IN_PROGRESS"])
-      .select("id, status, started_at, expires_at, attempt_phase, time_limit_minutes")
-      .maybeSingle();
-
-    if (updErr) {
-      console.error("[start-exam] update failed", updErr);
+    const userDb = createUserClient(auth.context.accessToken);
+    const { data: rpcData, error: rpcErr } = await userDb.rpc("start_owned_mock_test", {
+      p_test_id: testId,
+    });
+    if (rpcErr || !rpcData || typeof rpcData !== "object") {
+      console.error("[start-exam] start_owned_mock_test failed", rpcErr);
       return json(req, { error: "Could not start the exam.", code: "START_FAILED" }, 500);
     }
-
-    const row = updated ?? {
-      status: "IN_PROGRESS",
-      started_at: now.toISOString(),
-      expires_at: expiresAt,
-      attempt_phase: "ACTIVE",
-    };
+    const row = rpcData as Record<string, unknown>;
+    if (row.success === false) {
+      const code = String(row.code ?? "START_FAILED");
+      return json(req, {
+        error: code === "SUBMISSION_CONFLICT"
+          ? "This exam is already submitted."
+          : "Could not start the exam.",
+        code,
+      }, code === "NOT_FOUND" ? 404 : code === "UNAUTHORIZED" ? 401 : 409);
+    }
 
     return json(req, {
       success: true,
-      alreadyStarted: false,
+      alreadyStarted: Boolean(row.already_started),
       startedAt: row.started_at,
-      expiresAt: row.expires_at,
+      expiresAt: row.expires_at ?? null,
       status: row.status,
-      attemptPhase: row.attempt_phase,
+      attemptPhase: row.attempt_phase ?? "ACTIVE",
     });
   } catch (err) {
     console.error("[start-exam]", err);

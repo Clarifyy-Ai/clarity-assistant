@@ -146,4 +146,5 @@ def validate_question_payloads(
         rejected=rejected,
         accepted_count=len(accepted),
         rejected_count=len(rejected),
+        correlation_id=request.correlation_id,
     )

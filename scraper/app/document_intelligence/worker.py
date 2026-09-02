@@ -314,7 +314,21 @@ class DocumentJobWorker:
                 "UNSUPPORTED_FORMAT": "UNSUPPORTED_FILE_TYPE",
                 "OCR_UNAVAILABLE": "PARSER_UNAVAILABLE",
                 "OCR_EMPTY": "PARSER_FAILED",
+                "FILE_TOO_LARGE": "FILE_TOO_LARGE",
+                "TIMEOUT": "PARSER_TIMEOUT",
+                "PARSER_TIMEOUT": "PARSER_TIMEOUT",
+                "MALFORMED": "MALFORMED_OUTPUT",
+                "INVALID_FILE": "INVALID_FILE",
+                "PDF_ENCRYPTED": "ENCRYPTED_FILE",
+                "ENCRYPTED": "ENCRYPTED_FILE",
             }.get(error_code, error_code)
+            if error_code in {
+                "FILE_TOO_LARGE",
+                "UNSUPPORTED_FILE_TYPE",
+                "INVALID_FILE",
+                "ENCRYPTED_FILE",
+            }:
+                is_retryable = False
             error_message = str(exc)
 
             if is_retryable and attempt_count < max_attempts:

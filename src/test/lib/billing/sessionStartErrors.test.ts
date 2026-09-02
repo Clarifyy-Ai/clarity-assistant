@@ -33,6 +33,15 @@ describe("session start errors", () => {
     expect(handleSessionStartError(err)).toBe(true);
   });
 
+  it("handles 503 start failures without showing raw gateway text", () => {
+    const err = new ApiClientError({
+      message: "Service Unavailable",
+      status: 503,
+      code: "DEPENDENCY_UNAVAILABLE",
+    });
+    expect(handleSessionStartError(err)).toBe(true);
+  });
+
   it("opens upgrade for credits separately from daily limit", () => {
     useUIStore.setState({ upgradeModalOpen: false, upgradeModalReason: null } as never);
     const handled = handleSessionStartError(new ApiClientError({

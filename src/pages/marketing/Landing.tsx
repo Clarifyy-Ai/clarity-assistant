@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { PUBLIC_CTAS } from "@/lib/constants/publicCtas";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import {
   Brain, BarChart2, Shield, Zap, ArrowRight, CheckCircle2,
@@ -344,7 +345,7 @@ export default function Landing() {
               to="/signup"
               className="inline-flex items-center gap-2 text-sm font-semibold px-5 py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity shadow-lg shadow-primary/25"
             >
-              Start Preparing
+              {PUBLIC_CTAS.signup}
               <ArrowRight className="w-4 h-4" />
             </Link>
             <Link
@@ -742,7 +743,7 @@ export default function Landing() {
             <p className="mt-3 text-sm text-muted-foreground">
               Have more questions?{" "}
               <Link to="/help" className="text-primary hover:underline">
-                Visit the help center
+                {PUBLIC_CTAS.help}
               </Link>
               .
             </p>
@@ -786,10 +787,10 @@ export default function Landing() {
             to="/signup"
             className="inline-flex items-center gap-2 text-sm font-semibold px-6 py-3 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity shadow-xl shadow-primary/30"
           >
-            Start Preparing <ArrowRight className="w-4 h-4" />
+            {PUBLIC_CTAS.signup} <ArrowRight className="w-4 h-4" />
           </Link>
           <p className="mt-4 text-xs text-muted-foreground">
-            Free plan &middot; No card required &middot; Cancel anytime
+            Free plan &middot; No card required &middot; One-time purchases
           </p>
         </m.div>
       </section>

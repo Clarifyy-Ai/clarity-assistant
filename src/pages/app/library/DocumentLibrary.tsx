@@ -179,13 +179,19 @@ export default function DocumentLibraryPage() {
     void load();
   }, [load]);
 
+  const inflightDocIds = docs
+    .filter((d) => isInFlightJobStatus(d.processing_status))
+    .map((d) => d.id)
+    .sort()
+    .join(",");
+
   /** Resume existing jobs after refresh — same job id, never create duplicates. */
   useEffect(() => {
     if (!user?.id) return;
-    const inflight = docs.filter((d) => isInFlightJobStatus(d.processing_status));
-    if (!inflight.length) return;
+    if (!inflightDocIds) return;
 
     let cancelled = false;
+    const inflightIds = inflightDocIds.split(",");
 
     async function findExistingJob(documentId: string) {
       const remembered = recalledJobId(documentId);
@@ -226,24 +232,24 @@ export default function DocumentLibraryPage() {
     }
 
     async function resumeOnce(): Promise<void> {
-      for (const doc of inflight) {
-        if (cancelled || resumedDocsRef.current.has(doc.id)) continue;
-        resumedDocsRef.current.add(doc.id);
+      for (const documentId of inflightIds) {
+        if (cancelled || resumedDocsRef.current.has(documentId)) continue;
+        resumedDocsRef.current.add(documentId);
         try {
-          const job = await findExistingJob(doc.id);
+          const job = await findExistingJob(documentId);
           if (!job?.id) continue;
-          rememberJobId(doc.id, job.id);
+          rememberJobId(documentId, job.id);
           if (!isInFlightJobStatus(job.status)) {
-            await syncDocFromJob(doc.id, job);
+            await syncDocFromJob(documentId, job);
             continue;
           }
           // Soft edge poll — confirms ownership and refreshes status without create.
           const live = await getDocumentProcessingJob(job.id);
           if (live && !isInFlightJobStatus(live.status)) {
-            await syncDocFromJob(doc.id, live);
+            await syncDocFromJob(documentId, live);
           }
         } catch {
-          resumedDocsRef.current.delete(doc.id);
+          resumedDocsRef.current.delete(documentId);
         }
       }
       if (!cancelled) void load();
@@ -253,13 +259,13 @@ export default function DocumentLibraryPage() {
 
     const timer = window.setInterval(() => {
       if (!cancelled) void load();
-    }, 3000);
+    }, 8_000);
 
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [docs, load, user?.id]);
+  }, [inflightDocIds, load, user?.id]);
 
   async function processLibraryDocument(opts: {
     documentId: string;
@@ -292,6 +298,12 @@ export default function DocumentLibraryPage() {
         return;
       }
       const job = await pollDocumentJobUntilDone(created.jobId);
+      if (job?.error_code === "PARSER_TIMEOUT") {
+        await supabase.from("personal_library_documents").update({
+          processing_error: userFacingJobError(job),
+        }).eq("id", opts.documentId).eq("owner_id", user?.id);
+        throw new Error(userFacingJobError(job));
+      }
       if (job && isFailedJobStatus(job.status)) {
         await supabase.from("personal_library_documents").update({
           processing_status: job.status,

@@ -287,9 +287,8 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     }
   }
 
-  // 3a) Email verification — before profile-dependent gates so unverified users
-  // cannot flash /onboarding or /app while profile/ban checks resolve.
-  if (requireEmailVerification && !isUserEmailConfirmed(user)) {
+  // 3a) Email verification — always enforced for authenticated protected routes.
+  if (!isUserEmailConfirmed(user)) {
     return <Navigate to="/verify-email" state={{ from: location }} replace />;
   }
 

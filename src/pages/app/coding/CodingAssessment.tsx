@@ -9,6 +9,11 @@ import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { ApiClientError } from "@/lib/api/apiClient";
 import { useAuthStore } from "@/store/authStore";
 import { remainingSubmissions, stripHiddenTestCases } from "@/lib/coding/assessment";
+import { formatCodingExecutionSummary, isCodingInfrastructureFailure } from "@/lib/coding/sampleResult";
+import { CodingCaseResultsTable } from "@/components/coding/CodingCaseResultsTable";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import type { SolveCaseResult } from "@/lib/coding/javascriptSolveRunner";
+import { resolveJavascriptSolveStarter } from "@/lib/coding/starterCode";
 import {
   APPROVED_CODING_LANGUAGES,
   isAutoExecutedLanguage,
@@ -35,39 +40,7 @@ type Question = {
 type SampleCase = { id: string; name: string; input: unknown; expected: unknown };
 type HistoryRow = { id: string; submitted_at: string; status: string; score: number | null };
 
-function formatExecutionStatus(status?: string, message?: string, blocked?: string): string {
-  const detail = blocked || message;
-  switch (status) {
-    case "compile_error":
-      return `Compile error${detail ? `: ${detail}` : "."}`;
-    case "runtime_error":
-      return `Runtime error${detail ? `: ${detail}` : "."}`;
-    case "timeout":
-      return "Timed out.";
-    case "unsupported":
-      return detail ?? "Language not supported for automated scoring.";
-    case "blocked":
-      return detail ?? "Execution blocked.";
-    case "passed":
-      return detail ?? "All tests passed.";
-    case "failed":
-      return detail ?? "Some tests failed.";
-    default:
-      return detail ?? (status ? `Status: ${status}` : "No result.");
-  }
-}
-
 /** Immutable starter contract for javascript_solve assessments (TC-COD-004). */
-const IMMUTABLE_SOLVE_STARTER = "function solve(input) {\n  return input;\n}\n";
-
-function resolveStarterCode(raw: string | null | undefined): string {
-  const starter = typeof raw === "string" ? raw : "";
-  if (!starter.trim()) return IMMUTABLE_SOLVE_STARTER;
-  if (!/\bfunction\s+solve\b|\bconst\s+solve\b|\blet\s+solve\b|\bsolve\s*=/.test(starter)) {
-    return IMMUTABLE_SOLVE_STARTER;
-  }
-  return starter;
-}
 
 export default function CodingAssessmentPage() {
   const { questionId } = useParams<{ questionId: string }>();
@@ -77,7 +50,11 @@ export default function CodingAssessmentPage() {
   const [language, setLanguage] = useState("javascript");
   const [sample, setSample] = useState<SampleCase[]>([]);
   const [sampleOut, setSampleOut] = useState<string>("");
+  const [sampleCases, setSampleCases] = useState<SolveCaseResult[]>([]);
   const [serverResult, setServerResult] = useState<string>("");
+  const [submitCases, setSubmitCases] = useState<SolveCaseResult[]>([]);
+  const [sampleInfraError, setSampleInfraError] = useState(false);
+  const [submitInfraError, setSubmitInfraError] = useState(false);
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [seconds, setSeconds] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -95,7 +72,7 @@ export default function CodingAssessmentPage() {
     // Refreshing history after a submit must not wipe the user's draft.
     // Only initialize the editor when the question itself changes.
     if (loadedQuestionRef.current !== questionId) {
-      setCode(resolveStarterCode(data?.starter_code as string | undefined));
+      setCode(resolveJavascriptSolveStarter(data?.starter_code as string | undefined));
       loadedQuestionRef.current = questionId;
     }
     const qLang = String(data?.language ?? "javascript").toLowerCase();
@@ -164,6 +141,8 @@ export default function CodingAssessmentPage() {
     }
     setSampleBusy(true);
     setSampleOut("");
+    setSampleCases([]);
+    setSampleInfraError(false);
     try {
       const result = await fetchEdgeJson<{
         status: string;
@@ -173,6 +152,8 @@ export default function CodingAssessmentPage() {
         execution_status?: string;
         message?: string;
         blocked_reason?: string;
+        primary_error?: string;
+        case_results?: SolveCaseResult[];
       }>("score-coding-submission", {
         question_id: questionId,
         code,
@@ -180,13 +161,24 @@ export default function CodingAssessmentPage() {
         sample_only: true,
       });
       setSampleOut(
-        formatExecutionStatus(result.execution_status, result.message, result.blocked_reason),
+        formatCodingExecutionSummary({
+          execution_status: result.execution_status,
+          message: result.message,
+          blocked_reason: result.blocked_reason,
+          primary_error: result.primary_error,
+          passed_tests: result.passed_tests,
+          failed_tests: result.failed_tests,
+          case_results: result.case_results,
+        }),
       );
+      setSampleCases(result.case_results ?? []);
+      setSampleInfraError(isCodingInfrastructureFailure(result.execution_status));
     } catch (error) {
       if (error instanceof ApiClientError && error.status === 401) {
         setSampleOut("Unauthorized — sign in again, then retry the sample run.");
       } else {
         setSampleOut(error instanceof Error ? error.message : "Sample run unavailable.");
+        setSampleInfraError(true);
       }
     } finally {
       setSampleBusy(false);
@@ -210,6 +202,8 @@ export default function CodingAssessmentPage() {
     }
     setBusy(true);
     setServerResult("");
+    setSubmitCases([]);
+    setSubmitInfraError(false);
     try {
       const result = await fetchEdgeJson<{
         status: string;
@@ -219,19 +213,28 @@ export default function CodingAssessmentPage() {
         execution_status?: string;
         message?: string;
         blocked_reason?: string;
+        primary_error?: string;
+        case_results?: SolveCaseResult[];
       }>("score-coding-submission", {
         question_id: questionId,
         code,
         language,
       });
       setServerResult(
-        formatExecutionStatus(
-          result.execution_status,
-          result.message ??
+        formatCodingExecutionSummary({
+          execution_status: result.execution_status,
+          message:
+            result.message ??
             `Status ${result.status}. Score ${result.score ?? "pending"}. Passed ${result.passed_tests ?? "—"}. Failed ${result.failed_tests ?? "—"}.`,
-          result.blocked_reason,
-        ),
+          blocked_reason: result.blocked_reason,
+          primary_error: result.primary_error,
+          passed_tests: result.passed_tests,
+          failed_tests: result.failed_tests,
+          case_results: result.case_results,
+        }),
       );
+      setSubmitCases(result.case_results ?? []);
+      setSubmitInfraError(isCodingInfrastructureFailure(result.execution_status));
       // compile_error responses may not persist a submission — still refresh history when scored
       if (result.status !== "compile_error") {
         void load();
@@ -248,6 +251,7 @@ export default function CodingAssessmentPage() {
         toast.error("Rate limited — try again shortly.");
       } else {
         setServerResult(error instanceof Error ? error.message : "Code execution service is temporarily unavailable.");
+        setSubmitInfraError(true);
       }
     } finally {
       setBusy(false);
@@ -255,9 +259,13 @@ export default function CodingAssessmentPage() {
   }
 
   function resetCode() {
-    setCode(resolveStarterCode(question?.starter_code));
+    setCode(resolveJavascriptSolveStarter(question?.starter_code));
     setSampleOut("");
+    setSampleCases([]);
     setServerResult("");
+    setSubmitCases([]);
+    setSampleInfraError(false);
+    setSubmitInfraError(false);
   }
 
   return (
@@ -336,10 +344,38 @@ export default function CodingAssessmentPage() {
             </div>
             <p className="mt-2 text-xs text-muted-foreground shrink-0">{left} submissions remaining</p>
             {sampleOut && (
-              <pre className="mt-3 whitespace-pre-wrap rounded-lg bg-secondary/50 p-3 text-xs shrink-0">Sample results{"\n"}{sampleOut}</pre>
+              <div className="mt-3 shrink-0 space-y-2">
+                {sampleInfraError ? (
+                  <InlineErrorRetry
+                    message={sampleOut}
+                    onRetry={() => void runSample()}
+                    compact
+                  />
+                ) : (
+                  <pre className="whitespace-pre-wrap rounded-lg bg-secondary/50 p-3 text-xs">
+                    Sample results{"\n"}
+                    {sampleOut}
+                  </pre>
+                )}
+                <CodingCaseResultsTable cases={sampleCases} data-testid="coding-sample-case-results" />
+              </div>
             )}
             {serverResult && (
-              <pre className="mt-3 whitespace-pre-wrap rounded-lg bg-secondary/50 p-3 text-xs shrink-0">Test results{"\n"}{serverResult}</pre>
+              <div className="mt-3 shrink-0 space-y-2">
+                {submitInfraError ? (
+                  <InlineErrorRetry
+                    message={serverResult}
+                    onRetry={() => void submit()}
+                    compact
+                  />
+                ) : (
+                  <pre className="whitespace-pre-wrap rounded-lg bg-secondary/50 p-3 text-xs">
+                    Test results{"\n"}
+                    {serverResult}
+                  </pre>
+                )}
+                <CodingCaseResultsTable cases={submitCases} data-testid="coding-submit-case-results" />
+              </div>
             )}
             <h3 className="mt-4 text-sm font-semibold shrink-0">Submission history</h3>
             <ul className="mt-2 space-y-1 text-xs text-muted-foreground shrink-0">

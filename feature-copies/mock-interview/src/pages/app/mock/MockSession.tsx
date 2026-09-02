@@ -71,6 +71,8 @@ import {
 } from "@/lib/mock/mockSessionLifecycle";
 import { speakQuestionText, stopBrowserTts } from "@/lib/mock/mockTts";
 import { getAiUserFacingError } from "@/lib/network/aiErrorUx";
+import { microphoneSetupHint } from "@/lib/audio/micPermission";
+import { getMicPermissionState } from "@/lib/validators/audioValidator";
 import { isOverlayGhostClickSuppressed } from "@/lib/overlay/ghostClickGuard";
 import {
   answerNextStatusLabel,
@@ -317,6 +319,7 @@ export default function MockSession() {
   const [endConfirm, setEndConfirm] = useState(false);
   const [questionsError, setQuestionsError] = useState<string | null>(null);
   const [setupStep, setSetupStep] = useState<MockSetupStep>("session");
+  const [audioSetupHint, setAudioSetupHint] = useState("Preparing your mock interview session");
   const [usedLocalQuestions, setUsedLocalQuestions] = useState(false);
   const [sessionNotes, setSessionNotes] = useState("");
   const [targetQuestionCount, setTargetQuestionCount] = useState(5);
@@ -410,7 +413,7 @@ export default function MockSession() {
 
     if (isPaused) {
       try {
-        await audio.start();
+        await audio.start({ restore: true });
         setIsPaused(false);
         toast.message("Session resumed");
       } catch (err) {
@@ -1136,6 +1139,7 @@ export default function MockSession() {
     }
 
     let dbSessionId: string | null = existingSessionId ?? null;
+    let restored = false;
     try {
       if (dbSessionId) {
         await activateSession(dbSessionId);
@@ -1181,7 +1185,7 @@ export default function MockSession() {
       }
 
       setSetupStep("questions");
-      const restored = await tryRestoreMockProgress(dbSessionId!, mockConfig);
+      restored = await tryRestoreMockProgress(dbSessionId!, mockConfig);
       if (!restored) {
         await loadQuestions(dbSessionId!, mockConfig);
       }
@@ -1224,8 +1228,10 @@ export default function MockSession() {
         return;
       }
       markOverlayProductSessionReady(generation);
+      const permission = await getMicPermissionState();
+      setAudioSetupHint(microphoneSetupHint(permission, { restore: restored }));
       setSetupStep("audio");
-      await audio.start();
+      await audio.start({ restore: restored });
       const restoredElapsed = restoredElapsedRef.current;
       sessionElapsedRef.current = restoredElapsed;
       setSessionElapsed(restoredElapsed);
@@ -1696,7 +1702,7 @@ export default function MockSession() {
             <p className="text-sm font-medium text-foreground">{setupLabel}</p>
             <p className="text-xs text-muted-foreground">
               {setupStep === "audio"
-                ? "Allow microphone access when prompted"
+                ? audioSetupHint
                 : "Preparing your mock interview session"}
             </p>
           </div>
@@ -1718,7 +1724,9 @@ export default function MockSession() {
                 isStartingRef.current = true;
                 setSetupStep("questions");
                 void loadQuestions(sid, cfg, { forceLocal: true })
-                  .then(() => {
+                  .then(async () => {
+                    const permission = await getMicPermissionState();
+                    setAudioSetupHint(microphoneSetupHint(permission));
                     setSetupStep("audio");
                     return audio.start();
                   })

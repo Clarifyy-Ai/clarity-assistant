@@ -39,7 +39,7 @@ function check(name, value, { required, pattern, forbidTestPrefix }) {
 
   if (present && forbidTestPrefix && isProd) {
     const v = String(value).trim();
-    if (v.startsWith("sk_test") || v.startsWith("pk_test") || v.startsWith("price_test")) {
+    if (v.startsWith("sk_test") || v.startsWith("pk_test") || v.startsWith("price_test") || v.startsWith("rzp_test_")) {
       environmentCompatible = false;
       formatValid = false;
       detail = "test_mode_forbidden_in_production";
@@ -92,15 +92,16 @@ const checks = [
   check("RAZORPAY_KEY_ID", process.env.RAZORPAY_KEY_ID, {
     required: requireRazorpay,
     pattern: /^rzp_(live|test)_[A-Za-z0-9]+$/,
+    forbidTestPrefix: true,
   }),
   check("RAZORPAY_KEY_SECRET", process.env.RAZORPAY_KEY_SECRET, {
     required: requireRazorpay,
   }),
   check("RAZORPAY_WEBHOOK_SECRET", process.env.RAZORPAY_WEBHOOK_SECRET, {
-    required: false,
+    required: requireRazorpay && isProd,
   }),
   check("PUBLIC_URL", process.env.PUBLIC_URL || process.env.SITE_URL, {
-    required: isProd,
+    required: isProd && (requireStripe || requireRazorpay),
     pattern: /^https:\/\//,
   }),
 ];

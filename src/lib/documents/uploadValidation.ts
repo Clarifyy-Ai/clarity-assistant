@@ -151,6 +151,12 @@ export function validateDocumentFile(
   if (category === "resume" && !["pdf", "docx", "txt"].includes(extension)) {
     return INVALID_RESUME_MESSAGE;
   }
+  if (
+    (category === "job_description" || category === "cover_letter") &&
+    !["pdf", "docx", "txt"].includes(extension)
+  ) {
+    return UNSUPPORTED_FORMAT_MESSAGE;
+  }
   if (category === "library" && !["pdf", "docx", "txt", "csv", "xlsx"].includes(extension)) {
     return UNSUPPORTED_FORMAT_MESSAGE;
   }
@@ -167,4 +173,19 @@ export function validateDocumentFile(
     return `The file MIME type does not match its .${extension} extension.`;
   }
   return null;
+}
+
+/** Validate metadata then magic bytes. Caller should hash the returned buffer. */
+export async function inspectDocumentFile(
+  file: File,
+  category: DocumentCategory,
+): Promise<{ error: string | null; bytes: Uint8Array | null }> {
+  const metaError = validateDocumentFile(file, category);
+  if (metaError) return { error: metaError, bytes: null };
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const extension = getDocumentExtension(file.name);
+  if (!validateMimeBytes(bytes, extension)) {
+    return { error: "The file is corrupt or does not match its extension.", bytes };
+  }
+  return { error: null, bytes };
 }

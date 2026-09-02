@@ -3,7 +3,7 @@
  * Duplicate start returns the same timestamps. Owner-only.
  */
 import { handleCors, getCorsHeaders, withBrowserCors, applyCors } from "../_shared/cors.ts";
-import { authenticateRequest } from "../_shared/auth.ts";
+import { authenticateRequest, createUserScopedClient } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { resolveIsIndiaProfile } from "../_shared/indiaRegion.ts";
 import { isUserBanned, bannedResponse } from "../_shared/banCheck.ts";
@@ -87,77 +87,31 @@ Deno.serve(withBrowserCors("start-exam-attempt", async (req) => {
       }, 403);
     }
 
-    if (test.status === "COMPLETED" || test.status === "ABANDONED") {
-      return json(req, {
-        error: "This attempt is already finished.",
-        code: "SUBMISSION_CONFLICT",
-        status: test.status,
-        startedAt: test.started_at,
-        expiresAt: test.expires_at,
-      }, 409);
-    }
-
-    if (test.status === "IN_PROGRESS" && test.started_at) {
-      return json(req, {
-        attemptId: test.id,
-        status: "IN_PROGRESS",
-        startedAt: test.started_at,
-        expiresAt: test.expires_at,
-        idempotentReplay: true,
-      });
-    }
-
-    const cfg = (test.config && typeof test.config === "object"
-      ? test.config
-      : {}) as Record<string, unknown>;
-    const limitMins = Number(test.time_limit_minutes ?? cfg.durationMinutes ?? cfg.duration_minutes ?? 0);
-    const startedAt = new Date().toISOString();
-    const expiresAt =
-      Number.isFinite(limitMins) && limitMins > 0
-        ? new Date(Date.now() + limitMins * 60_000).toISOString()
-        : null;
-
-    const { data: updated, error: updErr } = await db
-      .from("mock_tests")
-      .update({
-        status: "IN_PROGRESS",
-        started_at: startedAt,
-        expires_at: expiresAt,
-        attempt_phase: "ACTIVE",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", attemptId)
-      .eq("user_id", user.id)
-      .in("status", ["DRAFT", "NOT_STARTED"])
-      .select("id, status, started_at, expires_at")
-      .maybeSingle();
-
-    if (updErr) {
-      console.error("[start-exam-attempt]", updErr);
+    const userDb = createUserScopedClient(auth.context.accessToken);
+    const { data, error: startError } = await userDb.rpc("start_owned_mock_test", {
+      p_test_id: attemptId,
+    });
+    if (startError || !data || typeof data !== "object") {
+      console.error("[start-exam-attempt]", startError);
       return json(req, { error: "Failed to start attempt", code: "INTERNAL_ERROR" }, 500);
     }
-
-    if (!updated) {
-      const { data: raced } = await db
-        .from("mock_tests")
-        .select("id, status, started_at, expires_at")
-        .eq("id", attemptId)
-        .eq("user_id", user.id)
-        .maybeSingle();
+    const result = data as Record<string, unknown>;
+    if (result.success === false) {
+      const code = String(result.code ?? "START_FAILED");
       return json(req, {
-        attemptId,
-        status: raced?.status ?? "IN_PROGRESS",
-        startedAt: raced?.started_at ?? startedAt,
-        expiresAt: raced?.expires_at ?? expiresAt,
-        idempotentReplay: true,
-      });
+        error: code === "SUBMISSION_CONFLICT"
+          ? "This attempt is already finished."
+          : "Failed to start attempt",
+        code,
+      }, code === "NOT_FOUND" ? 404 : 409);
     }
-
     return json(req, {
-      attemptId: updated.id,
-      status: updated.status,
-      startedAt: updated.started_at,
-      expiresAt: updated.expires_at,
+      attemptId,
+      status: result.status,
+      startedAt: result.started_at,
+      expiresAt: result.expires_at,
+      attemptPhase: result.attempt_phase,
+      idempotentReplay: Boolean(result.already_started),
     });
   } catch (err) {
     console.error("[start-exam-attempt]", err);

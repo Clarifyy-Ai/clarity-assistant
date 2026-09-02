@@ -16,6 +16,8 @@ test.describe.configure({ timeout: 90_000 });
 const QUESTION_ID = "e2e-coding-q-0001-0001-0001-000000000001";
 const POST_ID = "e2e-community-post-0001-0001-0001-000000000001";
 
+const communityReportMetrics = { postCount: 0 };
+
 function cors(route: Route): Record<string, string> {
   const origin = route.request().headers()["origin"] ?? "http://127.0.0.1:5000";
   return {
@@ -57,6 +59,8 @@ async function installCommunityCodingMocks(page: Page) {
     },
   ];
   const answers: Record<string, unknown>[] = [];
+  const reports: Record<string, unknown>[] = [];
+  communityReportMetrics.postCount = 0;
   const question = {
     id: QUESTION_ID,
     title: "Sum the numbers",
@@ -117,8 +121,36 @@ async function installCommunityCodingMocks(page: Page) {
 
     if (url.includes("/rest/v1/community_reports")) {
       if (method === "OPTIONS") return fulfillJson(route, 200, {});
+      if (method === "GET") {
+        const existing = reports.find(
+          (r) =>
+            r.target_id === POST_ID &&
+            r.target_type === "post" &&
+            r.reporter_id === "e2e-user-0001-0001-0001-000000000001",
+        );
+        return fulfillJson(route, 200, existing ? (wantsObject(route) ? existing : [existing]) : []);
+      }
       if (method === "POST") {
-        const row = { id: "e2e-report-1", status: "open" };
+        communityReportMetrics.postCount += 1;
+        const body = route.request().postDataJSON() as Record<string, unknown>;
+        const duplicate = reports.some(
+          (r) =>
+            r.reporter_id === body.reporter_id &&
+            r.target_type === body.target_type &&
+            r.target_id === body.target_id,
+        );
+        if (duplicate) {
+          return fulfillJson(route, 409, {
+            code: "23505",
+            message: 'duplicate key value violates unique constraint "community_reports_one_per_reporter_target"',
+          });
+        }
+        const row = {
+          id: `e2e-report-${reports.length + 1}`,
+          status: "open",
+          ...body,
+        };
+        reports.push(row);
         return fulfillJson(route, 201, wantsObject(route) ? row : [row]);
       }
       return fulfillJson(route, 200, []);
@@ -148,6 +180,43 @@ async function installCommunityCodingMocks(page: Page) {
       return fulfillJson(route, 200, []);
     }
 
+    if (url.includes("/functions/v1/moderate-content")) {
+      if (method === "POST") {
+        const body = route.request().postDataJSON() as { action?: string; target_id?: string };
+        if (body.action === "mark_post_reported" && body.target_id) {
+          const post = posts.find((p) => p.id === body.target_id);
+          if (post && post.status !== "HIDDEN") post.status = "REPORTED";
+        }
+        return fulfillJson(route, 200, { success: true });
+      }
+      return fulfillJson(route, 200, { success: true });
+    }
+
+    if (url.includes("/functions/v1/score-coding-submission")) {
+      if (method === "POST") {
+        const body = route.request().postDataJSON() as { sample_only?: boolean };
+        return fulfillJson(route, 200, {
+          status: body.sample_only ? "passed" : "failed",
+          score: body.sample_only ? 100 : 0,
+          execution_status: body.sample_only ? "passed" : "failed",
+          passed_tests: body.sample_only ? 1 : 0,
+          failed_tests: body.sample_only ? 0 : 1,
+          case_results: [
+            {
+              id: "case-1",
+              name: "sample",
+              passed: Boolean(body.sample_only),
+              actual: body.sample_only ? 6 : 0,
+              input_preview: "[1,2,3]",
+              ...(body.sample_only ? {} : { error: "Expected 6, got 0", error_kind: "wrong_answer" }),
+            },
+          ],
+          message: body.sample_only ? "Sample: 1 passed, 0 failed." : "Sample: 0 passed, 1 failed.",
+        });
+      }
+      return fulfillJson(route, 200, { ok: true });
+    }
+
     return route.fallback();
   });
 }
@@ -164,10 +233,10 @@ test.describe("Community + Coding Lab module regression", () => {
     await expectDashboardReady(page);
 
     await page.goto("/app/community", { waitUntil: "domcontentloaded" });
-    await expect(page.getByRole("heading", { name: /Questions & Answers/i })).toBeVisible({
+    await expect(page.getByRole("heading", { name: /^Community$/i })).toBeVisible({
       timeout: 20_000,
     });
-    await expect(page.getByRole("heading", { name: /Create a post/i })).toBeVisible({
+    await expect(page.getByRole("heading", { name: /Ask a question/i })).toBeVisible({
       timeout: 15_000,
     });
     await expect(page.getByRole("button", { name: /Publish post/i })).toBeVisible();
@@ -181,6 +250,44 @@ test.describe("Community + Coding Lab module regression", () => {
     await expect(page.getByRole("heading", { name: /Report this post/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /Submit report/i })).toBeVisible();
     await expect(page.getByText(/Interactions deferred/i)).toHaveCount(0);
+  });
+
+  test("TC-MOD-013: duplicate report is idempotent without duplicate POST", async ({ page }) => {
+    await loginAsTestUser(page);
+    await expectDashboardReady(page);
+
+    await page.goto(`/app/community/${POST_ID}`, { waitUntil: "domcontentloaded" });
+    const submit = page.getByRole("button", { name: /Submit report/i });
+    await expect(submit).toBeVisible({ timeout: 20_000 });
+
+    await submit.click();
+    await expect(page.getByText(/Report submitted for moderation/i)).toBeVisible({
+      timeout: 10_000,
+    });
+
+    communityReportMetrics.postCount = 0;
+    await submit.click();
+    await expect(page.getByText(/You already reported this post/i)).toBeVisible({
+      timeout: 10_000,
+    });
+    expect(communityReportMetrics.postCount).toBe(0);
+  });
+
+  test("TC-MOD-013: rapid double-click issues one report request", async ({ page }) => {
+    await loginAsTestUser(page);
+    await expectDashboardReady(page);
+
+    communityReportMetrics.postCount = 0;
+
+    await page.goto(`/app/community/${POST_ID}`, { waitUntil: "domcontentloaded" });
+    const submit = page.getByRole("button", { name: /Submit report/i });
+    await expect(submit).toBeVisible({ timeout: 20_000 });
+
+    await submit.dblclick();
+    await expect(page.getByText(/Report submitted for moderation/i)).toBeVisible({
+      timeout: 10_000,
+    });
+    expect(communityReportMetrics.postCount).toBeLessThanOrEqual(1);
   });
 
   test("TC-COD-004/005: coding assessment exposes solve guidance and language labels", async ({
@@ -205,5 +312,31 @@ test.describe("Community + Coding Lab module regression", () => {
     expect(options.some((t) => /TypeScript/i.test(t) && /pending review/i.test(t))).toBe(true);
     expect(options.some((t) => /Python/i.test(t) && /pending review/i.test(t))).toBe(true);
     expect(options.some((t) => /Java/i.test(t) && /pending review/i.test(t))).toBe(true);
+  });
+
+  test("TC-COD-006: sample run shows per-case results from server", async ({ page }) => {
+    await loginAsTestUser(page);
+    await expectDashboardReady(page);
+
+    await page.goto(`/app/coding/${QUESTION_ID}`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: /Run sample/i }).click();
+    await expect(page.getByTestId("coding-sample-case-results")).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.getByText("Pass")).toBeVisible();
+  });
+
+  test("TC-MOD-014: report marks post as REPORTED via moderate-content", async ({ page }) => {
+    await loginAsTestUser(page, { isAdmin: true });
+    await expectDashboardReady(page);
+
+    await page.goto(`/app/community/${POST_ID}`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: /Submit report/i }).click();
+    await expect(page.getByText(/Report submitted for moderation/i)).toBeVisible({
+      timeout: 10_000,
+    });
+
+    await page.goto("/app/community", { waitUntil: "domcontentloaded" });
+    await expect(page.getByText("Reported")).toBeVisible({ timeout: 15_000 });
   });
 });

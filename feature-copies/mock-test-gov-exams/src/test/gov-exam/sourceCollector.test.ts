@@ -45,7 +45,7 @@ describe("Government Exam Source Collection and Ingestion Pipeline", () => {
     expect(result.evidence?.statusCode).toBe(200);
     expect(result.evidence?.etag).toBe('"upsc-2024-etag-1"');
     expect(result.evidence?.fileHash).toBeDefined();
-    expect(result.evidence?.userAgent).toContain("ClarifyAI-GovExamBot");
+    expect(result.evidence?.userAgent).toContain("CareerPilot-GovExamBot");
   });
 
   // 2. Rejected Domain

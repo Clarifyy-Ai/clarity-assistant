@@ -27,6 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { formatSessionScore } from "@/lib/analytics/scoreStatus";
 import { HybridSourceLine } from "@/components/hybrid/HybridSourceLine";
 import { getAiUserFacingError } from "@/lib/network/aiErrorUx";
 import { DebriefExtras } from "@/components/session/DebriefExtras";
@@ -61,50 +62,21 @@ export default function DebriefDetail() {
   const [debriefSource, setDebriefSource] = useState<string | null>(null);
   const generateInFlightRef = useRef(false);
 
-  // ── Generate debrief from edge function ──────────────────────
-  // FIX 1: fetchEdge returns parsed data directly — no .ok / .json()
-  // FIX 5: removed user_id from body — derived server-side from auth token
-  const generateDebrief = useCallback(async (sessionId: string) => {
-    if (generateInFlightRef.current) return;
-    generateInFlightRef.current = true;
-    setFetchError(null);
-    setGenning(true);
-    setLoadStep(2);
-    try {
-      const data = await fetchEdgeJson<{
-        debrief?: unknown;
-        session?: unknown;
-        source?: string;
-        meta?: { source?: string };
-      }>(
-        "generate-debrief",
-        { session_id: sessionId }
-      );
-      setLoadStep(3);
-      if (data?.debrief) setDebrief(data.debrief);
-      if (data?.session) setSession(data.session);
-      setDebriefSource(data?.source ?? data?.meta?.source ?? null);
-    } catch (err: unknown) {
-      const msg = getAiUserFacingError(err);
-      console.error("[DebriefDetail] generateDebrief error:", err);
-      toast.error(msg);
-      setFetchError(msg);
-    } finally {
-      generateInFlightRef.current = false;
-      setGenning(false);
-    }
-  }, []);
-
   // Persist-first: load DB only. Missing debriefs wait for an explicit Generate click.
-  const fetchDebrief = useCallback(async () => {
+  const fetchDebrief = useCallback(async (options?: { silent?: boolean }) => {
     if (!id || !user) return;
-    setLoading(true);
-    setFetchError(null);
-    setLoadStep(0);
+    if (!options?.silent) {
+      setLoading(true);
+      setFetchError(null);
+      setLoadStep(0);
+    }
 
     try {
-      setLoadStep(1);
-      const db = await sessionDebriefsDB.getByIdForUser(id, user.id);
+      if (!options?.silent) setLoadStep(1);
+      let db = await sessionDebriefsDB.getByIdForUser(id, user.id);
+      if (!db) {
+        db = await sessionDebriefsDB.getBySessionIdForUser(id, user.id);
+      }
 
       if (db) {
         setDebrief(db);
@@ -114,14 +86,14 @@ export default function DebriefDetail() {
               sessionsDB.getByIdForUser(db.session_id, user.id),
               sessionAnswersDB.listBySessionIdForUser(db.session_id, user.id),
               scorecardsDB.getBySessionIdForUser(db.session_id, user.id).catch(() => null),
-              sessionTranscriptsDB.listSegmentsBySessionId(db.session_id).catch(() => []),
+              sessionTranscriptsDB.listSegmentsBySessionIdForUser(db.session_id, user.id).catch(() => []),
             ]);
             setSession(sess);
             setAnswers(ans);
             setScorecard(sc);
             setTranscriptSegments(segments);
             try {
-              const tx = await sessionTranscriptsDB.getBySessionId(db.session_id);
+              const tx = await sessionTranscriptsDB.getBySessionIdForUser(db.session_id, user.id);
               setTranscript(tx ?? sess?.notes ?? null);
             } catch {
               setTranscript(sess?.notes ?? null);
@@ -145,13 +117,13 @@ export default function DebriefDetail() {
           const [ans, sc, segments] = await Promise.all([
             sessionAnswersDB.listBySessionIdForUser(id, user.id),
             scorecardsDB.getBySessionIdForUser(id, user.id).catch(() => null),
-            sessionTranscriptsDB.listSegmentsBySessionId(id).catch(() => []),
+            sessionTranscriptsDB.listSegmentsBySessionIdForUser(id, user.id).catch(() => []),
           ]);
           setAnswers(ans);
           setScorecard(sc);
           setTranscriptSegments(segments);
           try {
-            const tx = await sessionTranscriptsDB.getBySessionId(id);
+            const tx = await sessionTranscriptsDB.getBySessionIdForUser(id, user.id);
             setTranscript(tx ?? sess?.notes ?? null);
           } catch {
             setTranscript(sess?.notes ?? null);
@@ -166,9 +138,40 @@ export default function DebriefDetail() {
       console.error("[DebriefDetail] fetchDebrief error:", err);
       setFetchError(msg);
     } finally {
-      setLoading(false);
+      if (!options?.silent) setLoading(false);
     }
   }, [id, user?.id]);
+
+  // ── Generate debrief from edge function ──────────────────────
+  const generateDebrief = useCallback(async (sessionId: string) => {
+    if (generateInFlightRef.current) return;
+    generateInFlightRef.current = true;
+    setFetchError(null);
+    setGenning(true);
+    setLoadStep(2);
+    try {
+      const data = await fetchEdgeJson<{
+        debrief?: unknown;
+        session?: unknown;
+        source?: string;
+        meta?: { source?: string };
+      }>(
+        "generate-debrief",
+        { session_id: sessionId }
+      );
+      setLoadStep(3);
+      setDebriefSource(data?.source ?? data?.meta?.source ?? null);
+      await fetchDebrief({ silent: true });
+    } catch (err: unknown) {
+      const msg = getAiUserFacingError(err);
+      console.error("[DebriefDetail] generateDebrief error:", err);
+      toast.error(msg);
+      setFetchError(msg);
+    } finally {
+      generateInFlightRef.current = false;
+      setGenning(false);
+    }
+  }, [fetchDebrief]);
 
   // FIX 3: include user?.id in dep array so it re-runs if user loads after id
   useEffect(() => {
@@ -197,7 +200,7 @@ export default function DebriefDetail() {
     await sessionDebriefsDB.updateShareToken(debrief.id, user.id, token);
     if (debrief.session_id) {
       try {
-        await scorecardsDB.markShared(debrief.session_id, token);
+        await scorecardsDB.markShared(debrief.session_id, user.id, token);
       } catch {
         /* debrief share still succeeds if scorecard row is missing */
       }
@@ -407,7 +410,10 @@ export default function DebriefDetail() {
             report={detailedReport}
             onShareToken={handleShareToken}
             previewTitle={debriefTitle + (session?.target_company ? ` — ${session.target_company}` : "")}
-            previewScore={debrief.overall_grade ?? scorecard?.overall_score ?? null}
+            previewScore={formatSessionScore(
+              scorecard?.overall_score,
+              scorecard?.score_status ?? "scored",
+            )}
             previewSummary={debrief.summary ?? null}
           />
         </div>
@@ -668,7 +674,7 @@ export default function DebriefDetail() {
           variant="secondary"
           size="md"
           fullWidth
-          onClick={() => navigate(`/app/sessions/${debrief.session_id}`)}
+          onClick={() => navigate(`/app/scorecard/${debrief.session_id}`)}
           leftIcon={<BarChart2 className="w-4 h-4" />}
         >
           View scorecard

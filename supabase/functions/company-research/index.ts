@@ -3,6 +3,7 @@ import {
   requireAuth,
   parseBody,
   errorResponse,
+  successResponse,
   log,
   getAdminClient,
 } from "../_shared/utils.ts";
@@ -19,7 +20,27 @@ import {
 } from "../_shared/companyIdentity.ts";
 import { callPythonProcess } from "../_shared/pythonClient.ts";
 import { executeHybridOperation } from "../_shared/hybridExecute.ts";
-import { DomainError } from "../_shared/domainErrors.ts";
+import { DomainError, classifyAiFailure, defaultMessage } from "../_shared/domainErrors.ts";
+import { creditDenialResponse } from "../_shared/creditAuthority.ts";
+import { isUniqueViolation } from "../_shared/postgresErrors.ts";
+import {
+  COMPANY_BRIEF_AI_TIMEOUT_MS,
+  cancelCompanyBriefJob,
+  claimCompanyBriefJob,
+  completeCompanyBriefJob,
+  failCompanyBriefJob,
+  insertCompanyBriefJob,
+  isStaleCompanyBriefJob,
+  isTerminalCompanyBriefStatus,
+  loadCompanyBriefJob,
+  patchCompanyBriefJob,
+  requeueFailedCompanyBriefJob,
+  reserveCompanyBriefCredits,
+  scheduleWaitUntil,
+  toCompanyBriefJobClient,
+  userFacingCompanyBriefError,
+  type CompanyBriefJobRow,
+} from "../_shared/companyResearchJob.ts";
 
 const FN = "company-research";
 const CREDIT_COST = creditCost("company_research");
@@ -28,7 +49,10 @@ const SYSTEM_PROMPT = `You are an expert career and company research assistant.
 Provide structured, factual, concise interview insights.
 Return ONLY valid JSON.`;
 
-function withTimeout<T>(promise: Promise<T>, ms = 20000): Promise<T> {
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function withTimeout<T>(promise: Promise<T>, ms = COMPANY_BRIEF_AI_TIMEOUT_MS): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) =>
@@ -37,7 +61,7 @@ function withTimeout<T>(promise: Promise<T>, ms = 20000): Promise<T> {
   ]);
 }
 
-async function retry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
+async function retry<T>(fn: () => Promise<T>, retries = 1): Promise<T> {
   let lastError: unknown;
   for (let i = 0; i <= retries; i++) {
     try {
@@ -284,6 +308,21 @@ function legacyJsonResponse(req: Request, body: unknown, status = 200): Response
   });
 }
 
+function jobAcceptedResponse(req: Request, job: CompanyBriefJobRow, replay = false): Response {
+  return successResponse(
+    {
+      ...toCompanyBriefJobClient(job),
+      accepted: true,
+      async: true,
+      idempotentReplay: replay,
+      message: "Brief queued. Credits reserved until generation finishes.",
+    },
+    undefined,
+    isTerminalCompanyBriefStatus(job.status) ? 200 : 202,
+    req,
+  );
+}
+
 async function generateBriefWithAi(
   company: string,
   role: string,
@@ -321,7 +360,7 @@ Return ONLY valid JSON:
         skipSecondaryOnQuota: policy.skipSecondaryOnQuota,
       }),
     ),
-    20000,
+    COMPANY_BRIEF_AI_TIMEOUT_MS,
   );
   const aiText = String(aiResult?.text ?? "").trim();
   if (!aiText) throw new Error("Empty AI response");
@@ -338,6 +377,232 @@ Return ONLY valid JSON:
   return data;
 }
 
+async function generateBriefViaHybrid(
+  req: Request,
+  auth: Awaited<ReturnType<typeof requireAuth>>,
+  admin: ReturnType<typeof getAdminClient>,
+  input: {
+    company: string;
+    role: string;
+    normalized: string;
+    force: boolean;
+    idempotencyKey: string;
+    jobId: string;
+  },
+): Promise<CompanyResearchClientData> {
+  const { company, role, normalized, force, userId } = {
+    ...input,
+    userId: auth.userId,
+  };
+
+  const hybridResult = await executeHybridOperation<CompanyResearchClientData>({
+    req,
+    auth,
+    operation: "company_research",
+    idempotencyKey: `job:${input.jobId}:${input.idempotencyKey}`.slice(0, 150),
+    creditCost: 0,
+    creditAction: "company_research",
+    body: { company, role, normalized, force, jobId: input.jobId },
+    runDatabase: async () => {
+      if (force) return null;
+      const { data: existing } = await admin
+        .from("company_research")
+        .select("id, raw_data")
+        .eq("user_id", userId)
+        .eq("company_name_normalized", normalized)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const brief = briefFromUnknown(existing?.raw_data);
+      if (!brief || !existing?.id) return null;
+      return {
+        persisted: true,
+        cached: true,
+        id: existing.id,
+        data: brief,
+        brief,
+        source: "database",
+      };
+    },
+    runPython: async (ctx) => {
+      // MATRIX: database → python (normalize only) → ai
+      let pyData: unknown = null;
+      try {
+        const py = await callPythonProcess({
+          operation: "company_normalize",
+          operationId: ctx.operationId,
+          correlationId: ctx.correlationId,
+          payload: {
+            company,
+            company_name: company,
+            role,
+            role_title: role,
+            normalized,
+          },
+        });
+        if (py.ok) pyData = py.data;
+      } catch (err) {
+        log(FN, "warn", "Python normalization unavailable", {
+          error: String(err),
+        });
+      }
+
+      const brief = briefFromPythonCompany(pyData, company, role);
+      const isScaffold = Boolean(
+        brief?.overview.includes("being researched for") ||
+          brief?.watch_outs.some((w) => w.includes("unverified assumptions")),
+      );
+      if (!brief || !isMeaningfulBrief(brief) || isScaffold) {
+        return null;
+      }
+
+      return {
+        persisted: false,
+        cached: false,
+        data: brief,
+        brief,
+        source: "python",
+      };
+    },
+    runDeterministic: async () => {
+      const brief = briefFromPythonCompany(
+        { profile: { company_name: company, company_name_normalized: normalized } },
+        company,
+        role,
+      );
+      if (!brief) return null;
+      return {
+        persisted: false,
+        cached: false,
+        data: brief,
+        brief,
+        source: "deterministic",
+      };
+    },
+    runAi: async () => {
+      const brief = await generateBriefWithAi(company, role, userId);
+      return {
+        persisted: false,
+        cached: false,
+        data: brief,
+        brief,
+        source: "ai",
+      };
+    },
+  });
+
+  if (!hybridResult.ok) {
+    const code = String(hybridResult.code || "AI_PROVIDER_UNAVAILABLE");
+    const mapped =
+      code === "DATABASE_FAILURE"
+        ? "DATABASE_FAILURE"
+        : code === "AI_TIMEOUT"
+        ? "AI_TIMEOUT"
+        : code === "AI_INVALID_OUTPUT"
+        ? "AI_INVALID_OUTPUT"
+        : "AI_PROVIDER_UNAVAILABLE";
+    throw new DomainError(mapped, userFacingCompanyBriefError(code));
+  }
+
+  return hybridResult.data;
+}
+
+async function processCompanyResearchJob(
+  req: Request,
+  auth: Awaited<ReturnType<typeof requireAuth>>,
+  jobId: string,
+): Promise<CompanyBriefJobRow | null> {
+  const admin = getAdminClient();
+  let job = await loadCompanyBriefJob(admin, jobId, auth.userId);
+  if (!job) return null;
+
+  if (isStaleCompanyBriefJob(job)) {
+    return failCompanyBriefJob(admin, job, {
+      code: "JOB_TIMEOUT",
+      message: userFacingCompanyBriefError("JOB_TIMEOUT"),
+      retryable: true,
+    });
+  }
+
+  if (job.cancel_requested_at || job.status === "cancelled") {
+    return job.status === "cancelled" ? job : cancelCompanyBriefJob(admin, job);
+  }
+  if (isTerminalCompanyBriefStatus(job.status)) return job;
+
+  job = (await claimCompanyBriefJob(admin, jobId, auth.userId)) ?? job;
+  if (job.status !== "processing") return job;
+
+  try {
+    await patchCompanyBriefJob(admin, job.id, { progress_stage: "generating" });
+    const generated = await generateBriefViaHybrid(req, auth, admin, {
+      company: job.company_name,
+      role: job.role_title ?? "",
+      normalized: job.company_name_normalized,
+      force: job.force,
+      idempotencyKey: job.idempotency_key,
+      jobId: job.id,
+    });
+
+    const latest = await loadCompanyBriefJob(admin, job.id, auth.userId);
+    if (latest?.cancel_requested_at || latest?.status === "cancelled") {
+      return latest.status === "cancelled" ? latest : cancelCompanyBriefJob(admin, latest);
+    }
+
+    const brief = generated.brief;
+    if (!brief || !isMeaningfulBrief(brief)) {
+      throw new DomainError("AI_INVALID_OUTPUT", userFacingCompanyBriefError("AI_INVALID_OUTPUT"));
+    }
+
+    await patchCompanyBriefJob(admin, job.id, { progress_stage: "saving" });
+    const persisted = generated.persisted && generated.id
+      ? generated
+      : await persistBriefResult(
+          admin,
+          auth.userId,
+          job.company_name,
+          job.company_name_normalized,
+          job.role_title ?? "",
+          brief,
+          generated.source ?? "ai",
+        );
+
+    if (!persisted?.id) {
+      throw new DomainError("DATABASE_FAILURE", userFacingCompanyBriefError("DATABASE_FAILURE"));
+    }
+
+    return completeCompanyBriefJob(admin, job, {
+      researchId: persisted.id,
+      brief: persisted.brief,
+      source: persisted.source ?? generated.source ?? "ai",
+    });
+  } catch (err) {
+    const code = err instanceof DomainError ? err.code : classifyAiFailure(err);
+    const message = userFacingCompanyBriefError(
+      code,
+      err instanceof Error ? err.message : defaultMessage(code),
+    );
+    log(FN, "error", "Job process failed", { jobId, code, error: String(err) });
+    const latest = (await loadCompanyBriefJob(admin, job.id, auth.userId)) ?? job;
+    if (latest.status === "cancelled") return latest;
+    return failCompanyBriefJob(admin, latest, {
+      code,
+      message,
+      retryable: code !== "CAPABILITY_REQUIRED" && code !== "INSUFFICIENT_CREDITS",
+    });
+  }
+}
+
+function kickProcess(
+  req: Request,
+  auth: Awaited<ReturnType<typeof requireAuth>>,
+  jobId: string,
+): void {
+  const background = processCompanyResearchJob(req, auth, jobId);
+  if (!scheduleWaitUntil(background)) {
+    void background;
+  }
+}
+
 Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
@@ -346,7 +611,7 @@ Deno.serve(async (req) => {
   let userId = "";
 
   try {
-    log(FN, "info", "Request started", { requestId });
+    log(FN, "info", "Request started", { requestId, method: req.method });
 
     const auth = await requireAuth(req);
     userId = auth.userId;
@@ -364,7 +629,89 @@ Deno.serve(async (req) => {
     const capabilityGate = await requireCapabilityForFunction(auth.planId, FN, req);
     if (capabilityGate) return capabilityGate;
 
-    const body = await parseBody<Record<string, unknown>>(req);
+    const url = new URL(req.url);
+    const queryJobId = url.searchParams.get("jobId");
+    const body = req.method === "GET"
+      ? {}
+      : await parseBody<Record<string, unknown>>(req).catch(() => ({} as Record<string, unknown>));
+    const action = String(body.action ?? (queryJobId ? "status" : "start")).trim().toLowerCase();
+    const jobIdRaw = String(body.jobId ?? body.job_id ?? queryJobId ?? "").trim();
+    const jobId = UUID_RE.test(jobIdRaw) ? jobIdRaw : "";
+
+    const admin = getAdminClient();
+
+    if (action === "status" || req.method === "GET") {
+      if (!jobId) return errorResponse("Missing jobId", "INVALID_REQUEST", 400, req);
+      let job = await loadCompanyBriefJob(admin, jobId, userId);
+      if (!job) return errorResponse("Job not found", "JOB_NOT_FOUND", 404, req);
+      if (isStaleCompanyBriefJob(job)) {
+        job = await failCompanyBriefJob(admin, job, {
+          code: "JOB_TIMEOUT",
+          message: userFacingCompanyBriefError("JOB_TIMEOUT"),
+          retryable: true,
+        });
+      }
+      const payload = toCompanyBriefJobClient(job);
+      return successResponse(payload, undefined, 200, req);
+    }
+
+    if (action === "cancel") {
+      if (!jobId) return errorResponse("Missing jobId", "INVALID_REQUEST", 400, req);
+      const job = await loadCompanyBriefJob(admin, jobId, userId);
+      if (!job) return errorResponse("Job not found", "JOB_NOT_FOUND", 404, req);
+      const cancelled = await cancelCompanyBriefJob(admin, job);
+      return successResponse(toCompanyBriefJobClient(cancelled), undefined, 200, req);
+    }
+
+    if (action === "process") {
+      if (!jobId) return errorResponse("Missing jobId", "INVALID_REQUEST", 400, req);
+      const job = await loadCompanyBriefJob(admin, jobId, userId);
+      if (!job) return errorResponse("Job not found", "JOB_NOT_FOUND", 404, req);
+      if (!isTerminalCompanyBriefStatus(job.status)) {
+        kickProcess(req, auth, job.id);
+      }
+      return jobAcceptedResponse(req, job);
+    }
+
+    if (action === "retry") {
+      if (!jobId) return errorResponse("Missing jobId", "INVALID_REQUEST", 400, req);
+      const existing = await loadCompanyBriefJob(admin, jobId, userId);
+      if (!existing) return errorResponse("Job not found", "JOB_NOT_FOUND", 404, req);
+      if (existing.status === "queued" || existing.status === "processing") {
+        kickProcess(req, auth, existing.id);
+        return jobAcceptedResponse(req, existing, true);
+      }
+      const requeued = await requeueFailedCompanyBriefJob(admin, existing);
+      if (!requeued) {
+        return errorResponse("This brief can no longer be retried.", "INVALID_REQUEST", 409, req);
+      }
+      const reserved = await reserveCompanyBriefCredits(
+        admin,
+        requeued.id,
+        userId,
+        CREDIT_COST,
+        `${requeued.idempotency_key}:retry:${requeued.attempt_count + 1}`.slice(0, 150),
+      );
+      if (!reserved.success) {
+        await failCompanyBriefJob(admin, requeued, {
+          code: String(reserved.denial?.code ?? "INSUFFICIENT_CREDITS"),
+          message: userFacingCompanyBriefError(
+            String(reserved.denial?.code ?? "INSUFFICIENT_CREDITS"),
+            typeof reserved.denial?.error === "string" ? reserved.denial.error : undefined,
+          ),
+          retryable: true,
+        });
+        return creditDenialResponse(req, {
+          success: false,
+          error: String(reserved.denial?.error ?? "Insufficient credits."),
+          code: String(reserved.denial?.code ?? "INSUFFICIENT_CREDITS"),
+          balance: Number(reserved.denial?.balance),
+        }, CREDIT_COST);
+      }
+      kickProcess(req, auth, requeued.id);
+      return jobAcceptedResponse(req, requeued);
+    }
+
     const rawCompany = String(body.company ?? body.companyName ?? "").trim();
     const rawRole = String(body.role ?? body.roleTitle ?? "").trim();
     const force = body.force === true || body.refresh === true;
@@ -379,8 +726,6 @@ Deno.serve(async (req) => {
     if (!normalized) {
       return errorResponse("Missing company name", "INVALID_REQUEST", 400, req);
     }
-
-    const admin = getAdminClient();
 
     if (!force) {
       const { data: existing, error: existingErr } = await admin
@@ -424,108 +769,93 @@ Deno.serve(async (req) => {
         ? headerKey.slice(0, 150)
         : derivedKey.slice(0, 150);
 
-    const hybridResult = await executeHybridOperation<CompanyResearchClientData>({
-      req,
-      auth,
-      operation: "company_research",
+    const inserted = await insertCompanyBriefJob(admin, {
+      userId,
+      company,
+      normalized,
+      role,
+      force,
       idempotencyKey,
-      creditCost: CREDIT_COST,
-      creditAction: "company_research",
-      body: { company, role, normalized, force },
-      runDatabase: async () => {
-        if (force) return null;
-        const { data: existing } = await admin
-          .from("company_research")
-          .select("id, raw_data")
-          .eq("user_id", userId)
-          .eq("company_name_normalized", normalized)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        const brief = briefFromUnknown(existing?.raw_data);
-        if (!brief || !existing?.id) return null;
-        return {
-          persisted: true,
-          cached: true,
-          id: existing.id,
-          data: brief,
-          brief,
-          source: "database",
-        };
-      },
-      runPython: async (ctx) => {
-        // MATRIX: database → python (normalize only) → ai
-        let pyData: unknown = null;
-        try {
-          const py = await callPythonProcess({
-            operation: "company_normalize",
-            operationId: ctx.operationId,
-            correlationId: ctx.correlationId,
-            payload: {
-              company,
-              company_name: company,
-              role,
-              role_title: role,
-              normalized,
-            },
-          });
-          if (py.ok) pyData = py.data;
-        } catch (err) {
-          log(FN, "warn", "Python normalization unavailable", {
-            requestId,
-            error: String(err),
-          });
-        }
-
-        const brief = briefFromPythonCompany(pyData, company, role);
-        const isScaffold = Boolean(
-          brief?.overview.includes("being researched for") ||
-            brief?.watch_outs.some((w) => w.includes("unverified assumptions")),
-        );
-        if (!brief || !isMeaningfulBrief(brief) || isScaffold) {
-          return null;
-        }
-
-        return persistBriefResult(admin, userId, company, normalized, role, brief, "python");
-      },
-      runDeterministic: async () => {
-        const brief = briefFromPythonCompany(
-          { profile: { company_name: company, company_name_normalized: normalized } },
-          company,
-          role,
-        );
-        if (!brief) return null;
-        return persistBriefResult(
-          admin,
-          userId,
-          company,
-          normalized,
-          role,
-          brief,
-          "deterministic",
-        );
-      },
-      runAi: async () => {
-        const brief = await generateBriefWithAi(company, role, userId);
-        return persistBriefResult(admin, userId, company, normalized, role, brief, "ai");
-      },
     });
-
-    if (!hybridResult.ok) {
-      return hybridResult.response;
+    if (!inserted.row) {
+      return errorResponse(
+        "Could not queue company research. Please try again.",
+        "DATABASE_FAILURE",
+        503,
+        req,
+      );
     }
 
-    log(FN, "info", "Success", {
+    let job = inserted.row;
+    if (inserted.replay && job.status === "completed" && job.brief) {
+      return successResponse(toCompanyBriefJobClient(job, { cached: true }), undefined, 200, req);
+    }
+
+    if (inserted.replay && (job.status === "failed" || job.status === "cancelled")) {
+      const requeued = await requeueFailedCompanyBriefJob(admin, job);
+      if (!requeued) {
+        return errorResponse(
+          job.error_message || userFacingCompanyBriefError(job.error_code),
+          job.error_code || "PROVIDER_UNAVAILABLE",
+          503,
+          req,
+        );
+      }
+      job = requeued;
+      inserted.replay = false;
+    }
+
+    if (!inserted.replay || job.credits_reserved <= 0) {
+      const reserved = await reserveCompanyBriefCredits(
+        admin,
+        job.id,
+        userId,
+        CREDIT_COST,
+        idempotencyKey,
+      );
+      if (!reserved.success) {
+        if (!inserted.replay) {
+          await failCompanyBriefJob(admin, job, {
+            code: String(reserved.denial?.code ?? "INSUFFICIENT_CREDITS"),
+            message: userFacingCompanyBriefError(
+              String(reserved.denial?.code ?? "INSUFFICIENT_CREDITS"),
+              typeof reserved.denial?.error === "string" ? reserved.denial.error : undefined,
+            ),
+            retryable: true,
+          });
+        }
+        return creditDenialResponse(req, {
+          success: false,
+          error: String(reserved.denial?.error ?? "Insufficient credits."),
+          code: String(reserved.denial?.code ?? "INSUFFICIENT_CREDITS"),
+          balance: Number(reserved.denial?.balance),
+        }, CREDIT_COST);
+      }
+    }
+
+    if (!isTerminalCompanyBriefStatus(job.status)) {
+      kickProcess(req, auth, job.id);
+    }
+
+    log(FN, "info", "Job accepted", {
       requestId,
+      jobId: job.id,
+      replay: inserted.replay,
       company: normalized,
       userId,
-      id: hybridResult.data.id,
-      source: hybridResult.source,
     });
 
-    return hybridResult.response;
+    return jobAcceptedResponse(req, job, inserted.replay);
   } catch (err) {
     log(FN, "error", "Unhandled error", { requestId, error: String(err) });
+    if (isUniqueViolation(err as { message?: string })) {
+      return errorResponse(
+        "A brief is already being generated for this company.",
+        "DUPLICATE_REQUEST",
+        409,
+        req,
+      );
+    }
     return errorResponse(
       "Company research failed. Please try again.",
       "INTERNAL_ERROR",

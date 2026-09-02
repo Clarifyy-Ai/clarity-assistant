@@ -8,6 +8,19 @@ import {
 } from "../_shared/rateLimit.ts";
 import { isFeatureKilled, killSwitchResponse } from "../_shared/featureKillSwitch.ts";
 
+function localDayKey(iso: string, timeZone: string): string {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(ms));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
 Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;
@@ -260,6 +273,31 @@ Deno.serve(async (req: Request) => {
         ? Math.round((recentFillerAvg - olderFillerAvg) * 100) / 100
         : null;
 
+    const recentWpmAvg = avgOf(recentSc, "wpm_avg");
+    const olderWpmAvg = avgOf(olderSc, "wpm_avg");
+    const wpmDelta30d =
+      recentWpmAvg !== null && olderWpmAvg !== null
+        ? Math.round(recentWpmAvg - olderWpmAvg)
+        : null;
+
+    const avgDimension = (
+      field: "communication" | "technical" | "problem_solving" | "confidence",
+    ) => {
+      const vals = scorecardList
+        .map((sc) => sc[field])
+        .filter((x): x is number => typeof x === "number");
+      return vals.length
+        ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)
+        : null;
+    };
+
+    const dimension_averages = {
+      communication: avgDimension("communication"),
+      technical: avgDimension("technical"),
+      problem_solving: avgDimension("problem_solving"),
+      confidence: avgDimension("confidence"),
+    };
+
     const fillerTrend = scorecardList
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
       .slice(-30)
@@ -358,6 +396,19 @@ Deno.serve(async (req: Request) => {
         date: sc.created_at,
         score: sc.overall_score as number,
       }));
+
+    const sessionsScored = recentSessions.filter(
+      (s) => typeof s.overall_score === "number",
+    ).length;
+
+    const activityByDay: Record<string, number> = {};
+    for (const session of recentSessions) {
+      const anchor = session.started_at ?? session.date;
+      if (!anchor) continue;
+      const day = localDayKey(String(anchor), timeZone);
+      if (!day) continue;
+      activityByDay[day] = (activityByDay[day] ?? 0) + 1;
+    }
     /* ---------------------------
        CREDIT RECONCILIATION CHECK
     --------------------------- */
@@ -428,11 +479,16 @@ Deno.serve(async (req: Request) => {
         ? null
         : Math.round(avgOf(scorecardList, "wpm_avg") as number),
 
+      avg_wpm_delta_30d: wpmDelta30d,
+
       recent_sessions: recentSessions,
       confidence_trend: confidenceTrend,
+      sessions_scored: sessionsScored,
+      activity_by_day: activityByDay,
 
       filler_trend: fillerTrend,
       weak_spot_radar: weakSpotRadar,
+      dimension_averages,
       leaderboard: [],
     };
 

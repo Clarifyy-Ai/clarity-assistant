@@ -16,6 +16,11 @@ import { creditCost } from "../_shared/creditEconomics.ts";
 import { callPythonProcess } from "../_shared/pythonClient.ts";
 import { executeHybridOperation } from "../_shared/hybridExecute.ts";
 import { isUndefinedColumn } from "../_shared/postgresErrors.ts";
+import {
+  documentErrorMessage,
+  fileByteLengthFailure,
+  mapHybridDocumentCode,
+} from "../_shared/documentErrors.ts";
 import JSZip from "https://esm.sh/jszip@3.10.1";
 
 const RESUME_PARSE_COST = creditCost("resume_analysis");
@@ -757,22 +762,13 @@ Deno.serve(async (req) => {
     }
 
     const buf = await fileData.arrayBuffer();
-    if (!buf.byteLength) {
+    const sizeFail = fileByteLengthFailure(buf.byteLength, MAX_FILE_BYTES);
+    if (sizeFail) {
       return new Response(
         JSON.stringify({
-          error: "File is empty.",
-          code: "PARSER_FAILED",
-          message: "File is empty.",
-        }),
-        { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
-      );
-    }
-    if (buf.byteLength > MAX_FILE_BYTES) {
-      return new Response(
-        JSON.stringify({
-          error: "File is too large.",
-          code: "FILE_TOO_LARGE",
-          message: `File exceeds the ${Math.floor(MAX_FILE_BYTES / (1024 * 1024))} MB limit.`,
+          error: sizeFail.message,
+          code: sizeFail.code,
+          message: sizeFail.message,
           max_bytes: MAX_FILE_BYTES,
         }),
         { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
@@ -842,7 +838,7 @@ Deno.serve(async (req) => {
     });
     if (!mimeCheck.ok) {
       return new Response(
-        JSON.stringify({ error: mimeCheck.reason, code: "BAD_REQUEST" }),
+        JSON.stringify({ error: mimeCheck.reason, code: "INVALID_FILE" }),
         { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
       );
     }
@@ -851,7 +847,7 @@ Deno.serve(async (req) => {
 
     if (resolvedMime === "application/pdf" && !looksLikePdf(fileBytes)) {
       return new Response(
-        JSON.stringify({ error: "File content does not match PDF format.", code: "BAD_REQUEST" }),
+        JSON.stringify({ error: "File content does not match PDF format.", code: "INVALID_FILE" }),
         { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
       );
     }
@@ -860,7 +856,7 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({
           error: "Legacy .doc files are not supported. Please upload PDF, DOCX, or TXT.",
-          code: "BAD_REQUEST",
+          code: "UNSUPPORTED_FILE_TYPE",
         }),
         { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
       );
@@ -890,7 +886,7 @@ Deno.serve(async (req) => {
         return new Response(
           JSON.stringify({
             error: "Text file is empty or too short to parse.",
-            code: "BAD_REQUEST",
+            code: "INVALID_FILE",
           }),
           { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
         );
@@ -936,12 +932,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Total failure — hybrid already refunded reserved credits.
-    const failMsg = "We could not extract readable content from this resume.";
+    // Total failure — hybrid already refunded reserved credits. Keep hybrid class.
+    const failCode = mapHybridDocumentCode(hybrid.code);
+    const failMsg = documentErrorMessage(failCode, "We could not extract readable content from this resume.");
     await updateResumeRow(db, resume_id, {
       content: JSON.stringify({
         _parse_error: failMsg,
-        _error_code: "PARSER_FAILED",
+        _error_code: failCode,
       }),
     });
     if (effectiveVersionId) {
@@ -950,23 +947,7 @@ Deno.serve(async (req) => {
         parse_error: failMsg,
       }).eq("id", effectiveVersionId);
     }
-    let correlationId = "";
-    try {
-      const failBody = await hybrid.response.clone().json() as { correlation_id?: string };
-      correlationId = failBody.correlation_id ?? "";
-    } catch {
-      /* ignore */
-    }
-    return new Response(
-      JSON.stringify({
-        success: false,
-        code: "PARSER_FAILED",
-        message: failMsg,
-        retryable: true,
-        correlation_id: correlationId,
-      }),
-      { status: 422, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
-    );
+    return hybrid.response;
 
   } catch (err) {
     if (err instanceof Response) return err;

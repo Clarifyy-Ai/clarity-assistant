@@ -45,7 +45,10 @@ import {
   sessionServiceReadiness,
   type EligibilityRpc,
 } from "../_shared/sessionStartEligibility.ts";
-import { rpcJson } from "../_shared/sessionLifecycleRpc.ts";
+import {
+  mapSessionStartRpcFailure,
+  rpcJson,
+} from "../_shared/sessionLifecycleRpc.ts";
 
 const FUNCTION_NAME = "start-session";
 
@@ -698,7 +701,21 @@ Deno.serve(async (req: Request) => {
 
   const { user } = auth.context;
 
-  const onboardingBlock = await requireOnboardingComplete(user.id, req);
+  let onboardingBlock: Response | null;
+  try {
+    onboardingBlock = await requireOnboardingComplete(user.id, req);
+  } catch (onboardingErr) {
+    if (
+      onboardingErr instanceof Error &&
+      onboardingErr.name === "DependencyUnavailableError"
+    ) {
+      return json(corsHeaders, 503, {
+        error: "Could not verify account setup. Please try again shortly.",
+        code: "DEPENDENCY_UNAVAILABLE",
+      });
+    }
+    throw onboardingErr;
+  }
   if (onboardingBlock) {
     return withCorsHeaders(req, onboardingBlock);
   }
@@ -772,9 +789,10 @@ Deno.serve(async (req: Request) => {
     });
     if (error) {
       console.error("[start-session] eligibility rpc:", error);
-      return json(corsHeaders, 500, {
-        error: "Could not check session eligibility.",
-        code: "INTERNAL_ERROR",
+      const mapped = mapSessionStartRpcFailure(error);
+      return json(corsHeaders, mapped.status, {
+        error: mapped.error,
+        code: mapped.code,
       });
     }
     let reason = String(data.reason ?? (data.allowed ? "ALLOWED" : "ACCOUNT_RESTRICTED"));
@@ -796,9 +814,10 @@ Deno.serve(async (req: Request) => {
     });
     if (error) {
       console.error("[start-session] restore rpc:", error);
-      return json(corsHeaders, 500, {
-        error: "Could not restore session.",
-        code: "INTERNAL_ERROR",
+      const mapped = mapSessionStartRpcFailure(error);
+      return json(corsHeaders, mapped.status, {
+        error: mapped.error,
+        code: mapped.code === "SESSION_CREATE_FAILED" ? "SESSION_RESTORE_FAILED" : mapped.code,
       });
     }
     if (data.reason === "SESSION_EXPIRED" || data.expired) {
@@ -900,9 +919,13 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
     if (ctxErr) {
       console.error("[start-session] practice_context lookup:", ctxErr.message);
-      return json(corsHeaders, 500, {
-        error: "Could not start session.",
-        code: "SESSION_LOOKUP_FAILED",
+      const mapped = mapSessionStartRpcFailure(ctxErr.message);
+      return json(corsHeaders, mapped.status === 422 ? mapped.status : 503, {
+        error:
+          mapped.status === 422
+            ? mapped.error
+            : "Could not verify practice context. Please try again shortly.",
+        code: mapped.status === 422 ? mapped.code : "DEPENDENCY_UNAVAILABLE",
       });
     }
     if (!ctxRow) {
@@ -941,9 +964,17 @@ Deno.serve(async (req: Request) => {
 
   if (startErr) {
     console.error("[start-session] start rpc:", startErr);
-    return json(corsHeaders, 500, {
-      error: "Could not create session.",
-      code: "SESSION_CREATE_FAILED",
+    const mapped = mapSessionStartRpcFailure(startErr);
+    return json(corsHeaders, mapped.status, {
+      error: mapped.error,
+      code: mapped.code,
+    });
+  }
+
+  if (started.reason === "SESSION_STATE_CONFLICT") {
+    return json(corsHeaders, 409, {
+      error: String(started.error ?? "Could not create session due to a concurrent start."),
+      code: "SESSION_STATE_CONFLICT",
     });
   }
 
@@ -953,8 +984,8 @@ Deno.serve(async (req: Request) => {
   }
 
   if (!started.session_id) {
-    return json(corsHeaders, 500, {
-      error: "Could not create session.",
+    return json(corsHeaders, 503, {
+      error: "Could not create session. Please try again shortly.",
       code: "SESSION_CREATE_FAILED",
     });
   }
@@ -1034,18 +1065,28 @@ Deno.serve(async (req: Request) => {
     lifecycle_status: started.lifecycle_status ?? "IN_PROGRESS",
   });
   } catch (error) {
+    if (
+      error instanceof Error &&
+      error.name === "DependencyUnavailableError"
+    ) {
+      return json(corsHeaders, 503, {
+        error: "Could not start session. Please try again shortly.",
+        code: "DEPENDENCY_UNAVAILABLE",
+      });
+    }
     const message =
       error instanceof Error ? error.message : "Unexpected start-session error.";
     console.error("[start-session] Unhandled error:", message);
+    const mapped = mapSessionStartRpcFailure(message);
     try {
-      return json(getCorsHeaders(req), 500, {
-        error: "Could not start session.",
-        code: "INTERNAL_ERROR",
+      return json(getCorsHeaders(req), mapped.status, {
+        error: mapped.error,
+        code: mapped.code,
       });
     } catch {
       return new Response(
-        JSON.stringify({ error: "Could not start session.", code: "INTERNAL_ERROR" }),
-        { status: 500, headers: { "Content-Type": "application/json" } },
+        JSON.stringify({ error: mapped.error, code: mapped.code }),
+        { status: mapped.status, headers: { "Content-Type": "application/json" } },
       );
     }
   }

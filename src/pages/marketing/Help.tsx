@@ -3,7 +3,13 @@ import { Link } from "react-router-dom";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { Search, ChevronDown, ChevronUp, HelpCircle, Mail, BookOpen } from "lucide-react";
 import { motion } from "framer-motion";
-import { SUPPORT_EMAIL, STATUS_PAGE_URL } from "@/lib/constants/contact";
+import {
+  SUPPORT_EMAIL,
+  STATUS_PAGE_URL,
+  STATUS_REPORT_MAILTO,
+  PUBLIC_STATUS_FOOTER_LABEL,
+  PUBLIC_STATUS_HELP_LINE,
+} from "@/lib/constants/contact";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import { ComplianceBanner } from "@/components/marketing";
 import { Input } from "@/components/ui/Input";
@@ -13,10 +19,8 @@ import {
   HELP_FAQ_CATEGORIES_FALLBACK,
   HELP_ARTICLES_FALLBACK,
   groupHelpArticlesIntoCategories,
-  resolveHelpArticleDisplay,
-  dedupeHelpArticlesByQuestion,
+  mergePublishedHelpRows,
   type HelpFaqCategory,
-  type HelpArticleItem,
 } from "@/lib/constants/helpArticlesFallback";
 import { helpArticlesDB } from "@/lib/supabase/database";
 
@@ -38,8 +42,8 @@ function mapDbRowsToCategories(
     sort_order: number;
   }>,
 ): HelpFaqCategory[] {
-  const cleaned: HelpArticleItem[] = rows.map((r) =>
-    resolveHelpArticleDisplay({
+  const cleaned = mergePublishedHelpRows(
+    rows.map((r) => ({
       slug: r.slug,
       question: r.question,
       answer: r.answer,
@@ -47,18 +51,9 @@ function mapDbRowsToCategories(
       category_slug: r.category_slug,
       category_title: r.category_title,
       sort_order: r.sort_order,
-    }),
+    })),
   );
-  // Ensure critical billing/free-plan answers exist even if DB omit them.
-  const have = new Set(cleaned.map((a) => a.slug));
-  for (const slug of ["gs-3", "bi-5"] as const) {
-    if (!have.has(slug)) {
-      const fb = HELP_ARTICLES_FALLBACK.find((a) => a.slug === slug);
-      if (fb) cleaned.push(fb);
-    }
-  }
-  const deduped = dedupeHelpArticlesByQuestion(cleaned);
-  return groupHelpArticlesIntoCategories(deduped);
+  return groupHelpArticlesIntoCategories(cleaned);
 }
 
 export default function Help() {
@@ -272,6 +267,42 @@ export default function Help() {
         </div>
       </section>
 
+      <section className="pb-10 px-4 sm:px-6">
+        <div className="max-w-3xl mx-auto rounded-2xl border border-border bg-card/40 p-5 sm:p-6">
+          <h2 className="text-base font-semibold text-foreground">Company &amp; product pages</h2>
+          <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+            Help Center articles are separate from the product FAQ and company pages. Use these
+            dedicated routes when you need short answers or company information.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link
+              to="/faq"
+              className="inline-flex items-center rounded-xl border border-border bg-background px-3 py-2 text-sm font-medium text-foreground hover:border-primary/30 hover:text-primary transition-colors"
+            >
+              Product FAQ
+            </Link>
+            <Link
+              to="/about"
+              className="inline-flex items-center rounded-xl border border-border bg-background px-3 py-2 text-sm font-medium text-foreground hover:border-primary/30 hover:text-primary transition-colors"
+            >
+              About
+            </Link>
+            <Link
+              to="/industries"
+              className="inline-flex items-center rounded-xl border border-border bg-background px-3 py-2 text-sm font-medium text-foreground hover:border-primary/30 hover:text-primary transition-colors"
+            >
+              Industries
+            </Link>
+            <Link
+              to="/contact-sales"
+              className="inline-flex items-center rounded-xl border border-border bg-background px-3 py-2 text-sm font-medium text-foreground hover:border-primary/30 hover:text-primary transition-colors"
+            >
+              Contact Sales
+            </Link>
+          </div>
+        </div>
+      </section>
+
       <section className="pb-14 px-4 sm:px-6">
         <div className="max-w-xl mx-auto text-center rounded-2xl border border-border bg-card p-8">
           <Mail className="w-8 h-8 text-primary mx-auto mb-3" />
@@ -284,7 +315,7 @@ export default function Help() {
             <Mail className="w-4 h-4" /> Contact Support
           </a>
           <p className="text-sm text-muted-foreground mt-4">
-            System status:{" "}
+            {PUBLIC_STATUS_HELP_LINE}{" "}
             {STATUS_PAGE_URL ? (
               <a
                 href={STATUS_PAGE_URL}
@@ -292,20 +323,17 @@ export default function Help() {
                 rel="noopener noreferrer"
                 className="text-sm text-primary hover:underline"
               >
-                View status page
+                {PUBLIC_STATUS_FOOTER_LABEL}
               </a>
             ) : (
-              <span className="text-sm text-muted-foreground">
-                No public status page configured —{" "}
-                <a
-                  href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Career Pilot system status")}`}
-                  className="text-sm text-primary hover:underline"
-                >
-                  email {SUPPORT_EMAIL}
-                </a>{" "}
-                for outages.
-              </span>
+              <a
+                href={STATUS_REPORT_MAILTO}
+                className="text-sm text-primary hover:underline"
+              >
+                {PUBLIC_STATUS_FOOTER_LABEL}
+              </a>
             )}
+            {!STATUS_PAGE_URL ? ` (${SUPPORT_EMAIL}).` : "."}
           </p>
         </div>
       </section>

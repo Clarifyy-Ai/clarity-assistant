@@ -263,7 +263,8 @@ def auth_cases() -> list[dict]:
             "3. If MFA UI absent, record Unavailable / Requires Configuration.",
             "1. MFA prompt appears when enabled.\n2. Valid code grants access; invalid denied.\n3. Honest classification if not present.",
             "MFA enforced when enabled for the account.",
-            priority="P2", severity="Major", test_type="Security", account="PRO_USER_01",
+            priority="P2", severity="Major", test_type="Security", account="MFA_USER_01",
+            notes="Blocked until npm run qa:seed-mfa — see QA-GAP-002.",
         ),
         tc(
             "TC-AUTH-016", "Authentication", "Expired / invalid session action",
@@ -289,7 +290,7 @@ def onboarding_cases() -> list[dict]:
             "3. Dashboard reachable.\n4. Onboarding stays completed after refresh.",
             "New user can complete onboarding and reach the app.",
             priority="P0", severity="Critical", account="NEW_USER_01",
-            pre="Verified email; onboarding incomplete.",
+            pre="Verified email; onboarding incomplete. Run npm run qa:reset-fixtures (QA-GAP-003).",
         ),
         tc(
             "TC-ONB-002", "Onboarding", "Required field validation",

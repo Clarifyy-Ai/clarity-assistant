@@ -24,6 +24,11 @@ import {
   isParseQuestionPdfQueuedPayload,
   pollParseQuestionPdfJob,
 } from "@/lib/gov-exam/parseQuestionPdfJob";
+import {
+  validatePdfImportFile,
+  userMessageForPdfImportFailure,
+} from "@/lib/gov-exam/extractQuestionPaper";
+import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { useAuthStore } from "@/store/userStore";
 
 import { Button } from "@/components/ui/Button";
@@ -702,6 +707,7 @@ function ReviewModal({
 function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
   const user = useAuthStore((s) => s.user);
   const fileRef = useRef<HTMLInputElement>(null);
+  const lastFileRef = useRef<File | null>(null);
 
   const [dragging, setDragging] = useState(false);
   const [parsing, setParsing] = useState(false);
@@ -710,6 +716,7 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
   const [reviewItems, setReviewItems] = useState<ReviewItem[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [summary, setSummary] = useState<string | null>(null);
+  const [canRetry, setCanRetry] = useState(false);
 
   function handleDrop(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault();
@@ -729,20 +736,20 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
       return;
     }
 
-    if (file.type !== "application/pdf") {
-      toast.error("Only PDF files are supported.");
+    const gate = validatePdfImportFile(file);
+    if (!gate.ok) {
+      setCanRetry(false);
+      setParseError(gate.message);
+      toast.error(gate.message);
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("PDF must be under 10 MB.");
-      return;
-    }
-
+    lastFileRef.current = file;
     setParsing(true);
     setBackgroundParse(false);
     setParseError(null);
     setSummary(null);
+    setCanRetry(false);
 
     try {
       const formData = new FormData();
@@ -763,11 +770,14 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
 
       const responseJson = await response.json().catch(() => ({}));
 
-      if (response.status === 504 || response.status === 502) {
+      if (response.status === 504 || response.status === 502 || response.status === 422) {
         const message =
           responseJson?.error ||
           responseJson?.message ||
-          "PDF parsing failed. Credits refunded.";
+          userMessageForPdfImportFailure(
+            response.status === 504 ? "PARSER_TIMEOUT" : "AI_ERROR",
+            true,
+          );
         throw new Error(message);
       }
 
@@ -817,12 +827,13 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
         const saved = payload.count ?? questions.length;
         toast.success(`${saved} questions saved to your bank.`);
         setSummary(`${saved} questions saved to your bank.`);
+        setCanRetry(false);
         onImported(saved);
         return;
       }
 
       if (questions.length === 0) {
-        throw new Error("No questions found in this PDF.");
+        throw new Error(userMessageForPdfImportFailure("ZERO_QUESTIONS", true));
       }
 
       const items: ReviewItem[] = (questions as ParsedQuestion[]).map((question, index) => ({
@@ -833,10 +844,12 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
 
       setReviewItems(items);
       setSummary(parseSummary ?? `${items.length} questions parsed.`);
+      setCanRetry(false);
     } catch (error) {
       console.error("[PDFImportTab] parse error:", error);
       const message = error instanceof Error ? error.message : "Failed to parse PDF.";
       setParseError(message);
+      setCanRetry(true);
       toast.error(message);
     } finally {
       setParsing(false);
@@ -910,7 +923,7 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
         <input
           ref={fileRef}
           type="file"
-          accept="application/pdf"
+          accept=".pdf,application/pdf"
           className="sr-only"
           onChange={handleFileChange}
         />
@@ -932,7 +945,7 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
             <Upload className="mb-3 h-10 w-10 text-muted-foreground" />
             <p className="font-medium text-foreground">Drop your PDF here</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              or click to browse · Max 10 MB
+              or click to browse · Max 15 MB
             </p>
             <p className="mt-3 text-xs text-muted-foreground">
               Supports JEE, NEET, UPSC, SSC, IBPS papers and more
@@ -942,9 +955,26 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
       </div>
 
       {parseError && (
-        <div className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          {parseError}
+        <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span>{parseError}</span>
+            {canRetry && lastFileRef.current && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  const retryFile = lastFileRef.current;
+                  if (retryFile) void processFile(retryFile);
+                }}
+              >
+                Retry
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
@@ -958,8 +988,8 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
       <div className="flex items-start gap-2 rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
         <span>
-          Each PDF import costs <strong>5 credits</strong>. The AI will extract
-          questions automatically and let you review before saving.
+          Each PDF import costs <strong>{AI_CREDIT_COSTS.parse_question_pdf} credits</strong>.
+          Credits are refunded if parsing fails. Review extracted questions before saving.
         </span>
       </div>
 

@@ -1,5 +1,5 @@
 // src/hooks/useAudioSession.ts
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useMemo } from "react";
 import { FillerAccumulator, RealTimeFillerCounter } from "@/lib/audio/fillerDetector";
 import { useAudioStore } from "@/store/audioStore";
 import { useSessionStore } from "@/store/sessionStore";
@@ -15,7 +15,20 @@ import {
   isSystemAudioSupported,
 } from "@/lib/audio/audioCapture";
 import { confirmTabAudioCapture } from "@/lib/audio/tabAudioGuide";
-import { DeepgramStreamClient } from "@/lib/audio/deepgramStream";
+import {
+  isMicrophoneAccessError,
+  MIC_DENIED_RECOVERY,
+  MIC_NO_DEVICE_RECOVERY,
+} from "@/lib/audio/micPermission";
+import { getMicPermissionState } from "@/lib/validators/audioValidator";
+import {
+  createParakeetTranscriptionService,
+  channelToSpeaker,
+  newUtteranceFromSegment,
+  type ParakeetTranscriptionService,
+  type TranscriptionChannel,
+} from "@/lib/audio/transcription";
+import { generateId } from "@/lib/utils";
 import { processUtteranceForDiarization } from "@/lib/audio/diarization";
 import { VADDetector, SilenceBoundaryDetector } from "@/lib/audio/vadDetector";
 import { WPMTracker } from "@/lib/audio/wpmTracker";
@@ -41,16 +54,25 @@ interface UseAudioSessionOptions {
   onWPMUpdate: (wpm: number) => void;
 }
 
+export type AudioStartOptions = {
+  /** Restore/reconnect: reuse granted permission and skip the tab-share picker. */
+  restore?: boolean;
+};
+
+export type AudioStopOptions = {
+  /** Keep transcript/utterances (pause, reconnect). Default false = full teardown. */
+  preserveTranscript?: boolean;
+  /** Release cached deepgram-token after session end. */
+  releaseToken?: boolean;
+};
+
 export function useAudioSession(opts: UseAudioSessionOptions) {
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
   const isMuted = useAudioStore((s) => s.is_muted ?? false);
   const deepgramStatus = useAudioStore((s) => s.deepgram_status ?? "disconnected");
-  const currentLevel = useAudioStore((s) => s.levels?.current_level ?? 0);
-  const isSpeaking = useAudioStore((s) => s.levels?.is_speaking ?? false);
   const streamError = useAudioStore((s) => s.streams?.error ?? null);
 
-  const deepgramMicRef = useRef<DeepgramStreamClient | null>(null);
-  const deepgramSystemRef = useRef<DeepgramStreamClient | null>(null);
+  const transcriptionServiceRef = useRef<ParakeetTranscriptionService | null>(null);
   const vadRef = useRef<VADDetector | null>(null);
   const silenceRef = useRef<SilenceBoundaryDetector | null>(null);
   const fillerAccRef = useRef<FillerAccumulator | null>(null);
@@ -62,6 +84,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
   const cleanupDevicesRef = useRef<(() => void) | null>(null);
   const toggleSystemAudioRef = useRef<(() => Promise<void>) | null>(null);
   const isStartedRef = useRef(false);
+  const skipAutoTabShareRef = useRef(false);
   const levelTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastAudioAtRef = useRef(0);
   /** True while a dedicated interviewer (tab) Deepgram client is connected. */
@@ -120,43 +143,45 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     [],
   );
 
-  const connectDeepgram = useCallback(
-    async (
-      stream: MediaStream,
-      forcedSpeaker: Speaker,
-      onInterim?: (text: string) => void,
-    ): Promise<DeepgramStreamClient> => {
-      const store = useAudioStore.getState();
-      const client = new DeepgramStreamClient({
-        stream,
-        config: {
-          model: "nova-2-meeting",
-          filler_words: true,
-          interim_results: true,
-          utterance_end_ms: 1200,
-        },
-        onUtterance: (u) => handleUtterance(u, forcedSpeaker),
-        onInterim: (text) => {
+  const ensureTranscriptionService = useCallback((): ParakeetTranscriptionService => {
+    if (transcriptionServiceRef.current) return transcriptionServiceRef.current;
+
+    const sessionId =
+      useSessionStore.getState().session_id ||
+      generateId();
+
+    const service = createParakeetTranscriptionService({
+      sessionId,
+      callbacks: {
+        onPartial: (segment, channel) => {
           if (!isStartedRef.current) return;
+          const store = useAudioStore.getState();
           store.setPipelineStatus("transcribing");
-          if (forcedSpeaker === "interviewer") {
+          if (channel === "interviewer") {
             silenceRef.current?.onInterviewerSpeaking();
           }
-          if (onInterim) onInterim(text);
+          if (channel === "candidate") {
+            store.updateInterimText(segment.text);
+            fillerRTRef.current?.check(segment.text);
+          }
         },
-        onError: (error) => {
+        onFinal: (segment, channel) => {
           if (!isStartedRef.current) return;
-          store.setStreamError({
-            code: "DEEPGRAM_CONNECTION_FAILED",
-            message: error.message,
-            recoverable: true,
-            suggestion: "Check your internet connection.",
-          });
+          const utterance = newUtteranceFromSegment(segment, channel);
+          handleUtterance(utterance, channelToSpeaker(channel));
         },
-        onStatusChange: (status) => {
-          if (!isStartedRef.current) return;
-          if (forcedSpeaker === "candidate" || !deepgramMicRef.current) {
-            store.setDeepgramStatus(status);
+        onStatusChange: (status, channel) => {
+          if (!isStartedRef.current && status !== "paused" && status !== "ended") return;
+          const store = useAudioStore.getState();
+          store.setTranscriptionProviderStatus(status);
+          if (channel === "candidate" || channel === undefined) {
+            if (status === "connecting") store.setDeepgramStatus("connecting");
+            else if (status === "connected") store.setDeepgramStatus("connected");
+            else if (status === "reconnecting") store.setDeepgramStatus("reconnecting");
+            else if (status === "error" || status === "unavailable")
+              store.setDeepgramStatus("error");
+            else if (status === "paused" || status === "ended" || status === "idle")
+              store.setDeepgramStatus("disconnected");
           }
           if (status === "connecting") store.setPipelineStatus("connecting");
           else if (status === "reconnecting") store.setPipelineStatus("reconnecting");
@@ -164,33 +189,112 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
             store.setPipelineStatus(
               hasInterviewerChannelRef.current ? "listening" : "microphone_only",
             );
-          } else if (status === "error") store.setPipelineStatus("unavailable");
-          else if (status === "disconnected" && isStartedRef.current) {
+          } else if (status === "error" || status === "unavailable") {
+            store.setPipelineStatus("unavailable");
+          } else if (status === "paused") {
+            store.setPipelineStatus("idle");
+          } else if (status === "disconnected" && isStartedRef.current) {
             store.setPipelineStatus(
               hasInterviewerChannelRef.current ? "listening" : "microphone_only",
             );
           }
         },
-      });
-      await client.connect();
-      return client;
+        onError: (error, recoverable) => {
+          if (!isStartedRef.current) return;
+          useAudioStore.getState().setStreamError({
+            code: "DEEPGRAM_CONNECTION_FAILED",
+            message: error.message,
+            recoverable,
+            suggestion: recoverable
+              ? "Check your internet connection or tap Reconnect."
+              : "Live transcription is unavailable. Type questions in Chat.",
+          });
+        },
+      },
+    });
+
+    transcriptionServiceRef.current = service;
+    return service;
+  }, [handleUtterance]);
+
+  const connectTranscriptionChannel = useCallback(
+    async (stream: MediaStream, channel: TranscriptionChannel): Promise<void> => {
+      const store = useAudioStore.getState();
+      store.setTokenState("connecting");
+      try {
+        const service = ensureTranscriptionService();
+        if (!service.isProviderEnabled()) {
+          throw new Error(
+            "Live transcription is disabled. You can still type questions in Chat.",
+          );
+        }
+        await service.connectChannel(stream, channel);
+        store.setTokenState("ready");
+      } catch (err) {
+        store.setTokenState("failed");
+        throw err;
+      }
     },
-    [handleUtterance],
+    [ensureTranscriptionService],
   );
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (startOpts?: AudioStartOptions) => {
     if (isStartedRef.current) return;
     isStartedRef.current = true;
     hasInterviewerChannelRef.current = false;
+    const restore = Boolean(startOpts?.restore);
+    skipAutoTabShareRef.current = restore;
 
     const store = useAudioStore.getState();
     store.setIsCapturing(false);
     store.setStreamError(null);
-    store.setMicState("requesting_permission");
     store.setTokenState("connecting");
-    store.setPipelineStatus("requesting_permission");
     store.setDeepgramStatus("connecting");
+    store.setTranscriptionProviderStatus("connecting");
     useOverlayStore.getState().setSessionPipelineState("connecting");
+
+    const permission = await getMicPermissionState();
+    if (permission === "denied") {
+      store.setMicState("permission_denied");
+      store.setStreamError({
+        code: "PERMISSION_DENIED",
+        message: MIC_DENIED_RECOVERY,
+        recoverable: false,
+        suggestion: MIC_DENIED_RECOVERY,
+      });
+      if (opts.micOptional) {
+        isStartedRef.current = false;
+        store.setDeepgramStatus("disconnected");
+        store.setTokenState("idle");
+        store.setPipelineStatus("text_only");
+        toast.message("Mic unavailable — continue with text chat and AI hints.");
+        return;
+      }
+      store.setPipelineStatus("unavailable");
+      useOverlayStore.getState().setSessionPipelineState("permission_denied");
+      toast.message(MIC_DENIED_RECOVERY, { duration: 8000 });
+      if (!restore) isStartedRef.current = false;
+      return;
+    }
+
+    if (permission === "prompt") {
+      store.setMicState("requesting_permission");
+      store.setPipelineStatus("requesting_permission");
+    } else {
+      store.setMicState("not_checked");
+      store.setPipelineStatus("connecting");
+    }
+
+    if (restore && permission !== "granted") {
+      store.setMicState("not_checked");
+      store.setPipelineStatus("idle");
+      store.setDeepgramStatus("disconnected");
+      store.setTokenState("idle");
+      store.setStreamError(null);
+      useOverlayStore.getState().setSessionPipelineState("idle");
+      toast.message("Session restored. Enable your microphone when you are ready — audio is not requested automatically.");
+      return;
+    }
 
     try {
       const micStream = await captureMicrophone(opts.micDeviceId, {
@@ -200,10 +304,9 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       store.setMicStream(micStream);
       store.setMicState("ready");
 
-      // Tab-share must not block Practice Coach from becoming active. The
-      // OS picker and guidance modal previously held startLiveSession on
-      // "starting" until the tester clicked Continue/Skip — that blocked QA.
-      if (opts.enableSystemAudio && isSystemAudioSupported()) {
+      // Tab-share always prompts. Skip it on restore/reconnect so a granted
+      // microphone is not followed by a second permission picker.
+      if (opts.enableSystemAudio && isSystemAudioSupported() && !restore) {
         store.setSystemAudioAvailable(false);
         markInterviewerChannel(false);
         window.setTimeout(() => {
@@ -222,6 +325,9 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
         toast.warning(
           "Interviewer audio unavailable in this browser. Only your microphone will be transcribed. Type a question in Chat as a fallback.",
         );
+      } else if (opts.enableSystemAudio && restore) {
+        store.setSystemAudioAvailable(false);
+        markInterviewerChannel(false);
       }
 
       // combined_stream is mic-only for analyser/legacy — NOT a mix for Deepgram.
@@ -313,14 +419,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       wpmTracker.start();
 
       try {
-        deepgramMicRef.current = await connectDeepgram(
-          micStream,
-          "candidate",
-          (text) => {
-            store.updateInterimText(text);
-            fillerRTRef.current?.check(text);
-          },
-        );
+        await connectTranscriptionChannel(micStream, "candidate");
 
         if (opts.enableSystemAudio) {
           markInterviewerChannel(false);
@@ -368,35 +467,53 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
         useOverlayStore.getState().setSessionPipelineState("audio_unavailable");
       });
     } catch (err) {
-      isStartedRef.current = false;
       hasInterviewerChannelRef.current = false;
-      const message = err instanceof Error ? err.message : "Audio start failed";
+      const access = isMicrophoneAccessError(err) ? err : null;
+      const message = access?.message ?? (err instanceof Error ? err.message : "Audio start failed");
+      const denied = access?.audioCode === "PERMISSION_DENIED";
+      const noDevice = access?.audioCode === "DEVICE_NOT_FOUND";
 
       if (opts.micOptional) {
+        isStartedRef.current = false;
         store.setStreamError(null);
         store.setDeepgramStatus("disconnected");
         store.setTokenState("idle");
-        store.setMicState("not_checked");
+        store.setMicState(denied ? "permission_denied" : noDevice ? "device_unavailable" : "not_checked");
         store.setIsCapturing(false);
         store.setPipelineStatus("text_only");
-        toast.message("Mic unavailable — continue with text chat and AI hints.");
+        toast.message(
+          denied ? MIC_DENIED_RECOVERY : "Mic unavailable — continue with text chat and AI hints.",
+        );
         return;
       }
 
-      store.setStreamError({
-        code: "UNKNOWN",
-        message,
-        recoverable: true,
-        suggestion: "Allow microphone access in browser settings, then retry.",
-      });
+      if (!restore) isStartedRef.current = false;
+
+      store.setStreamError(
+        access?.toAudioError() ?? {
+          code: "UNKNOWN",
+          message,
+          recoverable: true,
+          suggestion: "Allow microphone access in browser settings, then retry.",
+        },
+      );
       store.setDeepgramStatus("error");
       store.setTokenState("failed");
       store.setPipelineStatus("unavailable");
-      const denied = /permission|denied|notallowed|not allowed/i.test(message);
-      store.setMicState(denied ? "permission_denied" : "error");
+      store.setMicState(
+        denied ? "permission_denied" : noDevice ? "device_unavailable" : "error",
+      );
       useOverlayStore
         .getState()
         .setSessionPipelineState(denied ? "permission_denied" : "audio_unavailable");
+      toast.message(
+        denied
+          ? MIC_DENIED_RECOVERY
+          : noDevice
+            ? MIC_NO_DEVICE_RECOVERY
+            : message,
+        { duration: 8000 },
+      );
     }
   }, [
     opts.micDeviceId,
@@ -404,11 +521,12 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     opts.autoGainControl,
     opts.enableSystemAudio,
     opts.micOptional,
-    connectDeepgram,
+    connectTranscriptionChannel,
     markInterviewerChannel,
   ]);
 
-  const stop = useCallback(() => {
+  const stop = useCallback((stopOpts?: AudioStopOptions) => {
+    const preserveTranscript = stopOpts?.preserveTranscript === true;
     isStartedRef.current = false;
     hasInterviewerChannelRef.current = false;
 
@@ -417,10 +535,10 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       levelTimerRef.current = null;
     }
 
-    deepgramMicRef.current?.disconnect();
-    deepgramMicRef.current = null;
-    deepgramSystemRef.current?.disconnect();
-    deepgramSystemRef.current = null;
+    transcriptionServiceRef.current?.destroy({
+      releaseTokenCache: stopOpts?.releaseToken === true,
+    });
+    transcriptionServiceRef.current = null;
 
     vadRef.current?.stop();
     vadRef.current = null;
@@ -450,9 +568,30 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     stopStream(store.streams.combined_stream);
     teardownAudioContext();
 
-    store.resetAudio();
-    store.setPipelineStatus("ended");
+    if (preserveTranscript) {
+      store.setMicStream(null);
+      store.setSystemStream(null);
+      store.setCombinedStream(null);
+      store.setIsCapturing(false);
+      store.setDeepgramStatus("disconnected");
+      store.setTranscriptionProviderStatus("idle");
+      store.setTokenState("idle");
+      store.setPipelineStatus("idle");
+      store.updateInterimText("");
+    } else {
+      store.resetAudio();
+      store.setPipelineStatus("ended");
+      store.setTranscriptionProviderStatus("ended");
+    }
   }, []);
+
+  const pause = useCallback(() => {
+    if (!isStartedRef.current) return;
+    transcriptionServiceRef.current?.pause();
+    stop({ preserveTranscript: true });
+    useAudioStore.getState().setTranscriptionProviderStatus("paused");
+    useOverlayStore.getState().setSessionPipelineState("paused");
+  }, [stop]);
 
   const toggleMute = useCallback(() => {
     const store = useAudioStore.getState();
@@ -509,8 +648,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     const currentSysStream = store.streams.system_stream;
 
     if (currentSysStream) {
-      deepgramSystemRef.current?.disconnect();
-      deepgramSystemRef.current = null;
+      transcriptionServiceRef.current?.disconnectChannel("interviewer");
       cleanupSysRef.current?.();
       cleanupSysRef.current = null;
       stopStream(currentSysStream);
@@ -541,14 +679,13 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
 
       cleanupSysRef.current = watchStreamEnded(sysStream, () => {
         if (!isStartedRef.current) return;
-        deepgramSystemRef.current?.disconnect();
-        deepgramSystemRef.current = null;
+        transcriptionServiceRef.current?.disconnectChannel("interviewer");
         store.setSystemStream(null);
         markInterviewerChannel(false);
         toast.warning("Interviewer audio unavailable — tab share ended.");
       });
 
-      deepgramSystemRef.current = await connectDeepgram(sysStream, "interviewer");
+      await connectTranscriptionChannel(sysStream, "interviewer");
       markInterviewerChannel(true);
       store.setPipelineStatus("listening");
       useOverlayStore.getState().setSessionPipelineState("listening");
@@ -563,7 +700,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       });
       markInterviewerChannel(false);
     }
-  }, [connectDeepgram, markInterviewerChannel]);
+  }, [connectTranscriptionChannel, markInterviewerChannel]);
 
   useEffect(() => {
     toggleSystemAudioRef.current = toggleSystemAudio;
@@ -573,9 +710,10 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
 
   const reconnect = useCallback(async () => {
     useOverlayStore.getState().setSessionPipelineState("reconnecting");
-    stop();
+    useAudioStore.getState().setTranscriptionProviderStatus("reconnecting");
+    stop({ preserveTranscript: true });
     await new Promise((r) => setTimeout(r, 500));
-    await start();
+    await start({ restore: true });
   }, [start, stop]);
 
   const getFillerSnapshot = useCallback(
@@ -594,6 +732,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     const timer = setTimeout(() => {
       if (!isStartedRef.current) return;
       if (hasInterviewerChannelRef.current) return;
+      if (skipAutoTabShareRef.current) return;
 
       const store = useAudioStore.getState();
       store.setStreamError({
@@ -624,24 +763,51 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     };
   }, [stop]);
 
-  return {
-    start,
-    stop,
-    reconnect,
-    toggleMute,
-    suspendCandidateCapture,
-    resumeCandidateCapture,
-    setNoiseSuppression,
-    toggleSystemAudio,
-    isSystemAudioActive,
-    getFillerSnapshot,
-    getWPMDataPoints,
-    getAverageWPM,
-    isCapturing,
-    isMuted,
-    deepgramStatus,
-    currentLevel,
-    isSpeaking,
-    streamError,
-  };
+  return useMemo(
+    () => ({
+      start,
+      stop,
+      pause,
+      reconnect,
+      toggleMute,
+      suspendCandidateCapture,
+      resumeCandidateCapture,
+      setNoiseSuppression,
+      toggleSystemAudio,
+      isSystemAudioActive,
+      getFillerSnapshot,
+      getWPMDataPoints,
+      getAverageWPM,
+      isCapturing,
+      isMuted,
+      deepgramStatus,
+      /** Snapshot — do not subscribe here; 10 Hz analyser ticks must not remount session UI. */
+      get currentLevel() {
+        return useAudioStore.getState().levels?.current_level ?? 0;
+      },
+      get isSpeaking() {
+        return useAudioStore.getState().levels?.is_speaking ?? false;
+      },
+      streamError,
+    }),
+    [
+      start,
+      stop,
+      pause,
+      reconnect,
+      toggleMute,
+      suspendCandidateCapture,
+      resumeCandidateCapture,
+      setNoiseSuppression,
+      toggleSystemAudio,
+      isSystemAudioActive,
+      getFillerSnapshot,
+      getWPMDataPoints,
+      getAverageWPM,
+      isCapturing,
+      isMuted,
+      deepgramStatus,
+      streamError,
+    ],
+  );
 }

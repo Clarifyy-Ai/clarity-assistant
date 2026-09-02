@@ -86,3 +86,14 @@ for (const key of requiredPaise) {
 
 if (failed) process.exit(1);
 console.log("OK: billing catalog parity passed (ranks + credit packs + INR paise)");
+
+const indexHtml = fs.readFileSync(path.join(root, "index.html"), "utf8");
+if (!indexHtml.includes("https://*.razorpay.com")) {
+  console.error("FAIL: index.html CSP must allow https://*.razorpay.com for checkout risk-detection");
+  process.exit(1);
+}
+if (!indexHtml.includes("cdn.razorpay.com")) {
+  console.error("FAIL: index.html CSP must allow cdn.razorpay.com");
+  process.exit(1);
+}
+console.log("OK: billing CSP preflight passed");

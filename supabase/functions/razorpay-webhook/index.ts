@@ -22,6 +22,7 @@ import {
 import {
   fulfillCapturedRazorpayOrder,
   claimRazorpayWebhookEvent,
+  markFailedRazorpayOrder,
   hmacSha256Hex,
   timingSafeEqual,
   type PaymentOrderRow,
@@ -137,6 +138,68 @@ async function handleRefundEvent(
   );
 }
 
+async function claimWebhookEvent(
+  db: ReturnType<typeof createServiceClient>,
+  eventId: string,
+  fallbackKey?: string,
+): Promise<boolean> {
+  const key = eventId.trim() || fallbackKey?.trim() || "";
+  if (!key) return true;
+  return await claimRazorpayWebhookEvent(db, key);
+}
+
+async function handlePaymentFailedEvent(
+  db: ReturnType<typeof createServiceClient>,
+  event: { payload?: Record<string, unknown> },
+  headers: Record<string, string>,
+): Promise<Response> {
+  const payment = (event.payload?.payment as { entity?: Record<string, unknown> } | undefined)
+    ?.entity;
+  const orderId = payment?.order_id as string | undefined;
+  const paymentId = payment?.id as string | undefined;
+
+  if (!orderId) {
+    return new Response(JSON.stringify({ received: true, skipped: "no_order_id" }), {
+      status: 200,
+      headers: { ...headers, "Content-Type": "application/json" },
+    });
+  }
+
+  const { data: order } = await db
+    .from("payment_orders")
+    .select("id, status")
+    .eq("provider", "razorpay")
+    .eq("provider_order_id", orderId)
+    .maybeSingle();
+
+  if (!order) {
+    console.warn("[razorpay-webhook] payment.failed: unknown order", orderId);
+    return new Response(JSON.stringify({ received: true, skipped: "unknown_order" }), {
+      status: 200,
+      headers: { ...headers, "Content-Type": "application/json" },
+    });
+  }
+
+  const result = await markFailedRazorpayOrder(db, {
+    orderId: order.id as string,
+    currentStatus: order.status as string,
+  });
+
+  opsLog({
+    function_name: "razorpay-webhook",
+    operation: "payment.failed",
+    result: "ok",
+    provider: "razorpay",
+    provider_event_id: paymentId ?? orderId,
+    meta: { order_id: order.id, duplicate: result.duplicate },
+  });
+
+  return new Response(
+    JSON.stringify({ received: true, status: "failed", duplicate: result.duplicate }),
+    { status: 200, headers: { ...headers, "Content-Type": "application/json" } },
+  );
+}
+
 Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;
@@ -190,14 +253,25 @@ Deno.serve(async (req: Request) => {
   try {
     const eventName = event.event as string;
     const eventId = typeof event.id === "string" ? event.id.trim() : "";
-    if (eventId) {
-      const isNewEvent = await claimRazorpayWebhookEvent(db, eventId);
-      if (!isNewEvent) {
-        return new Response(
-          JSON.stringify({ received: true, duplicate: true, event_id: eventId }),
-          { status: 200, headers: { ...headers, "Content-Type": "application/json" } },
-        );
-      }
+    const paymentEntity = (event.payload?.payment as { entity?: Record<string, unknown> } | undefined)
+      ?.entity;
+    const paymentIdForDedupe = typeof paymentEntity?.id === "string"
+      ? paymentEntity.id
+      : "";
+    const fallbackDedupeKey = !eventId && paymentIdForDedupe
+      ? `razorpay_webhook_payment_${paymentIdForDedupe}_${eventName}`
+      : "";
+
+    const isNewEvent = await claimWebhookEvent(db, eventId, fallbackDedupeKey);
+    if (!isNewEvent) {
+      return new Response(
+        JSON.stringify({
+          received: true,
+          duplicate: true,
+          event_id: eventId || fallbackDedupeKey,
+        }),
+        { status: 200, headers: { ...headers, "Content-Type": "application/json" } },
+      );
     }
 
     // P4-2: refund events — mark payment_orders refunded + conditional clawback
@@ -207,6 +281,10 @@ Deno.serve(async (req: Request) => {
       eventName === "payment.refunded"
     ) {
       return await handleRefundEvent(db, event, headers);
+    }
+
+    if (eventName === "payment.failed") {
+      return await handlePaymentFailedEvent(db, event, headers);
     }
 
     if (eventName !== "payment.captured") {

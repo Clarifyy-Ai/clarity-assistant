@@ -56,6 +56,8 @@ import {
 } from "@/lib/validators";
 
 import { cn } from "@/lib/utils";
+import { formatSupabaseAuthError, isHardAuthTransportError } from "@/lib/errors";
+import { recoveryLinkIssueFromUrl } from "@/lib/auth/loginFailure";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -94,20 +96,11 @@ function getRecoveryLinkIssue(): string | null {
   const errorDescription =
     hashParams.get("error_description") ?? searchParams.get("error_description");
 
-  if (!error && !errorCode) {
-    return null;
-  }
-
-  if (errorCode === "otp_expired") {
-    return "This reset link has expired. Please request a new one.";
-  }
-
-  if (errorDescription) {
-    // URLSearchParams already decodes percent-encoding and "+" as space.
-    return errorDescription;
-  }
-
-  return "This reset link is invalid or has already been used. Please request a new one.";
+  return recoveryLinkIssueFromUrl({
+    error,
+    errorCode,
+    errorDescription,
+  });
 }
 
 function isRecoveryUrl(): boolean {
@@ -337,9 +330,9 @@ export default function ResetPassword(): JSX.Element {
   usePageMeta({
     title:
       mode === "reset"
-        ? "Reset password | Clarify AI"
-        : "Forgot password | Clarify AI",
-    description: "Reset your Clarify AI account password.",
+        ? "Reset password | Career Pilot"
+        : "Forgot password | Career Pilot",
+    description: "Reset your Career Pilot account password.",
     noIndex: true,
   });
 
@@ -467,7 +460,13 @@ export default function ResetPassword(): JSX.Element {
         );
         return;
       }
-      // Neutral response for other failures: never reveal whether registered.
+      if (isHardAuthTransportError(error)) {
+        setGeneralError(
+          "Could not send a reset email right now. Check your connection and try again — we did not pretend the message was sent.",
+        );
+        return;
+      }
+      // Neutral response for unknown-user / other failures: never reveal whether registered.
     }
     setSubmittedEmail(data.email);
     setMode("success-request");
@@ -480,12 +479,7 @@ export default function ResetPassword(): JSX.Element {
       await updatePassword(data.password);
       setMode("success-reset");
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Failed to update password. The link may have expired.";
-
-      setGeneralError(message);
+      setGeneralError(formatSupabaseAuthError(error));
     }
   }
 
@@ -502,7 +496,7 @@ export default function ResetPassword(): JSX.Element {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -24 }}
             transition={{ duration: 0.3 }}
-            className="w-full max-w-md"
+            className="w-full"
           >
             <Card className="shadow-xl border-border/60">
               <CardHeader className="space-y-2 text-center pb-2">
@@ -629,7 +623,7 @@ export default function ResetPassword(): JSX.Element {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.3 }}
-            className="w-full max-w-md"
+            className="w-full"
           >
             <Card className="shadow-xl border-border/60 text-center">
               <CardHeader className="space-y-3">
@@ -662,7 +656,7 @@ export default function ResetPassword(): JSX.Element {
 
               <CardContent className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  Didn&apos;t receive it? Check your spam folder, or{" "}
+                  Email can take a minute. Check spam, wait, then retry. Didn&apos;t receive it?{" "}
                   <button
                     type="button"
                     onClick={() => {
@@ -698,7 +692,7 @@ export default function ResetPassword(): JSX.Element {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -24 }}
             transition={{ duration: 0.3 }}
-            className="w-full max-w-md"
+            className="w-full"
           >
             <Card className="shadow-xl border-border/60">
               <CardHeader className="space-y-2 text-center pb-2">
@@ -909,7 +903,7 @@ export default function ResetPassword(): JSX.Element {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.3 }}
-            className="w-full max-w-md"
+            className="w-full"
           >
             <Card className="shadow-xl border-border/60 text-center">
               <CardHeader className="space-y-3">

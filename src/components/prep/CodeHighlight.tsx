@@ -73,7 +73,7 @@ export function CodeHighlight({ code, language = "javascript", className }: Code
     >
       {lines.map((line, idx) => (
         <div key={idx} className="table-row">
-          <span className="table-cell select-none pr-4 text-right text-muted-foreground/50 w-8">
+          <span className="table-cell select-none pr-4 text-right text-muted-foreground w-8">
             {idx + 1}
           </span>
           <code className="table-cell whitespace-pre">{highlightLine(line, lang)}</code>

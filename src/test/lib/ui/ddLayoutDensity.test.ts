@@ -54,11 +54,12 @@ describe("DD layout density contracts", () => {
     expect(audit).toMatch(/CardHeader className="mb-2 flex flex-col/);
   });
 
-  it("Verify certificate uses a single page max-w (no stacked PAGE_SHELL + max-w-5xl)", () => {
+  it("Verify certificate uses the public marketing shell with a readable inner cap", () => {
     const verify = src("pages/public/VerifyCertificate.tsx");
-    expect(verify).toMatch(/PAGE_SHELL_STANDARD/);
-    expect(verify).not.toMatch(/PAGE_SHELL\}.*max-w-5xl/);
-    expect(verify).not.toMatch(/max-w-5xl flex-col px-4 py-8/);
+    expect(verify).toMatch(/MarketingLayout/);
+    expect(verify).toMatch(/MARKETING_SHELL/);
+    expect(verify).toMatch(/max-w-3xl/);
+    expect(verify).not.toMatch(/PAGE_SHELL_STANDARD/);
   });
 
   it("Admin layout owns page padding; AI Hub does not double-pad", () => {

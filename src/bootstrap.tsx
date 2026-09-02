@@ -20,6 +20,7 @@ import {
   isAiTrainingAllowed,
   stripSessionTextFromPayload,
 } from "@/lib/privacy/privacyPrefs";
+import { isExpectedBusinessFailure } from "@/lib/network/businessConflict";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
@@ -36,6 +37,44 @@ function isRealKey(value: string | undefined, placeholderPrefixes: string[]): bo
   return !placeholderPrefixes.some((prefix) =>
     value.toLowerCase().startsWith(prefix.toLowerCase()),
   );
+}
+
+function readSentryString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() && value !== "[REDACTED]"
+    ? value.trim()
+    : undefined;
+}
+
+function readSentryStatus(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+/** Drop expected product conflicts (HTTP 409 / credit-inventory codes) from Sentry. */
+function isExpectedBusinessSentryEvent(event: {
+  extra?: Record<string, unknown>;
+  tags?: Record<string, unknown>;
+}): boolean {
+  const extra = event.extra ?? {};
+  const tags = event.tags ?? {};
+  const codes = [
+    readSentryString(extra.code),
+    readSentryString(extra.errorCode),
+    readSentryString(tags.code),
+  ].filter((value): value is string => Boolean(value));
+  const statuses = [
+    readSentryStatus(extra.httpStatus),
+    readSentryStatus(extra.status),
+    readSentryStatus(tags.httpStatus),
+    readSentryStatus(tags.status),
+  ].filter((value): value is number => value !== undefined);
+
+  if (statuses.some((status) => isExpectedBusinessFailure(status))) return true;
+  return codes.some((code) => isExpectedBusinessFailure(0, code));
 }
 
 // ── Sentry — error monitoring ──────────────────────────────────────────────
@@ -61,6 +100,7 @@ if (
     replaysOnErrorSampleRate: import.meta.env.PROD ? 1.0 : 0,
     beforeSend(event) {
       if (!isCrashReportingEnabled()) return null;
+      if (isExpectedBusinessSentryEvent(event)) return null;
       if (event.extra && "audioStream" in event.extra) {
         delete event.extra.audioStream;
       }

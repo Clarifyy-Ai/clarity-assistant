@@ -1,7 +1,15 @@
 import { test, expect, loginAsTestUser } from "../playwright-fixture";
+import {
+  GOV_EXAM_ID as EXAM_ID,
+  GOV_STAGE_ID as STAGE_ID,
+  GOV_JOB_ID,
+  GOV_MOCK_TEST_ID,
+  GOV_REVIEW_AVAILABILITY as REVIEW_AVAILABILITY,
+  mockGovExamGenerateRoutes,
+  navigateToGovExamReview,
+} from "./helpers/gov-exam-mocks";
 
-const EXAM_ID = "11111111-1111-4111-8111-111111111111";
-const STAGE_ID = "22222222-2222-4222-8222-222222222222";
+const CREATE_EXAM_PAPER_CREDIT_COST = 3;
 
 test.describe("Government exam generation and submission UX", () => {
   test.describe.configure({ timeout: 120_000 });
@@ -172,6 +180,302 @@ test.describe("Government exam generation and submission UX", () => {
     ).toBeVisible();
     await expect(page.getByRole("button", { name: "Generate Full Paper" })).toHaveCount(0);
     expect(generateCalls).toBe(0);
+  });
+
+  test("TC-GOV-LIVE-05: Review step shows server availability without console errors", async ({
+    page,
+  }) => {
+    const pageErrors: string[] = [];
+    page.on("pageerror", (err) => pageErrors.push(err.message));
+
+    await loginAsTestUser(page);
+    await mockGovExamGenerateRoutes(page);
+
+    await page.goto(
+      `/app/mock-test/generate?examId=${EXAM_ID}&stageId=${STAGE_ID}&basis=quick`,
+    );
+    await expect(page.getByRole("heading", { name: /Generate practice paper/i })).toBeVisible({
+      timeout: 30_000,
+    });
+
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByRole("button", { name: "Continue" }).click();
+
+    await expect(page.getByRole("button", { name: "Generate Practice Paper" })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(
+      page.getByText(
+        `Server check — Available: ${REVIEW_AVAILABILITY.available}, Requested: ${REVIEW_AVAILABILITY.requested}, Missing: ${REVIEW_AVAILABILITY.missing}.`,
+      ),
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(
+      page.getByText(
+        `${REVIEW_AVAILABILITY.available} / ${REVIEW_AVAILABILITY.requested} questions available`,
+      ).first(),
+    ).toBeVisible();
+
+    const startTimeErrors = pageErrors.filter((m) =>
+      /startTime|Cannot read properties of undefined/i.test(m),
+    );
+    expect(startTimeErrors).toEqual([]);
+    expect(pageErrors.filter((m) => !/ResizeObserver|Script error/i.test(m))).toEqual([]);
+  });
+
+  test("TC-GOV-LIVE-06: poll timeout surfaces Retry UI", async ({ page }) => {
+    await loginAsTestUser(page, { credits: 50, planId: "pro" });
+    await page.clock.install();
+    await mockGovExamGenerateRoutes(page);
+
+    let pollCalls = 0;
+    await page.route("**/functions/v1/create-exam-paper", async (route) => {
+      if (route.request().method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({
+          jobId: GOV_JOB_ID,
+          status: "queued",
+          progressStage: "queued",
+        }),
+      });
+    });
+
+    await page.route("**/functions/v1/get-paper-generation-job**", async (route) => {
+      if (route.request().method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } });
+        return;
+      }
+      pollCalls += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({
+          jobId: GOV_JOB_ID,
+          status: "generating_paper",
+          progressStage: "generating_paper",
+        }),
+      });
+    });
+
+    await page.route("**/functions/v1/process-paper-generation-job**", async (route) => {
+      if (route.request().method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({ ok: true }),
+      });
+    });
+
+    await navigateToGovExamReview(page);
+    const generateButton = page.getByRole("button", { name: "Generate Practice Paper" });
+    await generateButton.click();
+
+    await expect.poll(() => pollCalls, { timeout: 30_000 }).toBeGreaterThan(0);
+
+    const retryButton = page.getByRole("button", { name: "Retry" });
+    for (let i = 0; i < 45; i += 1) {
+      if (await retryButton.isVisible().catch(() => false)) break;
+      await page.clock.runFor(3_000);
+    }
+
+    await expect(retryButton).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page.getByText(/Paper generation timed out/i).first(),
+    ).toBeVisible();
+    expect(pollCalls).toBeGreaterThanOrEqual(2);
+  });
+
+  test("TC-GOV-LIVE-07: refresh during generation resumes poll without re-creating job", async ({
+    page,
+  }) => {
+    await loginAsTestUser(page, { credits: 50, planId: "pro" });
+    await mockGovExamGenerateRoutes(page);
+
+    let createCalls = 0;
+    let pollCalls = 0;
+
+    await page.route("**/functions/v1/create-exam-paper", async (route) => {
+      if (route.request().method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } });
+        return;
+      }
+      createCalls += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({
+          jobId: GOV_JOB_ID,
+          status: "queued",
+          progressStage: "queued",
+        }),
+      });
+    });
+
+    await page.route("**/functions/v1/get-paper-generation-job**", async (route) => {
+      if (route.request().method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } });
+        return;
+      }
+      pollCalls += 1;
+      const terminal = pollCalls >= 4;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify(
+          terminal
+            ? {
+                jobId: GOV_JOB_ID,
+                status: "completed",
+                progressStage: "completed",
+                mockTestId: GOV_MOCK_TEST_ID,
+                questionCount: 25,
+              }
+            : {
+                jobId: GOV_JOB_ID,
+                status: "generating_paper",
+                progressStage: "generating_paper",
+              },
+        ),
+      });
+    });
+
+    await page.route("**/functions/v1/process-paper-generation-job**", async (route) => {
+      if (route.request().method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({ ok: true }),
+      });
+    });
+
+    await navigateToGovExamReview(page);
+    await page.getByRole("button", { name: "Generate Practice Paper" }).click();
+    await expect.poll(() => createCalls, { timeout: 30_000 }).toBe(1);
+    await expect(page.getByText(/Generating/i).first()).toBeVisible({ timeout: 15_000 });
+
+    const pollsBeforeReload = pollCalls;
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByRole("heading", { name: /Generate practice paper/i })).toBeVisible({
+      timeout: 30_000,
+    });
+
+    await expect(page).toHaveURL(
+      new RegExp(`/app/mock-test/session/${GOV_MOCK_TEST_ID}`),
+      { timeout: 60_000 },
+    );
+    expect(createCalls).toBe(1);
+    expect(pollCalls).toBeGreaterThan(pollsBeforeReload);
+  });
+
+  test("TC-GOV-LIVE-08: permanent generation failure restores spendable credits", async ({
+    page,
+  }) => {
+    let spendableBalance = 10;
+    await loginAsTestUser(page, { credits: spendableBalance, planId: "pro" });
+    await mockGovExamGenerateRoutes(page);
+
+    await page.route("**/rest/v1/rpc/get_spendable_credits", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({
+          success: true,
+          balance: spendableBalance,
+          plan_id: "pro",
+        }),
+      });
+    });
+
+    let reserved = false;
+    let refunded = false;
+
+    await page.route("**/functions/v1/create-exam-paper", async (route) => {
+      if (route.request().method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } });
+        return;
+      }
+      reserved = true;
+      spendableBalance -= CREATE_EXAM_PAPER_CREDIT_COST;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({
+          jobId: GOV_JOB_ID,
+          status: "queued",
+          progressStage: "queued",
+          creditsCharged: CREATE_EXAM_PAPER_CREDIT_COST,
+          balanceAfter: spendableBalance,
+        }),
+      });
+    });
+
+    await page.route("**/functions/v1/get-paper-generation-job**", async (route) => {
+      if (route.request().method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } });
+        return;
+      }
+      if (reserved && !refunded) {
+        refunded = true;
+        spendableBalance += CREATE_EXAM_PAPER_CREDIT_COST;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify({
+          jobId: GOV_JOB_ID,
+          status: "failed_permanent",
+          progressStage: "failed_permanent",
+          errorCode: "ASSEMBLY_FAILED",
+          errorMessage: "Paper assembly failed permanently.",
+          creditsCharged: 0,
+          retryable: false,
+        }),
+      });
+    });
+
+    await navigateToGovExamReview(page);
+    await page.getByRole("button", { name: "Generate Practice Paper" }).click();
+    await expect.poll(() => reserved, { timeout: 30_000 }).toBe(true);
+
+    await expect(page.getByText(/assembly failed permanently/i).first()).toBeVisible({
+      timeout: 60_000,
+    });
+
+    const balanceAfter = await page.evaluate(async () => {
+      const res = await fetch(
+        "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/rpc/get_spendable_credits",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ p_user_id: "e2e-user-0001-0001-0001-000000000001" }),
+        },
+      );
+      const json = (await res.json()) as { balance?: number };
+      return json.balance;
+    });
+
+    expect(balanceAfter).toBe(10);
+    expect(refunded).toBe(true);
   });
 
   test("submit-test CORS preflight and duplicate submit stay readable", async ({ page }) => {

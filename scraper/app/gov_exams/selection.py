@@ -97,4 +97,5 @@ def select_questions(
         exam_type_keys=keys,
         rejected_duplicates=rejected_duplicates,
         section_counts=dict(section_counts),
+        correlation_id=request.correlation_id,
     )

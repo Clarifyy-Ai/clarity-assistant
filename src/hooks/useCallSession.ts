@@ -35,11 +35,11 @@ export function useCallSession({
   });
 
   const sessionStatus = useSessionStore((s) => s.status);
-  const deepgramStatus = useAudioStore((s) => s.deepgram_status);
+  const providerStatus = useAudioStore((s) => s.transcription_provider_status);
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
 
   const isReconnecting =
-    deepgramStatus === "reconnecting" || deepgramStatus === "connecting";
+    providerStatus === "reconnecting" || providerStatus === "connecting";
 
   useEffect(() => {
     if (endingRef.current) {

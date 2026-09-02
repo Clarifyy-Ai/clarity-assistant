@@ -316,32 +316,30 @@ Deno.serve(async (req) => {
     let emailSent = false;
     let remindersQueued = 0;
 
-    if (emailConfigured) {
-      if (sendConfirmation && email) {
-        emailSent = await sendConfirmationEmail(email, company, role, scheduledAt);
+    const nowMs = Date.now();
+    const rows = buildReminderRows(
+      interviewId,
+      userId,
+      when.getTime(),
+      nowMs,
+      sendConfirmation && emailConfigured && Boolean(email),
+    );
+
+    if (rows.length > 0) {
+      const { data: upserted, error: queueErr } = await db
+        .from("interview_reminders")
+        .upsert(rows, { onConflict: "interview_id,kind" })
+        .select("id");
+
+      if (queueErr) {
+        console.error("[schedule-interview] reminder queue:", queueErr);
+      } else {
+        remindersQueued = upserted?.length ?? rows.length;
       }
+    }
 
-      const nowMs = Date.now();
-      const rows = buildReminderRows(
-        interviewId,
-        userId,
-        when.getTime(),
-        nowMs,
-        sendConfirmation && emailSent,
-      );
-
-      if (rows.length > 0) {
-        const { data: upserted, error: queueErr } = await db
-          .from("interview_reminders")
-          .upsert(rows, { onConflict: "interview_id,kind" })
-          .select("id");
-
-        if (queueErr) {
-          console.error("[schedule-interview] reminder queue:", queueErr);
-        } else {
-          remindersQueued = upserted?.length ?? rows.length;
-        }
-      }
+    if (emailConfigured && sendConfirmation && email) {
+      emailSent = await sendConfirmationEmail(email, company, role, scheduledAt);
     }
 
     return new Response(

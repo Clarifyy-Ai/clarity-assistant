@@ -22,6 +22,8 @@ import { toast } from "sonner";
 import { CodeScratchpad } from "@/components/prep/CodeScratchpad";
 import { CodeHighlight, renderTextWithCodeBlocks } from "@/components/prep/CodeHighlight";
 import { supabase } from "@/lib/supabase/client";
+import { prepCodingHistoryDB } from "@/lib/supabase/database";
+import { useAuthStore } from "@/store/userStore";
 import { splitCodingHints } from "@/lib/documents/gapAnalysisPersist";
 import type { LucideIcon } from "lucide-react";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
@@ -73,6 +75,7 @@ function normalizeDifficulty(value: string | null | undefined): Difficulty {
 
 export default function CodingHints() {
   const credits = useCredits();
+  const { user } = useAuthStore();
 
   const [problems, setProblems]     = useState<CodingProblem[] | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -84,6 +87,7 @@ export default function CodingHints() {
   const [solutionText, setSolutionText] = useState("");
   const [loading, setLoading]       = useState<"hint" | "solution" | null>(null);
   const [error, setError]           = useState<string | null>(null);
+  const [restoredFromDb, setRestoredFromDb] = useState(false);
   const [depth, setDepth]           = useState<"surface" | "medium" | "near-complete" | "edge" | "implement">("surface");
   const hintKeyRef = useRef<string | null>(null);
   const solutionKeyRef = useRef<string | null>(null);
@@ -137,6 +141,34 @@ export default function CodingHints() {
 
   const activeProblem = problems?.find((p) => p.id === selected) ?? null;
 
+  useEffect(() => {
+    if (!user?.id || !selected) {
+      setHintText("");
+      setSolutionText("");
+      setRestoredFromDb(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const row = await prepCodingHistoryDB.getForProblem(user.id, selected);
+        if (cancelled || !row) return;
+        if (row.hint_text) setHintText(row.hint_text);
+        if (row.solution_text) setSolutionText(row.solution_text);
+        if (row.depth && row.depth !== depth) {
+          const d = row.depth as typeof depth;
+          if (["surface", "medium", "near-complete", "edge", "implement"].includes(d)) {
+            setDepth(d);
+          }
+        }
+        setRestoredFromDb(Boolean(row.hint_text || row.solution_text));
+      } catch {
+        /* history is optional */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id, selected]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function getAIHint() {
     if (!activeProblem || !credits.canAfford("coding_hint") || loading) return;
     setLoading("hint");
@@ -162,6 +194,15 @@ export default function CodingHints() {
         data.result ??
           "Think about the data structures that would help here. Consider time and space complexity tradeoffs."
       );
+      if (user?.id && activeProblem) {
+        await prepCodingHistoryDB.upsert(user.id, {
+          problem_slug: activeProblem.id,
+          depth,
+          hint_text: data.result ?? "",
+          solution_text: solutionText,
+        }).catch(() => undefined);
+        setRestoredFromDb(false);
+      }
       hintKeyRef.current = null;
       await refreshCredits();
     } catch (err) {
@@ -195,6 +236,15 @@ export default function CodingHints() {
         },
       });
       setSolutionText(data.result ?? "Solution explanation unavailable.");
+      if (user?.id && activeProblem) {
+        await prepCodingHistoryDB.upsert(user.id, {
+          problem_slug: activeProblem.id,
+          depth,
+          hint_text: hintText,
+          solution_text: data.result ?? "",
+        }).catch(() => undefined);
+        setRestoredFromDb(false);
+      }
       solutionKeyRef.current = null;
       await refreshCredits();
     } catch (err) {
@@ -403,6 +453,12 @@ export default function CodingHints() {
                   Explain solution ({credits.costs.coding_solution} credits)
                 </Button>
               </div>
+
+              {restoredFromDb && (hintText || solutionText) && (
+                <p className="text-[10px] text-muted-foreground italic">
+                  Restored from your last session on this problem.
+                </p>
+              )}
 
               {hintText && splitCodingHints(hintText).map((hint, index) => (
                 <Card key={index} className="border-amber-500/20 bg-amber-500/5">

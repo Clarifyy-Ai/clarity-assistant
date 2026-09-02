@@ -17,9 +17,14 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  TRANSCRIPTION_STATUS_COPY,
+  providerStatusToTranscription,
+} from "@/lib/audio/transcriptionStates";
 
 export function OverlayAuditPanel() {
-  const deepgramStatus = useAudioStore((s) => s.deepgram_status);
+  const providerStatus = useAudioStore((s) => s.transcription_provider_status);
+  const pipelineStatus = useAudioStore((s) => s.pipeline_status);
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
   const isMuted = useAudioStore((s) => s.is_muted);
   const hasSystemAudio = useAudioStore((s) => !!s.streams?.system_stream);
@@ -38,24 +43,20 @@ export function OverlayAuditPanel() {
     seconds
   ).padStart(2, "0")}`;
 
-  const sttLabel =
-    deepgramStatus === "connected"
-      ? "Connected"
-      : deepgramStatus === "connecting"
-      ? "Connecting…"
-      : deepgramStatus === "reconnecting"
-      ? "Reconnecting…"
-      : deepgramStatus === "error"
-      ? "Error"
-      : "Disconnected";
+  const transcriptionState = providerStatusToTranscription(providerStatus, pipelineStatus);
+  const sttLabel = TRANSCRIPTION_STATUS_COPY[transcriptionState];
 
   const sttColor =
-    deepgramStatus === "connected"
+    transcriptionState === "ready" ||
+    transcriptionState === "transcribing" ||
+    transcriptionState === "receiving_audio"
       ? "text-emerald-400"
-      : deepgramStatus === "connecting" ||
-        deepgramStatus === "reconnecting"
-      ? "text-amber-400"
-      : "text-red-400";
+      : transcriptionState === "connecting" ||
+          transcriptionState === "reconnecting"
+        ? "text-amber-400"
+        : transcriptionState === "paused"
+          ? "text-sky-400"
+          : "text-red-400";
 
   const netColor =
     network.mode === "offline"
@@ -96,7 +97,7 @@ export function OverlayAuditPanel() {
       />
       <AuditRow
         icon={Zap}
-        label="Speech‑to‑Text"
+        label="Transcription"
         value={sttLabel}
         valueClass={sttColor}
       />

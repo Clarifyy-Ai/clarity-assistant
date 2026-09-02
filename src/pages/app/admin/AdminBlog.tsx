@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/common/EmptyState";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { supabase } from "@/lib/supabase/client";
 import { writeAdminAudit } from "@/lib/admin/writeAdminAudit";
@@ -43,6 +44,8 @@ export default function AdminBlog() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Partial<BlogPost> & { title: string; slug: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<BlogPost | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -141,6 +144,32 @@ export default function AdminBlog() {
     }
   }
 
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const { error: err } = await supabase
+        .from("blog_posts")
+        .delete()
+        .eq("id", deleteTarget.id);
+      if (err) throw err;
+      await writeAdminAudit({
+        action: "delete",
+        targetType: "blog_post",
+        targetId: deleteTarget.id,
+        oldValue: { slug: deleteTarget.slug, title: deleteTarget.title },
+      });
+      toast.success("Blog post deleted");
+      setDeleteTarget(null);
+      if (editing?.id === deleteTarget.id) setEditing(null);
+      await load();
+    } catch (e) {
+      toast.error(adminActionFailedMessage(e, "AdminBlog.delete"));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   async function setPublished(post: BlogPost, published: boolean) {
     const { error: err } = await supabase
       .from("blog_posts")
@@ -196,13 +225,20 @@ export default function AdminBlog() {
                   <Badge variant="secondary">{p.published ? "published" : "draft"}</Badge>
                   <Button size="xs" variant="outline" onClick={() => setEditing(p)}>Edit</Button>
                   <a
-                    href={`/blog/${p.slug}`}
+                    href={`/app/admin/blog/preview/${p.id}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex h-7 items-center rounded-lg border border-border px-2.5 text-xs hover:bg-secondary"
                   >
                     Preview
                   </a>
+                  <Button
+                    size="xs"
+                    variant="danger"
+                    onClick={() => setDeleteTarget(p)}
+                  >
+                    Delete
+                  </Button>
                   {p.published ? (
                     <Button size="xs" variant="outline" onClick={() => void setPublished(p, false)}>Unpublish</Button>
                   ) : (
@@ -243,6 +279,21 @@ export default function AdminBlog() {
           </div>
         </Card>
       )}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title="Delete this blog post?"
+        description={
+          deleteTarget ? `"${deleteTarget.title}" will be permanently removed.` : undefined
+        }
+        confirmLabel="Delete"
+        variant="destructive"
+        isLoading={deleting}
+        onConfirm={() => void confirmDelete()}
+      />
     </div>
   );
 }

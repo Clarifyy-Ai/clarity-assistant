@@ -25,6 +25,7 @@ const FROM_EMAIL =
   "Career Pilot <hello@trycareerpilot.com>";
 const APP_URL = Deno.env.get("APP_URL") ?? "https://clarityapp.ai";
 const BATCH_LIMIT = 50;
+const EMAIL_RETRY_BACKOFF_MS = 30 * 60 * 1000;
 
 function json(req: Request, payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -92,6 +93,23 @@ function bodyForKind(
 <p><a href="${APP_URL}/app/interviews">View in Career Pilot</a></p>`;
 }
 
+function inAppTitleForKind(kind: string, company: string): string {
+  if (kind === "t24h") return `Interview in 24 hours: ${company}`;
+  if (kind === "t1h") return `Interview in 1 hour: ${company}`;
+  return `Interview reminder: ${company}`;
+}
+
+function inAppBodyForKind(kind: string, company: string, role: string, whenText: string): string {
+  const roleBit = role ? `${role} — ` : "";
+  if (kind === "t24h") {
+    return `${roleBit}${company} is in about 24 hours (${whenText}).`;
+  }
+  if (kind === "t1h") {
+    return `${roleBit}${company} starts in about 1 hour (${whenText}).`;
+  }
+  return `${roleBit}${company} — ${whenText}`;
+}
+
 async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
   if (!RESEND_API_KEY || !to) return false;
 
@@ -136,18 +154,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  if (!RESEND_API_KEY) {
-    return json(
-      req,
-      {
-        error: "RESEND_API_KEY not configured",
-        code: "NOT_CONFIGURED",
-        processed: 0,
-      },
-      501,
-    );
-  }
-
+  const emailConfigured = Boolean(RESEND_API_KEY);
   const db = createServiceClient();
   const nowIso = new Date().toISOString();
 
@@ -168,6 +175,7 @@ Deno.serve(async (req) => {
   let sent = 0;
   let failed = 0;
   let skipped = 0;
+  let inAppOnly = 0;
 
   for (const row of rows) {
     const { data: interview } = await db
@@ -229,14 +237,25 @@ Deno.serve(async (req) => {
           timeStyle: "short",
         });
 
-    const { data: authUser } = await db.auth.admin.getUserById(row.user_id);
-    const email = authUser?.user?.email ?? "";
-    if (!email) {
+    const company = String(interview.company_name ?? "Interview");
+    const role = String(interview.role_title ?? "");
+
+    const { error: notifErr } = await db.from("notifications").insert({
+      user_id: row.user_id,
+      type: "reminder",
+      title: inAppTitleForKind(row.kind, company),
+      body: inAppBodyForKind(row.kind, company, role, whenText),
+      action_url: `/app/interviews/${row.interview_id}`,
+    });
+
+    if (notifErr) {
+      console.error("[send-interview-reminders] in-app notification:", notifErr);
       await db
         .from("interview_reminders")
         .update({
-          status: "failed",
-          error: "no_email",
+          status: "pending",
+          error: "notification_failed",
+          remind_at: new Date(Date.now() + EMAIL_RETRY_BACKOFF_MS).toISOString(),
           updated_at: nowIso,
         })
         .eq("id", row.id);
@@ -244,8 +263,38 @@ Deno.serve(async (req) => {
       continue;
     }
 
-    const company = String(interview.company_name ?? "Interview");
-    const role = String(interview.role_title ?? "");
+    if (!emailConfigured || row.kind === "confirmation") {
+      await db
+        .from("interview_reminders")
+        .update({
+          status: "sent",
+          sent_at: nowIso,
+          error: emailConfigured ? null : "email_not_configured",
+          updated_at: nowIso,
+        })
+        .eq("id", row.id);
+      inAppOnly++;
+      sent++;
+      continue;
+    }
+
+    const { data: authUser } = await db.auth.admin.getUserById(row.user_id);
+    const email = authUser?.user?.email ?? "";
+    if (!email) {
+      await db
+        .from("interview_reminders")
+        .update({
+          status: "sent",
+          sent_at: nowIso,
+          error: "no_email",
+          updated_at: nowIso,
+        })
+        .eq("id", row.id);
+      inAppOnly++;
+      sent++;
+      continue;
+    }
+
     const ok = await sendEmail(
       email,
       subjectForKind(row.kind, company),
@@ -267,8 +316,9 @@ Deno.serve(async (req) => {
       await db
         .from("interview_reminders")
         .update({
-          status: "failed",
+          status: "pending",
           error: "resend_failed",
+          remind_at: new Date(Date.now() + EMAIL_RETRY_BACKOFF_MS).toISOString(),
           updated_at: nowIso,
         })
         .eq("id", row.id);
@@ -278,9 +328,11 @@ Deno.serve(async (req) => {
 
   return json(req, {
     success: true,
+    email_configured: emailConfigured,
     processed: rows.length,
     sent,
     failed,
     skipped,
+    in_app_only: inAppOnly,
   });
 });

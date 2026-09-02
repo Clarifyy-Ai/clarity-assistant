@@ -10,6 +10,7 @@ const {
   searchGovExams,
   isSearchUnavailableError,
   mapGovSearchError,
+  GOV_SEARCH_TIMEOUT_MS,
 } = await import("@/lib/gov-exam/api");
 
 const EXAM = {
@@ -115,7 +116,7 @@ describe("searchGovExams", () => {
     expect(fetchEdgeJson).toHaveBeenCalledWith(
       "search-exams",
       { q: "  ", family: "banking", page: 3, pageSize: 40, cursor: undefined },
-      { signal, timeoutMs: 45_000 },
+      { signal, timeoutMs: GOV_SEARCH_TIMEOUT_MS },
     );
   });
 });
@@ -144,5 +145,26 @@ describe("search error code mapping", () => {
     expect(mapGovSearchError({ code: "RATE_LIMITED" }).code).toBe("RATE_LIMITED");
     expect(mapGovSearchError({ code: "VALIDATION_ERROR" }).code).toBe("INVALID_QUERY");
     expect(mapGovSearchError(new Error("boom")).code).toBe("SEARCH_FAILED");
+  });
+
+  it("maps 401 as a recoverable auth error, not empty results", () => {
+    expect(mapGovSearchError({ status: 401, code: "AUTH_REQUIRED" })).toEqual({
+      code: "AUTH_REQUIRED",
+      message: "Sign in to search exams.",
+    });
+  });
+
+  it("maps 5xx as a failed/unavailable search, not empty results", () => {
+    expect(mapGovSearchError({ status: 500, code: "SEARCH_FAILED" }).code).toBe("SEARCH_FAILED");
+    expect(mapGovSearchError({ status: 503, code: "SEARCH_SERVICE_UNAVAILABLE" }).code).toBe(
+      "SEARCH_UNAVAILABLE",
+    );
+  });
+
+  it("maps timeouts as a typed timeout, not an empty result", () => {
+    expect(mapGovSearchError(new Error("The request timed out. Please try again."))).toEqual({
+      code: "SEARCH_TIMEOUT",
+      message: "Search timed out. Please try again.",
+    });
   });
 });

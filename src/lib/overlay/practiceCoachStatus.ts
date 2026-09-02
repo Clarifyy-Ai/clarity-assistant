@@ -3,13 +3,13 @@
  */
 
 import type { DeepgramTokenState, RuntimeMicState } from "@/types/audio.types";
-import type { DeepgramConnectionStatus, AudioPipelineStatus } from "@/types/audio.types";
+import type { AudioPipelineStatus, TranscriptionProviderStatus } from "@/types/audio.types";
 import {
   MIC_PERMISSION_RECOVERY,
   MIC_READY_STT_UNAVAILABLE,
   STT_STATUS_COPY,
 } from "@/lib/audio/precheckStates";
-import { deepgramStatusToTranscription } from "@/lib/audio/transcriptionStates";
+import { providerStatusToTranscription } from "@/lib/audio/transcriptionStates";
 
 export type PracticeCoachWarningSeverity = "info" | "warn" | "error";
 
@@ -24,7 +24,7 @@ export type PracticeCoachWarning = {
 export type PracticeCoachStatusInput = {
   micState: RuntimeMicState;
   tokenState: DeepgramTokenState;
-  deepgramStatus: DeepgramConnectionStatus;
+  transcriptionProviderStatus: TranscriptionProviderStatus;
   pipelineStatus: AudioPipelineStatus;
   streamErrorMessage?: string | null;
   streamErrorCode?: string | null;
@@ -53,13 +53,13 @@ function micRuntimeToCopy(state: RuntimeMicState): string | null {
 
 function sttUnavailableCopy(
   tokenState: DeepgramTokenState,
-  deepgramStatus: DeepgramConnectionStatus,
+  providerStatus: TranscriptionProviderStatus,
   pipelineStatus: AudioPipelineStatus,
 ): boolean {
   if (tokenState === "failed") return true;
-  if (deepgramStatus === "error") return true;
+  if (providerStatus === "error" || providerStatus === "unavailable") return true;
   if (pipelineStatus === "unavailable") return true;
-  const tx = deepgramStatusToTranscription(deepgramStatus, pipelineStatus);
+  const tx = providerStatusToTranscription(providerStatus, pipelineStatus);
   return tx === "unavailable" || tx === "text_only";
 }
 
@@ -105,7 +105,7 @@ export function buildPracticeCoachWarnings(
     input.micState === "ready" || input.micState === "no_signal";
   const sttDown = sttUnavailableCopy(
     input.tokenState,
-    input.deepgramStatus,
+    input.transcriptionProviderStatus,
     input.pipelineStatus,
   );
 
@@ -157,7 +157,7 @@ export function formatPracticeCoachStatusLine(input: PracticeCoachStatusInput): 
   const mic = micRuntimeToCopy(input.micState);
   const stt = sttUnavailableCopy(
     input.tokenState,
-    input.deepgramStatus,
+    input.transcriptionProviderStatus,
     input.pipelineStatus,
   )
     ? STT_STATUS_COPY.STT_UNAVAILABLE

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuthStore } from "@/store/authStore";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -34,9 +34,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { AnalyticsPeriod } from "@/types/analytics.types";
+import type { AnalyticsPeriod, AnalyticsSessionFilter } from "@/types/analytics.types";
+import { INTERVIEW_TYPE_OPTIONS } from "@/lib/constants/interviewTypes";
 import { cn } from "@/lib/utils";
-import { format, subDays } from "date-fns";
+import { format } from "date-fns";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { formatAggregateScore, formatSessionScore } from "@/lib/analytics/scoreStatus";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
@@ -46,6 +47,8 @@ import {
   resolveDisplayTimeZone,
   sessionPickerLabel,
 } from "@/lib/analytics/sessionComparison";
+import { resolveSessionCountKpi } from "@/lib/analytics/sessionKpi";
+import { buildHeatmapWeekDayKeys, heatmapDaysForPeriod, heatmapPeriodTitle, scoreTrendBadgeLabel, SCORE_TREND_CHART_LIMIT } from "@/lib/analytics/dashboardDerivations";
 
 // ─────────────────────────────────────────────────────────────────
 // Analytics — progress trends, filler analysis, category scores
@@ -54,8 +57,24 @@ import {
 export default function Analytics() {
   const analytics  = useAnalytics();
   const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState("scores");
+  const [compareSelection, setCompareSelection] = useState<{
+    selectedIds: string[];
+    comparableIds: string[];
+  }>({ selectedIds: [], comparableIds: [] });
+  const handleCompareSelection = useCallback(
+    (selection: { selectedIds: string[]; comparableIds: string[] }) => {
+      setCompareSelection((prev) => {
+        const same =
+          prev.selectedIds.join("|") === selection.selectedIds.join("|") &&
+          prev.comparableIds.join("|") === selection.comparableIds.join("|");
+        return same ? prev : selection;
+      });
+    },
+    [],
+  );
 
-  if (analytics.isLoading) {
+  if (analytics.loadStatus === "loading") {
     return (
       <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-4`}>
         <PageHeader
@@ -76,7 +95,7 @@ export default function Analytics() {
     );
   }
 
-  if (analytics.error && !analytics.data) {
+  if (analytics.loadStatus === "error") {
     return (
       <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-4`}>
         <PageHeader
@@ -95,11 +114,7 @@ export default function Analytics() {
     );
   }
 
-  const hasSessions =
-    (analytics.data?.total_sessions ?? 0) > 0 ||
-    (analytics.data?.recent_sessions?.length ?? 0) > 0;
-
-  if (!hasSessions) {
+  if (analytics.loadStatus === "empty" && !analytics.filtersActive) {
     return (
       <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-4`}>
         <PageHeader
@@ -125,6 +140,51 @@ export default function Analytics() {
     );
   }
 
+  if (analytics.loadStatus === "empty" && analytics.filtersActive) {
+    return (
+      <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-4`}>
+        <PageHeader
+          title={PRODUCT_NAMES.analytics}
+          subtitle="Track your interview performance over time"
+          breadcrumbs={[
+            { label: "Dashboard", href: "/app/dashboard" },
+            { label: "Analytics" },
+          ]}
+          actions={<AnalyticsFilterControls analytics={analytics} />}
+        />
+        <Card>
+          <EmptyState
+            icon={BarChart2}
+            title="No sessions match these filters."
+            description="Try widening the date range or changing session or interview type filters."
+            actionLabel="Clear filters"
+            onAction={() => {
+              analytics.setPeriod("30d");
+              analytics.setSessionFilter("all");
+              analytics.setInterviewTypeFilter("all");
+            }}
+          />
+        </Card>
+      </div>
+    );
+  }
+
+  const comparableIdsForKpi = (analytics.data?.recent_sessions ?? [])
+    .filter((session) => session.comparable === true)
+    .map((session) => session.session_id);
+  const selectedIdsForKpi =
+    activeTab === "compare" && compareSelection.selectedIds.length === 0
+      ? comparableIdsForKpi.slice(-2)
+      : compareSelection.selectedIds;
+
+  const sessionKpi = resolveSessionCountKpi({
+    tab: activeTab,
+    period: analytics.filter.period,
+    periodSessionCount: analytics.sessionsInSelectedPeriod,
+    selectedIds: selectedIdsForKpi,
+    comparableIds: comparableIdsForKpi,
+  });
+
   return (
     <div data-testid="page-width-root" className={`${PAGE_SHELL} space-y-4`}>
       <PageHeader
@@ -134,33 +194,7 @@ export default function Analytics() {
           { label: "Dashboard", href: "/app/dashboard" },
           { label: "Analytics" },
         ]}
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={analytics.filter.period}
-              onValueChange={(v) => analytics.setPeriod(v as AnalyticsPeriod)}
-            >
-              <SelectTrigger className="w-[130px] h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="7d">Last 7 days</SelectItem>
-                <SelectItem value="30d">Last 30 days</SelectItem>
-                <SelectItem value="90d">Last 90 days</SelectItem>
-                <SelectItem value="all">All time</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void analytics.downloadCSV()}
-              disabled={!analytics.data?.recent_sessions?.length}
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Export CSV
-            </Button>
-          </div>
-        }
+        actions={<AnalyticsFilterControls analytics={analytics} />}
       />
 
       {analytics.error && analytics.data && (
@@ -181,32 +215,38 @@ export default function Analytics() {
           label={`Avg score (${analytics.filter.period})`}
           value={formatAggregateScore(analytics.avgScore30d)}
           delta={analytics.scoreDelta}
+          deltaLabel="vs prior 30 days"
           icon={<BarChart2 className="w-4 h-4 text-primary" />}
         />
         <KPICard
-          label={`Sessions (${analytics.filter.period})`}
-          value={`${analytics.sessionsInSelectedPeriod ?? 0}`}
+          testId="analytics-kpi-sessions"
+          scope={sessionKpi.scope}
+          label={sessionKpi.label}
+          value={`${sessionKpi.value}`}
+          description={sessionKpi.description}
           icon={<Calendar className="w-4 h-4 text-blue-400" />}
         />
         <KPICard
           label="Avg WPM"
           value={formatAggregateScore(analytics.avgWpm)}
           delta={analytics.wpmDelta}
+          deltaLabel="vs prior 30 days"
           icon={<Mic className="w-4 h-4 text-emerald-400" />}
         />
         <KPICard
-          label="Avg fillers/session"
+          label="Avg fillers/min"
           value={typeof analytics.avgFillers === "number" ? String(analytics.avgFillers) : "—"}
           delta={analytics.fillerDelta}
+          deltaLabel="vs prior 30 days"
           invertDelta
           icon={<AlertTriangle className="w-4 h-4 text-amber-400" />}
         />
       </div>
 
-      <Tabs defaultValue="scores">
+      <Tabs value={activeTab} defaultValue="scores" onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="scores">Score trends</TabsTrigger>
-          <TabsTrigger value="categories">Categories</TabsTrigger>
+          <TabsTrigger value="categories">Session types</TabsTrigger>
           <TabsTrigger value="speech">Speech metrics</TabsTrigger>
           <TabsTrigger value="heatmap">Activity</TabsTrigger>
           <TabsTrigger value="compare">Compare</TabsTrigger>
@@ -216,7 +256,12 @@ export default function Analytics() {
         <TabsContent value="scores">
           <div className="space-y-4">
             <PlanGate requiredPlan="pro" featureFlag="analytics">
-              <ScoreTrendChart data={analytics.scoreTrend ?? []} />
+              <ScoreTrendChart
+                data={analytics.scoreTrend ?? []}
+                scoreTrendSource={analytics.scoreTrendSource}
+                sessionsInPeriod={analytics.sessionsInSelectedPeriod}
+                sessionsScored={analytics.sessionsScored}
+              />
             </PlanGate>
             <DimensionRadar dimensions={analytics.dimensionAverages} />
           </div>
@@ -235,15 +280,91 @@ export default function Analytics() {
         {/* ── Activity heatmap ────────────────────────── */}
         <TabsContent value="heatmap">
           <PlanGate requiredPlan="pro" featureFlag="analytics">
-            <ActivityHeatmap data={analytics.activityByDay ?? {}} />
+            <ActivityHeatmap
+              data={analytics.activityByDay ?? {}}
+              timeZone={analytics.displayTimeZone}
+              period={analytics.filter.period}
+            />
           </PlanGate>
         </TabsContent>
 
         {/* ── Session comparison ──────────────────────── */}
         <TabsContent value="compare">
-          <SessionComparePanel analytics={analytics} />
+          <SessionComparePanel
+            key={`${analytics.filter.period}:${analytics.filter.session_filter}:${analytics.filter.interview_type}`}
+            analytics={analytics}
+            onSelectionChange={handleCompareSelection}
+          />
         </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// AnalyticsFilterControls
+// ─────────────────────────────────────────────────────────────────
+
+function AnalyticsFilterControls({
+  analytics,
+}: {
+  analytics: ReturnType<typeof useAnalytics>;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Select
+        value={analytics.filter.period}
+        onValueChange={(v) => analytics.setPeriod(v as AnalyticsPeriod)}
+      >
+        <SelectTrigger className="w-[130px] h-9" data-testid="analytics-filter-period">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="7d">Last 7 days</SelectItem>
+          <SelectItem value="30d">Last 30 days</SelectItem>
+          <SelectItem value="90d">Last 90 days</SelectItem>
+          <SelectItem value="all">All time</SelectItem>
+        </SelectContent>
+      </Select>
+      <Select
+        value={analytics.filter.session_filter}
+        onValueChange={(v) => analytics.setSessionFilter(v as AnalyticsSessionFilter)}
+      >
+        <SelectTrigger className="w-[130px] h-9" data-testid="analytics-filter-session">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All sessions</SelectItem>
+          <SelectItem value="mock">Mock</SelectItem>
+          <SelectItem value="live">Rehearsal</SelectItem>
+          <SelectItem value="real_interview">Real interview</SelectItem>
+        </SelectContent>
+      </Select>
+      <Select
+        value={analytics.filter.interview_type}
+        onValueChange={(v) => analytics.setInterviewTypeFilter(v as typeof analytics.filter.interview_type)}
+      >
+        <SelectTrigger className="w-[140px] h-9" data-testid="analytics-filter-interview-type">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All types</SelectItem>
+          {INTERVIEW_TYPE_OPTIONS.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => void analytics.downloadCSV()}
+        disabled={!analytics.data?.recent_sessions?.length}
+      >
+        <Download className="w-4 h-4 mr-2" />
+        Export CSV
+      </Button>
     </div>
   );
 }
@@ -253,37 +374,54 @@ export default function Analytics() {
 // ─────────────────────────────────────────────────────────────────
 
 function KPICard({
-  label, value, delta, icon, invertDelta,
+  label, value, delta, deltaLabel, icon, invertDelta, description, testId, scope,
 }: {
   label:        string;
   value:        string;
   delta?:       number | null;
+  deltaLabel?:  string;
   icon:         React.ReactNode;
   invertDelta?: boolean;
+  description?: string;
+  testId?:      string;
+  scope?:       string;
 }) {
   const isPositive = invertDelta
     ? (delta ?? 0) < 0
     : (delta ?? 0) > 0;
+  const showDelta = delta !== null && delta !== undefined && delta !== 0;
 
   return (
     <Card className="flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        {icon}
-        {delta !== null && delta !== undefined && delta !== 0 && (
-          <span className={cn(
-            "flex items-center gap-0.5 text-[10px] font-semibold",
-            isPositive ? "text-emerald-400" : "text-red-400"
-          )}>
-            {isPositive
-              ? <TrendingUp className="w-3 h-3" />
-              : <TrendingDown className="w-3 h-3" />
-            }
-            {Math.abs(delta)}
-          </span>
+      <div data-testid={testId} data-kpi-scope={scope} className="flex flex-col gap-2">
+        <div className="flex items-center justify-between">
+          {icon}
+          {showDelta && (
+            <span className={cn(
+              "flex flex-col items-end gap-0.5 text-[10px] font-semibold",
+              isPositive ? "text-emerald-400" : "text-red-400"
+            )}>
+              <span className="flex items-center gap-0.5">
+                {isPositive
+                  ? <TrendingUp className="w-3 h-3" />
+                  : <TrendingDown className="w-3 h-3" />
+                }
+                {Math.abs(delta!)}
+              </span>
+              {deltaLabel && (
+                <span className="text-[9px] font-normal text-muted-foreground/80">
+                  {deltaLabel}
+                </span>
+              )}
+            </span>
+          )}
+        </div>
+        <p className="text-xl sm:text-2xl font-black text-foreground">{value}</p>
+        <p className="text-[10px] sm:text-xs text-muted-foreground">{label}</p>
+        {description && (
+          <p className="text-[10px] text-muted-foreground/80 leading-snug">{description}</p>
         )}
       </div>
-      <p className="text-xl sm:text-2xl font-black text-foreground">{value}</p>
-      <p className="text-[10px] sm:text-xs text-muted-foreground">{label}</p>
     </Card>
   );
 }
@@ -334,7 +472,17 @@ function dimensionRadarSummary(
   return `${list}. Weakest: ${formatDim(weakest[0])}.`;
 }
 
-function ScoreTrendChart({ data }: { data: { date: string; score: number | null | undefined }[] }) {
+function ScoreTrendChart({
+  data,
+  scoreTrendSource,
+  sessionsInPeriod,
+  sessionsScored,
+}: {
+  data: { date: string; score: number | null | undefined }[];
+  scoreTrendSource: "scorecards" | "sessions";
+  sessionsInPeriod: number;
+  sessionsScored: number;
+}) {
   if (!data.length) {
     return (
       <Card className="text-center py-6">
@@ -344,18 +492,36 @@ function ScoreTrendChart({ data }: { data: { date: string; score: number | null 
     );
   }
 
-  const visible = data.slice(-20);
-  const chartData = visible.map((d) => ({
-    label: format(new Date(d.date), "MMM d"),
-    score: d.score,
-  }));
-  const summary = scoreTrendSummary(visible);
+  const visible = data.slice(-SCORE_TREND_CHART_LIMIT);
+  const scoredPoints = visible.filter((d) => isFiniteScore(d.score));
+
+  if (scoredPoints.length === 0) {
+    return (
+      <Card className="text-center py-6">
+        <BarChart2 className="w-7 h-7 text-muted-foreground/40 mx-auto mb-2" />
+        <p className="text-sm font-medium text-foreground">
+          {sessionsInPeriod} session{sessionsInPeriod === 1 ? "" : "s"} in this period
+        </p>
+        <p className="text-muted-foreground text-sm mt-1">
+          Score trends appear once {sessionsScored === 0 ? "sessions are analyzed" : "more sessions are scored"}.
+        </p>
+      </Card>
+    );
+  }
+
+  const chartData = visible
+    .filter((d) => isFiniteScore(d.score))
+    .map((d) => ({
+      label: format(new Date(d.date), "MMM d"),
+      score: d.score,
+    }));
+  const summary = scoreTrendSummary(scoredPoints);
 
   return (
     <Card>
       <div className="flex items-center justify-between mb-5">
         <h3 className="text-sm font-semibold text-foreground">Score over time</h3>
-        <Badge variant="primary" size="sm">Last 30 sessions</Badge>
+        <Badge variant="primary" size="sm">{scoreTrendBadgeLabel(scoreTrendSource)}</Badge>
       </div>
 
       <p className="sr-only">{summary}</p>
@@ -390,12 +556,7 @@ function DimensionRadar({
 }: {
   dimensions?: Record<string, number | null | undefined>;
 }) {
-  const dims = dimensions ?? {
-    content:       0,
-    structure:     0,
-    communication: 0,
-    confidence:    0,
-  };
+  const dims = dimensions ?? {};
   const summary = dimensionRadarSummary(dimensions);
   const scoredEntries = Object.entries(dims).filter(([, val]) => isFiniteScore(val)) as [
     string,
@@ -452,7 +613,7 @@ function CategoryBreakdown({
     return (
       <Card className="text-center py-6">
         <Target className="w-7 h-7 text-muted-foreground/40 mx-auto mb-2" />
-        <p className="text-muted-foreground text-sm">No category data yet.</p>
+        <p className="text-muted-foreground text-sm">No session type data yet.</p>
       </Card>
     );
   }
@@ -555,7 +716,7 @@ function SpeechMetrics({ analytics }: { analytics: ReturnType<typeof useAnalytic
           <div className="text-2xl sm:text-3xl font-black text-amber-400 mb-1">
             {typeof avgFillers === "number" ? avgFillers : "—"}
           </div>
-          <p className="text-xs text-muted-foreground">Avg fillers per session</p>
+          <p className="text-xs text-muted-foreground">Avg fillers/min</p>
           <p className="text-[10px] text-muted-foreground mt-1">Target: under 5</p>
         </Card>
 
@@ -563,7 +724,7 @@ function SpeechMetrics({ analytics }: { analytics: ReturnType<typeof useAnalytic
           <div className="text-2xl sm:text-3xl font-black text-primary mb-1">
             {typeof avgConfidence === "number" ? `${avgConfidence}%` : "—"}
           </div>
-          <p className="text-xs text-muted-foreground">Avg confidence score</p>
+          <p className="text-xs text-muted-foreground">Avg confidence</p>
           {typeof avgConfidence === "number" && (
             <ProgressBar
               value={avgConfidence}
@@ -614,19 +775,17 @@ function SpeechMetrics({ analytics }: { analytics: ReturnType<typeof useAnalytic
 // ActivityHeatmap — GitHub-style grid
 // ─────────────────────────────────────────────────────────────────
 
-function ActivityHeatmap({ data }: { data: Record<string, number> }) {
-  // Build last 12 weeks
-  const weeks: string[][] = [];
-  let week: string[] = [];
-  for (let i = 83; i >= 0; i--) {
-    const d = format(subDays(new Date(), i), "yyyy-MM-dd");
-    week.push(d);
-    if (week.length === 7) {
-      weeks.push(week);
-      week = [];
-    }
-  }
-  if (week.length) weeks.push(week);
+function ActivityHeatmap({
+  data,
+  timeZone,
+  period,
+}: {
+  data: Record<string, number>;
+  timeZone: string;
+  period: AnalyticsPeriod;
+}) {
+  const weeks = buildHeatmapWeekDayKeys(timeZone, heatmapDaysForPeriod(period));
+  const title = heatmapPeriodTitle(period);
 
   const maxVal = Math.max(...Object.values(data), 1);
 
@@ -634,13 +793,32 @@ function ActivityHeatmap({ data }: { data: Record<string, number> }) {
     <Card>
       <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
         <Flame className="w-4 h-4 text-amber-400" />
-        Practice activity — last 12 weeks
+        {title}
       </h3>
       <div
         className="flex gap-1 overflow-x-auto pb-2"
         role="img"
-        aria-label="Practice activity heatmap for the last 12 weeks"
+        aria-label={title}
       >
+        {weeks[0] && weeks[0].length > 0 ? (
+          <div className="flex flex-col gap-1 pr-1" aria-hidden="true">
+            {weeks[0].map((day) => {
+              const parsed = new Date(`${day}T12:00:00`);
+              const label = Number.isNaN(parsed.getTime())
+                ? ""
+                : parsed.toLocaleDateString("en-US", { weekday: "short" }).slice(0, 2);
+              const show = !Number.isNaN(parsed.getTime()) && parsed.getDay() % 2 === 1;
+              return (
+                <span
+                  key={`dow-${day}`}
+                  className="h-3 w-5 text-[8px] leading-3 text-muted-foreground"
+                >
+                  {show ? label : ""}
+                </span>
+              );
+            })}
+          </div>
+        ) : null}
         {weeks.map((week, wi) => (
           <div key={wi} className="flex flex-col gap-1">
             {week.map((day) => {
@@ -681,14 +859,29 @@ function ActivityHeatmap({ data }: { data: Record<string, number> }) {
 // SessionComparePanel — side-by-side session comparison
 // ─────────────────────────────────────────────────────────────────
 
-function SessionComparePanel({ analytics }: { analytics: ReturnType<typeof useAnalytics> }) {
+function SessionComparePanel({
+  analytics,
+  onSelectionChange,
+}: {
+  analytics: ReturnType<typeof useAnalytics>;
+  onSelectionChange?: (selection: { selectedIds: string[]; comparableIds: string[] }) => void;
+}) {
   const sessions = analytics.data?.recent_sessions ?? [];
   const { profile } = useAuthStore();
   const timeZone = resolveDisplayTimeZone(profile?.timezone);
-  const [sessionA, setSessionA] = useState("");
-  const [sessionB, setSessionB] = useState("");
   const comparison = analytics.comparison;
   const comparable = sessions.filter((s) => s.comparable === true);
+  const comparableIdKey = comparable.map((s) => s.session_id).join("|");
+  const comparableIds = useMemo(
+    () => (comparableIdKey ? comparableIdKey.split("|") : []),
+    [comparableIdKey],
+  );
+  const [sessionA, setSessionA] = useState(
+    () => (comparableIds.length >= 2 ? comparableIds[comparableIds.length - 2] : comparableIds[0] ?? ""),
+  );
+  const [sessionB, setSessionB] = useState(
+    () => (comparableIds.length >= 2 ? comparableIds[comparableIds.length - 1] : ""),
+  );
 
   useEffect(() => {
     if (comparable.length >= 2 && !sessionA && !sessionB) {
@@ -696,6 +889,19 @@ function SessionComparePanel({ analytics }: { analytics: ReturnType<typeof useAn
       setSessionB(comparable[comparable.length - 1].session_id);
     }
   }, [comparable, sessionA, sessionB]);
+
+  useEffect(() => {
+    const eligible = new Set(comparableIds);
+    if (sessionA && !eligible.has(sessionA)) setSessionA("");
+    if (sessionB && !eligible.has(sessionB)) setSessionB("");
+  }, [comparableIds, sessionA, sessionB]);
+
+  useEffect(() => {
+    onSelectionChange?.({
+      selectedIds: [sessionA, sessionB].filter((id) => id.length > 0),
+      comparableIds,
+    });
+  }, [sessionA, sessionB, comparableIds, onSelectionChange]);
 
   if (comparable.length < 2) {
     return (
@@ -753,12 +959,6 @@ function SessionComparePanel({ analytics }: { analytics: ReturnType<typeof useAn
         </Button>
         {!compareState.enabled && compareState.reason && (
           <p className="text-xs text-muted-foreground mt-2">{compareState.reason}</p>
-        )}
-        {comparable.length < 2 && (
-          <p className="text-xs text-muted-foreground mt-2">
-            Compare needs two completed sessions that already have a scorecard.
-            Unfinished or unscored sessions stay in the list but cannot be compared.
-          </p>
         )}
       </Card>
 

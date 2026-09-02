@@ -192,6 +192,13 @@ describe("ensureAuthSession", () => {
     expect(reset).toHaveBeenCalled();
     expect(redirect).toHaveBeenCalled();
   });
+
+  it("does not hang forever when getSession never settles", async () => {
+    getSession.mockReturnValue(new Promise(() => {}));
+    const result = await ensureAuthSession();
+    expect(result.probeFailed).toBe(true);
+    expect(reset).not.toHaveBeenCalled();
+  });
 });
 
 describe("isSessionNearExpiry", () => {

@@ -57,6 +57,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { formatSupabaseAuthError, isHardAuthTransportError } from "@/lib/errors";
+import { recoveryLinkIssueFromUrl } from "@/lib/auth/loginFailure";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -95,20 +96,11 @@ function getRecoveryLinkIssue(): string | null {
   const errorDescription =
     hashParams.get("error_description") ?? searchParams.get("error_description");
 
-  if (!error && !errorCode) {
-    return null;
-  }
-
-  if (errorCode === "otp_expired") {
-    return "This reset link has expired. Please request a new one.";
-  }
-
-  if (errorDescription) {
-    // URLSearchParams already decodes percent-encoding and "+" as space.
-    return errorDescription;
-  }
-
-  return "This reset link is invalid or has already been used. Please request a new one.";
+  return recoveryLinkIssueFromUrl({
+    error,
+    errorCode,
+    errorDescription,
+  });
 }
 
 function isRecoveryUrl(): boolean {

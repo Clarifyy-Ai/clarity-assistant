@@ -25,18 +25,36 @@ export type GoogleCalendarDomainCode =
   | "SYNC_ERROR"
   | "CALENDAR_NOT_CONNECTED";
 
+function readGoogleClientId(): string {
+  return (
+    Deno.env.get("GOOGLE_CLIENT_ID") ??
+    Deno.env.get("GOOGLE_OAUTH_CLIENT_ID") ??
+    Deno.env.get("GOOGLE_CALENDAR_CLIENT_ID") ??
+    ""
+  ).trim();
+}
+
+function readGoogleClientSecret(): string {
+  return (
+    Deno.env.get("GOOGLE_CLIENT_SECRET") ??
+    Deno.env.get("GOOGLE_OAUTH_CLIENT_SECRET") ??
+    Deno.env.get("GOOGLE_CALENDAR_CLIENT_SECRET") ??
+    ""
+  ).trim();
+}
+
 export function isCalendarConfigured(): boolean {
-  const id = (Deno.env.get("GOOGLE_CLIENT_ID") ?? "").trim();
-  const secret = (Deno.env.get("GOOGLE_CLIENT_SECRET") ?? "").trim();
+  const id = readGoogleClientId();
+  const secret = readGoogleClientSecret();
   return id.length > 0 && secret.length > 0;
 }
 
 export function googleClientId(): string {
-  return (Deno.env.get("GOOGLE_CLIENT_ID") ?? "").trim();
+  return readGoogleClientId();
 }
 
 export function googleClientSecret(): string {
-  return (Deno.env.get("GOOGLE_CLIENT_SECRET") ?? "").trim();
+  return readGoogleClientSecret();
 }
 
 function stripSlash(value: string): string {

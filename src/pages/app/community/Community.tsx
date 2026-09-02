@@ -6,15 +6,16 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/Badge";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
-import { COMMUNITY_CATEGORIES, type CommunityCategory } from "@/lib/community/moderation";
+import { COMMUNITY_CATEGORIES, COMMUNITY_MODULE_DESCRIPTION, COMMUNITY_MODULE_LABEL, type CommunityCategory } from "@/lib/community/moderation";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
-import { EmptyState } from "@/components/common/EmptyState";
 import { MessageSquare } from "lucide-react";
 
 type Post = {
   id: string;
+  user_id: string;
   title: string;
   body: string;
   tags: string[];
@@ -23,9 +24,22 @@ type Post = {
   created_at: string;
 };
 
+function showReportedBadge(
+  post: Post,
+  userId: string | undefined,
+  isStaff: boolean,
+): boolean {
+  return (
+    post.status === "REPORTED" &&
+    (isStaff || (!!userId && post.user_id === userId))
+  );
+}
+
 export default function CommunityPage() {
   const user = useAuthStore((s) => s.user);
   const isAdmin = useAuthStore((s) => s.isAdmin);
+  const isModerator = useAuthStore((s) => s.isModerator);
+  const isStaff = isAdmin || isModerator;
   const navigate = useNavigate();
   const [posts, setPosts] = useState<Post[]>([]);
   const [category, setCategory] = useState("all");
@@ -57,8 +71,14 @@ export default function CommunityPage() {
   }, [category]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (!loaded) return;
-  }, [loaded, posts.length, error, isAdmin]);
+    if (window.location.hash !== "#community-create-question") return;
+    window.requestAnimationFrame(() => {
+      document.getElementById("community-create-question")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }, [loaded]);
 
   async function createPost() {
     if (!user?.id) {
@@ -105,23 +125,45 @@ export default function CommunityPage() {
   return (
     <div className={PAGE_SHELL}>
       <PageHeader
-        title="Questions & Answers"
-        breadcrumbs={[{ label: "Dashboard", href: "/app/dashboard" }, { label: "Questions & Answers" }]}
-        description="Ask interview questions, share answers, and report content for moderation."
+        title={COMMUNITY_MODULE_LABEL}
+        breadcrumbs={[{ label: "Dashboard", href: "/app/dashboard" }, { label: COMMUNITY_MODULE_LABEL }]}
+        description={COMMUNITY_MODULE_DESCRIPTION}
         actions={
-          isAdmin ? (
-            <Button size="sm" variant="outline" onClick={() => navigate("/app/admin/community")}>
-              Moderation
-            </Button>
-          ) : undefined
+          <div className="flex gap-2">
+            {user ? (
+              <Button
+                size="sm"
+                onClick={() =>
+                  document.getElementById("community-create-question")?.scrollIntoView({
+                    behavior: "smooth",
+                    block: "start",
+                  })
+                }
+              >
+                Ask a question
+              </Button>
+            ) : (
+              <Button size="sm" onClick={() => navigate("/login")}>
+                Sign in to ask
+              </Button>
+            )}
+            {isAdmin ? (
+              <Button size="sm" variant="outline" onClick={() => navigate("/app/admin/community")}>
+                Moderation
+              </Button>
+            ) : null}
+          </div>
         }
       />
       {error ? (
         <EmptyState title="Community unavailable" description={error} actionLabel="Retry" onAction={() => void load()} />
       ) : null}
 
-      <Card className="mb-4 space-y-3">
-        <h2 className="text-sm font-semibold">Create a post</h2>
+      <Card className="mb-4 space-y-3" data-testid="community-create-question" id="community-create-question">
+        <h2 className="text-sm font-semibold">Ask a question</h2>
+        <p className="text-xs text-muted-foreground">
+          Post an interview, career, or exam prep question. Published posts are visible to the community.
+        </p>
         <Input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -165,8 +207,13 @@ export default function CommunityPage() {
             />
           </div>
         </div>
-        <Button onClick={() => void createPost()} loading={saving} disabled={saving || !user}>
-          Publish post
+        <Button
+          onClick={() => void createPost()}
+          loading={saving}
+          disabled={saving || !user}
+          data-testid="community-publish-question"
+        >
+          {user ? "Publish question" : "Sign in to publish"}
         </Button>
       </Card>
 
@@ -194,9 +241,18 @@ export default function CommunityPage() {
           <li key={post.id}>
             <Link to={`/app/community/${post.id}`}>
               <Card hover className="min-w-0">
-                <p className="font-medium break-words">{post.title}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-medium break-words">{post.title}</p>
+                  {showReportedBadge(post, user?.id, isStaff) && (
+                    <Badge variant="amber" size="sm" dot>
+                      Reported
+                    </Badge>
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  {post.category} · {post.status} · {(post.tags ?? []).join(", ")}
+                  {post.category}
+                  {isStaff && post.status !== "PUBLISHED" ? ` · ${post.status}` : ""}
+                  {(post.tags ?? []).length > 0 ? ` · ${(post.tags ?? []).join(", ")}` : ""}
                 </p>
               </Card>
             </Link>

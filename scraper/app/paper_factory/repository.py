@@ -12,9 +12,10 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, Sequence
 
-from supabase import Client, create_client
+from supabase import Client
 
 from app.core.logger import get_logger
+from app.core.security import create_bounded_supabase_client
 from app.paper_factory.config import FactorySettings
 from app.paper_factory.models import (
     AI_PAPER_DISCLAIMER,
@@ -151,7 +152,7 @@ class PaperRepository:
 
     def __init__(self, settings: FactorySettings, client: Client | None = None) -> None:
         self.settings = settings
-        self.db = client or create_client(
+        self.db = client or create_bounded_supabase_client(
             settings.supabase_url, settings.supabase_service_role_key
         )
 
@@ -167,6 +168,16 @@ class PaperRepository:
             .execute()
         )
         return list(result.data or [])
+
+    def check_connection(self) -> bool:
+        """Perform the smallest useful dependency probe for readiness checks."""
+        result = (
+            self.db.table("gov_paper_generation_jobs")
+            .select("id")
+            .limit(1)
+            .execute()
+        )
+        return result.data is not None
 
     def resolve_exam(self, query: str, stage_ref: str | None = None) -> ExamContext:
         """Resolve a user search term (uuid, code, alias or name) to an exam + stage."""
@@ -819,8 +830,7 @@ class PaperRepository:
             return None
         return self._claim(job, worker_id, datetime.now(timezone.utc))
 
-    @staticmethod
-    def _wants_python_factory(job: dict[str, Any]) -> bool:
+    def _wants_python_factory(self, job: dict[str, Any]) -> bool:
         """Only claim jobs explicitly routed to the Python factory.
 
         Edge sets request_json.generator = "python_paper_factory" when
@@ -828,7 +838,12 @@ class PaperRepository:
         assembler (process-paper-generation-job) to avoid double-claim races.
         """
         request = job.get("request_json") or {}
+        if not isinstance(request, dict):
+            return False
         generator = str(request.get("generator") or "").strip().lower()
+        queue = str(request.get("workerQueue") or request.get("worker_queue") or "").strip().lower()
+        if queue and queue != self.settings.worker_queue:
+            return False
         return generator in ("python_paper_factory", "python", "factory")
 
     def _claim(

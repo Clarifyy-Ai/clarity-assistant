@@ -10,6 +10,10 @@ import { ApiClientError } from "@/lib/api/apiClient";
 import { ensureAuthSession } from "@/lib/focusRecovery/sessionRefresh";
 import { debugLog161d95 } from "@/lib/debug/debugLog161d95";
 import { debugLog4a9592 } from "@/lib/debug/debugLog4a9592";
+import { coalesceKey, resetSingleFlightForTests, singleFlight } from "@/lib/network/singleFlight";
+import { isExpectedBusinessFailure } from "@/lib/network/businessConflict";
+
+export { resetSingleFlightForTests };
 
 /** Functions that may run without a user JWT (gateway still gets apikey + anon Bearer). */
 const ANON_OK_EDGE_FNS = new Set([
@@ -46,6 +50,7 @@ const PRIVATE_MODE_ALLOWLIST = new Set([
   "issue-course-certificate",
   "create-test",
   "submit-test",
+  "save-test-answer",
   "start-exam",
   "start-exam-attempt",
   "save-test-answer",
@@ -150,30 +155,113 @@ const NO_NETWORK_RETRY_FNS = new Set([
   "issue-course-certificate",
   "start-session",
   "end-session",
-  // Question generation is idempotent server-side; client retries can still
-  // amplify provider load / race with AbortController during End Session.
+  "finalize-session",
+  "deduct-credits",
+  "generate-hint",
   "generate-questions",
   "generate-answer",
+  "generate-scorecard",
+  "generate-debrief",
+  "generate-practice-questions",
+  "generate-star-answer",
   "prep-tool",
   "polish-star-section",
-  "generate-star-answer",
-  // Charges credits and persists the brief server-side; a browser retry can
-  // double-charge when the first request actually reached the function.
+  "parse-question-pdf",
+  "parse-document",
+  "parse-resume",
+  "schedule-interview",
+  "create-checkout",
+  "create-billing-portal",
+  "delete-account",
+  "start-exam",
+  "start-exam-attempt",
+  "save-test-answer",
+  "save-attempt-answer",
+  "select-test-questions",
+  "process-paper-generation-job",
+  "cancel-paper-generation-job",
+  "create-document-processing-job",
+  "retry-document-processing-job",
+  "cancel-document-processing-job",
   "company-research",
-  // Export burns rate-limit quota; browser retries must not double-consume.
   "export-user-data",
-  // Payment order creation / verify must never storm on TypeError retries.
   "razorpay-create-order",
   "razorpay-verify-payment",
   "moderate-content",
   "score-coding-submission",
-  // Typeahead / availability: retries are kept to a single attempt to avoid
-  // spinner storms while still recovering from transient network blips.
+  "search-exams",
   "check-exam-paper-availability",
   "get-paper-generation-job",
+  "get-document-processing-job",
+  "analytics-dashboard",
+  "compare-sessions",
   "sync-calendar",
   "disconnect-calendar",
+  "ai-coach-chat",
+  "gap-analysis",
+  "analyze-test-performance",
 ]);
+
+/**
+ * TypeError ("Failed to fetch") retries are allowed only for safe, idempotent
+ * reads. Every other Edge call is a single attempt — mutations must not
+ * double-process after a transport glitch.
+ */
+const SAFE_NETWORK_RETRY_FNS = new Set([
+  "ping",
+  "hybrid-health",
+  "hybrid-ping",
+  "ai-key-check",
+  "billing-catalog",
+  "billing-status",
+  "get-exam-details",
+  "get-exam-pattern",
+  "get-exam-syllabus",
+  "list-previous-papers",
+]);
+
+function networkRetryAttempts(fnName: string): number {
+  if (NO_NETWORK_RETRY_FNS.has(fnName)) return 0;
+  if (SAFE_NETWORK_RETRY_FNS.has(fnName)) return NETWORK_RETRY_DELAYS_MS.length;
+  return 0;
+}
+
+function throwIfAborted(signal: AbortSignal): void {
+  if (!signal.aborted) return;
+  const reason = signal.reason;
+  if (reason instanceof DOMException && reason.name === "AbortError") throw reason;
+  if (reason instanceof Error && reason.name === "AbortError") throw reason;
+  throw new DOMException("The operation was aborted.", "AbortError");
+}
+
+/** Race a promise against an AbortSignal so auth/session probes cannot outlive the request budget. */
+function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) {
+    return Promise.reject(
+      signal.reason instanceof Error
+        ? new DOMException("The operation was aborted.", "AbortError")
+        : new DOMException("The operation was aborted.", "AbortError"),
+    );
+  }
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException("The operation was aborted.", "AbortError"));
+    };
+    const cleanup = () => signal.removeEventListener("abort", onAbort);
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => {
+        cleanup();
+        resolve(value);
+      },
+      (err) => {
+        cleanup();
+        reject(err);
+      },
+    );
+  });
+}
 
 function unreachableUserMessage(fnName: string): string {
   if (fnName === "delete-account") {
@@ -300,15 +388,72 @@ function buildEdgeUrl(fnName: string): string {
   return `${base}/functions/v1/${fnName}`;
 }
 
+type FetchEdgeOptions = {
+  method?: "POST" | "GET" | "PUT" | "PATCH" | "DELETE";
+  signal?: AbortSignal;
+  headers?: Record<string, string>;
+  timeoutMs?: number;
+};
+
+type BufferedEdgeResponse = {
+  status: number;
+  statusText: string;
+  headers: [string, string][];
+  buf: ArrayBuffer;
+};
+
+function shouldCoalesceEdge(
+  body: Record<string, unknown> | FormData | undefined,
+  options?: FetchEdgeOptions,
+): boolean {
+  if (body instanceof FormData) return false;
+  if (options?.signal) return false;
+  return true;
+}
+
+function replayBufferedResponse(snap: BufferedEdgeResponse): Response {
+  return new Response(snap.buf.slice(0), {
+    status: snap.status,
+    statusText: snap.statusText,
+    headers: new Headers(snap.headers),
+  });
+}
+
+/**
+ * One in-flight Edge call per method + function + body. Double-clicks and
+ * Strict Mode remounts join the same flight instead of issuing a second POST.
+ * Callers that pass AbortSignal (typeahead) skip coalescing so cancel stays local.
+ */
 export async function fetchEdge(
   fnName: string,
   body?: Record<string, unknown> | FormData,
-  options?: {
-    method?: "POST" | "GET" | "PUT" | "PATCH" | "DELETE";
-    signal?: AbortSignal;
-    headers?: Record<string, string>;
-    timeoutMs?: number;
+  options?: FetchEdgeOptions,
+): Promise<Response> {
+  if (!shouldCoalesceEdge(body, options)) {
+    return executeFetchEdge(fnName, body, options);
   }
+  const key = coalesceKey({
+    method: options?.method ?? "POST",
+    fnName,
+    body,
+  });
+  const snap = await singleFlight(key, async () => {
+    const res = await executeFetchEdge(fnName, body, options);
+    const buf = await res.arrayBuffer();
+    return {
+      status: res.status,
+      statusText: res.statusText,
+      headers: [...res.headers.entries()],
+      buf,
+    } satisfies BufferedEdgeResponse;
+  });
+  return replayBufferedResponse(snap);
+}
+
+async function executeFetchEdge(
+  fnName: string,
+  body?: Record<string, unknown> | FormData,
+  options?: FetchEdgeOptions,
 ): Promise<Response> {
   if (getPrivateMode() && !PRIVATE_MODE_ALLOWLIST.has(fnName)) {
     throw new Error(
@@ -352,19 +497,18 @@ export async function fetchEdge(
       { forceRefresh, allowAnonBearer },
     );
 
-  let headers = await buildHeaders(false);
-
-  if (!headers.Authorization && !allowAnonBearer) {
-    if (timeout) clearTimeout(timeout);
-    throw new ApiClientError({
-      message: "Sign in to continue.",
-      status: 401,
-      code: "AUTH_REQUIRED",
-    });
-  }
-
-
   try {
+    let headers = await raceAbort(buildHeaders(false), signal);
+    throwIfAborted(signal);
+
+    if (!headers.Authorization && !allowAnonBearer) {
+      throw new ApiClientError({
+        message: "Sign in to continue.",
+        status: 401,
+        code: "AUTH_REQUIRED",
+      });
+    }
+
     const url = buildEdgeUrl(fnName);
     const payload =
       body === undefined
@@ -382,7 +526,7 @@ export async function fetchEdge(
       });
 
     let lastErr: unknown;
-    const maxAttempts = NO_NETWORK_RETRY_FNS.has(fnName) ? 0 : NETWORK_RETRY_DELAYS_MS.length;
+    const maxAttempts = networkRetryAttempts(fnName);
     let authRetried = false;
 
     for (let attempt = 0; attempt <= maxAttempts; attempt++) {
@@ -418,7 +562,8 @@ export async function fetchEdge(
                 : undefined;
           if (isAuthRetryableStatus(401, code, message)) {
             authRetried = true;
-            headers = await buildHeaders(true);
+            headers = await raceAbort(buildHeaders(true), signal);
+            throwIfAborted(signal);
             if (headers.Authorization) {
               response = await doFetch(headers);
             }
@@ -442,7 +587,16 @@ export async function fetchEdge(
     }
     throw lastErr;
   } catch (err: unknown) {
-    if (err instanceof Error && err.name === "AbortError") {
+    const abortName =
+      err && typeof err === "object" && "name" in err
+        ? String((err as { name?: unknown }).name ?? "")
+        : "";
+    const abortMessage = err instanceof Error ? err.message : String(err ?? "");
+    const isAbort =
+      abortName === "AbortError" ||
+      abortName === "TimeoutError" ||
+      abortMessage === "The operation was aborted.";
+    if (isAbort) {
       if (options?.signal?.aborted) {
         throw new Error(
           fnName === "delete-account"
@@ -596,13 +750,20 @@ export async function fetchEdgeJson<T>(
       response.headers.get("x-correlation-id") ||
       response.headers.get("x-request-id") ||
       undefined;
-    if (correlationId) {
-      logger.warn("network.request.failed", {
-        fnName,
-        status: response.status,
-        code,
-        requestId: correlationId,
+    const logFields = {
+      fnName,
+      status: response.status,
+      code,
+      requestId: correlationId,
+    };
+    if (isExpectedBusinessFailure(response.status, code)) {
+      logger.info("network.request.business", {
+        ...logFields,
+        outcome: "skipped" as const,
+        retryable: false,
       });
+    } else {
+      logger.warn("network.request.failed", logFields);
     }
     throw new ApiClientError({
       message: typeof message === "string" ? message : fallback,

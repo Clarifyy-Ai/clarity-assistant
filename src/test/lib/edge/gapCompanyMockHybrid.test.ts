@@ -64,6 +64,9 @@ describe("gap-company-mock Edge hybrid contracts", () => {
     expect(source).toContain("runPython");
     expect(source).toContain("runAi");
     expect(source).toMatch(/parse_failed.*throw|throw.*parse failed/i);
+    expect(source).toContain("mapHybridDocumentCode");
+    expect(source).toContain("MALFORMED_OUTPUT");
+    expect(source).toContain("PARSER_TIMEOUT");
   });
 
   it("company-research does not call AI inside runPython", () => {

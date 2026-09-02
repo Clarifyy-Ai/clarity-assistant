@@ -26,7 +26,7 @@ import { sanitizeText } from "@/lib/security";
 import { normalizePlanId } from "@/lib/billing/planIds";
 
 import type { FeatureFlagId, PlanId } from "@/types";
-import { FEATURE_PLAN_GATE } from "@/lib/constants/features";
+import { FEATURE_PLAN_GATE, FEATURE_FLAGS } from "@/lib/constants/features";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -200,6 +200,13 @@ const PLAN_ORDER: PlanId[] = [
   "elite",
   "enterprise",
 ];
+
+/** Build-time kill for beta model catalogue (`VITE_ENABLE_BETA_MODELS=false`). Unset/true = plan gate only. */
+function isBetaModelsBuildAllowed(): boolean {
+  const raw = import.meta.env.VITE_ENABLE_BETA_MODELS;
+  if (raw === "false") return false;
+  return true;
+}
 
 function resolveFlags(planId: PlanId): Record<FeatureFlagId, boolean> {
   const normalized = normalizePlanId(planId) as PlanId;
@@ -510,6 +517,9 @@ export const useGlobalStore = create<GlobalStore>()(
       },
 
       isFeatureEnabled: (flag) => {
+        if (flag === FEATURE_FLAGS.BETA_MODELS && !isBetaModelsBuildAllowed()) {
+          return false;
+        }
         return get().featureFlags[flag] ?? false;
       },
 

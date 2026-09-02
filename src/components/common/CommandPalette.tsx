@@ -36,6 +36,8 @@ import { usePrivateMode } from "@/hooks/usePrivateMode";
 
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 
+import { COMMUNITY_MODULE_LABEL } from "@/lib/community/moderation";
+
 import { useUIStore } from "@/store/uiStore";
 
 import { useIndiaRegion } from "@/hooks/useIndiaRegion";
@@ -116,7 +118,7 @@ const COMMANDS: NavCommand[] = [
 
   { label: "Learning Hub", path: "/app/learn", icon: BookOpen, group: "Prep", keywords: "learn courses preview" },
 
-  { label: "Q&A", path: "/app/community", icon: BookOpen, group: "Prep", keywords: "community questions" },
+  { label: COMMUNITY_MODULE_LABEL, path: "/app/community", icon: BookOpen, group: "Prep", keywords: "community questions answers qa" },
 
   { label: "Coding lab", path: "/app/coding", icon: FlaskConical, group: "Prep", keywords: "coding assessment lab", featureFlag: "coding_hints" },
 

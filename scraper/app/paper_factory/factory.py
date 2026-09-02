@@ -176,15 +176,6 @@ class PaperFactory:
 
         outstanding = self._subtract_bank_coverage(blueprint, bank_selected)
         needed = sum(slot.count for slot in outstanding)
-        if needed > 0 and request.allow_deterministic_fill:
-            await self._fill_deterministic_slots(
-                blueprint,
-                bank_selected,
-                None,
-                seed=request.random_seed or request.job_id or "gov-paper",
-            )
-            outstanding = self._subtract_bank_coverage(blueprint, bank_selected)
-            needed = sum(slot.count for slot in outstanding)
         decision = decide_ai(
             feature="paper_factory_mcq",
             needed_count=needed,

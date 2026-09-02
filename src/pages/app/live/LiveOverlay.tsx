@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/Button";
 
 import { ClipboardCheck, AlertTriangle, RefreshCw, Eye, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
+import { restoredSessionToast } from "@/lib/audio/micPermission";
+import type { MicPermissionState } from "@/lib/audio/micPermission";
 import { Skeleton } from "@/components/ui/SkeletonLoader";
 import type { LiveSessionConfig } from "@/types/session.types";
 import { notifyOverlayVisibilityOnMobile } from "@/lib/overlay/overlayVisibilityNotice";
@@ -212,7 +214,16 @@ function LiveOverlaySession() {
         setLastSessionId(useSessionStore.getState().session_id);
         setPhase("active");
         if (sessionRestoredRef.current) {
-          toast.info("Session restored — reconnect your microphone to continue transcription.");
+          const micState = useAudioStore.getState().mic_state;
+          const permission: MicPermissionState =
+            micState === "ready"
+              ? "granted"
+              : micState === "permission_denied"
+                ? "denied"
+                : micState === "requesting_permission"
+                  ? "prompt"
+                  : "unavailable";
+          toast.info(restoredSessionToast(micState === "ready", permission));
           setSessionWasRestored(true);
           sessionRestoredRef.current = false;
         }
@@ -483,7 +494,7 @@ function LiveOverlaySession() {
           {IS_ELECTRON ? "Open web app" : "Dashboard"}
         </button>
         <span className="text-xs text-muted-foreground truncate">
-          {isActive ? "Session active" : "Session ended"}
+          {isActive ? "Session active" : isPaused ? "Session paused" : "Session ended"}
         </span>
       </header>
 
@@ -523,6 +534,8 @@ function LiveOverlaySession() {
           onManualQuestion={handleManualQuestion}
           onStartSession={handleSetup}
           onSetupNewSession={() => setPhase("setup")}
+          onPauseSession={copilot.pauseLiveSession}
+          onResumeSession={() => void copilot.resumeLiveSession()}
           onReconnectAudio={() => void copilot.reconnectAudio?.()}
           lastSessionId={lastSessionId}
           isPreparingSession={copilot.isPreparingSession}
@@ -568,11 +581,15 @@ function LiveOverlaySession() {
       {/* Centre content */}
       <div className="flex items-center justify-center min-h-[60vh] pt-14 px-4">
         <div className="text-center space-y-3">
-          {isActive ? (
+          {isActive || isPaused ? (
             <>
-              <p className="text-lg font-semibold text-foreground">Overlay Mode Active</p>
+              <p className="text-lg font-semibold text-foreground">
+                {isPaused ? "Overlay Paused" : "Overlay Mode Active"}
+              </p>
               <p className="text-sm text-muted-foreground max-w-sm">
-                {isMobile
+                {isPaused
+                  ? "Audio capture is paused. Resume from the overlay toolbar or compact pill to continue transcribing."
+                  : isMobile
                   ? "Live overlay shortcuts and floating desktop overlay are limited on phones. Use a desktop browser or the Career Pilot desktop app for Ctrl+Shift+H / Ctrl+Shift+P."
                   : (
                     <>
@@ -581,7 +598,7 @@ function LiveOverlaySession() {
                     </>
                   )}
               </p>
-              {!isMobile && (
+              {!isMobile && !isPaused && (
                 <p className="text-xs text-muted-foreground/60">
                   Press <kbd className="hotkey-badge">Ctrl+Shift+P</kbd> for calm coaching steps
                 </p>

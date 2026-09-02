@@ -15,8 +15,10 @@ import { Button } from "@/components/ui/Button";
 import { BrandLogo } from "@/components/marketing";
 import { AuthShell } from "@/components/layout/AuthShell";
 import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
+import { getAuthenticatedEntryPath } from "@/lib/auth/postAuthRedirect";
 import { assignLoginWithReturnTo } from "@/lib/auth/safeReturnTo";
 import { buildAuthRedirectUrl } from "@/lib/auth/redirectUrl";
+import { formatSupabaseAuthError } from "@/lib/errors";
 
 /**
  * Verify Email gate — shown when an authenticated user has not yet
@@ -30,6 +32,8 @@ export default function VerifyEmail() {
   const navigate = useNavigate();
   const location = useLocation();
   const user = useAuthStore((s) => s.user);
+  const isOnboarded = useAuthStore((s) => s.isOnboarded);
+  const isAdmin = useAuthStore((s) => s.isAdmin);
   const signOut = useAuthStore((s) => s.signOut);
   // Signup has no session yet (email confirmation required), so fall back to
   // the address passed through router state.
@@ -43,10 +47,25 @@ export default function VerifyEmail() {
   const [cooldown, setCooldown] = useState(0);
 
   useEffect(() => {
-    if (isUserEmailConfirmed(user)) {
-      navigate("/app/dashboard", { replace: true });
-    }
-  }, [user, navigate]);
+    if (!isUserEmailConfirmed(user)) return;
+    navigate(
+      getAuthenticatedEntryPath({ isAdmin, isOnboarded }),
+      { replace: true },
+    );
+  }, [user, isAdmin, isOnboarded, navigate]);
+
+  // Refresh auth user after the confirmation link is opened in another tab.
+  useEffect(() => {
+    if (!email) return;
+    const interval = window.setInterval(() => {
+      void supabase.auth.getUser().then(({ data }) => {
+        if (data.user && isUserEmailConfirmed(data.user)) {
+          useAuthStore.getState().setUser(data.user as never);
+        }
+      });
+    }, 5000);
+    return () => window.clearInterval(interval);
+  }, [email]);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -76,7 +95,7 @@ export default function VerifyEmail() {
 
     setResending(false);
     if (error) {
-      setResendError(error.message);
+      setResendError(formatSupabaseAuthError(error));
     } else {
       setResendOk(true);
       setCooldown(60);

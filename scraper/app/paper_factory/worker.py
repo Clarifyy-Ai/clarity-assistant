@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import os
 import socket
+import time
 import uuid
 from typing import Any
 
@@ -23,13 +24,31 @@ from app.paper_factory.repository import PaperRepository
 log = get_logger("paper_factory.worker")
 
 
+class WorkerUnavailableError(RuntimeError):
+    """Raised when durable queue infrastructure cannot be reached."""
+
+
 def worker_id() -> str:
     return f"py-factory-{socket.gethostname()}-{os.getpid()}-{uuid.uuid4().hex[:6]}"
 
 
 def request_from_job(job: dict[str, Any]) -> GenerationRequest:
     """Translate a job row into a generation request (tests + diagnostics)."""
-    payload = job.get("request_json") or {}
+    payload = job.get("request_json")
+    if payload is None:
+        payload = {}
+    if not isinstance(payload, dict):
+        raise PaperFactoryError(
+            "MALFORMED_JOB_PAYLOAD",
+            "request_json must be an object.",
+            retryable=False,
+        )
+    if not job.get("id") or not job.get("exam_id"):
+        raise PaperFactoryError(
+            "MALFORMED_JOB_PAYLOAD",
+            "Job payload requires id and exam_id.",
+            retryable=False,
+        )
 
     def optional_int(key: str) -> int | None:
         value = payload.get(key)
@@ -63,7 +82,7 @@ async def process_job(
     repo: PaperRepository,
 ) -> Any:
     """Run the hybrid engine for one already-claimed job row."""
-    job_id = str(job["id"])
+    job_id = str(job.get("id") or "unknown")
     correlation_id = str(
         ((job.get("request_json") or {}) or {}).get("correlationId") or job_id
     )
@@ -78,6 +97,7 @@ async def process_job(
         mode=job.get("mode"),
     )
 
+    started = time.perf_counter()
     try:
         result = await process_gov_exam_job(
             job,
@@ -86,6 +106,7 @@ async def process_job(
             correlation_id=correlation_id,
         )
     except PaperFactoryError as exc:
+        duration_ms = int(round((time.perf_counter() - started) * 1000))
         log.error(
             "paper_factory_job_failed",
             job_id=job_id,
@@ -107,9 +128,11 @@ async def process_job(
             correlation_id=correlation_id,
             success=False,
             error_code=exc.code,
+            duration_ms=duration_ms,
         )
         return None
     except Exception as exc:  # noqa: BLE001 - never leave a job stuck in-flight
+        duration_ms = int(round((time.perf_counter() - started) * 1000))
         log.exception("paper_factory_job_crashed", job_id=job_id)
         await asyncio.to_thread(
             repo.fail_job,
@@ -125,9 +148,11 @@ async def process_job(
             correlation_id=correlation_id,
             success=False,
             error_code="PAPER_GENERATION_FAILED",
+            duration_ms=duration_ms,
         )
         return None
 
+    duration_ms = int(round((time.perf_counter() - started) * 1000))
     gov_exam_log(
         "completed",
         operation_id=operation_id,
@@ -139,8 +164,9 @@ async def process_job(
         bank_count=result.bank_count,
         generated_count=(result.ai_count or 0) + (result.deterministic_count or 0),
         error_code=result.error_code,
+        duration_ms=duration_ms,
     )
-    return result
+    return result if result.success else None
 
 
 async def worker_loop(
@@ -151,6 +177,8 @@ async def worker_loop(
 ) -> int:
     """Poll for claimable jobs until stopped. Returns the number processed."""
     active_settings = settings or get_factory_settings()
+    if isinstance(active_settings, FactorySettings):
+        active_settings.require_worker_configuration()
     repo = PaperRepository(active_settings)
     identity = worker_id()
     stop_event = stop or asyncio.Event()
@@ -161,12 +189,28 @@ async def worker_loop(
         worker_id=identity,
         once=once,
         has_ai_provider=active_settings.has_ai_provider,
+        worker_mode=getattr(active_settings, "worker_mode", "embedded"),
+        worker_queue=getattr(active_settings, "worker_queue", "python_paper_factory"),
+        lease_seconds=getattr(active_settings, "lease_seconds", None),
     )
+    consecutive_claim_failures = 0
     while not stop_event.is_set():
         try:
             job = await asyncio.to_thread(repo.claim_next_job, identity)
+            consecutive_claim_failures = 0
         except Exception as exc:  # noqa: BLE001 - transient DB/network issues
-            log.error("paper_factory_claim_failed", error=str(exc))
+            consecutive_claim_failures += 1
+            log.error(
+                "paper_factory_claim_failed",
+                error=str(exc),
+                consecutive_failures=consecutive_claim_failures,
+            )
+            if consecutive_claim_failures >= int(
+                getattr(active_settings, "max_claim_failures", 3)
+            ):
+                raise WorkerUnavailableError(
+                    "WORKER_UNAVAILABLE: durable paper-factory queue cannot be reached"
+                ) from exc
             job = None
 
         if job is None:

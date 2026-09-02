@@ -9,7 +9,7 @@ describe("practiceCoachStatus", () => {
     const warnings = buildPracticeCoachWarnings({
       micState: "ready",
       tokenState: "failed",
-      deepgramStatus: "error",
+      transcriptionProviderStatus: "error",
       pipelineStatus: "microphone_only",
     });
     const primary = primaryPracticeCoachWarning(warnings);
@@ -22,7 +22,7 @@ describe("practiceCoachStatus", () => {
     const warnings = buildPracticeCoachWarnings({
       micState: "permission_denied",
       tokenState: "failed",
-      deepgramStatus: "error",
+      transcriptionProviderStatus: "error",
       pipelineStatus: "unavailable",
     });
     expect(warnings.some((w) => w.id === "mic-denied")).toBe(true);
@@ -33,11 +33,23 @@ describe("practiceCoachStatus", () => {
     const warnings = buildPracticeCoachWarnings({
       micState: "not_checked",
       tokenState: "idle",
-      deepgramStatus: "disconnected",
+      transcriptionProviderStatus: "idle",
       pipelineStatus: "idle",
       sessionRestored: true,
       needsMicReconnect: true,
     });
     expect(warnings.some((w) => w.id === "session-restored-reconnect-mic")).toBe(true);
+  });
+
+  it("does not nag to reconnect mic when restore reused a granted permission", () => {
+    const warnings = buildPracticeCoachWarnings({
+      micState: "ready",
+      tokenState: "ready",
+      transcriptionProviderStatus: "connected",
+      pipelineStatus: "listening",
+      sessionRestored: true,
+      needsMicReconnect: false,
+    });
+    expect(warnings.some((w) => w.id === "session-restored-reconnect-mic")).toBe(false);
   });
 });

@@ -21,6 +21,8 @@ SUPPORTED_OPERATIONS: tuple[str, ...] = (
     "prep_rephrase",
     "prep_coding",
     "prep_project",
+    "prep_answer_outline",
+    "prep_raw_prompt",
     "ping",
 )
 

@@ -15,6 +15,7 @@ import type { Tables, TablesUpdate } from "@/integrations/supabase";
 import { startSession } from "@/lib/api/sessions";
 import { createIdempotencyKey } from "@/lib/api/functions";
 import { sessionDurationSeconds } from "@/lib/session/sessionStartEligibility";
+import { ApiClientError } from "@/lib/api/apiClient";
 
 export type SessionRow = Tables<"sessions">;
 export type SessionType = SessionRow["type"];
@@ -104,6 +105,41 @@ export function isServerExpired(row: Pick<SessionRow, "expires_at" | "lifecycle_
 }
 
 export { sessionDurationSeconds };
+
+/** Normalize lifecycle/DB errors so session-start UX handlers can classify them. */
+export function normalizeSessionLifecycleError(error: unknown): Error {
+  if (error instanceof ApiClientError) return error;
+  const message =
+    error instanceof Error ? error.message : String(error ?? "Could not start session.");
+  const lower = message.toLowerCase();
+
+  if (lower.includes("expired")) {
+    return new ApiClientError({
+      message,
+      status: 409,
+      code: "SESSION_EXPIRED",
+    });
+  }
+  if (lower.includes("no longer active") || lower.includes("not found")) {
+    return new ApiClientError({
+      message,
+      status: 409,
+      code: "SESSION_NOT_AVAILABLE",
+    });
+  }
+  if (
+    lower.includes("timed out") ||
+    lower.includes("connection") ||
+    lower.includes("network")
+  ) {
+    return new ApiClientError({
+      message,
+      status: 503,
+      code: "DEPENDENCY_UNAVAILABLE",
+    });
+  }
+  return error instanceof Error ? error : new Error(message);
+}
 
 /** Only keep IDs that exist in public.documents (resume IDs live in resumes). */
 async function resolveDocumentsTableId(
@@ -277,7 +313,7 @@ export async function pauseOwnedSession(sessionId: string, userId: string): Prom
 export async function resumeOwnedSession(sessionId: string, userId: string): Promise<void> {
   await persistSessionLifecycle(sessionId, userId, {
     status: "active",
-    lifecycle_status: "RESUMED",
+    lifecycle_status: "IN_PROGRESS",
   });
 }
 

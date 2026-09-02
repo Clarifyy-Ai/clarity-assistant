@@ -130,7 +130,7 @@ export default function Scorecard() {
     allPoor ? dominantQuality ?? "IRRELEVANT" : undefined,
   );
   const looksEmpty =
-    scorecard.overall_score === 0 &&
+    scorecard.overall_score == null &&
     (scorecard.question_scores?.length ?? 0) === 0 &&
     (scorecard.clarity_score ?? 0) === 0 &&
     (scorecard.structure_score ?? 0) === 0 &&
@@ -203,7 +203,7 @@ export default function Scorecard() {
           scoreGrade.bg, scoreGrade.border
         )}>
           <div className={cn("text-7xl font-black mb-2", scoreGrade.color)}>
-            {scorecard.overall_score}
+            {scorecard.overall_score ?? "—"}
           </div>
           <div className="text-lg font-semibold text-foreground">{scoreGrade.label}</div>
           <p className="text-muted-foreground text-sm mt-1">Overall performance score</p>
@@ -481,7 +481,15 @@ function MiniScoreBar({ value }: { value: number }) {
 // Helpers
 // ─────────────────────────────────────────────────────────────────
 
-function getScoreGrade(score: number, qualityClass?: string) {
+function getScoreGrade(score: number | null, qualityClass?: string) {
+  if (score == null) {
+    return {
+      label: "Not scored",
+      color: "text-muted-foreground",
+      bg: "bg-secondary",
+      border: "border-border",
+    };
+  }
   const poor =
     qualityClass === "IRRELEVANT" ||
     qualityClass === "NON_RESPONSIVE" ||

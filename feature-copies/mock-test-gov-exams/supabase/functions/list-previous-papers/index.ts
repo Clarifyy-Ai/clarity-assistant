@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
         message:
           "No approved previous-year papers in the registry yet. Practice papers can still be generated from the pattern blueprint.",
         disclaimer:
-          "Clarify AI is not affiliated with any recruiting body. Official labels mean registry provenance only — verify on the official website.",
+          "Career Pilot is not affiliated with any recruiting body. Official labels mean registry provenance only — verify on the official website.",
       });
     }
 
@@ -183,7 +183,7 @@ Deno.serve(async (req) => {
           ? "No approved previous-year papers in the registry yet. Practice papers can still be generated from the pattern blueprint."
           : undefined,
       disclaimer:
-        "Clarify AI is not affiliated with any recruiting body. Official labels mean registry provenance only — verify on the official website.",
+        "Career Pilot is not affiliated with any recruiting body. Official labels mean registry provenance only — verify on the official website.",
     });
   } catch (err) {
     console.error("[list-previous-papers]", err);

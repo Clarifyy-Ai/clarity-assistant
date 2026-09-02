@@ -32,12 +32,17 @@ test.describe("Reports / Compare sessions", () => {
     await expect(compare).toBeEnabled();
     await compare.click();
 
-    await expect(page.getByText("Baseline", { exact: true })).toBeVisible();
-    await expect(page.getByText("Comparison", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("compare-baseline")).toBeVisible();
+    await expect(page.getByTestId("compare-comparison")).toBeVisible();
     await expect(page.getByText("Acme", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Globex", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Delta summary")).toBeVisible();
-    await expect(page.getByText("Overall score").first()).toBeVisible();
+    await expect(page.getByText("Score", { exact: true }).first()).toBeVisible();
+    const sessionKpi = page.getByTestId("analytics-kpi-sessions");
+    await expect(sessionKpi).toHaveAttribute("data-kpi-scope", "compare");
+    await expect(sessionKpi).toContainText("Sessions in this comparison");
+    await expect(sessionKpi).toContainText("2");
+    await expect(sessionKpi).not.toContainText(/sessions overall/i);
     expect(badStatuses.every((status) => status < 400)).toBe(true);
     expect(consoleErrors.join("\n")).not.toMatch(/PGRST200|session_questions/i);
   });
@@ -45,8 +50,8 @@ test.describe("Reports / Compare sessions", () => {
   test("keeps Compare disabled when the same session is selected twice", async ({ page }) => {
     await openCompareTab(page);
 
-    const sessionA = page.getByTestId("compare-session-a");
-    const sessionB = page.getByTestId("compare-session-b");
+    const sessionA = page.getByTestId("compare-baseline");
+    const sessionB = page.getByTestId("compare-comparison");
     await sessionA.click();
     await page.getByRole("option", { name: /Acme/i }).first().click();
     await sessionB.click();
@@ -58,7 +63,7 @@ test.describe("Reports / Compare sessions", () => {
   test("only lists comparable sessions in Session A/B pickers", async ({ page }) => {
     await openCompareTab(page);
 
-    await page.getByTestId("compare-session-a").click();
+    await page.getByTestId("compare-baseline").click();
     await expect(page.getByRole("option", { name: /Acme|Globex/i }).first()).toBeVisible();
     await expect(page.locator('[role="option"][data-disabled]')).toHaveCount(0);
     // Unscored session must not appear as a selectable option
@@ -184,7 +189,7 @@ test.describe("Reports / Compare sessions", () => {
   test("session dates use the profile timezone", async ({ page }) => {
     await openCompareTab(page);
     // Radix Select trigger shows the formatted label (Asia/Kolkata for profile).
-    const trigger = page.getByTestId("compare-session-a");
+    const trigger = page.getByTestId("compare-baseline");
     await expect(trigger).toBeVisible({ timeout: 20_000 });
     await expect(trigger).toContainText(/Aug 20, 2026/);
     await expect(trigger).toContainText(/3:30\s*PM/i);

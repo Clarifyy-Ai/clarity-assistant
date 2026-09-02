@@ -1,5 +1,6 @@
 import { Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AdvisoryBanner } from "@/components/common/AdvisoryBanner";
 
 interface OverlayComplianceBannerProps {
   className?: string;
@@ -17,39 +18,28 @@ export function OverlayComplianceBanner({
 }: OverlayComplianceBannerProps) {
   const isPill = variant === "pill";
 
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className={cn(
-        "flex items-start gap-2 shrink-0 border-b border-indigo-500/15 bg-indigo-500/8",
-        isPill ? "px-2 py-1 rounded-full border border-indigo-500/20" : compact ? "px-2.5 py-1.5" : "px-3 py-2",
-        className
-      )}
-    >
-      <Shield
-        className={cn("text-indigo-400 shrink-0 mt-0.5", isPill || compact ? "w-3 h-3" : "w-3.5 h-3.5")}
-        aria-hidden="true"
-      />
-      <p
-        className={cn(
-          "text-indigo-200/90 leading-snug flex-1",
-          isPill ? "text-[9px]" : compact ? "text-[10px]" : "text-[11px]"
-        )}
+  if (isPill) {
+    return (
+      <AdvisoryBanner
+        icon={Shield}
+        title="Visible on screen share."
+        compact
+        className={cn("rounded-full border-b-0 shrink-0", className)}
       >
-        {isPill ? (
-          <>
-            <span className="font-semibold text-indigo-200">Visible on screen share.</span>{" "}
-            Not hidden from viewers.
-          </>
-        ) : (
-          <>
-            <span className="font-semibold text-indigo-200">Visible assistant.</span>{" "}
-            For practice, meetings, and productivity only — stays visible on screen share,
-            recordings, and proctoring tools. No concealment.
-          </>
-        )}
-      </p>
-    </div>
+        Not hidden from viewers.
+      </AdvisoryBanner>
+    );
+  }
+
+  return (
+    <AdvisoryBanner
+      icon={Shield}
+      title="Visible assistant."
+      compact={compact}
+      className={cn("rounded-none border-x-0 border-t-0 shrink-0", className)}
+    >
+      For practice, meetings, and productivity only — stays visible on screen share,
+      recordings, and proctoring tools. No concealment.
+    </AdvisoryBanner>
   );
 }

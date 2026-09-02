@@ -62,7 +62,7 @@ export default function LearningHubPage() {
     <div data-testid="page-width-root" className={PAGE_SHELL}>
       <PageHeader
         title="Learning Hub"
-        badge="Preview"
+        badge={isPreview ? "Preview" : undefined}
         description={
           isPreview
             ? "Preview — original Career Pilot courses will appear here. This is not a third-party LMS and not an official certification program."

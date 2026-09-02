@@ -103,16 +103,17 @@ Render + Edge logs share correlation / job IDs:
 
 ## Job FSM
 
-`queued` → `validating` → `building_blueprint` → `selecting_questions` → `generating_missing_slots` → `validating_questions` → `assembling` → `completed`  
-Terminal: `failed_retryable` | `failed_permanent` | `cancelled`
+Public stages: `queued` → `validating` → `blueprint` → `select` → `optional_ai_fill` → `assemble` → `completed`  
+Internal stages remain more granular (`checking_availability`, `building_blueprint`, `selecting_questions`, `generating_missing_slots`, …).  
+Terminal: `failed_retryable` | `failed_permanent` | `cancelled` | `expired`
 
-Lease: heartbeat, timeout, retry limit, refund on permanent fail. Frontend resumes via `?jobId=` + localStorage.
+Lease: heartbeat, timeout, retry limit. Credits stay reserved on retryable failure. Release only on permanent fail, cancel, or expiry. Frontend resumes via `?jobId=` + localStorage. Local `sweep_gov_paper_jobs` cron recovers stuck leases.
 
 ## Credit lifecycle
 
-availability → eligibility → cost → reservation → generation → validation → publication → finalization  
+availability (no charge) → exact-cost preflight → atomic enqueue+reserve → work → finalize on completed **or** release once on permanent/cancel/expired  
 
-One logical charge; AI failure + Python fallback = same operation; compensate on failure before valid publication.
+One logical charge; AI failure + Python fallback = same reservation; retries must not double-charge. `CONTENT_INSUFFICIENT` / worker unavailable must not permanently consume credits.
 
 **Durable jobs note:** `gov_paper_generation_jobs` are hybrid-by-plan (MATRIX `gov_exam_assemble` via `decideGenerationPlan` / assembler), not request-scoped `executeHybridOperation`.
 
@@ -128,3 +129,32 @@ See `docs/GOV_EXAM_MONITORING.md` and `scripts/gov-exam-ops-snapshot.mjs`.
 ## Release posture
 
 Hybrid engine shipped (Edge + Python + registry + durable jobs). Full-simulation readiness still depends on **approved bank density** per exam. Do not claim GO for all exams until bank readiness is `ready`.
+
+## Local verification (2026-09-02)
+
+Completed in-repo (no live apply/deploy):
+
+- Vitest government-exam contracts: 46 files / 408 tests passed
+- Component tests: ExamSearchCombobox + generation timer (12 tests)
+- Python worker/HMAC/recovery: 46 tests with isolated placeholder env
+- Feature-copy `mock-test-gov-exams` byte-parity with production counterparts
+- Topic-practice jobs now persist/resume via `?jobId=` + localStorage (`kind: topic_practice`)
+- Analytics trend scores clamp persisted totals the same way results do
+- Public job FSM aliases (`queued → validating → blueprint → select → optional_ai_fill → assemble`) map in the client
+
+Environment-blocked here (do not treat as product regressions):
+
+- Playwright gov-exam specs: 4/12 passed on a bootable `:5000` login. Remaining failures are login-helper flake (`clearBrowserAuthState` reload/abort) or hub search listing assertions, not credit/job/scoring contracts
+- `supabase db lint --local`: local Postgres not running
+- Deno type-check for Edge handlers: Deno not installed
+
+## QA deploy checklist (do not apply from this workspace)
+
+1. Apply migrations `20260902230000_release_gov_paper_credits_fail_closed.sql`, `20260902231000_gov_paper_atomic_enqueue_and_sweeper.sql`, `20260902240000_attempt_submission_lifecycle.sql` after confirming `pg_cron` exists.
+2. Deploy Edge: `search-exams`, `check-exam-paper-availability`, `create-exam-paper`, `get/process/cancel-paper-generation-job`, `generate-topic-practice`, `save-test-answer`, `save-attempt-answer`, `start-exam`, `submit-test`.
+3. Deploy Python factory with HMAC secret, `SYSTEM_USER_ID`, worker mode, 180s lease, and `/ready` returning `paper_factory_queue` + worker runtime.
+4. Confirm `PYTHON_SERVICE_URL` / `DOCUMENT_INTELLIGENCE_AUTH_SECRET` on Edge; fail-closed `WORKER_UNAVAILABLE` when factory is down.
+5. Credit matrix: 0 / below / exact / sufficient — no job on insufficient; refund only permanent/cancel/expired.
+6. Official/PYQ never labeled from AI or deterministic fill; availability counts match generation plan.
+7. Attempt: autosave + stale version + submit lock + late-save `SUBMISSION_CONFLICT`; results/analytics/revision read persisted analysis.
+8. Re-run `e2e/gov-exam-search.spec.ts`, `gov-exam-generation.spec.ts`, `gov-exam-session.spec.ts` against a bootable QA app.

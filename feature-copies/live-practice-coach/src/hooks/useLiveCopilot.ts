@@ -890,7 +890,7 @@ export function useLiveCopilot({
       markOverlayProductSessionReady(generation);
       useOverlayStore.getState().showOverlay();
       useOverlayStore.getState().setSessionPipelineState("connecting");
-      await audio.start();
+      await audio.start({ restore: restoringExisting });
       if (!getOverlaySessionAuthority().matchesGeneration(generation)) {
         audio.stop();
         return;
@@ -979,7 +979,7 @@ export function useLiveCopilot({
     markOverlayProductSessionTerminal(gen, "USER_ENDED");
     // STT / mic teardown must never block session history persistence.
     try {
-      audio.stop();
+      audio.stop({ releaseToken: true });
     } catch (stopErr) {
       console.warn("[useLiveCopilot] audio stop during end (non-fatal):", stopErr);
     }
@@ -1061,12 +1061,12 @@ export function useLiveCopilot({
   }, [audio, profile?.id]);
 
   const pauseLiveSession = useCallback(() => {
-    audio.stop();
+    audio.pause();
     useSessionStore.getState().setStatus("paused");
   }, [audio]);
 
   const resumeLiveSession = useCallback(async () => {
-    await audio.start();
+    await audio.start({ restore: true });
     useSessionStore.getState().setStatus("active");
   }, [audio]);
 

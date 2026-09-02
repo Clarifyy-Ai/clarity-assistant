@@ -1,6 +1,6 @@
 // src/pages/app/documents/Documents.tsx
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { toast } from "sonner";
 import { jobDescriptionsDB, documentsDB, resumesDB } from "@/lib/supabase/database";
@@ -110,6 +110,20 @@ function isValidUrl(url: string): boolean {
 
 export default function Documents() {
   const { isLoading, loadError, reload } = useDocumentManager();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [defaultTab, setDefaultTab] = useState("resumes");
+
+  useEffect(() => {
+    if (searchParams.get("highlight") === "gap-analysis") {
+      setDefaultTab("jds");
+      toast.message(
+        "Upload a resume and job description, then open a JD to run gap analysis.",
+      );
+      const next = new URLSearchParams(searchParams);
+      next.delete("highlight");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   return (
     <div className="space-y-5 max-w-4xl">
@@ -131,7 +145,7 @@ export default function Documents() {
           ))}
         </div>
       )}
-      <Tabs defaultValue="resumes">
+      <Tabs key={defaultTab} defaultValue={defaultTab}>
         <TabsList>
           <TabsTrigger value="resumes"><span aria-hidden="true">📄 </span>Resumes</TabsTrigger>
           <TabsTrigger value="jds"><span aria-hidden="true">📋 </span>Job Descriptions</TabsTrigger>
@@ -1245,6 +1259,8 @@ function JDManager() {
                   value={jdUrl}
                   onChange={(e) => setJdUrl(e.target.value)}
                   placeholder="https://jobs.example.com/senior-engineer"
+                  aria-invalid={Boolean(jdUrl) && !isValidUrl(jdUrl)}
+                  aria-describedby={jdUrl && !isValidUrl(jdUrl) ? "jd-url-error" : undefined}
                   className={cn(
                     "w-full bg-background border text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors",
                     jdUrl && !isValidUrl(jdUrl) ? "border-red-500/60" : "border-input"
@@ -1254,7 +1270,7 @@ function JDManager() {
                   The URL is saved for your reference. Automatic scraping is not available — paste the job description text for AI parsing.
                 </p>
                 {jdUrl && !isValidUrl(jdUrl) && (
-                  <p className="text-xs text-red-400 mt-1">Please enter a valid URL (including https://)</p>
+                  <p id="jd-url-error" className="text-xs text-red-400 mt-1">Please enter a valid URL (including https://)</p>
                 )}
               </div>
             ) : (
@@ -1341,21 +1357,28 @@ function CoverLetterManager() {
   const user = useAuthStore((s) => s.user);
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [coverDoc, setCoverDoc] = useState<{
+    id?: string;
     title: string;
     parsed_summary: string | null;
     content: string | null;
     updated_at: string;
   } | null>(null);
 
+  async function reloadCover() {
+    if (!user?.id) {
+      setCoverDoc(null);
+      return;
+    }
+    const data = await documentsDB.getPrimaryByType(user.id, "cover_letter");
+    setCoverDoc(data);
+  }
+
   useEffect(() => {
-    if (!user?.id) return;
-    void documentsDB
-      .getPrimaryByType(user.id, "cover_letter")
-      .then((data) => {
-        if (data) setCoverDoc(data as typeof coverDoc);
-      });
-  }, [user?.id, uploading]);
+    void reloadCover();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   async function handleFile(f: File) {
     const validationError = validateFile(f, "cover_letter");
@@ -1372,7 +1395,12 @@ function CoverLetterManager() {
       toast.success("Document uploaded successfully");
       setFile(null);
     }
+    await reloadCover();
   }
+
+  const parsedPreview = (coverDoc?.content ?? "").trim();
+  const summaryPreview = (coverDoc?.parsed_summary ?? "").trim();
+  const parseFailed = Boolean(coverDoc && !parsedPreview);
 
   return (
     <div className="space-y-4">
@@ -1397,14 +1425,53 @@ function CoverLetterManager() {
         <Card padding="sm" className="space-y-3">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-semibold text-foreground">{coverDoc.title}</p>
-            <Badge variant="emerald" size="sm">Active for AI</Badge>
+            <Badge variant={parseFailed ? "amber" : "emerald"} size="sm">
+              {parseFailed ? "Parse failed" : "Active for AI"}
+            </Badge>
           </div>
           <p className="text-xs text-muted-foreground line-clamp-4">
-            {coverDoc.parsed_summary ?? coverDoc.content?.slice(0, 400) ?? "Parsed text available."}
+            {parseFailed
+              ? (summaryPreview || "Parsing failed. Retry or upload another file.")
+              : (summaryPreview || parsedPreview.slice(0, 400))}
           </p>
           <p className="text-[10px] text-muted-foreground">
             Used in Practice Coach and mock interviews with your resume.
           </p>
+          <div className="flex flex-wrap gap-2">
+            {coverDoc.id && parseFailed && (
+              <Button
+                size="sm"
+                variant="secondary"
+                disabled={retrying}
+                onClick={async () => {
+                  setRetrying(true);
+                  const { error } = await docMgr.retryCoverLetterParse(coverDoc.id!);
+                  setRetrying(false);
+                  if (error) toast.error(error);
+                  else toast.success("Cover letter re-parsed");
+                  await reloadCover();
+                }}
+              >
+                {retrying ? "Retrying…" : "Retry parse"}
+              </Button>
+            )}
+            {coverDoc.id && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={async () => {
+                  const { error } = await docMgr.deleteCoverLetter(coverDoc.id!);
+                  if (error) toast.error(error);
+                  else {
+                    toast.success("Cover letter deleted");
+                    setCoverDoc(null);
+                  }
+                }}
+              >
+                Delete
+              </Button>
+            )}
+          </div>
         </Card>
       ) : !file ? (
         <Card className="bg-secondary/30">

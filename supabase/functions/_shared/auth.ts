@@ -20,6 +20,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { bannedResponse, isUserBanned } from "./banCheck.ts";
+import { isAuthUserEmailConfirmed, emailNotVerifiedResponse } from "./emailVerification.ts";
 import { isBillingPastDue, isPastDueAllowedPath, pastDueResponse, resolveCanonicalBillingStatus } from "./billingPastDue.ts";
 import { getCorsHeaders } from "./cors.ts";
 
@@ -192,6 +193,12 @@ export async function requireAuth(req: Request): Promise<AuthContext> {
     throw authError;
   }
 
+  if (!isAuthUserEmailConfirmed(data.user)) {
+    const emailError = new Error("EMAIL_NOT_VERIFIED");
+    emailError.name = "EmailNotVerifiedError";
+    throw emailError;
+  }
+
   const admin = createServiceRoleClient();
   if (await isUserBanned(admin, data.user.id)) {
     const banError = new Error("ACCOUNT_BANNED");
@@ -262,6 +269,15 @@ export async function getAuthContext(
       error: null,
     };
   } catch (err) {
+    if (
+      err instanceof Error &&
+      (err.name === "EmailNotVerifiedError" || err.message === "EMAIL_NOT_VERIFIED")
+    ) {
+      return {
+        context: null,
+        error: emailNotVerifiedResponse(getCorsHeaders(req)),
+      };
+    }
     if (
       err instanceof Error &&
       (err.name === "AccountBannedError" || err.message === "ACCOUNT_BANNED")

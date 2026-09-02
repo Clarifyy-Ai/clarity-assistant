@@ -8,9 +8,16 @@
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
+import { withTimeout } from "../_shared/withTimeout.ts";
+import { AUTH_LOOKUP_TIMEOUT_MS, PROFILE_LOOKUP_TIMEOUT_MS } from "../_shared/indiaRegion.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { creditDenialResponse } from "../_shared/creditAuthority.ts";
-import { reservePaperJobCredits, releasePaperJobCredits, finalizePaperJobCredits } from "../_shared/claimJobCredits.ts";
+import {
+  createReservedPaperJob,
+  preflightSpendableCredits,
+  refundClaimedPaperCredits,
+  finalizePaperJobCredits,
+} from "../_shared/claimJobCredits.ts";
 import {
   countEligibleGovQuestions,
   inventoryInsufficientPayload,
@@ -19,7 +26,6 @@ import {
   attemptLimitPayload,
   checkGovExamAttemptLimit,
 } from "../_shared/govAttemptLimits.ts";
-import { isUniqueViolation } from "../_shared/postgresErrors.ts";
 import { isUserBanned, bannedResponse } from "../_shared/banCheck.ts";
 import {
   checkRateLimitAsyncWithLocalFallback,
@@ -43,6 +49,12 @@ import {
   GOV_QUESTION_COUNT_ABS_MAX,
   validateGovQuestionCount,
 } from "../_shared/govQuestionCount.ts";
+import {
+  claimPaperGenerationJob,
+  heartbeatJobLease,
+  newWorkerId,
+  setJobIfActive,
+} from "../_shared/govPaperJobLease.ts";
 import { examBankTypeKeys, mapExamType } from "../_shared/examTypeMap.ts";
 import { type GapFillRow } from "../_shared/govAiGapFill.ts";
 import {
@@ -101,11 +113,28 @@ Deno.serve(async (req) => {
   const db = createServiceClient();
 
   try {
-    const auth = await authenticateRequest(req);
+    let auth: Awaited<ReturnType<typeof authenticateRequest>>;
+    try {
+      auth = await withTimeout(authenticateRequest(req), AUTH_LOOKUP_TIMEOUT_MS);
+    } catch {
+      return json(req, {
+        error: "Authentication timed out.",
+        code: "AUTH_TIMEOUT",
+      }, 503);
+    }
     if (auth.error) return auth.error;
     const user = auth.context.user;
 
-    if (await isUserBanned(db, user.id)) {
+    let banned = false;
+    try {
+      banned = await withTimeout(isUserBanned(db, user.id), PROFILE_LOOKUP_TIMEOUT_MS);
+    } catch {
+      return json(req, {
+        error: "Account status lookup timed out.",
+        code: "PROFILE_LOOKUP_TIMEOUT",
+      }, 503);
+    }
+    if (banned) {
       return bannedResponse(getCorsHeaders(req));
     }
 
@@ -236,11 +265,23 @@ Deno.serve(async (req) => {
       }
     }
 
-    const { data: profile } = await db
-      .from("profiles")
-      .select("plan_id, credits")
-      .eq("id", user.id)
-      .maybeSingle();
+    let profile: { plan_id?: string | null; credits?: number | null } | null = null;
+    try {
+      const result = await withTimeout(
+        db
+          .from("profiles")
+          .select("plan_id, credits")
+          .eq("id", user.id)
+          .maybeSingle(),
+        PROFILE_LOOKUP_TIMEOUT_MS,
+      );
+      profile = result.data;
+    } catch (profileErr) {
+      console.warn(
+        "[generate-topic-practice] profile lookup timed out",
+        profileErr instanceof Error ? profileErr.message : "unknown",
+      );
+    }
 
     const attemptLimit = await checkGovExamAttemptLimit(db, user.id, profile?.plan_id);
     if (!attemptLimit.allowed) {
@@ -280,85 +321,52 @@ Deno.serve(async (req) => {
       return json(req, inventoryInsufficientPayload(available, questionCount), 409);
     }
 
-    const { data: job, error: jobErr } = await db
-      .from("gov_paper_generation_jobs")
-      .insert({
-        user_id: user.id,
-        exam_id: examId,
-        stage_id: stageId,
-        pattern_version_id: patternId,
-        mode: "custom_mock",
-        language,
-        request_json: {
-          ...b,
-          topics,
-          questionCount,
-          difficulty,
-          skipAiFill: true,
-          allowDeterministicFill: true,
-          generator: isPythonGovExamConfigured() ? "python_paper_factory" : "edge_assembler",
-        },
-        status: isPythonGovExamConfigured() ? "queued" : "selecting",
-        progress_stage: isPythonGovExamConfigured() ? "queued" : "selecting_questions",
-        idempotency_key: idempotencyKey,
-        credits_charged: 0,
-        credits_reserved: 0,
-        random_seed: randomSeed,
-        started_at: new Date().toISOString(),
-      })
-      .select("id")
-      .single();
-
-    if (jobErr || !job) {
-      if (isUniqueViolation(jobErr)) {
-        const { data: replay } = await db
-          .from("gov_paper_generation_jobs")
-          .select("id, status, mock_test_id, generated_paper_id, error_code, progress_stage, request_json")
-          .eq("user_id", user.id)
-          .eq("idempotency_key", idempotencyKey)
-          .maybeSingle();
-        if (replay) {
-          return json(req, {
-            jobId: replay.id,
-            status: replay.status,
-            mockTestId: replay.mock_test_id,
-            paperId: replay.generated_paper_id,
-            errorCode: replay.error_code,
-            progressStage: replay.progress_stage,
-            paperClass: "custom_practice",
-            idempotentReplay: true,
-          }, replay.status === "completed" ? 200 : 202);
-        }
-      }
-      console.error("[generate-topic-practice] job:", jobErr);
-      return json(req, { error: "Failed to create job", code: "PAPER_GENERATION_FAILED" }, 500);
+    const creditPreflight = await preflightSpendableCredits(db, user.id, COST);
+    if (!creditPreflight.ok) {
+      return creditDenialResponse(req, creditPreflight.denial ?? { success: false }, COST);
     }
 
-    const reserved = await reservePaperJobCredits(
-      db,
-      job.id as string,
-      user.id,
-      COST,
-      `gov_topic_practice:${idempotencyKey}`,
-    );
-
+    const reserved = await createReservedPaperJob(db, {
+      userId: user.id,
+      examId,
+      stageId,
+      patternVersionId: patternId,
+      mode: "custom_mock",
+      language,
+      requestJson: {
+        ...b,
+        topics,
+        questionCount,
+        difficulty,
+        skipAiFill: true,
+        allowDeterministicFill: true,
+        generator: isPythonGovExamConfigured() ? "python_paper_factory" : "edge_assembler",
+        jobKind: "topic_practice",
+      },
+      idempotencyKey,
+      cost: COST,
+      randomSeed,
+      inventorySnapshot: inventory.inventorySnapshot ?? null,
+      inventoryVersion: inventory.inventoryVersion ?? "gov_inventory_v1",
+      status: isPythonGovExamConfigured() ? "queued" : "checking_availability",
+      progressStage: "checking_availability",
+    });
     if (!reserved.success) {
-      await db
-        .from("gov_paper_generation_jobs")
-        .update({
-          status: "failed_permanent",
-          progress_stage: "failed_permanent",
-          retryable: false,
-          error_code: String(reserved.denial?.code ?? "INSUFFICIENT_CREDITS"),
-          error_message: "Could not reserve credits for this paper.",
-          completed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", job.id);
-      return creditDenialResponse(req, reserved.denial ?? { success: false }, COST);
+      return creditDenialResponse(req, reserved.denial, COST);
+    }
+    if (reserved.idempotentReplay) {
+      return json(req, {
+        jobId: reserved.jobId,
+        status: reserved.status,
+        progressStage: reserved.progressStage,
+        mockTestId: reserved.mockTestId,
+        paperId: reserved.paperId,
+        paperClass: "custom_practice",
+        idempotentReplay: true,
+      }, reserved.status === "completed" ? 200 : 202);
     }
 
-    const jobId = job.id as string;
+    const jobId = reserved.jobId;
 
     if (isPythonGovExamConfigured()) {
       const correlationId = req.headers.get("x-request-id")?.trim() || crypto.randomUUID();
@@ -417,7 +425,45 @@ Deno.serve(async (req) => {
         .eq("id", jobId);
     }
 
+    const workerId = newWorkerId("topic");
+    const claimed = await claimPaperGenerationJob(db, {
+      jobId,
+      workerId,
+      userId: user.id,
+    });
+    if (!claimed.ok) {
+      const { data: current } = await db
+        .from("gov_paper_generation_jobs")
+        .select("status, progress_stage, mock_test_id, generated_paper_id")
+        .eq("id", jobId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      return json(req, {
+        jobId,
+        status: current?.status ?? "queued",
+        progressStage: current?.progress_stage ?? current?.status ?? "queued",
+        mockTestId: current?.mock_test_id ?? null,
+        paperId: current?.generated_paper_id ?? null,
+        paperClass: "custom_practice",
+        async: true,
+      }, 202);
+    }
+    await setJobIfActive(
+      db,
+      jobId,
+      { status: "selecting", progress_stage: "selecting_questions" },
+      { workerId },
+    );
+
     try {
+      if (!await heartbeatJobLease(db, jobId, workerId)) {
+        return json(req, {
+          jobId,
+          status: "cancelled",
+          errorCode: "LEASE_LOST",
+          error: "The job lease was lost before processing.",
+        }, 202);
+      }
       const examTypeKeys = examBankTypeKeys({
         code: exam.code as string | null,
         name: exam.name as string | null,
@@ -522,20 +568,27 @@ Deno.serve(async (req) => {
         await db
           .from("gov_paper_generation_jobs")
           .update({
-            status: "failed",
-            progress_stage: "failed",
+            status: "failed_permanent",
+            progress_stage: "failed_permanent",
+            retryable: false,
             error_code: "QUESTION_INVENTORY_INSUFFICIENT",
             error_message: `Only ${selected.length} of ${questionCount} requested questions passed validation.`,
             completed_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           })
-          .eq("id", jobId);
+          .eq("id", jobId)
+          .eq("worker_id", workerId);
 
-        await releasePaperJobCredits(db, jobId, "refund_topic_practice_insufficient");
+        await refundClaimedPaperCredits(
+          db,
+          jobId,
+          user.id,
+          "refund_topic_practice_insufficient",
+        );
 
         return json(req, {
           jobId,
-          status: "failed",
+          status: "failed_permanent",
           errorCode: "QUESTION_INVENTORY_INSUFFICIENT",
           error: `Only ${selected.length} approved questions are available for this configuration.`,
           available: selected.length,
@@ -555,6 +608,15 @@ Deno.serve(async (req) => {
         5,
         Math.round((durationMinutes / Math.max(1, questionCount)) * finalCount),
       );
+
+      if (!await heartbeatJobLease(db, jobId, workerId)) {
+        return json(req, {
+          jobId,
+          status: "cancelled",
+          errorCode: "LEASE_LOST",
+          error: "The job lease was lost before persistence.",
+        }, 202);
+      }
 
       const { data: mockTest, error: mtErr } = await db
         .from("mock_tests")
@@ -643,7 +705,7 @@ Deno.serve(async (req) => {
         await db.from("gov_generated_paper_questions").insert(linkRows);
       }
 
-      await db
+      const { data: completedJob } = await db
         .from("gov_paper_generation_jobs")
         .update({
           status: "completed",
@@ -660,8 +722,21 @@ Deno.serve(async (req) => {
           },
           completed_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
+          retryable: false,
         })
-        .eq("id", jobId);
+        .eq("id", jobId)
+        .eq("worker_id", workerId)
+        .filter("status", "not.in", "(cancelled,expired,failed_permanent)")
+        .select("id")
+        .maybeSingle();
+      if (!completedJob) {
+        return json(req, {
+          jobId,
+          status: "cancelled",
+          errorCode: "CANCELLED",
+          error: "Cancelled before completion",
+        }, 202);
+      }
       await finalizePaperJobCredits(db, jobId);
 
       return json(req, {
@@ -682,18 +757,20 @@ Deno.serve(async (req) => {
       await db
         .from("gov_paper_generation_jobs")
         .update({
-          status: "failed",
-          progress_stage: "failed",
+          status: "failed_retryable",
+          progress_stage: "failed_retryable",
+          retryable: true,
           error_code: "PAPER_GENERATION_FAILED",
-          error_message: "Topic practice generation failed",
-          completed_at: new Date().toISOString(),
+          error_message: "Topic practice generation failed. Retry is safe.",
+          completed_at: null,
           updated_at: new Date().toISOString(),
         })
-        .eq("id", jobId);
-      await releasePaperJobCredits(db, jobId, "refund_topic_practice_failed");
+        .eq("id", jobId)
+        .eq("worker_id", workerId)
+        .filter("status", "not.in", "(completed,cancelled,failed_permanent,expired)");
       return json(req, {
         jobId,
-        status: "failed",
+        status: "failed_retryable",
         errorCode: "PAPER_GENERATION_FAILED",
         error: "Topic practice generation failed",
       }, 500);

@@ -81,7 +81,7 @@ function check(
     opts.environment === "production"
   ) {
     const v = value!.trim();
-    if (v.startsWith("sk_test") || v.startsWith("pk_test") || v.startsWith("price_test")) {
+    if (v.startsWith("sk_test") || v.startsWith("pk_test") || v.startsWith("price_test") || v.startsWith("rzp_test_")) {
       environmentCompatible = false;
       formatValid = false;
       detail = "test_mode_forbidden_in_production";
@@ -127,7 +127,9 @@ export function validateBillingConfig(options?: {
   // Razorpay is the live checkout path. Stripe is optional leftover config.
   const requireStripe =
     options?.requireStripe ?? Boolean(Deno.env.get("STRIPE_SECRET_KEY"));
-  const requireRazorpayWebhook = options?.requireRazorpayWebhook ?? false;
+  const requireRazorpayWebhook =
+    options?.requireRazorpayWebhook ??
+    (requireRazorpay && environment === "production");
 
   const checks: EnvCheckResult[] = [];
 
@@ -162,6 +164,7 @@ export function validateBillingConfig(options?: {
     check("RAZORPAY_KEY_ID", Deno.env.get("RAZORPAY_KEY_ID"), {
       required: requireRazorpay,
       pattern: /^rzp_(live|test)_[A-Za-z0-9]+$/,
+      productionForbidsTestPrefix: true,
       environment,
     }),
   );
@@ -181,7 +184,8 @@ export function validateBillingConfig(options?: {
   const publicUrl = Deno.env.get("PUBLIC_URL") ?? Deno.env.get("SITE_URL");
   checks.push(
     check("PUBLIC_URL", publicUrl, {
-      required: environment === "production" && requireStripe,
+      required:
+        environment === "production" && (requireStripe || requireRazorpay),
       pattern: /^https:\/\//,
       environment,
     }),

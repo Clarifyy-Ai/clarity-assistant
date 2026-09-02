@@ -22,6 +22,8 @@ import {
   forbiddenResponse,
 } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
+import { withTimeout } from "../_shared/withTimeout.ts";
+import { AUTH_LOOKUP_TIMEOUT_MS } from "../_shared/indiaRegion.ts";
 import {
   assembleClaimedPaperJob,
 } from "../_shared/govPaperAssembly.ts";
@@ -32,6 +34,10 @@ import {
   reclaimExpiredPaperJobs,
   releasePaperJobForPythonFactory,
 } from "../_shared/govPaperJobLease.ts";
+import {
+  isPythonGovExamConfigured,
+  pythonGovProcessJob,
+} from "../_shared/pythonGovExamClient.ts";
 
 function json(req: Request, payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -98,10 +104,27 @@ Deno.serve(async (req) => {
     let userId: string | null = null;
 
     if (!internal) {
-      const auth = await authenticateRequest(req);
+      let auth: Awaited<ReturnType<typeof authenticateRequest>>;
+      try {
+        auth = await withTimeout(authenticateRequest(req), AUTH_LOOKUP_TIMEOUT_MS);
+      } catch {
+        return json(req, {
+          error: "Authentication timed out.",
+          code: "AUTH_TIMEOUT",
+        }, 503);
+      }
       if (auth.error) return auth.error;
       userId = auth.context.user.id;
-      if (await isAdmin(userId)) {
+      let admin = false;
+      try {
+        admin = await withTimeout(isAdmin(userId), AUTH_LOOKUP_TIMEOUT_MS);
+      } catch {
+        return json(req, {
+          error: "Authorization lookup timed out.",
+          code: "AUTH_TIMEOUT",
+        }, 503);
+      }
+      if (admin) {
         actor = "admin";
       } else if (jobId) {
         actor = "owner";
@@ -140,50 +163,25 @@ Deno.serve(async (req) => {
         const leaseActive =
           owned?.lease_expires_at &&
           new Date(String(owned.lease_expires_at)).getTime() > Date.now();
-        if (owned && !leaseActive && owned.status !== "completed" && owned.status !== "cancelled") {
-          const prevJson =
-            owned.request_json && typeof owned.request_json === "object"
-              ? (owned.request_json as Record<string, unknown>)
-              : {};
-          await db
-            .from("gov_paper_generation_jobs")
-            .update({
-              request_json: { ...prevJson, generator: "edge_assembler", pythonFallback: "stale_python_lease" },
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", jobId);
-          const fallback = await claimPaperGenerationJob(db, {
-            jobId,
-            workerId,
-            userId: actor === "owner" && userId ? userId : undefined,
+        const createdMs = owned?.started_at
+          ? Date.parse(String(owned.started_at))
+          : NaN;
+        const queuedStale =
+          owned?.status === "queued" &&
+          Number.isFinite(createdMs) &&
+          Date.now() - createdMs > 120_000;
+        if (
+          queuedStale &&
+          !leaseActive &&
+          isPythonGovExamConfigured()
+        ) {
+          await pythonGovProcessJob({
+            job_id: jobId,
+            correlation_id: crypto.randomUUID(),
+          }).catch((err) => {
+            console.warn("[process-paper-generation-job] python_redispatch:", err);
           });
-          if (fallback.ok) {
-            claimedJobId = String(fallback.job.id);
-            claimedWorkerId = fallback.workerId;
-            const result = await assembleClaimedPaperJob(db, fallback.job, fallback.workerId);
-            if (result.ok) {
-              return json(req, {
-                jobId: fallback.job.id,
-                status: "completed",
-                mockTestId: result.mockTestId,
-                paperId: result.paperId,
-                questionCount: result.questionCount,
-                paperClass: result.paperClass,
-                workerId: fallback.workerId,
-                attemptCount: fallback.attemptCount,
-                pythonFallback: true,
-              });
-            }
-            return json(req, {
-              jobId: fallback.job.id,
-              status: result.status,
-              errorCode: result.errorCode,
-              error: result.error,
-              pythonFallback: true,
-            }, result.status === "cancelled" ? 202 : (result.httpStatus ?? 500));
-          }
         }
-
         return json(req, {
           jobId,
           status: owned?.status ?? "queued",

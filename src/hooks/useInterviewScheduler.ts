@@ -20,6 +20,7 @@ import { generateId } from "@/lib/utils";
 import { schedulerCompanyNameSchema, schedulerRoleTitleSchema, schedulerTimezoneSchema } from "@/lib/validators/interviewSchemas";
 import { subscribeFocusRecovery } from "@/lib/focusRecovery";
 import { toSafeUiError } from "@/lib/focusRecovery";
+import { isScheduledToday, resolveSchedulerTimezoneKey } from "@/lib/interviews/schedulerTimezone";
 import type { TablesInsert, TablesUpdate } from "@/integrations/supabase";
 import type {
   ScheduledInterview,
@@ -72,7 +73,7 @@ export function useInterviewScheduler() {
         ...i,
         rounds:     i.interview_rounds ?? [],
         next_round: getNextRound(i.interview_rounds ?? []),
-        is_today:   checkIsToday(i.interview_rounds ?? []),
+        is_today:   checkIsToday(i.interview_rounds ?? [], i.timezone),
       })) as ScheduledInterview[];
       store.setInterviews(interviews);
     } catch (err) {
@@ -265,12 +266,42 @@ export function useInterviewScheduler() {
   const updateRound = useCallback(async (
     roundId: string,
     values: Partial<RoundFormValues> & { status?: InterviewRound["status"] },
+    options?: { previousScheduledAt?: string | null },
   ): Promise<{ error: string | null }> => {
+    if (values.scheduled_at) {
+      const when = new Date(values.scheduled_at);
+      const prevMs = options?.previousScheduledAt
+        ? new Date(options.previousScheduledAt).getTime()
+        : null;
+      const unchanged = prevMs !== null && when.getTime() === prevMs;
+      if (
+        !unchanged &&
+        (!Number.isFinite(when.getTime()) || when.getTime() <= Date.now())
+      ) {
+        return { error: "Scheduled time must be in the future." };
+      }
+    }
+
+    let timezoneValue: string | null | undefined;
+    if (values.timezone !== undefined) {
+      const timezone = schedulerTimezoneSchema.safeParse(values.timezone ?? "local");
+      if (!timezone.success) {
+        return {
+          error: timezone.error.issues[0]?.message ?? "Invalid timezone",
+        };
+      }
+      timezoneValue = timezone.data === "local" ? null : timezone.data;
+    }
+
+    const { timezone: _tz, ...rest } = values;
+    const dbPatch = {
+      ...rest,
+      ...(timezoneValue !== undefined ? { timezone: timezoneValue } : {}),
+      updated_at: new Date().toISOString(),
+    };
+
     try {
-      await interviewRoundsDB.update(roundId, {
-        ...values,
-        updated_at: new Date().toISOString(),
-      } as TablesUpdate<"interview_rounds">);
+      await interviewRoundsDB.update(roundId, dbPatch as TablesUpdate<"interview_rounds">);
       await loadInterviews();
       return { error: null };
     } catch (err) {
@@ -335,15 +366,10 @@ function getNextRound(rounds: InterviewRound[]): InterviewRound | null {
   return upcoming[0] ?? null;
 }
 
-function checkIsToday(rounds: InterviewRound[]): boolean {
+function checkIsToday(rounds: InterviewRound[], interviewTimezone?: string | null): boolean {
   return rounds.some((r) => {
     if (!r.scheduled_at) return false;
-    const d = new Date(r.scheduled_at);
-    const n = new Date();
-    return (
-      d.getFullYear() === n.getFullYear() &&
-      d.getMonth()    === n.getMonth()    &&
-      d.getDate()     === n.getDate()
-    );
+    const tz = resolveSchedulerTimezoneKey(r.timezone, interviewTimezone);
+    return isScheduledToday(r.scheduled_at, tz);
   });
 }

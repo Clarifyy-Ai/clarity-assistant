@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/Button";
+import { AdvisoryBanner } from "@/components/common/AdvisoryBanner";
 import { isElectronApp } from "@/lib/platform/isElectron";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 
@@ -76,14 +77,12 @@ export function ElectronFirstRunModal(): JSX.Element | null {
         </div>
 
         <div className="px-6 py-4 space-y-4">
-          <div className="flex gap-2 rounded-lg border border-indigo-500/25 bg-indigo-500/8 px-3 py-2.5 text-xs text-indigo-100/90 leading-relaxed">
-            <Sparkles className="w-4 h-4 shrink-0 mt-0.5 text-indigo-300" aria-hidden />
-            <p>
-              Use this app for <strong className="text-indigo-100">Overlay</strong> and{" "}
-              <strong className="text-indigo-100">{PRODUCT_NAMES.practiceCoach}</strong> during live calls.
-              Your full account hub opens in your browser.
-            </p>
-          </div>
+          <AdvisoryBanner icon={Sparkles} compact>
+            Use this app for{" "}
+            <strong className="font-semibold text-brand-950 dark:text-white">Overlay</strong> and{" "}
+            <strong className="font-semibold text-brand-950 dark:text-white">{PRODUCT_NAMES.practiceCoach}</strong>{" "}
+            during live calls. Your full account hub opens in your browser.
+          </AdvisoryBanner>
 
           <ol className="space-y-3">
             {DESKTOP_POINTS.map((step, index) => {

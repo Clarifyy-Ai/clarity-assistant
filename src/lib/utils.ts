@@ -215,9 +215,11 @@ export function generateShareToken(): string {
 // URL helpers
 // ─────────────────────────────────────────────────────────────────
 
-export function buildShareUrl(token: string, path: string): string {
-  const base = ENV.APP_URL || window.location.origin;
-  return `${base}${path}?token=${token}`;
+export function buildShareUrl(token: string): string {
+  const base =
+    ENV.APP_URL ||
+    (typeof window !== "undefined" ? window.location.origin : "");
+  return `${base}/share/${token}`;
 }
 
 export function isValidUrl(url: string): boolean {
