@@ -84,6 +84,30 @@ describe("ingest JSON question validation", () => {
     }
   });
 
+  it("normalizes {label,text} option objects instead of [object Object]", () => {
+    const result = validateIngestQuestionsPayload([
+      {
+        question_text: "Capital of India?",
+        options: [
+          { label: "A", text: "Mumbai" },
+          { label: "B", text: "New Delhi" },
+          { label: "C", text: "Kolkata" },
+          { label: "D", text: "Chennai" },
+        ],
+        correct_answer: "B",
+      },
+    ]);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.questions[0].options).toEqual([
+        "Mumbai",
+        "New Delhi",
+        "Kolkata",
+        "Chennai",
+      ]);
+    }
+  });
+
   it("rejects empty / non-array payloads", () => {
     expect(validateIngestQuestionsPayload([]).ok).toBe(false);
     expect(validateIngestQuestionsPayload(null).ok).toBe(false);

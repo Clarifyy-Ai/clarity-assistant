@@ -6,7 +6,34 @@
  *   SUPABASE_ACCESS_TOKEN=sbp_... node --use-system-ca scripts/configure-auth-email-templates.mjs
  */
 
+import fs from "node:fs";
 import https from "https";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.join(__dirname, "..");
+
+function loadEnvLocal() {
+  const envPath = path.join(ROOT, ".env.local");
+  if (!fs.existsSync(envPath)) return;
+  for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq <= 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let val = trimmed.slice(eq + 1).trim();
+    if (
+      (val.startsWith('"') && val.endsWith('"')) ||
+      (val.startsWith("'") && val.endsWith("'"))
+    ) {
+      val = val.slice(1, -1);
+    }
+    if (!process.env[key]) process.env[key] = val;
+  }
+}
+loadEnvLocal();
 
 const PROJECT_REF = "qzgvjrvtkwlzxpmlddkx";
 const SITE_URL = "https://trycareerpilot.com";
@@ -293,6 +320,7 @@ async function main() {
   console.log(`   uri_allow_list entries=${beforeAllow ? beforeAllow.split(",").filter(Boolean).length : 0}`);
 
   const uriAllowList = mergeAllowList(before.uri_allow_list);
+  const smtpPassword = String(process.env.HOSTINGER_SMTP_PASSWORD ?? "").trim();
   const payload = {
     site_url: SITE_URL,
     uri_allow_list: uriAllowList,
@@ -303,6 +331,14 @@ async function main() {
     smtp_sender_name: "Career Pilot",
     ...templates(),
   };
+  if (smtpPassword) {
+    Object.assign(payload, {
+      smtp_host: "smtp.hostinger.com",
+      smtp_port: "465",
+      smtp_user: MAILBOX,
+      smtp_pass: smtpPassword,
+    });
+  }
 
   console.log("2) PATCH Auth templates + site URL");
   const authPatch = await supabase("PATCH", `/v1/projects/${PROJECT_REF}/config/auth`, token, payload);
@@ -328,6 +364,14 @@ async function main() {
   if (String(live.site_url || "") !== SITE_URL) {
     console.error("site_url did not update to trycareerpilot.com");
     process.exit(1);
+  }
+  if (live.smtp_host !== "smtp.hostinger.com" || live.smtp_user !== MAILBOX) {
+    console.warn(
+      `   WARN Auth SMTP host/user not Hostinger (host=${live.smtp_host || "(none)"} user=${live.smtp_user || "(none)"}).`,
+    );
+    console.warn("   Set HOSTINGER_SMTP_PASSWORD and re-run, or configure SMTP in Supabase Dashboard.");
+  } else {
+    console.log(`   Auth SMTP OK (${live.smtp_host}:${live.smtp_port || "465"} as ${live.smtp_user})`);
   }
   const required = [
     "mailer_templates_confirmation_content",

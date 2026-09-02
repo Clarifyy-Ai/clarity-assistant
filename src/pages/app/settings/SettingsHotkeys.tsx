@@ -161,7 +161,7 @@ export default function SettingsHotkeys() {
         >
           <p className="font-semibold text-foreground">Desktop overlay required</p>
           <p className="text-muted-foreground text-xs leading-relaxed">
-            Live overlay, global hotkeys (Ctrl+Shift+H / Ctrl+Shift+P), and system-audio capture
+            Live overlay, global hotkeys (Ctrl+Shift+U / Ctrl+Shift+P), and system-audio capture
             need a desktop browser or the Career Pilot desktop app. On mobile you can still complete
             setup and practice with the microphone, but overlay shortcuts are unavailable.
           </p>
@@ -172,7 +172,7 @@ export default function SettingsHotkeys() {
           <p className="font-medium">When shortcuts fire</p>
           <p className="text-muted-foreground text-xs mt-1 leading-relaxed">
             Overlay shortcuts run during an active Practice Coach or Mock Interview.
-            In Chrome, Ctrl+Shift+H opens History and Ctrl+Shift+J opens DevTools —
+            In Chrome, Ctrl+Shift+T reopens a closed tab and Ctrl+Shift+I opens DevTools —
             remap those here or use the Career Pilot desktop app for global hotkeys.
           </p>
         </div>

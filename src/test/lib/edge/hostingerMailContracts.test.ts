@@ -103,6 +103,22 @@ describe("Hostinger Mail contracts", () => {
     expect(uiFolders).toContain('name: "PasswordResets"');
   });
 
+  it("contact-sales prefers Hostinger with Resend fallback", () => {
+    const contactSales = read("supabase/functions/contact-sales/index.ts");
+    expect(contactSales).toContain("isHostingerMailConfigured");
+    expect(contactSales).toContain("sendHostingerEmail");
+    expect(contactSales).toContain("sendSalesEmail");
+    const block = contactSales.slice(
+      contactSales.indexOf("async function sendSalesEmail"),
+      contactSales.indexOf("Deno.serve"),
+    );
+    expect(block.indexOf("isHostingerMailConfigured()")).toBeGreaterThan(-1);
+    expect(block.indexOf("isHostingerMailConfigured()")).toBeLessThan(
+      block.indexOf("return sendSalesEmailResend"),
+    );
+    expect(contactSales).toContain("emailProviderConfigured");
+  });
+
   it("uses the Career Pilot email shell and public website", () => {
     const layout = read("supabase/functions/_shared/emailLayout.ts");
     expect(layout).toContain('PUBLIC_WEBSITE_URL = "https://trycareerpilot.com"');

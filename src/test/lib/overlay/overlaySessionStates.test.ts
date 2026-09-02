@@ -9,6 +9,10 @@ describe("pipelineStateFromErrorMessage", () => {
     expect(pipelineStateFromErrorMessage("Deepgram websocket closed")).toBe(
       "audio_unavailable",
     );
+    expect(pipelineStateFromErrorMessage("STT stream failed")).toBe("audio_unavailable");
+    expect(pipelineStateFromErrorMessage("parakeet unavailable")).toBe(
+      "ai_provider_unavailable",
+    );
   });
 
   it("maps credit and rate-limit copy", () => {
@@ -21,6 +25,12 @@ describe("pipelineStateFromErrorMessage", () => {
   it("maps generic model failures to ai_provider_unavailable", () => {
     expect(pipelineStateFromErrorMessage("Gemini returned 503")).toBe(
       "ai_provider_unavailable",
+    );
+  });
+
+  it("does not treat parakeet as an STT pipeline token", () => {
+    expect(pipelineStateFromErrorMessage("parakeet failed")).not.toBe(
+      "audio_unavailable",
     );
   });
 });

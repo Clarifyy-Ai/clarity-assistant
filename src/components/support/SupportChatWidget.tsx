@@ -25,6 +25,10 @@ import {
   validateSupportAttachment,
   type SupportChipId,
 } from "@/lib/support/supportCopy";
+import {
+  waitingStatusLabel,
+  type SupportPriority,
+} from "@/lib/support/triage";
 
 const GUEST_TOKEN_KEY = "clarify-support-guest-token";
 const THREAD_KEY = "clarify-support-thread-id";
@@ -59,6 +63,7 @@ type ChatResponse = {
   status?: string | null;
   mode?: string | null;
   category?: string | null;
+  priority?: SupportPriority | null;
   public_ref?: string | null;
   messages: ChatMessage[];
   threads?: ThreadSummary[];
@@ -106,6 +111,7 @@ function shouldHideWidget(pathname: string): boolean {
     pathname.startsWith("/reset-password") ||
     pathname.startsWith("/forgot-password") ||
     pathname.startsWith("/verify-email") ||
+    pathname.startsWith("/auth") ||
     pathname.startsWith("/onboarding")
   );
 }
@@ -130,14 +136,14 @@ function modeToUi(mode: string | null | undefined, fallback: UiState): UiState {
   return fallback;
 }
 
-function statusLabel(state: UiState): string {
+function statusLabel(state: UiState, priority?: SupportPriority | null): string {
   switch (state) {
     case "connecting":
       return "Connecting…";
     case "ai_typing":
       return "Career Pilot is writing…";
     case "waiting_for_agent":
-      return "Waiting for an agent";
+      return waitingStatusLabel(priority);
     case "agent_connected":
       return "Agent connected";
     case "resolved":
@@ -177,6 +183,7 @@ export function SupportChatWidget() {
   const [history, setHistory] = useState<ThreadSummary[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [publicRef, setPublicRef] = useState<string | null>(null);
+  const [threadPriority, setThreadPriority] = useState<SupportPriority | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const lastClientIdRef = useRef<string | null>(null);
   const lastPayloadRef = useRef<{
@@ -224,6 +231,7 @@ export function SupportChatWidget() {
     setGuestToken(null);
     setMessages([]);
     setPublicRef(null);
+    setThreadPriority(null);
     setForceGuestFields(true);
     setUiState("connected");
     if (message) setError(message);
@@ -233,6 +241,7 @@ export function SupportChatWidget() {
     if (data.thread_id) persistThread(data.thread_id, data.guest_token);
     setMessages(data.messages ?? []);
     setPublicRef(data.public_ref ?? null);
+    setThreadPriority(data.priority ?? null);
     setUiState(modeToUi(data.mode, "connected"));
     setError(null);
   }
@@ -537,10 +546,10 @@ export function SupportChatWidget() {
               </p>
               <p className="text-[11px] text-primary-foreground/80 truncate">
                 {uiState === "connecting" || uiState === "ai_typing"
-                  ? statusLabel(uiState)
+                  ? statusLabel(uiState, threadPriority)
                   : publicRef
-                    ? `${publicRef} · ${statusLabel(uiState)}`
-                    : statusLabel(uiState)}
+                    ? `${publicRef} · ${statusLabel(uiState, threadPriority)}`
+                    : statusLabel(uiState, threadPriority)}
               </p>
             </div>
             <div className="flex items-center gap-1">
@@ -687,6 +696,15 @@ export function SupportChatWidget() {
                 <RotateCcw className="h-3 w-3" />
                 {SUPPORT_FAILED_LABEL}
               </button>
+            )}
+
+            {uiState === "waiting_for_agent" && (
+              <p className="px-3 pt-2 text-[11px] text-muted-foreground leading-relaxed">
+                {publicRef
+                  ? `Ticket ${publicRef} is open. `
+                  : ""}
+                An agent will reply here — your messages stay saved. You can add more details below.
+              </p>
             )}
 
             <form

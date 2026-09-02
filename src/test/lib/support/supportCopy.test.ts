@@ -39,4 +39,9 @@ describe("support copy", () => {
     const huge = new File([new Uint8Array(5 * 1024 * 1024 + 1)], "big.pdf", { type: "application/pdf" });
     expect(validateSupportAttachment(huge)).toMatch(/5 MB/i);
   });
+
+  it("keeps guest polling below the 8 req/min rate limit", async () => {
+    const { SUPPORT_GUEST_POLL_MS } = await import("@/lib/support/supportCopy");
+    expect(SUPPORT_GUEST_POLL_MS).toBeGreaterThanOrEqual(8_000);
+  });
 });

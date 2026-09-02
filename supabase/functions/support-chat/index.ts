@@ -25,6 +25,15 @@ import {
   type SupportSnapshot,
 } from "../_shared/supportContext.ts";
 import { generateWithFallback } from "../_shared/aiProvider.ts";
+import {
+  escalationUserMessage,
+  mergeEscalationState,
+  nextEscalationStateAfterBotReply,
+  parseEscalationState,
+  shouldAutoEscalate,
+  type AutoEscalateReason,
+  type SupportPriority,
+} from "../_shared/supportTriage.ts";
 
 const FUNCTION_NAME = "support-chat";
 const MAX_BODY = 4000;
@@ -181,9 +190,111 @@ function threadPayload(thread: Record<string, unknown>, messages: unknown[]) {
     status: thread.status,
     mode: thread.mode,
     category: thread.category,
+    priority: thread.priority ?? "normal",
     assigned_admin_id: thread.assigned_admin_id ?? null,
     messages,
   };
+}
+
+async function summarizeEscalation(
+  db: ReturnType<typeof createServiceClient>,
+  ownerUserId: string | null,
+  threadId: string,
+  message: string,
+  existingSummary: string | null,
+): Promise<string> {
+  const fallback = (existingSummary?.trim() || message).slice(0, 200);
+  const aiLimit = await checkRateLimitAsync(db, {
+    key: createRateLimitKey(FUNCTION_NAME, `escalate-summary:${ownerUserId ?? threadId}`),
+    limit: 20,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (!aiLimit.allowed) return fallback;
+  try {
+    const ai = await generateWithFallback({
+      prompt: `Summarize this Career Pilot support issue in one short sentence for a human agent:\n${message}`,
+      systemPrompt: "One sentence only. No greeting. Max 25 words.",
+      maxTokens: 80,
+      temperature: 0.2,
+      action: "support_chat",
+      userId: ownerUserId ?? undefined,
+    });
+    const text = ai.text.trim().slice(0, 200);
+    return text || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function escalateThread(opts: {
+  db: ReturnType<typeof createServiceClient>;
+  threadId: string;
+  ownerUserId: string | null;
+  priority: SupportPriority;
+  reason: AutoEscalateReason;
+  message: string;
+  existingSummary: string | null;
+  contextSnapshot: Record<string, unknown> | null;
+}): Promise<{ mode: string }> {
+  const { data: thread } = await opts.db
+    .from("support_threads")
+    .select("public_ref")
+    .eq("id", opts.threadId)
+    .maybeSingle();
+
+  const summary = await summarizeEscalation(
+    opts.db,
+    opts.ownerUserId,
+    opts.threadId,
+    opts.message,
+    opts.existingSummary,
+  );
+
+  const body = escalationUserMessage(opts.priority, thread?.public_ref ?? null);
+  await insertMessage(opts.db, {
+    thread_id: opts.threadId,
+    sender_id: null,
+    sender_type: "system",
+    body,
+  });
+
+  await opts.db
+    .from("support_threads")
+    .update({
+      mode: "waiting_agent",
+      status: "pending",
+      priority: opts.priority,
+      summary,
+      unread_for_admin: true,
+      context_snapshot: mergeEscalationState(opts.contextSnapshot, {
+        ai_unresolved_turns: 0,
+      }),
+    })
+    .eq("id", opts.threadId);
+
+  await insertEvent(opts.db, {
+    thread_id: opts.threadId,
+    event_type: "escalate",
+    visibility: "user",
+    body: "Escalated to human support",
+    metadata: { priority: opts.priority, reason: opts.reason },
+  });
+
+  return { mode: "waiting_agent" };
+}
+
+async function persistContextSnapshot(
+  db: ReturnType<typeof createServiceClient>,
+  threadId: string,
+  snapshot: SupportSnapshot,
+  escalationPatch: ReturnType<typeof nextEscalationStateAfterBotReply>,
+  existingContext: Record<string, unknown> | null,
+) {
+  const merged = mergeEscalationState(
+    { ...(existingContext ?? {}), ...snapshot },
+    escalationPatch,
+  );
+  await db.from("support_threads").update({ context_snapshot: merged }).eq("id", threadId);
 }
 
 async function produceReply(opts: {
@@ -196,7 +307,10 @@ async function produceReply(opts: {
   resourceHint: { exam_id?: string; job_id?: string; document_id?: string } | null;
   escalateRequested: boolean;
   summary: string | null;
+  contextSnapshot: Record<string, unknown> | null;
 }): Promise<{ mode: string; snapshot: SupportSnapshot; usedAi: boolean }> {
+  const escalationState = parseEscalationState(opts.contextSnapshot);
+
   const classified = classifySupportRequest({
     message: opts.message,
     category: opts.category,
@@ -210,24 +324,26 @@ async function produceReply(opts: {
     .update({ category: classified.category })
     .eq("id", opts.threadId);
 
-  if (classified.intent === "escalate") {
-    await insertMessage(opts.db, {
-      thread_id: opts.threadId,
-      sender_id: null,
-      sender_type: "system",
-      body: "A support agent will join this conversation. You do not need to repeat the details already in this chat.",
+  const autoEscalate = shouldAutoEscalate({
+    message: opts.message,
+    intent: classified.intent,
+    category: classified.category,
+    escalateRequested: opts.escalateRequested,
+    state: escalationState,
+  });
+
+  if (autoEscalate.escalate && autoEscalate.reason) {
+    const result = await escalateThread({
+      db: opts.db,
+      threadId: opts.threadId,
+      ownerUserId: opts.ownerUserId,
+      priority: autoEscalate.priority,
+      reason: autoEscalate.reason,
+      message: opts.message,
+      existingSummary: opts.summary,
+      contextSnapshot: opts.contextSnapshot,
     });
-    await opts.db
-      .from("support_threads")
-      .update({ mode: "waiting_agent", status: "pending" })
-      .eq("id", opts.threadId);
-    await insertEvent(opts.db, {
-      thread_id: opts.threadId,
-      event_type: "escalate",
-      visibility: "user",
-      body: "Escalated to human support",
-    });
-    return { mode: "waiting_agent", snapshot: {}, usedAi: false };
+    return { mode: result.mode, snapshot: {}, usedAi: false };
   }
 
   const snapshot = await loadOwnedSupportSnapshot(
@@ -236,10 +352,6 @@ async function produceReply(opts: {
     classified.intent,
     opts.resourceHint,
   );
-  await opts.db
-    .from("support_threads")
-    .update({ context_snapshot: snapshot })
-    .eq("id", opts.threadId);
 
   const deterministic =
     classified.intent === "account_howto"
@@ -255,6 +367,17 @@ async function produceReply(opts: {
       sender_type: "system",
       body: deterministic,
     });
+    await persistContextSnapshot(
+      opts.db,
+      opts.threadId,
+      snapshot,
+      nextEscalationStateAfterBotReply({
+        intent: classified.intent,
+        usedAi: false,
+        previous: escalationState,
+      }),
+      opts.contextSnapshot,
+    );
     return { mode: "ai", snapshot, usedAi: false };
   }
 
@@ -265,6 +388,17 @@ async function produceReply(opts: {
       sender_type: "system",
       body: chipWelcome(classified.category),
     });
+    await persistContextSnapshot(
+      opts.db,
+      opts.threadId,
+      snapshot,
+      nextEscalationStateAfterBotReply({
+        intent: classified.intent,
+        usedAi: false,
+        previous: escalationState,
+      }),
+      opts.contextSnapshot,
+    );
     return { mode: "ai", snapshot, usedAi: false };
   }
 
@@ -281,6 +415,17 @@ async function produceReply(opts: {
       body: deterministic
         ?? "I could not generate an AI explanation right now because of a support-chat limit. Choose Talk to Support and an agent will pick this up.",
     });
+    await persistContextSnapshot(
+      opts.db,
+      opts.threadId,
+      snapshot,
+      nextEscalationStateAfterBotReply({
+        intent: classified.intent,
+        usedAi: false,
+        previous: escalationState,
+      }),
+      opts.contextSnapshot,
+    );
     return { mode: "ai", snapshot, usedAi: false };
   }
 
@@ -353,6 +498,17 @@ async function produceReply(opts: {
         completed_at: new Date().toISOString(),
       })
       .eq("operation_id", operationId);
+    await persistContextSnapshot(
+      opts.db,
+      opts.threadId,
+      snapshot,
+      nextEscalationStateAfterBotReply({
+        intent: classified.intent,
+        usedAi: true,
+        previous: escalationState,
+      }),
+      opts.contextSnapshot,
+    );
     return { mode: "ai", snapshot, usedAi: true };
   } catch (err) {
     const fallback =
@@ -372,6 +528,17 @@ async function produceReply(opts: {
         completed_at: new Date().toISOString(),
       })
       .eq("operation_id", operationId);
+    await persistContextSnapshot(
+      opts.db,
+      opts.threadId,
+      snapshot,
+      nextEscalationStateAfterBotReply({
+        intent: classified.intent,
+        usedAi: false,
+        previous: escalationState,
+      }),
+      opts.contextSnapshot,
+    );
     return { mode: "ai", snapshot, usedAi: false };
   }
 }
@@ -514,11 +681,12 @@ Deno.serve(async (req) => {
         resourceHint: null,
         escalateRequested: true,
         summary: loaded.thread.summary,
+        contextSnapshot: (loaded.thread.context_snapshot as Record<string, unknown>) ?? null,
       });
       const messages = await loadMessages(db, threadId);
       const { data: refreshed } = await db
         .from("support_threads")
-        .select("id, status, mode, category, public_ref, assigned_admin_id")
+        .select("id, status, mode, category, public_ref, priority, assigned_admin_id")
         .eq("id", threadId)
         .single();
       return json(corsHeaders, threadPayload(refreshed ?? loaded.thread, messages));
@@ -750,6 +918,7 @@ Deno.serve(async (req) => {
             resourceHint,
             escalateRequested,
             summary: null,
+            contextSnapshot: null,
           });
           const messages = await loadMessages(db, threadId);
           const { data: refreshed } = await db.from("support_threads").select("*").eq("id", threadId).single();
@@ -805,6 +974,7 @@ Deno.serve(async (req) => {
         resourceHint,
         escalateRequested,
         summary: loaded.thread.summary,
+        contextSnapshot: (loaded.thread.context_snapshot as Record<string, unknown>) ?? null,
       });
 
       const messages = await loadMessages(db, threadId);

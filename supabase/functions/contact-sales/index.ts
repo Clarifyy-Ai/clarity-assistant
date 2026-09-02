@@ -6,6 +6,7 @@ import {
   enforceRateLimitAsync,
   RATE_LIMIT_PRESETS,
 } from "../_shared/rateLimit.ts";
+import { isHostingerMailConfigured, sendHostingerEmail } from "../_shared/hostingerMail.ts";
 import { wrapCareerPilotEmail } from "../_shared/emailLayout.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
@@ -24,6 +25,65 @@ function sanitize(str: unknown, max = 2000): string {
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function emailProviderConfigured(): boolean {
+  return isHostingerMailConfigured() || RESEND_API_KEY.trim().length > 0;
+}
+
+function buildSalesHtml(name: string, email: string, company: string, message: string): string {
+  return wrapCareerPilotEmail(
+    `<h1 style="font-size:22px;font-weight:800;margin:0 0 12px;color:#F8FAFC;">New sales inquiry</h1>
+<p style="font-size:14px;line-height:1.65;color:#CBD5E1;margin:8px 0;"><strong style="color:#F8FAFC;">${name}</strong> &lt;${email}&gt;</p>
+${company ? `<p style="font-size:14px;line-height:1.65;color:#CBD5E1;margin:8px 0;">Company: ${company}</p>` : ""}
+<p style="font-size:14px;line-height:1.65;color:#CBD5E1;margin:8px 0;">${message.replace(/\n/g, "<br/>")}</p>
+<p style="font-size:13px;line-height:1.65;color:#94A3B8;margin:16px 0 0;">Reply to <a href="mailto:${email}" style="color:#2563EB;">${email}</a></p>`,
+    { preheader: `Sales inquiry from ${name}` },
+  );
+}
+
+async function sendSalesEmailResend(
+  subject: string,
+  html: string,
+  replyTo: string,
+): Promise<boolean> {
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+    },
+    body: JSON.stringify({
+      from: FROM_EMAIL,
+      to: SALES_EMAIL,
+      reply_to: replyTo,
+      subject,
+      html,
+    }),
+  });
+  return res.ok;
+}
+
+/** Prefer Hostinger Mail API when configured; otherwise Resend. */
+async function sendSalesEmail(
+  subject: string,
+  html: string,
+  replyTo: string,
+): Promise<boolean> {
+  if (isHostingerMailConfigured()) {
+    const result = await sendHostingerEmail({
+      to: SALES_EMAIL,
+      subject,
+      html,
+      displayName: "Career Pilot",
+    });
+    if (!result.ok) {
+      console.error("[contact-sales] Hostinger error:", result.status, result.error);
+    }
+    return result.ok;
+  }
+  if (!RESEND_API_KEY.trim()) return false;
+  return sendSalesEmailResend(subject, html, replyTo);
 }
 
 Deno.serve(async (req) => {
@@ -49,7 +109,7 @@ Deno.serve(async (req) => {
   );
   if (rateLimited) return rateLimited;
 
-  if (!RESEND_API_KEY) {
+  if (!emailProviderConfigured()) {
     return new Response(
       JSON.stringify({
         error: "Contact Sales email is not configured.",
@@ -75,28 +135,11 @@ Deno.serve(async (req) => {
     );
   }
 
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${RESEND_API_KEY}`,
-    },
-    body: JSON.stringify({
-      from: FROM_EMAIL,
-      to: SALES_EMAIL,
-      reply_to: email,
-      subject: `Sales inquiry from ${name}${company ? ` (${company})` : ""}`,
-      html: wrapCareerPilotEmail(
-        `<h1 style="font-size:22px;font-weight:800;margin:0 0 12px;color:#F8FAFC;">New sales inquiry</h1>
-<p style="font-size:14px;line-height:1.65;color:#CBD5E1;margin:8px 0;"><strong style="color:#F8FAFC;">${name}</strong> &lt;${email}&gt;</p>
-${company ? `<p style="font-size:14px;line-height:1.65;color:#CBD5E1;margin:8px 0;">Company: ${company}</p>` : ""}
-<p style="font-size:14px;line-height:1.65;color:#CBD5E1;margin:8px 0;">${message.replace(/\n/g, "<br/>")}</p>`,
-        { preheader: `Sales inquiry from ${name}` },
-      ),
-    }),
-  });
+  const subject = `Sales inquiry from ${name}${company ? ` (${company})` : ""}`;
+  const html = buildSalesHtml(name, email, company, message);
+  const sent = await sendSalesEmail(subject, html, email);
 
-  if (!res.ok) {
+  if (!sent) {
     return new Response(
       JSON.stringify({
         error: "Could not send the sales message. Try again or use email.",

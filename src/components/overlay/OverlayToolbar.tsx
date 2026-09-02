@@ -74,8 +74,9 @@ const HINT_STYLE_ARIA_LABELS: Record<string, string> = {
 };
 
 const TOOLBAR_HOTKEY_COMBOS = new Set([
-  "ctrl+shift+h",
-  "ctrl+shift+t",
+  "ctrl+shift+u",
+  "ctrl+shift+x",
+  "ctrl+shift+f",
   "ctrl+shift+a",
   "ctrl+shift+s",
   "ctrl+shift+y",

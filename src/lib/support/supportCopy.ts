@@ -9,7 +9,10 @@ export const SUPPORT_FAILED_LABEL = "Could not send. Retry";
 export const SUPPORT_MAX_BODY = 4000;
 export const SUPPORT_CONNECT_TIMEOUT_MS = 8000;
 export const SUPPORT_AI_TIMEOUT_MS = 20000;
-export const SUPPORT_GUEST_POLL_MS = 8000;
+/** Guest list poll floor — stay under support-chat's 8 req/min guest cap. */
+export const SUPPORT_GUEST_POLL_MS = 15_000;
+export const SUPPORT_WAITING_HINT =
+  "Your conversation is saved. An agent will reply in this chat.";
 
 export type SupportChipId =
   | "interview"

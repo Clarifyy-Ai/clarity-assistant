@@ -2,6 +2,7 @@
 import { Link } from "react-router-dom";
 import { ClipboardCheck, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import {
   buildNextStepSuggestion,
   formatDuration,
@@ -9,16 +10,26 @@ import {
   type LastSessionSummary,
 } from "@/lib/session/lastSessionSummary";
 
+export type ScorecardEvalState = "processing" | "ready" | "failed";
+
 interface PostSessionSummaryProps {
   sessionId: string;
   onStartNew: () => void;
+  /** Mock interview scorecard generation — omit for live (treated as ready). */
+  scorecardEval?: ScorecardEvalState;
+  onRetryScorecard?: () => void;
 }
 
 function resolveSummary(sessionId: string): LastSessionSummary | null {
   return loadLastSessionSummary(sessionId);
 }
 
-export function PostSessionSummary({ sessionId, onStartNew }: PostSessionSummaryProps) {
+export function PostSessionSummary({
+  sessionId,
+  onStartNew,
+  scorecardEval = "ready",
+  onRetryScorecard,
+}: PostSessionSummaryProps) {
   const summary = resolveSummary(sessionId);
   const durationLabel = summary
     ? formatDuration(summary.durationSeconds)
@@ -87,14 +98,37 @@ export function PostSessionSummary({ sessionId, onStartNew }: PostSessionSummary
           ))}
         </ul>
 
+        {scorecardEval === "processing" && (
+          <p className="text-sm text-muted-foreground" data-testid="scorecard-scoring">
+            Scoring…
+          </p>
+        )}
+        {scorecardEval === "failed" && onRetryScorecard && (
+          <InlineErrorRetry
+            message="Scorecard could not be generated."
+            onRetry={onRetryScorecard}
+          />
+        )}
+
         <div className="flex items-center justify-center gap-3 mt-1 flex-wrap">
-          <Link
-            to={`/app/scorecard/${sessionId}`}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary text-sm font-medium rounded-xl transition-all"
-          >
-            <ClipboardCheck className="w-4 h-4" />
-            View Scorecard
-          </Link>
+          {scorecardEval === "ready" ? (
+            <Link
+              to={`/app/scorecard/${sessionId}`}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary text-sm font-medium rounded-xl transition-all"
+            >
+              <ClipboardCheck className="w-4 h-4" />
+              View Scorecard
+            </Link>
+          ) : (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled
+              leftIcon={<ClipboardCheck className="w-4 h-4" />}
+            >
+              {scorecardEval === "processing" ? "Scoring…" : "View Scorecard"}
+            </Button>
+          )}
           <Link
             to={`/app/debriefs/${sessionId}`}
             className="inline-flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-foreground text-sm font-medium rounded-xl transition-all"

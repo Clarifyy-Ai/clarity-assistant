@@ -14,10 +14,6 @@ export function isDebugIngestEnabled(): boolean {
   return import.meta.env.DEV === true;
 }
 
-function sinkPathForSession(sessionId: string): string {
-  return `/__agent_debug_${sessionId}`;
-}
-
 /**
  * Optional HTTPS telemetry endpoint for non-dev builds.
  * Localhost / loopback URLs are rejected so production cannot accidentally enable dev ingest.
@@ -55,12 +51,8 @@ function postFireAndForget(url: string, headers: Record<string, string>, body: s
   }
 }
 
-/**
- * Dev-only debug telemetry via same-origin Vite middleware (CSP-safe).
- * Production builds no-op unless VITE_DEBUG_INGEST_URL is a secure HTTPS endpoint.
- */
-export function postDebugIngest(sessionId: string, payload: DebugIngestFields): void {
-  const body = JSON.stringify({
+function buildIngestBody(sessionId: string, payload: DebugIngestFields): string {
+  return JSON.stringify({
     sessionId,
     runId: payload.runId ?? "pre-fix",
     hypothesisId: payload.hypothesisId,
@@ -69,13 +61,28 @@ export function postDebugIngest(sessionId: string, payload: DebugIngestFields): 
     data: payload.data ?? {},
     timestamp: Date.now(),
   });
+}
+
+const INGEST_HEADERS = {
+  "Content-Type": "application/json",
+} as const;
+
+/**
+ * Dev-only debug telemetry via same-origin Vite middleware (CSP-safe).
+ * The same-origin sink path lives only inside `import.meta.env.DEV` so production
+ * bundles cannot contain localhost ingest URLs or agent debug sink strings.
+ * Production posts only if VITE_DEBUG_INGEST_URL is https and not loopback.
+ */
+export function postDebugIngest(sessionId: string, payload: DebugIngestFields): void {
   const headers = {
-    "Content-Type": "application/json",
+    ...INGEST_HEADERS,
     "X-Debug-Session-Id": sessionId,
   };
+  const body = buildIngestBody(sessionId, payload);
 
-  if (isDebugIngestEnabled()) {
-    postFireAndForget(sinkPathForSession(sessionId), headers, body);
+  // Vite DCE: this entire block (including the sink path literal) is dropped in prod.
+  if (import.meta.env.DEV) {
+    postFireAndForget(`/__agent_debug_${sessionId}`, headers, body);
     return;
   }
 

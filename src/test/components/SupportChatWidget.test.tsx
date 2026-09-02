@@ -118,4 +118,69 @@ describe("SupportChatWidget", () => {
     expect(container.querySelector("[aria-label='Contact support']")).toBeNull();
     expect(screen.queryByRole("button", { name: "Contact support" })).not.toBeInTheDocument();
   });
+
+  it("hides the floating widget on signup and auth callback", () => {
+    for (const path of ["/signup", "/auth/callback"]) {
+      const { container, unmount } = render(
+        <MemoryRouter initialEntries={[path]}>
+          <SupportChatWidget />
+        </MemoryRouter>,
+      );
+      expect(container.querySelector("[aria-label='Contact support']")).toBeNull();
+      unmount();
+    }
+  });
+
+  it("shows urgent waiting label when escalated with urgent priority", async () => {
+    fetchEdgeJson.mockResolvedValue({
+      thread_id: "t-urgent",
+      public_ref: "CP-URGENT1",
+      mode: "waiting_agent",
+      priority: "urgent",
+      messages: [
+        {
+          id: "m1",
+          thread_id: "t-urgent",
+          sender_role: "system",
+          body: "This looks urgent",
+          created_at: new Date().toISOString(),
+        },
+      ],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/app/dashboard"]}>
+        <SupportChatWidget />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Contact support" }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Urgent — agent assigned soon/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Ticket CP-URGENT1 is open/i)).toBeInTheDocument();
+  });
+
+  it("shows queued label for low-priority waiting threads", async () => {
+    fetchEdgeJson.mockResolvedValue({
+      thread_id: "t-low",
+      public_ref: "CP-LOW1",
+      mode: "waiting_agent",
+      priority: "low",
+      messages: [],
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/app/dashboard"]}>
+        <SupportChatWidget />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Contact support" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Queued — agent will reply when available/i),
+      ).toBeInTheDocument();
+    });
+  });
 });

@@ -112,7 +112,7 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
       id:          "toggle_stealth",
       label:       "Discrete UI",
       description: "Lower overlay opacity until you hover (still visible on screen share)",
-      keys:        ["ctrl", "shift", "t"],
+      keys:        ["ctrl", "shift", "f"],
       category:    "overlay",
       action:      toggleAppStealthMode,
       isEnabled:   () => true,

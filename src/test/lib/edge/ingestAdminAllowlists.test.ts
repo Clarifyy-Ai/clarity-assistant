@@ -101,6 +101,15 @@ describe("hybrid-health HMAC probe (no secret leak)", () => {
   });
 });
 
+describe("edge ingest JSON MCQ options", () => {
+  it("normalizes labeled option objects the same way as the client validator", () => {
+    const edge = read("supabase/functions/_shared/ingestJsonQuestions.ts");
+    expect(edge).toContain("normalizeMcqOptions");
+    expect(edge).toContain("normalizeMcqOptions(q.options, 6)");
+    expect(edge).not.toMatch(/q\.options\.map\(\(o\) => String\(o \?\? ""\)\.trim\(\)\)/);
+  });
+});
+
 describe("parse-document document_classify wiring", () => {
   const parseDocument = read("supabase/functions/parse-document/index.ts");
 

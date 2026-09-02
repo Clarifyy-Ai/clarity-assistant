@@ -21,6 +21,7 @@ import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
   eventVisibleToUser,
   threadMatchesQueue,
+  sortSupportQueueThreads,
   type SupportQueueFilter,
 } from "@/lib/support/adminQueue";
 
@@ -41,6 +42,7 @@ interface Thread {
   last_message_at: string;
   last_message_preview: string | null;
   unread_for_admin: boolean;
+  summary?: string | null;
 }
 
 interface Message {
@@ -77,9 +79,19 @@ const QUEUE_FILTERS: SupportQueueFilter[] = [
   "open",
   "pending",
   "escalated",
+  "urgent",
   "assigned",
   "resolved",
 ];
+
+function priorityBadgeVariant(
+  priority: Thread["priority"],
+): "default" | "violet" | "amber" | "red" {
+  if (priority === "urgent") return "red";
+  if (priority === "high") return "amber";
+  if (priority === "low") return "default";
+  return "violet";
+}
 
 export default function AdminLiveChat() {
   const user = useAuthStore((s) => s.user);
@@ -224,7 +236,7 @@ export default function AdminLiveChat() {
   }, [messages.length]);
 
   const queued = useMemo(
-    () => threads.filter((t) => threadMatchesQueue(t, statusFilter)),
+    () => sortSupportQueueThreads(threads.filter((t) => threadMatchesQueue(t, statusFilter))),
     [threads, statusFilter],
   );
 
@@ -249,6 +261,7 @@ export default function AdminLiveChat() {
   const openCount = threads.filter((t) => threadMatchesQueue(t, "open")).length;
   const pendingCount = threads.filter((t) => threadMatchesQueue(t, "pending")).length;
   const escalatedCount = threads.filter((t) => threadMatchesQueue(t, "escalated")).length;
+  const urgentCount = threads.filter((t) => threadMatchesQueue(t, "urgent")).length;
   const resolvedCount = threads.filter((t) => threadMatchesQueue(t, "resolved")).length;
 
   async function adminAction(action: string, extra: Record<string, unknown> = {}) {
@@ -323,6 +336,7 @@ export default function AdminLiveChat() {
           <KPI label="Open" value={openCount} icon={<AlertCircle className="w-3.5 h-3.5" />} color="text-amber-400" />
           <KPI label="Pending" value={pendingCount} icon={<Clock className="w-3.5 h-3.5" />} color="text-blue-400" />
           <KPI label="Escalated" value={escalatedCount} icon={<AlertCircle className="w-3.5 h-3.5" />} color="text-rose-400" />
+          <KPI label="Urgent" value={urgentCount} icon={<AlertCircle className="w-3.5 h-3.5" />} color="text-red-500" />
           <KPI label="Resolved" value={resolvedCount} icon={<CheckCircle2 className="w-3.5 h-3.5" />} color="text-emerald-400" />
         </div>
       </div>
@@ -405,7 +419,14 @@ export default function AdminLiveChat() {
                           </span>
                         )}
                       </span>
-                      {t.unread_for_admin && <span className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />}
+                      <div className="flex items-center gap-1 shrink-0">
+                        {t.priority !== "normal" && (
+                          <Badge size="sm" variant={priorityBadgeVariant(t.priority)}>
+                            {t.priority}
+                          </Badge>
+                        )}
+                        {t.unread_for_admin && <span className="w-2 h-2 rounded-full bg-primary mt-1.5" />}
+                      </div>
                     </div>
                     <p className="text-[11px] text-muted-foreground truncate">
                       {t.public_ref ?? t.id.slice(0, 8)} · {t.category ?? "general"}
@@ -440,8 +461,16 @@ export default function AdminLiveChat() {
                     {active.category ?? "general"}
                     {active.source_path ? ` · ${active.source_path}` : ""}
                   </p>
+                  {active.summary ? (
+                    <p className="text-[11px] text-foreground/80 mt-1 line-clamp-2">{active.summary}</p>
+                  ) : null}
                 </div>
                 <div className="flex gap-1.5 flex-wrap">
+                  {active.priority !== "normal" && (
+                    <Badge size="sm" variant={priorityBadgeVariant(active.priority)}>
+                      {active.priority}
+                    </Badge>
+                  )}
                   <Badge size="sm" variant={active.status === "resolved" ? "default" : "violet"}>
                     {active.mode === "waiting_agent" ? "escalated" : active.status}
                   </Badge>

@@ -14,7 +14,7 @@ export interface OverlayHotkeyCatalogEntry {
 
 /**
  * Canonical overlay shortcut map for help, settings, and the toolbar cheat sheet.
- * Combos must match OverlayKeyboardHandler + DEFAULT_HOTKEYS (S = scroll, T = discrete UI).
+ * Combos must match OverlayKeyboardHandler + DEFAULT_HOTKEYS (S = scroll, F = discrete UI).
  */
 export const OVERLAY_HOTKEY_CATALOG: OverlayHotkeyCatalogEntry[] = [
   {
@@ -36,7 +36,7 @@ export const OVERLAY_HOTKEY_CATALOG: OverlayHotkeyCatalogEntry[] = [
     group: "visibility",
   },
   {
-    keys: ["ctrl", "shift", "t"],
+    keys: ["ctrl", "shift", "f"],
     label: "Discrete UI",
     description: "Lower overlay opacity until hover",
     group: "visibility",

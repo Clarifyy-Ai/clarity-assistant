@@ -46,7 +46,7 @@ export function AppHotkeyListener() {
         if (!eventMatchesKeys(e, keys)) continue;
         e.preventDefault();
         toast.info(
-          "Overlay shortcuts work during an active Practice Coach or Mock Interview session. In Chrome, Ctrl+Shift+H / J may open History or DevTools — use the desktop app or remap in Settings.",
+          "Overlay shortcuts work during an active Practice Coach or Mock Interview session. In Chrome, Ctrl+Shift+T reopens a closed tab and Ctrl+Shift+I opens DevTools — use the desktop app or remap in Settings.",
         );
         return;
       }

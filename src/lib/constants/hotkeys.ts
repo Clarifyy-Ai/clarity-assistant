@@ -128,8 +128,8 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
   // ── Practice Session ─────────────────────────────────────────────────────────────
   // T-0295/T-0305: click-through stealth removed for compliance — discrete UI is opacity-only.
   TOGGLE_STEALTH: {
-    keys:        "Ctrl+Shift+T",
-    mac:         "⌘+Shift+T",
+    keys:        "Ctrl+Shift+F",
+    mac:         "⌘+Shift+F",
     action:      "overlay:toggle_stealth",
     description: "Toggle discrete UI mode (lower opacity until hover)",
     category:    "session",
@@ -166,8 +166,8 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
     global:      false,
   },
   GENERATE_HINT: {
-    keys:        "Ctrl+Shift+I",
-    mac:         "⌘+Shift+I",
+    keys:        "Ctrl+Alt+I",
+    mac:         "⌘+Alt+I",
     action:      "ai:generate_hint",
     description: "Get a quick AI hint",
     category:    "ai",

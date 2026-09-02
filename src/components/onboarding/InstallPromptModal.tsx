@@ -67,7 +67,7 @@ const DESKTOP_INSTALL_STEPS = [
   {
     icon: Home,
     title: "Use global hotkeys",
-    detail: "Ctrl+Shift+H toggles the overlay; Ctrl+Enter generates AI answers.",
+    detail: "Ctrl+Shift+U toggles the overlay; Ctrl+Enter generates AI answers.",
   },
 ];
 

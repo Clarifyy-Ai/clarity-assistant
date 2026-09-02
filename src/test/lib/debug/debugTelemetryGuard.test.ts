@@ -47,4 +47,18 @@ describe("debug telemetry source guard", () => {
     expect(html).not.toMatch(/http:\/\/127\.0\.0\.1/);
     expect(html).not.toMatch(/http:\/\/localhost/);
   });
+
+  it("keeps the agent debug sink path behind import.meta.env.DEV for Vite DCE", () => {
+    const source = readFileSync(join(srcRoot, "lib/debug/debugIngest.ts"), "utf8");
+    const sinkIdx = source.indexOf("__agent_debug_");
+    expect(sinkIdx).toBeGreaterThan(-1);
+    const gatedWindow = source.slice(Math.max(0, sinkIdx - 280), sinkIdx);
+    expect(gatedWindow).toMatch(/import\.meta\.env\.DEV/);
+    expect(source).not.toMatch(/127\.0\.0\.1:7572|localhost:7572/);
+  });
+
+  it("includes Razorpay wildcard in the production CSP", () => {
+    const html = readFileSync(join(root, "index.html"), "utf8");
+    expect(html).toMatch(/https:\/\/\*\.razorpay\.com/);
+  });
 });

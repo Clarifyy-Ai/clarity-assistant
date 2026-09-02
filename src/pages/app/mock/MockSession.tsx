@@ -23,7 +23,10 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { OverlayWindow } from "@/components/overlay/OverlayWindow";
 import { OverlayKeyboardHandler } from "@/components/overlay/OverlayKeyboardHandler";
 import { MockSessionController } from "@/components/mock/MockSessionController";
-import { PostSessionSummary } from "@/components/session/PostSessionSummary";
+import {
+  PostSessionSummary,
+  type ScorecardEvalState,
+} from "@/components/session/PostSessionSummary";
 import { setGenerateAnswerHandler } from "@/lib/overlay/hotkeys";
 import { saveLastSessionSummary } from "@/lib/session/lastSessionSummary";
 import {
@@ -344,6 +347,7 @@ export default function MockSession() {
   const [phase, setPhase] = useState<MockSessionPhase>("idle");
   const [summaryStats, setSummaryStats] = useState<MockSessionSummaryStats | null>(null);
   const [isSavingSummary, setIsSavingSummary] = useState(false);
+  const [scorecardEval, setScorecardEval] = useState<ScorecardEvalState>("processing");
   const [calmMode, setCalmMode] = useState(false);
   const [skipConfirm, setSkipConfirm] = useState(false);
   const [endConfirm, setEndConfirm] = useState(false);
@@ -395,6 +399,7 @@ export default function MockSession() {
 
   const endCalledRef = useRef(false);
   const scorecardRequestedRef = useRef(false);
+  const scorecardRetryUsedRef = useRef(false);
 
   const answersRef = useRef<QuestionAnswer[]>([]);
   const questionStartRef = useRef<number>(Date.now());
@@ -1234,6 +1239,9 @@ export default function MockSession() {
     setNoiseSuppression(config.noise_suppression ?? true);
     startTimeRef.current = new Date().toISOString();
     endCalledRef.current = false;
+    scorecardRequestedRef.current = false;
+    scorecardRetryUsedRef.current = false;
+    setScorecardEval("processing");
 
     const { generation } = beginOverlayProductSession({ mode: "mock" });
     overlayGenerationRef.current = generation;
@@ -1461,6 +1469,7 @@ export default function MockSession() {
             creditsUsed: session.credits_used ?? 0,
             sessionId: session.id,
           });
+          setScorecardEval("ready");
           setPhase("completed");
           return;
         }
@@ -1472,6 +1481,7 @@ export default function MockSession() {
               creditsUsed: session.credits_used ?? 0,
               sessionId: session.id,
             });
+            setScorecardEval("ready");
             setPhase("completed");
             toast.message("This practice session has expired and can no longer accept new actions.");
             return;
@@ -1565,19 +1575,31 @@ export default function MockSession() {
       sessionId,
       incompleteNoAnswers,
     });
+    setScorecardEval(incompleteNoAnswers ? "ready" : "processing");
     setPhase("completed");
     setIsSavingSummary(true);
 
     try {
-      await persistMockSession({ incompleteNoAnswers });
+      try {
+        await persistMockSession({ incompleteNoAnswers });
+      } catch (persistErr) {
+        if (!incompleteNoAnswers) setScorecardEval("failed");
+        throw persistErr;
+      }
       if (!incompleteNoAnswers && sessionId && !scorecardRequestedRef.current) {
         scorecardRequestedRef.current = true;
-        void fetchEdgeJson("generate-scorecard", { session_id: sessionId }, { timeoutMs: 90_000 }).catch(
-          (scoreErr) => {
-            scorecardRequestedRef.current = false;
-            console.warn("[MockSession] generate-scorecard failed:", scoreErr);
-          },
-        );
+        try {
+          await fetchEdgeJson(
+            "generate-scorecard",
+            { session_id: sessionId },
+            { timeoutMs: 90_000 },
+          );
+          setScorecardEval("ready");
+        } catch (scoreErr) {
+          scorecardRequestedRef.current = false;
+          console.warn("[MockSession] generate-scorecard failed:", scoreErr);
+          setScorecardEval("failed");
+        }
       }
       await orchestrator.completeSession();
 
@@ -1954,6 +1976,22 @@ export default function MockSession() {
       <PostSessionSummary
         sessionId={summaryStats.sessionId}
         onStartNew={() => navigate("/app/mock")}
+        scorecardEval={scorecardEval}
+        onRetryScorecard={() => {
+          const sid = summaryStats.sessionId;
+          if (!sid || scorecardRetryUsedRef.current) return;
+          scorecardRetryUsedRef.current = true;
+          setScorecardEval("processing");
+          void fetchEdgeJson("generate-scorecard", { session_id: sid }, { timeoutMs: 90_000 })
+            .then(() => {
+              setScorecardEval("ready");
+            })
+            .catch((scoreErr) => {
+              scorecardRetryUsedRef.current = false;
+              console.warn("[MockSession] generate-scorecard failed:", scoreErr);
+              setScorecardEval("failed");
+            });
+        }}
       />
     );
   }
@@ -2245,7 +2283,7 @@ export default function MockSession() {
                   Speech, transcript, fillers, and AI hints appear in the floating overlay — not on this
                   page. Use{" "}
                   <kbd className="px-1.5 py-0.5 rounded bg-secondary text-[10px] font-mono">
-                    Ctrl+Shift+H
+                    Ctrl+Shift+U
                   </kbd>{" "}
                   to show or hide it.
                 </>

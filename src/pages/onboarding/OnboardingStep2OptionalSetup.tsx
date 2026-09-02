@@ -419,9 +419,7 @@ export default function OnboardingStep2OptionalSetup({
               && "title" in experience[0]
               ? String((experience[0] as { title?: string }).title ?? "")
               : null);
-          const skills = Array.isArray(parsed.skills)
-            ? parsed.skills.map((s) => String(s)).slice(0, 50)
-            : [];
+          const skills = normalizeParsedResume(parsed).skills.slice(0, 50);
           const profileFields = profile as {
             headline?: string | null;
             target_role?: string | null;

@@ -36,7 +36,7 @@ describe("overlay hotkey catalog", () => {
     expect(new Set(combos).size).toBe(combos.length);
   });
 
-  it("maps S to scroll, T to discrete UI, and A to generate", () => {
+  it("maps S to scroll, F to discrete UI, and A to generate", () => {
     const byCombo = new Map(
       OVERLAY_HOTKEY_CATALOG.map((entry) => [comboKey(entry.keys), entry]),
     );
@@ -45,7 +45,7 @@ describe("overlay hotkey catalog", () => {
     expect(scroll?.label).toMatch(/scroll/i);
     expect(scroll?.label).not.toMatch(/discrete/i);
 
-    const discrete = byCombo.get("ctrl+shift+t");
+    const discrete = byCombo.get("ctrl+shift+f");
     expect(discrete?.label).toMatch(/discrete/i);
 
     const generate = byCombo.get("ctrl+shift+a");

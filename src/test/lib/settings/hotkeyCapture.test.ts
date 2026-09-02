@@ -42,8 +42,11 @@ describe("isBrowserReservedCombo", () => {
   it("blocks browser-stolen overlay defaults and allows Shift combos that are free", () => {
     expect(isBrowserReservedCombo("Ctrl+Shift+H")).toBe(true);
     expect(isBrowserReservedCombo("Ctrl+Shift+J")).toBe(true);
+    expect(isBrowserReservedCombo("Ctrl+Shift+T")).toBe(true);
+    expect(isBrowserReservedCombo("Ctrl+Shift+I")).toBe(true);
     expect(isBrowserReservedCombo("Ctrl+Shift+P")).toBe(false);
     expect(isBrowserReservedCombo("Ctrl+Shift+U")).toBe(false);
+    expect(isBrowserReservedCombo("Ctrl+Shift+F")).toBe(false);
   });
 });
 

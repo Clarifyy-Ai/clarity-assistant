@@ -3,7 +3,11 @@
  * Validates with the same MCQ rules as the paper engine; does not scrape or fetch.
  */
 
-import { validateSingleCorrectMcq, type McqCandidate } from "./mcqValidator";
+import {
+  normalizeMcqOptions,
+  validateSingleCorrectMcq,
+  type McqCandidate,
+} from "./mcqValidator";
 
 export type IngestQuestionInput = {
   question_text: string;
@@ -109,9 +113,7 @@ export function validateIngestQuestionsPayload(
       return;
     }
     const q = item as IngestQuestionInput;
-    const options = Array.isArray(q.options)
-      ? q.options.map((o) => String(o ?? "").trim())
-      : [];
+    const options = normalizeMcqOptions(q.options, 6);
     const correct_index = resolveCorrectIndex(q);
     if (correct_index === null) {
       rejected.push({

@@ -5,7 +5,7 @@ export const OVERLAY_VISIBILITY_WARNING =
 
 export const OVERLAY_MOBILE_TOAST_TITLE = "Desktop overlay required";
 export const OVERLAY_MOBILE_TOAST_BODY =
-  "Live overlay, global hotkeys (Ctrl+Shift+H / Ctrl+Shift+P), and system-audio capture need a desktop browser or the Career Pilot desktop app. On mobile you can still complete setup and practice with the microphone, but overlay shortcuts are unavailable.";
+  "Live overlay, global hotkeys (Ctrl+Shift+U / Ctrl+Shift+P), and system-audio capture need a desktop browser or the Career Pilot desktop app. On mobile you can still complete setup and practice with the microphone, but overlay shortcuts are unavailable.";
 
 export type SetupChecklistItem = {
   id: string;
@@ -68,7 +68,7 @@ export const OVERLAY_SYSTEM_CHECKLIST: SetupChecklistItem[] = [
     id: "hotkeys",
     title: "Learn overlay hotkeys",
     detail:
-      "Ctrl+Shift+H toggles overlay minimize/restore in-app. See Settings → Keyboard shortcuts or /shortcuts for the full list.",
+      "Ctrl+Shift+U toggles overlay minimize/restore in-app. See Settings → Keyboard shortcuts or /shortcuts for the full list.",
     platforms: ["web", "desktop"],
   },
 ];
@@ -104,7 +104,7 @@ export const OVERLAY_TROUBLESHOOTING: TroubleshootingItem[] = [
     id: "overlay-hidden",
     problem: "Overlay disappeared during a session",
     fixes: [
-      "Press Ctrl+Shift+H or click Show Overlay / Restore Overlay at the bottom-right.",
+      "Press Ctrl+Shift+U or click Show Overlay / Restore Overlay at the bottom-right.",
       "Desktop app: click the tray icon → Show Career Pilot.",
       "Check you did not minimize the browser window on web — the overlay lives inside the tab.",
     ],

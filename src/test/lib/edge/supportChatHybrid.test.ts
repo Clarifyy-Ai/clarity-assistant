@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { escalationUserMessage } from "@/lib/support/triage";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 
@@ -61,5 +62,25 @@ describe("support-chat hybrid contracts", () => {
   it("keeps user RLS from reading internal support_events", () => {
     expect(eventsSql).toContain("visibility = 'user'");
     expect(eventsSql).toContain("support_events_user_select");
+  });
+
+  it("runs triage before bot reply and auto-escalates incidents", () => {
+    expect(source).toContain("shouldAutoEscalate");
+    expect(source).toContain("async function escalateThread");
+    expect(source).toContain("escalationUserMessage");
+    expect(source).toMatch(/shouldAutoEscalate[\s\S]*escalateThread/);
+  });
+
+  it("returns priority in thread payload for widget and admin", () => {
+    expect(source).toContain("priority: thread.priority");
+    expect(source).toContain('event_type: "escalate"');
+    expect(source).toContain("metadata: { priority:");
+  });
+
+  it("uses shared triage copy with ticket ref on escalate", () => {
+    const triage = read("supabase/functions/_shared/supportTriage.ts");
+    expect(triage).toContain("escalationUserMessage");
+    expect(triage).toContain("Ticket ${publicRef}");
+    expect(escalationUserMessage("urgent", "CP-TEST99")).toContain("CP-TEST99");
   });
 });

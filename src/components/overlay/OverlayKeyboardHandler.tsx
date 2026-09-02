@@ -59,6 +59,7 @@ export function OverlayKeyboardHandler({
   const aiKeys = useMemo(() => keysFor("REQUEST_AI_ANSWER", overrides), [overrides]);
   const cycleKeys = useMemo(() => keysFor("CYCLE_HINT_STYLE", overrides), [overrides]);
   const panicKeys = useMemo(() => keysFor("PANIC_CALM", overrides), [overrides]);
+  const stealthKeys = useMemo(() => keysFor("TOGGLE_STEALTH", overrides), [overrides]);
 
   useHotkey(toggleKeys, () => useOverlayStore.getState().toggleMinimize(), enabled);
   useHotkey(aliasKeys, () => useOverlayStore.getState().toggleMinimize(), enabled);
@@ -73,7 +74,7 @@ export function OverlayKeyboardHandler({
 
   useHotkey(minimizeKeys, () => useOverlayStore.getState().toggleMinimize(), enabled);
 
-  useHotkey(["ctrl", "shift", "t"], toggleAppStealthMode, enabled && is_visible);
+  useHotkey(stealthKeys, toggleAppStealthMode, enabled && is_visible);
 
   useHotkey(
     ["ctrl", "shift", "s"],

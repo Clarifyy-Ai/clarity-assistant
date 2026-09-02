@@ -77,11 +77,11 @@ describe("gov exam credit/inventory contracts", () => {
     expect(preflightFn).not.toContain("reserve_gov_paper_credits");
   });
 
-  it("create-exam-paper leaves retryable assembly credits reserved", () => {
+  it("create-exam-paper refunds reserved credits when enqueue dispatch throws", () => {
     const src = readFn("create-exam-paper");
-    expect(src).not.toContain("refundClaimedPaperCredits");
+    expect(src).toContain("refundClaimedPaperCredits");
+    expect(src).toContain("ENQUEUE_DISPATCH_FAILED");
     expect(src).toContain("scheduleWithWaitUntil");
-    expect(src).toContain("failed_retryable");
   });
 
   it("get-paper-generation-job refunds via refundClaimedPaperCredits on terminal failure", () => {

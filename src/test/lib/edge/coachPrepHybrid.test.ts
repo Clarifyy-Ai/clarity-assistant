@@ -35,7 +35,7 @@ describe("coach-prep Wave 1 STAR / prep hybrid contracts", () => {
     const source = readFunction("prep-tool");
     expect(source).toContain("pythonStarMethodDraft");
     expect(source).toContain('operation: "star_evidence"');
-    expect(source).toContain("Structured draft to polish");
+    expect(source).toContain("formatStarDraftFromPython");
   });
 
   it("prep-tool system_design uses hybrid system_design with python and AI tiers", () => {

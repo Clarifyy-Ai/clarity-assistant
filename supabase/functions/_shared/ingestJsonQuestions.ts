@@ -1,5 +1,5 @@
 /** Mirrors src/lib/gov-exam/ingestJsonQuestions.ts for Deno edge. */
-import { validateSingleCorrectMcq } from "./govMcqValidator.ts";
+import { normalizeMcqOptions, validateSingleCorrectMcq } from "./govMcqValidator.ts";
 
 export type IngestQuestionNormalized = {
   question_text: string;
@@ -85,9 +85,7 @@ export function validateIngestQuestionsPayload(
       return;
     }
     const q = item as Record<string, unknown>;
-    const options = Array.isArray(q.options)
-      ? q.options.map((o) => String(o ?? "").trim())
-      : [];
+    const options = normalizeMcqOptions(q.options, 6);
     const correct_index = resolveCorrectIndex(q);
     if (correct_index === null) {
       rejected.push({

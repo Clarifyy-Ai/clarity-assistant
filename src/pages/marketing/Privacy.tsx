@@ -55,7 +55,7 @@ export default function Privacy() {
         <h2>4. Data Sharing</h2>
         <p>We do not sell your personal data. We may share data with:</p>
         <ul>
-          <li><strong>Service providers:</strong> Supabase (database/auth), Razorpay (payments), Deepgram (transcription), PostHog (analytics), Resend (email).</li>
+          <li><strong>Service providers:</strong> Supabase (database/auth), Razorpay (payments), Deepgram (transcription), PostHog (analytics), Hostinger (email), Resend (email fallback).</li>
           <li><strong>AI model providers:</strong> OpenAI, Anthropic, Google (for processing your prompts — no data is retained by these providers for training).</li>
           <li><strong>Legal requirements:</strong> If required by law, regulation, or legal process.</li>
         </ul>
