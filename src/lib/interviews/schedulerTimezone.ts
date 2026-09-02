@@ -116,9 +116,18 @@ export function isScheduledToday(
   return Boolean(scheduledDate && todayDate && scheduledDate === todayDate);
 }
 
+/** Persist IANA timezone, never the picker sentinel `local`. */
+export function persistableIanaTimezone(key: string | null | undefined): string {
+  if (key && key !== "local") return key;
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
+  } catch {
+    return "Asia/Kolkata";
+  }
+}
+
 /** Infer picker key from ISO offset when no DB timezone column is set (legacy rows). */
 export function inferTimezoneKeyFromIso(iso: string): SchedulerTimezoneKey {
-  if (iso.endsWith("Z") || /[+-]00:00$/.test(iso)) return "UTC";
   if (/[+-]05:30$/.test(iso)) return "Asia/Kolkata";
   return "local";
 }

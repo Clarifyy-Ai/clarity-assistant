@@ -5,7 +5,6 @@ import { cn } from "@/lib/utils";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 
 const GOV_EXAMS = ["UPSC CSE", "SSC CGL", "IBPS PO", "HPCL", "PSU"];
-const PALETTE_SIZE = 24;
 
 const SAMPLE_QUESTIONS = [
   {
@@ -26,7 +25,21 @@ const SAMPLE_QUESTIONS = [
     options: ["Inflation", "Exports", "FDI", "Tax revenue"],
     correct: 0,
   },
+  {
+    exam: "HPCL",
+    q: "Which process is used in petroleum refining to convert heavy oils into lighter products?",
+    options: ["Cracking", "Polymerization", "Oxidation", "Saponification"],
+    correct: 0,
+  },
+  {
+    exam: "PSU",
+    q: "Which body audits the accounts of public sector undertakings in India?",
+    options: ["CAG", "RBI", "SEBI", "NITI Aayog"],
+    correct: 0,
+  },
 ];
+
+const PALETTE_SIZE = SAMPLE_QUESTIONS.length;
 
 interface GovExamShowcaseProps {
   compact?: boolean;
@@ -40,7 +53,7 @@ export function GovExamShowcase({ compact = false, className }: GovExamShowcaseP
   const [seconds, setSeconds] = useState(compact ? 847 : 2847);
 
   const question = SAMPLE_QUESTIONS[step % SAMPLE_QUESTIONS.length];
-  const qNumber = step + 1;
+  const qNumber = (step % SAMPLE_QUESTIONS.length) + 1;
 
   useEffect(() => {
     const t = setInterval(() => setSeconds((s) => (s > 0 ? s - 1 : compact ? 847 : 2847)), 1000);

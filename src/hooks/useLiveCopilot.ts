@@ -835,6 +835,7 @@ export function useLiveCopilot({
 
   const startLiveSession = useCallback(async () => {
     if (startInFlightRef.current) return;
+    if (sessionEndedRef.current) return;
 
     const userId = profile?.id || user?.id;
     if (!userId) throw new Error("Please sign in to start a live session.");
@@ -847,6 +848,8 @@ export function useLiveCopilot({
     abortRef.current?.abort();
     chatAbortRef.current?.abort();
     startAbortRef.current?.abort();
+    const startController = new AbortController();
+    startAbortRef.current = startController;
     sessionEndedRef.current = false;
     hintOperationIdRef.current = null;
 
@@ -906,6 +909,7 @@ export function useLiveCopilot({
               interview_type: cfg.interview_type,
               attemptNonce: startAttemptKeyRef.current,
             }),
+            signal: startController.signal,
           },
         ).catch(async (startErr) => {
           const code =
@@ -938,6 +942,10 @@ export function useLiveCopilot({
         sessionIdRef.current = result.session_id;
       } else {
         sessionIdRef.current = generateId();
+      }
+
+      if (startController.signal.aborted || sessionEndedRef.current) {
+        return;
       }
 
       if (!getOverlaySessionAuthority().matchesGeneration(generation)) {
@@ -1020,6 +1028,9 @@ export function useLiveCopilot({
       }
       checkpointLiveSession();
     } catch (err) {
+      if (startController.signal.aborted || sessionEndedRef.current) {
+        return;
+      }
       const normalized = normalizeSessionLifecycleError(err);
       const code = normalized instanceof ApiClientError ? normalized.code : "";
       if (code === "SESSION_STATE_CONFLICT" || code === "SESSION_NOT_AVAILABLE") {
@@ -1048,6 +1059,12 @@ export function useLiveCopilot({
       setPrepStepIndex(0);
     }
   }, [audio, checkpointLiveSession, initSessionFromConfig, profile?.id, user?.id, sessionType]);
+
+  useEffect(() => {
+    return () => {
+      startAbortRef.current?.abort();
+    };
+  }, []);
 
   const endLiveSession = useCallback(async (): Promise<{ answersRecorded: number }> => {
     const gen = overlayGenerationRef.current;

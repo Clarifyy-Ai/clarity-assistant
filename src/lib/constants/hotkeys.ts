@@ -29,8 +29,8 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
 
   // ── Overlay ─────────────────────────────────────────────────────────────────
   TOGGLE_OVERLAY: {
-    keys:        "Ctrl+Shift+H",
-    mac:         "⌘+Shift+H",
+    keys:        "Ctrl+Shift+U",
+    mac:         "⌘+Shift+U",
     action:      "overlay:toggle",
     description: "Show / hide overlay (desktop app: global; browser: while overlay focused)",
     category:    "overlay",
@@ -38,8 +38,8 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
   },
   /** Alternate overlay toggle. Ctrl+Shift+C is coding capture in the overlay manager. */
   TOGGLE_OVERLAY_ALIAS: {
-    keys:        "Ctrl+Shift+U",
-    mac:         "⌘+Shift+U",
+    keys:        "Ctrl+Shift+X",
+    mac:         "⌘+Shift+X",
     action:      "overlay:toggle",
     description: "Show / hide the overlay window (alternate shortcut)",
     category:    "overlay",
@@ -54,8 +54,8 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
     global:      true,
   },
   MINIMIZE_OVERLAY: {
-    keys:        "Ctrl+Shift+J",
-    mac:         "⌘+Shift+J",
+    keys:        "Ctrl+Shift+K",
+    mac:         "⌘+Shift+K",
     action:      "overlay:minimize",
     description: "Minimize overlay to title bar",
     category:    "overlay",
@@ -142,8 +142,8 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
     category:    "session",
   },
   NEXT_QUESTION: {
-    keys:        "Ctrl+Shift+N",
-    mac:         "⌘+Shift+N",
+    keys:        "Ctrl+Shift+G",
+    mac:         "⌘+Shift+G",
     action:      "session:next_question",
     description: "Move to next question",
     category:    "session",

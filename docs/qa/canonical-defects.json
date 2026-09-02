@@ -1,0 +1,84 @@
+{
+  "updated": "2026-09-03",
+  "release": "NO_GO_UNTIL_RUNTIME_PROOF",
+  "defects": [
+    {
+      "id": "DEF-PC-001",
+      "title": "Practice Coach/Live start-session HTTP 500",
+      "status": "fixed_in_source",
+      "fix": "Expire-hardening + typed RPC map + skip expired reuse + abort on unmount"
+    },
+    {
+      "id": "DEF-GOV-002",
+      "title": "Production localhost ingest/CSP",
+      "status": "fixed_in_source",
+      "fix": "debugIngest no-op in prod; dist guard; Vite proxy is server-side only"
+    },
+    {
+      "id": "DEF-GOV-CREDITS",
+      "title": "Failed generation consumes credits",
+      "status": "fixed_in_source",
+      "fix": "Refund+cancel on enqueue dispatch failure; cancel job on poll timeout"
+    },
+    {
+      "id": "DEF-GOV-409",
+      "title": "Post-submit autosave 409",
+      "status": "fixed_in_source",
+      "fix": "SUBMISSION_CONFLICT treated as ALREADY_SUBMITTED 200 no-op"
+    },
+    {
+      "id": "DEF-AI-001",
+      "title": "Chat composer does not clear after accepted send",
+      "status": "fixed_in_source",
+      "fix": "Clear on accept; remove bubbles on hard failure; reuse idempotency key"
+    },
+    {
+      "id": "DEF-AI-004",
+      "title": "Live/AI fallback start-session 409",
+      "status": "fixed_in_source",
+      "fix": "Reuse open unexpired session; conflict maps to restore"
+    },
+    {
+      "id": "DEF-DOC-001",
+      "title": "PDF/JD parse binary, filename stub, object skills",
+      "status": "fixed_in_source",
+      "fix": "parseNormalize + gap-analysis skillFromUnknown + JDDetail hide stub"
+    },
+    {
+      "id": "DEF-MOCK-SCORE",
+      "title": "Mock scorecard Not scored after completion",
+      "status": "fixed_in_source",
+      "fix": "generate-scorecard once after persist with answers"
+    },
+    {
+      "id": "DEF-BILLING-CSP",
+      "title": "Razorpay CSP / checkout Uh oh",
+      "status": "fixed_in_source_external_config",
+      "fix": "index.html allows cdn.razorpay.com; remaining 503/500 is secrets/dashboard"
+    },
+    {
+      "id": "DEF-ADMIN-DUA",
+      "title": "Admin Analytics DUA typo",
+      "status": "fixed_in_source",
+      "fix": "DAY label + smoke test"
+    },
+    {
+      "id": "DEF-LEARN-OVERLAP",
+      "title": "Learning assessment/verification overlap",
+      "status": "fixed_in_source",
+      "fix": "flex wrap stack on CourseDetail"
+    },
+    {
+      "id": "DEF-SUPPORT-FAB",
+      "title": "Support widget blocking primary Next",
+      "status": "fixed_in_source",
+      "fix": "Hide FAB on /onboarding"
+    },
+    {
+      "id": "DEF-TZ-UTC",
+      "title": "Scheduler timezone reverts to UTC",
+      "status": "fixed_in_source",
+      "fix": "Persist IANA; do not infer Z as UTC"
+    }
+  ]
+}

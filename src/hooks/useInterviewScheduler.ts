@@ -20,7 +20,7 @@ import { generateId } from "@/lib/utils";
 import { schedulerCompanyNameSchema, schedulerRoleTitleSchema, schedulerTimezoneSchema } from "@/lib/validators/interviewSchemas";
 import { subscribeFocusRecovery } from "@/lib/focusRecovery";
 import { toSafeUiError } from "@/lib/focusRecovery";
-import { isScheduledToday, resolveSchedulerTimezoneKey } from "@/lib/interviews/schedulerTimezone";
+import { isScheduledToday, persistableIanaTimezone, resolveSchedulerTimezoneKey } from "@/lib/interviews/schedulerTimezone";
 import type { TablesInsert, TablesUpdate } from "@/integrations/supabase";
 import type {
   ScheduledInterview,
@@ -139,7 +139,7 @@ export function useInterviewScheduler() {
       notes:           values.notes           || null,
       resume_id:       values.resume_id       ?? null,
       jd_id:           values.jd_id           ?? null,
-      timezone:        (values as { timezone?: string }).timezone || null,
+      timezone:        persistableIanaTimezone((values as { timezone?: string }).timezone),
       // ✅ NOT included: rounds, next_round, is_today
       created_at:      new Date().toISOString(),
       updated_at:      new Date().toISOString(),
@@ -236,7 +236,7 @@ export function useInterviewScheduler() {
       status:                 "scheduled",
       outcome:                null,
       notes:                  values.notes             || null,
-      timezone:               timezone.data === "local" ? null : timezone.data,
+      timezone:               persistableIanaTimezone(timezone.data),
       session_id:             null,
       debrief_id:             null,
       created_at:             new Date().toISOString(),

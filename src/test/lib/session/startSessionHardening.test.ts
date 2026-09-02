@@ -47,6 +47,19 @@ describe("start-session edge onboarding dependency", () => {
     expect(source).toContain("DEPENDENCY_UNAVAILABLE");
     expect(source).toContain("mapSessionStartRpcFailure");
     expect(source).toContain("findReusablePracticeSession");
+    expect(source).toContain("isPracticeSessionExpired");
+    expect(source).toContain("canReturnReusablePracticeRow");
     expect(source).toContain("rollbackFailedInitialization");
+  });
+});
+
+describe("create-exam-paper dispatch failure refunds credits", () => {
+  it("releases reserved credits instead of leaving failed_retryable charged", () => {
+    const source = fs.readFileSync(
+      path.join(root, "supabase/functions/create-exam-paper/index.ts"),
+      "utf8",
+    );
+    expect(source).toContain("refundClaimedPaperCredits");
+    expect(source).toContain("enqueue_dispatch_failed");
   });
 });

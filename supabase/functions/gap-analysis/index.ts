@@ -171,17 +171,51 @@ function deterministicGapAnalysis(
   };
 }
 
+function skillFromUnknown(item: unknown): string | null {
+  if (typeof item === "string") {
+    const t = item.replace(/\s+/g, " ").trim();
+    if (!t || t === "[object Object]") return null;
+    return t.slice(0, 200);
+  }
+  if (item && typeof item === "object" && !Array.isArray(item)) {
+    const row = item as Record<string, unknown>;
+    for (const key of ["name", "skill", "label", "text", "title", "value"]) {
+      const inner = row[key];
+      if (typeof inner === "string") {
+        const t = inner.replace(/\s+/g, " ").trim();
+        if (t && t !== "[object Object]") return t.slice(0, 200);
+      }
+    }
+  }
+  return null;
+}
+
+function skillListFromUnknown(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    const s = skillFromUnknown(item);
+    if (!s) continue;
+    const key = s.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+  }
+  return out;
+}
+
 function normalizeHybridGap(raw: unknown): GapAnalysisResult | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const obj = raw as Record<string, unknown>;
 
   const matching = Array.isArray(obj.matching_skills)
-    ? obj.matching_skills.map(String)
+    ? skillListFromUnknown(obj.matching_skills)
     : Array.isArray(obj.matched_skills)
-    ? obj.matched_skills.map(String)
+    ? skillListFromUnknown(obj.matched_skills)
     : null;
   const missing = Array.isArray(obj.missing_skills)
-    ? obj.missing_skills.map(String)
+    ? skillListFromUnknown(obj.missing_skills)
     : null;
   if (!matching || !missing) return null;
 

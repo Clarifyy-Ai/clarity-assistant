@@ -18,19 +18,19 @@ export interface OverlayHotkeyCatalogEntry {
  */
 export const OVERLAY_HOTKEY_CATALOG: OverlayHotkeyCatalogEntry[] = [
   {
-    keys: ["ctrl", "shift", "h"],
+    keys: ["ctrl", "shift", "u"],
     label: "Toggle overlay",
     description: "Show or hide the Career Pilot overlay",
     group: "visibility",
   },
   {
-    keys: ["ctrl", "shift", "u"],
+    keys: ["ctrl", "shift", "x"],
     label: "Toggle overlay (alt)",
-    description: "Same as Ctrl+Shift+H — show or hide overlay",
+    description: "Same as Ctrl+Shift+U — show or hide overlay",
     group: "visibility",
   },
   {
-    keys: ["ctrl", "shift", "j"],
+    keys: ["ctrl", "shift", "k"],
     label: "Minimize overlay",
     description: "Minimize overlay to title bar",
     group: "visibility",

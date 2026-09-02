@@ -590,11 +590,11 @@ function LiveOverlaySession() {
                 {isPaused
                   ? "Audio capture is paused. Resume from the overlay toolbar or compact pill to continue transcribing."
                   : isMobile
-                  ? "Live overlay shortcuts and floating desktop overlay are limited on phones. Use a desktop browser or the Career Pilot desktop app for Ctrl+Shift+H / Ctrl+Shift+P."
+                  ? "Live overlay shortcuts and floating desktop overlay are limited on phones. Use a desktop browser or the Career Pilot desktop app for Ctrl+Shift+U / Ctrl+Shift+P."
                   : (
                     <>
                       The overlay is floating on your screen. Use{" "}
-                      <kbd className="hotkey-badge">Ctrl+Shift+H</kbd> to toggle visibility/minimize.
+                      <kbd className="hotkey-badge">Ctrl+Shift+U</kbd> to toggle visibility/minimize.
                     </>
                   )}
               </p>

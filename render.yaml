@@ -37,4 +37,6 @@ services:
         sync: false
       - key: CORS_ORIGINS
         sync: false
-        # Dashboard value should include https://trycareerpilot.com and https://www.trycareerpilot.com
+        # Set in Render Dashboard → clarity-scraper → Environment (dashboard overrides this blueprint).
+        # Recommended production value:
+        # https://trycareerpilot.com,https://www.trycareerpilot.com,https://clarify.ai.sltfinanceindia.com

@@ -1,6 +1,6 @@
 // src/lib/validators/index.ts
 //
-// Central validation";// Central validation export module.
+// Central validation export module.
 
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -107,6 +107,17 @@ const QA_ACCOUNTS = [
     notes: "CREDIT-001 insufficient credits fixture",
   },
   {
+    key: "NO_HISTORY",
+    email: "qa.nohistory@clarify.ai.test",
+    fullName: "QA No History User",
+    planId: "free",
+    credits: 50,
+    admin: false,
+    emailConfirm: true,
+    onboardingCompleted: true,
+    notes: "Analytics empty-state fixture — do not run sessions on this account",
+  },
+  {
     key: "ONBOARDING",
     email: "qa.onboarding@clarify.ai.test",
     fullName: "QA Onboarding User",

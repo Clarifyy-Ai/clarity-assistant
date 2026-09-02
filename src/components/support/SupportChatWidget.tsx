@@ -105,7 +105,8 @@ function shouldHideWidget(pathname: string): boolean {
     pathname.startsWith("/register") ||
     pathname.startsWith("/reset-password") ||
     pathname.startsWith("/forgot-password") ||
-    pathname.startsWith("/verify-email")
+    pathname.startsWith("/verify-email") ||
+    pathname.startsWith("/onboarding")
   );
 }
 

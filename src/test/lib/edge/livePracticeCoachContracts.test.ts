@@ -42,6 +42,8 @@ describe("Live Practice Coach — start-session contracts", () => {
   it("reuses an open ACTIVE practice session instead of 409", () => {
     const source = readFunction("start-session");
     expect(source).toContain("findReusablePracticeSession");
+    expect(source).toContain("isPracticeSessionExpired");
+    expect(source).toContain("canReturnReusablePracticeRow");
     expect(source).toContain("shouldReuseExistingOnConflict");
     expect(source).toContain("isOpenPracticeStatus");
     expect(source).toContain("jsonOkSession");

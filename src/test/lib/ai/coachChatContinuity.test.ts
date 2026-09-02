@@ -16,6 +16,8 @@ describe("coach chat continuity", () => {
     const edge = read("supabase/functions/ai-coach-chat/index.ts");
     expect(client).toContain("previous_turns");
     expect(client).toContain("timeoutMs: opts.timeoutMs ?? 45_000");
+    expect(session).toContain("removeChatMessage");
+    expect(session).toContain("pendingChatIdempotency");
     expect(session).toContain("previousTurns");
     expect(session).toContain("CP-10245");
     expect(session).toContain("return true");

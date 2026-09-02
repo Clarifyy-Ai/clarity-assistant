@@ -82,6 +82,7 @@ import {
   normalizeQuestionText,
 } from "@/lib/mock/validateGeneratedQuestion";
 import { getAiUserFacingError } from "@/lib/network/aiErrorUx";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { microphoneSetupHint } from "@/lib/audio/micPermission";
 import { getMicPermissionState } from "@/lib/validators/audioValidator";
 import { isOverlayGhostClickSuppressed } from "@/lib/overlay/ghostClickGuard";
@@ -393,6 +394,7 @@ export default function MockSession() {
   const sessionElapsedRef = useRef(0);
 
   const endCalledRef = useRef(false);
+  const scorecardRequestedRef = useRef(false);
 
   const answersRef = useRef<QuestionAnswer[]>([]);
   const questionStartRef = useRef<number>(Date.now());
@@ -1568,6 +1570,15 @@ export default function MockSession() {
 
     try {
       await persistMockSession({ incompleteNoAnswers });
+      if (!incompleteNoAnswers && sessionId && !scorecardRequestedRef.current) {
+        scorecardRequestedRef.current = true;
+        void fetchEdgeJson("generate-scorecard", { session_id: sessionId }, { timeoutMs: 90_000 }).catch(
+          (scoreErr) => {
+            scorecardRequestedRef.current = false;
+            console.warn("[MockSession] generate-scorecard failed:", scoreErr);
+          },
+        );
+      }
       await orchestrator.completeSession();
 
       const userId = profile?.id;

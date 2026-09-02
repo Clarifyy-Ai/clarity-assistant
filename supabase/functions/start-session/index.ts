@@ -49,6 +49,7 @@ import {
   mapSessionStartRpcFailure,
   rpcJson,
   isOpenPracticeStatus,
+  isPracticeSessionExpired,
   isTerminalPracticeStatus,
   shouldReuseExistingOnConflict,
   PRACTICE_SESSION_DB_TYPES,
@@ -265,13 +266,23 @@ function shouldReuseExistingSession(opts: {
   existingStatus: string | null | undefined;
   existingContextId: string | null | undefined;
   requestContextId: string | null | undefined;
+  expiresAt?: string | null;
 }): boolean {
   if (!isOpenPracticeStatus(opts.existingStatus)) return false;
+  if (isPracticeSessionExpired(opts.expiresAt)) return false;
   const existing = opts.existingContextId ?? null;
   const request = opts.requestContextId ?? null;
   if (request && existing !== request) return false;
   if (!request && existing) return false;
   return true;
+}
+
+function canReturnReusablePracticeRow(row: ExistingSessionRow | null): row is ExistingSessionRow {
+  return Boolean(
+    row &&
+      isOpenPracticeStatus(row.status) &&
+      !isPracticeSessionExpired(row.expires_at),
+  );
 }
 
 function jsonOkSession(
@@ -325,12 +336,13 @@ async function findReusablePracticeSession(
         existingStatus: row.status,
         existingContextId: row.practice_context_id,
         requestContextId: practiceContextId,
+        expiresAt: row.expires_at,
       })
     ) {
       return row;
     }
   }
-  return (data[0] as ExistingSessionRow) ?? null;
+  return null;
 }
 
 async function rollbackFailedInitialization(
@@ -1042,7 +1054,7 @@ Deno.serve(async (req: Request) => {
     sessionType,
     practiceContextId,
   );
-  if (reusable && isOpenPracticeStatus(reusable.status)) {
+  if (canReturnReusablePracticeRow(reusable)) {
     return jsonOkSession(
       corsHeaders,
       {
@@ -1083,7 +1095,7 @@ Deno.serve(async (req: Request) => {
         sessionType,
         practiceContextId,
       );
-      if (existing && isOpenPracticeStatus(existing.status)) {
+      if (canReturnReusablePracticeRow(existing)) {
         return jsonOkSession(
           corsHeaders,
           {
@@ -1112,7 +1124,7 @@ Deno.serve(async (req: Request) => {
       sessionType,
       practiceContextId,
     );
-    if (existing && isOpenPracticeStatus(existing.status)) {
+    if (canReturnReusablePracticeRow(existing)) {
       return jsonOkSession(
         corsHeaders,
         {

@@ -19,6 +19,10 @@ os.environ.update(
         "DOCUMENT_INTELLIGENCE_AUTH_SECRET": "x" * 48,
         "SCRAPE_DAILY_ENABLED": "false",
         "APP_ENV": "test",
+        # Dummy publishing UUID so FactorySettings fail-closed checks pass in unit tests.
+        # Production still requires a real auth user UUID via SYSTEM_USER_ID.
+        "SYSTEM_USER_ID": "00000000-0000-4000-8000-000000000001",
+        "PAPER_FACTORY_WORKER_MODE": "true",
     }
 )
 

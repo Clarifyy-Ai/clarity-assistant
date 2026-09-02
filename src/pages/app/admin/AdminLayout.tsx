@@ -210,20 +210,43 @@ export default function AdminLayout() {
             <SheetHeader className="p-4 border-b border-border text-left shrink-0">
               <SheetTitle className="flex items-center gap-2 text-sm">
                 <Shield className="w-5 h-5 text-red-400" aria-hidden="true" />
-                {isAdmin ? "Admin" : "Moderation"}
+                {isAdmin ? "Career Pilot Admin" : "Moderation"}
               </SheetTitle>
-              <SheetDescription className="sr-only">
-                Admin navigation
+              <SheetDescription className="text-[10px] text-muted-foreground text-left">
+                {isAdmin ? "Career Pilot Administration" : "Content moderation"}
               </SheetDescription>
             </SheetHeader>
             <nav className="p-3 space-y-3 overflow-y-auto min-h-0 flex-1" aria-label="Admin navigation">
               <AdminNavLinks sections={navSections} onNavigate={() => setMobileOpen(false)} />
             </nav>
+            <div className="p-3 border-t border-border space-y-1 shrink-0">
+              <NavLink
+                to="/app/dashboard"
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-muted-foreground hover:text-foreground transition-colors duration-150"
+              >
+                <ChevronRight className="w-3 h-3 rotate-180" aria-hidden="true" />
+                Back to app
+              </NavLink>
+              <a
+                href="/help"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-muted-foreground hover:text-foreground transition-colors duration-150"
+              >
+                <ExternalLink className="w-3 h-3" aria-hidden="true" />
+                Help docs
+              </a>
+            </div>
           </SheetContent>
         </Sheet>
-        <div className="flex items-center gap-2">
-          <Shield className="w-4 h-4 text-red-400" aria-hidden="true" />
-          <span className="text-sm font-semibold">{isAdmin ? "Admin" : "Moderation"}</span>
+        <div className="flex flex-col min-w-0">
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-red-400 shrink-0" aria-hidden="true" />
+            <span className="text-sm font-semibold truncate">
+              {isAdmin ? "Career Pilot Admin" : "Moderation"}
+            </span>
+          </div>
         </div>
       </header>
 

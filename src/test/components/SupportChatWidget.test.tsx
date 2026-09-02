@@ -108,4 +108,14 @@ describe("SupportChatWidget", () => {
       expect((retry[retry.length - 1][1] as { client_message_id?: string }).client_message_id).toBe(clientId);
     });
   });
+
+  it("hides the floating widget on onboarding so it cannot cover Continue", () => {
+    const { container } = render(
+      <MemoryRouter initialEntries={["/onboarding"]}>
+        <SupportChatWidget />
+      </MemoryRouter>,
+    );
+    expect(container.querySelector("[aria-label='Contact support']")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Contact support" })).not.toBeInTheDocument();
+  });
 });

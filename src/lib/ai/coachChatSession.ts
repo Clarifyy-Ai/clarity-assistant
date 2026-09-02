@@ -55,6 +55,12 @@ export async function loadCoachChatHistory(sessionId: string): Promise<void> {
   }
 }
 
+const pendingChatIdempotency = new Map<string, string>();
+
+function chatTurnKey(sessionId: string, message: string): string {
+  return `${sessionId}:${message.trim()}`;
+}
+
 /**
  * Submit a coach-chat turn (Live or Mock Overlay Chat tab).
  * Streams into overlay chat_history; charges ai_coach_message via Edge.
@@ -66,7 +72,9 @@ export async function submitCoachChatMessage(
   if (!profile) return false;
 
   const overlay = useOverlayStore.getState();
+  const userMsgId = generateId();
   overlay.addChatMessage({
+    id: userMsgId,
     role: "user",
     text: opts.message,
     timestamp: Date.now(),
@@ -82,7 +90,7 @@ export async function submitCoachChatMessage(
         : creditCheck.reason ?? "Out of credits",
       timestamp: Date.now(),
     });
-    return false;
+    return true;
   }
 
   const assistantId = generateId();
@@ -101,6 +109,11 @@ export async function submitCoachChatMessage(
   const hintStyle = (overlay.hint_style ??
     (profile as { hint_style?: HintStyle }).hint_style ??
     "short_hints") as HintStyle;
+
+  const turnKey = chatTurnKey(opts.sessionId, opts.message);
+  const idempotencyKey =
+    pendingChatIdempotency.get(turnKey) ?? createIdempotencyKey("ai-coach-chat");
+  pendingChatIdempotency.set(turnKey, idempotencyKey);
 
   try {
     await streamCoachChat({
@@ -121,7 +134,7 @@ export async function submitCoachChatMessage(
       hintStyle,
       model: overlay.active_model,
       timeoutMs: 45_000,
-      idempotencyKey: createIdempotencyKey("ai-coach-chat"),
+      idempotencyKey,
       signal: opts.signal,
       onMeta: (meta) => {
         if (meta.conversation_id) {
@@ -157,6 +170,7 @@ export async function submitCoachChatMessage(
         throw error;
       },
     });
+    pendingChatIdempotency.delete(turnKey);
     return true;
   } catch (err) {
     openUpgradeIfInsufficientCredits(err);
@@ -167,10 +181,8 @@ export async function submitCoachChatMessage(
       ? "Coach reply timed out (CP-10245). Your message was not accepted — retry the same turn."
       : getAiUserFacingError(err) ||
         "Your coach is temporarily unavailable. Please retry.";
-    useOverlayStore.getState().updateChatMessage(assistantId, {
-      text: msg,
-      pending: false,
-    });
+    useOverlayStore.getState().removeChatMessage(assistantId);
+    useOverlayStore.getState().removeChatMessage(userMsgId);
     useOverlayStore.getState().setError(msg);
     return false;
   } finally {

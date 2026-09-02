@@ -55,4 +55,10 @@ describe("mapSessionStartRpcFailure", () => {
     expect(mapped.status).toBe(500);
     expect(mapped.code).toBe("SESSION_CREATE_FAILED");
   });
+
+  it("maps RLS and permission errors to FORBIDDEN (403)", () => {
+    const mapped = mapSessionStartRpcFailure("new row violates row-level security policy");
+    expect(mapped.status).toBe(403);
+    expect(mapped.code).toBe("FORBIDDEN");
+  });
 });

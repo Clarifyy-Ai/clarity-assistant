@@ -77,6 +77,21 @@ describe("Hostinger Mail contracts", () => {
     expect(sendEmail).not.toContain("confideq.app");
   });
 
+  it("schedule-interview prefers Hostinger with Resend fallback", () => {
+    const scheduleInterview = read("supabase/functions/schedule-interview/index.ts");
+    expect(scheduleInterview).toContain("isHostingerMailConfigured");
+    expect(scheduleInterview).toContain("sendHostingerEmail");
+    const confirmBlock = scheduleInterview.slice(
+      scheduleInterview.indexOf("async function sendConfirmationEmail"),
+      scheduleInterview.indexOf("type ReminderKind"),
+    );
+    expect(confirmBlock.indexOf("isHostingerMailConfigured()")).toBeGreaterThan(-1);
+    expect(confirmBlock.indexOf("api.resend.com")).toBeGreaterThan(-1);
+    expect(scheduleInterview).toContain(
+      "isHostingerMailConfigured() || Boolean(RESEND_API_KEY)",
+    );
+  });
+
   it("creates tracking folders for OTPs and verifications", () => {
     expect(helper).toContain('name: "OTPs"');
     expect(helper).toContain('name: "Verifications"');

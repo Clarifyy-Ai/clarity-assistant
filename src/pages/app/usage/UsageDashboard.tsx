@@ -530,8 +530,9 @@ export default function UsageDashboard(): JSX.Element {
               compact
             />
           ) : (
+          <>
           <div className="overflow-x-auto">
-            <div className="overflow-x-auto"><table className="w-full text-sm min-w-[640px]">
+            <table className="w-full text-sm min-w-[640px]">
               <thead>
                 <tr className="border-b border-border text-left text-muted-foreground">
                   <th className="py-2 pr-4 font-medium">Date</th>
@@ -581,7 +582,8 @@ export default function UsageDashboard(): JSX.Element {
                   );
                 })}
               </tbody>
-            </table></div>
+            </table>
+          </div>
 
             {txHasMore && (
               <div className="pt-4 flex justify-center">
@@ -595,7 +597,7 @@ export default function UsageDashboard(): JSX.Element {
                 </Button>
               </div>
             )}
-          </div>
+          </>
           )}
         </CardContent>
       </Card>

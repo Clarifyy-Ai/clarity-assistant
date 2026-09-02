@@ -39,9 +39,11 @@ describe("isBrowserReservedCombo", () => {
     expect(isBrowserReservedCombo("Meta+C")).toBe(true);
   });
 
-  it("allows overlay-style combos that include Shift", () => {
-    expect(isBrowserReservedCombo("Ctrl+Shift+H")).toBe(false);
+  it("blocks browser-stolen overlay defaults and allows Shift combos that are free", () => {
+    expect(isBrowserReservedCombo("Ctrl+Shift+H")).toBe(true);
+    expect(isBrowserReservedCombo("Ctrl+Shift+J")).toBe(true);
     expect(isBrowserReservedCombo("Ctrl+Shift+P")).toBe(false);
+    expect(isBrowserReservedCombo("Ctrl+Shift+U")).toBe(false);
   });
 });
 
@@ -73,8 +75,8 @@ describe("captureCombo", () => {
   });
 
   it("captures a valid custom combo with Ctrl+Shift", () => {
-    const combo = captureCombo(keydown({ key: "h", ctrlKey: true, shiftKey: true }));
-    expect(combo).toBe("Ctrl+Shift+H");
+    const combo = captureCombo(keydown({ key: "u", ctrlKey: true, shiftKey: true }));
+    expect(combo).toBe("Ctrl+Shift+U");
     expect(comboHasRequiredModifier(combo!)).toBe(true);
     expect(isBrowserReservedCombo(combo!)).toBe(false);
   });

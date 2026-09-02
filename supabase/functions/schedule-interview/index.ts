@@ -4,6 +4,7 @@ import { handleCors, getCorsHeaders, withCorsHeaders } from "../_shared/cors.ts"
 import { createServiceClient } from "../_shared/supabase.ts";
 import { requireAuth } from "../_shared/utils.ts";
 import { enforceSessionRateLimitAsync } from "../_shared/rateLimit.ts";
+import { isHostingerMailConfigured, sendHostingerEmail } from "../_shared/hostingerMail.ts";
 import { emailButton, publicAppUrl, wrapCareerPilotEmail } from "../_shared/emailLayout.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
@@ -26,12 +27,34 @@ async function sendConfirmationEmail(
   role: string,
   whenIso: string,
 ): Promise<boolean> {
-  if (!RESEND_API_KEY || !to) return false;
+  if (!to) return false;
 
   const when = new Date(whenIso);
   const whenText = Number.isNaN(when.getTime())
     ? whenIso
     : when.toLocaleString("en-US", { dateStyle: "full", timeStyle: "short" });
+  const subject = `Interview scheduled: ${company}`;
+  const html = wrapCareerPilotEmail(
+    `<h1 style="font-size:22px;font-weight:800;margin:0 0 12px;color:#F8FAFC;">Interview scheduled</h1>
+<p style="font-size:14px;line-height:1.65;color:#CBD5E1;margin:8px 0;">Your ${sanitize(role)} interview at <strong style="color:#F8FAFC;">${sanitize(company)}</strong> is scheduled for ${sanitize(whenText)}.</p>
+${emailButton(`${APP_URL}/app/interviews`, "View in Career Pilot")}`,
+    { preheader: `Interview at ${sanitize(company)}` },
+  );
+
+  if (isHostingerMailConfigured()) {
+    try {
+      const result = await sendHostingerEmail({ to, subject, html });
+      return result.ok;
+    } catch (err) {
+      console.error(
+        "[schedule-interview] Hostinger email failed:",
+        err instanceof Error ? err.message : String(err),
+      );
+      return false;
+    }
+  }
+
+  if (!RESEND_API_KEY) return false;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
@@ -43,17 +66,7 @@ async function sendConfirmationEmail(
         "Content-Type": "application/json",
         Authorization: `Bearer ${RESEND_API_KEY}`,
       },
-      body: JSON.stringify({
-        from: FROM_EMAIL,
-        to,
-        subject: `Interview scheduled: ${company}`,
-        html: wrapCareerPilotEmail(
-          `<h1 style="font-size:22px;font-weight:800;margin:0 0 12px;color:#F8FAFC;">Interview scheduled</h1>
-<p style="font-size:14px;line-height:1.65;color:#CBD5E1;margin:8px 0;">Your ${sanitize(role)} interview at <strong style="color:#F8FAFC;">${sanitize(company)}</strong> is scheduled for ${sanitize(whenText)}.</p>
-${emailButton(`${APP_URL}/app/interviews`, "View in Career Pilot")}`,
-          { preheader: `Interview at ${sanitize(company)}` },
-        ),
-      }),
+      body: JSON.stringify({ from: FROM_EMAIL, to, subject, html }),
     });
 
     return res.ok;
@@ -317,7 +330,7 @@ Deno.serve(async (req) => {
 
     const { data: authUser } = await db.auth.admin.getUserById(userId);
     const email = authUser?.user?.email ?? "";
-    const emailConfigured = Boolean(RESEND_API_KEY);
+    const emailConfigured = isHostingerMailConfigured() || Boolean(RESEND_API_KEY);
     let emailSent = false;
     let remindersQueued = 0;
 

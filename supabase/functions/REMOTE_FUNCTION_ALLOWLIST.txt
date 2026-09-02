@@ -1,25 +1,27 @@
-# One slug per line. Must match local supabase/functions/*/index.ts.
+﻿# One slug per line. Must match local supabase/functions/*/index.ts.
 # Retired zombies remain listed so CI requires a maintained 410 stub.
 ai-coach-chat
 ai-feedback
 ai-hub-router
 ai-key-check
 analytics-dashboard
-compare-sessions
 analyze-paper-trends
 analyze-test-performance
 assemble-assessment
 billing-catalog
 billing-status
 bulk-import-questions
+cancel-document-processing-job
 cancel-paper-generation-job
 cancel-subscription
 check-exam-paper-availability
 collect-exam-papers
 company-research
+compare-sessions
 contact-sales
 create-billing-portal
 create-checkout
+create-document-processing-job
 create-exam-paper
 create-test
 deduct-credits
@@ -27,8 +29,10 @@ deepgram-token
 delete-account
 disconnect-calendar
 end-session
+evaluate-auto-approval
 export-user-data
 extract-question-paper
+finalize-session
 gap-analysis
 generate-answer
 generate-debrief
@@ -38,14 +42,19 @@ generate-questions
 generate-scorecard
 generate-star-answer
 generate-topic-practice
+get-document-processing-job
 get-exam-details
 get-exam-pattern
 get-exam-syllabus
 get-paper-generation-job
 health
+hostinger-mail
+hybrid-health
+hybrid-ping
 ingest-source-document
 issue-course-certificate
 list-previous-papers
+moderate-content
 parse-document
 parse-question-pdf
 parse-resume
@@ -53,6 +62,7 @@ ping
 polish-star-section
 prep-tool
 process-paper-generation-job
+process-sprint-transcript
 razorpay-create-order
 razorpay-verify-payment
 razorpay-webhook
@@ -61,6 +71,7 @@ reconcile-paper-quality
 record-referral
 report-question
 resume-subscription
+retry-document-processing-job
 run-daily-exam-scrape
 save-answer
 save-attempt-answer
@@ -80,9 +91,3 @@ submit-test
 support-chat
 sync-calendar
 validate-api-key
-cancel-document-processing-job
-create-document-processing-job
-get-document-processing-job
-hybrid-health
-hybrid-ping
-retry-document-processing-job

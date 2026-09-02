@@ -122,6 +122,16 @@ Deno.serve(withBrowserCors("save-attempt-answer", async (req) => {
       };
       if (result.success === false) {
         const code = String(result.code ?? "SAVE_FAILED");
+        if (code === "SUBMISSION_CONFLICT") {
+          return json(req, {
+            attemptId,
+            saved: 0,
+            staleQuestionIds: [],
+            nextVersions: {},
+            ignored: true,
+            code: "ALREADY_SUBMITTED",
+          });
+        }
         const status = code === "NOT_FOUND" ? 404
           : code === "UNAUTHORIZED" ? 401
           : code === "CLIENT_CLOCK_INVALID" || code === "QUESTION_NOT_IN_ATTEMPT" ? 400

@@ -14,6 +14,16 @@ export function isOpenPracticeStatus(status: string | null | undefined): boolean
   return value === "pending" || value === "active" || value === "paused";
 }
 
+/** Timed-out rows must fall through to start_owned_session so expire-hardening runs. */
+export function isPracticeSessionExpired(
+  expiresAt: string | null | undefined,
+  nowMs = Date.now(),
+): boolean {
+  if (!expiresAt) return false;
+  const t = Date.parse(expiresAt);
+  return Number.isFinite(t) && t <= nowMs;
+}
+
 export function isTerminalPracticeStatus(status: string | null | undefined): boolean {
   const value = String(status ?? "").toLowerCase();
   const life = String(status ?? "").toUpperCase();
@@ -66,10 +76,24 @@ export function mapSessionStartRpcFailure(message: string): SessionStartRpcFailu
   }
 
   if (
+    lower.includes("row-level security") ||
+    lower.includes("permission denied") ||
+    lower.includes("42501")
+  ) {
+    return {
+      status: 403,
+      code: "FORBIDDEN",
+      error: "You do not have permission to start this session.",
+    };
+  }
+
+  if (
     lower.includes("foreign key") ||
     lower.includes("violates foreign key") ||
     lower.includes("invalid input syntax") ||
-    lower.includes("invalid uuid")
+    lower.includes("invalid uuid") ||
+    lower.includes("not-null") ||
+    lower.includes("null value in column")
   ) {
     return {
       status: 422,

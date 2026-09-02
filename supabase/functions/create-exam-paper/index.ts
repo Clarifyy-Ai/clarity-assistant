@@ -25,6 +25,7 @@ import { creditDenialResponse } from "../_shared/creditAuthority.ts";
 import {
   createReservedPaperJob,
   preflightSpendableCredits,
+  refundClaimedPaperCredits,
 } from "../_shared/claimJobCredits.ts";
 import { countEligibleGovQuestions } from "../_shared/govQuestionInventory.ts";
 import {
@@ -84,6 +85,7 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
   const correlationId = req.headers.get("x-request-id")?.trim() || crypto.randomUUID();
   let creditsChargedForJob = false;
   let reservedJobId: string | null = null;
+  let reservedUserId: string | null = null;
 
   try {
     let auth: Awaited<ReturnType<typeof authenticateRequest>>;
@@ -97,6 +99,7 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
     }
     if (auth.error) return applyCors(req, auth.error);
     const user = auth.context.user;
+    reservedUserId = user.id;
 
     let banned = false;
     try {
@@ -727,15 +730,21 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
     }, result.httpStatus ?? 500);
   } catch (err) {
     console.error("[create-exam-paper] Error:", err);
-    if (creditsChargedForJob && reservedJobId) {
+    if (creditsChargedForJob && reservedJobId && reservedUserId) {
+      await refundClaimedPaperCredits(
+        db,
+        reservedJobId,
+        reservedUserId,
+        "refund_paper_job:enqueue_dispatch_failed",
+      ).catch(() => undefined);
       await db
         .from("gov_paper_generation_jobs")
         .update({
-          status: "failed_retryable",
-          progress_stage: "failed_retryable",
-          retryable: true,
+          status: "cancelled",
+          progress_stage: "cancelled",
+          retryable: false,
           error_code: "ENQUEUE_DISPATCH_FAILED",
-          error_message: "The job was saved but dispatch failed. Retry is safe.",
+          error_message: "Generation could not start. Credits were not charged.",
           worker_id: null,
           lease_expires_at: null,
           updated_at: new Date().toISOString(),

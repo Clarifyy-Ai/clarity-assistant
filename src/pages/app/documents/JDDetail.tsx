@@ -32,6 +32,7 @@ import {
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
 import { HybridSourceLine } from "@/components/hybrid/HybridSourceLine";
+import { looksLikeUploadedFilenameStub } from "@/lib/documents/parseNormalize";
 
 interface ResumeOption {
   id: string;
@@ -435,12 +436,22 @@ export default function JDDetail() {
           </Card>
         )}
 
-        {jd.content && (
+        {jd.content &&
+          !looksLikeUploadedFilenameStub(jd.content) &&
+          jd.parse_status !== "error" && (
           <Card>
             <h3 className="text-sm font-semibold text-foreground mb-2">Full Description</h3>
             <div className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto">
               {jd.content}
             </div>
+          </Card>
+        )}
+        {(looksLikeUploadedFilenameStub(jd.content ?? "") || jd.parse_status === "error") && (
+          <Card>
+            <h3 className="text-sm font-semibold text-foreground mb-2">Full Description</h3>
+            <p className="text-sm text-muted-foreground">
+              Extracted job description is not available yet. Re-parse this file or paste the description.
+            </p>
           </Card>
         )}
 

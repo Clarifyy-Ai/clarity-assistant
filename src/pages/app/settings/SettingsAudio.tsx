@@ -335,7 +335,7 @@ export default function SettingsAudio() {
   return (
     <SettingsPageShell title="Audio & Speech">
       <Accordion type="multiple" defaultValue={["microphone", "language"]} className="space-y-3">
-        <AccordionItem value="microphone" className="rounded-2xl border border-border bg-card px-5 border-b-0">
+        <AccordionItem value="microphone" className="rounded-2xl border border-border bg-card px-5">
           <AccordionTrigger className="text-sm font-semibold hover:no-underline py-4">
             <span className="flex items-center gap-2">
               <Mic className="w-4 h-4 text-primary" />
@@ -471,7 +471,7 @@ export default function SettingsAudio() {
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem value="language" className="rounded-2xl border border-border bg-card px-5 border-b-0">
+        <AccordionItem value="language" className="rounded-2xl border border-border bg-card px-5">
           <AccordionTrigger className="text-sm font-semibold hover:no-underline py-4">
             <span className="flex items-center gap-2">
               <Volume2 className="w-4 h-4 text-blue-400" />
@@ -498,7 +498,7 @@ export default function SettingsAudio() {
           </AccordionContent>
         </AccordionItem>
 
-        <AccordionItem value="fillers" className="rounded-2xl border border-border bg-card px-5 border-b-0">
+        <AccordionItem value="fillers" className="rounded-2xl border border-border bg-card px-5">
           <AccordionTrigger className="text-sm font-semibold hover:no-underline py-4">
             <span className="flex items-center gap-2">
               <Settings2 className="w-4 h-4 text-amber-400" />

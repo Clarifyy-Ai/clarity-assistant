@@ -91,18 +91,18 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
       id:          "toggle_overlay",
       label:       "Toggle Overlay",
       description: "Minimize, restore, or show the overlay panel",
-      keys:        ["ctrl", "shift", "h"],
+      keys:        ["ctrl", "shift", "u"],
       category:    "overlay",
       action:      () => useOverlayStore.getState().toggleMinimize(),
       isEnabled:   () => true,
       showInHelp:  true,
     },
-    // Alias for overlay toggle — Ctrl+Shift+U (Y is used for hint style cycle).
+    // Alias for overlay toggle — Ctrl+Shift+L (Y is used for hint style cycle).
     {
       id:          "toggle_overlay_alias",
       label:       "Toggle Overlay (Alt)",
-      description: "Same as Ctrl+Shift+H — show / hide overlay",
-      keys:        ["ctrl", "shift", "u"],
+      description: "Same as Ctrl+Shift+U — show / hide overlay",
+      keys:        ["ctrl", "shift", "x"],
       category:    "overlay",
       action:      () => useOverlayStore.getState().toggleMinimize(),
       isEnabled:   () => true,

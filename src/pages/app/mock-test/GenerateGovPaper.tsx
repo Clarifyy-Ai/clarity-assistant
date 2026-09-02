@@ -142,6 +142,15 @@ function rememberPollTimeoutIfNeeded(job: PaperJobResult): void {
   }
 }
 
+function releaseCreditsOnTerminalFailure(job: PaperJobResult): void {
+  const jobId = job.jobId;
+  if (!jobId) return;
+  const timedOut =
+    isPaperJobPollTimeoutError(job) || job.errorCode === "GENERATION_POLL_TIMEOUT";
+  if (!timedOut) return;
+  void cancelPaperGenerationJob(jobId).catch(() => undefined);
+}
+
 function examCategoryLabel(exam: GovExamSearchResult): string | null {
   return exam.stateCode?.trim() || exam.jurisdiction?.trim() || exam.family?.trim() || null;
 }
@@ -1312,6 +1321,7 @@ export default function GenerateGovPaper(): React.ReactElement {
         navigate(`/app/mock-test/session/${current.mockTestId}`);
       } else if (terminal === "failed_retryable") {
         rememberPollTimeoutIfNeeded(current);
+        releaseCreditsOnTerminalFailure(current);
         setGenerationSession((prev) =>
           failGenerationSession(prev, current.jobId ?? result.jobId, {
             errorCode: current.errorCode,
@@ -1343,6 +1353,10 @@ export default function GenerateGovPaper(): React.ReactElement {
         toast.message("Generation cancelled.");
       } else {
         rememberPollTimeoutIfNeeded(current);
+        releaseCreditsOnTerminalFailure({
+          ...current,
+          errorCode: current.errorCode ?? "GENERATION_POLL_TIMEOUT",
+        });
         setGenerationSession((prev) =>
           failGenerationSession(prev, current.jobId ?? result.jobId, {
             errorCode: current.errorCode ?? "GENERATION_POLL_TIMEOUT",

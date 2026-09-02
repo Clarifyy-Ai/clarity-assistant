@@ -38,6 +38,7 @@ import {
   zoneOrOffsetForPicker,
   utcIsoToZonedWallParts,
   inferTimezoneKeyFromIso,
+  persistableIanaTimezone,
   type SchedulerTimezoneKey,
 } from "@/lib/interviews/schedulerTimezone";
 import {
@@ -452,6 +453,10 @@ export default function NewInterview() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (editingInterview?.status === "cancelled") {
+      setError("Cancelled interviews cannot be edited.");
+      return;
+    }
     if (!canSubmit || loading) {
       setError(validationMessage ?? "Complete the required fields before scheduling.");
       return;
@@ -469,7 +474,7 @@ export default function NewInterview() {
         resume_id: resumeId,
         jd_id: jdId,
         is_remote: platform !== "onsite",
-        timezone: timeZoneKey,
+        timezone: persistableIanaTimezone(timeZoneKey),
       });
 
       if (updateErr) {
@@ -492,7 +497,7 @@ export default function NewInterview() {
           interviewer_name: interviewerName.trim(),
           platform,
           meeting_link: meetingLink.trim(),
-          timezone: timeZoneKey,
+          timezone: persistableIanaTimezone(timeZoneKey),
         },
         { previousScheduledAt: editingRound.scheduled_at },
       );
@@ -508,7 +513,7 @@ export default function NewInterview() {
         company: company.trim(),
         role: roleTitle.trim(),
         scheduledAt: scheduledAtIso,
-        timezone: timeZoneKey,
+        timezone: persistableIanaTimezone(timeZoneKey),
         durationMinutes: duration,
         meetingLink: meetingLink.trim(),
         calendarEventId: editingInterview?.calendar_event_id,
@@ -528,7 +533,7 @@ export default function NewInterview() {
         resume_id: resumeId,
         jd_id: jdId,
         is_remote: platform !== "onsite",
-        timezone: timeZoneKey,
+        timezone: persistableIanaTimezone(timeZoneKey),
       });
       if (updateErr) {
         if (mountedRef.current) {
@@ -549,7 +554,7 @@ export default function NewInterview() {
         platform,
         meeting_link: meetingLink.trim(),
         notes: "",
-        timezone: timeZoneKey,
+        timezone: persistableIanaTimezone(timeZoneKey),
       });
       if (roundErr) {
         toast.warning(`Interview saved, but round details failed: ${roundErr}`);
@@ -561,7 +566,7 @@ export default function NewInterview() {
         company: company.trim(),
         role: roleTitle.trim(),
         scheduledAt: scheduledAtIso,
-        timezone: timeZoneKey,
+        timezone: persistableIanaTimezone(timeZoneKey),
         durationMinutes: duration,
         meetingLink: meetingLink.trim(),
         calendarEventId: editingInterview?.calendar_event_id,
@@ -623,7 +628,7 @@ export default function NewInterview() {
       company: company.trim(),
       role: roleTitle.trim(),
       scheduledAt: scheduledAtIso,
-      timezone: timeZoneKey,
+      timezone: persistableIanaTimezone(timeZoneKey),
       durationMinutes: duration,
       meetingLink: meetingLink.trim(),
     });
@@ -776,7 +781,7 @@ export default function NewInterview() {
           </h3>
           <div className="space-y-4">
             <Input
-              label="Company name *"
+              label="Company name"
               value={company}
               onChange={(e) => setCompany(e.target.value)}
               placeholder="e.g. Google"
@@ -785,7 +790,7 @@ export default function NewInterview() {
               autoFocus
             />
             <Input
-              label="Role / position *"
+              label="Role / position"
               value={roleTitle}
               onChange={(e) => setRoleTitle(e.target.value)}
               placeholder="e.g. Senior Software Engineer"

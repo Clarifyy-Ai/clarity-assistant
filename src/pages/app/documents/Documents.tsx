@@ -1145,7 +1145,7 @@ function JDManager() {
                     aria-pressed={isActive}
                   >
                     <div className="flex items-center gap-2">
-                      <p className="text-xs sm:text-sm font-medium text-foreground truncate">
+                      <p className="min-w-0 flex-1 text-xs sm:text-sm font-medium text-foreground truncate">
                         {jd.role_title}
                       </p>
                       {isActive && <Badge variant="emerald" size="sm" dot>Selected</Badge>}

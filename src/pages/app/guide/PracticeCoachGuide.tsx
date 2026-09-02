@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { PAGE_SHELL_STANDARD } from "@/lib/ui/responsivePage";
 
 const OverlaySetupGuidePanel = lazy(async () => {
   const mod = await import("@/components/overlay/OverlaySetupGuidePanel");
@@ -20,7 +21,7 @@ const SECTION_LINKS = [
 /** Authenticated-only Practice Coach install & troubleshooting guide. */
 export default function PracticeCoachGuide() {
   return (
-    <div className="max-w-3xl mx-auto space-y-8 pb-10">
+    <div className={`${PAGE_SHELL_STANDARD} space-y-8 pb-10`}>
       <PageHeader
         title="Practice Coach setup"
         description="Install the overlay, configure microphone and system audio, and review visibility rules before your first session."

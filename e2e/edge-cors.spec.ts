@@ -39,7 +39,9 @@ test.describe("Edge Function CORS — browser-readable responses", () => {
     });
     await page.getByLabel("Search government exams").fill("SSC CGL");
     await page.getByLabel("Search government exams").press("Enter");
-    await expect(page.getByText(/SSC Combined Graduate Level/i)).toBeVisible({
+    await expect(
+      page.getByText(/SSC Combined Graduate Level/i).first(),
+    ).toBeVisible({
       timeout: 15_000,
     });
     expect(corsFailures).toEqual([]);

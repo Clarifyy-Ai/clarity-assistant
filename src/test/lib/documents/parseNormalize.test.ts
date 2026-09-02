@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   assessExtractedDocumentQuality,
   extractJdFieldsFromText,
@@ -87,5 +90,19 @@ describe("format-aware extractors", () => {
     expect(text).toContain("Skills");
     expect(text).toMatch(/React/);
     expect(text?.split("\n").length).toBeGreaterThan(1);
+  });
+});
+
+describe("gap-analysis write path", () => {
+  it("does not coerce skills with String() which yields [object Object]", () => {
+    const source = fs.readFileSync(
+      path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "../../../../supabase/functions/gap-analysis/index.ts",
+      ),
+      "utf8",
+    );
+    expect(source).toContain("skillFromUnknown");
+    expect(source).not.toMatch(/matching_skills\.map\(String\)/);
   });
 });

@@ -41,4 +41,15 @@ describe("start-session reuse", () => {
       }),
     ).toBe(true);
   });
+
+  it("does not reuse an expired pending session", () => {
+    expect(
+      shouldReuseExistingSession({
+        existingStatus: "pending",
+        existingContextId: "ctx-a",
+        requestContextId: "ctx-a",
+        expiresAt: new Date(Date.now() - 60_000).toISOString(),
+      }),
+    ).toBe(false);
+  });
 });

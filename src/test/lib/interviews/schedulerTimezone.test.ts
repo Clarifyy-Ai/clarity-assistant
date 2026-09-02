@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";import {
   utcIsoToZonedWallParts,
   zoneOrOffsetForPicker,
   inferTimezoneKeyFromIso,
+  persistableIanaTimezone,
   isScheduledToday,
 } from "@/lib/interviews/schedulerTimezone";
 import { zonedWallTimeToUtc } from "@/lib/schedule/zonedWallTime";
@@ -36,9 +37,15 @@ describe("schedulerTimezone", () => {
   });
 
   it("infers legacy ISO offsets when timezone column is missing", () => {
-    expect(inferTimezoneKeyFromIso("2026-09-01T10:00:00.000Z")).toBe("UTC");
+    expect(inferTimezoneKeyFromIso("2026-09-01T10:00:00.000Z")).toBe("local");
     expect(inferTimezoneKeyFromIso("2026-09-01T10:00:00.000+05:30")).toBe("Asia/Kolkata");
     expect(inferTimezoneKeyFromIso("2026-09-01T10:00:00.000-04:00")).toBe("local");
+  });
+
+  it("persists browser IANA instead of the local sentinel", () => {
+    expect(persistableIanaTimezone("Asia/Kolkata")).toBe("Asia/Kolkata");
+    expect(persistableIanaTimezone("local")).not.toBe("local");
+    expect(persistableIanaTimezone("local").length).toBeGreaterThan(2);
   });
 
   it("isScheduledToday uses interview timezone calendar date", () => {

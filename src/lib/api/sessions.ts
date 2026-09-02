@@ -59,12 +59,15 @@ export type StartSessionResponse = {
 
 export async function startSession(
   payload: StartSessionRequest,
-  options?: { idempotencyKey?: string },
+  options?: { idempotencyKey?: string; signal?: AbortSignal },
 ): Promise<StartSessionResponse> {
   return invokeFunction<StartSessionResponse, StartSessionRequest>(
     "start-session",
     payload,
-    options?.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : {},
+    {
+      ...(options?.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : {}),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    },
   );
 }
 

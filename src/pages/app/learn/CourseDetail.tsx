@@ -240,6 +240,7 @@ export default function CourseDetailPage() {
             Verify {certCode}
           </Link>
         )}
+        <div className="mt-3 flex flex-col sm:flex-row flex-wrap gap-2">
         {quizzes.map((quiz) => {
           const progress = quizProgress.get(quiz.id);
           const passed = Boolean(progress?.completed_at);
@@ -252,7 +253,7 @@ export default function CourseDetailPage() {
           return (
             <Button
               key={quiz.id}
-              className="mt-3 mr-2"
+              className="mr-0"
               variant={passed ? "secondary" : "outline"}
               onClick={() => void startQuiz(quiz)}
             >
@@ -261,6 +262,7 @@ export default function CourseDetailPage() {
             </Button>
           );
         })}
+        </div>
       </Card>
       <div className="space-y-3">
         {views.map((view) => {

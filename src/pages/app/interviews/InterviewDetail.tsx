@@ -336,6 +336,7 @@ export default function InterviewDetail() {
                 Retry calendar sync
               </Button>
             )}
+            {ivStatus !== "cancelled" && ivStatus !== "completed" && (
             <Button
               variant="secondary"
               size="sm"
@@ -344,6 +345,7 @@ export default function InterviewDetail() {
             >
               Edit
             </Button>
+            )}
             <Button
               variant="danger"
               size="sm"

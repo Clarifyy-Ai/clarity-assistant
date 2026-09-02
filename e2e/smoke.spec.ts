@@ -5,7 +5,7 @@ test.describe("Marketing & auth smoke", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveTitle(/Career Pilot/i);
     await expect(page.getByRole("heading", { level: 1 })).toContainText(
-      /Practice every interview/i,
+      /Navigate Your Career|Practice every interview/i,
       { timeout: 15_000 }
     );
   });
@@ -31,7 +31,7 @@ test.describe("Marketing & auth smoke", () => {
     await page.goto("/signup", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveTitle(/Create account/i, { timeout: 15_000 });
     await expect(
-      page.getByRole("heading", { name: "Create your account" })
+      page.getByRole("heading", { name: /Create your (Career Pilot )?account/i })
     ).toBeVisible();
   });
 
@@ -51,11 +51,7 @@ test.describe("Critical path — authenticated smoke [T-0896, T-0900]", () => {
     // Old type picker shows "Behavioural"; wizard keeps PageHeader "Mock Interview"
     // plus step "Session Type". Match either so the smoke stays green across the rewrite.
     await expect(
-      page
-        .getByRole("heading", { name: /mock interview/i })
-        .or(page.getByText(/^Session Type$/i))
-        .or(page.getByText(/configure/i))
-        .or(page.getByText("Behavioural")),
+      page.getByRole("heading", { name: /mock interview/i }).first(),
     ).toBeVisible({ timeout: 15_000 });
   });
 

@@ -60,6 +60,7 @@ function rpcStatusForCode(code: string | undefined): number {
     case "NOT_FOUND":
       return 404;
     case "SUBMISSION_CONFLICT":
+      return 200;
     case "ATTEMPT_NOT_STARTED":
     case "ATTEMPT_EXPIRED":
     case "ATTEMPT_INVALIDATED":
@@ -156,6 +157,16 @@ Deno.serve(withBrowserCors("save-test-answer", async (req) => {
       const result = (data ?? {}) as SaveOwnedRpcResult;
       if (result.success === false) {
         const code = String(result.code ?? "SAVE_FAILED");
+        if (code === "SUBMISSION_CONFLICT") {
+          return json(req, {
+            success: true,
+            savedCount: 0,
+            staleQuestionIds: [],
+            nextVersions: {},
+            ignored: true,
+            code: "ALREADY_SUBMITTED",
+          });
+        }
         return json(req, { error: "Could not save answers.", code }, rpcStatusForCode(code));
       }
       if (result.stale) {

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { adminAnalyticsDB } from "@/lib/supabase/database";
 import { supabase } from "@/integrations/supabase/client";
+import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageContent } from "@/components/layout/PageContent";
@@ -230,7 +231,7 @@ export default function AdminDashboard() {
   ] : [];
 
   return (
-    <PageContent className="space-y-6 overflow-x-auto">
+    <PageContent className="space-y-6">
       <PageHeader
         title="Admin Dashboard"
         description="Platform metrics, user activity, and operational shortcuts"
@@ -354,6 +355,17 @@ function RecentSignups() {
       cancelled = true;
     };
   }, []);
+
+  if (rows.length === 0) {
+    return (
+      <EmptyState
+        compact
+        icon={Users}
+        title="No signups yet"
+        description="New user profiles will appear here as people join Career Pilot."
+      />
+    );
+  }
 
   return (
     <div className="overflow-x-auto">

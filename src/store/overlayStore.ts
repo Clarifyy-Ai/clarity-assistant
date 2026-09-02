@@ -252,6 +252,7 @@ interface OverlayStore {
 
   addChatMessage: (msg: ChatMessage) => void;
   updateChatMessage: (id: string, patch: Partial<ChatMessage>) => void;
+  removeChatMessage: (id: string) => void;
   clearChatHistory: () => void;
   setChatGenerating: (generating: boolean) => void;
   setCoachConversationId: (id: string | null) => void;
@@ -857,6 +858,12 @@ export const useOverlayStore = create<OverlayStore>()(
           chat_history: s.chat_history.map((m) =>
             m.id === id ? { ...m, ...patch } : m,
           ),
+        }));
+      },
+      removeChatMessage: (id) => {
+        if (!guardSessionMutation()) return;
+        set((s) => ({
+          chat_history: s.chat_history.filter((m) => m.id !== id),
         }));
       },
       clearChatHistory: () => {
