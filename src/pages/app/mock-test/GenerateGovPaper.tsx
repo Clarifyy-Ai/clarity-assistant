@@ -88,28 +88,20 @@ import {
   GOV_QUESTION_COUNT_ABS_MAX,
   GOV_QUESTION_COUNT_MIN,
 } from "@/lib/gov-exam/questionCount";
+import {
+  clampGovDurationMinutes,
+  modeFromPaperBasis,
+  normalizeGenerationConfig,
+  parsePaperBasis,
+  parseStoredGenerationConfig,
+  type GovPaperBasis,
+} from "@/lib/gov-exam/generationConfig";
 import { toast } from "sonner";
 
 const STEPS = ["Exam", "Paper basis", "Customize", "Review"] as const;
 
 const QUESTION_COUNT_MIN = GOV_QUESTION_COUNT_MIN;
 const QUESTION_COUNT_ABS_MAX = GOV_QUESTION_COUNT_ABS_MAX;
-
-const DURATION_MIN = 5;
-const DURATION_MAX = 360;
-
-function clampDurationMinutes(raw: unknown): number {
-  if (typeof raw === "string") {
-    const trimmed = raw.trim();
-    if (!trimmed || /[eE.+-]/.test(trimmed)) return DURATION_MIN;
-    const n = Number.parseInt(trimmed, 10);
-    if (!Number.isFinite(n)) return DURATION_MIN;
-    return Math.min(Math.max(DURATION_MIN, n), DURATION_MAX);
-  }
-  const n = typeof raw === "number" ? raw : Number(raw);
-  if (!Number.isFinite(n) || !Number.isInteger(n)) return DURATION_MIN;
-  return Math.min(Math.max(DURATION_MIN, Math.floor(n)), DURATION_MAX);
-}
 
 const LANGUAGE_LABELS: Record<string, string> = {
   en: "English",
@@ -160,40 +152,14 @@ function examVerificationLabel(exam: GovExamSearchResult): string | null {
   return String(raw).slice(0, 10) || null;
 }
 
-type PaperBasis =
-  | "latest_pattern"
-  | "topic"
-  | "quick"
-  | "full_sim"
-  | "official_previous"
-  | "hybrid";
-
-const PAPER_BASIS_VALUES: readonly PaperBasis[] = [
-  "latest_pattern",
-  "topic",
-  "quick",
-  "full_sim",
-  "official_previous",
-  "hybrid",
-];
-
-function parsePaperBasis(raw: string | null): PaperBasis {
-  if (raw && (PAPER_BASIS_VALUES as readonly string[]).includes(raw)) {
-    return raw as PaperBasis;
-  }
-  return "quick";
-}
+type PaperBasis = GovPaperBasis;
 
 function isExactPatternBasis(basis: PaperBasis): boolean {
   return isGovExactPatternBasis(basis);
 }
 
-function modeFromBasis(
-  basis: PaperBasis,
-): "official_previous" | "generated_mock" | "custom_mock" {
-  if (basis === "official_previous") return "official_previous";
-  if (basis === "full_sim" || basis === "hybrid") return "generated_mock";
-  return "custom_mock";
+function modeFromBasis(basis: PaperBasis): "official_previous" | "generated_mock" | "custom_mock" {
+  return modeFromPaperBasis(basis);
 }
 
 export default function GenerateGovPaper(): React.ReactElement {
@@ -514,6 +480,18 @@ export default function GenerateGovPaper(): React.ReactElement {
     if (stored?.idempotencyKey) {
       idempotencyKeyRef.current = stored.idempotencyKey;
     }
+    const restoredConfig = parseStoredGenerationConfig(stored?.config);
+    if (restoredConfig) {
+      setExamId(restoredConfig.examId);
+      setStageId(restoredConfig.stageId);
+      setBasis(restoredConfig.basis);
+      setLanguage(restoredConfig.language);
+      setDurationMinutes(restoredConfig.durationMinutes);
+      setQuestionCount(restoredConfig.questionCount);
+      setQuestionCountInput(String(restoredConfig.questionCount));
+      if (restoredConfig.topics.length) setSelectedTopics(restoredConfig.topics);
+      if (restoredConfig.difficulty) setDifficulty(restoredConfig.difficulty);
+    }
     let cancelled = false;
 
     if (isPaperJobPollTimedOut(jobId)) {
@@ -830,6 +808,7 @@ export default function GenerateGovPaper(): React.ReactElement {
         mode,
         language,
         questionCount: safeRequested,
+        durationMinutes,
         topics: basis === "topic" ? resolvedTopicsSafe() : [],
         difficulty: difficulty || null,
         generator: pickPaperGeneratorPreference({
@@ -930,6 +909,39 @@ export default function GenerateGovPaper(): React.ReactElement {
       .filter(Boolean);
     return [...new Set([...selectedTopics, ...fromDraft])].slice(0, 20);
   }, [selectedTopics, topicDraft]);
+
+  const generationConfig = useMemo(
+    () =>
+      normalizeGenerationConfig({
+        examId,
+        stageId,
+        basis,
+        language,
+        durationMinutes,
+        questionCount,
+        topics: resolvedTopics,
+        difficulty,
+      }),
+    [examId, stageId, basis, language, durationMinutes, questionCount, resolvedTopics, difficulty],
+  );
+
+  function persistPaperJob(
+    jobId: string,
+    idempotencyKey?: string,
+    config: typeof generationConfig = generationConfig,
+  ) {
+    const resumeUserId = user?.id ?? profile?.id;
+    if (!resumeUserId) return;
+    saveActivePaperJob({
+      jobId,
+      examId: config.examId,
+      userId: resumeUserId,
+      idempotencyKey,
+      kind: "paper",
+      config,
+    });
+    syncJobIdInUrl(jobId);
+  }
 
   async function pollJobUntilTerminal(jobId: string, seed: PaperJobResult): Promise<PaperJobResult> {
     pollAbortRef.current = false;
@@ -1041,6 +1053,7 @@ export default function GenerateGovPaper(): React.ReactElement {
           mode: overrideCount != null ? "custom_mock" : mode,
           language,
           questionCount: requested,
+          durationMinutes,
           topics: basis === "topic" ? resolvedTopics : [],
           difficulty: difficulty || null,
         });
@@ -1154,6 +1167,11 @@ export default function GenerateGovPaper(): React.ReactElement {
               durationMinutes:
                 overrideCount != null || mode === "custom_mock" ? durationMinutes : undefined,
               idempotencyKey,
+              generationConfig: {
+                ...generationConfig,
+                questionCount: requested,
+                durationMinutes,
+              },
               generator: pickPaperGeneratorPreference({
                 mode: overrideCount != null ? "custom_mock" : mode,
                 questionCount: requested,
@@ -1176,14 +1194,11 @@ export default function GenerateGovPaper(): React.ReactElement {
       }
       const resumeUserId = user?.id ?? profile?.id;
       if (resumeUserId && result.jobId) {
-        saveActivePaperJob({
-          jobId: result.jobId,
-          examId,
-          userId: resumeUserId,
-          idempotencyKey: idempotencyKeyRef.current ?? undefined,
-          kind: "paper",
+        persistPaperJob(result.jobId, idempotencyKeyRef.current ?? undefined, {
+          ...generationConfig,
+          questionCount: requested,
+          durationMinutes,
         });
-        syncJobIdInUrl(result.jobId);
       }
 
       const publicStatus = mapPaperJobPublicStatus(result.status);
@@ -1791,7 +1806,7 @@ export default function GenerateGovPaper(): React.ReactElement {
                     disabled={isExactPatternBasis(basis)}
                     className="w-full rounded-lg border border-border bg-background px-3 py-2"
                     value={durationMinutes}
-                    onChange={(e) => setDurationMinutes(clampDurationMinutes(e.target.value))}
+                    onChange={(e) => setDurationMinutes(clampGovDurationMinutes(e.target.value))}
                   />
                 </label>
               )}

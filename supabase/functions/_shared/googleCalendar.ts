@@ -9,7 +9,7 @@ export const GOOGLE_CALENDAR_OAUTH_SCOPES = [
   GOOGLE_EMAIL_SCOPE,
 ].join(" ");
 
-export const PRODUCTION_APP_URL = "https://clarify.ai.sltfinanceindia.com";
+export const PRODUCTION_APP_URL = "https://trycareerpilot.com";
 export const CALENDAR_OAUTH_CALLBACK_PATH = "/app/settings/calendar-callback";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1"]);

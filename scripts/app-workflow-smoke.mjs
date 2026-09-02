@@ -290,7 +290,7 @@ let sessionId = null;
 
 // Frontend
 {
-  const r = await fetch("https://clarify.ai.sltfinanceindia.com/");
+  const r = await fetch("https://trycareerpilot.com/");
   results.push(
     note(
       "FRONTEND",

@@ -50,6 +50,7 @@ import {
   SIGNED_OUT_ELSEWHERE_REASON,
 } from "@/lib/auth/sessionErrors";
 import { MFA_ENFORCEMENT_PAUSED, resolveMfaGateFromAal } from "@/lib/auth/mfaGate";
+import { verifyTotpChallenge } from "@/lib/auth/mfaFactors";
 import {
   MFA_AAL_START_FAILED_MESSAGE,
   MFA_REQUIRED_REASON,
@@ -525,16 +526,10 @@ export default function Login(): JSX.Element {
     setMfaVerifying(true);
     setAuthError(null);
     try {
-      const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
+      await verifyTotpChallenge(supabase.auth.mfa, {
         factorId: mfaFactorId,
+        code: mfaCode,
       });
-      if (challengeError) throw challengeError;
-      const { error: verifyError } = await supabase.auth.mfa.verify({
-        factorId: mfaFactorId,
-        challengeId: challenge.id,
-        code: mfaCode.trim(),
-      });
-      if (verifyError) throw verifyError;
       setMfaPending(false);
       setMfaFactorId(null);
       setMfaCode("");

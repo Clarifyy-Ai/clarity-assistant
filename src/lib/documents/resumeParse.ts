@@ -1,4 +1,10 @@
 import type { ParsedResume } from "@/types/ai.types";
+import {
+  assessExtractedDocumentQuality,
+  looksLikeBinaryDump,
+  looksLikeUploadedFilenameStub,
+  normalizeSkillList,
+} from "@/lib/documents/parseNormalize";
 
 const MAX_RESUME_LIST_ITEMS = 100;
 const MAX_RESUME_FIELD_LENGTH = 4_000;
@@ -6,22 +12,19 @@ const MAX_RESUME_FIELD_LENGTH = 4_000;
 function text(value: unknown, max = MAX_RESUME_FIELD_LENGTH): string | null {
   if (typeof value !== "string") return null;
   const normalized = value.replace(/\s+/g, " ").trim();
-  return normalized ? normalized.slice(0, max) : null;
+  if (!normalized || normalized === "[object Object]") return null;
+  return normalized.slice(0, max);
 }
 
 function textList(value: unknown, maxItems = MAX_RESUME_LIST_ITEMS): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => text(item, 200))
-    .filter((item): item is string => Boolean(item))
-    .slice(0, maxItems);
+  return normalizeSkillList(value, maxItems);
 }
 
 /** Normalize edge parse-resume JSON (`name`) into app ParsedResume (`full_name`). */
 export function normalizeParsedResume(raw: Record<string, unknown> | null): ParsedResume | null {
   if (!raw || typeof raw !== "object") return null;
 
-  const skills = textList(raw.skills);
+  const skills = textList(raw.skills ?? raw.parsed_skills);
   const tech_stack = textList(raw.tech_stack);
 
   return {
@@ -56,11 +59,23 @@ export function parseResumeContentString(content: string | null | undefined): Pa
   try {
     const raw = JSON.parse(content) as Record<string, unknown>;
     if (typeof raw._parse_error === "string" && raw._parse_error) return null;
-    return normalizeParsedResume(raw);
+    const parsed = normalizeParsedResume(raw);
+    if (!parsed) return null;
+    const blob = [parsed.summary, parsed.skills.join(" "), parsed.full_name].filter(Boolean).join("\n");
+    if (looksLikeBinaryDump(blob)) return null;
+    if (parsed.skills.length > 0 || parsed.experience.length > 0 || parsed.full_name) {
+      return parsed;
+    }
+    const quality = assessExtractedDocumentQuality(blob || content, "resume");
+    if (!quality.showProfile) return null;
+    return parsed;
   } catch {
-    const text = content.trim();
-    if (text.length < 20) return null;
-    return normalizeParsedResume({ summary: text.slice(0, 8000) });
+    const body = content.trim();
+    if (looksLikeBinaryDump(body) || looksLikeUploadedFilenameStub(body)) return null;
+    if (body.length < 40) return null;
+    const quality = assessExtractedDocumentQuality(body, "resume");
+    if (!quality.showProfile) return null;
+    return normalizeParsedResume({ summary: body.slice(0, 8000) });
   }
 }
 
@@ -86,7 +101,23 @@ export function getResumeParseStatus(
     return "ready";
   }
   if (isParsingGlobally && !content) return "parsing";
-  if (content?.trim()) return "ready";
+  if (content?.trim()) {
+    const quality = assessExtractedDocumentQuality(
+      (() => {
+        try {
+          const raw = JSON.parse(content) as Record<string, unknown>;
+          return typeof raw.summary === "string" ? raw.summary : content;
+        } catch {
+          return content;
+        }
+      })(),
+      "resume",
+    );
+    if (quality.kind === "binary" || quality.kind === "unrelated" || quality.kind === "filename_stub") {
+      return "error";
+    }
+    return "ready";
+  }
   return "pending";
 }
 

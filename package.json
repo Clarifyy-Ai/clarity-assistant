@@ -35,6 +35,8 @@
     "qa:reset-fixtures": "node --use-system-ca scripts/reset-qa-fixture-state.mjs",
     "qa:seed-mfa": "node --use-system-ca scripts/seed-qa-mfa-totp.mjs",
     "qa:sync-secrets": "node --use-system-ca scripts/sync-edge-secrets-from-env.mjs",
+    "qa:verify-gemini": "node --use-system-ca scripts/verify-edge-gemini-key.mjs",
+    "qa:smoke-ai": "node --use-system-ca scripts/smoke-ai-remediation.mjs",
     "qa:setup": "node --use-system-ca scripts/seed-qa-accounts.mjs && node --use-system-ca scripts/reset-qa-fixture-state.mjs && node --use-system-ca scripts/sync-edge-secrets-from-env.mjs",
     "qa:live-audit": "node --use-system-ca scripts/run-live-qa-audit.mjs",
     "qa:ui-deep-audit": "node --use-system-ca scripts/run-live-ui-deep-audit.mjs",
@@ -55,6 +57,8 @@
     "audit": "npm audit --production",
     "audit:fix": "npm audit fix",
     "validate-env": "node scripts/validate-env.js",
+    "seo:sitemap": "node scripts/generate-sitemap.mjs",
+    "seo:ping": "node scripts/generate-sitemap.mjs --ping",
     "verify:dist-env": "node scripts/verify-dist-env.mjs",
     "publish:desktop-installer": "node scripts/publish-desktop-installer.mjs",
     "install:desktop": "powershell -ExecutionPolicy Bypass -File scripts/install-desktop-local.ps1",
@@ -89,6 +93,7 @@
       "darkModeSupport": true,
       "icon": "public/brand/app-icon-512.png"
     },
+    "artifactName": "Career-Pilot-Setup-${version}.${ext}",
     "win": {
       "target": [
         {

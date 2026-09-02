@@ -6,11 +6,10 @@ import {
 import { collectMfaFactors, findVerifiedTotp } from "@/lib/auth/mfaFactors";
 
 /**
- * Temporary pause: login and ProtectedRoute skip AAL step-up so Practice Coach
- * and the rest of /app are reachable. Settings enrollment UI stays available.
- * Flip back to false to restore fail-closed MFA.
+ * Fail-closed MFA at login and ProtectedRoute. Keep false in production.
+ * Settings enrollment UI is independent of this flag.
  */
-export const MFA_ENFORCEMENT_PAUSED = true;
+export const MFA_ENFORCEMENT_PAUSED = false;
 
 export type MfaGateDecision = "allow" | "challenge" | "block";
 

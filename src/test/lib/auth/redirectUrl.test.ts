@@ -12,9 +12,7 @@ describe("isLocalhostUrl", () => {
   });
 
   it("rejects non-local URLs", () => {
-    expect(isLocalhostUrl("https://clarify.ai.sltfinanceindia.com")).toBe(
-      false,
-    );
+    expect(isLocalhostUrl("https://trycareerpilot.com")).toBe(false);
   });
 
   it("rejects invalid URLs instead of throwing", () => {
@@ -59,7 +57,7 @@ describe("buildAuthRedirectUrl", () => {
         path: "/reset-password",
         configuredAppUrl: "http://localhost:5173",
         appEnv: "production",
-        windowOrigin: "https://clarify.ai.sltfinanceindia.com",
+        windowOrigin: "https://trycareerpilot.com",
       }),
     ).toBe(`${PRODUCTION_APP_URL}/reset-password`);
   });

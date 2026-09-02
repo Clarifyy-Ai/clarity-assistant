@@ -50,3 +50,42 @@ export function isFriendlyNameConflictError(message: string): boolean {
     m.includes("factor with the friendly name")
   );
 }
+
+export type MfaChallengeClient = {
+  challenge: (args: { factorId: string }) => Promise<{
+    data: { id?: string } | null;
+    error: { message?: string } | null;
+  }>;
+  verify: (args: {
+    factorId: string;
+    challengeId: string;
+    code: string;
+  }) => Promise<{ error: { message?: string } | null }>;
+};
+
+export async function verifyTotpChallenge(
+  mfa: MfaChallengeClient,
+  input: { factorId: string; code: string },
+): Promise<void> {
+  const code = input.code.replace(/\D/g, "").trim();
+  if (code.length < 6) {
+    throw new Error("Enter the 6-digit code from your authenticator app.");
+  }
+
+  const { data: challenge, error: challengeError } = await mfa.challenge({
+    factorId: input.factorId,
+  });
+  if (challengeError) throw challengeError;
+
+  const challengeId = challenge?.id?.trim();
+  if (!challengeId) {
+    throw new Error("We couldn't start two-factor verification. Sign in again.");
+  }
+
+  const { error: verifyError } = await mfa.verify({
+    factorId: input.factorId,
+    challengeId,
+    code,
+  });
+  if (verifyError) throw verifyError;
+}

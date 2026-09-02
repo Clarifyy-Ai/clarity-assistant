@@ -39,6 +39,15 @@ describe("gov exam hybrid timeout contracts", () => {
     expect(src).toContain("callPythonProcess");
   });
 
+  it("rejects loopback PYTHON_SERVICE_URL in production", () => {
+    const src = read("supabase/functions/_shared/pythonClient.ts");
+    expect(src).toContain("sanitizeInternalServiceUrl");
+    expect(src).toContain("isLoopbackServiceHost");
+    expect(src).toContain("isEdgeProduction");
+    const gov = read("supabase/functions/_shared/pythonGovExamClient.ts");
+    expect(gov).toContain("sanitizeInternalServiceUrl");
+  });
+
   it("create-exam-paper bounds auth and profile lookups", () => {
     const src = read("supabase/functions/create-exam-paper/index.ts");
     expect(src).toContain("withTimeout");

@@ -67,11 +67,15 @@ export function requireCapability(
   planId: string | null | undefined,
   capability: Capability,
   req?: Request,
+  options?: { code?: string },
 ): Response | null {
   if (hasCapability(planId, capability)) return null;
+  const code =
+    options?.code ??
+    (capability === "gov_exam_ai_fill" ? "PLAN_NOT_ALLOWED" : "CAPABILITY_REQUIRED");
   return errorResponse(
     "This feature requires a supported plan.",
-    "CAPABILITY_REQUIRED",
+    code,
     403,
     req,
   );

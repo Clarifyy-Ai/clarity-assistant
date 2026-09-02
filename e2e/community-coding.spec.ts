@@ -239,7 +239,7 @@ test.describe("Community + Coding Lab module regression", () => {
     await expect(page.getByRole("heading", { name: /Ask a question/i })).toBeVisible({
       timeout: 15_000,
     });
-    await expect(page.getByRole("button", { name: /Publish post/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Publish question|Publish post/i })).toBeVisible();
     await expect(page.getByText(/no create-post action/i)).toHaveCount(0);
 
     await page.goto(`/app/community/${POST_ID}`, { waitUntil: "domcontentloaded" });

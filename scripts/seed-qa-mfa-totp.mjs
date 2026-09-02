@@ -157,6 +157,10 @@ async function main() {
     console.error("MFA challenge failed:", chErr.message);
     process.exit(1);
   }
+  if (!challenge?.id) {
+    console.error("MFA challenge returned no challenge id");
+    process.exit(1);
+  }
 
   const { error: verifyErr } = await client.auth.mfa.verify({
     factorId: enrolled.id,

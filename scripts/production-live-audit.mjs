@@ -1,5 +1,5 @@
 /**
- * Genuine production audit against https://clarify.ai.sltfinanceindia.com
+ * Genuine production audit against https://trycareerpilot.com
  * Captures: HTTP statuses, CSP/console, auth API, profile API timing, route smoke.
  *
  * Usage: node scripts/production-live-audit.mjs
@@ -18,7 +18,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
-const BASE = "https://clarify.ai.sltfinanceindia.com";
+const BASE = "https://trycareerpilot.com";
 const SUPABASE_URL = "https://qzgvjrvtkwlzxpmlddkx.supabase.co";
 
 function loadEnv(filePath) {

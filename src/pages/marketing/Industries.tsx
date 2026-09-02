@@ -3,8 +3,9 @@ import { usePageMeta } from "@/hooks/usePageMeta";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import { Landmark } from "lucide-react";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { PUBLIC_WEBSITE_URL } from "@/lib/constants/contact";
 
-const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
+const SITE_URL = PUBLIC_WEBSITE_URL;
 
 /**
  * Honest industries surface for TC-PUB-014 — no customer logos or invented case studies.

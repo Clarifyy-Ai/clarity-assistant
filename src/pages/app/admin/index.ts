@@ -8,6 +8,7 @@ export { default as AdminModelCosts }   from "./AdminModelCosts";
 export { default as AdminAiHub }        from "./AdminAiHub";
 export { default as AdminAuditLog }     from "./AdminAuditLog";
 export { default as AdminSupport }      from "./AdminSupport";
+export { default as AdminMail }         from "./AdminMail";
 export { default as AdminDiagnostics }  from "./AdminDiagnostics";
 export { default as AdminBlog }         from "./AdminBlog";
 export { default as AdminHelpArticles } from "./AdminHelpArticles";

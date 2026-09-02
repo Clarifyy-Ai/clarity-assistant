@@ -22,12 +22,13 @@ import {
 } from "@/lib/audio/micPermission";
 import { getMicPermissionState } from "@/lib/validators/audioValidator";
 import {
-  createParakeetTranscriptionService,
+  createLiveTranscriptionService,
   channelToSpeaker,
   newUtteranceFromSegment,
-  type ParakeetTranscriptionService,
+  type LiveTranscriptionService,
   type TranscriptionChannel,
 } from "@/lib/audio/transcription";
+import { loadPersistedMicDeviceId } from "@/lib/audio/micDevicePersistence";
 import { generateId } from "@/lib/utils";
 import { processUtteranceForDiarization } from "@/lib/audio/diarization";
 import { VADDetector, SilenceBoundaryDetector } from "@/lib/audio/vadDetector";
@@ -37,8 +38,8 @@ import type { Speaker, TranscriptUtterance } from "@/types/audio.types";
 
 // ─────────────────────────────────────────────────────────────────
 // useAudioSession — Live dual-channel pipeline:
-//   mic  → Deepgram (forced candidate)
-//   tab  → Deepgram (forced interviewer)  [optional]
+//   mic  → LiveTranscriptionService / Deepgram (forced candidate)
+//   tab  → LiveTranscriptionService / Deepgram (forced interviewer)  [optional]
 // Do NOT mix streams for Live STT. Mock uses mic-only (enableSystemAudio: false).
 // ─────────────────────────────────────────────────────────────────
 
@@ -72,7 +73,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
   const deepgramStatus = useAudioStore((s) => s.deepgram_status ?? "disconnected");
   const streamError = useAudioStore((s) => s.streams?.error ?? null);
 
-  const transcriptionServiceRef = useRef<ParakeetTranscriptionService | null>(null);
+  const transcriptionServiceRef = useRef<LiveTranscriptionService | null>(null);
   const vadRef = useRef<VADDetector | null>(null);
   const silenceRef = useRef<SilenceBoundaryDetector | null>(null);
   const fillerAccRef = useRef<FillerAccumulator | null>(null);
@@ -108,6 +109,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
   const handleUtterance = useCallback(
     (utterance: TranscriptUtterance, forcedSpeaker?: Speaker) => {
       if (!isStartedRef.current) return;
+      if (!utterance.is_final) return;
 
       const store = useAudioStore.getState();
       const hasInterviewerChannel = hasInterviewerChannelRef.current;
@@ -143,25 +145,24 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     [],
   );
 
-  const ensureTranscriptionService = useCallback((): ParakeetTranscriptionService => {
+  const ensureTranscriptionService = useCallback((): LiveTranscriptionService => {
     if (transcriptionServiceRef.current) return transcriptionServiceRef.current;
 
     const sessionId =
       useSessionStore.getState().session_id ||
       generateId();
 
-    const service = createParakeetTranscriptionService({
+    const service = createLiveTranscriptionService({
       sessionId,
       callbacks: {
         onPartial: (segment, channel) => {
           if (!isStartedRef.current) return;
           const store = useAudioStore.getState();
-          store.setPipelineStatus("transcribing");
+          store.updateInterimText(segment.text);
           if (channel === "interviewer") {
             silenceRef.current?.onInterviewerSpeaking();
           }
           if (channel === "candidate") {
-            store.updateInterimText(segment.text);
             fillerRTRef.current?.check(segment.text);
           }
         },
@@ -201,8 +202,11 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
         },
         onError: (error, recoverable) => {
           if (!isStartedRef.current) return;
+          const unavailable =
+            (error as { code?: string }).code === "provider_unavailable" ||
+            /unavailable/i.test(error.message);
           useAudioStore.getState().setStreamError({
-            code: "DEEPGRAM_CONNECTION_FAILED",
+            code: unavailable ? "DEEPGRAM_CONNECTION_FAILED" : "DEEPGRAM_CONNECTION_FAILED",
             message: error.message,
             recoverable,
             suggestion: recoverable
@@ -297,10 +301,17 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     }
 
     try {
-      const micStream = await captureMicrophone(opts.micDeviceId, {
-        noiseSuppression: opts.noiseSuppression ?? true,
-        autoGainControl: opts.autoGainControl ?? true,
-      });
+      const existingMic = store.streams.mic_stream;
+      const existingLive =
+        restore &&
+        existingMic &&
+        existingMic.getAudioTracks().some((t) => t.readyState === "live");
+      const micStream = existingLive
+        ? existingMic!
+        : await captureMicrophone(opts.micDeviceId ?? loadPersistedMicDeviceId(), {
+            noiseSuppression: opts.noiseSuppression ?? true,
+            autoGainControl: opts.autoGainControl ?? true,
+          });
       store.setMicStream(micStream);
       store.setMicState("ready");
 
@@ -436,22 +447,19 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
           );
         }
         useOverlayStore.getState().setSessionPipelineState("listening");
-      } catch (dgErr) {
-        console.warn("[useAudioSession] Deepgram unavailable — mic-only mode:", dgErr);
+      } catch (sttErr) {
+        console.warn("[useAudioSession] Live transcription unavailable:", sttErr);
         store.setDeepgramStatus("error");
+        store.setTranscriptionProviderStatus("unavailable");
         store.setTokenState("failed");
-        store.setPipelineStatus("microphone_only");
+        store.setPipelineStatus("unavailable");
         store.setMicState("ready");
         markInterviewerChannel(false);
-        if (!opts.micOptional) {
-          useOverlayStore.getState().setSessionPipelineState("audio_unavailable");
-          toast.message(
-            "Transcription unavailable — your microphone still works. Type questions in Chat.",
-            { duration: 8000 },
-          );
-        } else {
-          useOverlayStore.getState().setSessionPipelineState("listening");
-        }
+        useOverlayStore.getState().setSessionPipelineState("audio_unavailable");
+        toast.message(
+          "Transcription unavailable — your microphone still works. Type questions in Chat.",
+          { duration: 8000 },
+        );
       }
 
       cleanupMicRef.current = watchStreamEnded(micStream, () => {
@@ -588,10 +596,27 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
   const pause = useCallback(() => {
     if (!isStartedRef.current) return;
     transcriptionServiceRef.current?.pause();
-    stop({ preserveTranscript: true });
-    useAudioStore.getState().setTranscriptionProviderStatus("paused");
+    const store = useAudioStore.getState();
+    store.setIsCapturing(false);
+    store.setTranscriptionProviderStatus("paused");
+    store.setDeepgramStatus("disconnected");
+    store.setPipelineStatus("idle");
+    store.updateInterimText("");
     useOverlayStore.getState().setSessionPipelineState("paused");
-  }, [stop]);
+  }, []);
+
+  const resume = useCallback(async () => {
+    if (!isStartedRef.current) {
+      await start({ restore: true });
+      return;
+    }
+    const store = useAudioStore.getState();
+    store.setIsCapturing(true);
+    store.setTranscriptionProviderStatus("connecting");
+    await transcriptionServiceRef.current?.resume();
+    store.setDeepgramStatus("connected");
+    useOverlayStore.getState().setSessionPipelineState("listening");
+  }, [start]);
 
   const toggleMute = useCallback(() => {
     const store = useAudioStore.getState();
@@ -711,10 +736,20 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
   const reconnect = useCallback(async () => {
     useOverlayStore.getState().setSessionPipelineState("reconnecting");
     useAudioStore.getState().setTranscriptionProviderStatus("reconnecting");
-    stop({ preserveTranscript: true });
-    await new Promise((r) => setTimeout(r, 500));
-    await start({ restore: true });
-  }, [start, stop]);
+    const service = transcriptionServiceRef.current;
+    if (service && isStartedRef.current) {
+      try {
+        await service.reconnectAll();
+        useOverlayStore.getState().setSessionPipelineState("listening");
+        return;
+      } catch {
+        /* fall through to restore start */
+      }
+    }
+    if (!isStartedRef.current) {
+      await start({ restore: true });
+    }
+  }, [start]);
 
   const getFillerSnapshot = useCallback(
     () => fillerAccRef.current?.getSnapshot() ?? [],
@@ -768,6 +803,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       start,
       stop,
       pause,
+      resume,
       reconnect,
       toggleMute,
       suspendCandidateCapture,
@@ -794,6 +830,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       start,
       stop,
       pause,
+      resume,
       reconnect,
       toggleMute,
       suspendCandidateCapture,

@@ -29,6 +29,22 @@ describe("debugIngest", () => {
     expect(resolveProductionTelemetryUrl()).toBeNull();
   });
 
+  it("posts fire-and-forget to a configured HTTPS ingest URL in production", async () => {
+    vi.stubEnv("DEV", false);
+    vi.stubEnv("VITE_DEBUG_INGEST_URL", "https://telemetry.example.com/ingest");
+    const { postDebugIngest, resolveProductionTelemetryUrl } = await import("@/lib/debug/debugIngest");
+    expect(resolveProductionTelemetryUrl()).toBe("https://telemetry.example.com/ingest");
+    postDebugIngest("161d95", {
+      hypothesisId: "H1",
+      location: "test.ts",
+      message: "prod https",
+    });
+    expect(fetch).toHaveBeenCalledWith(
+      "https://telemetry.example.com/ingest",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
   it("posts to same-origin dev sink without localhost in production mode flag off", async () => {
     vi.stubEnv("DEV", true);
     vi.stubEnv("VITE_DEBUG_INGEST_URL", "");

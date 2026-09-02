@@ -1745,6 +1745,7 @@ export default function MockSession() {
 
     if (!userId || !sessionId) return;
 
+    await persistCurrentAnswers();
     try {
       const dbModel = toDbModel(overlay.active_model);
       const audioState = useAudioStore.getState();
@@ -1776,10 +1777,12 @@ export default function MockSession() {
       await finalizeSessionApi({
         session_id: sessionId,
         terminal_reason: incompleteNoAnswers ? "CANCELLED" : "USER_ENDED",
-        answers: scoredAnswers.map((a) => ({
+        answers: answersRef.current.map((a) => ({
           question_index: a.question_index,
           question: a.question_text,
-          answer: a.answer_text,
+          answer: a.skipped
+            ? SKIPPED_ANSWER_SENTINEL
+            : (a.answer_text ?? "").trim(),
           duration_ms: a.duration_seconds * 1000,
         })),
         transcript:
@@ -2431,8 +2434,8 @@ export default function MockSession() {
               onShorten={() => void handleRequestHint()}
               onExpand={() => void handleRequestHint()}
               onEndSession={handleEndSession}
-              onManualQuestion={(q: string) => {
-                if (!isMockSessionMutable(lifecycleRef.current)) return;
+              onManualQuestion={async (q: string) => {
+                if (!isMockSessionMutable(lifecycleRef.current)) return false;
                 useOverlayStore.getState().setCurrentQuestion(q);
                 const sessionId = sessionIdFromStore;
                 if (
@@ -2441,21 +2444,20 @@ export default function MockSession() {
                     sessionId,
                   )
                 ) {
-                  return;
+                  return false;
                 }
-                void import("@/lib/ai/coachChatSession").then(({ submitCoachChatMessage }) =>
-                  submitCoachChatMessage({
-                    message: q,
-                    sessionId,
-                    currentQuestion:
-                      useOverlayStore.getState().current_question?.trim() || q,
-                    recentTranscript: "",
-                    resumeContext:
-                      typeof useOverlayStore.getState().resume_context === "object"
-                        ? useOverlayStore.getState().resume_context?.summary ?? ""
-                        : String(useOverlayStore.getState().resume_context ?? ""),
-                  }),
-                );
+                const { submitCoachChatMessage } = await import("@/lib/ai/coachChatSession");
+                return submitCoachChatMessage({
+                  message: q,
+                  sessionId,
+                  currentQuestion:
+                    useOverlayStore.getState().current_question?.trim() || q,
+                  recentTranscript: "",
+                  resumeContext:
+                    typeof useOverlayStore.getState().resume_context === "object"
+                      ? useOverlayStore.getState().resume_context?.summary ?? ""
+                      : String(useOverlayStore.getState().resume_context ?? ""),
+                });
               }}
               isPreparingSession={false}
             />

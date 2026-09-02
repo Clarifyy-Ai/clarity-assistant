@@ -1,4 +1,12 @@
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { getClientIp } from "../_shared/auth.ts";
+import { createServiceClient } from "../_shared/supabase.ts";
+import {
+  createRateLimitKey,
+  enforceRateLimitAsync,
+  RATE_LIMIT_PRESETS,
+} from "../_shared/rateLimit.ts";
+import { wrapCareerPilotEmail } from "../_shared/emailLayout.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const FROM_EMAIL =
@@ -30,6 +38,16 @@ Deno.serve(async (req) => {
       headers,
     });
   }
+
+  const rateLimited = await enforceRateLimitAsync(
+    createServiceClient(),
+    {
+      key: createRateLimitKey("contact-sales", getClientIp(req) || "unknown"),
+      ...RATE_LIMIT_PRESETS.EMAIL_ACTION,
+    },
+    req,
+  );
+  if (rateLimited) return rateLimited;
 
   if (!RESEND_API_KEY) {
     return new Response(
@@ -68,9 +86,13 @@ Deno.serve(async (req) => {
       to: SALES_EMAIL,
       reply_to: email,
       subject: `Sales inquiry from ${name}${company ? ` (${company})` : ""}`,
-      html: `<p><strong>${name}</strong> &lt;${email}&gt;</p>
-${company ? `<p>Company: ${company}</p>` : ""}
-<p>${message.replace(/\n/g, "<br/>")}</p>`,
+      html: wrapCareerPilotEmail(
+        `<h1 style="font-size:22px;font-weight:800;margin:0 0 12px;color:#F8FAFC;">New sales inquiry</h1>
+<p style="font-size:14px;line-height:1.65;color:#CBD5E1;margin:8px 0;"><strong style="color:#F8FAFC;">${name}</strong> &lt;${email}&gt;</p>
+${company ? `<p style="font-size:14px;line-height:1.65;color:#CBD5E1;margin:8px 0;">Company: ${company}</p>` : ""}
+<p style="font-size:14px;line-height:1.65;color:#CBD5E1;margin:8px 0;">${message.replace(/\n/g, "<br/>")}</p>`,
+        { preheader: `Sales inquiry from ${name}` },
+      ),
     }),
   });
 

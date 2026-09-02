@@ -71,6 +71,8 @@ describe("certificateVerification helpers", () => {
 
   it("exposes safe public copy for not-found and malformed states", () => {
     expect(certificateNotFoundCopy().title).toMatch(/not found/i);
+    expect(certificateNotFoundCopy().description).toMatch(/Career Pilot/);
+    expect(certificateNotFoundCopy().description).toMatch(/not shown/);
     expect(certificateMalformedCopy().description).toMatch(/CLR-YYYY-XXXXXXXX/i);
   });
 });

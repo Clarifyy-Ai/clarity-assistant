@@ -69,5 +69,7 @@ describe("PostDetail report integration", () => {
     expect(source).toContain("submitCommunityReport");
     expect(source).not.toMatch(/from\("community_reports"\)\s*\n\s*\.insert/);
     expect(source).toContain("reportInFlightRef");
+    expect(source).toContain("alreadyReported");
+    expect(source).toContain("You already reported this post.");
   });
 });

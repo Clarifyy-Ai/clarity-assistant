@@ -1,23 +1,13 @@
 # DB reconcile — staging
 
-## Deployment actions (2026-09-02)
-
-- Renamed duplicate migration timestamps (`20260902120100`, `20260902120200`, `20260902220100`).
-- Applied **17 pending migrations** via `scripts/apply-pending-migrations-mgmt.mjs` (Management API; `db push` blocked by pooler timeout).
-- Redeployed **12 edge functions** via `npm run qa:deploy-wave:live`.
-- Seeded **21 missing `feature_flags`** rows (34 total).
-- QA accounts refreshed via `npm run qa:seed-accounts` (17 accounts).
-
----
-
-Generated: 2026-09-02T10:22:41.450Z
+Generated: 2026-09-02T19:13:05.510Z
 Project: `qzgvjrvtkwlzxpmlddkx`
 
 Summary: **51 pass**, 0 warn, **0 fail**
 
 | Category | ID | Status | Detail |
 |----------|-----|--------|--------|
-| migrations | recent_applied | PASS | 25 recent; latest=20260902072840 |
+| migrations | recent_applied | PASS | 25 recent; latest=20260902191043 |
 | migrations | sep_2026_enqueue_gov_paper_job | PASS | RPC present |
 | migrations | sep_2026_is_auth_email_verified | PASS | RPC present |
 | migrations | sep_2026_record_quiz_progress | PASS | RPC present |
@@ -61,7 +51,7 @@ Summary: **51 pass**, 0 warn, **0 fail**
 | rls | session_transcripts.enabled | PASS | on |
 | rls | gov_paper_generation_jobs.enabled | PASS | on |
 | rls | test_responses.enabled | PASS | on |
-| rls | session_answers.policies | PASS | session_answers_admin, session_answers_own, session_answers_own_delete, session_answers_own_insert, session_answers_own_select, session_answers_own_update |
+| rls | session_answers.policies | PASS | session_answers_admin, session_answers_own_delete, session_answers_own_insert, session_answers_own_select, session_answers_own_update |
 | rls | session_transcripts.policies | PASS | session_transcripts_admin, session_transcripts_own_delete, session_transcripts_own_insert, session_transcripts_own_select, session_transcripts_own_update |
 | indexes | gov_paper_jobs_idempotency | PASS | found |
 | indexes | test_responses_test_question | PASS | found |

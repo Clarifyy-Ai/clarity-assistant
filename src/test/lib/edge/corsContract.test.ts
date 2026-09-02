@@ -4,7 +4,7 @@ import path from "node:path";
 
 const envStore: Record<string, string> = {
   APP_ENV: "production",
-  ALLOWED_ORIGINS: "https://clarityapp.ai,https://www.clarityapp.ai,https://clarify.ai.sltfinanceindia.com",
+  ALLOWED_ORIGINS: "https://trycareerpilot.com,https://www.trycareerpilot.com,https://clarityapp.ai,https://www.clarityapp.ai,https://clarify.ai.sltfinanceindia.com",
   ALLOW_LOCALHOST_ORIGINS: "true",
   ALLOW_PREVIEW_ORIGINS: "true",
   ALLOW_ELECTRON_NULL_ORIGIN: "true",
@@ -98,9 +98,24 @@ describe("shared Edge Function CORS contract", () => {
     expect(headers["Access-Control-Allow-Headers"]).toMatch(/x-request-id/i);
   });
 
-  it("allows localhost development origins", () => {
+  it("allows the canonical Career Pilot website origin", () => {
+    const origin = "https://trycareerpilot.com";
+    const headers = getCorsHeaders(makeReq("POST", origin));
+    expect(headers["Access-Control-Allow-Origin"]).toBe(origin);
+  });
+
+  it("allows localhost development origins when explicitly enabled", () => {
     const headers = getCorsHeaders(makeReq("POST", LOCALHOST));
     expect(headers["Access-Control-Allow-Origin"]).toBe(LOCALHOST);
+  });
+
+  it("rejects localhost in production when ALLOW_LOCALHOST_ORIGINS is unset", () => {
+    setCorsEnvForTests({
+      get: (key: string) =>
+        key === "ALLOW_LOCALHOST_ORIGINS" ? undefined : envStore[key],
+    });
+    const headers = getCorsHeaders(makeReq("POST", LOCALHOST));
+    expect(headers["Access-Control-Allow-Origin"]).toBeUndefined();
   });
 
   it("rejects unapproved origins without granting CORS access", () => {
@@ -253,6 +268,14 @@ describe("shared Edge Function CORS contract", () => {
 
   it("handleCors returns null for non-OPTIONS so auth can run next", () => {
     expect(handleCors(makeReq("POST", APPROVED))).toBeNull();
+  });
+
+  it("rejects Lovable preview origins in production when ALLOW_PREVIEW_ORIGINS is unset", () => {
+    setCorsEnvForTests({
+      get: (key: string) =>
+        key === "ALLOW_PREVIEW_ORIGINS" ? undefined : envStore[key],
+    });
+    expect(getCorsHeaders(makeReq("POST", PREVIEW))["Access-Control-Allow-Origin"]).toBeUndefined();
   });
 
   it("allows Lovable preview origins when enabled", () => {

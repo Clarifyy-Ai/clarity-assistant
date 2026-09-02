@@ -27,6 +27,7 @@ import {
   canUserAReadUserBRow,
   canUserModifyExamTemplate,
   canUserModifyQuestionEligibility,
+  canUserWriteTestResponse,
   USER_OWNED_TABLES,
 } from "@/lib/security/rlsTenantIsolation";
 
@@ -379,10 +380,45 @@ describe("assemble-assessment edge contract", () => {
 describe("attempt isolation and catalog writes", () => {
   it("prevents User A from reading User B attempts or writing templates/eligibility", () => {
     const mockTests = USER_OWNED_TABLES.find((table) => table.table === "mock_tests")!;
+    const responses = USER_OWNED_TABLES.find((table) => table.table === "test_responses")!;
     expect(canUserAReadUserBRow({ table: mockTests, ownerId: "user-b", viewerId: "user-a" })).toBe(false);
+    expect(canUserAReadUserBRow({ table: responses, ownerId: "user-b", viewerId: "user-a" })).toBe(false);
     expect(canUserModifyExamTemplate({ viewerIsAdmin: false })).toBe(false);
     expect(canUserModifyExamTemplate({ viewerIsAdmin: true })).toBe(true);
     expect(canUserModifyQuestionEligibility({ viewerIsAdmin: false })).toBe(false);
     expect(canUserModifyQuestionEligibility({ viewerIsAdmin: true })).toBe(true);
+  });
+
+  it("allows test_responses writes only for the owner of a live attempt", () => {
+    expect(
+      canUserWriteTestResponse({
+        viewerId: "user-a",
+        responseUserId: "user-b",
+        attemptUserId: "user-b",
+        attemptStatus: "IN_PROGRESS",
+        attemptStarted: true,
+        attemptExpired: false,
+      }),
+    ).toBe(false);
+    expect(
+      canUserWriteTestResponse({
+        viewerId: "user-a",
+        responseUserId: "user-a",
+        attemptUserId: "user-a",
+        attemptStatus: "COMPLETED",
+        attemptStarted: true,
+        attemptExpired: false,
+      }),
+    ).toBe(false);
+    expect(
+      canUserWriteTestResponse({
+        viewerId: "user-a",
+        responseUserId: "user-a",
+        attemptUserId: "user-a",
+        attemptStatus: "IN_PROGRESS",
+        attemptStarted: true,
+        attemptExpired: false,
+      }),
+    ).toBe(true);
   });
 });

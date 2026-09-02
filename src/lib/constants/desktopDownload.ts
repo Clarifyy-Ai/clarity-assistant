@@ -19,9 +19,25 @@ export const DESKTOP_DOWNLOAD_URL = sanitizeProductionUrl(
     : undefined,
 );
 
-const DESKTOP_DOWNLOAD_URL_WIN = sanitizeProductionUrl(
-  import.meta.env.VITE_DESKTOP_DOWNLOAD_URL_WIN as string | undefined,
-);
+export const DESKTOP_RELEASES_BUCKET = "desktop-releases";
+export const DESKTOP_INSTALLER_WIN_OBJECT = "Career-Pilot-Setup.exe";
+export const PUBLIC_WINDOWS_INSTALLER_URL =
+  "https://github.com/Clarifyy-Ai/career-pilot-releases/releases/latest/download/Career-Pilot-Setup.exe";
+
+/** Public installer hosted on the project's Supabase Storage bucket. */
+export function publicDesktopInstallerUrl(filename: string): string {
+  const base = sanitizeProductionUrl(
+    typeof import.meta !== "undefined"
+      ? (import.meta.env.VITE_SUPABASE_URL as string | undefined)
+      : undefined,
+  );
+  if (!base) return PUBLIC_WINDOWS_INSTALLER_URL;
+  return `${base.replace(/\/+$/, "")}/storage/v1/object/public/${DESKTOP_RELEASES_BUCKET}/${filename}`;
+}
+
+const DESKTOP_DOWNLOAD_URL_WIN =
+  sanitizeProductionUrl(import.meta.env.VITE_DESKTOP_DOWNLOAD_URL_WIN as string | undefined) ||
+  PUBLIC_WINDOWS_INSTALLER_URL;
 
 const DESKTOP_DOWNLOAD_URL_MAC = sanitizeProductionUrl(
   import.meta.env.VITE_DESKTOP_DOWNLOAD_URL_MAC as string | undefined,

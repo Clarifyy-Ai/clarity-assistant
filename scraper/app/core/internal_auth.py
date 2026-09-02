@@ -10,7 +10,7 @@ from threading import Lock
 
 from fastapi import Depends, Header, HTTPException, Request, status
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings, get_settings, is_production_app_env
 
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$")
 
@@ -110,3 +110,37 @@ async def require_internal_auth(
     ):
         raise _failure("AUTH_REPLAY", "Request ID has already been used with different content.", status_code=409)
     return InternalRequest(x_request_id, timestamp, body_digest)
+
+
+async def require_observability_auth(
+    request: Request,
+    x_metrics_token: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
+    x_internal_timestamp: str | None = Header(default=None),
+    x_request_id: str | None = Header(default=None),
+    x_internal_signature: str | None = Header(default=None),
+    settings: Settings = Depends(get_settings),
+) -> None:
+    """Gate /metrics and /alerts in production (HMAC or METRICS_AUTH_TOKEN)."""
+    if not is_production_app_env(settings.app_env):
+        return
+
+    expected = settings.metrics_auth_token.strip()
+    provided = (x_metrics_token or "").strip()
+    if not provided and authorization and authorization.lower().startswith("bearer "):
+        provided = authorization.split(" ", 1)[1].strip()
+    if (
+        expected
+        and provided
+        and len(provided) == len(expected)
+        and hmac.compare_digest(provided, expected)
+    ):
+        return
+
+    await require_internal_auth(
+        request,
+        x_internal_timestamp,
+        x_request_id,
+        x_internal_signature,
+        settings,
+    )

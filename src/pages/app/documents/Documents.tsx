@@ -713,7 +713,7 @@ function ResumeManager() {
                   isActive && "ring-2 ring-primary/40 border-primary/40 bg-primary/5",
                 )}
               >
-                <div className="flex items-center gap-3 sm:gap-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
                   <div className="w-9 h-9 bg-blue-500/10 rounded-xl items-center justify-center shrink-0 hidden sm:flex">
                     <FileText className="w-4 h-4 text-blue-400" />
                   </div>
@@ -728,15 +728,17 @@ function ResumeManager() {
                     className="flex-1 min-w-0 text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     aria-pressed={isActive}
                   >
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-xs sm:text-sm font-medium text-foreground truncate">
+                    <div className="flex items-start gap-2 min-w-0">
+                      <p className="text-xs sm:text-sm font-medium text-foreground truncate min-w-0 flex-1">
                         {row.title || row.name || "Untitled"}
                       </p>
+                      <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
                       {isActive  && <Badge variant="emerald" size="sm" dot>Selected</Badge>}
                       {isParsing && <Badge variant="amber"   size="sm">Parsing…</Badge>}
                       {isPending && <Badge variant="amber"   size="sm">Needs parse</Badge>}
                       {isError   && <Badge variant="red"     size="sm">Parse failed</Badge>}
                       {isReady   && <Badge variant="blue"    size="sm">Ready</Badge>}
+                      </div>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {format(new Date(r.created_at), "MMM d, yyyy")}
@@ -749,7 +751,7 @@ function ResumeManager() {
                     )}
                   </button>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                     {row.file_path && (
                       <button
                         onClick={() => void handleDownload(r.id, row.file_path!)}
@@ -774,6 +776,7 @@ function ResumeManager() {
                       <Button
                         variant="secondary"
                         size="xs"
+                        className="hidden sm:inline-flex"
                         onClick={() => {
                           void docMgr.setActiveResume(r.id)
                             .then(() => toast.success("Active resume updated."))

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { usePageMeta } from "@/hooks/usePageMeta";
+import { seoPageByPath } from "@/lib/seo/publicPages";
 import { Search, ChevronDown, ChevronUp, HelpCircle, Mail, BookOpen } from "lucide-react";
 import { motion } from "framer-motion";
 import {
@@ -9,6 +10,7 @@ import {
   STATUS_REPORT_MAILTO,
   PUBLIC_STATUS_FOOTER_LABEL,
   PUBLIC_STATUS_HELP_LINE,
+  PUBLIC_WEBSITE_URL,
 } from "@/lib/constants/contact";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import { ComplianceBanner } from "@/components/marketing";
@@ -24,7 +26,7 @@ import {
 } from "@/lib/constants/helpArticlesFallback";
 import { helpArticlesDB } from "@/lib/supabase/database";
 
-const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
+const SITE_URL = PUBLIC_WEBSITE_URL;
 const SEARCH_DEBOUNCE_MS = 300;
 
 const POPULAR_ARTICLES = [...HELP_ARTICLES_FALLBACK]
@@ -60,6 +62,7 @@ export default function Help() {
   usePageMeta({
     title: "Help Center — Career Pilot",
     description: "FAQs and guides for interview prep, live practice coaching, mock tests, and billing.",
+    keywords: seoPageByPath("/help")?.keywords,
     canonical: `${SITE_URL}/help`,
   });
 

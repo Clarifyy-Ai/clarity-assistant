@@ -1,6 +1,6 @@
 // supabase/functions/_shared/gemini.ts
 //
-// Shared Gemini API helper for names// Shared Gemini API helper for Supabase Edge Functions.
+// Shared Gemini API helper for Supabase Edge Functions.
 // - Enforce timeout
 // - Sanitize prompts
 // - Avoid logging secrets

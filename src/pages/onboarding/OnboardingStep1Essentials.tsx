@@ -32,6 +32,13 @@ import { cn } from "@/lib/utils";
 import { normalizeRefCode } from "@/lib/referrals";
 import type { StepProps } from "@/types/onboarding.types";
 import type { ProfileRow } from "@/types";
+import {
+  isAllowedOnboardingInterviewDate,
+  isMeaningfulDisplayName,
+  maxOnboardingInterviewIsoDate,
+  onboardingEssentialsSchema,
+  todayIsoDate,
+} from "@/lib/onboarding/schema";
 
 const ROLES: { value: string; label: string; icon: LucideIcon }[] = [
   { value: "software_engineer", label: "Software Engineer", icon: Code2 },
@@ -79,9 +86,11 @@ export default function OnboardingStep1Essentials({ data, onNext, onChange }: St
   const [error,      setError]      = useState<string | null>(null);
 
   const resolvedRole = role === "other" ? customRole.trim().slice(0, 100) : role;
+  const nameValid = isMeaningfulDisplayName(name);
+  const interviewDateValid = isAllowedOnboardingInterviewDate(interviewDate);
 
   const canProceed = Boolean(
-    name.trim() && role && level && (role !== "other" || customRole.trim()),
+    nameValid && role && level && (role !== "other" || customRole.trim()) && interviewDateValid,
   );
 
   // Keep parent in sync so "Skip setup" validates the same fields as Continue.
@@ -98,7 +107,16 @@ export default function OnboardingStep1Essentials({ data, onNext, onChange }: St
   }, [resolvedRole, level, industry, interviewDate, difficulty, goals, onChange, data.yearsOfExperience]);
 
   async function handleNext() {
-    if (!canProceed || !user) return;
+    if (!user) return;
+    const parsed = onboardingEssentialsSchema.safeParse({
+      fullName: name,
+      interviewDate,
+    });
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? "Check your name and interview date.");
+      return;
+    }
+    if (!canProceed) return;
     setLoading(true);
     setError(null);
 
@@ -112,13 +130,13 @@ export default function OnboardingStep1Essentials({ data, onNext, onChange }: St
     const { data: row, error: dbError } = await supabase
       .from("profiles")
       .update({
-        full_name:         name.trim(),
+        full_name:         parsed.data.fullName,
         role_type:         role,
         target_role:       resolvedRole,
         experience_years:  YEARS_MAP[level] ?? 0,
         industry: industry || null,
         domain: industry || null,
-        interview_date: interviewDate || null,
+        interview_date: parsed.data.interviewDate || null,
         interview_difficulty: difficulty || null,
         improvement_goals: goals.split(",").map((g) => g.trim()).filter(Boolean),
         notification_prefs: {
@@ -183,6 +201,11 @@ export default function OnboardingStep1Essentials({ data, onNext, onChange }: St
         onChange={(e) => setName(e.target.value)}
         placeholder="e.g. Jane Smith"
         autoFocus
+        error={
+          name.length > 0 && !nameValid
+            ? "Enter your real name — not a placeholder."
+            : undefined
+        }
       />
 
       <div>
@@ -273,9 +296,17 @@ export default function OnboardingStep1Essentials({ data, onNext, onChange }: St
           <input
             type="date"
             value={interviewDate}
+            min={todayIsoDate()}
+            max={maxOnboardingInterviewIsoDate()}
             onChange={(e) => setInterviewDate(e.target.value)}
             className="mt-1 w-full rounded-xl border border-border bg-secondary/50 px-3 py-2 text-sm text-foreground"
+            aria-invalid={interviewDate.length > 0 && !interviewDateValid}
           />
+          {interviewDate.length > 0 && !interviewDateValid ? (
+            <p className="mt-1 text-[11px] text-destructive">
+              Interview date must be today or later, and within the next two years.
+            </p>
+          ) : null}
         </label>
       </div>
       <label className="text-xs font-medium text-muted-foreground block">

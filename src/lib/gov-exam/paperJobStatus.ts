@@ -226,12 +226,34 @@ export function isPaperJobPollTimeoutError(job: {
 
 export type ActivePaperJobKind = "paper" | "topic_practice";
 
+export type StoredPaperJobConfig = {
+  examId?: string;
+  stageId?: string;
+  basis?: string;
+  language?: string;
+  durationMinutes?: number;
+  questionCount?: number;
+  topics?: string[];
+  difficulty?: string;
+  mode?: string;
+};
+
+export type StoredPaperJob = {
+  jobId: string;
+  examId: string;
+  userId: string;
+  idempotencyKey?: string;
+  kind: ActivePaperJobKind;
+  config?: StoredPaperJobConfig;
+};
+
 export function saveActivePaperJob(payload: {
   jobId: string;
   examId: string;
   userId: string;
   idempotencyKey?: string;
   kind?: ActivePaperJobKind;
+  config?: StoredPaperJobConfig;
 }): void {
   try {
     localStorage.setItem(
@@ -250,23 +272,11 @@ export function saveActivePaperJob(payload: {
 export function loadActivePaperJob(
   userId: string,
   kind: ActivePaperJobKind = "paper",
-): {
-  jobId: string;
-  examId: string;
-  userId: string;
-  idempotencyKey?: string;
-  kind: ActivePaperJobKind;
-} | null {
+): StoredPaperJob | null {
   try {
     const raw = localStorage.getItem(PAPER_JOB_STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as {
-      jobId?: string;
-      examId?: string;
-      userId?: string;
-      idempotencyKey?: string;
-      kind?: ActivePaperJobKind;
-    };
+    const parsed = JSON.parse(raw) as StoredPaperJob & { userId?: string };
     if (!parsed.jobId || parsed.userId !== userId) return null;
     const storedKind = parsed.kind ?? "paper";
     if (storedKind !== kind) return null;
@@ -276,6 +286,7 @@ export function loadActivePaperJob(
       userId: parsed.userId,
       idempotencyKey: parsed.idempotencyKey,
       kind: storedKind,
+      config: parsed.config,
     };
   } catch {
     return null;

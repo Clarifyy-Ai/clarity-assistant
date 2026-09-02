@@ -30,6 +30,7 @@ import {
   classifyAnswerKeyStatus,
   normalizePdfExtractedQuestions,
   parsePlainTextMcqs,
+  pythonDocumentExtractText,
   validateExtractQuestionPaperPayload,
   type ExtractPayloadOk,
 } from "../_shared/pdfQuestionExtract.ts";
@@ -67,11 +68,7 @@ async function tryPythonPdfText(
     console.warn("[extract-question-paper] python document_extract failed:", result.message);
     return null;
   }
-  const data = result.data as Record<string, unknown>;
-  const text =
-    (typeof data.full_text === "string" && data.full_text) ||
-    (typeof data.text === "string" && data.text) ||
-    "";
+  const text = pythonDocumentExtractText(result.data as Record<string, unknown>);
   return text.trim() ? text : null;
 }
 

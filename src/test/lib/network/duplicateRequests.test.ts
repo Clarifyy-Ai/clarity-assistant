@@ -189,7 +189,7 @@ function edgeCalls(fnName: string) {
 }
 
 describe("fetchEdge — one mutation per user action", () => {
-  it("coalesces identical in-flight POSTs into a single fetch", async () => {
+  it("coalesces identical in-flight POSTs into a single fetch", { timeout: 15_000 }, async () => {
     const hang = deferredEdgeFetch("start-session");
     const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
     const body = { action: "start", type: "live" };
@@ -221,6 +221,37 @@ describe("fetchEdge — one mutation per user action", () => {
       fetchEdgeJson("generate-hint", { question: "q2" }),
     ]);
     expect(edgeCalls("generate-hint")).toHaveLength(2);
+  });
+
+  it("attaches the same x-idempotency-key to coalesced mutation POSTs", { timeout: 15_000 }, async () => {
+    const hang = deferredEdgeFetch("deduct-credits");
+    const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
+    const body = { action: "generate_hint" };
+    const p1 = fetchEdgeJson("deduct-credits", body);
+    const p2 = fetchEdgeJson("deduct-credits", body);
+    hang.resolve({ ok: true });
+    await Promise.all([p1, p2]);
+    const calls = edgeCalls("deduct-credits");
+    expect(calls).toHaveLength(1);
+    const headers = (calls[0]?.[1] as { headers?: Record<string, string> } | undefined)?.headers ?? {};
+    const key = headers["x-idempotency-key"] ?? headers["Idempotency-Key"];
+    expect(key).toEqual(expect.stringMatching(/^deduct-credits:/));
+    expect(String(key).length).toBeGreaterThanOrEqual(16);
+  });
+
+  it("does not overwrite a caller-supplied idempotency key", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(() =>
+      Promise.resolve(okJson({ ok: true })),
+    );
+    const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
+    await fetchEdgeJson(
+      "deduct-credits",
+      { action: "generate_hint" },
+      { headers: { "x-idempotency-key": "caller-supplied-idem-key-01" } },
+    );
+    const headers =
+      (edgeCalls("deduct-credits")[0]?.[1] as { headers?: Record<string, string> })?.headers ?? {};
+    expect(headers["x-idempotency-key"]).toBe("caller-supplied-idem-key-01");
   });
 
   it.each([

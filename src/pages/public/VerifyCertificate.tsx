@@ -172,6 +172,9 @@ export default function VerifyCertificatePage() {
 
           {status === "invalid" && (
             <div data-testid="certificate-verify-invalid">
+              <p className="mb-2 text-center text-xs font-semibold uppercase tracking-widest text-primary">
+                {PRODUCT_NAMES.brand}
+              </p>
               <PublicErrorState
                 title={notFoundCopy.title}
                 description={notFoundCopy.description}

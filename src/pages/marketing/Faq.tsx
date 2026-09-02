@@ -10,12 +10,14 @@ import {
 } from "@/components/ui/accordion";
 import { PUBLIC_CTAS } from "@/lib/constants/publicCtas";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { PUBLIC_WEBSITE_URL } from "@/lib/constants/contact";
+import { seoPageByPath } from "@/lib/seo/publicPages";
 import {
   HELP_CREDITS_OVERVIEW_ANSWER,
   HELP_PAID_PLANS_ANSWER,
 } from "@/lib/help/helpCatalogCopy";
 
-const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
+const SITE_URL = PUBLIC_WEBSITE_URL;
 
 const FAQS: Array<{ q: string; a: string }> = [
   {
@@ -52,7 +54,17 @@ export default function Faq() {
     title: `FAQ — ${PRODUCT_NAMES.brand}`,
     description:
       "Answers about Career Pilot credits, Practice Coach, government exam mocks, and billing. More articles in Help.",
+    keywords: seoPageByPath("/faq")?.keywords,
     canonical: `${SITE_URL}/faq`,
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: FAQS.map((faq) => ({
+        "@type": "Question",
+        name: faq.q,
+        acceptedAnswer: { "@type": "Answer", text: faq.a },
+      })),
+    },
   });
 
   return (

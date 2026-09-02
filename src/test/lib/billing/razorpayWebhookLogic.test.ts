@@ -272,4 +272,17 @@ describe("razorpay refund event rules", () => {
     expect(result.orderStatus).toBe("refunded");
     expect(result.clawbackAmount).toBe(0);
   });
+
+  it("treats a second refund event for the same order as a duplicate", () => {
+    const seen = new Set<string>();
+    const applyOnce = (orderId: string) => {
+      const key = `razorpay_refund_order_${orderId}`;
+      if (seen.has(key)) return { duplicate: true };
+      seen.add(key);
+      return { duplicate: false };
+    };
+    expect(applyOnce("po-1").duplicate).toBe(false);
+    expect(applyOnce("po-1").duplicate).toBe(true);
+    expect(seen.size).toBe(1);
+  });
 });

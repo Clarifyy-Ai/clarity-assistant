@@ -146,6 +146,39 @@ function getAuthSecret(): string | null {
   return secret || null;
 }
 
+function isEdgeProduction(): boolean {
+  const appEnv = (Deno.env.get("APP_ENV") ?? "").trim().toLowerCase();
+  const environment = (Deno.env.get("ENVIRONMENT") ?? "").trim().toLowerCase();
+  const nonProd = ["development", "dev", "local", "preview", "staging", "stage", "test"];
+  if (nonProd.includes(appEnv) || nonProd.includes(environment)) return false;
+  if (appEnv === "production" || appEnv === "prod" || environment === "production" || environment === "prod") {
+    return true;
+  }
+  return true;
+}
+
+function isLoopbackServiceHost(hostname: string): boolean {
+  const host = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+  return host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1";
+}
+
+/**
+ * Normalize an internal Python/scraper base URL.
+ * Production drops loopback hosts so a leaked localhost secret cannot be used.
+ */
+export function sanitizeInternalServiceUrl(raw: string): string | null {
+  const trimmed = raw.trim().replace(/\/+$/, "");
+  if (!trimmed) return null;
+  try {
+    const u = new URL(trimmed);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+    if (isEdgeProduction() && isLoopbackServiceHost(u.hostname)) return null;
+    return u.origin + (u.pathname === "/" ? "" : u.pathname.replace(/\/+$/, ""));
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Returns PYTHON_SERVICE_URL or SCRAPER_URL with trailing slash stripped, or null.
  */
@@ -154,17 +187,8 @@ export function getPythonServiceUrl(): string | null {
     Deno.env.get("PYTHON_SERVICE_URL") ??
     Deno.env.get("SCRAPER_URL") ??
     ""
-  )
-    .trim()
-    .replace(/\/+$/, "");
-  if (!raw) return null;
-  try {
-    const u = new URL(raw);
-    if (u.protocol !== "https:" && u.protocol !== "http:") return null;
-    return u.origin + (u.pathname === "/" ? "" : u.pathname.replace(/\/+$/, ""));
-  } catch {
-    return null;
-  }
+  ).trim();
+  return sanitizeInternalServiceUrl(raw);
 }
 
 export function isPythonConfigured(): boolean {

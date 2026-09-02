@@ -51,7 +51,8 @@ export interface GenerationPlan {
   reasonCode?:
     | "QUESTION_INVENTORY_INSUFFICIENT"
     | "CONTENT_INSUFFICIENT"
-    | "CAPABILITY_REQUIRED";
+    | "CAPABILITY_REQUIRED"
+    | "PLAN_NOT_ALLOWED";
   paperClass:
     | "official_previous"
     | "ai_generated"
@@ -183,7 +184,7 @@ export function decideGenerationPlan(input: {
     generator: "edge_assembler",
     maxCustomSetSize: available,
     reasonCode: fillEligible && !input.canUseAi && !pythonWorkerEnabled
-      ? "CAPABILITY_REQUIRED"
+      ? "PLAN_NOT_ALLOWED"
       : "CONTENT_INSUFFICIENT",
     paperClass: paperClassForMode(),
   };
@@ -192,7 +193,7 @@ export function decideGenerationPlan(input: {
 /** Client-facing payload for a blocked plan. Never leaks internal state. */
 export function blockedPlanPayload(plan: GenerationPlan): {
   error: string;
-  code: "CONTENT_INSUFFICIENT" | "QUESTION_INVENTORY_INSUFFICIENT" | "CAPABILITY_REQUIRED";
+  code: "CONTENT_INSUFFICIENT" | "QUESTION_INVENTORY_INSUFFICIENT" | "CAPABILITY_REQUIRED" | "PLAN_NOT_ALLOWED";
   available: number;
   requested: number;
   required: number;
@@ -200,8 +201,14 @@ export function blockedPlanPayload(plan: GenerationPlan): {
   aiFillAvailable: boolean;
 } {
   const raw = plan.reasonCode ?? "CONTENT_INSUFFICIENT";
-  const code = raw === "QUESTION_INVENTORY_INSUFFICIENT" ? "CONTENT_INSUFFICIENT" : raw;
-  const error = code === "CAPABILITY_REQUIRED"
+  const code =
+    raw === "QUESTION_INVENTORY_INSUFFICIENT"
+      ? "CONTENT_INSUFFICIENT"
+      : raw === "CAPABILITY_REQUIRED"
+        ? "PLAN_NOT_ALLOWED"
+        : raw;
+  const planBlocked = code === "PLAN_NOT_ALLOWED" || code === "CAPABILITY_REQUIRED";
+  const error = planBlocked
     ? `Only ${plan.available} approved questions are available for this configuration. ` +
       `Generating the remaining ${plan.requested - plan.available} requires a supported plan ` +
       `or the practice generation service.`
@@ -217,7 +224,7 @@ export function blockedPlanPayload(plan: GenerationPlan): {
     requested: plan.requested,
     required: plan.requested,
     maxCustomSetSize: plan.maxCustomSetSize,
-    aiFillAvailable: code === "CAPABILITY_REQUIRED",
+    aiFillAvailable: planBlocked,
   };
 }
 

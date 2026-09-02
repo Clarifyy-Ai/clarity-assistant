@@ -209,6 +209,32 @@ function formatStarDraft(parts: {
   ].join("\n\n").trim();
 }
 
+/** Always-usable STAR outline when Python/AI are down (PYTHON_SERVICE_URL missing or 5xx). */
+function deterministicStarOutline(input: string): string {
+  const questionMatch = input.match(/Interview question:\s*([\s\S]*?)(?:\n\n|$)/i);
+  const question = (questionMatch?.[1] ?? input).trim().slice(0, 500) || "this behavioural question";
+  const parts = parseStarSections(input);
+  const situation = parts.situation.trim() ||
+    "[NEEDS EVIDENCE] Set the context (team, company type, constraints) for this question.";
+  const task = parts.task.trim() ||
+    `[NEEDS EVIDENCE] State your responsibility related to: ${question}`;
+  const action = parts.action.trim() ||
+    "[NEEDS EVIDENCE] Describe 2–3 actions you took. Do not invent employers, metrics, or tools.";
+  const result = parts.result.trim() ||
+    "[Add measurable result if available]";
+  return [
+    `Situation: ${situation}`,
+    "",
+    `Task: ${task}`,
+    "",
+    `Action: ${action}`,
+    "",
+    `Result: ${result}`,
+    "",
+    "_AI polish is temporarily unavailable — this STAR outline is a draft. Replace placeholders with your real experience before saving._",
+  ].join("\n");
+}
+
 function formatStarDraftFromPython(data: unknown): string {
   if (!data || typeof data !== "object") return "";
   const obj = data as Record<string, unknown>;
@@ -782,20 +808,17 @@ Deno.serve(async (req: Request) => {
           if (pythonStarMethodDraft?.result?.trim()) {
             return pythonStarMethodDraft;
           }
-          let draft = formatStarDraft(starParts);
-          if (!starParts.result.trim()) {
-            draft += "\n\nResult: [Add measurable result if available]";
-          }
-          if (!draft.trim()) return null;
+          const draft = deterministicStarOutline(sanitizedInput);
+          const parsed = parseStarSections(draft);
           return {
             result: draft,
             alternatives: null,
             source: "deterministic",
             draft_kind: "input_based",
-            situation: starParts.situation,
-            task: starParts.task,
-            action: starParts.action,
-            result_section: starParts.result || "[Add measurable result if available]",
+            situation: parsed.situation,
+            task: parsed.task,
+            action: parsed.action,
+            result_section: parsed.result || "[Add measurable result if available]",
           };
         },
         runPython: async (ctx) => {
@@ -828,15 +851,13 @@ Deno.serve(async (req: Request) => {
             action: parsed.action,
             result_section: parsed.result,
           };
-          // Defer success to runAi — matrix order is python → ai → deterministic.
-          return null;
+          // Return the Python outline so a missing/503 AI provider does not
+          // fail the hybrid chain when PYTHON_SERVICE_URL produced a draft.
+          return pythonStarMethodDraft;
         },
         runAi: async () => {
-          const polishPrompt = pythonStarMethodDraft
-            ? `${prompt}\n\nStructured draft to polish (preserve facts; do not invent):\n${pythonStarMethodDraft.result}`
-            : prompt;
           const ai = await generateWithFallback({
-            prompt: polishPrompt,
+            prompt,
             maxTokens: PREP_AI_POLICY.maxOutputTokens,
             skipSecondaryOnQuota: PREP_AI_POLICY.skipSecondaryOnQuota,
             temperature: 0.6,

@@ -452,7 +452,7 @@ export default function AdminAiHub() {
           {results.length > 0 ? (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
               {results.map((r, i) => (
-                <Card key={r.id ?? i} className="p-4 space-y-2">
+                <Card key={r.id ?? `lab-${r.provider}-${r.model}-${i}`} className="p-4 space-y-2">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-semibold">{r.model}</span>
                     <Badge size="sm">{r.provider}</Badge>
@@ -536,9 +536,9 @@ export default function AdminAiHub() {
             <EmptyState icon={History} title="No Hub runs yet" compact />
           ) : (
             <div className="space-y-2">
-              {(history as Array<Record<string, unknown>>).map((run) => (
+              {(history as Array<Record<string, unknown>>).map((run, i) => (
                 <div
-                  key={String(run.id)}
+                  key={`${String(run.id)}-${i}`}
                   className="rounded-xl border border-border px-3 py-2 text-xs flex flex-wrap gap-2 justify-between"
                 >
                   <span className="font-mono">{String(run.id).slice(0, 8)}</span>

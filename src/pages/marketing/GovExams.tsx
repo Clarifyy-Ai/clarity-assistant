@@ -13,7 +13,9 @@ import {
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import { GovExamShowcase } from "@/components/marketing/GovExamShowcase";
 import { usePageMeta } from "@/hooks/usePageMeta";
+import { seoPageByPath } from "@/lib/seo/publicPages";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { PUBLIC_WEBSITE_URL } from "@/lib/constants/contact";
 import { cn } from "@/lib/utils";
 
 const EXAM_TYPES = [
@@ -67,7 +69,8 @@ export default function GovExams() {
     title: `${PRODUCT_NAMES.govExams} — UPSC, SSC, IBPS & more | ${PRODUCT_NAMES.brand}`,
     description:
       "Timed MCQ mock tests for UPSC CSE, SSC CGL, IBPS PO, JEE, NEET, and PSU exams. Official previous year papers, question palette, and performance analytics.",
-    canonical: "https://clarify.ai.sltfinanceindia.com/gov-exams",
+    keywords: seoPageByPath("/gov-exams")?.keywords,
+    canonical: `${PUBLIC_WEBSITE_URL}/gov-exams`,
   });
 
   return (

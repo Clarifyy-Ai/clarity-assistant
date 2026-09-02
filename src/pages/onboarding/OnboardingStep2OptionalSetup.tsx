@@ -358,6 +358,7 @@ export default function OnboardingStep2OptionalSetup({
       }
     }
     resetUploadState();
+    onChange?.({ resumeFileId: null, resumeFileName: null, skipResume: false });
   }
 
   async function handleUpload() {
@@ -394,6 +395,11 @@ export default function OnboardingStep2OptionalSetup({
         setResumeId(resumeRecord.id);
         setStoredPath(path);
         setResumeDone(true);
+        onChange?.({
+          resumeFileId: resumeRecord.id,
+          resumeFileName: file.name,
+          skipResume: false,
+        });
         return;
       }
       setParsing(true);
@@ -439,6 +445,11 @@ export default function OnboardingStep2OptionalSetup({
       setResumeId(resumeRecord.id);
       setStoredPath(path);
       setResumeDone(true);
+      onChange?.({
+        resumeFileId: resumeRecord.id,
+        resumeFileName: file.name,
+        skipResume: false,
+      });
     } catch (err) {
       setResumeError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
@@ -449,6 +460,7 @@ export default function OnboardingStep2OptionalSetup({
   function skipResume() {
     resetUploadState();
     setResumeSkipped(true);
+    onChange?.({ skipResume: true, resumeFileId: null, resumeFileName: null });
   }
 
   function toggleStyle(value: string) {

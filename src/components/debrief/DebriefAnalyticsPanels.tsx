@@ -16,6 +16,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/userStore";
 import { canShareScorecard } from "@/lib/privacy/privacyPrefs";
+import { normalizeKeywordList } from "@/lib/debrief/reportNormalize";
 import {
   Bar,
   BarChart,
@@ -79,6 +80,7 @@ export type DetailedReport = {
   missed_keywords?: string[];
   keyword_coverage?: KeywordCoverageItem[];
   jd_keywords?: string[];
+  change_tracking?: Array<{ label: string; from: string | null; to: string | null }>;
   speakers?: { id: string; label: string }[];
   share_token?: string;
   is_shared?: boolean;
@@ -120,13 +122,13 @@ function buildKeywordCoverage(
 ): KeywordCoverageItem[] {
   if (report?.keyword_coverage?.length) return report.keyword_coverage;
 
-  const jdKeywords = report?.jd_keywords ?? [];
-  const missed = new Set((report?.missed_keywords ?? []).map((k) => k.toLowerCase()));
+  const jdKeywords = normalizeKeywordList(report?.jd_keywords);
+  const missed = new Set(normalizeKeywordList(report?.missed_keywords).map((k) => k.toLowerCase()));
   const lowerTx = (transcript ?? "").toLowerCase();
 
   const allKeywords = jdKeywords.length
     ? jdKeywords
-    : (report?.missed_keywords ?? []);
+    : normalizeKeywordList(report?.missed_keywords);
 
   if (!allKeywords.length) return [];
 

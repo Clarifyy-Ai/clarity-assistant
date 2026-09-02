@@ -156,6 +156,31 @@ describe("Analytics load status — BUG-029 / TC-AN-001", () => {
     expect(screen.getByText(/score trends appear once sessions are analyzed/i)).toBeInTheDocument();
   });
 
+  it("does not show a blank chart when KPI has sessions but trend series is empty", () => {
+    useAnalytics.mockReturnValue(
+      baseMock({
+        loadStatus: "ready",
+        data: {
+          total_sessions: 4,
+          recent_sessions: [],
+        },
+        sessionsInSelectedPeriod: 4,
+        sessionsScored: 0,
+        scoreTrend: [],
+      }),
+    );
+
+    render(
+      <MemoryRouter>
+        <Analytics />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("analytics-kpi-sessions")).toHaveTextContent("4");
+    expect(screen.getByText(/4 sessions in this period/i)).toBeInTheDocument();
+    expect(screen.queryByText("No session data yet.")).not.toBeInTheDocument();
+  });
+
   it("shows filter empty state when only period filter yields zero sessions", () => {
     useAnalytics.mockReturnValue(
       baseMock({

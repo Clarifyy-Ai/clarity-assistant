@@ -1,8 +1,8 @@
 Contact: hello@trycareerpilot.com
 Preferred-Languages: en
-Canonical: https://clarify.ai.sltfinanceindia.com/.well-known/security.txt
-Policy: https://clarify.ai.sltfinanceindia.com/privacy
-Acknowledgments: https://clarify.ai.sltfinanceindia.com/help
+Canonical: https://trycareerpilot.com/.well-known/security.txt
+Policy: https://trycareerpilot.com/privacy
+Acknowledgments: https://trycareerpilot.com/help
 
 # Career Pilot security contact
 # Report vulnerabilities responsibly to hello@trycareerpilot.com

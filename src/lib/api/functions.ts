@@ -70,6 +70,7 @@ export type EdgeFunctionName =
   | "get-exam-syllabus"
   | "get-paper-generation-job"
   | "health"
+  | "hostinger-mail"
   | "hybrid-health"
   | "hybrid-ping"
   | "ingest-source-document"

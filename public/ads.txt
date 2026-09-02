@@ -1,0 +1,6 @@
+# ads.txt — Authorized Digital Sellers
+# After Google AdSense / MCM approval, uncomment and set your publisher id:
+# google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0
+#
+# This file is for *selling* ad inventory. Buying Google Ads campaigns uses
+# conversion tags (VITE_GOOGLE_ADS_ID) instead — see .env.example.

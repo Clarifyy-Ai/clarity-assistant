@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { supabase } from "@/lib/supabase/client";
 import { toast } from "sonner";
+import { adminActionFailedMessage } from "@/lib/admin/adminErrors";
 import {
   Type, Image as ImageIcon, Sigma,
   ArrowUp, ArrowDown, Trash2, Loader2, Upload,
@@ -71,8 +72,7 @@ export default function BlockEditor({ value, onChange, uploadFolder, compact }: 
       onChange(next);
       toast.success("Image inserted");
     } catch (err) {
-      console.error(err);
-      toast.error((err as Error).message ?? "Upload failed");
+      toast.error(adminActionFailedMessage(err, "BlockEditor.upload"));
     } finally {
       setUploading(false);
       setPendingIdx(null);

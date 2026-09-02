@@ -81,6 +81,13 @@ export interface ScorecardRow {
 }
 
 function parseDetails(raw: unknown): ScorecardDetails {
+  if (typeof raw === "string") {
+    try {
+      return parseDetails(JSON.parse(raw) as unknown);
+    } catch {
+      return {};
+    }
+  }
   if (raw && typeof raw === "object" && !Array.isArray(raw)) {
     return raw as ScorecardDetails;
   }
@@ -157,7 +164,7 @@ export function mapRowToScorecard(row: ScorecardRow): Scorecard {
     clarity_score: details.clarity_score ?? row.communication ?? 0,
     structure_score: details.structure_score ?? row.problem_solving ?? 0,
     relevance_score: details.relevance_score ?? row.technical ?? 0,
-    question_scores: details.question_scores ?? [],
+    question_scores: Array.isArray(details.question_scores) ? details.question_scores : [],
     filler_count: details.filler_count ?? 0,
     filler_rate: details.filler_rate ?? 0,
     top_filler_words: details.top_filler_words ?? [],

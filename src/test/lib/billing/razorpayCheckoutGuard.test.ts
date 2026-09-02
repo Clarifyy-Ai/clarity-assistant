@@ -66,12 +66,35 @@ describe("razorpay checkout guards", () => {
   it("maps 503 billing misconfig without generic Something went wrong", () => {
     const msg = toPaymentUserFacingError(
       new ApiClientError({
-        message: "Integration not configured",
+        message: "Payments are not configured",
         status: 503,
-        code: "API_ERROR",
+        code: "PAYMENTS_NOT_CONFIGURED",
       }),
     );
     expect(msg).toMatch(/not configured/i);
+    expect(msg).not.toMatch(/something went wrong/i);
+  });
+
+  it("maps placeholder integration copy and 400 catalog validation", () => {
+    expect(
+      toPaymentUserFacingError(
+        new ApiClientError({
+          message: "Integration not configured",
+          status: 503,
+          code: "API_ERROR",
+        }),
+      ),
+    ).toMatch(/not configured/i);
+
+    expect(
+      toPaymentUserFacingError(
+        new ApiClientError({
+          message: "Invalid product_type. Use a supported plan or credit pack.",
+          status: 400,
+          code: "VALIDATION_ERROR",
+        }),
+      ),
+    ).toMatch(/not available for checkout/i);
   });
 
   it("create-order source wires failRazorpayOrder on payment.failed", async () => {

@@ -4,6 +4,10 @@ import {
   examExpiresAtMs,
   isExamExpired,
   shouldAutoSubmitAttempt,
+  examTimerOriginFromAttempt,
+  remainingFromTimerOrigin,
+  sameExamTimerOrigin,
+  canRenderExamTimer,
 } from "@/lib/gov-exam/examTimer";
 
 describe("examTimer", () => {
@@ -35,5 +39,22 @@ describe("examTimer", () => {
     expect(shouldAutoSubmitAttempt("COMPLETED", start, 10, startMs + 11 * 60_000)).toBe(false);
     expect(shouldAutoSubmitAttempt("IN_PROGRESS", start, 0, startMs + 60_000)).toBe(false);
     expect(shouldAutoSubmitAttempt("IN_PROGRESS", null, 10, startMs)).toBe(false);
+  });
+
+  it("isolates remaining time to a frozen origin so bootstrap cannot extend the clock", () => {
+    const origin = examTimerOriginFromAttempt({
+      started_at: start,
+      expires_at: new Date(startMs + 10 * 60_000).toISOString(),
+      time_limit_minutes: 10,
+    });
+    expect(canRenderExamTimer(origin)).toBe(true);
+    expect(remainingFromTimerOrigin(origin, startMs + 60_000)).toBe(9 * 60);
+    const refreshed = examTimerOriginFromAttempt({
+      started_at: start,
+      expires_at: origin?.expiresAt,
+      time_limit_minutes: 10,
+    });
+    expect(sameExamTimerOrigin(origin, refreshed)).toBe(true);
+    expect(canRenderExamTimer(null)).toBe(false);
   });
 });

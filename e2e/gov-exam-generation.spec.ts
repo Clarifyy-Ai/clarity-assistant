@@ -6,6 +6,8 @@ import {
   GOV_MOCK_TEST_ID,
   GOV_REVIEW_AVAILABILITY as REVIEW_AVAILABILITY,
   mockGovExamGenerateRoutes,
+  mockGovPaperJobPollSequence,
+  mockQueuedCreateExamPaper,
   navigateToGovExamReview,
 } from "./helpers/gov-exam-mocks";
 
@@ -537,5 +539,32 @@ test.describe("Government exam generation and submission UX", () => {
     expect(res2.ok).toBe(true);
     expect(res2.json.already_completed).toBe(true);
     expect(submitCount).toBe(2);
+  });
+
+  test("QA-02: poll harness injects 429 then 409 then completed", async ({ page }) => {
+    await loginAsTestUser(page, { credits: 50, planId: "pro" });
+    await mockGovExamGenerateRoutes(page);
+    const created = await mockQueuedCreateExamPaper(page);
+    const polls = await mockGovPaperJobPollSequence(page, [
+      { kind: "http", httpStatus: 429, code: "RATE_LIMITED" },
+      { kind: "http", httpStatus: 409, code: "GENERATION_CONFLICT" },
+      {
+        kind: "json",
+        body: {
+          status: "completed",
+          progressStage: "completed",
+          mockTestId: GOV_MOCK_TEST_ID,
+          questionCount: 25,
+        },
+      },
+    ]);
+
+    await navigateToGovExamReview(page);
+    await page.getByRole("button", { name: "Generate Practice Paper" }).click();
+    await expect.poll(() => created.createCalls(), { timeout: 30_000 }).toBe(1);
+    await expect.poll(() => polls.pollCalls(), { timeout: 45_000 }).toBeGreaterThanOrEqual(3);
+    await expect(page).toHaveURL(new RegExp(`/app/mock-test/session/${GOV_MOCK_TEST_ID}`), {
+      timeout: 60_000,
+    });
   });
 });

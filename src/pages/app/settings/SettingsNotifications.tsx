@@ -134,9 +134,9 @@ export default function SettingsNotifications() {
         <p className="text-xs text-muted-foreground leading-relaxed">
           <span className="font-medium text-foreground">Email enforcement: </span>
           Category toggles and the master email switch are checked by the{" "}
-          <code className="text-[11px]">send-email</code> edge function before Resend sends.
+          <code className="text-[11px]">send-email</code> edge function before Hostinger Mail (or Resend fallback) sends.
           Push delivery is <span className="font-medium text-foreground">Not configured</span> (no VAPID keys).
-          Email send uses Resend when that secret is present; otherwise interview reminders return Not configured.
+          Email send uses Hostinger when configured on the server; otherwise Resend if that secret is present.
         </p>
       </Card>
 
@@ -187,7 +187,7 @@ export default function SettingsNotifications() {
           </span>
         </div>
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Preferences on this page are saved to your account. Push subscriptions require VAPID secrets that are not configured. Scheduled email digests require Resend; in-app notifications and category email gates are the live channels.
+          Preferences on this page are saved to your account. Push subscriptions require VAPID secrets that are not configured. Scheduled email digests require Hostinger Mail or Resend; in-app notifications and category email gates are the live channels.
         </p>
       </Card>
 

@@ -196,13 +196,14 @@ Deno.serve(async (req) => {
     requireStripe: false,
     requireRazorpayWebhook: true,
   });
-  const razorpayId = present("RAZORPAY_KEY_ID");
-  const razorpaySecret = present("RAZORPAY_KEY_SECRET");
-  const razorpayWebhookSecret = present("RAZORPAY_WEBHOOK_SECRET");
-  const razorpayConfigured = razorpayId && razorpaySecret;
-  const razorpayKeyMode = razorpayId.startsWith("rzp_live_")
+  const razorpayIdRaw = (Deno.env.get("RAZORPAY_KEY_ID") ?? "").trim();
+  const razorpaySecretRaw = (Deno.env.get("RAZORPAY_KEY_SECRET") ?? "").trim();
+  const razorpayWebhookRaw = (Deno.env.get("RAZORPAY_WEBHOOK_SECRET") ?? "").trim();
+  const razorpayConfigured = Boolean(razorpayIdRaw && razorpaySecretRaw);
+  const razorpayWebhookSecret = Boolean(razorpayWebhookRaw);
+  const razorpayKeyMode = razorpayIdRaw.startsWith("rzp_live_")
     ? "live"
-    : razorpayId.startsWith("rzp_test_")
+    : razorpayIdRaw.startsWith("rzp_test_")
     ? "test"
     : "unknown";
   const razorpayChecks = billing.checks.filter((c) => c.name.startsWith("RAZORPAY_"));
@@ -261,6 +262,7 @@ Deno.serve(async (req) => {
     },
     integrations: {
       deepgram: classifyOptional(present("DEEPGRAM_API_KEY")),
+      hostinger: classifyOptional(present("HOSTINGER_MAIL_API_TOKEN")),
       resend: classifyOptional(present("RESEND_API_KEY")),
       calendar: classifyOptional(
         present("GOOGLE_CLIENT_ID") ||

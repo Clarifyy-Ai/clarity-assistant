@@ -1,19 +1,21 @@
 /**
- * ParakeetTranscriptionService — single provider boundary for live STT.
+ * LiveTranscriptionService — live overlay STT boundary.
  *
- * Wraps Deepgram streaming (server-minted tokens only). React hooks and overlay
- * components must not import Deepgram directly; use this service or useAudioSession.
+ * One Deepgram streaming client per audio channel, one service instance per
+ * session. Tokens are minted via the deepgram-token edge function.
+ * There is no NVIDIA / Parakeet cloud API.
  */
 
 import { DeepgramStreamClient } from "@/lib/audio/deepgramStream";
 import { resetDeepgramTokenClient } from "@/lib/audio/deepgramToken";
 import { generateId } from "@/lib/utils";
 import type { DeepgramConnectionStatus, TranscriptUtterance } from "@/types/audio.types";
-import { loadParakeetTranscriptionConfig } from "./config";
+import { loadLiveTranscriptionConfig } from "./config";
+import { finalSegmentFingerprint, rememberFinalKey } from "./finalKeys";
 import { partialTextToSegment, utteranceToSegment } from "./segmentMap";
 import type {
-  ParakeetTranscriptionCallbacks,
-  ParakeetTranscriptionServiceOptions,
+  LiveTranscriptionCallbacks,
+  LiveTranscriptionServiceOptions,
   TranscriptionChannel,
   TranscriptionProviderStatus,
 } from "./types";
@@ -23,6 +25,7 @@ type ChannelState = {
   stream: MediaStream | null;
   sequence: number;
   seenFinalKeys: Set<string>;
+  connectInFlight: Promise<void> | null;
 };
 
 function mapDeepgramStatus(status: DeepgramConnectionStatus): TranscriptionProviderStatus {
@@ -42,22 +45,34 @@ function mapDeepgramStatus(status: DeepgramConnectionStatus): TranscriptionProvi
   }
 }
 
-export class ParakeetTranscriptionService {
+export class LiveTranscriptionService {
   private readonly sessionId: string;
   private readonly correlationId: string;
-  private readonly callbacks: ParakeetTranscriptionCallbacks;
-  private readonly config = loadParakeetTranscriptionConfig();
+  private readonly callbacks: LiveTranscriptionCallbacks;
+  private readonly config = loadLiveTranscriptionConfig();
 
   private destroyed = false;
   private paused = false;
   private globalSequence = 0;
 
   private readonly channels: Record<TranscriptionChannel, ChannelState> = {
-    candidate: { client: null, stream: null, sequence: 0, seenFinalKeys: new Set() },
-    interviewer: { client: null, stream: null, sequence: 0, seenFinalKeys: new Set() },
+    candidate: {
+      client: null,
+      stream: null,
+      sequence: 0,
+      seenFinalKeys: new Set(),
+      connectInFlight: null,
+    },
+    interviewer: {
+      client: null,
+      stream: null,
+      sequence: 0,
+      seenFinalKeys: new Set(),
+      connectInFlight: null,
+    },
   };
 
-  constructor(opts: ParakeetTranscriptionServiceOptions) {
+  constructor(opts: LiveTranscriptionServiceOptions) {
     this.sessionId = opts.sessionId;
     this.correlationId = opts.correlationId ?? generateId();
     this.callbacks = opts.callbacks;
@@ -75,9 +90,6 @@ export class ParakeetTranscriptionService {
     return this.config.enabled;
   }
 
-  /**
-   * Open a streaming transcription channel for the given MediaStream.
-   */
   async connectChannel(stream: MediaStream, channel: TranscriptionChannel): Promise<void> {
     if (this.destroyed) {
       throw new Error("Transcription service has been destroyed.");
@@ -87,54 +99,63 @@ export class ParakeetTranscriptionService {
     }
     if (!this.config.enabled) {
       this.callbacks.onStatusChange("unavailable", channel);
-      throw new Error(
-        "Live transcription is disabled in this environment. You can still type questions in Chat.",
+      throw Object.assign(
+        new Error(
+          "Live transcription is disabled in this environment. You can still type questions in Chat.",
+        ),
+        { code: "provider_unavailable" },
       );
     }
 
-    await this.disconnectChannelInternal(channel, { preserveStream: true });
-
     const state = this.channels[channel];
-    state.stream = stream;
-    state.sequence = 0;
-    state.seenFinalKeys.clear();
+    if (state.connectInFlight) return state.connectInFlight;
 
-    this.callbacks.onStatusChange("connecting", channel);
+    const run = (async () => {
+      await this.disconnectChannelInternal(channel, { preserveStream: true });
 
-    const client = new DeepgramStreamClient({
-      stream,
-      config: {
-        model: this.config.model,
-        language: this.config.language,
-        smart_format: true,
-        interim_results: this.config.interimResults,
-        utterance_end_ms: this.config.utteranceEndMs,
-        vad_events: true,
-        diarize: channel === "candidate",
-        punctuate: true,
-        filler_words: this.config.fillerWords,
-      },
-      onUtterance: (utterance) => this.handleFinalUtterance(utterance, channel),
-      onInterim: (text) => this.handlePartial(text, channel),
-      onError: (error) => {
-        if (this.destroyed || this.paused) return;
-        this.callbacks.onError(error, true, channel);
-      },
-      onStatusChange: (status) => {
-        if (this.destroyed) return;
-        if (this.paused && status !== "disconnected") return;
-        const mapped = mapDeepgramStatus(status);
-        this.callbacks.onStatusChange(mapped, channel);
-      },
-    });
+      state.stream = stream;
+      state.sequence = 0;
+      state.seenFinalKeys.clear();
+      this.callbacks.onStatusChange("connecting", channel);
 
-    state.client = client;
-    await client.connect();
+      const client = new DeepgramStreamClient({
+        stream,
+        config: {
+          model: this.config.model,
+          language: this.config.language,
+          smart_format: true,
+          interim_results: this.config.interimResults,
+          utterance_end_ms: this.config.utteranceEndMs,
+          vad_events: true,
+          diarize: channel === "candidate",
+          punctuate: true,
+          filler_words: this.config.fillerWords,
+        },
+        onUtterance: (utterance) => this.handleFinalUtterance(utterance, channel),
+        onInterim: (text) => this.handlePartial(text, channel),
+        onError: (error) => {
+          if (this.destroyed || this.paused) return;
+          this.callbacks.onError(error, true, channel);
+        },
+        onStatusChange: (status) => {
+          if (this.destroyed) return;
+          if (this.paused && status !== "disconnected") return;
+          this.callbacks.onStatusChange(mapDeepgramStatus(status), channel);
+        },
+      });
+
+      state.client = client;
+      await client.connect();
+    })();
+
+    state.connectInFlight = run;
+    try {
+      await run;
+    } finally {
+      if (state.connectInFlight === run) state.connectInFlight = null;
+    }
   }
 
-  /**
-   * Controlled reconnect — reuses the last stream for a channel when available.
-   */
   async reconnectChannel(channel: TranscriptionChannel): Promise<void> {
     const state = this.channels[channel];
     if (!state.stream || state.stream.getAudioTracks().every((t) => t.readyState === "ended")) {
@@ -147,16 +168,13 @@ export class ParakeetTranscriptionService {
     const tasks: Promise<void>[] = [];
     for (const channel of ["candidate", "interviewer"] as const) {
       const state = this.channels[channel];
-      if (state.stream && state.client) {
+      if (state.stream && (state.client || state.connectInFlight)) {
         tasks.push(this.reconnectChannel(channel));
       }
     }
     await Promise.all(tasks);
   }
 
-  /**
-   * Pause streaming without destroying session correlation or transcript history.
-   */
   pause(): void {
     this.paused = true;
     for (const channel of ["candidate", "interviewer"] as const) {
@@ -165,28 +183,19 @@ export class ParakeetTranscriptionService {
     this.callbacks.onStatusChange("paused");
   }
 
-  /**
-   * Resume after pause — reconnects all channels that still have live streams.
-   */
   async resume(): Promise<void> {
     if (this.destroyed) return;
     this.paused = false;
     const tasks: Promise<void>[] = [];
     for (const channel of ["candidate", "interviewer"] as const) {
       const state = this.channels[channel];
-      if (
-        state.stream &&
-        state.stream.getAudioTracks().some((t) => t.readyState === "live")
-      ) {
+      if (state.stream && state.stream.getAudioTracks().some((t) => t.readyState === "live")) {
         tasks.push(this.connectChannel(state.stream, channel));
       }
     }
     await Promise.all(tasks);
   }
 
-  /**
-   * Tear down all channels. When preserveTranscriptState is true, only STT clients stop.
-   */
   destroy(options?: { releaseTokenCache?: boolean }): void {
     this.destroyed = true;
     this.paused = false;
@@ -199,9 +208,6 @@ export class ParakeetTranscriptionService {
     this.callbacks.onStatusChange("ended");
   }
 
-  /**
-   * Stop STT for one channel without tearing down the other or session correlation.
-   */
   disconnectChannel(channel: TranscriptionChannel): void {
     if (this.destroyed) return;
     this.disconnectChannelInternal(channel, { preserveStream: false });
@@ -222,16 +228,14 @@ export class ParakeetTranscriptionService {
 
   private nextSequence(channel: TranscriptionChannel): number {
     this.globalSequence += 1;
-    const state = this.channels[channel];
-    state.sequence += 1;
-    return state.sequence;
+    this.channels[channel].sequence += 1;
+    return this.channels[channel].sequence;
   }
 
   private handlePartial(text: string, channel: TranscriptionChannel): void {
     if (this.destroyed || this.paused || !text.trim()) return;
     const seq = this.nextSequence(channel);
-    const segment = partialTextToSegment(this.sessionId, text, channel, seq);
-    this.callbacks.onPartial(segment, channel);
+    this.callbacks.onPartial(partialTextToSegment(this.sessionId, text, channel, seq), channel);
   }
 
   private handleFinalUtterance(
@@ -239,30 +243,21 @@ export class ParakeetTranscriptionService {
     channel: TranscriptionChannel,
   ): void {
     if (this.destroyed || this.paused) return;
-
-    const fingerprint = [
+    if (!utterance.is_final) return;
+    const fingerprint = finalSegmentFingerprint(
       channel,
-      utterance.text.trim().toLowerCase(),
+      utterance.text,
       utterance.start_ms,
       utterance.end_ms,
-    ].join(":");
-
-    const state = this.channels[channel];
-    if (state.seenFinalKeys.has(fingerprint)) return;
-    state.seenFinalKeys.add(fingerprint);
-    if (state.seenFinalKeys.size > 500) {
-      const oldest = state.seenFinalKeys.values().next().value;
-      if (oldest) state.seenFinalKeys.delete(oldest);
-    }
-
+    );
+    if (!rememberFinalKey(this.channels[channel].seenFinalKeys, fingerprint)) return;
     const seq = this.nextSequence(channel);
-    const segment = utteranceToSegment(utterance, this.sessionId, seq);
-    this.callbacks.onFinal(segment, channel);
+    this.callbacks.onFinal(utteranceToSegment(utterance, this.sessionId, seq), channel);
   }
 }
 
-export function createParakeetTranscriptionService(
-  opts: ParakeetTranscriptionServiceOptions,
-): ParakeetTranscriptionService {
-  return new ParakeetTranscriptionService(opts);
+export function createLiveTranscriptionService(
+  opts: LiveTranscriptionServiceOptions,
+): LiveTranscriptionService {
+  return new LiveTranscriptionService(opts);
 }

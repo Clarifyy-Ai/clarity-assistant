@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { PAGE_SHELL, STACK_GRID } from "@/lib/ui/responsivePage";
+import { listPublishedLearningCourses } from "@/lib/learning/catalog";
 
 type Course = {
   id: string;
@@ -30,13 +31,8 @@ export default function LearningHubPage() {
     setLoaded(false);
     setError(null);
     try {
-      const { data, error } = await supabase
-        .from("learning_courses")
-        .select("id,slug,title,description,duration_hours")
-        .eq("publish_status", "published")
-        .order("title");
-      if (error) throw error;
-      setCourses((data as Course[]) ?? []);
+      const rows = await listPublishedLearningCourses();
+      setCourses(rows);
       if (!user?.id) return;
       const { data: enrolls, error: enrollError } = await supabase
         .from("course_enrollments")

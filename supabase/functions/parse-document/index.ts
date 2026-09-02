@@ -6,6 +6,8 @@ import { geminiGenerateWithPdf, parseJSON } from "../_shared/gemini.ts";
 import {
   buildDocumentExtractPayload,
   extractPdfTextBasic,
+  extractDocxXmlText,
+  extractJdFieldsFromText,
   looksBinary,
   tryDeterministicTextExtract,
   bytesToUtf8,
@@ -45,11 +47,14 @@ async function extractZipText(bytes: Uint8Array, xlsx: boolean): Promise<string 
     const file = zip.file(fileName);
     if (!file) return null;
     const xml = await file.async("string");
-    return xml
-      .replace(/<\/(?:w:p|row|si)>/g, "\n")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
-      .replace(/\s+/g, " ").trim().slice(0, 50000) || null;
+    if (xlsx) {
+      return xml
+        .replace(/<\/(?:row|si)>/g, "\n")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+        .replace(/\s+/g, " ").trim().slice(0, 50000) || null;
+    }
+    return extractDocxXmlText(xml);
   } catch {
     return null;
   }
@@ -653,15 +658,25 @@ Deno.serve(async (req) => {
         return classified.response;
       }
 
-      await db
-        .from("job_descriptions")
-        .update({
-          content: extracted.full_text,
-          parse_status: "ready",
-          parse_error: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", jdId);
+      const jdFields = extractJdFieldsFromText(extracted.full_text);
+      const jdPatch: Record<string, unknown> = {
+        content: extracted.full_text,
+        parse_status: "ready",
+        parse_error: null,
+        parsed_data: {
+          required_skills: jdFields.required_skills,
+          location: jdFields.location,
+          role: jdFields.role,
+          company: jdFields.company,
+        },
+        updated_at: new Date().toISOString(),
+      };
+      if (jdFields.role) {
+        jdPatch.target_role = jdFields.role;
+        jdPatch.title = jdFields.role;
+      }
+      if (jdFields.company) jdPatch.company = jdFields.company;
+      await db.from("job_descriptions").update(jdPatch).eq("id", jdId);
 
       return new Response(
         JSON.stringify({

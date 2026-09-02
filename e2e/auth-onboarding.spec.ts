@@ -43,9 +43,6 @@ test.describe("Unverified login [AUTH-VERIFY]", () => {
 });
 
 test.describe("MFA challenge [AUTH-MFA]", () => {
-  // MFA_ENFORCEMENT_PAUSED = true in src/lib/auth/mfaGate.ts — challenge UI not shown.
-  test.skip(true, "MFA enforcement paused in mfaGate.ts");
-
   test("enrolled TOTP is challenged after password", async ({ page }) => {
     await loginAsTestUser(page, { mfaEnrolled: true });
     await expect(page.getByLabel(/Authenticator code/i)).toBeVisible();

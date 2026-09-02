@@ -11,6 +11,7 @@ import { ensureAuthSession } from "@/lib/focusRecovery/sessionRefresh";
 import { debugLog161d95 } from "@/lib/debug/debugLog161d95";
 import { debugLog4a9592 } from "@/lib/debug/debugLog4a9592";
 import { coalesceKey, resetSingleFlightForTests, singleFlight } from "@/lib/network/singleFlight";
+import { createIdempotencyKey } from "@/lib/network/idempotency";
 import { isExpectedBusinessFailure } from "@/lib/network/businessConflict";
 
 export { resetSingleFlightForTests };
@@ -57,6 +58,8 @@ const PRIVATE_MODE_ALLOWLIST = new Set([
   "save-attempt-answer",
   "billing-catalog",
   "contact-sales",
+  "hostinger-mail",
+  "send-email",
 ]);
 
 /** Edge functions that do not deduct credits — skip balance refresh. */
@@ -103,6 +106,8 @@ const CREDIT_REFRESH_SKIP = new Set([
   "save-test-answer",
   "start-exam-attempt",
   "start-exam",
+  "hostinger-mail",
+  "send-email",
 ]);
 
 /** Non-AI functions should not blame an "AI request" on CORS / network failure. */
@@ -143,6 +148,8 @@ const OPERATIONAL_EDGE_FNS = new Set([
   "issue-course-certificate",
   "sync-calendar",
   "disconnect-calendar",
+  "hostinger-mail",
+  "send-email",
 ]);
 
 /** Mutating calls that must not be retried by the browser after a network/CORS glitch. */
@@ -224,6 +231,27 @@ function networkRetryAttempts(fnName: string): number {
   if (NO_NETWORK_RETRY_FNS.has(fnName)) return 0;
   if (SAFE_NETWORK_RETRY_FNS.has(fnName)) return NETWORK_RETRY_DELAYS_MS.length;
   return 0;
+}
+
+function existingIdempotencyKey(headers: Record<string, string>): string | undefined {
+  const key =
+    headers["x-idempotency-key"] ??
+    headers["X-Idempotency-Key"] ??
+    headers["Idempotency-Key"] ??
+    headers["idempotency-key"];
+  return typeof key === "string" && key.trim() ? key.trim() : undefined;
+}
+
+/**
+ * Mutations that are coalesced (double-click / Strict Mode) share one flight.
+ * Attach a key so a later retry of the same user action can replay server-side.
+ * Skip GET and allowlisted read/anon probes.
+ */
+function shouldAutoAttachIdempotency(method: string, fnName: string): boolean {
+  if (method === "GET" || method === "HEAD") return false;
+  if (SAFE_NETWORK_RETRY_FNS.has(fnName)) return false;
+  if (ANON_OK_EDGE_FNS.has(fnName)) return false;
+  return NO_NETWORK_RETRY_FNS.has(fnName);
 }
 
 function throwIfAborted(signal: AbortSignal): void {
@@ -487,12 +515,21 @@ async function executeFetchEdge(
       ? crypto.randomUUID()
       : `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`);
 
+  const callerHeaders = options?.headers ?? {};
+  const autoIdempotency =
+    shouldAutoAttachIdempotency(method, fnName) && !existingIdempotencyKey(callerHeaders)
+      ? createIdempotencyKey(fnName)
+      : null;
+
   const buildHeaders = async (forceRefresh = false) =>
     getAuthHeaders(
       {
         ...(isFormData ? {} : { "Content-Type": "application/json" }),
         "x-request-id": requestId,
-        ...(options?.headers ?? {}),
+        ...(autoIdempotency
+          ? { "x-idempotency-key": autoIdempotency, "Idempotency-Key": autoIdempotency }
+          : {}),
+        ...callerHeaders,
       },
       { forceRefresh, allowAnonBearer },
     );

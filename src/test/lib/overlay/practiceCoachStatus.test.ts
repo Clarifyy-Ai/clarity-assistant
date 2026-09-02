@@ -52,4 +52,16 @@ describe("practiceCoachStatus", () => {
     });
     expect(warnings.some((w) => w.id === "session-restored-reconnect-mic")).toBe(false);
   });
+
+  it("surfaces transcription unavailable without a fake transcript warning", () => {
+    const warnings = buildPracticeCoachWarnings({
+      micState: "ready",
+      tokenState: "failed",
+      transcriptionProviderStatus: "unavailable",
+      pipelineStatus: "unavailable",
+    });
+    const primary = primaryPracticeCoachWarning(warnings);
+    expect(primary?.id).toBe("stt-unavailable");
+    expect(primary?.title).toBe("Transcription unavailable");
+  });
 });

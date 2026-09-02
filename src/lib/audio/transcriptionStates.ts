@@ -19,17 +19,32 @@ export type TranscriptionState =
   (typeof TranscriptionState)[keyof typeof TranscriptionState];
 
 export const TRANSCRIPTION_STATUS_COPY: Record<TranscriptionState, string> = {
-  not_checked: "Transcription not checked",
-  connecting: "Connecting to transcription…",
-  ready: "Transcription ready",
-  receiving_audio: "Receiving audio",
-  transcribing: "Transcribing",
-  reconnecting: "Reconnecting transcription…",
-  paused: "Transcription paused",
-  text_only: "Text only",
+  not_checked: "Transcription connecting",
+  connecting: "Transcription connecting",
+  ready: "Transcription connected",
+  receiving_audio: "Transcription connected",
+  transcribing: "Transcription connected",
+  reconnecting: "Transcription connecting",
+  paused: "Transcription unavailable",
+  text_only: "Transcription unavailable",
   unavailable: "Transcription unavailable",
-  ended: "Transcription ended",
+  ended: "Transcription unavailable",
 };
+
+export const MIC_STATUS_COPY = {
+  active: "Mic active",
+  paused: "Mic paused",
+  disconnected: "Mic disconnected",
+  permission_denied: "Mic permission denied",
+} as const;
+
+export type MicStatusCopyKey = keyof typeof MIC_STATUS_COPY;
+
+export const LIVE_TRANSCRIPTION_BAR_COPY = {
+  connecting: "Transcription connecting",
+  connected: "Transcription connected",
+  unavailable: "Transcription unavailable",
+} as const;
 
 export function providerStatusToTranscription(
   provider: string | undefined,

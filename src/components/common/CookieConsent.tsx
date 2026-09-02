@@ -1,12 +1,16 @@
 import { useState, useEffect } from "react";
-
-const CONSENT_KEY = "clarify_cookie_consent";
+import { getCookieConsent, setCookieConsent } from "@/lib/privacy/cookieConsent";
+import { initGoogleAds } from "@/lib/ads/googleAds";
 
 export function CookieConsent() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const consent = localStorage.getItem(CONSENT_KEY);
+    const consent = getCookieConsent();
+    if (consent === "accepted") {
+      initGoogleAds();
+      return;
+    }
     if (!consent) {
       const timer = setTimeout(() => setVisible(true), 1500);
       return () => clearTimeout(timer);
@@ -29,12 +33,13 @@ export function CookieConsent() {
   }, [visible]);
 
   function accept() {
-    localStorage.setItem(CONSENT_KEY, "accepted");
+    setCookieConsent("accepted");
+    initGoogleAds();
     setVisible(false);
   }
 
   function decline() {
-    localStorage.setItem(CONSENT_KEY, "declined");
+    setCookieConsent("declined");
     setVisible(false);
   }
 
@@ -51,7 +56,7 @@ export function CookieConsent() {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-foreground mb-1">Cookie Notice</p>
           <p className="text-xs text-muted-foreground leading-relaxed break-words">
-            We use essential cookies for authentication and optional analytics cookies to improve the experience.{" "}
+            We use essential cookies for authentication and, if you accept, optional analytics and Google Ads conversion cookies.{" "}
             {/* Plain <a>: this banner may mount outside RouterProvider (App.tsx sibling). */}
             <a href="/privacy" className="text-primary hover:underline">
               Review our privacy policy

@@ -101,8 +101,31 @@ describe("active paper job storage", () => {
       userId: "user-1",
       kind: "paper",
     });
-    expect(loadActivePaperJob("user-1", "topic_practice")).toBeNull();
-    expect(loadActivePaperJob("user-1", "paper")?.jobId).toBe("paper-job");
+    expect(
+      loadActivePaperJob("user-1", "paper")?.jobId,
+    ).toBe("paper-job");
+  });
+
+  it("persists generation config so refresh can resume the same request", () => {
+    saveActivePaperJob({
+      jobId: "cfg-job",
+      examId: "exam-1",
+      userId: "user-1",
+      kind: "paper",
+      config: {
+        examId: "exam-1",
+        stageId: "stage-9",
+        basis: "quick",
+        language: "hi",
+        durationMinutes: 40,
+        questionCount: 25,
+      },
+    });
+    const stored = loadActivePaperJob("user-1", "paper");
+    expect(stored?.config?.stageId).toBe("stage-9");
+    expect(stored?.config?.language).toBe("hi");
+    expect(stored?.config?.questionCount).toBe(25);
+    expect(stored?.config?.durationMinutes).toBe(40);
   });
 
   it("does not clear a different stored job id", () => {

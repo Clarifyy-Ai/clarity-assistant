@@ -3,9 +3,20 @@ import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { enforceSessionRateLimitAsync } from "../_shared/rateLimit.ts";
+import { deepgramKeyLooksValid } from "../_shared/deepgramCost.ts";
+import {
+  geminiKeyLooksValid,
+  probeGeminiApiKey,
+  resolveGeminiApiKey,
+} from "../_shared/geminiKey.ts";
 
 function present(value: string | undefined) {
   return Boolean((value ?? "").trim());
+}
+
+function openAiKeyLooksValid(value: string | undefined): boolean {
+  const v = (value ?? "").trim();
+  return /^sk-[A-Za-z0-9_-]{20,}$/.test(v);
 }
 
 Deno.serve(async (req) => {
@@ -52,14 +63,42 @@ Deno.serve(async (req) => {
     new_value: { present_only: true },
   }).then(() => {}, () => {});
 
+  const deepgramKey = (Deno.env.get("DEEPGRAM_API_KEY") ?? "").trim();
+  let deepgramApiOk = false;
+  if (deepgramKeyLooksValid(deepgramKey)) {
+    try {
+      const probe = await fetch("https://api.deepgram.com/v1/projects", {
+        headers: {
+          Authorization: `Token ${deepgramKey}`,
+          Accept: "application/json",
+        },
+      });
+      deepgramApiOk = probe.ok;
+    } catch {
+      deepgramApiOk = false;
+    }
+  }
+
+  const geminiKey = resolveGeminiApiKey();
+  let geminiApiOk = false;
+  if (geminiKeyLooksValid(geminiKey)) {
+    geminiApiOk = await probeGeminiApiKey(geminiKey);
+  }
+
   const result = {
     providers: {
-      gemini: present(Deno.env.get("GEMINI_API_KEY") ?? Deno.env.get("GOOGLE_AI_API_KEY")),
+      gemini: present(geminiKey),
+      gemini_format_valid: geminiKeyLooksValid(geminiKey),
+      gemini_api_ok: geminiApiOk,
       openai: present(Deno.env.get("OPENAI_API_KEY")),
+      openai_format_valid: openAiKeyLooksValid(Deno.env.get("OPENAI_API_KEY")),
       anthropic: present(Deno.env.get("ANTHROPIC_API_KEY")),
-      deepgram: present(Deno.env.get("DEEPGRAM_API_KEY")),
+      deepgram: present(deepgramKey),
+      deepgram_format_valid: deepgramKeyLooksValid(deepgramKey),
+      deepgram_api_ok: deepgramApiOk,
       razorpay: present(Deno.env.get("RAZORPAY_KEY_ID")) && present(Deno.env.get("RAZORPAY_KEY_SECRET")),
       resend: present(Deno.env.get("RESEND_API_KEY")),
+      hostinger: present(Deno.env.get("HOSTINGER_MAIL_API_TOKEN")),
     },
   };
 

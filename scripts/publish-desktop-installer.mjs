@@ -17,7 +17,7 @@ import process from "node:process";
 
 const ROOT = process.cwd();
 const BUCKET = "desktop-releases";
-const OBJECT_NAME = "Clarify-AI-Setup-1.0.0.exe";
+const OBJECT_NAME = "Career-Pilot-Setup.exe";
 
 function loadEnv() {
   const merged = { ...process.env };
@@ -44,19 +44,35 @@ function loadEnv() {
 }
 
 function findInstaller() {
-  const candidates = [
-    path.join(ROOT, "release", "Career Pilot Setup 1.0.0.exe"),
-    path.join(ROOT, "release-new", "Career Pilot Setup 1.0.0.exe"),
+  const dirs = ["release", "release-new"];
+  const preferred = [
+    "Career-Pilot-Setup-1.0.0.exe",
+    "Career-Pilot-Setup.exe",
+    "Career Pilot Setup 1.0.0.exe",
   ];
-  for (const dir of ["release", "release-new"]) {
+  for (const dir of dirs) {
+    for (const name of preferred) {
+      const candidate = path.join(ROOT, dir, name);
+      if (fs.existsSync(candidate)) return candidate;
+    }
+  }
+  for (const dir of dirs) {
+    const folder = path.join(ROOT, dir);
+    if (!fs.existsSync(folder)) continue;
+    const match = fs
+      .readdirSync(folder)
+      .find((f) => f.endsWith(".exe") && /Career.?Pilot.*Setup/i.test(f));
+    if (match) return path.join(folder, match);
+  }
+  for (const dir of dirs) {
     const folder = path.join(ROOT, dir);
     if (!fs.existsSync(folder)) continue;
     const match = fs
       .readdirSync(folder)
       .find((f) => f.endsWith(".exe") && /setup/i.test(f));
-    if (match) candidates.unshift(path.join(folder, match));
+    if (match) return path.join(folder, match);
   }
-  return candidates.find((p) => fs.existsSync(p)) ?? null;
+  return null;
 }
 
 async function main() {
@@ -81,13 +97,57 @@ async function main() {
   if (!installerPath) {
     console.error(
       "No installer found. Run: npm run dist:win\n" +
-        "Expected: release/Career Pilot Setup 1.0.0.exe",
+        "Expected: release/Career-Pilot-Setup-1.0.0.exe",
     );
     process.exit(1);
   }
 
   const fileBuffer = fs.readFileSync(installerPath);
   const mb = (fileBuffer.length / (1024 * 1024)).toFixed(1);
+  const fileSizeLimit = 524288000;
+  console.log(`Raising ${BUCKET} file size limit to ${fileSizeLimit} bytes`);
+  const bucketRes = await fetch(`${supabaseUrl}/storage/v1/bucket/${BUCKET}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${serviceKey}`,
+      apikey: serviceKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      public: true,
+      fileSizeLimit,
+      allowedMimeTypes: [
+        "application/octet-stream",
+        "application/x-msdownload",
+        "application/vnd.microsoft.portable-executable",
+      ],
+    }),
+  });
+  if (!bucketRes.ok) {
+    console.error(
+      `Bucket update failed (${bucketRes.status}): ${(await bucketRes.text()).slice(0, 300)}`,
+    );
+  } else {
+    console.log("Bucket limit updated");
+  }
+
+  const projectRef = String(supabaseUrl).match(/https:\/\/([a-z0-9]+)\.supabase\.co/i)?.[1];
+  const managementToken = String(env.SUPABASE_ACCESS_TOKEN ?? "").trim();
+  if (projectRef && managementToken.startsWith("sbp_")) {
+    const cfgRes = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/config/storage`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${managementToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ fileSizeLimit }),
+    });
+    console.log(`Project storage limit PATCH ${cfgRes.status}`);
+    if (!cfgRes.ok) {
+      console.error((await cfgRes.text()).slice(0, 300));
+    }
+  }
+
   console.log(`Uploading ${path.basename(installerPath)} (${mb} MB) → ${BUCKET}/${OBJECT_NAME}`);
 
   const uploadUrl = `${supabaseUrl}/storage/v1/object/${BUCKET}/${OBJECT_NAME}`;

@@ -5,4 +5,5 @@ export const PUBLIC_CTAS = {
   login: "Log in",
   help: "Help Center",
   helpShort: "Help",
+  downloadDesktop: "Download desktop",
 } as const;

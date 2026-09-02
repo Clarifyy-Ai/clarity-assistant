@@ -22,7 +22,7 @@ export default function AdminBulkUpload() {
   }
 
   return (
-    <div className="space-y-6 max-w-5xl pb-20">
+    <div className="space-y-6 max-w-5xl">
       <PageHeader
         title="Bulk Upload Questions"
       description="Import questions and answers for validation and review before publication."

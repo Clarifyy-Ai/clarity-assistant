@@ -1,8 +1,12 @@
 """Test suite for FastAPI health probes, Prometheus metrics, alert manager, and worker recovery."""
+import hashlib
+import hmac
 import time
+import uuid
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
+from app.core.config import get_settings, is_production_app_env
 from app.core.telemetry import (
     alert_manager,
     sanitize_telemetry_payload,
@@ -14,6 +18,22 @@ from app.core.telemetry import (
 @pytest.fixture
 def client():
     return TestClient(app)
+
+
+def _hmac_headers(method: str, path: str, body: bytes = b"") -> dict[str, str]:
+    settings = get_settings()
+    timestamp = int(time.time())
+    request_id = f"reqobs{uuid.uuid4().hex[:16]}"
+    body_digest = hashlib.sha256(body).hexdigest()
+    message = f"{method.upper()}\n{path}\n{timestamp}\n{request_id}\n{body_digest}".encode()
+    signature = hmac.new(
+        settings.internal_auth_secret.encode(), message, hashlib.sha256
+    ).hexdigest()
+    return {
+        "x-request-id": request_id,
+        "x-internal-timestamp": str(timestamp),
+        "x-internal-signature": f"sha256={signature}",
+    }
 
 
 def test_health_endpoint(client):
@@ -46,8 +66,14 @@ def test_ready_endpoint(client):
 
 
 def test_metrics_endpoint(client):
-    """GET /metrics exports Prometheus plain text metrics."""
-    response = client.get("/metrics")
+    """GET /metrics exports Prometheus plain text metrics (auth required in production)."""
+    settings = get_settings()
+    unauth = client.get("/metrics")
+    if is_production_app_env(settings.app_env):
+        assert unauth.status_code == 401
+        response = client.get("/metrics", headers=_hmac_headers("GET", "/metrics"))
+    else:
+        response = unauth
     assert response.status_code == 200
     assert "text/plain" in response.headers.get("content-type", "")
 
@@ -78,7 +104,13 @@ def test_alert_manager_triggers_and_redacts_secrets(client):
     assert cleaned["nested"]["token"] == "[REDACTED]"
 
     # Test /alerts endpoint
-    response = client.get("/alerts")
+    settings = get_settings()
+    unauth = client.get("/alerts")
+    if is_production_app_env(settings.app_env):
+        assert unauth.status_code == 401
+        response = client.get("/alerts", headers=_hmac_headers("GET", "/alerts"))
+    else:
+        response = unauth
     assert response.status_code == 200
     alerts_data = response.json()
     assert alerts_data["total_active"] >= 2

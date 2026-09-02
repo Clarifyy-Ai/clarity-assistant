@@ -67,6 +67,8 @@ describe("DD layout density contracts", () => {
     const hub = src("pages/app/admin/AdminAiHub.tsx");
     expect(layout).toMatch(/data-testid="admin-content-pad"/);
     expect(layout).toMatch(/p-4 md:p-6/);
+    expect(layout).toMatch(/h-dvh/);
+    expect(layout).toMatch(/min-w-0 min-h-0/);
     expect(hub).not.toMatch(/className="space-y-4 p-4"/);
     expect(hub).not.toMatch(/className="p-4"/);
   });

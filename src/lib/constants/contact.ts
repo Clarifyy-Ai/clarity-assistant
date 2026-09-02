@@ -25,7 +25,8 @@ export const GITHUB_ORG_URL =
   (import.meta.env.VITE_GITHUB_ORG_URL as string | undefined)?.trim() ||
   "https://github.com/Clarifyy-Ai";
 
-/** Product / service brand name shown in UI and marketing. */
+/** Public website origin shown in emails, legal copy, and canonical URLs. */
+export const PUBLIC_WEBSITE_URL = "https://trycareerpilot.com";
 export const COMPANY_NAME = "Career Pilot";
 
 /** Legal operator name for Terms, Privacy, footer, and email — not the registered entity suffix. */

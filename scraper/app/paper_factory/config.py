@@ -25,6 +25,8 @@ class FactorySettings(BaseSettings):
     # Owner recorded on generated questions. Must be a real auth user because
     # `questions.uploaded_by` references it.
     system_user_id: str = Field("", alias="SYSTEM_USER_ID")
+    # Optional fallback: resolve publishing UUID from profiles.email when SYSTEM_USER_ID unset.
+    system_user_email: str = Field("", alias="SYSTEM_USER_EMAIL")
 
     # AI providers. Gemini is primary; OpenAI is the fallback when configured.
     gemini_api_key: str = Field("", alias="GEMINI_API_KEY")

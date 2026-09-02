@@ -9,7 +9,7 @@
  * goes through signedFetch with AbortController + timeoutMs.
  */
 
-import { signInternalRequest } from "./pythonClient.ts";
+import { sanitizeInternalServiceUrl, signInternalRequest } from "./pythonClient.ts";
 
 export const DEFAULT_TIMEOUT_MS = 25_000;
 /** Ack-only: Python claims (or worker already owns) and continues in background. */
@@ -138,13 +138,8 @@ export function resolvePythonGovExamBaseUrl(): string | null {
   ]) {
     const raw = env(key);
     if (!raw) continue;
-    try {
-      const u = new URL(raw);
-      if (u.protocol !== "http:" && u.protocol !== "https:") continue;
-      return `${u.origin}${u.pathname.replace(/\/$/, "")}`;
-    } catch {
-      // ignore malformed
-    }
+    const sanitized = sanitizeInternalServiceUrl(raw);
+    if (sanitized) return sanitized;
   }
   return null;
 }

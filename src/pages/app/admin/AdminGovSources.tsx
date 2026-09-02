@@ -127,7 +127,7 @@ export default function AdminGovSources() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-6 max-w-6xl min-w-0">
       <PageHeader
         title="Official sources"
         description="Register and review official exam links (metadata only — no scraping)."
@@ -230,7 +230,7 @@ export default function AdminGovSources() {
         </Select>
       </div>
 
-      <Card className="overflow-hidden" padding="none">
+      <Card className="overflow-hidden min-w-0" padding="none">
         <Table>
           <TableHeader>
             <TableRow>

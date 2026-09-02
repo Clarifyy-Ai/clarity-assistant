@@ -3,6 +3,8 @@ import { useEffect } from "react";
 interface PageMetaOptions {
   title?: string;
   description?: string;
+  /** Comma-separated keywords for engines that still read this tag */
+  keywords?: string;
   /** When true, adds robots noindex,nofollow for auth and error pages */
   noIndex?: boolean;
   /** Absolute or relative canonical URL for the current page */
@@ -56,6 +58,7 @@ function upsertLink(
 export function usePageMeta({
   title,
   description,
+  keywords,
   noIndex,
   canonical,
   ogImage,
@@ -84,6 +87,14 @@ export function usePageMeta({
           if (prevDesc) metaDesc.content = prevDesc;
         });
       }
+    }
+
+    if (keywords) {
+      const kw = upsertMeta('meta[name="keywords"]', "name", "keywords", keywords);
+      cleanups.push(() => {
+        if (kw.created) kw.el.remove();
+        else if (kw.prev) kw.el.content = kw.prev;
+      });
     }
 
     // Robots noindex
@@ -138,6 +149,11 @@ export function usePageMeta({
         if (og.created) og.el.remove();
         else if (og.prev) og.el.content = og.prev;
       });
+      const tw = upsertMeta('meta[name="twitter:title"]', "name", "twitter:title", title);
+      cleanups.push(() => {
+        if (tw.created) tw.el.remove();
+        else if (tw.prev) tw.el.content = tw.prev;
+      });
     }
 
     // og:description mirrors description
@@ -151,6 +167,16 @@ export function usePageMeta({
       cleanups.push(() => {
         if (og.created) og.el.remove();
         else if (og.prev) og.el.content = og.prev;
+      });
+      const tw = upsertMeta(
+        'meta[name="twitter:description"]',
+        "name",
+        "twitter:description",
+        description,
+      );
+      cleanups.push(() => {
+        if (tw.created) tw.el.remove();
+        else if (tw.prev) tw.el.content = tw.prev;
       });
     }
 
@@ -202,5 +228,5 @@ export function usePageMeta({
       // Run cleanups in reverse order
       for (let i = cleanups.length - 1; i >= 0; i--) cleanups[i]();
     };
-  }, [title, description, noIndex, canonical, ogImage, ogType, jsonLd]);
+  }, [title, description, keywords, noIndex, canonical, ogImage, ogType, jsonLd]);
 }

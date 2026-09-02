@@ -1,5 +1,5 @@
 /**
- * Post-deploy full test suite for https://clarify.ai.sltfinanceindia.com
+ * Post-deploy full test suite for https://trycareerpilot.com
  * Phases: deploy verify, public API/UI, auth E2E, security, responsive/UX, load probe.
  *
  * Env:
@@ -19,7 +19,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
-const BASE = "https://clarify.ai.sltfinanceindia.com";
+const BASE = "https://trycareerpilot.com";
 const SUPABASE_URL = "https://qzgvjrvtkwlzxpmlddkx.supabase.co";
 const PROJECT_REF = "qzgvjrvtkwlzxpmlddkx";
 

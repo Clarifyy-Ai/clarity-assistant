@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapSessionStartRpcFailure } from "../../../../supabase/functions/_shared/sessionLifecycleRpc";
+import { mapSessionStartRpcFailure, shouldReuseExistingOnConflict, isOpenPracticeStatus } from "../../../../supabase/functions/_shared/sessionLifecycleRpc";
 
 describe("mapSessionStartRpcFailure", () => {
   it("maps lifecycle check violations to SESSION_STATE_CONFLICT (409)", () => {
@@ -31,6 +31,15 @@ describe("mapSessionStartRpcFailure", () => {
     const mapped = mapSessionStartRpcFailure("connection reset by peer");
     expect(mapped.status).toBe(503);
     expect(mapped.code).toBe("DEPENDENCY_UNAVAILABLE");
+  });
+
+  it("treats SESSION_STATE_CONFLICT as a reuse signal, not an unhandled 500", () => {
+    const mapped = mapSessionStartRpcFailure("session_state_conflict");
+    expect(mapped.status).toBe(409);
+    expect(shouldReuseExistingOnConflict(mapped.code)).toBe(true);
+    expect(isOpenPracticeStatus("active")).toBe(true);
+    expect(isOpenPracticeStatus("pending")).toBe(true);
+    expect(isOpenPracticeStatus("completed")).toBe(false);
   });
 
   it("maps FK violations to VALIDATION_ERROR (422)", () => {

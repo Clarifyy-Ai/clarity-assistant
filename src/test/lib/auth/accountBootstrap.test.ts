@@ -28,7 +28,7 @@ describe("classifyAccountLoadFailure / userFacingAccountError", () => {
     expect(classifyAccountLoadFailure(new Error("Invalid login credentials"))).toBe(
       "invalid_credentials",
     );
-    expect(classifyAccountLoadFailure(new Error("Role check timed out after 4s"))).toBe(
+    expect(classifyAccountLoadFailure(new Error("Role check timed out after 6s"))).toBe(
       "timeout",
     );
     expect(userFacingAccountError("invalid_credentials")).toBe(
@@ -62,6 +62,16 @@ describe("withTimeout", () => {
     const pending = withTimeout(new Promise<string>(() => {}), 1000, "Role check");
     const assertion = expect(pending).rejects.toThrow(/Role check timed out after 1s/);
     await vi.advanceTimersByTimeAsync(1000);
+    await assertion;
+  });
+
+  it("cancels when the abort signal fires", async () => {
+    const abort = new AbortController();
+    const pending = withTimeout(new Promise<string>(() => {}), 5000, "Profile load", {
+      signal: abort.signal,
+    });
+    const assertion = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    abort.abort();
     await assertion;
   });
 });

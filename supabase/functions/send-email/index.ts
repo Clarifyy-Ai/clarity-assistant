@@ -9,14 +9,14 @@ import {
   getAdminClient,
 } from "../_shared/utils.ts";
 import { enforceEmailRateLimitAsync } from "../_shared/rateLimit.ts";
+import { isHostingerMailConfigured, sendHostingerEmail } from "../_shared/hostingerMail.ts";
+import { emailButton, publicAppUrl, wrapCareerPilotEmail } from "../_shared/emailLayout.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const FROM_EMAIL =
   Deno.env.get("RESEND_FROM_EMAIL") ??
   Deno.env.get("FROM_EMAIL") ??
   "Career Pilot <hello@trycareerpilot.com>";
-/** Public legal operator name — not "Payara Innovations Private Limited". */
-const LEGAL_ENTITY_NAME = "Payara Labs";
 
 /* -------------------------------------------------------------------------- */
 /*                              HELPERS                                       */
@@ -74,6 +74,23 @@ async function sendEmailResend(to: string, subject: string, html: string): Promi
   return res.ok;
 }
 
+function emailProviderConfigured(): boolean {
+  return isHostingerMailConfigured() || RESEND_API_KEY.trim().length > 0;
+}
+
+/** Prefer Hostinger Mail API when the token is set; otherwise Resend. */
+async function sendProductEmail(to: string, subject: string, html: string): Promise<boolean> {
+  if (isHostingerMailConfigured()) {
+    const result = await sendHostingerEmail({ to, subject, html });
+    if (!result.ok) {
+      console.error("[send-email] Hostinger error:", result.status, result.error);
+    }
+    return result.ok;
+  }
+  if (!RESEND_API_KEY.trim()) return false;
+  return sendEmailResend(to, subject, html);
+}
+
 /* -------------------------------------------------------------------------- */
 /*                           EMAIL TEMPLATES                                  */
 /* -------------------------------------------------------------------------- */
@@ -91,98 +108,81 @@ type EmailType = (typeof ALLOWED_TYPES)[number];
 
 function renderTemplate(type: EmailType, data: Record<string, unknown>) {
   const safe = (x: unknown, max = 500) => sanitize(x, max);
-
-  const base = (inner: string) => `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8"/>
-  <style>
-    body { font-family: Inter, system-ui, sans-serif; background: #0B1220; color: #F5F7FA; margin: 0; padding: 0; }
-    .container { max-width: 560px; margin: 0 auto; padding: 40px 24px; }
-    .logo { font-size: 20px; font-weight: 800; color: #38BDF8; margin-bottom: 32px; }
-    .card { background: #163B73; border: 1px solid rgba(56,189,248,0.18); border-radius: 16px; padding: 24px; margin: 16px 0; }
-    .btn { display: inline-block; background: #2563EB; color: white !important; text-decoration: none; padding: 12px 24px; border-radius: 12px; font-weight: 600; font-size: 14px; margin-top: 16px; }
-    h1 { font-size: 24px; font-weight: 800; margin: 0 0 8px; }
-    p { font-size: 14px; color: #9ca3af; line-height: 1.6; margin: 8px 0; }
-    .footer { font-size: 11px; color: #4b5563; margin-top: 32px; text-align: center; }
-  </style>
-</head>
-<body>
-<div class="container">
-  <div class="logo">Career Pilot</div>
-  ${inner}
-  <div class="footer">
-    © ${new Date().getFullYear()} ${LEGAL_ENTITY_NAME} · <a href="https://confideq.app/unsubscribe" style="color:#4b5563;">Unsubscribe</a>
-  </div>
-</div>
-</body>
-</html>`;
+  const app = publicAppUrl();
+  const heading = (text: string) =>
+    `<h1 style="font-size:22px;font-weight:800;margin:0 0 12px;color:#F8FAFC;">${text}</h1>`;
+  const para = (text: string) =>
+    `<p style="font-size:14px;line-height:1.65;color:#CBD5E1;margin:8px 0;">${text}</p>`;
 
   switch (type) {
     case "interview_reminder":
       return {
         subject: `Interview reminder: ${safe(data.company)} in ${safe(data.time_until)}`,
-        html: base(`
-          <div class="card">
-            <h1>Interview soon!</h1>
-            <p>Your interview with <strong>${safe(data.company)}</strong> for <strong>${safe(data.role)}</strong> begins in ${safe(data.time_until)}.</p>
-            <p>${safe(data.time)} · ${safe(data.platform)}</p>
-            ${data.meeting_link ? `<a class="btn" href="${sanitize(data.meeting_link)}">Open meeting</a>` : ""}
-          </div>`),
+        html: wrapCareerPilotEmail(
+          `${heading("Interview soon")}
+          ${para(`Your interview with <strong style="color:#F8FAFC;">${safe(data.company)}</strong> for <strong style="color:#F8FAFC;">${safe(data.role)}</strong> begins in ${safe(data.time_until)}.`)}
+          ${para(`${safe(data.time)} · ${safe(data.platform)}`)}
+          ${data.meeting_link ? emailButton(sanitize(data.meeting_link), "Open meeting") : emailButton(`${app}/app/interviews`, "View in Career Pilot")}`,
+          { preheader: `Interview with ${safe(data.company)} in ${safe(data.time_until)}` },
+        ),
       };
     case "debrief_ready":
       return {
         subject: `Your interview debrief is ready (${safe(data.score)}/100)`,
-        html: base(`
-          <div class="card">
-            <h1>Debrief ready!</h1>
-            <p>You scored <strong>${safe(data.score)}</strong> on your interview.</p>
-            <a class="btn" href="https://confideq.app/app/debrief/${safe(data.debrief_id)}">View debrief</a>
-          </div>`),
+        html: wrapCareerPilotEmail(
+          `${heading("Debrief ready")}
+          ${para(`You scored <strong style="color:#F8FAFC;">${safe(data.score)}</strong> on your interview.`)}
+          ${emailButton(`${app}/app/debrief/${safe(data.debrief_id)}`, "View debrief")}`,
+          { preheader: "Your Career Pilot interview debrief is ready." },
+        ),
       };
     case "weekly_report":
       return {
         subject: `Your weekly Career Pilot report — ${safe(data.sessions_this_week)} sessions`,
-        html: base(`
-          <div class="card">
-            <h1>This week's summary</h1>
-            <p>Sessions: ${safe(data.sessions_this_week)}</p>
-            <p>Average score: ${safe(data.avg_score)}</p>
-            <p>Streak: ${safe(data.streak)} days</p>
-          </div>`),
+        html: wrapCareerPilotEmail(
+          `${heading("This week's summary")}
+          ${para(`Sessions: ${safe(data.sessions_this_week)}`)}
+          ${para(`Average score: ${safe(data.avg_score)}`)}
+          ${para(`Streak: ${safe(data.streak)} days`)}
+          ${emailButton(`${app}/app/dashboard`, "Open dashboard")}`,
+          { preheader: "Your weekly Career Pilot practice summary." },
+        ),
       };
     case "welcome":
       return {
-        subject: "Welcome to Career Pilot! 🎉",
-        html: base(`
-          <div class="card">
-            <h1>Welcome ${safe(data.name)}</h1>
-            <p>You're ready to start preparing!</p>
-            <a href="https://confideq.app/app/dashboard" class="btn">Start practicing</a>
-          </div>`),
+        subject: "Welcome to Career Pilot",
+        html: wrapCareerPilotEmail(
+          `${heading(`Welcome${data.name ? `, ${safe(data.name)}` : ""}`)}
+          ${para("You're ready to start preparing for interviews and exams with Career Pilot.")}
+          ${emailButton(`${app}/app/dashboard`, "Start practicing")}`,
+          { preheader: "Welcome to Career Pilot." },
+        ),
       };
     case "low_credits":
       return {
-        subject: `Low Credits — ${safe(data.remaining)} left`,
-        html: base(`
-          <div class="card">
-            <h1>Running low on credits</h1>
-            <p>You have ${safe(data.remaining)} credits remaining.</p>
-            <a href="https://confideq.app/app/settings/credits" class="btn">Buy credits</a>
-          </div>`),
+        subject: `Low credits — ${safe(data.remaining)} left`,
+        html: wrapCareerPilotEmail(
+          `${heading("Running low on credits")}
+          ${para(`You have ${safe(data.remaining)} credits remaining.`)}
+          ${emailButton(`${app}/app/settings/credits`, "Buy credits")}`,
+          { preheader: "Your Career Pilot credits are running low." },
+        ),
       };
     case "streak_reminder":
       return {
-        subject: "🔥 Keep your streak going!",
-        html: base(`
-          <div class="card">
-            <h1>Your practice streak needs you!</h1>
-            <p>Don't break the momentum — complete a session today.</p>
-          </div>`),
+        subject: "Keep your Career Pilot streak going",
+        html: wrapCareerPilotEmail(
+          `${heading("Your practice streak needs you")}
+          ${para("Don't break the momentum — complete a session today.")}
+          ${emailButton(`${app}/app/dashboard`, "Practice now")}`,
+          { preheader: "Complete a session today to keep your streak." },
+        ),
       };
     default:
-      return { subject: "Career Pilot Notification", html: base("<div class='card'>Hello!</div>") };
+      return {
+        subject: "Career Pilot",
+        html: wrapCareerPilotEmail(`${para("Hello from Career Pilot.")}${emailButton(`${app}/app/dashboard`, "Open Career Pilot")}`),
+      };
   }
 }
 
@@ -197,10 +197,10 @@ Deno.serve(async (req) => {
   const correlationId = crypto.randomUUID();
 
   try {
-    if (!RESEND_API_KEY.trim()) {
+    if (!emailProviderConfigured()) {
       return structuredError(
         req,
-        "Email is not configured yet. Add RESEND_API_KEY in Supabase project secrets.",
+        "Email is not configured yet. Add HOSTINGER_MAIL_API_TOKEN or RESEND_API_KEY in Supabase project secrets.",
         "PROVIDER_UNAVAILABLE",
         503,
         correlationId,
@@ -282,7 +282,7 @@ Deno.serve(async (req) => {
     }
 
     const { subject, html } = renderTemplate(type as EmailType, data ?? {});
-    const ok = await sendEmailResend(to, subject, html);
+    const ok = await sendProductEmail(to, subject, html);
 
     log("send-email", "info", "Email sent", { to, type, userId, correlationId, ok });
 

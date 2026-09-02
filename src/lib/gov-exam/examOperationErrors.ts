@@ -85,7 +85,11 @@ export function formatGovExamOperationError(err: unknown): string {
     return `You have reached today's attempt limit. Try again after ${formatResetTime(details?.resetAt)}.`;
   }
 
-  if (code === "CAPABILITY_REQUIRED" || code === "PLAN_UPGRADE_REQUIRED") {
+  if (
+    code === "PLAN_NOT_ALLOWED" ||
+    code === "CAPABILITY_REQUIRED" ||
+    code === "PLAN_UPGRADE_REQUIRED"
+  ) {
     return "This feature requires a supported plan.";
   }
 

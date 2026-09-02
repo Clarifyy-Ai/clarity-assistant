@@ -430,7 +430,7 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
         requested: requestedCount,
         hybrid_fail_closed: fullMockShortWithoutAi,
       }));
-      return json(req, { ...payload, correlationId }, payload.code === "CAPABILITY_REQUIRED" ? 403 : 409);
+      return json(req, { ...payload, correlationId }, payload.code === "PLAN_NOT_ALLOWED" || payload.code === "CAPABILITY_REQUIRED" ? 403 : 409);
     }
     if (plan.kind === "ai_assisted") {
       const capabilityGate = await requireCapabilityForFunction(

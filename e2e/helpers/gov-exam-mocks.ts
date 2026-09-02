@@ -194,6 +194,100 @@ export async function mockGovExamGenerateRoutes(
   });
 }
 
+export type GovPaperPollStep =
+  | {
+      kind: "json";
+      httpStatus?: number;
+      body: Record<string, unknown>;
+    }
+  | {
+      kind: "http";
+      httpStatus: 409 | 429 | 500 | 502 | 503 | 504;
+      code?: string;
+      message?: string;
+    };
+
+/**
+ * Deterministic poll harness. Inject 429/409/5xx without changing production poller logic.
+ */
+export async function mockGovPaperJobPollSequence(
+  page: Page,
+  sequence: GovPaperPollStep[],
+  options?: { jobId?: string; loopLast?: boolean },
+): Promise<{ pollCalls: () => number }> {
+  let pollCalls = 0;
+  const jobId = options?.jobId ?? GOV_JOB_ID;
+
+  await page.route("**/functions/v1/get-paper-generation-job**", async (route) => {
+    if (await fulfillOptions(route)) return;
+    pollCalls += 1;
+    const step =
+      sequence[pollCalls - 1] ??
+      (options?.loopLast === false ? sequence[sequence.length - 1] : sequence[sequence.length - 1]);
+    if (!step) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: corsHeaders(),
+        body: JSON.stringify({ jobId, status: "queued", progressStage: "queued" }),
+      });
+      return;
+    }
+    if (step.kind === "http") {
+      await route.fulfill({
+        status: step.httpStatus,
+        contentType: "application/json",
+        headers: corsHeaders(),
+        body: JSON.stringify({
+          error: step.message ?? "Transient poll error",
+          code: step.code ?? (step.httpStatus === 429 ? "RATE_LIMITED" : "TRANSIENT"),
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: step.httpStatus ?? 200,
+      contentType: "application/json",
+      headers: corsHeaders(),
+      body: JSON.stringify({ jobId, ...step.body }),
+    });
+  });
+
+  return { pollCalls: () => pollCalls };
+}
+
+export async function mockQueuedCreateExamPaper(
+  page: Page,
+  options?: { jobId?: string },
+): Promise<{ createCalls: () => number }> {
+  let createCalls = 0;
+  const jobId = options?.jobId ?? GOV_JOB_ID;
+  await page.route("**/functions/v1/create-exam-paper", async (route) => {
+    if (await fulfillOptions(route)) return;
+    createCalls += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: corsHeaders(),
+      body: JSON.stringify({
+        jobId,
+        status: "queued",
+        progressStage: "queued",
+      }),
+    });
+  });
+  await page.route("**/functions/v1/process-paper-generation-job**", async (route) => {
+    if (await fulfillOptions(route)) return;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: corsHeaders(),
+      body: JSON.stringify({ ok: true }),
+    });
+  });
+  return { createCalls: () => createCalls };
+}
+
 /** Walk the generate wizard to the review step (step 3). */
 export async function navigateToGovExamReview(
   page: Page,

@@ -8,6 +8,7 @@ import {
 } from "@/lib/billing/creditsManager";
 import { formatTalkingPointsAsHint } from "@/lib/ai/resumeFallback";
 import { getAiUserFacingError, openUpgradeIfInsufficientCredits } from "@/lib/network/aiErrorUx";
+import { ApiClientError } from "@/lib/api/apiClient";
 import { generateId } from "@/lib/utils";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useSessionStore } from "@/store/sessionStore";
@@ -60,9 +61,9 @@ export async function loadCoachChatHistory(sessionId: string): Promise<void> {
  */
 export async function submitCoachChatMessage(
   opts: SubmitCoachChatOptions,
-): Promise<void> {
+): Promise<boolean> {
   const profile = useAuthStore.getState().profile;
-  if (!profile) return;
+  if (!profile) return false;
 
   const overlay = useOverlayStore.getState();
   overlay.addChatMessage({
@@ -81,7 +82,7 @@ export async function submitCoachChatMessage(
         : creditCheck.reason ?? "Out of credits",
       timestamp: Date.now(),
     });
-    return;
+    return false;
   }
 
   const assistantId = generateId();
@@ -106,6 +107,11 @@ export async function submitCoachChatMessage(
       message: opts.message,
       sessionId: opts.sessionId,
       conversationId: useOverlayStore.getState().coach_conversation_id,
+      previousTurns: useOverlayStore
+        .getState()
+        .chat_history.filter((m) => m.role === "user" || m.role === "assistant")
+        .slice(-12)
+        .map((m) => ({ role: m.role as "user" | "assistant", text: m.text })),
       currentQuestion: opts.currentQuestion ?? overlay.current_question ?? "",
       recentTranscript: opts.recentTranscript ?? "",
       resumeContext: opts.resumeContext ?? "",
@@ -114,6 +120,7 @@ export async function submitCoachChatMessage(
       coachTone,
       hintStyle,
       model: overlay.active_model,
+      timeoutMs: 45_000,
       idempotencyKey: createIdempotencyKey("ai-coach-chat"),
       signal: opts.signal,
       onMeta: (meta) => {
@@ -150,16 +157,22 @@ export async function submitCoachChatMessage(
         throw error;
       },
     });
+    return true;
   } catch (err) {
     openUpgradeIfInsufficientCredits(err);
-    const msg =
-      getAiUserFacingError(err) ||
-      "Your coach is temporarily unavailable. Please retry.";
+    const timedOut =
+      err instanceof ApiClientError &&
+      (err.code === "REQUEST_ABORTED" || err.status === 408 || /timed? ?out/i.test(err.message));
+    const msg = timedOut
+      ? "Coach reply timed out (CP-10245). Your message was not accepted — retry the same turn."
+      : getAiUserFacingError(err) ||
+        "Your coach is temporarily unavailable. Please retry.";
     useOverlayStore.getState().updateChatMessage(assistantId, {
       text: msg,
       pending: false,
     });
     useOverlayStore.getState().setError(msg);
+    return false;
   } finally {
     useOverlayStore.getState().setChatGenerating(false);
   }

@@ -184,7 +184,7 @@ export default function AdminGovIngest() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-6 max-w-6xl min-w-0">
       <div className="flex items-start gap-3 flex-wrap">
         <Button
           variant="ghost"

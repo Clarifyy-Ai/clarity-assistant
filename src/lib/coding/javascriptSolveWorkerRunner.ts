@@ -127,8 +127,14 @@ export async function runJavascriptSolveTestsAsync(
   cases: SolveTestCase[],
   timeoutMs = 800,
 ): Promise<SolveRunOutcome> {
-  if (!createWorker()) {
-    return runJavascriptSolveTests(source, cases, timeoutMs);
+  if (!Array.isArray(cases) || cases.length === 0) {
+    return {
+      ok: false,
+      results: [],
+      execution_status: "service_error",
+      blockedReason: "No test cases were available to run.",
+      primary_error: "No test cases were available to run.",
+    };
   }
 
   const compiled = compileJavascriptSolve(source);
@@ -143,18 +149,14 @@ export async function runJavascriptSolveTestsAsync(
     };
   }
 
-  if (!cases.length) {
-    return {
-      ok: false,
-      results: [],
-      execution_status: "service_error",
-      blockedReason: "No test cases were available to run.",
-      primary_error: "No test cases were available to run.",
-    };
+  if (!createWorker()) {
+    return runJavascriptSolveTests(source, cases, timeoutMs);
   }
 
   let sawRuntime = false;
   let sawTimeout = false;
+  let sawService = false;
+  let sawCompile = false;
   let primaryError: string | undefined;
   const results = [];
 
@@ -163,22 +165,30 @@ export async function runJavascriptSolveTestsAsync(
     const expected = normalizeSolveValue(testCase.expected);
     const inputPreview = previewSolveValue(input);
     const outcome = await runCaseInWorker(source, input, timeoutMs);
+    const kind = outcome.error_kind ?? "";
 
-    if (outcome.error_kind === "runtime") sawRuntime = true;
-    if (outcome.error_kind === "timeout") sawTimeout = true;
+    if (kind === "runtime") sawRuntime = true;
+    if (kind === "timeout") sawTimeout = true;
+    if (kind === "service") sawService = true;
+    if (kind === "compile" || kind === "blocked") sawCompile = true;
 
     if (!outcome.ok) {
       const error = outcome.error ?? "Runtime error";
       if (!primaryError) primaryError = `${testCase.name}: ${error} (input ${inputPreview})`;
+      const mappedKind =
+        kind === "timeout"
+          ? ("timeout" as const)
+          : kind === "compile" || kind === "blocked"
+            ? ("runtime" as const)
+            : kind === "service"
+              ? ("runtime" as const)
+              : ("runtime" as const);
       results.push({
         id: testCase.id,
         name: testCase.name,
         passed: false,
         error,
-        error_kind:
-          outcome.error_kind === "timeout"
-            ? ("timeout" as const)
-            : ("runtime" as const),
+        error_kind: mappedKind,
         input_preview: inputPreview,
         stdout: outcome.stdout?.join("\n").trim() || undefined,
         stderr: outcome.stderr?.join("\n").trim() || undefined,
@@ -229,13 +239,17 @@ export async function runJavascriptSolveTestsAsync(
   }
 
   const allPassed = results.every((r) => r.passed);
-  const execution_status = sawTimeout
-    ? "timeout"
-    : sawRuntime
-      ? "runtime_error"
-      : allPassed
-        ? "passed"
-        : "failed";
+  const execution_status = sawService
+    ? "service_error"
+    : sawCompile
+      ? "compile_error"
+      : sawTimeout
+        ? "timeout"
+        : sawRuntime
+          ? "runtime_error"
+          : allPassed
+            ? "passed"
+            : "failed";
 
   return {
     ok: allPassed,

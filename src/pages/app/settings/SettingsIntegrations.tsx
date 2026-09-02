@@ -303,7 +303,7 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
           )}
           {connectionStatus === "not_configured" ? (
             <Button variant="ghost" size="sm" disabled title="Calendar sync is not configured">
-              Not configured
+              Requires Configuration
             </Button>
           ) : isProbingSync || isCheckingConnection ? (
             <Button variant="ghost" size="sm" disabled>
@@ -329,8 +329,8 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
               {reauthRequired ? "Reconnect" : "Connect"}
             </Button>
           ) : (
-            <Button variant="ghost" size="sm" disabled>
-              Not configured
+            <Button variant="ghost" size="sm" disabled title="Calendar sync is not configured">
+              Requires Configuration
             </Button>
           )}
         </div>

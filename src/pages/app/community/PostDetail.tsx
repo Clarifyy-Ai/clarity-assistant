@@ -104,25 +104,28 @@ export default function CommunityPostPage() {
     if (!user?.id || !postId || reportInFlightRef.current) return;
     reportInFlightRef.current = true;
     setReportBusy(true);
-    const reason = [reportReason, reportNotes.trim()].filter(Boolean).join(": ").slice(0, 500);
-    const result = await submitCommunityReport({
-      reporterId: user.id,
-      targetType: "post",
-      targetId: postId,
-      reason,
-    });
-    reportInFlightRef.current = false;
-    setReportBusy(false);
-    if (!result.ok) {
-      toast.error(result.message);
-      return;
+    try {
+      const reason = [reportReason, reportNotes.trim()].filter(Boolean).join(": ").slice(0, 500);
+      const result = await submitCommunityReport({
+        reporterId: user.id,
+        targetType: "post",
+        targetId: postId,
+        reason,
+      });
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
+      if (result.alreadyReported) {
+        toast.success("You already reported this post.");
+        return;
+      }
+      toast.success("Report submitted for moderation.");
+      setReportNotes("");
+    } finally {
+      reportInFlightRef.current = false;
+      setReportBusy(false);
     }
-    if (result.alreadyReported) {
-      toast.error("You already reported this post.");
-      return;
-    }
-    toast.success("Report submitted for moderation.");
-    setReportNotes("");
   }
 
   return (

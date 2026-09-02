@@ -75,6 +75,39 @@ describe("mergeBillingHistoryTransactions", () => {
     expect(merged.every((t) => t.credits === 0 || t.status === "completed")).toBe(true);
   });
 
+  it("surfaces refunded payment orders and refund ledger rows", () => {
+    const merged = mergeBillingHistoryTransactions(
+      [
+        {
+          id: "ct-refund",
+          amount: -50,
+          action: "refund",
+          created_at: "2026-01-05T12:00:00Z",
+          stripe_payment_id: "razorpay_refund_order_po-1",
+        },
+      ],
+      [
+        {
+          id: "po-1",
+          product_type: "credits_50",
+          amount_paise: 69_900,
+          status: "refunded",
+          created_at: "2026-01-04T09:00:00Z",
+          paid_at: "2026-01-04T09:05:00Z",
+          provider: "razorpay",
+          credits_granted: 50,
+          provider_payment_id: "pay_abc",
+        },
+      ],
+    );
+
+    const refunds = merged.filter((t) => t.type === "refund");
+    expect(refunds.length).toBeGreaterThanOrEqual(2);
+    expect(merged.find((t) => t.id === "order:po-1")?.status).toBe("refunded");
+    expect(merged.find((t) => t.id === "order:po-1")?.description).toMatch(/Refund/i);
+    expect(merged.find((t) => t.id === "ledger:ct-refund")?.credits).toBe(-50);
+  });
+
   it("keeps bonus ledger rows even when payment id is present", () => {
     const merged = mergeBillingHistoryTransactions(
       [

@@ -16,7 +16,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..");
 const OUT_JSON = path.join(ROOT, "docs/qa/audits/p0-p1-live-results.json");
 
-const BASE = process.env.QA_BASE_URL || "https://clarify.ai.sltfinanceindia.com";
+const BASE = process.env.QA_BASE_URL || "https://trycareerpilot.com";
 
 function loadCredsFromXlsx() {
   try {

@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   MFA_TOTP_FRIENDLY_NAME,
   collectMfaFactors,
   findUnverifiedTotp,
   findVerifiedTotp,
   isFriendlyNameConflictError,
+  verifyTotpChallenge,
 } from "@/lib/auth/mfaFactors";
 
 describe("mfaFactors", () => {
@@ -49,5 +50,26 @@ describe("mfaFactors", () => {
       ),
     ).toBe(true);
     expect(isFriendlyNameConflictError("network timeout")).toBe(false);
+  });
+
+  it("verifies TOTP only after a challenge id is issued", async () => {
+    const challenge = vi.fn().mockResolvedValue({ data: { id: "ch-1" }, error: null });
+    const verify = vi.fn().mockResolvedValue({ error: null });
+    await verifyTotpChallenge({ challenge, verify }, { factorId: "f1", code: "123456" });
+    expect(challenge).toHaveBeenCalledWith({ factorId: "f1" });
+    expect(verify).toHaveBeenCalledWith({
+      factorId: "f1",
+      challengeId: "ch-1",
+      code: "123456",
+    });
+  });
+
+  it("does not call verify when challenge returns no id", async () => {
+    const challenge = vi.fn().mockResolvedValue({ data: {}, error: null });
+    const verify = vi.fn();
+    await expect(
+      verifyTotpChallenge({ challenge, verify }, { factorId: "f1", code: "123456" }),
+    ).rejects.toThrow(/couldn't start two-factor/i);
+    expect(verify).not.toHaveBeenCalled();
   });
 });

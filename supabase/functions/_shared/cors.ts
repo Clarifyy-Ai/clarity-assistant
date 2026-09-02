@@ -11,10 +11,11 @@
 // HOW TO CONFIGURE:
 //
 // ALLOWED_ORIGINS — comma-separated explicit origins
-//   https://clarify.ai.sltfinanceindia.com,https://clarityapp.ai,https://www.clarityapp.ai
+//   https://trycareerpilot.com,https://www.trycareerpilot.com,https://clarify.ai.sltfinanceindia.com
 //
-// ALLOW_LOCALHOST_ORIGINS — "true" (default) or "false"
-// ALLOW_PREVIEW_ORIGINS — "true" (default) or "false" (Lovable preview hosts)
+// ALLOW_LOCALHOST_ORIGINS — unset defaults false in production, true otherwise
+// ALLOW_PREVIEW_ORIGINS — unset defaults false in production, true otherwise
+//   (Lovable preview hosts). Never leave this true on the live Edge project.
 // ALLOW_ELECTRON_NULL_ORIGIN — "true" (default) or "false" (file:// Electron).
 //   Unset env is treated as true. Secret sync also defaults this secret to "true"
 //   when local env does not set a usable value.
@@ -62,6 +63,8 @@ const LOCAL_DEV_ORIGINS = [
 
 /** Known production browser origins — merged even if ALLOWED_ORIGINS secret is missing. */
 const KNOWN_PRODUCTION_ORIGINS = [
+  "https://trycareerpilot.com",
+  "https://www.trycareerpilot.com",
   "https://clarify.ai.sltfinanceindia.com",
   "https://clarityapp.ai",
   "https://www.clarityapp.ai",
@@ -200,7 +203,7 @@ function getAllowedOrigins(): Set<string> {
   const origins = new Set<string>();
   const isProduction = isProductionEnvironment();
 
-  if (envFlag("ALLOW_LOCALHOST_ORIGINS", true)) {
+  if (envFlag("ALLOW_LOCALHOST_ORIGINS", !isProduction)) {
     for (const origin of LOCAL_DEV_ORIGINS) {
       addOriginIfValid(origins, origin);
     }
@@ -246,7 +249,7 @@ function getRequestOrigin(req: Request): string | null {
 }
 
 function isPreviewOrigin(origin: string): boolean {
-  if (!envFlag("ALLOW_PREVIEW_ORIGINS", true)) return false;
+  if (!envFlag("ALLOW_PREVIEW_ORIGINS", !isProductionEnvironment())) return false;
   try {
     const { protocol, hostname } = new URL(origin);
     if (protocol !== "https:") return false;

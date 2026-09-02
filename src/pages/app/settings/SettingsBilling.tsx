@@ -142,7 +142,7 @@ export default function SettingsBilling(): JSX.Element {
   const [razorpayLoading, setRazorpayLoading] = useState<string | null>(null);
   const [checkoutPhase, setCheckoutPhase] = useState<CheckoutPhase | null>(null);
   /** Sum of debit amounts this calendar month; null when unknown / N/A. */
-  const [creditsUsedThisPeriod, setCreditsUsedThisPeriod] = useState<number | null>(null);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   /** Sync lock so double-click before React re-render cannot start two checkouts. */
   const checkoutLockRef = useRef(false);
 
@@ -192,6 +192,7 @@ export default function SettingsBilling(): JSX.Element {
       setSubscription(sub);
       await refreshCredits();
       await loadPeriodUsage();
+      setHistoryRefreshKey((n) => n + 1);
     } catch (error) {
       console.error("[SettingsBilling] Failed to load billing details:", error);
       setSubError("Could not load billing details. Please refresh.");
@@ -754,7 +755,7 @@ export default function SettingsBilling(): JSX.Element {
       </div>
 
       <div>
-        <BillingHistory itemsPerPage={8} />
+        <BillingHistory itemsPerPage={8} refreshKey={historyRefreshKey} />
       </div>
     </div>
   );

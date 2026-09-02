@@ -281,6 +281,16 @@ export type CreateExamPaperRequest = {
   idempotencyKey: string;
   /** auto (default) | edge | python — server picks runtime when auto. */
   generator?: "auto" | "edge" | "python";
+  generationConfig?: {
+    examId: string;
+    stageId: string;
+    basis: string;
+    language: string;
+    durationMinutes: number;
+    questionCount: number;
+    topics?: string[];
+    difficulty?: string;
+  };
 };
 
 export type PaperJobResult = {
@@ -657,6 +667,14 @@ export type ExamPaperAvailability = {
   eligible?: number;
   available: number;
   missing: number;
+  sourceCounts?: {
+    official_verified: number;
+    verified_public: number;
+    approved_bank: number;
+    generated_practice: number;
+  };
+  allowedFallback?: boolean;
+  durationMinutes?: number | null;
   inventoryClass?: "official_pyq" | "approved_practice";
   inventorySource?: "canonical_rpc" | "python_authoritative";
   /** Availability is a read-only preflight and never charges credits. */
@@ -693,6 +711,7 @@ export async function checkExamPaperAvailability(params: {
   mode?: "official_previous" | "generated_mock" | "custom_mock" | "adaptive";
   language?: string;
   questionCount?: number;
+  durationMinutes?: number;
   topics?: string[];
   difficulty?: "EASY" | "MEDIUM" | "HARD" | null;
   generator?: "auto" | "edge" | "python";
@@ -703,6 +722,7 @@ export async function checkExamPaperAvailability(params: {
     mode: params.mode ?? "custom_mock",
     language: params.language ?? "en",
     questionCount: params.questionCount,
+    durationMinutes: params.durationMinutes,
     topics: params.topics ?? [],
     difficulty: params.difficulty ?? null,
     generator: params.generator,

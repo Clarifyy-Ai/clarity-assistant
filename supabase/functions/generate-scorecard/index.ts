@@ -168,7 +168,10 @@ function wordCount(text: string): number {
 }
 
 function hasAnswers(answers: AnswerRow[]): AnswerRow[] {
-  return answers.filter((row) => sanitizeText(row.answer, 20_000).length > 0);
+  return answers.filter((row) => {
+    const text = sanitizeText(row.answer, 20_000);
+    return text.length > 0 && text !== "(skipped)";
+  });
 }
 
 function isNonResponsiveAnswer(answer: string): boolean {
@@ -756,6 +759,7 @@ function scorecardRow(userId: string, sessionId: string, payload: ScorePayload) 
       uncertainty: payload.uncertainty,
       evidence_snippets: payload.evidence_snippets,
       scoring_source: payload.scoring_source,
+      evaluation_status: "scored",
       answer_quality_classes: payload.question_scores.map((q) => q.quality_class ?? "VALID"),
     },
   };

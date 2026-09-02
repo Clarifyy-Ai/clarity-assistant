@@ -2,11 +2,11 @@ import { Link } from "react-router-dom";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import { Briefcase, Mail } from "lucide-react";
-import { SALES_EMAIL, SUPPORT_EMAIL } from "@/lib/constants/contact";
+import { PUBLIC_WEBSITE_URL, SALES_EMAIL, SUPPORT_EMAIL } from "@/lib/constants/contact";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { useEffect } from "react";
 
-const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
+const SITE_URL = PUBLIC_WEBSITE_URL;
 
 /**
  * Honest careers surface for TC-PUB-014 — no fake open roles or broken "Apply" CTAs.

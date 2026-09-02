@@ -48,7 +48,12 @@ import {
 import {
   mapSessionStartRpcFailure,
   rpcJson,
+  isOpenPracticeStatus,
+  isTerminalPracticeStatus,
+  shouldReuseExistingOnConflict,
+  PRACTICE_SESSION_DB_TYPES,
 } from "../_shared/sessionLifecycleRpc.ts";
+import { refundCredits } from "../_shared/supabase.ts";
 
 const FUNCTION_NAME = "start-session";
 
@@ -251,6 +256,9 @@ type ExistingSessionRow = {
   created_at: string;
   status: string;
   practice_context_id?: string | null;
+  started_at?: string | null;
+  expires_at?: string | null;
+  lifecycle_status?: string | null;
 };
 
 function shouldReuseExistingSession(opts: {
@@ -258,14 +266,95 @@ function shouldReuseExistingSession(opts: {
   existingContextId: string | null | undefined;
   requestContextId: string | null | undefined;
 }): boolean {
-  const status = String(opts.existingStatus ?? "").toLowerCase();
-  if (status === "completed" || status === "abandoned") return false;
-  if (status !== "pending") return false;
+  if (!isOpenPracticeStatus(opts.existingStatus)) return false;
   const existing = opts.existingContextId ?? null;
   const request = opts.requestContextId ?? null;
   if (request && existing !== request) return false;
   if (!request && existing) return false;
   return true;
+}
+
+function jsonOkSession(
+  corsHeaders: HeadersInit,
+  started: {
+    session_id?: string;
+    started_at?: string;
+    expires_at?: string | null;
+    reused?: boolean;
+    status?: string;
+    lifecycle_status?: string;
+  },
+  config: unknown,
+  nowIso: string,
+): Response {
+  return json(corsHeaders, 200, {
+    session_id: started.session_id,
+    config,
+    started_at: started.started_at ?? nowIso,
+    expires_at: started.expires_at ?? null,
+    reused: Boolean(started.reused),
+    status: started.status ?? "active",
+    lifecycle_status: started.lifecycle_status ?? "IN_PROGRESS",
+  });
+}
+
+async function findReusablePracticeSession(
+  db: ReturnType<typeof createServiceClient>,
+  userId: string,
+  sessionType: SessionType,
+  practiceContextId: string | null,
+): Promise<ExistingSessionRow | null> {
+  const types = PRACTICE_SESSION_DB_TYPES.includes(sessionType as (typeof PRACTICE_SESSION_DB_TYPES)[number])
+    ? [...PRACTICE_SESSION_DB_TYPES]
+    : [sessionType];
+
+  const { data, error } = await db
+    .from("sessions")
+    .select("id, created_at, status, practice_context_id, started_at, expires_at, lifecycle_status")
+    .eq("user_id", userId)
+    .in("type", types)
+    .in("status", ["pending", "active", "paused"])
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(5);
+  if (error || !data?.length) return null;
+
+  for (const row of data as ExistingSessionRow[]) {
+    if (
+      shouldReuseExistingSession({
+        existingStatus: row.status,
+        existingContextId: row.practice_context_id,
+        requestContextId: practiceContextId,
+      })
+    ) {
+      return row;
+    }
+  }
+  return (data[0] as ExistingSessionRow) ?? null;
+}
+
+async function rollbackFailedInitialization(
+  db: ReturnType<typeof createServiceClient>,
+  userId: string,
+  sessionId: string,
+  credit: { cost: number; idempotencyKey: string } | null,
+): Promise<void> {
+  await rpcJson(db, "end_owned_session", {
+    p_user_id: userId,
+    p_session_id: sessionId,
+    p_terminal_reason: "CANCELLED",
+    p_lifecycle_status: "CANCELLED",
+  });
+  if (credit && credit.cost > 0) {
+    await refundCredits({
+      userId,
+      cost: credit.cost,
+      reason: "session_init_failed",
+      idempotencyKey: `refund:start-session:${credit.idempotencyKey}`,
+    }).catch((refundErr) => {
+      console.warn("[start-session] credit refund failed:", refundErr);
+    });
+  }
 }
 
 type CreatedSessionRow = {
@@ -947,6 +1036,28 @@ Deno.serve(async (req: Request) => {
   const documentId = await resolveDocumentsFk(db, body.resume_id);
   const jdId = await resolveDocumentsFk(db, resolvedJdInput);
 
+  const reusable = await findReusablePracticeSession(
+    db,
+    user.id,
+    sessionType,
+    practiceContextId,
+  );
+  if (reusable && isOpenPracticeStatus(reusable.status)) {
+    return jsonOkSession(
+      corsHeaders,
+      {
+        session_id: reusable.id,
+        started_at: reusable.started_at ?? reusable.created_at,
+        expires_at: reusable.expires_at ?? null,
+        reused: true,
+        status: reusable.status,
+        lifecycle_status: reusable.lifecycle_status ?? "IN_PROGRESS",
+      },
+      config,
+      nowIso,
+    );
+  }
+
   const { data: started, error: startErr } = await rpcJson(db, "start_owned_session", {
     p_user_id: user.id,
     // sessions.type has no 'practice' value — always map before the RPC.
@@ -965,13 +1076,57 @@ Deno.serve(async (req: Request) => {
   if (startErr) {
     console.error("[start-session] start rpc:", startErr);
     const mapped = mapSessionStartRpcFailure(startErr);
+    if (mapped.code === "SESSION_STATE_CONFLICT" || shouldReuseExistingOnConflict(mapped.code)) {
+      const existing = await findReusablePracticeSession(
+        db,
+        user.id,
+        sessionType,
+        practiceContextId,
+      );
+      if (existing && isOpenPracticeStatus(existing.status)) {
+        return jsonOkSession(
+          corsHeaders,
+          {
+            session_id: existing.id,
+            started_at: existing.started_at ?? existing.created_at,
+            expires_at: existing.expires_at ?? null,
+            reused: true,
+            status: existing.status,
+            lifecycle_status: existing.lifecycle_status ?? "IN_PROGRESS",
+          },
+          config,
+          nowIso,
+        );
+      }
+    }
     return json(corsHeaders, mapped.status, {
       error: mapped.error,
       code: mapped.code,
     });
   }
 
-  if (started.reason === "SESSION_STATE_CONFLICT") {
+  if (shouldReuseExistingOnConflict(String(started.reason ?? ""))) {
+    const existing = await findReusablePracticeSession(
+      db,
+      user.id,
+      sessionType,
+      practiceContextId,
+    );
+    if (existing && isOpenPracticeStatus(existing.status)) {
+      return jsonOkSession(
+        corsHeaders,
+        {
+          session_id: existing.id,
+          started_at: existing.started_at ?? existing.created_at,
+          expires_at: existing.expires_at ?? null,
+          reused: true,
+          status: existing.status,
+          lifecycle_status: existing.lifecycle_status ?? "IN_PROGRESS",
+        },
+        config,
+        nowIso,
+      );
+    }
     return json(corsHeaders, 409, {
       error: String(started.error ?? "Could not create session due to a concurrent start."),
       code: "SESSION_STATE_CONFLICT",
@@ -994,12 +1149,7 @@ Deno.serve(async (req: Request) => {
   const reusedLife = String(started.lifecycle_status ?? "").toUpperCase();
   if (
     started.reused === true &&
-    (reusedStatus === "completed" ||
-      reusedStatus === "abandoned" ||
-      reusedStatus === "cancelled" ||
-      reusedLife === "COMPLETED" ||
-      reusedLife === "EXPIRED" ||
-      reusedLife === "CANCELLED")
+    (isTerminalPracticeStatus(reusedStatus) || isTerminalPracticeStatus(reusedLife))
   ) {
     return json(corsHeaders, 409, {
       error: "That practice session already ended. Start a new one.",
@@ -1022,12 +1172,7 @@ Deno.serve(async (req: Request) => {
     if (consumeErr) {
       console.error("[start-session] consume context:", consumeErr.message);
     } else if (!consumed) {
-      await rpcJson(db, "end_owned_session", {
-        p_user_id: user.id,
-        p_session_id: started.session_id,
-        p_terminal_reason: "CANCELLED",
-        p_lifecycle_status: "CANCELLED",
-      });
+      await rollbackFailedInitialization(db, user.id, started.session_id, null);
       return json(corsHeaders, 409, {
         error: "This practice launch was already used.",
         code: "PRACTICE_CONTEXT_CONSUMED",
@@ -1055,15 +1200,7 @@ Deno.serve(async (req: Request) => {
     console.warn("[start-session] audit failed:", auditErr);
   }
 
-  return json(corsHeaders, 200, {
-    session_id: started.session_id,
-    config,
-    started_at: started.started_at ?? nowIso,
-    expires_at: started.expires_at ?? null,
-    reused: Boolean(started.reused),
-    status: started.status ?? "active",
-    lifecycle_status: started.lifecycle_status ?? "IN_PROGRESS",
-  });
+  return jsonOkSession(corsHeaders, started, config, nowIso);
   } catch (error) {
     if (
       error instanceof Error &&

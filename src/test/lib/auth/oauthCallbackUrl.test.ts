@@ -11,7 +11,7 @@ describe("buildOAuthCallbackUrl", () => {
     vi.stubEnv("VITE_APP_URL", "http://localhost:5173");
     const { buildOAuthCallbackUrl } = await import("@/lib/auth/oauthCallbackUrl");
     expect(buildOAuthCallbackUrl("http://localhost:5173")).toBe(
-      "https://clarify.ai.sltfinanceindia.com/auth/callback",
+      "https://trycareerpilot.com/auth/callback",
     );
   });
 

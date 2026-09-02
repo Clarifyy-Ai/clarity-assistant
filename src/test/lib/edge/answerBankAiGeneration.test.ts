@@ -51,6 +51,16 @@ describe("Answer Bank AI generation (prep-tool)", () => {
     expect(answerBank).toContain('"raw_prompt"');
   });
 
+  it("star_method returns python outline instead of deferring to AI (avoids 503 when Gemini is down)", () => {
+    expect(prepTool).toContain("deterministicStarOutline");
+    expect(prepTool).toContain("return pythonStarMethodDraft");
+    expect(prepTool).not.toContain("Defer success to runAi");
+    const router = readShared("operationRouter.ts");
+    expect(router).toMatch(
+      /star_builder:[\s\S]*preferredOrder:\s*\["ai",\s*"python",\s*"deterministic"\]/,
+    );
+  });
+
   it("Answer Bank uses content-stable idempotency keys (not random per click)", () => {
     expect(answerBank).toContain("prepToolContentIdempotencyKey");
     expect(answerBank).toContain("parsePrepToolResponse");

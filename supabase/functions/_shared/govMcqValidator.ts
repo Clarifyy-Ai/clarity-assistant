@@ -154,6 +154,30 @@ export function findNearDuplicatesInSet(
   return pairs;
 }
 
+/**
+ * Drop later collisions so two near-duplicates cannot occupy the same paper.
+ * Fingerprint + stem near-dup; keeps the first occurrence.
+ */
+export function collapseIntraPaperCollisions<T>(
+  questions: T[],
+  textOf: (q: T) => string,
+  optionsOf?: (q: T) => string[],
+): T[] {
+  const kept: T[] = [];
+  const stems: string[] = [];
+  const fps = new Set<string>();
+  for (const q of questions) {
+    const text = textOf(q);
+    const options = optionsOf ? optionsOf(q) : [];
+    const fp = questionFingerprint(text, options);
+    if (fps.has(fp) || conflictsWithSelected(text, stems)) continue;
+    fps.add(fp);
+    stems.push(text);
+    kept.push(q);
+  }
+  return kept;
+}
+
 export function validateSingleCorrectMcq(q: {
   question_text: string;
   options: string[];

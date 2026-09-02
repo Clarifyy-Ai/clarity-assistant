@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
+import { formatAdminRelativeTime } from "@/lib/admin/searchFilter";
+import { toAdminUserMessage } from "@/lib/admin/adminErrors";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
@@ -98,14 +100,27 @@ export default function AdminLiveChat() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [realtimeDegraded, setRealtimeDegraded] = useState(false);
+  const mountedRef = useRef(true);
+  const loadGen = useRef(0);
 
-  useEffect(() => { void loadThreads(); }, []);
+  useEffect(() => {
+    mountedRef.current = true;
+    void loadThreads();
+    return () => {
+      mountedRef.current = false;
+      loadGen.current += 1;
+    };
+  }, []);
 
   async function loadThreads() {
-    setLoading(true);
-    setLoadError(null);
+    const gen = ++loadGen.current;
+    if (mountedRef.current) {
+      setLoading(true);
+      setLoadError(null);
+    }
     try {
       const list = (await supportDB.listThreads("all")) as Thread[];
+      if (!mountedRef.current || gen !== loadGen.current) return;
       setThreads(list);
       const ids = Array.from(
         new Set(list.map((t) => t.user_id).filter((id): id is string => Boolean(id))),
@@ -116,22 +131,26 @@ export default function AdminLiveChat() {
         profs.forEach((p) => {
           map[p.id] = { id: p.id, full_name: p.full_name ?? null, email: p.email ?? null };
         });
+        if (!mountedRef.current || gen !== loadGen.current) return;
         setProfiles(map);
       } else {
+        if (!mountedRef.current || gen !== loadGen.current) return;
         setProfiles({});
       }
       try {
         const adminList = await supportDB.listAssignableAdmins();
+        if (!mountedRef.current || gen !== loadGen.current) return;
         setAdmins(adminList.map((p) => ({ id: p.id, full_name: p.full_name ?? null, email: p.email ?? null })));
       } catch {
-        setAdmins([]);
+        if (mountedRef.current && gen === loadGen.current) setAdmins([]);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to load support threads";
+      if (!mountedRef.current || gen !== loadGen.current) return;
+      const message = toAdminUserMessage(err, undefined, "AdminLiveChat.load");
       setLoadError(message);
       toast.error(message);
     } finally {
-      setLoading(false);
+      if (mountedRef.current && gen === loadGen.current) setLoading(false);
     }
   }
 
@@ -142,12 +161,13 @@ export default function AdminLiveChat() {
         supportDB.listEventsByThreadId(id) as Promise<SupportEvent[]>,
         supportDB.listAttachmentsByThreadId(id) as Promise<Attachment[]>,
       ]);
+      if (!mountedRef.current) return;
       setMessages(msgs ?? []);
       setEvents(evs ?? []);
       setAttachments(atts ?? []);
       await supportDB.markThreadReadForAdmin(id);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load messages");
+      toast.error(toAdminUserMessage(err, undefined, "AdminLiveChat.messages"));
     }
   }
 
@@ -277,7 +297,7 @@ export default function AdminLiveChat() {
       const url = await supportDB.createAttachmentSignedUrl(att.storage_path);
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not download attachment");
+      toast.error(toAdminUserMessage(err, undefined, "AdminLiveChat.attachment"));
     }
   }
 
@@ -307,7 +327,7 @@ export default function AdminLiveChat() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-[300px_1fr_260px] gap-4 h-[calc(100vh-220px)] min-h-[500px]">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)_minmax(0,240px)] gap-4 min-h-[28rem] lg:h-[calc(100dvh-8.5rem)] lg:min-h-0">
         <Card padding="none" className="flex flex-col overflow-hidden">
           <div className="p-3 border-b border-border space-y-2">
             <Input
@@ -393,7 +413,7 @@ export default function AdminLiveChat() {
                     <p className="text-[10px] text-muted-foreground/70 line-clamp-1 mt-0.5">{t.last_message_preview ?? "—"}</p>
                     <p className="text-[9px] text-muted-foreground mt-1">
                       {t.mode === "waiting_agent" ? "Escalated · " : ""}
-                      {formatDistanceToNow(new Date(t.last_message_at), { addSuffix: true })}
+                      {formatAdminRelativeTime(t.last_message_at, formatDistanceToNow)}
                     </p>
                   </button>
                 );
@@ -457,7 +477,7 @@ export default function AdminLiveChat() {
                         </p>
                         <p className="whitespace-pre-wrap">{m.body}</p>
                         <p className="text-[9px] text-muted-foreground mt-1">
-                          {formatDistanceToNow(new Date(m.created_at), { addSuffix: true })}
+                          {formatAdminRelativeTime(m.created_at, formatDistanceToNow)}
                         </p>
                       </div>
                     );
@@ -590,7 +610,7 @@ export default function AdminLiveChat() {
                       <div key={n.id} className="rounded-md border border-border bg-muted/30 px-2 py-1.5">
                         <p className="whitespace-pre-wrap">{n.body}</p>
                         <p className="text-[9px] text-muted-foreground mt-0.5">
-                          {n.event_type} · {formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}
+                          {n.event_type} · {formatAdminRelativeTime(n.created_at, formatDistanceToNow)}
                         </p>
                       </div>
                     ))

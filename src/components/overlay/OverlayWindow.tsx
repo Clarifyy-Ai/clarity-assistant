@@ -1,6 +1,6 @@
 // src/components/overlay/OverlayWindow.tsx
 import { createPortal } from "react-dom";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { useOverlayStore, type OverlayPosition } from "@/store/overlayStore";
@@ -78,6 +78,145 @@ function electronResize(w: number, h: number) {
 // ─────────────────────────────────────────────────────────────────
 
 const OVERLAY_ROOT_ID = "clarify-overlay-root";
+
+function isOverlayAudioSessionStatus(status: string | undefined): boolean {
+  return (
+    status === "pending" ||
+    status === "warming_up" ||
+    status === "starting" ||
+    status === "active" ||
+    status === "paused"
+  );
+}
+
+const OverlayLiveRecordingBadge = memo(function OverlayLiveRecordingBadge() {
+  const providerStatus = useAudioStore((s) => s.transcription_provider_status);
+  const sessionStatus = useSessionStore((s) => s.status);
+  if (providerStatus !== "connected" || sessionStatus !== "active") return null;
+  return (
+    <div className="flex items-center gap-1 shrink-0">
+      <span
+        className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_6px_rgba(239,68,68,0.8)]"
+        title="Recording"
+      />
+      <span className="text-[10px] font-mono text-red-400/70">LIVE</span>
+    </div>
+  );
+});
+
+const OverlayPracticeCoachBanner = memo(function OverlayPracticeCoachBanner({
+  sessionRestored,
+  onReconnectAudio,
+  isMobile,
+}: {
+  sessionRestored: boolean;
+  onReconnectAudio?: () => void;
+  isMobile: boolean;
+}) {
+  const providerStatus = useAudioStore((s) => s.transcription_provider_status);
+  const tokenState = useAudioStore((s) => s.token_state);
+  const micState = useAudioStore((s) => s.mic_state);
+  const pipelineStatus = useAudioStore((s) => s.pipeline_status);
+  const streamError = useAudioStore((s) => s.streams?.error ?? null);
+
+  const warning = useMemo(() => {
+    const warnings = buildPracticeCoachWarnings({
+      micState,
+      tokenState,
+      transcriptionProviderStatus: providerStatus,
+      pipelineStatus,
+      streamErrorMessage: streamError?.message ?? null,
+      streamErrorCode: streamError?.code ?? null,
+      sessionRestored,
+      needsMicReconnect:
+        sessionRestored &&
+        micState !== "ready" &&
+        pipelineStatus !== "listening" &&
+        pipelineStatus !== "transcribing",
+    });
+    return primaryPracticeCoachWarning(warnings);
+  }, [micState, tokenState, providerStatus, pipelineStatus, streamError, sessionRestored]);
+
+  if (!warning) return null;
+
+  return (
+    <div
+      role="alert"
+      className={cn(
+        "px-3 py-3 border-b shrink-0",
+        warning.severity === "error"
+          ? "bg-red-500/15 border-red-500/25"
+          : warning.severity === "warn"
+            ? "bg-amber-500/15 border-amber-500/25"
+            : "bg-blue-500/10 border-blue-500/20",
+      )}
+    >
+      <div className="flex items-start gap-2.5">
+        <AlertCircle
+          className={cn(
+            "w-4 h-4 shrink-0 mt-0.5",
+            warning.severity === "error"
+              ? "text-red-400"
+              : warning.severity === "warn"
+                ? "text-amber-400"
+                : "text-blue-400",
+          )}
+          aria-hidden
+        />
+        <div className="flex-1 min-w-0">
+          <p
+            className={cn(
+              "text-xs font-bold",
+              warning.severity === "error"
+                ? "text-red-300"
+                : warning.severity === "warn"
+                  ? "text-amber-300"
+                  : "text-blue-300",
+            )}
+          >
+            {warning.title}
+          </p>
+          <p
+            className={cn(
+              "text-[11px] mt-0.5 leading-snug",
+              warning.severity === "error"
+                ? "text-red-400/90"
+                : warning.severity === "warn"
+                  ? "text-amber-400/90"
+                  : "text-blue-400/90",
+            )}
+          >
+            {warning.message}
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 mt-2.5 pl-6">
+        {warning.recoverable && onReconnectAudio && (
+          <button
+            type="button"
+            onClick={() => void onReconnectAudio()}
+            className={cn(
+              "inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg",
+              "bg-red-500/30 hover:bg-red-500/40 text-red-100 transition-colors",
+              "border border-red-500/30",
+              isMobile && "px-4 py-2 text-xs",
+            )}
+          >
+            <RefreshCw className="w-3 h-3 shrink-0" aria-hidden />
+            Reconnect
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => useAudioStore.getState().setStreamError(null)}
+          className="text-[11px] font-medium text-red-400/60 hover:text-red-400 px-2 py-1 transition-colors"
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  );
+});
 
 function overlayContextModeLabel(
   sessionMode: SessionMode,
@@ -218,7 +357,7 @@ export function OverlayWindow({
   // Overlay store state
   const isVisible = useOverlayStore((s) => s.is_visible);
   const isStealthMode = useOverlayStore((s) => s.is_stealth_mode);
-  // Parakeet-style: keep overlay fully opaque while a session is running.
+  // Keep overlay fully opaque while a session is running.
   const useDiscreteOpacity = isStealthMode && !isSessionActive;
   const isProctorSafe = useOverlayStore((s) => s.is_proctor_safe);
   const isPanicVisible = useOverlayStore((s) => s.is_panic_visible);
@@ -260,51 +399,17 @@ export function OverlayWindow({
     isSessionActive,
   );
 
-  // Audio state
-  const providerStatus = useAudioStore((s) => s.transcription_provider_status);
-  const tokenState = useAudioStore((s) => s.token_state);
-  const micState = useAudioStore((s) => s.mic_state);
-  const pipelineStatus = useAudioStore((s) => s.pipeline_status);
-  const streamError = useAudioStore((s) => s.streams?.error ?? null);
-
-  const practiceCoachWarnings = useMemo(
-    () =>
-      buildPracticeCoachWarnings({
-        micState,
-        tokenState,
-        transcriptionProviderStatus: providerStatus,
-        pipelineStatus,
-        streamErrorMessage: streamError?.message ?? null,
-        streamErrorCode: streamError?.code ?? null,
-        sessionRestored,
-        needsMicReconnect:
-          sessionRestored &&
-          micState !== "ready" &&
-          pipelineStatus !== "listening" &&
-          pipelineStatus !== "transcribing",
-      }),
-    [micState, tokenState, providerStatus, pipelineStatus, streamError, sessionRestored],
-  );
-  const primaryCoachWarning = useMemo(
-    () => primaryPracticeCoachWarning(practiceCoachWarnings),
-    [practiceCoachWarnings],
-  );
-  const showAudioFailureBanner = Boolean(primaryCoachWarning);
-  const showStreamError = false;
-
+  // Mic mute UI only — STT packets must not remount the overlay shell.
   const isMuted = useAudioStore((s) => s.is_muted);
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
+  const showAudioStatusBar = isOverlayAudioSessionStatus(sessionStatus);
 
-  const isRecording = providerStatus === "connected" && isSessionActive;
   const isGenerating = hintState === "generating" || hintState === "streaming";
   const showFullHeaderChrome = !isMobile || !isMinimalMode;
 
   /** Mid-session SR announcements (generating / errors). Minimal mode has no HintPanel. */
   const sessionStatusAnnouncement = useMemo(() => {
     if (errorMessage) return `Error: ${errorMessage}`;
-    if (primaryCoachWarning) {
-      return `${primaryCoachWarning.title}: ${primaryCoachWarning.message}`;
-    }
     if (isScreenshotLoading) return "Capturing screen for answer";
     if (isGenerating) {
       return hintStyle === "full_answer"
@@ -314,13 +419,11 @@ export function OverlayWindow({
     return "";
   }, [
     errorMessage,
-    primaryCoachWarning,
     isScreenshotLoading,
     isGenerating,
     hintStyle,
   ]);
-  const sessionStatusLive =
-    errorMessage || showAudioFailureBanner ? "assertive" : "polite";
+  const sessionStatusLive = errorMessage ? "assertive" : "polite";
 
   // Persist position (debounced)
   const handlePositionChange = useCallback(
@@ -493,7 +596,7 @@ export function OverlayWindow({
       {(isMinimalMode || activeTab !== "answer") && (
         <div
           className="sr-only"
-          role={errorMessage || showAudioFailureBanner ? "alert" : "status"}
+          role={errorMessage ? "alert" : "status"}
           aria-live={sessionStatusLive}
           aria-atomic="true"
         >
@@ -551,15 +654,7 @@ export function OverlayWindow({
             </span>
           )}
 
-          {isRecording && (
-            <div className="flex items-center gap-1 shrink-0">
-              <span
-                className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_6px_rgba(239,68,68,0.8)]"
-                title="Recording"
-              />
-              <span className="text-[10px] font-mono text-red-400/70">LIVE</span>
-            </div>
-          )}
+          <OverlayLiveRecordingBadge />
 
           {showFullHeaderChrome && (
             <OverlayNetworkBadge color={networkColor} rttMs={avgRTT} label={qualityLabel} />
@@ -568,7 +663,7 @@ export function OverlayWindow({
           {isSessionActive && showFullHeaderChrome && (
             <span
               className="font-mono text-[9px] font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/20 px-1.5 py-0.5 rounded shrink-0"
-              title="Fully visible during session (Parakeet-style)"
+              title="Fully visible during session"
             >
               VISIBLE
             </span>
@@ -779,104 +874,11 @@ export function OverlayWindow({
                 </div>
               ) : (
                 <>
-                  {showAudioFailureBanner && primaryCoachWarning && (
-                    <div
-                      role="alert"
-                      className={cn(
-                        "px-3 py-3 border-b shrink-0",
-                        primaryCoachWarning.severity === "error"
-                          ? "bg-red-500/15 border-red-500/25"
-                          : primaryCoachWarning.severity === "warn"
-                            ? "bg-amber-500/15 border-amber-500/25"
-                            : "bg-blue-500/10 border-blue-500/20",
-                      )}
-                    >
-                      <div className="flex items-start gap-2.5">
-                        <AlertCircle
-                          className={cn(
-                            "w-4 h-4 shrink-0 mt-0.5",
-                            primaryCoachWarning.severity === "error"
-                              ? "text-red-400"
-                              : primaryCoachWarning.severity === "warn"
-                                ? "text-amber-400"
-                                : "text-blue-400",
-                          )}
-                          aria-hidden
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p
-                            className={cn(
-                              "text-xs font-bold",
-                              primaryCoachWarning.severity === "error"
-                                ? "text-red-300"
-                                : primaryCoachWarning.severity === "warn"
-                                  ? "text-amber-300"
-                                  : "text-blue-300",
-                            )}
-                          >
-                            {primaryCoachWarning.title}
-                          </p>
-                          <p
-                            className={cn(
-                              "text-[11px] mt-0.5 leading-snug",
-                              primaryCoachWarning.severity === "error"
-                                ? "text-red-400/90"
-                                : primaryCoachWarning.severity === "warn"
-                                  ? "text-amber-400/90"
-                                  : "text-blue-400/90",
-                            )}
-                          >
-                            {primaryCoachWarning.message}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 mt-2.5 pl-6">
-                        {primaryCoachWarning.recoverable && onReconnectAudio && (
-                          <button
-                            type="button"
-                            onClick={() => void onReconnectAudio()}
-                            className={cn(
-                              "inline-flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-lg",
-                              "bg-red-500/30 hover:bg-red-500/40 text-red-100 transition-colors",
-                              "border border-red-500/30",
-                              isMobile && "px-4 py-2 text-xs",
-                            )}
-                          >
-                            <RefreshCw className="w-3 h-3 shrink-0" aria-hidden />
-                            Reconnect
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => useAudioStore.getState().setStreamError(null)}
-                          className="text-[11px] font-medium text-red-400/60 hover:text-red-400 px-2 py-1 transition-colors"
-                        >
-                          Dismiss
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  {showStreamError && streamError && !showAudioFailureBanner && (
-                    <div
-                      role="alert"
-                      aria-live="assertive"
-                      className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border-b border-red-500/15 shrink-0"
-                    >
-                      <div className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0 animate-pulse" aria-hidden />
-                      <span className="text-[11px] text-red-400 truncate flex-1">
-                        {streamError!.message}
-                        {streamError!.suggestion ? ` — ${streamError!.suggestion}` : ""}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => useAudioStore.getState().setStreamError(null)}
-                        aria-label="Dismiss stream error"
-                        className="text-red-400/50 hover:text-red-400 text-[11px] shrink-0 transition-colors"
-                      >
-                        dismiss
-                      </button>
-                    </div>
-                  )}
+                  <OverlayPracticeCoachBanner
+                    sessionRestored={sessionRestored}
+                    onReconnectAudio={onReconnectAudio}
+                    isMobile={isMobile}
+                  />
 
                   {!isSessionActive && !lastSessionId && onStartSession && (
                     <OverlayQuickStart onStart={onStartSession} />
@@ -1007,7 +1009,7 @@ export function OverlayWindow({
 
       {isSessionLive && !isMinimalMode && !isMobile && <OverlaySessionStats />}
 
-      {isSessionLive && !isMinimalMode && !isMobile && <OverlayAudioStatusBar />}
+      {showAudioStatusBar && <OverlayAudioStatusBar />}
 
       {isSessionActive && !isMinimalMode && !isMobile && (
         <div className="flex items-center justify-between border-t border-white/[0.04] px-3 py-1 shrink-0">

@@ -317,7 +317,11 @@ let unsubAuthListener: (() => void) | null = null;
 let _bootstrapping = false;
 
 /** Dedupes concurrent profile loads for the same user. */
-let inFlightProfileLoad: { userId: string; promise: Promise<boolean> } | null = null;
+let inFlightProfileLoad: {
+  userId: string;
+  promise: Promise<boolean>;
+  abort: AbortController;
+} | null = null;
 let inFlightCreditsRefresh: Promise<void> | null = null;
 let profileLoadGeneration = 0;
 
@@ -373,6 +377,28 @@ function applyAdminRoleResult(
   });
 }
 
+/** Kick off moderator lookup — admin flag may already come from profile.is_admin. */
+function scheduleModeratorRoleResolve(
+  userId: string,
+  set: (fn: (state: AuthStore) => void) => void,
+  get: () => AuthStore,
+): void {
+  void withTimeout(
+    userRolesDB.hasRole(userId, "moderator"),
+    ROLE_CHECK_TIMEOUT_MS,
+    "Moderator role check",
+  )
+    .then((isModerator) => {
+      if (get().user?.id !== userId) return;
+      set((state) => {
+        state.isModerator = isModerator;
+      });
+    })
+    .catch(() => {
+      // Moderator access fails closed.
+    });
+}
+
 /** Kick off (or join) the shared role load — never awaited by Free-user routing. */
 function scheduleAdminRoleResolve(
   userId: string,
@@ -381,20 +407,7 @@ function scheduleAdminRoleResolve(
 ): void {
   void resolveAdminRole(userId).then((roleResult) => {
     applyAdminRoleResult(userId, roleResult, set, get);
-    void withTimeout(
-      userRolesDB.hasRole(userId, "moderator"),
-      ROLE_CHECK_TIMEOUT_MS,
-      "Moderator role check",
-    )
-      .then((isModerator) => {
-        if (get().user?.id !== userId) return;
-        set((state) => {
-          state.isModerator = isModerator;
-        });
-      })
-      .catch(() => {
-        // Moderator access fails closed; admin resolution is already complete.
-      });
+    scheduleModeratorRoleResolve(userId, set, get);
   });
 }
 
@@ -1152,6 +1165,10 @@ export const useAuthStore = create<AuthStore>()(
             if (inFlightProfileLoad && inFlightProfileLoad.userId === userId) {
               return inFlightProfileLoad.promise;
             }
+            if (inFlightProfileLoad && inFlightProfileLoad.userId !== userId) {
+              inFlightProfileLoad.abort.abort();
+              inFlightProfileLoad = null;
+            }
 
             const ttlMs = options?.force
               ? 0
@@ -1186,6 +1203,7 @@ export const useAuthStore = create<AuthStore>()(
               });
             }
 
+            const abort = new AbortController();
             const run = async (): Promise<boolean> => {
             const generation = ++profileLoadGeneration;
             const profileStartedAt = Date.now();
@@ -1207,20 +1225,18 @@ export const useAuthStore = create<AuthStore>()(
                 profilesDB.getByIdMaybe(userId),
                 PROFILE_FETCH_TIMEOUT_MS,
                 "Profile load",
+                { signal: abort.signal },
               );
 
             try {
               let profile: Awaited<ReturnType<typeof profilesDB.getByIdMaybe>>;
-              // Role lookup must NEVER gate Free-user routing / dashboard paint.
-              // Kick it off in parallel; apply flags when it settles.
-              // Background recovery must not re-hit user_roles when already resolved.
-              if (!(options?.background && get().isAdminResolved)) {
-                scheduleAdminRoleResolve(userId, set, get);
-              }
 
               try {
                 profile = await fetchProfile();
               } catch (firstErr) {
+                if (abort.signal.aborted) {
+                  throw firstErr;
+                }
                 // Non-retryable auth errors must not be retried — they will fail
                 // immediately again and waste another PROFILE_FETCH_TIMEOUT_MS.
                 if (isNonRetryableAuthError(firstErr)) {
@@ -1287,6 +1303,7 @@ export const useAuthStore = create<AuthStore>()(
                     } as Parameters<typeof profilesDB.upsert>[0]),
                     PROFILE_FETCH_TIMEOUT_MS,
                     "Profile ensure",
+                    { signal: abort.signal },
                   );
                 } catch (ensureErr) {
                   logger.error(LogEvents.AUTH_PROFILE_LOAD_FAILED, {
@@ -1340,7 +1357,6 @@ export const useAuthStore = create<AuthStore>()(
                 if (state.status === "error") state.status = "authenticated";
 
                 state.error = null;
-                // Role flags are applied asynchronously by scheduleAdminRoleResolve.
                 state.isOnboarded = getProfileBoolean(
                   row,
                   "onboarding_completed",
@@ -1348,7 +1364,17 @@ export const useAuthStore = create<AuthStore>()(
                 );
                 state.planId = getProfileString(row, "plan_id", "free");
                 state.credits = getProfileNumber(row, "credits", 0);
+                if (Object.prototype.hasOwnProperty.call(row, "is_admin")) {
+                  state.isAdmin = getProfileBoolean(row, "is_admin", false);
+                  state.isAdminResolved = true;
+                }
               });
+
+              if (Object.prototype.hasOwnProperty.call(row, "is_admin")) {
+                scheduleModeratorRoleResolve(userId, set, get);
+              } else if (!(options?.background && get().isAdminResolved)) {
+                scheduleAdminRoleResolve(userId, set, get);
+              }
 
               syncOverlayFromProfile(row);
               syncPrivacyPrefsFromProfile(row.privacy_prefs);
@@ -1360,6 +1386,13 @@ export const useAuthStore = create<AuthStore>()(
               });
               return true;
             } catch (err) {
+              if (
+                abort.signal.aborted ||
+                generation !== profileLoadGeneration ||
+                get().user?.id !== userId
+              ) {
+                return hadLoadedProfile;
+              }
               console.error("[authStore] Failed to load profile:", err);
 
               // A dead refresh token is an auth failure, not a profile failure:
@@ -1464,7 +1497,7 @@ export const useAuthStore = create<AuthStore>()(
               }
             });
 
-            inFlightProfileLoad = { userId, promise };
+            inFlightProfileLoad = { userId, promise, abort };
 
             return promise;
           },

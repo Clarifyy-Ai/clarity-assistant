@@ -12,7 +12,10 @@
  * - Do not log webhook secrets or full payloads.
  */
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
-import { assertBillingConfigOrThrow } from "../_shared/billingConfig.ts";
+import {
+  getRazorpayProviderConfig,
+  paymentsNotConfiguredBody,
+} from "../_shared/razorpayProvider.ts";
 import { opsLog } from "../_shared/opsLog.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { reportEdgeError } from "../_shared/errors.ts";
@@ -27,8 +30,6 @@ import {
   timingSafeEqual,
   type PaymentOrderRow,
 } from "../_shared/razorpayFulfill.ts";
-
-const WEBHOOK_SECRET = Deno.env.get("RAZORPAY_WEBHOOK_SECRET") ?? "";
 
 /**
  * P4-2: Only claw back when unspent balance covers the original grant.
@@ -53,9 +54,9 @@ export function decideRefundClawback(opts: {
   return { clawbackAmount: 0, shouldClawback: false, reason: "insufficient_unspent" };
 }
 
-async function verifySignature(body: string, signature: string): Promise<boolean> {
-  if (!WEBHOOK_SECRET || !signature) return false;
-  const expected = await hmacSha256Hex(WEBHOOK_SECRET, body);
+async function verifySignature(secret: string, body: string, signature: string): Promise<boolean> {
+  if (!secret || !signature) return false;
+  const expected = await hmacSha256Hex(secret, body);
   return timingSafeEqual(expected, signature);
 }
 
@@ -204,29 +205,18 @@ Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;
   const headers = getCorsHeaders(req);
+  const razorpayProvider = getRazorpayProviderConfig();
+  const WEBHOOK_SECRET = razorpayProvider.webhookSecret;
 
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405, headers });
   }
 
-  try {
-    assertBillingConfigOrThrow({
-      requireRazorpay: true,
-      requireStripe: false,
-      requireRazorpayWebhook: true,
-    });
-  } catch {
-    return new Response(JSON.stringify({ error: "Billing configuration invalid" }), {
-      status: 503,
-      headers: { ...headers, "Content-Type": "application/json" },
-    });
-  }
-
-  if (!WEBHOOK_SECRET) {
+  if (!razorpayProvider.webhookConfigured) {
     console.error(
       "[razorpay-webhook] RAZORPAY_WEBHOOK_SECRET not configured — refusing events",
     );
-    return new Response(JSON.stringify({ error: "Webhook secret not configured" }), {
+    return new Response(JSON.stringify(paymentsNotConfiguredBody()), {
       status: 503,
       headers: { ...headers, "Content-Type": "application/json" },
     });
@@ -235,7 +225,7 @@ Deno.serve(async (req: Request) => {
   const rawBody = await req.text();
   const signature = req.headers.get("x-razorpay-signature") ?? "";
 
-  if (!(await verifySignature(rawBody, signature))) {
+  if (!(await verifySignature(WEBHOOK_SECRET, rawBody, signature))) {
     opsLog({
       function_name: "razorpay-webhook",
       operation: "verify_signature",
@@ -299,7 +289,7 @@ Deno.serve(async (req: Request) => {
     const paymentId = payment?.id as string | undefined;
 
     if (!orderId || !paymentId) {
-      return new Response(JSON.stringify({ error: "Missing payment data" }), {
+      return new Response(JSON.stringify({ error: "Missing payment data", code: "VALIDATION_ERROR" }), {
         status: 400,
         headers: { ...headers, "Content-Type": "application/json" },
       });

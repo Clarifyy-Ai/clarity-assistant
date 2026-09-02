@@ -35,6 +35,66 @@ describe("Live Practice Coach — start-session contracts", () => {
     const source = readFunction("start-session");
     expect(source).toContain('"end_owned_session"');
     expect(source).toContain('p_terminal_reason: "CANCELLED"');
+    expect(source).toContain("rollbackFailedInitialization");
+    expect(source).toContain("refundCredits");
+  });
+
+  it("reuses an open ACTIVE practice session instead of 409", () => {
+    const source = readFunction("start-session");
+    expect(source).toContain("findReusablePracticeSession");
+    expect(source).toContain("shouldReuseExistingOnConflict");
+    expect(source).toContain("isOpenPracticeStatus");
+    expect(source).toContain("jsonOkSession");
+  });
+
+  it("mints Deepgram live tokens without leaking NVIDIA or API keys to the client", () => {
+    const source = readFunction("deepgram-token");
+    expect(source).toContain("deepgram-token");
+    expect(source).not.toContain("NVIDIA_API_KEY");
+    expect(source).not.toContain("PARAKEET_NIM_URL");
+    expect(source).not.toContain("parakeet-token");
+    expect(source).toContain("type: \"scoped\"");
+    expect(source).toContain("token: minted.token");
+    expect(source).not.toMatch(/JSON\.stringify\([\s\S]{0,200}DEEPGRAM_API_KEY/);
+    expect(source).toMatch(/JSON\.stringify\(\{[\s\S]*token: minted\.token/);
+  });
+
+  it("skips credit refresh for deepgram-token and does not skip parakeet-token", () => {
+    const fetchEdge = readSrc("src/lib/network/fetchEdge.ts");
+    expect(fetchEdge).toMatch(/CREDIT_REFRESH_SKIP[\s\S]*?"deepgram-token"/);
+    expect(fetchEdge).not.toMatch(/CREDIT_REFRESH_SKIP[\s\S]*?"parakeet-token"/);
+    const functions = readSrc("src/lib/api/functions.ts");
+    expect(functions).toContain('"deepgram-token"');
+    expect(functions).not.toContain('"parakeet-token"');
+  });
+});
+
+describe("Live Practice Coach — production src must not use Parakeet STT", () => {
+  it("does not reference parakeet-token, PARAKEET_NIM_URL, NVIDIA_API_KEY, or /v1/stt/parakeet", () => {
+    const srcRoot = path.join(root, "src");
+    const skipDirNames = new Set(["test", "node_modules"]);
+    const forbidden =
+      /parakeet-token|PARAKEET_NIM_URL|NVIDIA_API_KEY|\/v1\/stt\/parakeet/;
+    const offenders: string[] = [];
+
+    function walk(dir: string): void {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (entry.isDirectory()) {
+          if (skipDirNames.has(entry.name)) continue;
+          walk(path.join(dir, entry.name));
+          continue;
+        }
+        if (!/\.(ts|tsx|js|jsx)$/.test(entry.name)) continue;
+        const file = path.join(dir, entry.name);
+        const rel = path.relative(srcRoot, file).split(path.sep).join("/");
+        if (rel.startsWith("test/")) continue;
+        const source = fs.readFileSync(file, "utf8");
+        if (forbidden.test(source)) offenders.push(rel);
+      }
+    }
+
+    walk(srcRoot);
+    expect(offenders).toEqual([]);
   });
 });
 
@@ -83,5 +143,6 @@ describe("Live Practice Coach — useLiveCopilot client contracts", () => {
     expect(source).toContain("cancelSessionOnFailure");
     expect(source).toContain('terminal_reason: "CANCELLED"');
     expect(source).toContain("endSessionApi");
+    expect(source).toContain("restoreOwnedSession");
   });
 });

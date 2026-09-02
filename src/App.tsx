@@ -70,6 +70,7 @@ import About from "@/pages/marketing/About";
 import Industries from "@/pages/marketing/Industries";
 import Cookies from "@/pages/marketing/Cookies";
 import Faq from "@/pages/marketing/Faq";
+import Download from "@/pages/marketing/Download";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Electron typing
@@ -319,6 +320,7 @@ const AdminHelpArticlePreview = lazy(
   () => import("@/pages/app/admin/AdminHelpArticlePreview"),
 );
 const AdminSupport = lazy(() => import("@/pages/app/admin/AdminSupport"));
+const AdminMail = lazy(() => import("@/pages/app/admin/AdminMail"));
 const AdminPromoCodes = lazy(() => import("@/pages/app/admin/AdminPromoCodes"));
 const AdminBillingSettings = lazy(
   () => import("@/pages/app/admin/AdminBillingSettings"),
@@ -580,6 +582,7 @@ const routes = [
   { path: "/help", element: <MarketingPage component={Help} /> },
   { path: "/help/:slug", element: <MarketingPage component={HelpArticle} /> },
   { path: "/shortcuts", element: <MarketingPage component={Shortcuts} /> },
+  { path: "/download", element: <MarketingPage component={Download} /> },
   { path: "/blog", element: <MarketingPage component={Blog} /> },
   { path: "/blog/:slug", element: <MarketingPage component={BlogPost} /> },
   { path: "/terms", element: <MarketingPage component={Terms} /> },
@@ -1003,6 +1006,7 @@ const routes = [
             element: <Page component={AdminHelpArticles} />,
           },
           { path: "support",   element: <Page component={AdminSupport} /> },
+          { path: "mail",      element: <Page component={AdminMail} /> },
           { path: "promo-codes", element: <Page component={AdminPromoCodes} /> },
           { path: "billing-settings", element: <Page component={AdminBillingSettings} /> },
           { path: "gov/sources", element: <Page component={AdminGovSources} /> },

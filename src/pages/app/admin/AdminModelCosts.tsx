@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { creditsDB } from "@/lib/supabase/database";
 import { supabase } from "@/integrations/supabase/client";
 import { formatNumber, formatUsdCentsAsInr } from "@/lib/utils/formatters";
@@ -7,6 +7,7 @@ import { subDays } from "date-fns";
 import { toast } from "sonner";
 import { writeAdminAudit } from "@/lib/admin/writeAdminAudit";
 import { adminActionFailedMessage, toAdminUserMessage } from "@/lib/admin/adminErrors";
+import { inferAiProvider } from "@/lib/admin/inferAiProvider";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Input } from "@/components/ui/Input";
@@ -88,6 +89,8 @@ const FEATURE_LABELS: Record<string, string> = {
   analyze_test_performance: "Analyze test performance",
   project_builder: "Project builder",
   polish_star: "Polish STAR",
+  deepgram_stt_session: "Live STT session",
+  deepgram_token_mint: "STT token mint",
 };
 
 function buildCreditCostRows(): FeatureCreditCost[] {
@@ -118,8 +121,10 @@ export default function AdminModelCosts() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionStats, setActionStats] = useState<ActionUsageStat[]>([]);
   const [fallbackCalls, setFallbackCalls] = useState(0);
+  const loadGen = useRef(0);
 
   const fetchData = async (showRefresh = false) => {
+    const gen = ++loadGen.current;
     if (showRefresh) setIsRefreshing(true);
     else             setIsLoading(true);
     setLoadError(null);
@@ -141,15 +146,19 @@ export default function AdminModelCosts() {
       ]);
 
       if (pricingRes.error) {
-        // Table may be empty or RLS — show empty pricing, not fake costs
+        if (gen !== loadGen.current) return;
         setPricingRows([]);
       } else {
+        if (gen !== loadGen.current) return;
         setPricingRows((pricingRes.data as typeof pricingRows) ?? []);
       }
+
+      if (usageRes.error) throw usageRes.error;
 
       const data = creditData;
 
       if (data.length > 0) {
+        if (gen !== loadGen.current) return;
         const catalog = buildCreditCostRows();
         const featureMap: Record<string, number> = {};
         data.forEach((tx) => {
@@ -185,13 +194,7 @@ export default function AdminModelCosts() {
 
       for (const row of usageRows) {
         const modelId = String(row.model ?? "unknown");
-        const provider = modelId.startsWith("gpt")
-          ? "openai"
-          : modelId.startsWith("claude")
-            ? "anthropic"
-            : modelId.startsWith("gemini")
-              ? "gemini"
-              : "other";
+        const provider = inferAiProvider(modelId);
 
         const existing = modelMap.get(modelId) ?? {
           modelId,
@@ -231,6 +234,7 @@ export default function AdminModelCosts() {
         actionMap.set(action, actionExisting);
       }
 
+      if (gen !== loadGen.current) return;
       setFallbackCalls(fallbacks);
       setActionStats(
         [...actionMap.values()].sort((a, b) => b.tokensTotal - a.tokensTotal).slice(0, 10),
@@ -242,11 +246,13 @@ export default function AdminModelCosts() {
         })).sort((a, b) => b.costUSDCents - a.costUSDCents),
       );
     } catch (err) {
-      console.error("[AdminModelCosts] fetch error:", err);
+      if (gen !== loadGen.current) return;
       setLoadError(toAdminUserMessage(err, undefined, "AdminModelCosts"));
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      if (gen === loadGen.current) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
     }
   };
 
@@ -280,7 +286,12 @@ export default function AdminModelCosts() {
     toast.success("Model pricing saved");
   }
 
-  useEffect(() => { void fetchData(); }, [dateRange]);
+  useEffect(() => {
+    void fetchData();
+    return () => {
+      loadGen.current += 1;
+    };
+  }, [dateRange]);
 
   const totalCost    = modelStats.reduce((s, m) => s + m.costUSDCents, 0);
   const totalRevCred = modelStats.reduce((s, m) => s + m.revenueCredits, 0);

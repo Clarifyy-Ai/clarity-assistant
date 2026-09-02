@@ -130,6 +130,8 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
       }, 409);
     }
 
+    const requestedDurationRaw = Number((body as Record<string, unknown>).durationMinutes);
+
     const { data: pattern } = await db
       .from("gov_exam_pattern_versions")
       .select("id, total_questions, languages, duration_minutes, negative_mark, total_marks")
@@ -292,6 +294,17 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
         : true);
     const canCustomPractice = available >= 5;
     const customPracticeMax = Math.min(available, 200);
+    const snapshot = (inventory.inventorySnapshot ?? {}) as Record<string, unknown>;
+    const sourceCounts = {
+      official_verified: Number(snapshot.official_verified ?? snapshot.officialVerified ?? 0) ||
+        (mode === "official_previous" ? available : 0),
+      verified_public: Number(snapshot.verified_public ?? snapshot.verifiedPublic ?? 0) || 0,
+      approved_bank: Number(snapshot.approved_bank ?? snapshot.approvedBank ?? 0) ||
+        (mode === "official_previous" ? 0 : available),
+      generated_practice: Number(snapshot.generated_practice ?? 0) || 0,
+    };
+    const allowedFallback =
+      mode !== "official_previous" && (aiFillAllowed || plan.allowDeterministicFill);
     // Treat hybrid-only Full Mock as blocked for honest Custom Practice UX.
     const hybridFullMockBlocked =
       (mode === "generated_mock" || mode === "official_previous") &&
@@ -299,15 +312,17 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
       !fullMockInventoryOk;
     const blocked = plan.kind === "blocked" || hybridFullMockBlocked;
     const blockCode = blocked
-      ? (plan.kind === "blocked" && plan.reasonCode === "CAPABILITY_REQUIRED" && !hybridFullMockBlocked
-        ? "CAPABILITY_REQUIRED"
+      ? (plan.kind === "blocked" &&
+          (plan.reasonCode === "PLAN_NOT_ALLOWED" || plan.reasonCode === "CAPABILITY_REQUIRED") &&
+          !hybridFullMockBlocked
+        ? "PLAN_NOT_ALLOWED"
         : "CONTENT_INSUFFICIENT")
       : null;
 
     const inventoryLabel =
       mode === "official_previous" ? "verified official/PYQ" : "approved practice-bank";
     const message = blocked
-      ? blockCode === "CAPABILITY_REQUIRED"
+      ? blockCode === "PLAN_NOT_ALLOWED" || blockCode === "CAPABILITY_REQUIRED"
         ? `${inventoryLabel} available: ${available}. Requested: ${requested}. Missing: ${missing}. ` +
           `Full mock needs a plan that includes generation, or choose custom practice (max ${customPracticeMax}).`
         : `${inventoryLabel} available: ${available}. Requested: ${requested}. Missing: ${missing}. ` +
@@ -339,6 +354,11 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
       eligible: available,
       available,
       missing,
+      sourceCounts,
+      allowedFallback,
+      durationMinutes: Number.isFinite(requestedDurationRaw) && requestedDurationRaw > 0
+        ? Math.floor(requestedDurationRaw)
+        : Number(pattern.duration_minutes) || null,
       inventoryClass:
         mode === "official_previous" ? "official_pyq" : "approved_practice",
       inventorySource,

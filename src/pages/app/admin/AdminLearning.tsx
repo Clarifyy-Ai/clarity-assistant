@@ -12,6 +12,7 @@ import { useAuthStore } from "@/store/authStore";
 import { writeAdminAudit } from "@/lib/admin/writeAdminAudit";
 import { adminActionFailedMessage, toAdminUserMessage } from "@/lib/admin/adminErrors";
 import { validateCourseForPublish } from "@/lib/learning/publishValidation";
+import { invalidatePublicContentCache } from "@/lib/cms/publicContentCache";
 
 type Course = {
   id: string;
@@ -330,6 +331,7 @@ export default function AdminLearningPage() {
         newValue: { publish_status: status },
       });
       toast.success(status === "published" ? "Course published" : "Course set to draft");
+      invalidatePublicContentCache(["learning"]);
       await loadCourses();
       await loadDetail(selectedId);
     } catch (e) {
@@ -401,7 +403,7 @@ export default function AdminLearningPage() {
       {error && <InlineErrorRetry message={error} onRetry={() => void loadCourses()} />}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="space-y-3 p-4">
+        <Card className="space-y-3 p-4 min-w-0">
           <h2 className="font-medium">Courses</h2>
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
@@ -425,7 +427,7 @@ export default function AdminLearningPage() {
           )}
         </Card>
 
-        <Card className="space-y-3 p-4">
+        <Card className="space-y-3 p-4 min-w-0">
           <h2 className="font-medium">{selected ? "Edit course" : "Create course"}</h2>
           <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Course title" />
           <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description" />
@@ -484,7 +486,7 @@ export default function AdminLearningPage() {
       </div>
 
       {selected && (
-        <Card className="space-y-4 p-4">
+        <Card className="space-y-4 p-4 min-w-0">
           <h2 className="font-medium">Modules & lessons</h2>
           {modules.map((m) => (
             <div key={m.id} className="rounded-lg border border-border p-3 space-y-2">
@@ -554,7 +556,7 @@ export default function AdminLearningPage() {
       )}
 
       {selected && (
-        <Card className="space-y-3 p-4">
+        <Card className="space-y-3 p-4 min-w-0">
           <h2 className="font-medium">Module quizzes</h2>
           <p className="text-xs text-muted-foreground">
             Link assessment question IDs (comma-separated). Final quizzes gate certificates.

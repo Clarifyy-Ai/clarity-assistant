@@ -11,6 +11,7 @@ import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { COMMUNITY_CATEGORIES, COMMUNITY_MODULE_DESCRIPTION, COMMUNITY_MODULE_LABEL, type CommunityCategory } from "@/lib/community/moderation";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
+import { EmptyState } from "@/components/common/EmptyState";
 import { MessageSquare } from "lucide-react";
 
 type Post = {

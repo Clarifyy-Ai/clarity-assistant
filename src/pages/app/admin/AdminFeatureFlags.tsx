@@ -3,6 +3,7 @@ import { featureFlagsDB } from "@/lib/supabase/database";
 import { useGlobalStore }       from "@/store";
 import { FEATURE_PLAN_GATES, isKillOnlyFlag } from "@/lib/constants/features";
 import { getPlanDisplayName, type DisplayTier } from "@/lib/constants/pricing";
+import { toAdminUserMessage } from "@/lib/admin/adminErrors";
 
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
@@ -93,11 +94,8 @@ export default function AdminFeatureFlags() {
         setFeatureKillSwitches(map);
       } catch (err) {
         if (cancelled) return;
-        const message =
-          err instanceof Error ? err.message : "Failed to load feature flags from database";
-        setDbFlagsError(message);
-        console.error("[AdminFeatureFlags] load failed:", err);
-        toast.error(message);
+        setDbFlagsError(toAdminUserMessage(err, undefined, "AdminFeatureFlags"));
+        toast.error(toAdminUserMessage(err, undefined, "AdminFeatureFlags"));
       } finally {
         if (!cancelled) setDbFlagsLoading(false);
       }

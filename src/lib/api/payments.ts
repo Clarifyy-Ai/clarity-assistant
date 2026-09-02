@@ -29,6 +29,7 @@ export async function recordReferralViaEdge(
 }
 
 export { openRazorpayCheckout, toPaymentUserFacingError, type RazorpayProductType };
+export { PAYMENTS_NOT_CONFIGURED } from "@/lib/billing/razorpayCheckout";
 
 export type PaymentOrderRow = {
   id: string;

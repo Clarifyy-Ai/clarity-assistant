@@ -32,6 +32,7 @@ import {
 } from "@/lib/billing/pendingPlan";
 import { normalizeRefCode, storeRefCode } from "@/lib/referrals";
 import { formatSupabaseAuthError } from "@/lib/errors";
+import { trackGoogleAdsSignup } from "@/lib/ads/googleAds";
 
 type PasswordStrength = {
   score: number;
@@ -235,6 +236,8 @@ export default function Signup(): JSX.Element {
 
     try {
       await signUpWithEmail(data.email, data.password, data.fullName);
+
+      trackGoogleAdsSignup();
 
       setSubmittedEmail(data.email);
       setDone(true);

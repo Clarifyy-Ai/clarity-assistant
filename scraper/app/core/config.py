@@ -9,6 +9,43 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+_LOCAL_CORS_HOSTS = frozenset({"localhost", "127.0.0.1", "0.0.0.0", "::1"})
+_PREVIEW_CORS_MARKERS = (
+    "lovable.app",
+    "lovable.dev",
+    "lovableproject.com",
+    "localhost",
+    "127.0.0.1",
+)
+
+
+def is_production_app_env(app_env: str) -> bool:
+    return app_env.strip().lower() in {"production", "prod"}
+
+
+def is_localhost_origin(origin: str) -> bool:
+    host = (urlparse(origin).hostname or "").lower()
+    return host in _LOCAL_CORS_HOSTS
+
+
+def cors_regex_allows_preview_or_localhost(origin_regex: str) -> bool:
+    regex = origin_regex.strip().lower().replace("\\", "")
+    if not regex:
+        return False
+    return any(marker in regex for marker in _PREVIEW_CORS_MARKERS)
+
+
+def sanitize_production_cors(
+    app_env: str, origins: list[str], origin_regex: str
+) -> tuple[list[str], str]:
+    """Drop loopback and preview CORS in production without crashing startup."""
+    if not is_production_app_env(app_env):
+        return origins, origin_regex
+    cleaned = [origin for origin in origins if not is_localhost_origin(origin)]
+    regex = "" if cors_regex_allows_preview_or_localhost(origin_regex) else origin_regex
+    return cleaned, regex
+
+
 def parse_cors_origins(value: object) -> list[str]:
     """Accept CSV, JSON array, or empty — Render env vars are always strings.
 
@@ -64,6 +101,10 @@ class Settings(BaseSettings):
     # Use the ``cors_origins`` property for the parsed list.
     cors_origins_raw: str = Field(default="", alias="CORS_ORIGINS")
     cors_origin_regex: str = Field("", alias="CORS_ORIGIN_REGEX")
+
+    # Optional bearer/token for Prometheus /alerts in production.
+    # When unset, production still accepts internal HMAC (Edge hybrid-health).
+    metrics_auth_token: str = Field("", alias="METRICS_AUTH_TOKEN")
 
     # Service
     port: int = Field(8000, alias="PORT")
@@ -167,10 +208,20 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_origins(self) -> Settings:
-        for origin in self.cors_origins:
+        origins, regex = sanitize_production_cors(
+            self.app_env, self.cors_origins, self.cors_origin_regex
+        )
+        if origins != self.cors_origins:
+            self.cors_origins_raw = ",".join(origins)
+        if regex != self.cors_origin_regex:
+            self.cors_origin_regex = regex
+        production = is_production_app_env(self.app_env)
+        for origin in origins:
             parsed = urlparse(origin)
             if parsed.scheme not in {"http", "https"} or not parsed.netloc:
                 raise ValueError(f"Invalid CORS origin: {origin}")
+            if production and parsed.scheme != "https":
+                raise ValueError(f"Production CORS origins must use HTTPS: {origin}")
         return self
 
     @field_validator("scrape_daily_hour_utc", mode="before")

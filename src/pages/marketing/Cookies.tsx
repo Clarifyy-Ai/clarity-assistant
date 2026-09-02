@@ -3,9 +3,10 @@ import { usePageMeta } from "@/hooks/usePageMeta";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import { Cookie } from "lucide-react";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { PUBLIC_WEBSITE_URL } from "@/lib/constants/contact";
 import { ROUTES } from "@/lib/constants/apiEndpoints";
 
-const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
+const SITE_URL = PUBLIC_WEBSITE_URL;
 
 /**
  * Cookie / telemetry notice for TC-PUB-014 — points at Privacy Policy and Settings → Privacy.
@@ -14,7 +15,7 @@ export default function Cookies() {
   usePageMeta({
     title: `Cookies — ${PRODUCT_NAMES.brand}`,
     description:
-      "How Career Pilot uses essential cookies, PostHog analytics, and Sentry crash reporting. Manage prefs in Settings → Privacy.",
+      "How Career Pilot uses essential cookies, PostHog analytics, optional Google Ads conversion tags, and Sentry crash reporting. Manage prefs in Settings → Privacy.",
     canonical: `${SITE_URL}/cookies`,
   });
 
@@ -48,6 +49,16 @@ export default function Cookies() {
             <strong className="text-foreground font-medium">Sentry</strong> for crash
             and error reports. Session text is omitted from those tools when you
             turn off AI-improvement consent.
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-6 space-y-3">
+          <h2 className="text-base font-semibold text-foreground">Advertising</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            If you accept the cookie notice and Google Ads is configured on this
+            deployment, we load a conversion tag so we can measure sign-ups and
+            purchases from ads. We do not send emails or answer text to Google.
+            Decline the notice to keep advertising cookies off.
           </p>
         </div>
 

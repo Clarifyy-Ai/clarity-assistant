@@ -9,6 +9,7 @@ import {
   computeTemplateFingerprint,
   evaluateCurrentAffairsStaleness,
   evaluateQuestionSimilarity,
+  filterIntraPaperDuplicates,
   persistSimilarityMatch,
 } from "@/lib/gov-exam/validators/questionDeduplication";
 
@@ -265,6 +266,31 @@ describe("Deterministic Question Validation and Deduplication", () => {
       const refDate = new Date("2026-08-21T00:00:00Z");
       const check = evaluateCurrentAffairsStaleness(freshMeta, refDate);
       expect(check.isStale).toBe(false);
+    });
+  });
+
+  describe("5. Intra-paper duplicate collapse", () => {
+    it("prevents colliding stems from occupying the same paper", () => {
+      const result = filterIntraPaperDuplicates([
+        {
+          id: "q1",
+          question_text: "What is the capital of India?",
+          options: ["Mumbai", "New Delhi", "Kolkata", "Chennai"],
+        },
+        {
+          id: "q2",
+          question_text: "What is the capital of India?",
+          options: ["Mumbai", "New Delhi", "Kolkata", "Chennai"],
+        },
+        {
+          id: "q3",
+          question_text: "Which river is the longest in India?",
+          options: ["Ganga", "Yamuna", "Godavari", "Narmada"],
+        },
+      ]);
+      expect(result.kept.map((q) => q.id)).toEqual(["q1", "q3"]);
+      expect(result.dropped).toHaveLength(1);
+      expect(result.dropped[0]?.decision).toBe("exact_duplicate");
     });
   });
 });

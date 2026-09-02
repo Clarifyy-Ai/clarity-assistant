@@ -452,6 +452,15 @@ export async function setupSupabaseMocks(
       });
     }
 
+    if (url.includes("/auth/v1/factors/") && url.includes("/challenge") && method === "POST") {
+      return fulfillJson(route, 200, { id: "e2e-challenge-id" });
+    }
+
+    if (url.includes("/auth/v1/factors/") && url.includes("/verify") && method === "POST") {
+      const user = makeUser(E2E_TEST_USER.email, emailConfirmed, userId);
+      return fulfillJson(route, 200, makeSession(user));
+    }
+
     if (url.includes("/auth/v1/factors")) {
       if (mfaEnrolled) {
         return fulfillJson(route, 200, {

@@ -7,6 +7,7 @@ import {
 
 describe("onboarding draft", () => {
   beforeEach(() => {
+    localStorage.clear();
     sessionStorage.clear();
   });
 
@@ -22,5 +23,17 @@ describe("onboarding draft", () => {
     saveOnboardingDraft(1, { targetRole: "PM" });
     clearOnboardingDraft();
     expect(loadOnboardingDraft()).toBeNull();
+  });
+
+  it("keeps uploaded resume references after save", () => {
+    saveOnboardingDraft(2, {
+      resumeFileId: "resume-1",
+      resumeFileName: "Ada_Lovelace.pdf",
+      skipResume: false,
+    });
+    const draft = loadOnboardingDraft();
+    expect(draft?.step).toBe(2);
+    expect(draft?.data.resumeFileId).toBe("resume-1");
+    expect(draft?.data.resumeFileName).toBe("Ada_Lovelace.pdf");
   });
 });

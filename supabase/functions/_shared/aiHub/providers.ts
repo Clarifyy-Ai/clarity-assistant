@@ -48,9 +48,21 @@ async function fetchWithTimeout(
   }
 }
 
+let warnedMockHub = false;
+
 function providerMode(): "mock" | "live" {
   const m = (Deno.env.get("AI_PROVIDER_MODE") ?? "mock").toLowerCase();
-  return m === "live" ? "live" : "mock";
+  const live = m === "live";
+  if (!live && !warnedMockHub) {
+    warnedMockHub = true;
+    const appEnv = (Deno.env.get("APP_ENV") ?? Deno.env.get("ENVIRONMENT") ?? "").toLowerCase();
+    if (!appEnv || appEnv === "production" || appEnv === "prod") {
+      console.warn(
+        "[ai-hub] AI_PROVIDER_MODE is not live — Admin AI Hub uses mock responses. Set AI_PROVIDER_MODE=live to call real providers.",
+      );
+    }
+  }
+  return live ? "live" : "mock";
 }
 
 function missingKeyMessage(provider: AIHubProvider): string {

@@ -35,6 +35,7 @@ const slugs = (
     : fs
         .readdirSync(FN_ROOT, { withFileTypes: true })
         .filter((d) => d.isDirectory() && !d.name.startsWith("_"))
+        .filter((d) => fs.existsSync(path.join(FN_ROOT, d.name, "index.ts")))
         .map((d) => d.name)
 ).sort();
 

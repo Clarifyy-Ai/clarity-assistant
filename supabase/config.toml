@@ -181,6 +181,9 @@ verify_jwt = true
 [functions.send-email]
 verify_jwt = true
 
+[functions.hostinger-mail]
+verify_jwt = true
+
 # Interview reminder worker (pg_cron / Actions). Auth is in-function
 # (x-internal-secret, CRON_SECRET, INTERNAL_WORKER_SECRET, service role, or admin JWT).
 [functions.send-interview-reminders]

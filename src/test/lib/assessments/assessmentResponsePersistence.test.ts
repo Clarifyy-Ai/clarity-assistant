@@ -32,6 +32,10 @@ describe("assessment response persistence contracts", () => {
     expect(sql).toContain("status = 'IN_PROGRESS'");
     expect(sql).toContain("user_id = auth.uid()");
     expect(sql).toContain("ABANDONED");
+    expect(sql.indexOf("INSUFFICIENT_QUESTION_INVENTORY")).toBeLessThan(
+      sql.indexOf("INSERT INTO public.mock_tests"),
+    );
+    expect(sql).toContain("v_available < v_total");
   });
 
   it("assemble-assessment surfaces inventory counts on 409 shortages", () => {

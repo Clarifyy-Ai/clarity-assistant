@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { creditsDB } from "@/lib/supabase/database";
 import { catalogPaiseForPlan, formatInrPaise } from "@/lib/billing/priceCalculator";
+import { toAdminUserMessage } from "@/lib/admin/adminErrors";
 import { formatCents, formatNumber, formatPercent, formatDate } from "@/lib/utils/formatters";
 import { timeAgo }             from "@/lib/utils/dateUtils";
 
@@ -143,8 +144,10 @@ export default function AdminRevenue() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [mrrIsEstimated, setMrrIsEstimated] = useState(true);
   const [revenueUnavailable, setRevenueUnavailable] = useState(false);
+  const loadGen = useRef(0);
 
   const fetchData = async (showRefresh = false) => {
+    const gen = ++loadGen.current;
     if (showRefresh) setIsRefreshing(true);
     else             setIsLoading(true);
     setLoadError(null);
@@ -336,15 +339,22 @@ export default function AdminRevenue() {
         });
       }
     } catch (err) {
-      console.error("[AdminRevenue] fetch error:", err);
-      setLoadError("Failed to load revenue metrics. Please retry.");
+      if (gen !== loadGen.current) return;
+      setLoadError(toAdminUserMessage(err, undefined, "AdminRevenue"));
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      if (gen === loadGen.current) {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
     }
   };
 
-  useEffect(() => { fetchData(); }, [dateRange]);  
+  useEffect(() => {
+    void fetchData();
+    return () => {
+      loadGen.current += 1;
+    };
+  }, [dateRange]);  
 
   const exportCSV = () => {
     const rows = [

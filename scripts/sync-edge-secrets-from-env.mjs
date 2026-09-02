@@ -26,10 +26,15 @@ const SECRET_MAP = [
   ["RESEND_API_KEY", "RESEND_API_KEY"],
   ["RESEND_FROM_EMAIL", "RESEND_FROM_EMAIL"],
   ["FROM_EMAIL", "FROM_EMAIL"],
+  ["HOSTINGER_MAIL_API_TOKEN", "HOSTINGER_MAIL_API_TOKEN"],
+  ["HOSTINGER_MAIL_ADDRESS", "HOSTINGER_MAIL_ADDRESS"],
+  ["HOSTINGER_SMTP_PASSWORD", "HOSTINGER_SMTP_PASSWORD"],
   ["SALES_EMAIL", "SALES_EMAIL"],
   ["OPENAI_API_KEY", "OPENAI_API_KEY"],
   ["ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"],
   ["GEMINI_API_KEY", "GEMINI_API_KEY"],
+  ["GOOGLE_AI_API_KEY", "GEMINI_API_KEY"],
+  ["GEMINI_MODEL_DEFAULT", "GEMINI_MODEL_DEFAULT"],
   ["AI_PROVIDER_MODE", "AI_PROVIDER_MODE"],
   ["AI_DAILY_BUDGET_USD", "AI_DAILY_BUDGET_USD"],
   ["AI_MONTHLY_BUDGET_USD", "AI_MONTHLY_BUDGET_USD"],
@@ -45,6 +50,9 @@ const SECRET_MAP = [
   ["AI_ACCELERATION_DEFAULT_TIER", "AI_ACCELERATION_DEFAULT_TIER"],
   ["DEEPGRAM_API_KEY", "DEEPGRAM_API_KEY"],
   ["DEEPGRAM_PROJECT_ID", "DEEPGRAM_PROJECT_ID"],
+  ["DEEPGRAM_STT_MODEL", "DEEPGRAM_STT_MODEL"],
+  ["DEEPGRAM_AGENT_SPEAK_MODEL", "DEEPGRAM_AGENT_SPEAK_MODEL"],
+  ["DEEPGRAM_AGENT_LISTEN_MODEL", "DEEPGRAM_AGENT_LISTEN_MODEL"],
   ["OCR_API_KEY", "OCR_API_KEY"],
   ["RAZORPAY_KEY_ID", "RAZORPAY_KEY_ID"],
   ["RAZORPAY_KEY_SECRET", "RAZORPAY_KEY_SECRET"],
@@ -65,6 +73,8 @@ const SECRET_MAP = [
   ["GOV_EXAM_PYTHON_URL", "GOV_EXAM_PYTHON_URL"],
   ["PAPER_FACTORY_URL", "PAPER_FACTORY_URL"],
   ["PAPER_FACTORY_WORKER", "PAPER_FACTORY_WORKER"],
+  ["SYSTEM_USER_ID", "SYSTEM_USER_ID"],
+  ["SYSTEM_USER_EMAIL", "SYSTEM_USER_EMAIL"],
   ["PUBLIC_URL", "PUBLIC_URL"],
   ["SITE_URL", "SITE_URL"],
   ["ALLOWED_ORIGINS", "ALLOWED_ORIGINS"],
@@ -130,6 +140,39 @@ function isUsable(value) {
   return true;
 }
 
+const PRODUCTION_BROWSER_ORIGINS = [
+  "https://trycareerpilot.com",
+  "https://www.trycareerpilot.com",
+  "https://clarify.ai.sltfinanceindia.com",
+  "https://clarityapp.ai",
+  "https://www.clarityapp.ai",
+  "https://app.clarityapp.ai",
+];
+
+function isLoopbackOrigin(origin) {
+  try {
+    const host = new URL(origin.trim()).hostname.toLowerCase();
+    return host === "localhost" || host === "127.0.0.1" || host === "0.0.0.0" || host === "::1";
+  } catch {
+    return /localhost|127\.0\.0\.1/i.test(origin);
+  }
+}
+
+function parseOriginList(value) {
+  return String(value ?? "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function isProductionSync(env) {
+  const appEnv = String(env.APP_ENV ?? "").trim().toLowerCase();
+  const environment = String(env.ENVIRONMENT ?? "").trim().toLowerCase();
+  const nonProd = ["development", "dev", "local", "preview", "staging", "stage", "test"];
+  if (nonProd.includes(appEnv) || nonProd.includes(environment)) return false;
+  return true;
+}
+
 function isUsableHttpsUrl(value) {
   if (!isUsable(value)) return false;
   try {
@@ -138,6 +181,16 @@ function isUsableHttpsUrl(value) {
   } catch {
     return false;
   }
+}
+
+/** Google Gemini keys: standard AIza… or auth AQ.… */
+function geminiKeyLooksValid(value) {
+  const v = String(value ?? "").trim();
+  if (!v || v.length < 20) return false;
+  return (
+    /^AIza[0-9A-Za-z_-]{20,}$/.test(v) ||
+    /^AQ\.[A-Za-z0-9_-]{20,}$/.test(v)
+  );
 }
 
 function requestJson(method, apiPath, token, body) {
@@ -189,7 +242,7 @@ async function main() {
   }
 
   // Defaults for closed-beta prod host when not set locally
-  const productionHost = "https://clarify.ai.sltfinanceindia.com";
+  const productionHost = "https://trycareerpilot.com";
   const viteAppUrl = isUsable(env.VITE_APP_URL)
     ? String(env.VITE_APP_URL).trim()
     : "";
@@ -205,10 +258,8 @@ async function main() {
   }
   if (!isUsable(env.ALLOWED_ORIGINS)) {
     env.ALLOWED_ORIGINS = [
-      ...(viteAppUrl ? [viteAppUrl] : []),
-      productionHost,
-      "http://localhost:5173",
-      "http://127.0.0.1:5173",
+      ...(viteAppHttpsUrl ? [viteAppHttpsUrl] : []),
+      ...PRODUCTION_BROWSER_ORIGINS,
     ]
       .filter((origin, index, all) => all.indexOf(origin) === index)
       .join(",");
@@ -225,10 +276,33 @@ async function main() {
     env.ENVIRONMENT = env.APP_ENV;
   }
 
+  if (isProductionSync(env)) {
+    env.ALLOW_LOCALHOST_ORIGINS = "false";
+    env.ALLOW_PREVIEW_ORIGINS = "false";
+    env.PUBLIC_URL = productionHost;
+    env.SITE_URL = productionHost;
+    env.ALLOWED_ORIGINS = [
+      ...PRODUCTION_BROWSER_ORIGINS,
+      ...parseOriginList(env.ALLOWED_ORIGINS),
+    ]
+      .filter((origin, index, all) => all.indexOf(origin) === index)
+      .filter((origin) => !isLoopbackOrigin(origin))
+      .join(",");
+  }
+
   const secrets = new Map();
   for (const [localKey, secretName] of SECRET_MAP) {
     const value = env[localKey];
     if (!isUsable(value)) continue;
+    if (
+      (secretName === "GEMINI_API_KEY" || localKey === "GEMINI_API_KEY") &&
+      !geminiKeyLooksValid(value)
+    ) {
+      console.warn(
+        `  SKIP ${secretName}: value does not look like a Google Gemini key (expected AIza… or AQ.…); paste your key into .env.local`,
+      );
+      continue;
+    }
     // Prefer already-set Edge-named keys over Vite remaps if both exist later
     if (!secrets.has(secretName)) secrets.set(secretName, value);
   }

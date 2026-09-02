@@ -17,13 +17,15 @@ import {
   isAdmin,
 } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
+import { isHostingerMailConfigured, sendHostingerEmail } from "../_shared/hostingerMail.ts";
+import { emailButton, publicAppUrl, wrapCareerPilotEmail } from "../_shared/emailLayout.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const FROM_EMAIL =
   Deno.env.get("RESEND_FROM_EMAIL") ??
   Deno.env.get("FROM_EMAIL") ??
   "Career Pilot <hello@trycareerpilot.com>";
-const APP_URL = Deno.env.get("APP_URL") ?? "https://clarityapp.ai";
+const APP_URL = publicAppUrl();
 const BATCH_LIMIT = 50;
 const EMAIL_RETRY_BACKOFF_MS = 30 * 60 * 1000;
 
@@ -81,16 +83,29 @@ function bodyForKind(
   whenText: string,
 ): string {
   const roleBit = role ? `${sanitize(role)} ` : "";
+  const cta = emailButton(`${APP_URL}/app/interviews`, "View in Career Pilot");
   if (kind === "t24h") {
-    return `<p>Reminder: your ${roleBit}interview at <strong>${sanitize(company)}</strong> is in about 24 hours (${sanitize(whenText)}).</p>
-<p><a href="${APP_URL}/app/interviews">View in Career Pilot</a></p>`;
+    return wrapCareerPilotEmail(
+      `<h1 style="font-size:22px;font-weight:800;margin:0 0 12px;color:#F8FAFC;">Interview in 24 hours</h1>
+<p style="font-size:14px;line-height:1.65;color:#CBD5E1;margin:8px 0;">Your ${roleBit}interview at <strong style="color:#F8FAFC;">${sanitize(company)}</strong> is in about 24 hours (${sanitize(whenText)}).</p>
+${cta}`,
+      { preheader: `Interview at ${sanitize(company)} in 24 hours` },
+    );
   }
   if (kind === "t1h") {
-    return `<p>Reminder: your ${roleBit}interview at <strong>${sanitize(company)}</strong> starts in about 1 hour (${sanitize(whenText)}).</p>
-<p><a href="${APP_URL}/app/interviews">View in Career Pilot</a></p>`;
+    return wrapCareerPilotEmail(
+      `<h1 style="font-size:22px;font-weight:800;margin:0 0 12px;color:#F8FAFC;">Interview in 1 hour</h1>
+<p style="font-size:14px;line-height:1.65;color:#CBD5E1;margin:8px 0;">Your ${roleBit}interview at <strong style="color:#F8FAFC;">${sanitize(company)}</strong> starts in about 1 hour (${sanitize(whenText)}).</p>
+${cta}`,
+      { preheader: `Interview at ${sanitize(company)} in 1 hour` },
+    );
   }
-  return `<p>Your ${roleBit}interview at <strong>${sanitize(company)}</strong> is scheduled for ${sanitize(whenText)}.</p>
-<p><a href="${APP_URL}/app/interviews">View in Career Pilot</a></p>`;
+  return wrapCareerPilotEmail(
+    `<h1 style="font-size:22px;font-weight:800;margin:0 0 12px;color:#F8FAFC;">Interview scheduled</h1>
+<p style="font-size:14px;line-height:1.65;color:#CBD5E1;margin:8px 0;">Your ${roleBit}interview at <strong style="color:#F8FAFC;">${sanitize(company)}</strong> is scheduled for ${sanitize(whenText)}.</p>
+${cta}`,
+    { preheader: `Interview at ${sanitize(company)}` },
+  );
 }
 
 function inAppTitleForKind(kind: string, company: string): string {
@@ -111,7 +126,22 @@ function inAppBodyForKind(kind: string, company: string, role: string, whenText:
 }
 
 async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
-  if (!RESEND_API_KEY || !to) return false;
+  if (!to) return false;
+
+  if (isHostingerMailConfigured()) {
+    try {
+      const result = await sendHostingerEmail({ to, subject, html });
+      return result.ok;
+    } catch (err) {
+      console.error(
+        "[send-interview-reminders] Hostinger email failed:",
+        err instanceof Error ? err.message : String(err),
+      );
+      return false;
+    }
+  }
+
+  if (!RESEND_API_KEY) return false;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
@@ -154,7 +184,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  const emailConfigured = Boolean(RESEND_API_KEY);
+  const emailConfigured = isHostingerMailConfigured() || Boolean(RESEND_API_KEY);
   const db = createServiceClient();
   const nowIso = new Date().toISOString();
 

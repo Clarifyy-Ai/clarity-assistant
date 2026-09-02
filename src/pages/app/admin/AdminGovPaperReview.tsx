@@ -60,7 +60,7 @@ export default function AdminGovPaperReview() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-6 max-w-6xl min-w-0">
       <PageHeader
         title="Generated paper review"
         description="Review AI-assembled papers, blueprint summaries, and review_state."

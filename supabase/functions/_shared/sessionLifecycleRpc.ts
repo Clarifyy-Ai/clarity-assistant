@@ -7,6 +7,32 @@ export type SessionStartRpcFailure = {
   error: string;
 };
 
+export const PRACTICE_SESSION_DB_TYPES = ["live", "rehearsal"] as const;
+
+export function isOpenPracticeStatus(status: string | null | undefined): boolean {
+  const value = String(status ?? "").toLowerCase();
+  return value === "pending" || value === "active" || value === "paused";
+}
+
+export function isTerminalPracticeStatus(status: string | null | undefined): boolean {
+  const value = String(status ?? "").toLowerCase();
+  const life = String(status ?? "").toUpperCase();
+  return (
+    value === "completed" ||
+    value === "abandoned" ||
+    value === "cancelled" ||
+    life === "COMPLETED" ||
+    life === "EXPIRED" ||
+    life === "CANCELLED"
+  );
+}
+
+/** Duplicate starts must reuse an open practice session instead of 409/500. */
+export function shouldReuseExistingOnConflict(reason: string | null | undefined): boolean {
+  const value = String(reason ?? "").toUpperCase();
+  return value === "SESSION_STATE_CONFLICT";
+}
+
 /** Map Postgres/Supabase RPC failures to typed HTTP responses (no secret leakage). */
 export function mapSessionStartRpcFailure(message: string): SessionStartRpcFailure {
   const lower = message.toLowerCase();

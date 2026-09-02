@@ -68,6 +68,15 @@ import { openUpgradeIfInsufficientCredits } from "@/lib/network/aiErrorUx";
 import { ApiClientError } from "@/lib/api/apiClient";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { GovPaperReviewGenerationTimer } from "@/components/gov-exam/GovPaperReviewGenerationTimer";
+import {
+  beginGenerationSession,
+  completeGenerationSession,
+  failGenerationSession,
+  initialGenerationSession,
+  resetGenerationSession,
+  type GovPaperGenerationSession,
+} from "@/lib/gov-exam/govPaperReviewSession";
 
 type DetailTab =
   | "overview"
@@ -173,6 +182,8 @@ export default function GovExamDetail(): React.ReactElement {
   const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
   const [topicBusy, setTopicBusy] = useState(false);
   const [topicJob, setTopicJob] = useState<PaperJobResult | null>(null);
+  const [topicGenerationSession, setTopicGenerationSession] =
+    useState<GovPaperGenerationSession>(initialGenerationSession);
   const paperTrendsCacheRef = useRef(new Map<string, PaperTrendsResponse>());
   const paperTrendsInflightRef = useRef(new Map<string, Promise<PaperTrendsResponse>>());
   const topicPollAbortRef = useRef(false);
@@ -473,11 +484,27 @@ export default function GovExamDetail(): React.ReactElement {
     if (status === "completed" && terminal.mockTestId) {
       clearActivePaperJob(terminal.jobId ?? undefined);
       syncTopicJobIdInUrl(null);
+      if (terminal.jobId) {
+        setTopicGenerationSession((prev) =>
+          completeGenerationSession(prev, terminal.jobId!, terminal.mockTestId),
+        );
+      } else {
+        setTopicGenerationSession(resetGenerationSession());
+      }
       toast.success("Topic practice set ready.");
       navigate(`/app/mock-test/session/${terminal.mockTestId}`);
       return true;
     }
     if (status === "failed_retryable" || status === "failed") {
+      if (terminal.jobId) {
+        setTopicGenerationSession((prev) =>
+          failGenerationSession(prev, terminal.jobId!, {
+            errorCode: terminal.errorCode,
+            errorMessage: terminal.errorMessage ?? terminal.error,
+            retryable: true,
+          }),
+        );
+      }
       toast.error(
         terminal.errorMessage ??
           terminal.error ??
@@ -487,6 +514,7 @@ export default function GovExamDetail(): React.ReactElement {
     }
     clearActivePaperJob(terminal.jobId ?? undefined);
     syncTopicJobIdInUrl(null);
+    setTopicGenerationSession(resetGenerationSession());
     throw new Error(
       terminal.errorMessage ?? terminal.error ?? "Topic practice failed.",
     );
@@ -543,6 +571,7 @@ export default function GovExamDetail(): React.ReactElement {
         topicPollAbortRef.current = false;
         topicResumeStartedRef.current = result.jobId;
         persistTopicPracticeJob(result.jobId, exam.examId);
+        setTopicGenerationSession(beginGenerationSession(result.jobId));
         toast.message("Assembling topic practice…");
         const terminal = await awaitTopicPracticeJob(result.jobId, result);
         if (completeTopicPracticeJob(terminal)) return;
@@ -573,6 +602,7 @@ export default function GovExamDetail(): React.ReactElement {
     topicResumeStartedRef.current = jobId;
     setTopicBusy(true);
     try {
+      setTopicGenerationSession(beginGenerationSession(jobId));
       await processPaperGenerationJob(jobId).catch(() => undefined);
       const latest = await getPaperGenerationJob(jobId);
       const terminal = await awaitTopicPracticeJob(jobId, latest);
@@ -630,6 +660,7 @@ export default function GovExamDetail(): React.ReactElement {
           return;
         }
         if (exam?.examId) persistTopicPracticeJob(jobId, exam.examId);
+        setTopicGenerationSession(beginGenerationSession(jobId));
         toast.message("Resuming topic practice…");
         const terminal = await awaitTopicPracticeJob(jobId, current);
         if (cancelled) return;
@@ -1119,11 +1150,14 @@ export default function GovExamDetail(): React.ReactElement {
                 </ul>
               )}
               {topicBusy && (
-                <p className="text-sm text-muted-foreground" aria-live="polite">
-                  {topicJob?.jobId
-                    ? "Assembling your topic practice. You can refresh — this job will resume."
-                    : "Starting topic practice…"}
-                </p>
+                <div className="space-y-1">
+                  <p className="text-sm text-muted-foreground" aria-live="polite">
+                    {topicJob?.jobId
+                      ? "Assembling your topic practice. You can refresh — this job will resume."
+                      : "Starting topic practice…"}
+                  </p>
+                  <GovPaperReviewGenerationTimer session={topicGenerationSession} />
+                </div>
               )}
               {topicJobRetryable && !topicBusy && (
                 <p className="text-sm text-muted-foreground">

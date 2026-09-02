@@ -1,11 +1,11 @@
 /**
- * Environment-based STT configuration — no API secrets on the client.
+ * Live overlay STT config — no API secrets on the client.
  * Tokens are minted server-side via the deepgram-token edge function.
  */
 
 import type { DeepgramConfig } from "@/types/audio.types";
 
-export type ParakeetTranscriptionConfig = {
+export type LiveTranscriptionConfig = {
   /** When false, service surfaces provider-unavailable without calling edge. */
   enabled: boolean;
   model: DeepgramConfig["model"];
@@ -21,7 +21,7 @@ function readEnvFlag(name: string, defaultValue: boolean): boolean {
   return String(raw).toLowerCase() !== "false" && String(raw) !== "0";
 }
 
-export function loadParakeetTranscriptionConfig(): ParakeetTranscriptionConfig {
+export function loadLiveTranscriptionConfig(): LiveTranscriptionConfig {
   const modelRaw = import.meta.env.VITE_STT_MODEL as string | undefined;
   const model =
     modelRaw === "nova-2" ||

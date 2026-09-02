@@ -123,3 +123,12 @@ describe("Guide banner source contracts (BUG-010)", () => {
     expect(guide).not.toContain("bg-indigo-500/8");
   });
 });
+
+describe("Question Bank filter alignment", () => {
+  it("vertically aligns the filter icon with the filter selects", () => {
+    const bank = read("src/pages/app/question-bank/QuestionBank.tsx");
+    expect(bank).toContain("sm:items-center");
+    expect(bank).toContain("leftIcon={<Search");
+    expect(bank).not.toMatch(/<Filter className="hidden h-4 w-4 sm:block" \/>/);
+  });
+});

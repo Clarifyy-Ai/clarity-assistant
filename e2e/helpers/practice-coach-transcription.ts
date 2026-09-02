@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import type { LiveSessionConfig } from "../../src/types/session.types";
 import {
+  buildDeepgramFinalResult,
   buildE2eTranscriptionSchedule,
   type DeepgramMockScheduleItem,
 } from "../../src/test/e2e/deepgramMockMessages";
@@ -11,6 +12,16 @@ const RESPONSIBLE_USE_KEY = "clarify:responsible-use-ack-v1";
 
 export const E2E_PARTIAL_TRANSCRIPT = "Hello wor";
 export const E2E_FINAL_TRANSCRIPT = "Hello world";
+
+export type { DeepgramMockScheduleItem };
+
+export function buildE2eDeepgramSchedule(
+  partialText: string,
+  finalText: string,
+  finalDelayMs = 8_000,
+): DeepgramMockScheduleItem[] {
+  return buildE2eTranscriptionSchedule(partialText, finalText, finalDelayMs);
+}
 
 export const DEFAULT_LIVE_OVERLAY_CONFIG: LiveSessionConfig = {
   company: null,
@@ -72,17 +83,26 @@ export async function installPracticeCoachMediaMocks(page: Page): Promise<void> 
   });
 }
 
-/** Replace Deepgram listen WebSockets with scripted partial/final transcript events. */
+export async function installMicDeniedMock(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const media = navigator.mediaDevices;
+    if (!media) return;
+    media.getUserMedia = async () => {
+      throw new DOMException("Permission denied", "NotAllowedError");
+    };
+  });
+}
+
+/** Replace Deepgram live WebSockets with scripted Results payloads. */
 export async function installDeepgramWebSocketMock(
   page: Page,
-  schedule: DeepgramMockScheduleItem[] = buildE2eTranscriptionSchedule(
+  schedule: DeepgramMockScheduleItem[] = buildE2eDeepgramSchedule(
     E2E_PARTIAL_TRANSCRIPT,
     E2E_FINAL_TRANSCRIPT,
   ),
 ): Promise<void> {
   await page.addInitScript((items) => {
     const NativeWebSocket = window.WebSocket;
-    const DEEPGRAM_HOST = "api.deepgram.com";
 
     type ListenerMap = {
       open: EventListener[];
@@ -91,7 +111,7 @@ export async function installDeepgramWebSocketMock(
       error: EventListener[];
     };
 
-  function emit(listeners: ListenerMap, type: keyof ListenerMap, event: Event) {
+    function emit(listeners: ListenerMap, type: keyof ListenerMap, event: Event) {
       for (const fn of listeners[type]) fn(event);
     }
 
@@ -104,7 +124,7 @@ export async function installDeepgramWebSocketMock(
 
       const socket = {
         url: String(url),
-        protocol: Array.isArray(protocols) ? (protocols[0] ?? "") : (protocols ?? ""),
+        protocol: Array.isArray(protocols) ? (protocols[1] ?? protocols[0] ?? "") : (protocols ?? ""),
         readyState: NativeWebSocket.CONNECTING,
         binaryType: "arraybuffer" as BinaryType,
         bufferedAmount: 0,
@@ -194,7 +214,9 @@ export async function installDeepgramWebSocketMock(
       protocols?: string | string[],
     ) {
       const urlString = String(url);
-      if (urlString.includes(DEEPGRAM_HOST)) {
+      const isDeepgram =
+        urlString.includes("api.deepgram.com") || urlString.includes("/v1/listen");
+      if (isDeepgram) {
         return createDeepgramSocket(url, protocols);
       }
       return new NativeWebSocket(url, protocols);
@@ -241,37 +263,30 @@ export async function openOverlayTranscriptTab(page: Page): Promise<void> {
   });
 }
 
-/** Mirror pauseLiveSession store updates after capture has started. */
-export async function pauseOverlaySessionViaStores(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    const { useSessionStore } = await import("/src/store/sessionStore.ts");
-    const { useOverlayStore } = await import("/src/store/overlayStore.ts");
-    const { useAudioStore } = await import("/src/store/audioStore.ts");
-
-    const audio = useAudioStore.getState();
-    audio.updateInterimText("");
-    audio.setDeepgramStatus("disconnected");
-    audio.setIsCapturing(false);
-    audio.setPipelineStatus("idle");
-
-    useSessionStore.getState().setStatus("paused");
-    useOverlayStore.getState().setSessionPipelineState("paused");
-  });
-}
-
 export type SessionApiCallTracker = {
+  parakeetTokenCalls: number;
   deepgramTokenCalls: number;
   startSessionCalls: number;
+  startSessionIds: string[];
 };
 
-/** Track deepgram-token and start-session edge calls (overrides generic supabase mock). */
+/** Track deepgram-token and start-session edge calls. Count (and block) any parakeet-token. */
 export async function trackPracticeCoachSessionApis(
   page: Page,
+  opts?: { deepgramUnavailable?: boolean },
 ): Promise<SessionApiCallTracker> {
   const tracker: SessionApiCallTracker = {
+    parakeetTokenCalls: 0,
     deepgramTokenCalls: 0,
     startSessionCalls: 0,
+    startSessionIds: [],
   };
+  const sessionId = "11111111-1111-4111-8111-111111111111";
+
+  await page.route("**/functions/v1/parakeet-token**", async (route) => {
+    tracker.parakeetTokenCalls += 1;
+    await route.abort("blocked");
+  });
 
   await page.route("**/functions/v1/deepgram-token**", async (route) => {
     if (route.request().method() === "OPTIONS") {
@@ -280,6 +295,21 @@ export async function trackPracticeCoachSessionApis(
     }
     tracker.deepgramTokenCalls += 1;
     const origin = route.request().headers()["origin"] ?? "http://127.0.0.1:5000";
+    if (opts?.deepgramUnavailable) {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        headers: {
+          "access-control-allow-origin": origin,
+          "access-control-allow-credentials": "true",
+        },
+        body: JSON.stringify({
+          error: "Live transcription is not configured.",
+          code: "provider_unavailable",
+        }),
+      });
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -287,7 +317,7 @@ export async function trackPracticeCoachSessionApis(
         "access-control-allow-origin": origin,
         "access-control-allow-credentials": "true",
       },
-      body: JSON.stringify({ token: "e2e-fake-deepgram-token", expires_in: 60 }),
+      body: JSON.stringify({ token: "e2e-fake-deepgram-token", expires_in: 60, type: "scoped" }),
     });
   });
 
@@ -300,6 +330,7 @@ export async function trackPracticeCoachSessionApis(
       return;
     }
     tracker.startSessionCalls += 1;
+    tracker.startSessionIds.push(sessionId);
     const origin = route.request().headers()["origin"] ?? "http://127.0.0.1:5000";
     await route.fulfill({
       status: 200,
@@ -309,10 +340,10 @@ export async function trackPracticeCoachSessionApis(
         "access-control-allow-credentials": "true",
       },
       body: JSON.stringify({
-        session_id: "11111111-1111-4111-8111-111111111111",
+        session_id: sessionId,
         started_at: new Date().toISOString(),
         expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-        reused: false,
+        reused: tracker.startSessionCalls > 1,
         status: "active",
         lifecycle_status: "IN_PROGRESS",
         config: { duration_minutes: 30, question_count: 5 },
@@ -329,3 +360,5 @@ export async function waitForOverlaySessionActive(page: Page): Promise<void> {
     timeout: 45_000,
   });
 }
+
+export { buildDeepgramFinalResult };

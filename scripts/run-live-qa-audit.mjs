@@ -49,7 +49,7 @@ const env = {
 const BASE =
   process.env.QA_BASE_URL ||
   env.QA_BASE_URL_STAGING ||
-  "https://clarify.ai.sltfinanceindia.com";
+  "https://trycareerpilot.com";
 const SUPABASE_URL = env.VITE_SUPABASE_URL || env.QA_SUPABASE_URL;
 const ANON = env.VITE_SUPABASE_ANON_KEY || env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const SERVICE = env.SUPABASE_SERVICE_ROLE_KEY;
@@ -544,7 +544,7 @@ async function main() {
 
   // Staging host health (always probe known closed-beta URL)
   try {
-    const stagingUrl = env.QA_BASE_URL_STAGING || "https://clarify.ai.sltfinanceindia.com";
+    const stagingUrl = env.QA_BASE_URL_STAGING || "https://trycareerpilot.com";
     const b = await chromium.launch({ headless: true });
     const p = await b.newPage();
     const stErrs = [];
@@ -575,7 +575,7 @@ async function main() {
         reportedBy: "Cursor Agent",
         assignedTo: "Platform Dev / Lovable",
         steps:
-          "1. Open https://clarify.ai.sltfinanceindia.com/pricing\n2. Observe stuck loader or missing-env boot failure\n3. Console: Missing required environment variable: VITE_SUPABASE_URL (+ CSP may block inline script)",
+          "1. Open https://trycareerpilot.com/pricing\n2. Observe stuck loader or missing-env boot failure\n3. Console: Missing required environment variable: VITE_SUPABASE_URL (+ CSP may block inline script)",
         expected:
           "After code deploy with boot-error UI: page shows 'Career Pilot failed to start' (not infinite loader). Staging remains Fail until Lovable sets VITE_* in the host build / .env.production.",
         actual: report.stagingProbe.notes,

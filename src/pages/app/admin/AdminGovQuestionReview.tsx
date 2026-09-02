@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -101,14 +101,17 @@ export default function AdminGovQuestionReview() {
     variant: "default" | "destructive" | "info";
     run: () => Promise<{ ok: number; failed: Array<{ id: string; error: string }> }>;
   } | null>(null);
+  const loadSeq = useRef(0);
 
   async function load() {
+    const seq = ++loadSeq.current;
     setLoading(true);
     setLoadError(null);
     const [qRes, rRes] = await Promise.all([
       listQuestionsForReview({ examType, topic: topicQuery, status, missingSourceOnly }),
       listVerificationRunway(),
     ]);
+    if (seq !== loadSeq.current) return;
     if (qRes.error) {
       setLoadError(qRes.error);
       toast.error(qRes.error);
@@ -249,7 +252,7 @@ export default function AdminGovQuestionReview() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-6 max-w-6xl min-w-0">
       <PageHeader
         title="Question review queue"
         description="Certify packs by verifying existing public questions. Filter public+unverified, then verify / unpublish / request translation — never invents copyrighted content."
@@ -271,7 +274,7 @@ export default function AdminGovQuestionReview() {
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {matchingRunway.map((r) => (
                 <div
-                  key={`${r.exam_id}-${r.stage_id ?? "x"}`}
+                  key={`${r.exam_id}-${r.stage_id ?? "x"}-${r.legacy_exam_type ?? ""}-${r.exam_code}`}
                   className="rounded-lg border border-border/60 px-3 py-2 text-xs space-y-1"
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -431,7 +434,8 @@ export default function AdminGovQuestionReview() {
         </Card>
       )}
 
-      <Card className="overflow-hidden" padding="none">
+      <Card className="overflow-hidden min-w-0" padding="none">
+        <div className="overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>
@@ -563,6 +567,7 @@ export default function AdminGovQuestionReview() {
             )}
           </TableBody>
         </Table>
+        </div>
       </Card>
 
       <ConfirmDialog
@@ -601,6 +606,7 @@ export default function AdminGovQuestionReview() {
             value={overrideReason}
             onChange={(e) => setOverrideReason(e.target.value)}
             placeholder="Reason for this override (required)"
+            aria-label="Reason for this override"
             rows={3}
           />
           <DialogFooter>

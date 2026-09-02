@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -32,6 +32,7 @@ export default function AdminPromoCodes() {
   const [maxRedemptions, setMaxRedemptions] = useState<string>("");
   const [validUntil, setValidUntil] = useState("");
   const [saving, setSaving] = useState(false);
+  const cancelledRef = useRef(false);
 
   async function load() {
     setLoading(true);
@@ -40,6 +41,7 @@ export default function AdminPromoCodes() {
       .from("promo_codes")
       .select("*")
       .order("created_at", { ascending: false });
+    if (cancelledRef.current) return;
     if (error) {
       setLoadError(toAdminUserMessage(error, undefined, "AdminPromoCodes"));
       toast.error(toAdminUserMessage(error));
@@ -48,7 +50,11 @@ export default function AdminPromoCodes() {
   }
 
   useEffect(() => {
+    cancelledRef.current = false;
     void load();
+    return () => {
+      cancelledRef.current = true;
+    };
   }, []);
 
   async function createPromo() {

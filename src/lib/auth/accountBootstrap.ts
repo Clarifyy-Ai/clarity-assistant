@@ -19,10 +19,10 @@ export const AUTH_SERVER_FAILURE_MESSAGE =
   "Sign-in is temporarily unavailable. Please try again in a moment.";
 
 /** Per-attempt profile read budget (includes India ↔ us-east latency). */
-export const PROFILE_FETCH_TIMEOUT_MS = 6_000;
+export const PROFILE_FETCH_TIMEOUT_MS = 10_000;
 
 /** Per-attempt admin role budget — must NOT gate Free-user routing. */
-export const ROLE_CHECK_TIMEOUT_MS = 4_000;
+export const ROLE_CHECK_TIMEOUT_MS = 6_000;
 
 export const AUTH_SESSION_TIMEOUT_MS_WEB = 8_000;
 export const AUTH_SESSION_TIMEOUT_MS_ELECTRON = 10_000;
@@ -276,16 +276,42 @@ export function withTimeout<T>(
   promise: Promise<T>,
   ms: number,
   label: string,
+  options?: { signal?: AbortSignal },
 ): Promise<T> {
+  const signal = options?.signal;
+  if (signal?.aborted) {
+    return Promise.reject(new DOMException(`${label} cancelled`, "AbortError"));
+  }
+
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<T>((_, reject) => {
+
+  return new Promise<T>((resolve, reject) => {
+    const cleanup = () => {
+      if (timer !== undefined) clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    };
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException(`${label} cancelled`, "AbortError"));
+    };
+
+    signal?.addEventListener("abort", onAbort, { once: true });
     timer = setTimeout(() => {
+      cleanup();
       reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`));
     }, ms);
+
+    promise.then(
+      (value) => {
+        cleanup();
+        resolve(value);
+      },
+      (error) => {
+        cleanup();
+        reject(error);
+      },
+    );
   });
-  return Promise.race([promise, timeout]).finally(() => {
-    if (timer !== undefined) clearTimeout(timer);
-  }) as Promise<T>;
 }
 
 /**

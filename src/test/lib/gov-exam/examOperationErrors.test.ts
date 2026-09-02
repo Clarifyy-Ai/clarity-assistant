@@ -56,6 +56,24 @@ describe("gov exam operation error mapping", () => {
     expect(formatGovExamOperationError(err)).not.toMatch(/psycopg2|traceback/i);
   });
 
+  it("distinguishes PLAN_NOT_ALLOWED from INSUFFICIENT_CREDITS", () => {
+    expect(
+      formatGovExamOperationError(
+        new ApiClientError({ message: "plan", status: 403, code: "PLAN_NOT_ALLOWED" }),
+      ),
+    ).toMatch(/supported plan/i);
+    expect(
+      formatGovExamOperationError(
+        new ApiClientError({
+          message: "credits",
+          status: 402,
+          code: "INSUFFICIENT_CREDITS",
+          details: { balance: 0, cost: 3 },
+        }),
+      ),
+    ).toMatch(/need 3 credits/i);
+  });
+
   it("maps attempt and submission conflicts", () => {
     expect(
       formatGovExamOperationError(

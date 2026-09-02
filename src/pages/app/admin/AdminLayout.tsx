@@ -8,6 +8,7 @@ import {
   MessageSquare, FileText, Database, ScrollText, LifeBuoy,
   ExternalLink, Upload, Menu, Tag, Settings2,
   Link2, BookOpen, ListChecks, FileStack, Languages, FileUp, Factory, ShieldCheck,
+  Mail,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { COMMUNITY_MODULE_LABEL } from "@/lib/community/moderation";
@@ -15,6 +16,7 @@ import { AppLoadingFallback } from "@/components/layout/AppLoadingFallback";
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -40,6 +42,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { to: "/app/admin/users",     icon: Users,         label: "Users"     },
       { to: "/app/admin/live-chat", icon: MessageSquare, label: "Live Support" },
       { to: "/app/admin/support",   icon: LifeBuoy,      label: "Support"   },
+      { to: "/app/admin/mail",      icon: Mail,          label: "Mail"      },
       { to: "/app/admin/audit-log", icon: ScrollText,    label: "Audit Log" },
     ],
   },
@@ -184,7 +187,7 @@ export default function AdminLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col md:flex-row">
+    <div className="h-dvh bg-background flex flex-col md:flex-row overflow-hidden">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:text-sm focus:font-medium"
@@ -203,14 +206,17 @@ export default function AdminLayout() {
               <Menu className="w-5 h-5" />
             </button>
           </SheetTrigger>
-          <SheetContent side="left" className="w-72 p-0">
-            <SheetHeader className="p-4 border-b border-border text-left">
+          <SheetContent side="left" className="w-72 p-0 flex flex-col">
+            <SheetHeader className="p-4 border-b border-border text-left shrink-0">
               <SheetTitle className="flex items-center gap-2 text-sm">
                 <Shield className="w-5 h-5 text-red-400" aria-hidden="true" />
                 {isAdmin ? "Admin" : "Moderation"}
               </SheetTitle>
+              <SheetDescription className="sr-only">
+                Admin navigation
+              </SheetDescription>
             </SheetHeader>
-            <nav className="p-3 space-y-3" aria-label="Admin navigation">
+            <nav className="p-3 space-y-3 overflow-y-auto min-h-0 flex-1" aria-label="Admin navigation">
               <AdminNavLinks sections={navSections} onNavigate={() => setMobileOpen(false)} />
             </nav>
           </SheetContent>
@@ -222,8 +228,8 @@ export default function AdminLayout() {
       </header>
 
       {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-52 shrink-0 border-r border-border flex-col">
-        <div className="p-4 border-b border-border">
+      <aside className="hidden md:flex w-56 shrink-0 border-r border-border flex-col h-full min-h-0">
+        <div className="p-4 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-red-400" aria-hidden="true" />
             <span className="text-sm font-bold text-foreground">{isAdmin ? "Career Pilot Admin" : "Moderation"}</span>
@@ -233,11 +239,11 @@ export default function AdminLayout() {
           </p>
         </div>
 
-        <nav className="flex-1 p-3 space-y-3" aria-label="Admin navigation">
+        <nav className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3" aria-label="Admin navigation">
           <AdminNavLinks sections={navSections} />
         </nav>
 
-        <div className="p-3 border-t border-border space-y-1">
+        <div className="p-3 border-t border-border space-y-1 shrink-0">
           <NavLink
             to="/app/dashboard"
             className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-muted-foreground hover:text-foreground transition-colors duration-150"
@@ -257,7 +263,7 @@ export default function AdminLayout() {
         </div>
       </aside>
 
-      <main id="main-content" data-testid="admin-content-pad" className="flex-1 overflow-auto p-4 md:p-6">
+      <main id="main-content" data-testid="admin-content-pad" className="flex-1 min-w-0 min-h-0 overflow-y-auto p-4 md:p-6">
         <Outlet />
       </main>
     </div>

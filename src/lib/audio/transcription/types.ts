@@ -1,6 +1,5 @@
 /**
- * Provider-neutral live transcription model (Parakeet boundary).
- * Deepgram (or future STT backends) normalize into these shapes.
+ * Normalized live transcription model used by the Practice Coach overlay.
  */
 
 export type TranscriptSegment = {
@@ -27,15 +26,15 @@ export type TranscriptionProviderStatus =
   | "error"
   | "ended";
 
-export type ParakeetTranscriptionCallbacks = {
+export type LiveTranscriptionCallbacks = {
   onPartial: (segment: TranscriptSegment, channel: TranscriptionChannel) => void;
   onFinal: (segment: TranscriptSegment, channel: TranscriptionChannel) => void;
   onStatusChange: (status: TranscriptionProviderStatus, channel?: TranscriptionChannel) => void;
   onError: (error: Error, recoverable: boolean, channel?: TranscriptionChannel) => void;
 };
 
-export type ParakeetTranscriptionServiceOptions = {
+export type LiveTranscriptionServiceOptions = {
   sessionId: string;
   correlationId?: string;
-  callbacks: ParakeetTranscriptionCallbacks;
+  callbacks: LiveTranscriptionCallbacks;
 };

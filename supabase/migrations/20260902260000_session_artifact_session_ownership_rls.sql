@@ -6,6 +6,11 @@ BEGIN;
 -- ── session_answers ─────────────────────────────────────────────────────────
 DROP POLICY IF EXISTS "Users can manage own session answers" ON public.session_answers;
 DROP POLICY IF EXISTS session_answers_admin ON public.session_answers;
+DROP POLICY IF EXISTS session_answers_own ON public.session_answers;
+DROP POLICY IF EXISTS session_answers_own_select ON public.session_answers;
+DROP POLICY IF EXISTS session_answers_own_insert ON public.session_answers;
+DROP POLICY IF EXISTS session_answers_own_update ON public.session_answers;
+DROP POLICY IF EXISTS session_answers_own_delete ON public.session_answers;
 
 CREATE POLICY session_answers_own_select
   ON public.session_answers
@@ -51,6 +56,11 @@ CREATE POLICY session_answers_admin
 -- ── session_transcripts ─────────────────────────────────────────────────────
 DROP POLICY IF EXISTS transcripts_own ON public.session_transcripts;
 DROP POLICY IF EXISTS transcripts_admin ON public.session_transcripts;
+DROP POLICY IF EXISTS session_transcripts_own_select ON public.session_transcripts;
+DROP POLICY IF EXISTS session_transcripts_own_insert ON public.session_transcripts;
+DROP POLICY IF EXISTS session_transcripts_own_update ON public.session_transcripts;
+DROP POLICY IF EXISTS session_transcripts_own_delete ON public.session_transcripts;
+DROP POLICY IF EXISTS session_transcripts_admin ON public.session_transcripts;
 
 CREATE POLICY session_transcripts_own_select
   ON public.session_transcripts

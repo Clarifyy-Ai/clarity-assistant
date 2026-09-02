@@ -40,18 +40,16 @@ export default function AdminBlogPreview() {
 
   if (error) {
     return (
-      <div className="p-6">
-        <InlineErrorRetry message={error} onRetry={() => window.location.reload()} />
-      </div>
+      <InlineErrorRetry message={error} onRetry={() => window.location.reload()} />
     );
   }
 
   if (!post) {
-    return <p className="p-6 text-sm text-muted-foreground">Loading preview…</p>;
+    return <p className="text-sm text-muted-foreground">Loading preview…</p>;
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-6">
+    <div className="mx-auto max-w-3xl space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
           Admin preview · {post.published ? "published" : "draft"}

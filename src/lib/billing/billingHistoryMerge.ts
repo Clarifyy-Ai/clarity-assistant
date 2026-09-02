@@ -88,7 +88,9 @@ function paymentOrderToTransaction(
     id: `order:${order.id}`,
     date: new Date(order.paid_at ?? order.created_at),
     type: refunded ? "refund" : completed ? "purchase" : "usage",
-    description: `${order.provider} — ${order.product_type.replace(/_/g, " ")}`,
+    description: refunded
+      ? `Refund — ${order.provider} — ${order.product_type.replace(/_/g, " ")}`
+      : `${order.provider} — ${order.product_type.replace(/_/g, " ")}`,
     amount: order.amount_paise / 100,
     credits: completed ? creditsGranted : 0,
     status: displayStatus,

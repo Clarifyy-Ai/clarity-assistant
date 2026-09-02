@@ -5,6 +5,7 @@ import { LazyMotion, domAnimation, m } from "framer-motion";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { supabase } from "@/integrations/supabase/client";
+import { PUBLIC_CTAS } from "@/lib/constants/publicCtas";
 
 interface BlogPostData {
   slug: string;
@@ -204,7 +205,7 @@ export default function BlogPost() {
               to="/signup"
               className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity"
             >
-              Get started free
+              {PUBLIC_CTAS.signup}
             </Link>
           </div>
         </div>

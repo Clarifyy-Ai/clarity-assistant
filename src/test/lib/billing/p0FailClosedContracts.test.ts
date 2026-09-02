@@ -33,6 +33,20 @@ describe("razorpay create-order fail-closed contract", () => {
     expect(src).toContain('action: z.literal("fail")');
     expect(src).toContain('transitionOrder(failParsed.data.payment_order_id, "failed")');
   });
+
+  it("returns PAYMENTS_NOT_CONFIGURED for missing provider secrets without a generic 500", () => {
+    expect(src).toContain("PAYMENTS_NOT_CONFIGURED");
+    expect(src).toContain("paymentsNotConfiguredBody");
+    expect(src).toContain("checkoutConfigured");
+    expect(src).not.toContain("Integration not configured");
+  });
+
+  it("allows cancel and fail without requiring Razorpay keys", () => {
+    const cancelIdx = src.indexOf('action: z.literal("cancel")');
+    const configIdx = src.indexOf("checkoutConfigured");
+    expect(cancelIdx).toBeGreaterThan(0);
+    expect(configIdx).toBeGreaterThan(cancelIdx);
+  });
 });
 
 describe("razorpay webhook payment failure contract", () => {
@@ -47,9 +61,29 @@ describe("razorpay webhook payment failure contract", () => {
     expect(src).toContain("markFailedRazorpayOrder");
   });
 
+  it("refuses events when the webhook secret is missing with PAYMENTS_NOT_CONFIGURED", () => {
+    expect(src).toContain("paymentsNotConfiguredBody");
+    expect(src).toContain("webhookConfigured");
+    expect(src).not.toContain("Webhook secret not configured");
+  });
+
   it("dedupes webhooks without event id using payment fallback key", () => {
     expect(src).toContain("razorpay_webhook_payment_");
     expect(src).toContain("claimWebhookEvent");
+  });
+});
+
+describe("razorpay verify-payment config contract", () => {
+  const src = fs.readFileSync(
+    path.join(root, "supabase/functions/razorpay-verify-payment/index.ts"),
+    "utf8",
+  );
+
+  it("uses shared Razorpay provider config and PAYMENTS_NOT_CONFIGURED", () => {
+    expect(src).toContain("getRazorpayProviderConfig");
+    expect(src).toContain("paymentsNotConfiguredBody");
+    expect(src).toContain("fulfillCapturedRazorpayOrder");
+    expect(src).not.toContain("Razorpay not configured");
   });
 });
 

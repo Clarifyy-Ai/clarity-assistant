@@ -50,10 +50,13 @@ REVOKE ALL ON FUNCTION public.start_owned_mock_test(uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.start_owned_mock_test(uuid) TO authenticated, service_role;
 
 DROP FUNCTION IF EXISTS public.save_owned_test_answer(
+  uuid, uuid, text, boolean, boolean, integer, timestamptz, integer
+);
+DROP FUNCTION IF EXISTS public.save_owned_test_answer(
   uuid, uuid, text, boolean, boolean, integer, timestamptz
 );
 
-CREATE FUNCTION public.save_owned_test_answer(
+CREATE OR REPLACE FUNCTION public.save_owned_test_answer(
   p_test_id uuid,
   p_question_id uuid,
   p_user_answer text,

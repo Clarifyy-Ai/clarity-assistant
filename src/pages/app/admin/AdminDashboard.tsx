@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageContent } from "@/components/layout/PageContent";
+import { toAdminUserMessage } from "@/lib/admin/adminErrors";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
@@ -86,9 +87,17 @@ function DashboardHealthStrip() {
   const [checks, setChecks] = useState<HealthCheck[]>([]);
 
   useEffect(() => {
+    let cancelled = false;
     void runAdminHealthChecks()
-      .then(setChecks)
-      .catch(() => setChecks([]));
+      .then((result) => {
+        if (!cancelled) setChecks(result);
+      })
+      .catch(() => {
+        if (!cancelled) setChecks([]);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (checks.length === 0) return null;
@@ -122,61 +131,68 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
 
-  useEffect(() => { fetchStats(); }, []);
+  const [reloadKey, setReloadKey] = useState(0);
 
-  async function fetchStats() {
-    setLoading(true);
-    setError(null);
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchStats() {
+      setLoading(true);
+      setError(null);
+      try {
+        const counts = await adminAnalyticsDB.getDashboardStats();
+        const { totalUsers, proUsers, todaySessions, totalSessions } = counts;
 
-    try {
-      const counts = await adminAnalyticsDB.getDashboardStats();
-      const { totalUsers, proUsers, todaySessions, totalSessions } = counts;
+        const since = subDays(new Date(), 7).toISOString();
+        const [{ data: subs, error: subsError }, { data: usage, error: usageError }] = await Promise.all([
+          supabase
+            .from("subscriptions")
+            .select("plan_id, status")
+            .in("status", ["active", "trialing"]),
+          supabase
+            .from("ai_usage_logs" as "profiles")
+            .select("cost_microcents")
+            .gte("created_at", since),
+        ]);
+        if (subsError) throw subsError;
+        if (usageError) throw usageError;
+        if (cancelled) return;
 
-      const since = subDays(new Date(), 7).toISOString();
-      const [{ data: subs, error: subsError }, { data: usage, error: usageError }] = await Promise.all([
-        supabase
-          .from("subscriptions")
-          .select("plan_id, status")
-          .in("status", ["active", "trialing"]),
-        supabase
-          .from("ai_usage_logs" as "profiles")
-          .select("cost_microcents")
-          .gte("created_at", since),
-      ]);
-      if (subsError) throw subsError;
-      if (usageError) throw usageError;
+        let mrrPaise = 0;
+        for (const sub of subs ?? []) {
+          const planId = String(sub.plan_id ?? "pro") as PlanId;
+          mrrPaise += razorpayPaiseForPlan(planId) ?? 0;
+        }
 
-      let mrrPaise = 0;
-      for (const sub of subs ?? []) {
-        const planId = String(sub.plan_id ?? "pro") as PlanId;
-        mrrPaise += razorpayPaiseForPlan(planId) ?? 0;
+        const usageRows = (usage ?? []) as Array<{ cost_microcents?: number | null }>;
+        const aiSpendUsd =
+          usageRows.reduce((sum, row) => sum + (Number(row.cost_microcents) || 0), 0) /
+          1_000_000;
+
+        setStats({
+          totalUsers,
+          proUsers,
+          freeUsers: totalUsers - proUsers,
+          todaySessions,
+          totalSessions,
+          mrrPaise,
+          convRate: totalUsers ? ((proUsers / totalUsers) * 100).toFixed(1) : "0",
+          aiSpendUsd,
+          activeSubscriptions: subs?.length ?? 0,
+        });
+      } catch (e: unknown) {
+        if (cancelled) return;
+        const msg = toAdminUserMessage(e, undefined, "AdminDashboard.fetchStats");
+        setError(msg);
+        toast.error(msg);
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-
-      const usageRows = (usage ?? []) as Array<{ cost_microcents?: number | null }>;
-      const aiSpendUsd =
-        usageRows.reduce((sum, row) => sum + (Number(row.cost_microcents) || 0), 0) /
-        1_000_000;
-
-      setStats({
-        totalUsers,
-        proUsers,
-        freeUsers: totalUsers - proUsers,
-        todaySessions,
-        totalSessions,
-        mrrPaise,
-        convRate: totalUsers ? ((proUsers / totalUsers) * 100).toFixed(1) : "0",
-        aiSpendUsd,
-        activeSubscriptions: subs?.length ?? 0,
-      });
-    } catch (e: any) {
-      const msg = e?.message ?? "Failed to load admin stats";
-      console.error("[AdminDashboard] fetchStats:", e);
-      setError(msg);
-      toast.error(msg);
-    } finally {
-      setLoading(false);
     }
-  }
+    void fetchStats();
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
 
   const KPIs: KPIItem[] = stats ? [
     {
@@ -214,7 +230,7 @@ export default function AdminDashboard() {
   ] : [];
 
   return (
-    <PageContent className="space-y-6">
+    <PageContent className="space-y-6 overflow-x-auto">
       <PageHeader
         title="Admin Dashboard"
         description="Platform metrics, user activity, and operational shortcuts"
@@ -222,7 +238,7 @@ export default function AdminDashboard() {
       />
 
       {error && !loading && (
-        <InlineErrorRetry message={error} onRetry={() => void fetchStats()} />
+        <InlineErrorRetry message={error} onRetry={() => setReloadKey((k) => k + 1)} />
       )}
 
       <DashboardHealthStrip />
@@ -319,12 +335,24 @@ function RecentSignups() {
   const [rows, setRows] = useState<SignupRow[]>([]);
 
   useEffect(() => {
-    supabase
+    let cancelled = false;
+    void supabase
       .from("profiles")
       .select("id, full_name, email, plan_id, created_at")
       .order("created_at", { ascending: false })
       .limit(10)
-      .then(({ data }) => setRows((data as unknown as SignupRow[]) ?? []));
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          toAdminUserMessage(error, undefined, "AdminDashboard.recentSignups");
+          setRows([]);
+          return;
+        }
+        setRows((data as unknown as SignupRow[]) ?? []);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
@@ -376,32 +404,35 @@ function SessionVolumeChart() {
   const [data, setData] = useState<DayCount[]>([]);
 
   useEffect(() => {
-    const days = [...Array(7)].map((_, i) => {
-      const d = subDays(new Date(), 6 - i);
-      return format(d, "yyyy-MM-dd");
-    });
-
-    Promise.all(
-      days.map((day) =>
-        supabase
-          .from("sessions")
-          .select("*", { count: "exact", head: true })
-          .gte("created_at", `${day}T00:00:00`)
-          .lt("created_at", `${day}T23:59:59`)
-          .then(({ count }) => ({ day, count: count ?? 0 }))
-      )
-    ).then(setData);
+    let cancelled = false;
+    void adminAnalyticsDB
+      .countCreatedAtByDay("sessions", 7)
+      .then((series) => {
+        if (!cancelled) setData(series);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        toAdminUserMessage(err, undefined, "AdminDashboard.sessionVolume");
+        setData([]);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const chartData = data.map((d) => ({
-    day: format(new Date(d.day), "EEE"),
+    day: format(new Date(`${d.day}T00:00:00`), "EEE"),
     count: d.count,
     full: d.day,
   }));
 
+  if (data.length === 0) {
+    return <p className="text-sm text-muted-foreground">No session volume for the last 7 days.</p>;
+  }
+
   return (
-    <div className="h-40 w-full">
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="h-40 min-h-[160px] w-full min-w-0">
+      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={160}>
         <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
           <XAxis dataKey="day" tick={{ fontSize: 10 }} />
@@ -410,7 +441,7 @@ function SessionVolumeChart() {
             contentStyle={{ borderRadius: 12, border: "1px solid hsl(var(--border))" }}
             labelFormatter={(_, payload) =>
               payload?.[0]?.payload?.full
-                ? format(new Date(payload[0].payload.full), "MMM d")
+                ? format(new Date(`${payload[0].payload.full}T00:00:00`), "MMM d")
                 : ""
             }
           />

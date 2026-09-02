@@ -65,6 +65,7 @@ import {
   startSession as startSessionApi,
   finalizeSession as finalizeSessionApi,
   endSession as endSessionApi,
+  restoreOwnedSession,
 } from "@/lib/api/sessions";
 import { ApiClientError } from "@/lib/api/apiClient";
 import { toDbModel } from "@/lib/ai/modelMapping";
@@ -450,6 +451,8 @@ export function useLiveCopilot({
 
   /**
    * Stable question detected callback (used by audio pipeline).
+   * Audio session only invokes this after a finalized interviewer question
+   * (never from partial transcripts). Fingerprints skip duplicate AI calls.
    */
   const seenQuestionFingerprintsRef = useRef<Set<string>>(new Set());
   const autoHintInflightFingerprintsRef = useRef<Set<string>>(new Set());
@@ -743,6 +746,13 @@ export function useLiveCopilot({
           );
           void refreshCredits().catch(() => undefined);
         }
+      } finally {
+        const fp = questionFingerprint(question);
+        if (fp) autoHintInflightFingerprintsRef.current.delete(fp);
+        const overlay = useOverlayStore.getState();
+        if (overlay.hint_state === "generating") {
+          overlay.setHintState("idle");
+        }
       }
     },
     [profile, coachStore, getSafeContext, enrichContextForAi, checkpointLiveSession],
@@ -771,7 +781,7 @@ export function useLiveCopilot({
 
   const submitManualQuestion = useCallback(
     async (question: string) => {
-      if (!profile) return;
+      if (!profile) return false;
 
       const sessionId = sessionIdRef.current;
       if (
@@ -781,11 +791,11 @@ export function useLiveCopilot({
         )
       ) {
         toast.error("Start a practice session before chatting with your coach.");
-        return;
+        return false;
       }
 
       const baseContext = coachStore.getContext() ?? getSafeContext();
-      if (!baseContext) return;
+      if (!baseContext) return false;
       const context = await enrichContextForAi(baseContext as Record<string, unknown>);
 
       chatAbortRef.current?.abort();
@@ -794,7 +804,7 @@ export function useLiveCopilot({
 
       try {
         const { submitCoachChatMessage } = await import("@/lib/ai/coachChatSession");
-        await submitCoachChatMessage({
+        return submitCoachChatMessage({
           message: question,
           sessionId,
           currentQuestion:
@@ -897,7 +907,16 @@ export function useLiveCopilot({
               attemptNonce: startAttemptKeyRef.current,
             }),
           },
-        );
+        ).catch(async (startErr) => {
+          const code =
+            startErr instanceof ApiClientError ? startErr.code : "";
+          if (code !== "SESSION_STATE_CONFLICT" && (startErr as { status?: number }).status !== 409) {
+            throw startErr;
+          }
+          const restored = await restoreOwnedSession({ session_type: apiSessionType });
+          if (!restored.session_id) throw startErr;
+          return { ...restored, reused: true };
+        });
         const reusedTerminal =
           result.reused === true &&
           (result.status === "completed" ||
@@ -1001,7 +1020,13 @@ export function useLiveCopilot({
       }
       checkpointLiveSession();
     } catch (err) {
-      console.error("[useLiveCopilot] Failed to start live session:", err);
+      const normalized = normalizeSessionLifecycleError(err);
+      const code = normalized instanceof ApiClientError ? normalized.code : "";
+      if (code === "SESSION_STATE_CONFLICT" || code === "SESSION_NOT_AVAILABLE") {
+        console.warn("[useLiveCopilot] Session start conflict:", code);
+      } else {
+        console.warn("[useLiveCopilot] Failed to start live session:", normalized.message);
+      }
       if (cancelSessionOnFailure && !getPrivateMode()) {
         void endSessionApi({
           session_id: cancelSessionOnFailure,
@@ -1016,7 +1041,6 @@ export function useLiveCopilot({
       audio.stop();
       markOverlayProductSessionTerminal(generation, "FAILED");
       teardownOverlayProductSession(generation);
-      const normalized = normalizeSessionLifecycleError(err);
       throw normalized;
     } finally {
       startInFlightRef.current = false;
@@ -1136,7 +1160,7 @@ export function useLiveCopilot({
   }, [audio]);
 
   const resumeLiveSession = useCallback(async () => {
-    await audio.start({ restore: true });
+    await audio.resume();
     useSessionStore.getState().setStatus("active");
   }, [audio]);
 

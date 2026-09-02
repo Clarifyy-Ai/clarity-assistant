@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuthStore } from '@/store/userStore';
-import { Calendar, Download, CreditCard, ArrowDownLeft, Filter } from 'lucide-react';
+import { Calendar, Download, ArrowDownLeft, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -42,6 +42,9 @@ interface BillingHistoryProps {
    */
   showExport?: boolean;
 
+  /** Increment to reload ledger + payment orders after Settings refresh. */
+  refreshKey?: number;
+
   className?: string;
 }
 
@@ -49,12 +52,15 @@ export function BillingHistory({
   itemsPerPage = 10,
   showFilters = true,
   showExport = true,
+  refreshKey = 0,
   className,
 }: BillingHistoryProps) {
-  const { profile } = useAuthStore();
+  const { profile, user } = useAuthStore();
+  const accountId = profile?.id ?? user?.id;
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reloadNonce, setReloadNonce] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [filterType, setFilterType] = useState<'all' | 'purchase' | 'usage' | 'refund' | 'bonus'>('all');
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'amount-desc'>('date-desc');
@@ -81,59 +87,63 @@ export function BillingHistory({
     setCurrentPage((page) => (nextTotalPages > 0 ? Math.min(page, nextTotalPages) : 1));
   }, [filteredTransactions.length, itemsPerPage]);
 
+  const loadTransactions = useCallback(async () => {
+    if (!accountId) {
+      setTransactions([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const [ledger, paymentsResult] = await Promise.all([
+        creditsDB.listByUserId(accountId, 100),
+        supabase
+          .from("payment_orders")
+          .select(
+            "id, product_type, amount_paise, status, created_at, paid_at, provider, credits_granted, provider_payment_id",
+          )
+          .eq("user_id", accountId)
+          .order("created_at", { ascending: false })
+          .limit(50),
+      ]);
+
+      if (paymentsResult.error) throw paymentsResult.error;
+
+      const payments = (paymentsResult.data ?? []) as Tables<"payment_orders">[];
+
+      setTransactions(
+        mergeBillingHistoryTransactions(
+          ledger.map((row) => ({
+            id: row.id,
+            amount: row.amount,
+            action: String(row.action ?? ""),
+            created_at: row.created_at,
+            description: row.description,
+            stripe_payment_id: row.stripe_payment_id ?? null,
+          })),
+          payments.map((p) => ({
+            id: p.id,
+            product_type: p.product_type,
+            amount_paise: p.amount_paise,
+            status: p.status,
+            created_at: p.created_at,
+            paid_at: p.paid_at,
+            provider: p.provider,
+            credits_granted: p.credits_granted,
+            provider_payment_id: p.provider_payment_id,
+          })),
+        ),
+      );
+    } catch {
+      toast.error('Failed to load billing history');
+    } finally {
+      setLoading(false);
+    }
+  }, [accountId]);
+
   useEffect(() => {
-    const loadTransactions = async () => {
-      if (!profile?.id) return;
-      setLoading(true);
-      try {
-        const [ledger, paymentsResult] = await Promise.all([
-          creditsDB.listByUserId(profile.id, 100),
-          supabase
-            .from("payment_orders")
-            .select(
-              "id, product_type, amount_paise, status, created_at, paid_at, provider, credits_granted, provider_payment_id",
-            )
-            .eq("user_id", profile.id)
-            .order("created_at", { ascending: false })
-            .limit(50),
-        ]);
-
-        if (paymentsResult.error) throw paymentsResult.error;
-
-        const payments = (paymentsResult.data ?? []) as Tables<"payment_orders">[];
-
-        setTransactions(
-          mergeBillingHistoryTransactions(
-            ledger.map((row) => ({
-              id: row.id,
-              amount: row.amount,
-              action: String(row.action ?? ""),
-              created_at: row.created_at,
-              description: row.description,
-              stripe_payment_id: row.stripe_payment_id ?? null,
-            })),
-            payments.map((p) => ({
-              id: p.id,
-              product_type: p.product_type,
-              amount_paise: p.amount_paise,
-              status: p.status,
-              created_at: p.created_at,
-              paid_at: p.paid_at,
-              provider: p.provider,
-              credits_granted: p.credits_granted,
-              provider_payment_id: p.provider_payment_id,
-            })),
-          ),
-        );
-      } catch {
-        toast.error('Failed to load billing history');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadTransactions();
-  }, [profile?.id]);
+    void loadTransactions();
+  }, [loadTransactions, refreshKey, reloadNonce]);
 
   // Paginate
   const startIdx = (currentPage - 1) * itemsPerPage;
@@ -180,7 +190,7 @@ export function BillingHistory({
     }
   };
 
-  if (loading) {
+  if (loading && transactions.length === 0) {
     return (
       <div className={cn('rounded-lg border border-border bg-secondary/50 p-6', className)}>
         <div className="flex items-center justify-center py-12">
@@ -197,20 +207,31 @@ export function BillingHistory({
         <div>
           <h3 className="text-lg font-bold text-foreground">Billing History</h3>
           <p className="text-xs text-muted-foreground mt-1">
-            View your transactions and invoices
+            View your transactions, refunds, and invoices
           </p>
         </div>
-        {showExport && (
+        <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
-            onClick={handleExport}
+            data-testid="billing-history-refresh"
+            onClick={() => setReloadNonce((n) => n + 1)}
             className="flex items-center gap-2"
           >
-            <Download className="h-4 w-4" />
-            Export
+            Refresh
           </Button>
-        )}
+          {showExport && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExport}
+              className="flex items-center gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Export
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -220,8 +241,9 @@ export function BillingHistory({
             <Filter className="h-4 w-4 text-muted-foreground" />
             <select
               value={filterType}
+              data-testid="billing-history-filter"
               onChange={(e) => {
-                setFilterType(e.target.value as any);
+                setFilterType(e.target.value as typeof filterType);
                 setCurrentPage(1);
               }}
               className="rounded-lg bg-secondary border border-border px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
@@ -286,6 +308,7 @@ export function BillingHistory({
                 {displayedTransactions.map((transaction) => (
                   <tr
                     key={transaction.id}
+                    data-testid={transaction.type === "refund" ? "billing-refund-row" : "billing-history-row"}
                     className="border-b border-border hover:bg-secondary/40 transition-colors"
                   >
                     <td className="px-4 py-3 text-xs text-muted-foreground">
@@ -359,6 +382,7 @@ export function BillingHistory({
             {displayedTransactions.map((transaction) => (
               <div
                 key={transaction.id}
+                data-testid={transaction.type === "refund" ? "billing-refund-row" : "billing-history-row"}
                 className="rounded-lg border border-border bg-secondary/50 p-4"
               >
                 <div className="flex items-start justify-between mb-2">

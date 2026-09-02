@@ -46,7 +46,17 @@ import {
 import {
   computeRemainingSeconds as remainingFromStart,
   shouldAutoSubmitAttempt,
+  examTimerOriginFromAttempt,
+  examTimerOriginKey,
+  remainingFromTimerOrigin,
+  canRenderExamTimer,
+  type ExamTimerOrigin,
 } from "@/lib/gov-exam/examTimer";
+import {
+  deriveResponseFromRow,
+  palettePresentation,
+  type QuestionPaletteState,
+} from "@/lib/gov-exam/questionPalette";
 import {
   PLAYABLE_QUESTIONS_VIEW,
   playableQuestionSelect,
@@ -189,12 +199,7 @@ function questionFromSnapshot(
   };
 }
 
-type QuestionState =
-  | "unattempted"
-  | "visited"
-  | "answered"
-  | "marked"
-  | "answered-marked";
+type QuestionState = QuestionPaletteState;
 
 interface ResponseState {
   answer: string;
@@ -229,29 +234,24 @@ interface MathSegment {
   isBlock: boolean;
 }
 
-const STATE_COLORS: Record<QuestionState, string> = {
-  unattempted: "bg-card text-foreground border-border hover:bg-muted",
-  visited:
-    "bg-yellow-500/10 text-yellow-600 border-yellow-500/40 dark:text-yellow-400",
-  answered:
-    "bg-green-500/10 text-green-600 border-green-500/40 dark:text-green-400",
-  marked:
-    "bg-purple-500/10 text-purple-600 border-purple-500/40 dark:text-purple-400",
-  "answered-marked":
-    "bg-red-500/10 text-red-600 border-red-500/40 dark:text-red-400",
-};
+const STATE_COLORS = {
+  unattempted: palettePresentation("unattempted").className,
+  visited: palettePresentation("visited").className,
+  answered: palettePresentation("answered").className,
+  marked: palettePresentation("marked").className,
+  "answered-marked": palettePresentation("answered-marked").className,
+} as const;
 
-/** Non-color status labels for palette + screen readers */
-const STATE_STATUS: Record<
-  QuestionState,
-  { label: string; short: string }
-> = {
-  unattempted: { label: "Not visited", short: "NV" },
-  visited: { label: "Visited, not answered", short: "V" },
-  answered: { label: "Answered", short: "A" },
-  marked: { label: "Marked for review", short: "M" },
-  "answered-marked": { label: "Answered and marked for review", short: "AM" },
-};
+const STATE_STATUS = {
+  unattempted: { label: palettePresentation("unattempted").label, short: palettePresentation("unattempted").short },
+  visited: { label: palettePresentation("visited").label, short: palettePresentation("visited").short },
+  answered: { label: palettePresentation("answered").label, short: palettePresentation("answered").short },
+  marked: { label: palettePresentation("marked").label, short: palettePresentation("marked").short },
+  "answered-marked": {
+    label: palettePresentation("answered-marked").label,
+    short: palettePresentation("answered-marked").short,
+  },
+} as const;
 
 const TIMER_WARN_SECONDS = 300;
 const TIMER_CRITICAL_SECONDS = 60;
@@ -270,6 +270,10 @@ function computeRemainingSeconds(test: MockTest): number {
     Date.now(),
     test.expires_at,
   );
+}
+
+function deriveResponseState(row: TestResponseRow): ResponseState {
+  return deriveResponseFromRow(row);
 }
 
 function MathText({ text }: { text: string }) {
@@ -396,22 +400,6 @@ function estimateAttempted(
   return { attempted, total: questions.length };
 }
 
-function deriveResponseState(row: TestResponseRow): ResponseState {
-  const answer = row.user_answer ?? "";
-  const isAnswered = Boolean(answer);
-  const isMarked = Boolean(row.is_marked_review);
-  const isAttempted = Boolean(row.is_attempted);
-
-  let state: QuestionState = "unattempted";
-
-  if (isAnswered && isMarked) state = "answered-marked";
-  else if (isAnswered) state = "answered";
-  else if (isMarked) state = "marked";
-  else if (isAttempted) state = "visited";
-
-  return { answer, state };
-}
-
 export default function TestSession() {
   const { testId } = useParams<{ testId: string }>();
   const navigate = useNavigate();
@@ -422,6 +410,7 @@ export default function TestSession() {
   const [responses, setResponses] = useState<Record<string, ResponseState>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [timerOrigin, setTimerOrigin] = useState<ExamTimerOrigin | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
@@ -457,10 +446,14 @@ export default function TestSession() {
     ? responses[currentQuestion.id] ?? { answer: "", state: "visited" as QuestionState }
     : null;
 
-  const hasTimer = useMemo(
-    () => Number(test?.time_limit_minutes ?? 0) > 0,
-    [test?.time_limit_minutes]
-  );
+  const hasTimer = canRenderExamTimer(timerOrigin);
+
+  function adoptTimerOrigin(nextTest: MockTest) {
+    const next = examTimerOriginFromAttempt(nextTest);
+    setTimerOrigin((prev) =>
+      examTimerOriginKey(prev) === examTimerOriginKey(next) ? prev : next,
+    );
+  }
 
   const answeredCount = useMemo(
     () => Object.values(responses).filter((r) => Boolean(r.answer)).length,
@@ -523,18 +516,19 @@ export default function TestSession() {
   }, [hasTimer, timeLeft]);
 
   useEffect(() => {
+    if (!hasTimer || !timerOrigin) return;
     if (!test || test.status !== "IN_PROGRESS") return;
-    if (Number(test.time_limit_minutes ?? 0) <= 0) return;
 
+    const origin = timerOrigin;
     const tick = () => {
-      setTimeLeft(computeRemainingSeconds(test));
+      setTimeLeft(remainingFromTimerOrigin(origin));
       if (
         shouldAutoSubmitAttempt(
           test.status,
-          test.started_at,
-          test.time_limit_minutes,
+          origin.startedAt,
+          origin.timeLimitMinutes,
           Date.now(),
-          test.expires_at,
+          origin.expiresAt,
         )
       ) {
         queueMicrotask(() => {
@@ -549,9 +543,9 @@ export default function TestSession() {
       if (timerRef.current) window.clearInterval(timerRef.current);
       timerRef.current = null;
     };
-    // Official clock keeps running while paused; submit is guarded by submittingRef.
+    // Official clock is frozen to timerOrigin so bootstrap refresh cannot reset it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [test?.id, test?.status, test?.started_at, test?.time_limit_minutes, lifecycleEpoch]);
+  }, [test?.id, test?.status, examTimerOriginKey(timerOrigin), lifecycleEpoch]);
 
   useEffect(() => {
     if (!testId || !user?.id) return;
@@ -827,6 +821,7 @@ export default function TestSession() {
       if (!mountedRef.current) return;
 
       setTest(loadedTest);
+      adoptTimerOrigin(loadedTest);
       setQuestions(orderedQuestions);
       setResponses(restoredResponses);
       setTimeLeft(remainingSeconds);
@@ -854,6 +849,7 @@ export default function TestSession() {
         attempt_phase: started.attemptPhase ?? "ACTIVE",
       };
       setTest(updated);
+      adoptTimerOrigin(updated);
       setTimeLeft(computeRemainingSeconds(updated));
       setPaused(false);
       setPausedAt(null);

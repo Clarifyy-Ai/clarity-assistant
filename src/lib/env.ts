@@ -165,6 +165,13 @@ export const ENV = {
   POSTHOG_KEY: optional(["VITE_POSTHOG_KEY"]),
   POSTHOG_HOST: POSTHOG_HOST_VALUE || "https://app.posthog.com",
 
+  // Google Ads / GA4 (public conversion IDs only — never API tokens)
+  GOOGLE_ADS_ID: optional(["VITE_GOOGLE_ADS_ID"]),
+  GOOGLE_ADS_SIGNUP_LABEL: optional(["VITE_GOOGLE_ADS_SIGNUP_LABEL"]),
+  GOOGLE_ADS_PURCHASE_LABEL: optional(["VITE_GOOGLE_ADS_PURCHASE_LABEL"]),
+  GOOGLE_ADS_PUBLISHER_ID: optional(["VITE_GOOGLE_ADS_PUBLISHER_ID"]),
+  GA_MEASUREMENT_ID: optional(["VITE_GA_MEASUREMENT_ID"]),
+
   // Stripe public config
   STRIPE_PUBLIC_KEY: optional(["VITE_STRIPE_PUBLIC_KEY"]),
 

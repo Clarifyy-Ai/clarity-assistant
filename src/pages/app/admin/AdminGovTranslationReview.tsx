@@ -84,7 +84,7 @@ export default function AdminGovTranslationReview() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-6 max-w-6xl min-w-0">
       <PageHeader
         title="Translation review"
         description="Human review for Hindi and other regional translations. Only approved rows surface in mock tests. Not a certified language pack."
@@ -123,7 +123,7 @@ export default function AdminGovTranslationReview() {
         </CardContent>
       </Card>
 
-      <Card className="overflow-hidden" padding="none">
+      <Card className="overflow-hidden min-w-0" padding="none">
         <Table>
           <TableHeader>
             <TableRow>

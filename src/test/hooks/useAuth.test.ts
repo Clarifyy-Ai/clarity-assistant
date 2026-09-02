@@ -72,6 +72,7 @@ import {
 const mockUser = {
   id: "u1",
   email: "u@x.com",
+  email_confirmed_at: "2026-01-01T00:00:00Z",
   app_metadata: {},
   user_metadata: { full_name: "Test User" },
 };

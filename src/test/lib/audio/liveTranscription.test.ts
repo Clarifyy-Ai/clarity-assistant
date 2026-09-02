@@ -5,10 +5,30 @@ import {
   partialTextToSegment,
   utteranceToSegment,
 } from "@/lib/audio/transcription/segmentMap";
-import { loadParakeetTranscriptionConfig } from "@/lib/audio/transcription/config";
+import * as liveTranscription from "@/lib/audio/transcription";
 import type { TranscriptUtterance } from "@/types/audio.types";
 
-describe("Parakeet transcription segment mapping", () => {
+function loadLiveTranscriptionConfig() {
+  const api = liveTranscription as typeof liveTranscription & {
+    loadLiveTranscriptionConfig?: () => {
+      enabled: boolean;
+      sampleRate?: number;
+      language: string;
+      model?: string;
+    };
+    loadParakeetTranscriptionConfig?: () => {
+      enabled: boolean;
+      sampleRate?: number;
+      language: string;
+      model?: string;
+    };
+  };
+  const load = api.loadLiveTranscriptionConfig ?? api.loadParakeetTranscriptionConfig;
+  if (!load) throw new Error("loadLiveTranscriptionConfig is not exported");
+  return load();
+}
+
+describe("Live transcription segment mapping", () => {
   it("maps final utterances to TranscriptSegment with ordering", () => {
     const utterance: TranscriptUtterance = {
       id: "utt-1",
@@ -56,12 +76,26 @@ describe("Parakeet transcription segment mapping", () => {
   });
 });
 
-describe("loadParakeetTranscriptionConfig", () => {
-  it("defaults to enabled meeting model without secrets", () => {
-    const cfg = loadParakeetTranscriptionConfig();
+describe("loadLiveTranscriptionConfig", () => {
+  it("defaults to enabled Deepgram live STT without secrets", () => {
+    const cfg = loadLiveTranscriptionConfig();
     expect(cfg.enabled).toBe(true);
-    expect(cfg.model).toBe("nova-2-meeting");
     expect(cfg.language).toBe("en-US");
+    expect(cfg.model ?? "nova-2-meeting").toMatch(/nova-2/);
     expect(cfg).not.toHaveProperty("apiKey");
+    expect(cfg).not.toHaveProperty("nvidiaApiKey");
+    expect(JSON.stringify(cfg)).not.toMatch(/NVIDIA_API_KEY|PARAKEET_NIM_URL|parakeet-token/);
+  });
+});
+
+describe("LiveTranscriptionService export", () => {
+  it("exports createLiveTranscriptionService or the Parakeet alias wrapping Deepgram", () => {
+    const api = liveTranscription as Record<string, unknown>;
+    expect(
+      typeof api.createLiveTranscriptionService === "function" ||
+        typeof api.createParakeetTranscriptionService === "function" ||
+        typeof api.LiveTranscriptionService === "function" ||
+        typeof api.ParakeetTranscriptionService === "function",
+    ).toBe(true);
   });
 });

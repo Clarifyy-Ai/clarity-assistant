@@ -177,7 +177,7 @@ export default function AdminGovExamRegistry() {
     : rows;
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="space-y-6 max-w-6xl min-w-0">
       <PageHeader
         title="Exam registry"
         description="Browse gov_exams, stages, pattern versions, and syllabus versions."
@@ -214,7 +214,7 @@ export default function AdminGovExamRegistry() {
                 : bankError}
             </p>
           )}
-          <div className="overflow-x-auto rounded-lg border border-border">
+          <div className="overflow-x-auto min-w-0 rounded-lg border border-border">
             <Table>
               <TableHeader>
                 <TableRow>

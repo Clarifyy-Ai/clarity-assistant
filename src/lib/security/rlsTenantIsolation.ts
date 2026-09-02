@@ -76,3 +76,20 @@ export function canUserAReadUserBRow(opts: {
   if (opts.viewerIsAdmin && opts.table.crossUserSelect === "admin_only") return true;
   return false;
 }
+
+/** Client write policy for test_responses: owner + live attempt only. */
+export function canUserWriteTestResponse(opts: {
+  viewerId: string;
+  responseUserId: string;
+  attemptUserId: string;
+  attemptStatus: string;
+  attemptStarted: boolean;
+  attemptExpired: boolean;
+}): boolean {
+  if (opts.viewerId !== opts.responseUserId) return false;
+  if (opts.viewerId !== opts.attemptUserId) return false;
+  if (opts.attemptStatus !== "IN_PROGRESS") return false;
+  if (!opts.attemptStarted) return false;
+  if (opts.attemptExpired) return false;
+  return true;
+}

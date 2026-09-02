@@ -134,6 +134,7 @@ export type CoachChatStreamOptions = {
   message: string;
   sessionId: string;
   conversationId?: string | null;
+  previousTurns?: Array<{ role: "user" | "assistant"; text: string }>;
   currentQuestion?: string;
   recentTranscript?: string;
   resumeContext?: string;
@@ -143,6 +144,7 @@ export type CoachChatStreamOptions = {
   hintStyle?: HintStyle;
   model?: string;
   idempotencyKey?: string;
+  timeoutMs?: number;
   onMeta?: (meta: {
     conversation_id: string;
     message_id: string;
@@ -178,6 +180,10 @@ export async function streamCoachChat(opts: CoachChatStreamOptions): Promise<voi
     session_id: sessionId,
     conversation_id: conversationId ?? null,
     message,
+    previous_turns: (opts.previousTurns ?? []).slice(-12).map((turn) => ({
+      role: turn.role === "assistant" ? "coach" : "user",
+      content: turn.text.slice(0, 2_000),
+    })),
     context: {
       current_question: opts.currentQuestion ?? "",
       recent_transcript: opts.recentTranscript ?? "",
@@ -204,7 +210,7 @@ export async function streamCoachChat(opts: CoachChatStreamOptions): Promise<voi
       method: "POST",
       headers,
       signal,
-      timeoutMs: 60_000,
+      timeoutMs: opts.timeoutMs ?? 45_000,
     });
 
     if (!res.ok) {

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { sanitizeAdminSearch } from "@/lib/admin/searchFilter";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -32,7 +33,8 @@ interface ThreadRow {
 const STATUS_COLORS: Record<string, "default" | "violet" | "red"> = {
   open: "violet",
   pending: "default",
-  closed: "default",
+  resolved: "default",
+  snoozed: "default",
 };
 
 export default function AdminSupport() {
@@ -41,9 +43,15 @@ export default function AdminSupport() {
 
   // Filters
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [status, setStatus] = useState<string>("all");
   const [priority, setPriority] = useState<string>("all");
   const [unreadOnly, setUnreadOnly] = useState(false);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearch(sanitizeAdminSearch(search)), 350);
+    return () => window.clearTimeout(t);
+  }, [search]);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,7 +67,7 @@ export default function AdminSupport() {
         if (status !== "all") q = q.eq("status", status);
         if (priority !== "all") q = q.eq("priority", priority);
         if (unreadOnly) q = q.eq("unread_for_admin", true);
-        if (search.trim()) q = q.ilike("subject", `%${search.trim()}%`);
+        if (debouncedSearch) q = q.ilike("subject", `%${debouncedSearch}%`);
 
         const { data, error } = await q;
         if (cancelled) return;
@@ -76,7 +84,7 @@ export default function AdminSupport() {
     }
     void load();
     return () => { cancelled = true; };
-  }, [search, status, priority, unreadOnly]);
+  }, [debouncedSearch, status, priority, unreadOnly]);
 
   const resetFilters = () => {
     setSearch(""); setStatus("all"); setPriority("all"); setUnreadOnly(false);
@@ -96,10 +104,12 @@ export default function AdminSupport() {
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="red" size="sm">{unreadCount} unread</Badge>
           <Badge variant="default" size="sm">{rows.length} threads</Badge>
-          <Link to="/app/admin/live-chat">
-            <Button size="sm" leftIcon={<ExternalLink className="h-3.5 w-3.5" />}>
-              Open Live Support
-            </Button>
+          <Link
+            to="/app/admin/live-chat"
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-xl border border-border bg-secondary hover:bg-secondary/80 text-secondary-foreground"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Open Live Support
           </Link>
         </div>
       </div>
@@ -113,8 +123,11 @@ export default function AdminSupport() {
             </Link>{" "}
             to message users.
           </p>
-          <Link to="/app/admin/live-chat">
-            <Button variant="secondary" size="sm">Go to Live Support</Button>
+          <Link
+            to="/app/admin/live-chat"
+            className="inline-flex items-center justify-center px-3 py-1.5 text-xs font-medium rounded-xl border border-border bg-transparent hover:bg-secondary text-foreground"
+          >
+            Go to Live Support
           </Link>
         </CardContent>
       </Card>
@@ -139,7 +152,7 @@ export default function AdminSupport() {
             <SelectItem value="all">All statuses</SelectItem>
             <SelectItem value="open">Open</SelectItem>
             <SelectItem value="pending">Pending</SelectItem>
-            <SelectItem value="closed">Closed</SelectItem>
+            <SelectItem value="resolved">Resolved</SelectItem>
           </SelectContent>
         </Select>
 

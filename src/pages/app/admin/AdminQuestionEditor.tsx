@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
 import { toast } from "sonner";
+import { sanitizeAdminSearch } from "@/lib/admin/searchFilter";
+import { adminActionFailedMessage, toAdminUserMessage } from "@/lib/admin/adminErrors";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import {
   Plus, Save, Eye, ListChecks, Loader2, Trash2, Search, ArrowLeft, CheckCircle2, ShieldCheck,
@@ -72,28 +74,40 @@ function ListView() {
   const [rows, setRows] = useState<QuestionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [examFilter, setExamFilter] = useState<string>("all");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [actionBusyId, setActionBusyId] = useState<string | null>(null);
+  const [reloadTick, setReloadTick] = useState(0);
 
-  useEffect(() => { void load(); }, [search, examFilter]);
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearch(sanitizeAdminSearch(search)), 350);
+    return () => window.clearTimeout(t);
+  }, [search]);
 
-  async function load() {
-    setLoading(true);
-    try {
-      const data = await questionsDB.list({
-        examType: examFilter,
-        search: search || undefined,
-        limit: 100,
-      });
-      setRows(data as unknown as QuestionRow[]);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load questions");
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const data = await questionsDB.list({
+          examType: examFilter,
+          search: debouncedSearch || undefined,
+          limit: 100,
+        });
+        if (!cancelled) setRows(data as unknown as QuestionRow[]);
+      } catch (err) {
+        if (!cancelled) toast.error(toAdminUserMessage(err, undefined, "AdminQuestionEditor.list"));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
-  }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedSearch, examFilter, reloadTick]);
 
   async function confirmDelete() {
     if (!deleteId) return;
@@ -106,9 +120,9 @@ function ListView() {
         targetId: deleteId,
       });
       toast.success("Deleted");
-      void load();
+      setReloadTick((n) => n + 1);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Delete failed");
+      toast.error(adminActionFailedMessage(err, "AdminQuestionEditor.delete"));
     } finally {
       setDeleting(false);
       setDeleteId(null);
@@ -129,9 +143,9 @@ function ListView() {
         newValue: { is_verified: true, review_status: "approved" },
       });
       toast.success("Question verified");
-      void load();
+      setReloadTick((n) => n + 1);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Verify failed");
+      toast.error(adminActionFailedMessage(err, "AdminQuestionEditor.verify"));
     } finally {
       setActionBusyId(null);
     }
@@ -158,16 +172,16 @@ function ListView() {
         },
       });
       toast.success("Question approved and published");
-      void load();
+      setReloadTick((n) => n + 1);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Approve failed");
+      toast.error(adminActionFailedMessage(err, "AdminQuestionEditor.approve"));
     } finally {
       setActionBusyId(null);
     }
   }
 
   return (
-    <div className="space-y-5 max-w-7xl pb-20">
+    <div className="space-y-5 max-w-7xl">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <PageHeader
           title="Question Bank Editor"
@@ -217,7 +231,7 @@ function ListView() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <div className="overflow-x-auto"><table className="w-full text-sm min-w-[640px]">
+            <table className="w-full text-sm min-w-[640px]">
               <thead className="border-b border-border bg-muted/30">
                 <tr>
                   {["Question", "Exam", "Subject", "Difficulty", "Status", "Actions"].map((h) => (
@@ -285,7 +299,7 @@ function ListView() {
                   </tr>
                 ))}
               </tbody>
-            </table></div>
+            </table>
           </div>
         )}
       </Card>
@@ -408,7 +422,7 @@ function EditorView({ id }: { id?: string }) {
           reviewStatus: (r as { review_status?: string | null }).review_status ?? "unreviewed",
         });
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to load question");
+        toast.error(toAdminUserMessage(err, undefined, "AdminQuestionEditor.load"));
         navigate("/app/admin/questions");
       } finally {
         setLoading(false);
@@ -525,7 +539,7 @@ function EditorView({ id }: { id?: string }) {
       }
       return true;
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Save failed");
+      toast.error(adminActionFailedMessage(err, "AdminQuestionEditor.save"));
       return false;
     } finally {
       setSaving(false);
@@ -566,7 +580,7 @@ function EditorView({ id }: { id?: string }) {
   }
 
   return (
-    <div className="space-y-5 max-w-7xl pb-24">
+    <div className="space-y-5 max-w-7xl">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={() => navigate("/app/admin/questions")} leftIcon={<ArrowLeft className="w-4 h-4" />}>

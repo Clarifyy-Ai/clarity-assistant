@@ -13,10 +13,11 @@ import {
   type HelpArticleItem,
 } from "@/lib/constants/helpArticlesFallback";
 import { helpArticlesDB } from "@/lib/supabase/database";
+import { PUBLIC_WEBSITE_URL } from "@/lib/constants/contact";
 
 type Article = HelpArticleItem;
 
-const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
+const SITE_URL = PUBLIC_WEBSITE_URL;
 
 function renderInline(text: string): React.ReactNode {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);

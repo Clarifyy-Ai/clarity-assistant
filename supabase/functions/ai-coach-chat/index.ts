@@ -126,6 +126,16 @@ const aiCoachChatSchema = z.object({
     .nullable()
     .optional()
     .default(null),
+  previous_turns: z
+    .array(
+      z.object({
+        role: z.string().trim().max(20),
+        content: z.string().trim().max(2_000),
+      }),
+    )
+    .max(12)
+    .optional()
+    .default([]),
   session_id: z.string().uuid("Invalid session ID."),
   message: z
     .string()
@@ -580,13 +590,22 @@ Deno.serve(async (req: Request) => {
     .limit(HISTORY_LIMIT);
 
   const history = ((historyRows ?? []) as MessageRow[]).reverse();
+  const clientTurns = (body.previous_turns ?? [])
+    .map((turn) => ({
+      id: "",
+      role: turn.role === "coach" || turn.role === "assistant" ? "coach" : "user",
+      content: sanitizeText(turn.content, 2_000),
+    }))
+    .filter((turn) => turn.content.length > 0);
+  const mergedHistory =
+    history.length >= clientTurns.length ? history : clientTurns;
 
   const model = sanitizeModel(body.model);
   const systemPrompt = `${BASE_SYSTEM_PROMPT}\n\n${buildToneStyleSystemAddon(
     coachTone,
     hintStyle,
   )}`;
-  const messages = buildGeminiMessages(body, history);
+  const messages = buildGeminiMessages(body, mergedHistory);
   const aiStartMs = Date.now();
 
   type CoachHybridData = {
@@ -634,7 +653,7 @@ Deno.serve(async (req: Request) => {
       };
     },
     runPython: async (ctx) => {
-      const recentHistory = history
+      const recentHistory = mergedHistory
         .map((item) =>
           `${item.role === "coach" ? "Coach" : "Candidate"}: ${item.content}`
         )

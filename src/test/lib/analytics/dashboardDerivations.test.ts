@@ -12,6 +12,7 @@ import {
   normalizeAnalyticsDashboard,
   normalizeDimensionAverages,
   resolveAnalyticsLoadStatus,
+  resolvePeriodSessionCount,
   resolveScoreTrendSource,
   scoreTrendBadgeLabel,
   SCORECARD_DIMENSION_KEYS,
@@ -151,6 +152,8 @@ describe("analytics load status", () => {
     ).toBe(1);
     expect(isAnalyticsPayloadEmpty({ total_sessions: 0, recent_sessions: [] })).toBe(true);
     expect(isAnalyticsPayloadEmpty({ total_sessions: 3, recent_sessions: [] })).toBe(false);
+    expect(resolvePeriodSessionCount({ total_sessions: 3, recent_sessions: [] })).toBe(3);
+    expect(resolvePeriodSessionCount({ total_sessions: 2, recent_sessions: [{}, {}, {}] })).toBe(3);
   });
 
   it("normalizes partial edge payloads without treating them as errors", () => {

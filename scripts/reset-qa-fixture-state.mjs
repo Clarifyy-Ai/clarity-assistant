@@ -18,7 +18,15 @@ const FIXTURE_RESETS = [
   {
     label: "NEW_USER_01 (onboarding)",
     emailKey: "QA_ONBOARDING_EMAIL",
-    profile: { onboarding_completed: false, onboarding_step: 1 },
+    profile: {
+      onboarding_completed: false,
+      onboarding_step: 1,
+      target_role: null,
+      role_type: null,
+      industry: null,
+      interview_date: null,
+      improvement_goals: [],
+    },
   },
   {
     label: "LOW_CREDIT_01",

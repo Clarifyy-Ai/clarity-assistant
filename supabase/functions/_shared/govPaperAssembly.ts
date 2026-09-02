@@ -24,6 +24,7 @@ import { hasCapability } from "./requireCapability.ts";
 import {
   conflictsWithSelected,
   findNearDuplicatesInSet,
+  collapseIntraPaperCollisions,
   normalizeMcqOptions,
   questionFingerprint,
   resolveCorrectIndex,
@@ -993,13 +994,23 @@ export async function assembleClaimedPaperJob(
       }
     }
 
+    const collapsed = collapseIntraPaperCollisions(
+      selected,
+      (row) => String(row.question_text ?? ""),
+      (row) => normalizeMcqOptions(row.options),
+    );
+    if (collapsed.length !== selected.length) {
+      selected.length = 0;
+      selected.push(...collapsed);
+    }
+
     const requireExact = mode === "official_previous" || mode === "generated_mock";
 
     if (selected.length < blueprint.total_questions) {
       if (requireExact) {
         const isCapBlocked = mode === "generated_mock" && !userCanAiFill && !skipAiFill;
         const errorCode = isCapBlocked
-          ? "CAPABILITY_REQUIRED"
+          ? "PLAN_NOT_ALLOWED"
           : "CONTENT_INSUFFICIENT";
         const errorMsg = isCapBlocked
           ? `Only ${selected.length}/${blueprint.total_questions} approved bank items are available. A supported plan is required to fill the remaining slots.`

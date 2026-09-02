@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { PUBLIC_CTAS } from "@/lib/constants/publicCtas";
 import { usePageMeta } from "@/hooks/usePageMeta";
+import { seoPageByPath } from "@/lib/seo/publicPages";
 import {
   Brain, BarChart2, Shield, Zap, ArrowRight, CheckCircle2,
   Mic, Star, TrendingUp, Clock, Target,
@@ -21,6 +22,7 @@ import {
 } from "@/lib/billing/priceCalculator";
 import { MARKETING_SHELL } from "@/lib/ui/responsivePage";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { PUBLIC_WEBSITE_URL } from "@/lib/constants/contact";
 import {
   AiProviderStrip,
   ProductDemoHero,
@@ -296,13 +298,14 @@ export default function Landing() {
   usePageMeta({
     title: PRODUCT_NAMES.titleLong,
     description: `${PRODUCT_NAMES.tagline} ${PRODUCT_NAMES.positioning}. Mock interviews, Government Exams, learning, practice, and performance insights.`,
-    canonical: "https://clarify.ai.sltfinanceindia.com/",
+    keywords: seoPageByPath("/")?.keywords,
+    canonical: `${PUBLIC_WEBSITE_URL}/`,
     jsonLd: [
       {
         "@context": "https://schema.org",
         "@type": "Organization",
         name: "Career Pilot",
-        url: "https://clarify.ai.sltfinanceindia.com/",
+        url: `${PUBLIC_WEBSITE_URL}/`,
         description: "AI-powered interview preparation platform.",
       },
       {
@@ -353,6 +356,12 @@ export default function Landing() {
               className="inline-flex items-center gap-2 text-sm font-medium px-5 py-2.5 rounded-xl border border-border text-foreground hover:bg-secondary/60 transition-all"
             >
               Explore Career Pilot
+            </Link>
+            <Link
+              to="/download"
+              className="inline-flex items-center gap-2 text-sm font-medium px-5 py-2.5 rounded-xl border border-border text-foreground hover:bg-secondary/60 transition-all"
+            >
+              {PUBLIC_CTAS.downloadDesktop}
             </Link>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">

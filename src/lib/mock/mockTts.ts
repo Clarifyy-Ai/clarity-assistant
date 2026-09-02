@@ -92,7 +92,7 @@ function startSpeakKeepAlive(): () => void {
   const id = window.setInterval(() => {
     try {
       const synth = window.speechSynthesis;
-      if (synth.speaking) {
+      if (synth.speaking && synth.paused) {
         synth.resume();
       }
     } catch {

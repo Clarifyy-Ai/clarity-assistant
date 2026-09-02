@@ -8,6 +8,10 @@ import { useAuthStore } from "@/store/userStore";
 import { canShareScorecard } from "@/lib/privacy/privacyPrefs";
 import type { Scorecard } from "@/types/scorecard.types";
 import type { ScorecardUiStatus } from "@/lib/analytics/scoreStatus";
+import {
+  associateAnswersForSession,
+  describeEvaluation,
+} from "@/lib/scorecard/evaluation";
 
 interface UseScorecardOptions {
   sessionId: string;
@@ -91,10 +95,8 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
       const answers = await sessionAnswersDB
         .listBySessionIdForUser(sessionId, userId)
         .catch(() => []);
-      const hasAnswers = (answers ?? []).some(
-        (row: { answer?: string | null }) => (row.answer ?? "").trim().length > 0,
-      );
-      if (!hasAnswers) {
+      const associated = associateAnswersForSession(sessionId, answers ?? []);
+      if (associated.length === 0) {
         setState((s) => ({
           ...s,
           scorecard: null,
@@ -112,7 +114,11 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
         status: "not_scored",
         isLoading: false,
         isGenerating: false,
-        error: null,
+        error: describeEvaluation({
+          status: "not_scored",
+          scorableAnswers: associated.length,
+          persistedQuestionScores: 0,
+        }),
       }));
     } catch {
       setState((s) => ({
@@ -142,10 +148,8 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
       const answers = await sessionAnswersDB
         .listBySessionIdForUser(sessionId, userId)
         .catch(() => []);
-      const hasAnswers = (answers ?? []).some(
-        (row: { answer?: string | null }) => (row.answer ?? "").trim().length > 0,
-      );
-      if (!hasAnswers) {
+      const associated = associateAnswersForSession(sessionId, answers ?? []);
+      if (associated.length === 0) {
         setState((s) => ({
           ...s,
           scorecard: null,
@@ -157,7 +161,23 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
         return;
       }
 
-      await fetchEdgeJson("generate-scorecard", { session_id: sessionId }, { timeoutMs: 60_000 });
+      try {
+        await fetchEdgeJson("generate-scorecard", { session_id: sessionId }, { timeoutMs: 90_000 });
+      } catch (err) {
+        const timedOut =
+          err instanceof ApiClientError &&
+          (err.code === "REQUEST_ABORTED" || err.status === 408);
+        if (!timedOut) throw err;
+        for (let i = 0; i < 10; i += 1) {
+          await new Promise((r) => setTimeout(r, 3_000));
+          const pending = await scorecardsDB.getBySessionIdForUser(sessionId, userId);
+          if (pending) {
+            applyScorecard(pending);
+            return;
+          }
+        }
+        throw err;
+      }
       const created = await scorecardsDB.getBySessionIdForUser(sessionId, userId);
       if (created) {
         applyScorecard(created);
@@ -166,10 +186,10 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
       setState((s) => ({
         ...s,
         scorecard: null,
-        status: "not_scored",
+        status: "failed",
         isLoading: false,
         isGenerating: false,
-        error: null,
+        error: "Scoring finished without persisting a scorecard. Retry — scores are not invented in the browser.",
       }));
     } catch (err) {
       const isNotScored =

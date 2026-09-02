@@ -4,7 +4,7 @@ import { Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface OverlayChatInputProps {
-  onSubmit: (question: string) => void | Promise<void>;
+  onSubmit: (question: string) => void | boolean | Promise<void | boolean>;
 }
 
 export function OverlayChatInput({ onSubmit }: OverlayChatInputProps) {
@@ -18,8 +18,8 @@ export function OverlayChatInput({ onSubmit }: OverlayChatInputProps) {
 
     try {
       setIsSubmitting(true);
-      await onSubmit(trimmed);
-      setValue("");
+      const accepted = await onSubmit(trimmed);
+      if (accepted !== false) setValue("");
     } finally {
       setIsSubmitting(false);
     }

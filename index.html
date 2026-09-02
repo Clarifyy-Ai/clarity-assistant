@@ -26,7 +26,7 @@
         default-src 'self';
         base-uri 'self';
         object-src 'none';
-        script-src 'self' 'sha256-94vmev1ZHn894g2iVWfQ1aQu9FkC2BtPA7fJnXbTA7Y=' https://checkout.razorpay.com https://cdn.razorpay.com https://*.razorpay.com;
+        script-src 'self' 'sha256-94vmev1ZHn894g2iVWfQ1aQu9FkC2BtPA7fJnXbTA7Y=' https://checkout.razorpay.com https://cdn.razorpay.com https://*.razorpay.com https://www.googletagmanager.com https://www.googleadservices.com https://googleads.g.doubleclick.net https://www.google.com;
         style-src 'self' 'unsafe-inline';
         img-src 'self' data: blob: https:;
         font-src 'self' data: https://cdn.gpteng.co;
@@ -48,8 +48,14 @@
           https://lumberjack.razorpay.com
           https://checkout.razorpay.com
           https://cdn.razorpay.com
-          https://*.razorpay.com;
-        frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com https://cdn.razorpay.com https://*.razorpay.com https://checkout.stripe.com;
+          https://*.razorpay.com
+          https://www.googletagmanager.com
+          https://www.google-analytics.com
+          https://www.google.com
+          https://googleads.g.doubleclick.net
+          https://www.googleadservices.com
+          https://stats.g.doubleclick.net;
+        frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com https://cdn.razorpay.com https://*.razorpay.com https://checkout.stripe.com https://www.google.com https://googleads.g.doubleclick.net https://www.googletagmanager.com https://td.doubleclick.net;
         media-src 'self' blob: data:;
         worker-src 'self' blob:;
         manifest-src 'self';
@@ -70,10 +76,21 @@
 
     <meta
       name="description"
-      content="Navigate Your Career. Prepare With Confidence. AI-powered career preparation, mock interviews, Government Exams, learning, practice, and performance insights."
+      content="AI-powered interview prep and government exam practice for India. Mock interviews, Practice Coach, UPSC, SSC CGL, IBPS, JEE, NEET — timed papers, STAR answers, and performance insights."
     />
+    <meta
+      name="keywords"
+      content="Career Pilot, AI interview preparation, mock interview practice India, UPSC CSE mock test, SSC CGL mock test, IBPS PO mock test, JEE Main practice test, NEET UG mock test, AI interview coach, STAR method interview answers, government exam preparation"
+    />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <meta name="googlebot" content="index, follow" />
+    <meta name="bingbot" content="index, follow" />
+    <meta name="author" content="Career Pilot" />
+    <meta name="geo.region" content="IN" />
+    <link rel="alternate" hrefLang="en-IN" href="https://trycareerpilot.com/" />
+    <link rel="alternate" hrefLang="x-default" href="https://trycareerpilot.com/" />
 
-    <link rel="canonical" href="https://clarify.ai.sltfinanceindia.com/" />
+    <link rel="canonical" href="https://trycareerpilot.com/" />
 
     <!-- PWA manifest -->
     <link rel="manifest" href="/manifest.json" />
@@ -95,10 +112,11 @@
       property="og:description"
       content="Navigate Your Career. Prepare With Confidence. AI-powered career and exam preparation."
     />
-    <meta property="og:url" content="https://clarify.ai.sltfinanceindia.com/" />
+    <meta property="og:url" content="https://trycareerpilot.com/" />
     <meta property="og:site_name" content="Career Pilot" />
     <meta property="og:type" content="website" />
-    <meta property="og:image" content="https://clarify.ai.sltfinanceindia.com/images/og-cover.png" />
+    <meta property="og:image" content="https://trycareerpilot.com/images/og-cover.png" />
+    <meta property="og:locale" content="en_IN" />
 
     <!-- Twitter -->
     <meta name="twitter:title" content="Career Pilot — AI Career & Exam Preparation" />
@@ -107,7 +125,7 @@
       content="Navigate Your Career. Prepare With Confidence. AI-powered career and exam preparation."
     />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:image" content="https://clarify.ai.sltfinanceindia.com/images/og-cover.png" />
+    <meta name="twitter:image" content="https://trycareerpilot.com/images/og-cover.png" />
 
     <!--
       Structured data (JSON-LD) — static data block; not an executable script.
@@ -121,18 +139,19 @@
         {
           "@type": "Organization",
           "name": "Career Pilot",
-          "url": "https://clarify.ai.sltfinanceindia.com/",
-          "logo": "https://clarify.ai.sltfinanceindia.com/icon.png",
+          "url": "https://trycareerpilot.com/",
+          "logo": "https://trycareerpilot.com/icon.png",
           "sameAs": [
-            "https://twitter.com/clarifyai",
-            "https://github.com/clarifyai"
-          ]
+            "https://github.com/Clarifyy-Ai"
+          ],
+          "areaServed": "IN"
         },
         {
           "@type": "WebSite",
           "name": "Career Pilot",
-          "url": "https://clarify.ai.sltfinanceindia.com/",
-          "description": "AI-Powered Career & Exam Preparation"
+          "url": "https://trycareerpilot.com/",
+          "description": "AI-Powered Career & Exam Preparation",
+          "inLanguage": "en-IN"
         }
       ]
     }

@@ -7,8 +7,11 @@ import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
-import { parseJsonBody } from "../_shared/errors.ts";
-import { assertBillingConfigOrThrow } from "../_shared/billingConfig.ts";
+import { EdgeFunctionError, parseJsonBody } from "../_shared/errors.ts";
+import {
+  getRazorpayProviderConfig,
+  paymentsNotConfiguredBody,
+} from "../_shared/razorpayProvider.ts";
 import { opsLog } from "../_shared/opsLog.ts";
 import {
   creditsForRazorpayProductType,
@@ -20,9 +23,6 @@ import {
   REUSABLE_CHECKOUT_STATUSES,
   type PaymentOrderStatus,
 } from "../_shared/paymentStateMachine.ts";
-
-const KEY_ID = Deno.env.get("RAZORPAY_KEY_ID") ?? "";
-const KEY_SECRET = Deno.env.get("RAZORPAY_KEY_SECRET") ?? "";
 
 const PRODUCT_TYPES = [
   "pro_monthly",
@@ -88,8 +88,13 @@ function baseAmountPaise(
   }
 }
 
-async function razorpayFetch(path: string, body: Record<string, unknown>) {
-  const auth = btoa(`${KEY_ID}:${KEY_SECRET}`);
+async function razorpayFetch(
+  path: string,
+  body: Record<string, unknown>,
+  keyId: string,
+  keySecret: string,
+) {
+  const auth = btoa(`${keyId}:${keySecret}`);
   const res = await fetch(`https://api.razorpay.com/v1${path}`, {
     method: "POST",
     headers: {
@@ -141,27 +146,11 @@ Deno.serve(async (req: Request) => {
     return json(req, { error: "Method not allowed" }, 405);
   }
 
-  if (!KEY_ID || !KEY_SECRET) {
-    return json(req, { error: "Integration not configured" }, 503);
-  }
+  const razorpayProvider = getRazorpayProviderConfig();
+  const KEY_ID = razorpayProvider.keyId;
+  const KEY_SECRET = razorpayProvider.keySecret;
 
   try {
-    assertBillingConfigOrThrow({
-      requireRazorpay: true,
-      requireStripe: false,
-      requireRazorpayWebhook: true,
-    });
-  } catch {
-    opsLog({
-      function_name: "razorpay-create-order",
-      operation: "config_validate",
-      result: "error",
-      error_class: "BILLING_CONFIG_INVALID",
-      retryable: false,
-    });
-    return json(req, { error: "Billing configuration invalid" }, 503);
-  }
-
   const auth = await authenticateRequest(req);
   if (auth.error || !auth.context) {
     // authenticateRequest → auth.requireAuth(getUser(accessToken)) — JWT required.
@@ -177,7 +166,15 @@ Deno.serve(async (req: Request) => {
   );
   if (rateLimited) return rateLimited;
 
-  const rawBody = await parseJsonBody(req);
+  let rawBody: unknown;
+  try {
+    rawBody = await parseJsonBody(req);
+  } catch (parseErr) {
+    if (parseErr instanceof EdgeFunctionError) {
+      return json(req, { error: parseErr.message, code: "VALIDATION_ERROR" }, 400);
+    }
+    return json(req, { error: "Invalid request body.", code: "VALIDATION_ERROR" }, 400);
+  }
 
   async function transitionOrder(
     paymentOrderId: string,
@@ -236,6 +233,17 @@ Deno.serve(async (req: Request) => {
       error: "Invalid product_type. Use a supported plan or credit pack.",
       code: "VALIDATION_ERROR",
     }, 400);
+  }
+
+  if (!razorpayProvider.checkoutConfigured) {
+    opsLog({
+      function_name: "razorpay-create-order",
+      operation: "config_validate",
+      result: "error",
+      error_class: "PAYMENTS_NOT_CONFIGURED",
+      retryable: false,
+    });
+    return json(req, paymentsNotConfiguredBody(), 503);
   }
 
   const { data: settingsRow } = await db
@@ -409,7 +417,7 @@ Deno.serve(async (req: Request) => {
         product_type,
         payment_order_id: paymentOrderId,
       },
-    });
+    }, KEY_ID, KEY_SECRET);
   } catch {
     await db.from("payment_orders").update({
       status: "failed",
@@ -468,4 +476,20 @@ Deno.serve(async (req: Request) => {
     promo_applied: appliedPromo,
     product_type,
   }, 200);
+  } catch (error) {
+    if (error instanceof EdgeFunctionError) {
+      return json(req, { error: error.message, code: error.code }, error.status);
+    }
+    opsLog({
+      function_name: "razorpay-create-order",
+      operation: "handler",
+      result: "error",
+      error_class: "UNHANDLED",
+      retryable: true,
+    });
+    return json(req, {
+      error: "Could not start checkout. Please try again.",
+      code: "ORDER_PERSIST_FAILED",
+    }, 500);
+  }
 });

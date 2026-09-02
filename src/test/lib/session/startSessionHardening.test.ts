@@ -46,5 +46,7 @@ describe("start-session edge onboarding dependency", () => {
     expect(source).toContain("DependencyUnavailableError");
     expect(source).toContain("DEPENDENCY_UNAVAILABLE");
     expect(source).toContain("mapSessionStartRpcFailure");
+    expect(source).toContain("findReusablePracticeSession");
+    expect(source).toContain("rollbackFailedInitialization");
   });
 });

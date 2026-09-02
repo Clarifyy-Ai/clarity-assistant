@@ -283,6 +283,7 @@ export function pipelineStateFromErrorMessage(
   }
   if (
     msg.includes("transcript") ||
+    msg.includes("parakeet") ||
     msg.includes("deepgram") ||
     msg.includes("speech-to-text") ||
     msg.includes("stt") ||

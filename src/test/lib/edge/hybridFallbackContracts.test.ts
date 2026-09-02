@@ -95,9 +95,9 @@ describe("hybridExecute / operationRouter source contracts", () => {
     expect(router).toMatch(
       /live_answer:[\s\S]*?preferredOrder:\s*\["ai",\s*"python",\s*"deterministic"\][\s\S]*?pythonFallbackOnAiFailure:\s*true/,
     );
-    // star_builder: python structure first, AI polish second
+    // star_builder: AI polish first; python/deterministic outlines when provider 503s
     expect(router).toMatch(
-      /star_builder:[\s\S]*?preferredOrder:\s*\["python",\s*"ai",\s*"deterministic"\][\s\S]*?pythonFallbackOnAiFailure:\s*true/,
+      /star_builder:[\s\S]*?preferredOrder:\s*\["ai",\s*"python",\s*"deterministic"\][\s\S]*?pythonFallbackOnAiFailure:\s*true/,
     );
     // prep_rephrase: AI preferred with deterministic fallback when AI fails
     expect(router).toMatch(

@@ -14,8 +14,8 @@
  * In that case, fall back to the known production origin instead.
  */
 
-/** Canonical production origin for Career Pilot. Keep in sync with docs/QA_ENVIRONMENTS.md. */
-export const PRODUCTION_APP_URL = "https://clarify.ai.sltfinanceindia.com";
+/** Canonical production origin for Career Pilot. Keep in sync with public website. */
+export const PRODUCTION_APP_URL = "https://trycareerpilot.com";
 
 const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1"]);
 

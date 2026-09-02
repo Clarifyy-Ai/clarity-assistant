@@ -10,6 +10,27 @@ Disallow: /app/
 Disallow: /onboarding/
 Disallow: /auth/
 
+User-agent: DuckDuckBot
+Allow: /
+Disallow: /app/
+Disallow: /onboarding/
+Disallow: /auth/
+
+User-agent: Yandex
+Allow: /
+Disallow: /app/
+Disallow: /onboarding/
+Disallow: /auth/
+
+User-agent: Applebot
+Allow: /
+Disallow: /app/
+Disallow: /onboarding/
+Disallow: /auth/
+
+User-agent: AdsBot-Google
+Allow: /
+
 User-agent: Twitterbot
 Allow: /
 
@@ -22,4 +43,4 @@ Disallow: /app/
 Disallow: /onboarding/
 Disallow: /auth/
 
-Sitemap: https://clarify.ai.sltfinanceindia.com/sitemap.xml
+Sitemap: https://trycareerpilot.com/sitemap.xml

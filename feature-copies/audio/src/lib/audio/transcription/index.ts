@@ -1,8 +1,9 @@
 export {
-  ParakeetTranscriptionService,
-  createParakeetTranscriptionService,
-} from "./ParakeetTranscriptionService";
-export { loadParakeetTranscriptionConfig } from "./config";
+  LiveTranscriptionService,
+  createLiveTranscriptionService,
+} from "./LiveTranscriptionService";
+export { loadLiveTranscriptionConfig } from "./config";
+export { finalSegmentFingerprint, rememberFinalKey } from "./finalKeys";
 export {
   channelToSpeaker,
   newUtteranceFromSegment,
@@ -10,8 +11,8 @@ export {
   utteranceToSegment,
 } from "./segmentMap";
 export type {
-  ParakeetTranscriptionCallbacks,
-  ParakeetTranscriptionServiceOptions,
+  LiveTranscriptionCallbacks,
+  LiveTranscriptionServiceOptions,
   TranscriptSegment,
   TranscriptionChannel,
   TranscriptionProviderStatus,

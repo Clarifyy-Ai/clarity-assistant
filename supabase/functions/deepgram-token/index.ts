@@ -9,6 +9,10 @@ import { createServiceClient } from "../_shared/supabase.ts";
 import {
   enforceSessionRateLimitAsync,
 } from "../_shared/rateLimit.ts";
+import {
+  logDeepgramUsage,
+  resolveDeepgramSttModel,
+} from "../_shared/deepgramCost.ts";
 
 const TOKEN_TTL_SECONDS = 600; // 10 minutes — meaningful lifetime for live sessions
 const CACHE_SAFETY_BUFFER_S = 15;
@@ -161,7 +165,11 @@ Deno.serve(async (req: Request) => {
       throw new Error(`Deepgram key creation failed: ${tempKeyRes.status}`);
     }
 
-    const keyData = await tempKeyRes.json() as { key_id?: string; key?: string };
+    const keyData = await tempKeyRes.json() as {
+      key_id?: string;
+      api_key_id?: string;
+      key?: string;
+    };
     const tempKey = keyData?.key;
 
     if (!tempKey) {
@@ -174,7 +182,7 @@ Deno.serve(async (req: Request) => {
 
     return {
       token: tempKey,
-      key_id: keyData.key_id ?? null,
+      key_id: keyData.api_key_id ?? keyData.key_id ?? null,
       expires_in: TOKEN_TTL_SECONDS,
     };
     })();
@@ -200,6 +208,16 @@ Deno.serve(async (req: Request) => {
       token: minted.token,
       key_id: minted.key_id,
       expires_at_ms: Date.now() + TOKEN_TTL_SECONDS * 1000,
+    });
+
+    const sttModel = resolveDeepgramSttModel();
+    const mintLatencyMs = Date.now() - now;
+    void logDeepgramUsage(db, {
+      userId: user.id,
+      action: "deepgram_stt_session",
+      model: sttModel,
+      audioSeconds: TOKEN_TTL_SECONDS,
+      latencyMs: mintLatencyMs,
     });
 
     /* ── RETURN SCOPED TOKEN ────────────────────────────────────────────── */

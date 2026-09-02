@@ -11,7 +11,9 @@ import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { supabase } from "@/lib/supabase/client";
 import { writeAdminAudit } from "@/lib/admin/writeAdminAudit";
 import { adminActionFailedMessage, toAdminUserMessage } from "@/lib/admin/adminErrors";
+import { sanitizeAdminSearch } from "@/lib/admin/searchFilter";
 import { isValidHelpSlug, slugifyHelpQuestion } from "@/lib/admin/helpArticleSlug";
+import { invalidatePublicContentCache } from "@/lib/cms/publicContentCache";
 
 type HelpArticle = {
   id: string;
@@ -58,8 +60,9 @@ export default function AdminHelpArticles() {
         .from("help_articles")
         .select("id,slug,category_slug,category_title,question,answer,body_md,sort_order,published")
         .order("sort_order", { ascending: true });
-      if (search.trim()) {
-        q = q.or(`question.ilike.%${search.trim()}%,slug.ilike.%${search.trim()}%`);
+      const qTerm = sanitizeAdminSearch(search);
+      if (qTerm) {
+        q = q.or(`question.ilike.%${qTerm}%,slug.ilike.%${qTerm}%`);
       }
       const { data, error: err } = await q;
       if (err) throw err;
@@ -173,6 +176,7 @@ export default function AdminHelpArticles() {
         });
       }
       toast.success(editing.published ? "Help article published" : "Help article saved as draft");
+      invalidatePublicContentCache(["help"]);
       setEditing(null);
       await load();
     } catch (e) {
@@ -198,6 +202,7 @@ export default function AdminHelpArticles() {
         oldValue: { slug: deleteTarget.slug, question: deleteTarget.question },
       });
       toast.success("Help article deleted");
+      invalidatePublicContentCache(["help"]);
       setDeleteTarget(null);
       if (editing?.id === deleteTarget.id) setEditing(null);
       await load();
@@ -234,6 +239,7 @@ export default function AdminHelpArticles() {
         newValue: { published },
       });
       toast.success(published ? "Published" : "Unpublished");
+      invalidatePublicContentCache(["help"]);
       await load();
     } catch (e) {
       toast.error(adminActionFailedMessage(e, "AdminHelp.publish"));
@@ -255,12 +261,13 @@ export default function AdminHelpArticles() {
       </div>
 
       {editing && (
-        <Card className="space-y-3 p-4" data-testid="help-article-editor">
+        <Card className="space-y-3 p-4 min-w-0" data-testid="help-article-editor">
           <div>
             <h2 className="text-base font-semibold">{editing.id ? "Edit article" : "New article"}</h2>
             <p className="text-sm text-muted-foreground">Create or update a help center FAQ entry.</p>
           </div>
           <Input
+            label="Title"
             placeholder="Question"
             value={editing.question}
             onChange={(e) => {
@@ -276,20 +283,22 @@ export default function AdminHelpArticles() {
             }}
           />
           <Input
+            label="Slug"
             placeholder="Slug"
             value={editing.slug}
             onChange={(e) => setEditing({ ...editing, slug: e.target.value })}
           />
-          <Input placeholder="Category slug" value={editing.category_slug} onChange={(e) => setEditing({ ...editing, category_slug: e.target.value })} />
-          <Input placeholder="Category title" value={editing.category_title} onChange={(e) => setEditing({ ...editing, category_title: e.target.value })} />
+          <Input placeholder="Category slug" label="Category slug" value={editing.category_slug} onChange={(e) => setEditing({ ...editing, category_slug: e.target.value })} />
+          <Input placeholder="Category title" label="Category title" value={editing.category_title} onChange={(e) => setEditing({ ...editing, category_title: e.target.value })} />
           <Input
             type="number"
+            label="Sort order"
             placeholder="Sort order"
             value={editing.sort_order}
             onChange={(e) => setEditing({ ...editing, sort_order: Number(e.target.value) || 0 })}
           />
-          <Textarea placeholder="Short answer" value={editing.answer} onChange={(e) => setEditing({ ...editing, answer: e.target.value })} />
-          <Textarea className="min-h-[160px]" placeholder="Body (markdown)" value={editing.body_md ?? ""} onChange={(e) => setEditing({ ...editing, body_md: e.target.value })} />
+          <Textarea placeholder="Short answer" aria-label="Short answer" value={editing.answer} onChange={(e) => setEditing({ ...editing, answer: e.target.value })} />
+          <Textarea className="min-h-[160px]" placeholder="Body (markdown)" aria-label="Body markdown" value={editing.body_md ?? ""} onChange={(e) => setEditing({ ...editing, body_md: e.target.value })} />
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"

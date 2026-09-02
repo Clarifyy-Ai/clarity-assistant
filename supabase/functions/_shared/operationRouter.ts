@@ -98,7 +98,7 @@ const MATRIX: Record<HybridOperation, Omit<RouteDecision, "operation" | "canUseP
     canCompleteWithDatabase: false,
     isAiOptional: true,
     isAiRequired: false,
-    preferredOrder: ["python", "ai", "deterministic"],
+    preferredOrder: ["ai", "python", "deterministic"],
     pythonFallbackOnAiFailure: true,
     aiFallbackOnPythonFailure: false,
     creditCostKey: "generate_star_answer",

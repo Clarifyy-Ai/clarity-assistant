@@ -7,7 +7,7 @@ import { chromium } from "playwright";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
-const BASE = "https://clarify.ai.sltfinanceindia.com";
+const BASE = "https://trycareerpilot.com";
 
 function loadEnv(filePath) {
   if (!fs.existsSync(filePath)) return {};

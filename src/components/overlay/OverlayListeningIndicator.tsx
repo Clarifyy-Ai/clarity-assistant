@@ -49,9 +49,9 @@ export const OverlayListeningIndicator = memo(function OverlayListeningIndicator
     label = "Session ended";
     detail = undefined;
   } else if (audioPipeline === "microphone_only") {
-    state = "idle";
+    state = "listening";
     label = "Mic only";
-    detail = "Live transcription is unavailable — type questions in Chat.";
+    detail = "Your microphone is live. Share tab audio to capture the interviewer.";
   } else if (audioPipeline === "connecting") {
     state = "busy";
     label = "Connecting transcription…";

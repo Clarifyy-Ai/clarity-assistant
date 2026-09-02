@@ -15,6 +15,8 @@ describe("gov exam credit/inventory contracts", () => {
     expect(src).toContain('sourcePolicy: mode === "official_previous" ? "public_pyp" : "approved_bank"');
     expect(src).toContain('mode !== "official_previous" && isPythonGovExamConfigured()');
     expect(src).toContain('inventoryClass:');
+    expect(src).toContain("sourceCounts");
+    expect(src).toContain("allowedFallback");
     expect(src).toContain('billable: false');
     expect(src).toContain('creditCost: 0');
     expect(src).toContain('creditsCharged: 0');

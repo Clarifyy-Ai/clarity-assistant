@@ -11,6 +11,8 @@ import { usePageMeta } from "@/hooks/usePageMeta";
 import { LAUNCH_PLANS, getPlanDisplayName } from "@/lib/constants/pricing";
 import { formatPlanCheckoutPrice, razorpayPaiseForPlan } from "@/lib/billing/priceCalculator";
 import { MARKETING_SHELL } from "@/lib/ui/responsivePage";
+import { PUBLIC_WEBSITE_URL } from "@/lib/constants/contact";
+import { seoPageByPath } from "@/lib/seo/publicPages";
 import {
   billingReturnPathForPlan,
   isPaidSignupPlan,
@@ -26,7 +28,7 @@ const PLAN_COLORS: Record<string, string> = {
   emerald: "from-emerald-500 to-teal-500",
 };
 
-const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
+const SITE_URL = PUBLIC_WEBSITE_URL;
 
 function paidPlanHref(planId: PlanId): string {
   if (!isPaidSignupPlan(planId)) return "/signup";
@@ -53,6 +55,7 @@ export default function Pricing() {
   usePageMeta({
     title: "Pricing — Career Pilot",
     description: "Simple, transparent pricing for interview prep and rehearsal. Free, Pro, and Max — one-time Razorpay purchases in INR, no auto-renew.",
+    keywords: seoPageByPath("/pricing")?.keywords,
     canonical: `${SITE_URL}/pricing`,
     jsonLd: {
       "@context": "https://schema.org",

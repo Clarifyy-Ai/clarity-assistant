@@ -200,6 +200,20 @@ export function isAnalyticsPayloadEmpty(input: {
   return listed === 0 && total === 0;
 }
 
+/**
+ * Sessions KPI for the selected filter window. Prefer the larger of the
+ * listed rows and total_sessions so a truncated recent list cannot zero-out
+ * the count while the backend still reports activity.
+ */
+export function resolvePeriodSessionCount(input: {
+  total_sessions?: number | null;
+  recent_sessions?: ReadonlyArray<unknown> | null;
+}): number {
+  const listed = input.recent_sessions?.length ?? 0;
+  const total = Number(input.total_sessions) || 0;
+  return Math.max(listed, total);
+}
+
 export type AnalyticsLoadStatus = "loading" | "ready" | "empty" | "error";
 
 export function resolveAnalyticsLoadStatus(input: {

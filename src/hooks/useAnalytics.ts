@@ -27,6 +27,7 @@ import {
   DEFAULT_ANALYTICS_PERIOD,
   normalizeAnalyticsDashboard,
   resolveAnalyticsLoadStatus,
+  resolvePeriodSessionCount,
   resolveScoreTrendSource,
 } from "@/lib/analytics/dashboardDerivations";
 
@@ -244,8 +245,7 @@ export function useAnalytics() {
     useAuthStore.getState().profile?.timezone,
   );
 
-  const sessionsInSelectedPeriod =
-    data?.recent_sessions?.length ?? data?.total_sessions ?? 0;
+  const sessionsInSelectedPeriod = resolvePeriodSessionCount(data ?? {});
 
   const sessionsScored =
     data?.sessions_scored ??

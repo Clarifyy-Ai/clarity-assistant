@@ -27,20 +27,26 @@ import {
   formatTalkingPointsAsHint,
 } from "@/lib/ai/resumeFallback";
 import {
-  buildResumeContextForAI,
   loadPrimaryCoverLetterText,
 } from "@/lib/documents/interviewContext";
+import {
+  getOrBuildSessionAiContext,
+  lastTranscriptSlice,
+} from "@/lib/ai/sessionAiContext";
 import { parseResumeContentString } from "@/lib/documents/resumeParse";
 import { getPrivateMode } from "@/hooks/usePrivateMode";
 import { parsePrivacyPrefs } from "@/lib/privacy/privacyPrefs";
 import { createDragHandler } from "@/lib/overlay/stealthMouse";
 import { generateId } from "@/lib/utils";
-import { questionFingerprint, hintIdempotencyKey } from "@/lib/ai/questionDetection";
+import {
+  questionFingerprint,
+  hintIdempotencyKey,
+  beginAutoHintIfIdle,
+} from "@/lib/ai/questionDetection";
 import { createLiveHintOperationId } from "@/lib/audio/liveQuestionGate";
 import {
   jobDescriptionsDB,
   resumesDB,
-  answerBankDB,
 } from "@/lib/supabase/database";
 import { pairLiveSessionAnswers } from "@/lib/session/liveSessionAnswers";
 import {
@@ -52,12 +58,18 @@ import { notifySessionsChanged } from "@/lib/session/sessionReuse";
 import {
   activateSession,
   aiModeForSessionType,
+  normalizeSessionLifecycleError,
   type SessionType,
 } from "@/lib/session/sessionLifecycle";
-import { startSession as startSessionApi, finalizeSession as finalizeSessionApi } from "@/lib/api/sessions";
-import { handleSessionStartError } from "@/lib/billing/sessionStartErrors";
+import {
+  startSession as startSessionApi,
+  finalizeSession as finalizeSessionApi,
+  endSession as endSessionApi,
+  restoreOwnedSession,
+} from "@/lib/api/sessions";
+import { ApiClientError } from "@/lib/api/apiClient";
 import { toDbModel } from "@/lib/ai/modelMapping";
-import { markFirstListening } from "@/lib/analytics/uxMetrics";
+import { markFirstListening, startAnswerLatencySpan, markAnswerLatency } from "@/lib/analytics/uxMetrics";
 import { toast } from "sonner";
 import type { LiveSessionConfig } from "@/types/session.types";
 import {
@@ -73,6 +85,7 @@ import {
   markOverlayProductSessionTerminal,
   teardownOverlayProductSession,
 } from "@/lib/session/overlayProductSession";
+import { practiceCoachStartIdempotencyKey } from "@/lib/network/idempotency";
 import { getOverlaySessionAuthority } from "@/store/overlaySessionAuthorityStore";
 
 interface UseLiveCopilotOptions {
@@ -88,7 +101,7 @@ export function useLiveCopilot({
   sessionType = "live",
   existingSessionId,
 }: UseLiveCopilotOptions) {
-  const { profile } = useAuthStore();
+  const { profile, user } = useAuthStore();
 
   const sessionStatus = useSessionStore((s) => s.status);
   const elapsedSeconds = useSessionStore((s) => s.elapsed_seconds);
@@ -106,6 +119,7 @@ export function useLiveCopilot({
   /** When true, ignore late question / transcript / hint events. */
   const sessionEndedRef = useRef(false);
   const hintOperationIdRef = useRef<string | null>(null);
+  const startAbortRef = useRef<AbortController | null>(null);
   const pendingCaptureMetaRef = useRef<{
     question: string;
     thumbnail?: string;
@@ -117,6 +131,9 @@ export function useLiveCopilot({
 
   const existingSessionIdRef = useRef(existingSessionId ?? null);
   existingSessionIdRef.current = existingSessionId ?? null;
+  /** Shared across double-click; cleared when the session ends so Start New Session is a new row. */
+  const startAttemptKeyRef = useRef<string | null>(null);
+  const startInFlightRef = useRef(false);
 
   const [isPreparingSession, setIsPreparingSession] = useState(false);
   const [prepStepIndex, setPrepStepIndex] = useState(0);
@@ -228,7 +245,13 @@ export function useLiveCopilot({
       if (cfg.role) jdParts.push(`Role: ${cfg.role}`);
       if (cfg.company) jdParts.push(`Company: ${cfg.company}`);
 
-      const resumeBlock = await buildResumeContextForAI(userId, {
+      const cached = await getOrBuildSessionAiContext({
+        userId,
+        resumeId: cfg.resume_id,
+        jdId: cfg.jd_id,
+        instructions: cfg.instructions,
+        role: cfg.role,
+        company: cfg.company,
         parsedResume: parsed,
         resumeContent: activeResume?.content ?? null,
         resumeSummary:
@@ -236,78 +259,23 @@ export function useLiveCopilot({
             ? overlay.resume_context?.summary ?? null
             : String(overlay.resume_context ?? ""),
         jdSnippet: jdParts.join("\n") || null,
-        instructions: cfg.instructions ?? "",
-        role: cfg.role ?? null,
-        company: cfg.company ?? null,
       });
 
-      const transcript =
-        useAudioStore.getState().transcript?.full_transcript ?? "";
-      const lastTranscript =
-        transcript.length > 2500 ? transcript.slice(-2500) : transcript;
+      const resumeBlock = cached.resumeBlock;
 
-      let jdKeywords: string[] = [];
-      if (Array.isArray(base.jd_required_skills) && base.jd_required_skills.length) {
-        jdKeywords = base.jd_required_skills as string[];
-      }
-      if (cfg.jd_id) {
-        try {
-          const jd = await jobDescriptionsDB.getByIdMaybe(cfg.jd_id);
-          const raw = jd as Record<string, unknown> | null;
-          const kw = raw?.keywords ?? raw?.required_skills ?? raw?.skills;
-          if (Array.isArray(kw)) {
-            jdKeywords = [
-              ...new Set([
-                ...jdKeywords,
-                ...kw.filter((s): s is string => typeof s === "string"),
-              ]),
-            ];
-          }
-        } catch {
-          /* non-fatal */
-        }
-      }
-
-      let starStoriesBlock = "";
-      try {
-        const entries = await answerBankDB.listByUserId(userId);
-        const lines = entries.slice(0, 5).map((entry) => {
-          const enriched = entry as typeof entry & {
-            star_situation?: string | null;
-            star_task?: string | null;
-            star_action?: string | null;
-            star_result?: string | null;
-            summary?: string | null;
-          };
-          const starParts = [
-            enriched.star_situation,
-            enriched.star_task,
-            enriched.star_action,
-            enriched.star_result,
-          ].filter(Boolean);
-          const starText =
-            starParts.length > 0
-              ? starParts.join(" → ")
-              : (enriched.summary ?? enriched.answer_text?.slice(0, 240) ?? "");
-          return `Q: ${entry.question_text}\nSTAR: ${starText}`;
-        });
-        if (lines.length) {
-          starStoriesBlock = `\n\nRelevant saved STAR stories:\n${lines.join("\n\n")}`;
-        }
-      } catch {
-        /* non-fatal */
-      }
-
-      const jdBlock =
-        jdKeywords.length > 0
-          ? `\n\nJD keywords to weave in: ${jdKeywords.join(", ")}`
-          : "";
+      const lastTranscript = lastTranscriptSlice(
+        useAudioStore.getState().transcript?.full_transcript ?? "",
+      );
 
       return {
         ...base,
-        resume_experience_summary: resumeBlock + jdBlock + starStoriesBlock,
-        resume_skills: parsed?.skills ?? base.resume_skills,
-        jd_required_skills: jdKeywords.length ? jdKeywords : base.jd_required_skills,
+        resume_experience_summary: resumeBlock || String(base.resume_experience_summary ?? ""),
+        resume_skills: cached.parsedSkills.length
+          ? cached.parsedSkills
+          : parsed?.skills ?? base.resume_skills,
+        jd_required_skills: cached.jdKeywords.length
+          ? cached.jdKeywords
+          : base.jd_required_skills,
         last_transcript: lastTranscript,
       };
     },
@@ -430,6 +398,33 @@ export function useLiveCopilot({
         last_transcript: "",
       } as any);
     }
+
+    if (profile.id) {
+      const overlayNow = useOverlayStore.getState();
+      const jdParts: string[] = [];
+      if (jdRequiredSkills.length) {
+        jdParts.push(`Required skills: ${jdRequiredSkills.join(", ")}`);
+      }
+      if (cfg.role) jdParts.push(`Role: ${cfg.role}`);
+      if (cfg.company) jdParts.push(`Company: ${cfg.company}`);
+      void getOrBuildSessionAiContext({
+        userId: profile.id,
+        resumeId: cfg.resume_id,
+        jdId: cfg.jd_id,
+        instructions: cfg.instructions,
+        role: cfg.role,
+        company: cfg.company,
+        parsedResume: parsed,
+        resumeContent: activeResume?.content ?? null,
+        resumeSummary:
+          typeof overlayNow.resume_context === "object"
+            ? overlayNow.resume_context?.summary ?? null
+            : String(overlayNow.resume_context ?? ""),
+        jdSnippet: jdParts.join("\n") || null,
+      }).catch((err) => {
+        console.warn("[useLiveCopilot] session AI context preload failed:", err);
+      });
+    }
   }, [profile, coachStore]);
 
   // Hotkeys: OverlayKeyboardHandler on live/mock pages (avoids duplicate Ctrl+Shift+H handlers).
@@ -458,6 +453,7 @@ export function useLiveCopilot({
    * Stable question detected callback (used by audio pipeline).
    */
   const seenQuestionFingerprintsRef = useRef<Set<string>>(new Set());
+  const autoHintInflightFingerprintsRef = useRef<Set<string>>(new Set());
 
   const handleQuestionDetected = useCallback((question: string) => {
     if (sessionEndedRef.current) return;
@@ -498,7 +494,10 @@ export function useLiveCopilot({
     overlay.setActiveTab("answer");
 
     if (overlay.auto_generate) {
-      void requestLiveHintRef.current(trimmed);
+      const autoFp = fingerprint || trimmed;
+      if (beginAutoHintIfIdle(autoHintInflightFingerprintsRef, autoFp)) {
+        void requestLiveHintRef.current(trimmed);
+      }
     }
   }, []);
 
@@ -667,6 +666,8 @@ export function useLiveCopilot({
       const controller = new AbortController();
       abortRef.current = controller;
 
+      startAnswerLatencySpan("live_hint");
+
       const questionId = hintIdempotencyKey(sessionIdRef.current, question);
       const operationId = createLiveHintOperationId(sessionIdRef.current, questionId);
       hintOperationIdRef.current = operationId;
@@ -677,6 +678,7 @@ export function useLiveCopilot({
         questionId,
         question,
       });
+      markAnswerLatency("t1", { feature: "live_hint" });
 
       const stillCurrent = () =>
         !sessionEndedRef.current &&
@@ -685,6 +687,7 @@ export function useLiveCopilot({
         getOverlaySessionAuthority().canAcceptSessionMutations();
 
       try {
+        markAnswerLatency("t3", { feature: "live_hint" });
         if (answerMode === "full_answer") {
           await requestFullAnswer(
             question,
@@ -710,10 +713,12 @@ export function useLiveCopilot({
           answerMode: "hint",
           onChunk: (chunk) => {
             if (!stillCurrent()) return;
+            markAnswerLatency("t5", { feature: "live_hint" });
             useOverlayStore.getState().appendStreamChunk(chunk, operationId);
           },
           onDone: async () => {
             if (!stillCurrent()) return;
+            markAnswerLatency("t6", { feature: "live_hint" });
             useOverlayStore.getState().commitStreamedHint(operationId);
             checkpointLiveSession();
             const remaining = await refreshCredits();
@@ -790,7 +795,7 @@ export function useLiveCopilot({
 
       try {
         const { submitCoachChatMessage } = await import("@/lib/ai/coachChatSession");
-        await submitCoachChatMessage({
+        return submitCoachChatMessage({
           message: question,
           sessionId,
           currentQuestion:
@@ -820,47 +825,107 @@ export function useLiveCopilot({
   }, [submitManualQuestion]);
 
   const startLiveSession = useCallback(async () => {
-    const userId = profile?.id;
+    if (startInFlightRef.current) return;
+
+    const userId = profile?.id || user?.id;
     if (!userId) throw new Error("Please sign in to start a live session.");
 
+    startInFlightRef.current = true;
     const cfg = configRef.current;
     setIsPreparingSession(true);
     setPrepStepIndex(0);
 
     abortRef.current?.abort();
     chatAbortRef.current?.abort();
+    startAbortRef.current?.abort();
     sessionEndedRef.current = false;
     hintOperationIdRef.current = null;
 
-    const { generation } = beginOverlayProductSession({ mode: "live" });
+    const reusableSessionId = cfg.practice_context_id
+      ? null
+      : existingSessionIdRef.current;
+    const willRestore =
+      Boolean(reusableSessionId) && !getPrivateMode();
+
+    const { generation } = beginOverlayProductSession({
+      mode: "live",
+      sessionId: willRestore ? reusableSessionId! : undefined,
+      resetStores: !willRestore,
+    });
     overlayGenerationRef.current = generation;
+
+    /** Fresh server session to cancel if client init fails after start-session succeeds. */
+    let cancelSessionOnFailure: string | null = null;
 
     try {
       const privateMode = getPrivateMode();
-      const reusableSessionId = cfg.practice_context_id
-        ? null
-        : existingSessionIdRef.current;
       if (reusableSessionId && !privateMode) {
         sessionIdRef.current = reusableSessionId;
         await activateSession(reusableSessionId);
       } else if (!privateMode) {
         const apiSessionType = sessionType === "live" ? "rehearsal" : sessionType;
+        if (!startAttemptKeyRef.current) {
+          try {
+            startAttemptKeyRef.current = crypto.randomUUID().slice(0, 8);
+          } catch {
+            startAttemptKeyRef.current = `${Date.now().toString(36)}`.slice(0, 8);
+          }
+        }
 
-        const result = await startSessionApi({
-          session_type: apiSessionType,
-          type: apiSessionType,
-          is_practice: sessionType === "live" ? true : undefined,
-          interview_type: (cfg.interview_type as string) ?? "behavioral",
-          company: cfg.company ?? null,
-          role: cfg.role ?? null,
-          resume_id: cfg.resume_id ?? null,
-          jd_id: cfg.jd_id ?? null,
-          model: useOverlayStore.getState().active_model,
-          duration_minutes: cfg.duration_minutes ?? 30,
-          practice_context_id: cfg.practice_context_id ?? null,
-          source_type: cfg.source_type ?? null,
-          session_call_type: cfg.session_call_type ?? null,
+        const result = await startSessionApi(
+          {
+            session_type: apiSessionType,
+            type: apiSessionType,
+            is_practice: sessionType === "live" ? true : undefined,
+            interview_type: (cfg.interview_type as string) ?? "behavioral",
+            company: cfg.company ?? null,
+            role: cfg.role ?? null,
+            resume_id: cfg.resume_id ?? null,
+            jd_id: cfg.jd_id ?? null,
+            model: useOverlayStore.getState().active_model,
+            duration_minutes: cfg.duration_minutes ?? 30,
+            practice_context_id: cfg.practice_context_id ?? null,
+            source_type: cfg.source_type ?? null,
+            session_call_type: cfg.session_call_type ?? null,
+          },
+          {
+            idempotencyKey: practiceCoachStartIdempotencyKey(userId, {
+              practice_context_id: cfg.practice_context_id,
+              resume_id: cfg.resume_id,
+              role: cfg.role,
+              company: cfg.company,
+              interview_type: cfg.interview_type,
+              attemptNonce: startAttemptKeyRef.current,
+            }),
+          },
+        ).catch(async (startErr) => {
+          const code =
+            startErr instanceof ApiClientError ? startErr.code : "";
+          if (code !== "SESSION_STATE_CONFLICT" && (startErr as { status?: number }).status !== 409) {
+            throw startErr;
+          }
+          const restored = await restoreOwnedSession({ session_type: apiSessionType });
+          if (!restored.session_id) throw startErr;
+          return { ...restored, reused: true };
         });
+        const reusedTerminal =
+          result.reused === true &&
+          (result.status === "completed" ||
+            result.status === "abandoned" ||
+            result.lifecycle_status === "COMPLETED" ||
+            result.lifecycle_status === "EXPIRED" ||
+            result.lifecycle_status === "CANCELLED");
+        if (reusedTerminal || !result.session_id) {
+          startAttemptKeyRef.current = null;
+          throw new ApiClientError({
+            message: "Could not start your session. Please try again in a moment.",
+            status: 409,
+            code: "SESSION_NOT_AVAILABLE",
+          });
+        }
+        if (result.reused !== true) {
+          cancelSessionOnFailure = result.session_id;
+        }
         sessionIdRef.current = result.session_id;
       } else {
         sessionIdRef.current = generateId();
@@ -897,6 +962,7 @@ export function useLiveCopilot({
       }
       markOverlayProductSessionActive(generation);
       markFirstListening();
+      cancelSessionOnFailure = null;
 
       if (restoringExisting) {
         const checkpoint = loadLiveSessionCheckpoint(reusableSessionId!);
@@ -945,23 +1011,42 @@ export function useLiveCopilot({
       }
       checkpointLiveSession();
     } catch (err) {
-      console.error("[useLiveCopilot] Failed to start live session:", err);
+      const normalized = normalizeSessionLifecycleError(err);
+      const code = normalized instanceof ApiClientError ? normalized.code : "";
+      if (code === "SESSION_STATE_CONFLICT" || code === "SESSION_NOT_AVAILABLE") {
+        console.warn("[useLiveCopilot] Session start conflict:", code);
+      } else {
+        console.warn("[useLiveCopilot] Failed to start live session:", normalized.message);
+      }
+      if (cancelSessionOnFailure && !getPrivateMode()) {
+        void endSessionApi({
+          session_id: cancelSessionOnFailure,
+          terminal_reason: "CANCELLED",
+        }).catch((cancelErr) => {
+          console.warn(
+            "[useLiveCopilot] could not cancel session after init failure:",
+            cancelErr,
+          );
+        });
+      }
       audio.stop();
       markOverlayProductSessionTerminal(generation, "FAILED");
       teardownOverlayProductSession(generation);
-      if (!handleSessionStartError(err)) {
-        throw err instanceof Error ? err : new Error("Failed to start live session");
-      }
+      throw normalized;
     } finally {
+      startInFlightRef.current = false;
       setIsPreparingSession(false);
       setPrepStepIndex(0);
     }
-  }, [audio, checkpointLiveSession, initSessionFromConfig, profile?.id, sessionType]);
+  }, [audio, checkpointLiveSession, initSessionFromConfig, profile?.id, user?.id, sessionType]);
 
   const endLiveSession = useCallback(async (): Promise<{ answersRecorded: number }> => {
     const gen = overlayGenerationRef.current;
     sessionEndedRef.current = true;
+    startAttemptKeyRef.current = null;
     hintOperationIdRef.current = null;
+    startAbortRef.current?.abort();
+    startAbortRef.current = null;
     abortRef.current?.abort();
     chatAbortRef.current?.abort();
     abortRef.current = null;
@@ -1066,7 +1151,7 @@ export function useLiveCopilot({
   }, [audio]);
 
   const resumeLiveSession = useCallback(async () => {
-    await audio.start({ restore: true });
+    await audio.resume();
     useSessionStore.getState().setStatus("active");
   }, [audio]);
 

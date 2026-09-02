@@ -1,3 +1,5 @@
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+
 export const CERTIFICATE_CODE_PATTERN = /^CLR-\d{4}-[A-F0-9]{8}$/i;
 
 export type CertificateVerifyPayload = {
@@ -88,7 +90,7 @@ export function certificateNotFoundCopy(): { title: string; description: string 
   return {
     title: "Certificate not found",
     description:
-      "No matching certificate was found for this verification code. Learner names, course titles, and completion details are not shown for invalid codes.",
+      `${PRODUCT_NAMES.brand} could not match this verification code. Learner names, course titles, and completion details are not shown for invalid codes.`,
   };
 }
 

@@ -37,22 +37,30 @@ export {
   unblockDeepgramTokenClient,
   isDeepgramTokenBlocked,
 } from "./deepgramToken";
-export { TranscriptionState, TRANSCRIPTION_STATUS_COPY, deepgramStatusToTranscription, providerStatusToTranscription, sttHealthToTranscription } from "./transcriptionStates";
+export {
+  TranscriptionState,
+  TRANSCRIPTION_STATUS_COPY,
+  MIC_STATUS_COPY,
+  LIVE_TRANSCRIPTION_BAR_COPY,
+  deepgramStatusToTranscription,
+  providerStatusToTranscription,
+  sttHealthToTranscription,
+} from "./transcriptionStates";
 export type { DeepgramStreamOptions } from "./deepgramStream";
 
-// ─── Live transcription (Parakeet boundary) ───────────────────────────────────
+// ─── Live transcription (Deepgram via LiveTranscriptionService) ───────────────
 export {
-  ParakeetTranscriptionService,
-  createParakeetTranscriptionService,
-  loadParakeetTranscriptionConfig,
+  LiveTranscriptionService,
+  createLiveTranscriptionService,
+  loadLiveTranscriptionConfig,
   channelToSpeaker,
   newUtteranceFromSegment,
   partialTextToSegment,
   utteranceToSegment,
 } from "./transcription";
 export type {
-  ParakeetTranscriptionCallbacks,
-  ParakeetTranscriptionServiceOptions,
+  LiveTranscriptionCallbacks,
+  LiveTranscriptionServiceOptions,
   TranscriptSegment,
   TranscriptionChannel,
   TranscriptionProviderStatus,

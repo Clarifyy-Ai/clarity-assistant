@@ -47,6 +47,7 @@ const FOOTER_COLUMNS: Array<{
       { to: "/", hash: "features", label: "Features" },
       { to: "/gov-exams", label: PRODUCT_NAMES.govExams },
       { to: "/pricing", label: "Pricing" },
+      { to: "/download", label: PUBLIC_CTAS.downloadDesktop },
       { to: "/shortcuts", label: "Shortcuts" },
       { to: "/signup", label: PUBLIC_CTAS.signup },
     ],

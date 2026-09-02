@@ -1,6 +1,7 @@
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { createIdempotencyKey } from "@/lib/network/idempotency";
 import { ApiClientError } from "@/lib/api/apiClient";
+import { trackGoogleAdsPurchase } from "@/lib/ads/googleAds";
 
 export type RazorpayProductType =
   | "pro_monthly"
@@ -33,6 +34,8 @@ const RAZORPAY_SCRIPT = "https://checkout.razorpay.com/v1/checkout.js";
 const CHECKOUT_PREPARE_ERROR = "Checkout could not be prepared. Please try again.";
 export const PAYMENT_UNAVAILABLE =
   "Payment service is temporarily unavailable.";
+export const PAYMENTS_NOT_CONFIGURED =
+  "Payments are not configured on this environment. Contact support if you were trying to purchase.";
 
 /** Short QA copy for Razorpay test-mode sandboxes (never Stripe 4242). */
 export const RAZORPAY_QA_SANDBOX_HINT =
@@ -193,6 +196,9 @@ export function toPaymentUserFacingError(err: unknown): string {
   if (code === "PRICE_UNAVAILABLE" || /checkout is not available/i.test(msg)) {
     return "Checkout is not available for this product right now. Please try again later.";
   }
+  if (code === "VALIDATION_ERROR" || /invalid product_type/i.test(msg)) {
+    return "That plan or credit pack is not available for checkout.";
+  }
   if (
     code === "ORDER_PERSIST_FAILED" ||
     code === "PROVIDER_ORDER_INVALID" ||
@@ -202,12 +208,13 @@ export function toPaymentUserFacingError(err: unknown): string {
   }
   if (
     status === 503 ||
+    code === "PAYMENTS_NOT_CONFIGURED" ||
     code === "BILLING_CONFIG_INVALID" ||
-    /integration not configured|razorpay not configured|billing configuration invalid/i.test(
+    /payments are not configured|integration not configured|razorpay not configured|billing configuration invalid/i.test(
       msg,
     )
   ) {
-    return "Payments are not configured on this environment. Contact support if you were trying to purchase.";
+    return PAYMENTS_NOT_CONFIGURED;
   }
   if (code === "PROVIDER_UNAVAILABLE" || status === 502) {
     return "Payment provider is temporarily unavailable. Please try again in a moment.";
@@ -349,6 +356,11 @@ export async function openRazorpayCheckout(options: {
             razorpay_signature: response.razorpay_signature,
           })
             .then(() => {
+              trackGoogleAdsPurchase({
+                amountPaise: order.amount,
+                currency: order.currency,
+                transactionId: order.order_id,
+              });
               options.onSuccess?.();
               resolve();
             })

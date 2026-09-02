@@ -4,13 +4,14 @@ import { handleCors, getCorsHeaders, withCorsHeaders } from "../_shared/cors.ts"
 import { createServiceClient } from "../_shared/supabase.ts";
 import { requireAuth } from "../_shared/utils.ts";
 import { enforceSessionRateLimitAsync } from "../_shared/rateLimit.ts";
+import { emailButton, publicAppUrl, wrapCareerPilotEmail } from "../_shared/emailLayout.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const FROM_EMAIL =
   Deno.env.get("RESEND_FROM_EMAIL") ??
   Deno.env.get("FROM_EMAIL") ??
   "Career Pilot <hello@trycareerpilot.com>";
-const APP_URL = Deno.env.get("APP_URL") ?? "https://clarityapp.ai";
+const APP_URL = publicAppUrl();
 
 function sanitize(str: unknown, max = 200): string {
   return String(str ?? "")
@@ -46,8 +47,12 @@ async function sendConfirmationEmail(
         from: FROM_EMAIL,
         to,
         subject: `Interview scheduled: ${company}`,
-        html: `<p>Your ${sanitize(role)} interview at <strong>${sanitize(company)}</strong> is scheduled for ${sanitize(whenText)}.</p>
-<p><a href="${APP_URL}/app/interviews">View in Career Pilot</a></p>`,
+        html: wrapCareerPilotEmail(
+          `<h1 style="font-size:22px;font-weight:800;margin:0 0 12px;color:#F8FAFC;">Interview scheduled</h1>
+<p style="font-size:14px;line-height:1.65;color:#CBD5E1;margin:8px 0;">Your ${sanitize(role)} interview at <strong style="color:#F8FAFC;">${sanitize(company)}</strong> is scheduled for ${sanitize(whenText)}.</p>
+${emailButton(`${APP_URL}/app/interviews`, "View in Career Pilot")}`,
+          { preheader: `Interview at ${sanitize(company)}` },
+        ),
       }),
     });
 

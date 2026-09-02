@@ -21,6 +21,7 @@ import {
   fileByteLengthFailure,
   mapHybridDocumentCode,
 } from "../_shared/documentErrors.ts";
+import { extractPdfTextBasic } from "../_shared/documentTextExtract.ts";
 import JSZip from "https://esm.sh/jszip@3.10.1";
 
 const RESUME_PARSE_COST = creditCost("resume_analysis");
@@ -96,10 +97,21 @@ function normalizeResumeParsed(obj: any): Record<string, unknown> | null {
     const normalized = value.replace(/\s+/g, " ").trim();
     return normalized ? normalized.slice(0, max) : null;
   };
+  const skillFromUnknown = (item: unknown): string | null => {
+    if (typeof item === "string") return cleanText(item, 200);
+    if (item && typeof item === "object" && !Array.isArray(item)) {
+      const row = item as Record<string, unknown>;
+      for (const key of ["name", "skill", "label", "text", "title"]) {
+        const inner = cleanText(row[key], 200);
+        if (inner) return inner;
+      }
+    }
+    return null;
+  };
   const cleanList = (value: unknown, max = 100): string[] =>
     Array.isArray(value)
       ? value
-          .map((item) => cleanText(item, 200))
+          .map(skillFromUnknown)
           .filter((item): item is string => Boolean(item))
           .slice(0, max)
       : [];
@@ -185,24 +197,6 @@ function buildTextFallbackResume(text: string): Record<string, unknown> | null {
     education: [],
     projects: [],
   });
-}
-
-/** Best-effort text extraction from text-based PDFs when Python is unavailable. */
-function extractPdfTextBasic(bytes: Uint8Array): string | null {
-  const raw = bytesToUtf8(bytes);
-  const chunks: string[] = [];
-  const re = /\(([^()\\]*(?:\\.[^()\\]*)*)\)/g;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(raw)) !== null) {
-    const piece = match[1]!
-      .replace(/\\n/g, "\n")
-      .replace(/\\r/g, "\r")
-      .replace(/\\\(/g, "(")
-      .replace(/\\\)/g, ")");
-    if (piece.trim().length >= 2) chunks.push(piece);
-  }
-  const text = chunks.join(" ").replace(/\s+/g, " ").trim();
-  return text.length >= 40 ? text : null;
 }
 
 function mapPythonStructuredResume(structured: Record<string, unknown>): Record<string, unknown> | null {
@@ -592,7 +586,21 @@ async function parseResumeHybrid(opts: {
  */
 async function fanOutResume(db: any, userId: string, parsed: any): Promise<void> {
   try {
-    const skills = Array.isArray(parsed?.skills) ? parsed.skills.map((s: any) => String(s)).slice(0, 100) : [];
+    const skills = Array.isArray(parsed?.skills)
+      ? parsed.skills
+          .map((s: unknown) => {
+            if (typeof s === "string") return s.trim();
+            if (s && typeof s === "object") {
+              const row = s as Record<string, unknown>;
+              for (const key of ["name", "skill", "label", "text"]) {
+                if (typeof row[key] === "string" && row[key].trim()) return String(row[key]).trim();
+              }
+            }
+            return "";
+          })
+          .filter((s: string) => s && s !== "[object Object]")
+          .slice(0, 100)
+      : [];
     const experience = Array.isArray(parsed?.experience) ? parsed.experience : [];
     const education = Array.isArray(parsed?.education) ? parsed.education : [];
     const summary = typeof parsed?.summary === "string" ? parsed.summary.slice(0, 4000) : null;

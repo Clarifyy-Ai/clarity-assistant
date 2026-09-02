@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { CATALOG_PAISE_FALLBACK } from "@/lib/billing/liveCatalog";
 import { formatInrPaise } from "@/lib/billing/priceCalculator";
 import { ROUTES } from "@/lib/constants/apiEndpoints";
-import { PRIVACY_EMAIL, PUBLIC_STATUS_FOOTER_LABEL } from "@/lib/constants/contact";
+import { PRIVACY_EMAIL, PUBLIC_STATUS_FOOTER_LABEL, PUBLIC_WEBSITE_URL } from "@/lib/constants/contact";
 import {
   HELP_ARTICLES_FALLBACK,
   resolveHelpArticleDisplay,
@@ -181,6 +181,15 @@ describe("help / FAQ public copy (TC-PUB-004, TC-PUB-009, DEF-HELP-COPY)", () =>
     expect(privacy).toContain("PRIVACY_EMAIL");
     expect(privacy).not.toMatch(/clarifyprep/i);
     expect(privacy).not.toMatch(/privacy@clarifyprep/);
+  });
+
+  it("uses trycareerpilot.com as the public website", () => {
+    expect(PUBLIC_WEBSITE_URL).toBe("https://trycareerpilot.com");
+    expect(readRepo("index.html")).toContain("https://trycareerpilot.com/");
+    expect(readRepo("index.html")).not.toContain("sltfinanceindia");
+    expect(readRepo("src/pages/marketing/Landing.tsx")).toContain("PUBLIC_WEBSITE_URL");
+    expect(readRepo("src/pages/marketing/Landing.tsx")).not.toContain("sltfinanceindia");
+    expect(readRepo("public/robots.txt")).toContain("https://trycareerpilot.com/sitemap.xml");
   });
 });
 

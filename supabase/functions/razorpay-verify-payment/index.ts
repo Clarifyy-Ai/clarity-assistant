@@ -9,7 +9,10 @@ import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { parseJsonBody } from "../_shared/errors.ts";
-import { assertBillingConfigOrThrow } from "../_shared/billingConfig.ts";
+import {
+  getRazorpayProviderConfig,
+  paymentsNotConfiguredBody,
+} from "../_shared/razorpayProvider.ts";
 import { enforcePaymentRateLimitAsync } from "../_shared/rateLimit.ts";
 import {
   fulfillCapturedRazorpayOrder,
@@ -21,9 +24,6 @@ import {
   assertPaymentStatusTransition,
   type PaymentOrderStatus,
 } from "../_shared/paymentStateMachine.ts";
-
-const KEY_ID = Deno.env.get("RAZORPAY_KEY_ID") ?? "";
-const KEY_SECRET = Deno.env.get("RAZORPAY_KEY_SECRET") ?? "";
 
 const schema = z.object({
   razorpay_order_id: z.string().min(6).max(64),
@@ -38,8 +38,12 @@ function json(req: Request, payload: unknown, status = 200) {
   });
 }
 
-async function fetchRazorpayPayment(paymentId: string): Promise<{ status?: string; order_id?: string } | null> {
-  const auth = btoa(`${KEY_ID}:${KEY_SECRET}`);
+async function fetchRazorpayPayment(
+  paymentId: string,
+  keyId: string,
+  keySecret: string,
+): Promise<{ status?: string; order_id?: string } | null> {
+  const auth = btoa(`${keyId}:${keySecret}`);
   const res = await fetch(`https://api.razorpay.com/v1/payments/${paymentId}`, {
     headers: { Authorization: `Basic ${auth}` },
   });
@@ -56,18 +60,12 @@ Deno.serve(async (req: Request) => {
     return json(req, { error: "Method not allowed" }, 405);
   }
 
-  if (!KEY_ID || !KEY_SECRET) {
-    return json(req, { error: "Razorpay not configured" }, 503);
-  }
+  const razorpayProvider = getRazorpayProviderConfig();
+  const KEY_ID = razorpayProvider.keyId;
+  const KEY_SECRET = razorpayProvider.keySecret;
 
-  try {
-    assertBillingConfigOrThrow({
-      requireRazorpay: true,
-      requireStripe: false,
-      requireRazorpayWebhook: true,
-    });
-  } catch {
-    return json(req, { error: "Billing configuration invalid" }, 503);
+  if (!razorpayProvider.checkoutConfigured) {
+    return json(req, paymentsNotConfiguredBody(), 503);
   }
 
   const auth = await authenticateRequest(req);
@@ -83,7 +81,13 @@ Deno.serve(async (req: Request) => {
   );
   if (rateLimited) return rateLimited;
 
-  const parsed = schema.safeParse(await parseJsonBody(req));
+  let parsedBody: unknown;
+  try {
+    parsedBody = await parseJsonBody(req);
+  } catch {
+    return json(req, { error: "Invalid payment payload" }, 400);
+  }
+  const parsed = schema.safeParse(parsedBody);
   if (!parsed.success) {
     return json(req, { error: "Invalid payment payload" }, 400);
   }
@@ -97,7 +101,7 @@ Deno.serve(async (req: Request) => {
     return json(req, { error: "Invalid payment signature" }, 401);
   }
 
-  const remote = await fetchRazorpayPayment(razorpay_payment_id);
+  const remote = await fetchRazorpayPayment(razorpay_payment_id, KEY_ID, KEY_SECRET);
   if (!remote || remote.order_id !== razorpay_order_id) {
     return json(req, { error: "Payment could not be confirmed" }, 400);
   }

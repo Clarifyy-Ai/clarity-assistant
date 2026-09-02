@@ -1,4 +1,4 @@
-// Local deterministic text extraction for document parsing (PDF, plain text).
+// Local deterministic text extraction for document parsing (PDF, plain text, DOCX-ish XML).
 
 export type DocumentExtractPayload = {
   full_text: string;
@@ -24,27 +24,100 @@ export function looksBinary(bytes: Uint8Array): boolean {
   return nul > 4;
 }
 
+function printableRatio(text: string): number {
+  if (!text.length) return 0;
+  let ok = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    if (c === 9 || c === 10 || c === 13 || (c >= 32 && c < 127) || c > 159) ok += 1;
+  }
+  return ok / text.length;
+}
+
+function decodePdfLiteral(piece: string): string {
+  return piece
+    .replace(/\\n/g, "\n")
+    .replace(/\\r/g, "\r")
+    .replace(/\\t/g, "\t")
+    .replace(/\\\(/g, "(")
+    .replace(/\\\)/g, ")")
+    .replace(/\\\\/g, "\\")
+    .replace(/\\(\d{1,3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8) % 256));
+}
+
+function decodePdfHex(hex: string): string | null {
+  const clean = hex.replace(/\s+/g, "");
+  if (clean.length < 4 || clean.length % 2 !== 0) return null;
+  const bytes: number[] = [];
+  for (let i = 0; i < clean.length; i += 2) {
+    const n = parseInt(clean.slice(i, i + 2), 16);
+    if (!Number.isFinite(n)) return null;
+    bytes.push(n);
+  }
+  let start = 0;
+  let step = 1;
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+    start = 2;
+    step = 2;
+  }
+  let out = "";
+  if (step === 2) {
+    for (let i = start; i + 1 < bytes.length; i += 2) {
+      out += String.fromCharCode((bytes[i]! << 8) | bytes[i + 1]!);
+    }
+  } else {
+    for (let i = start; i < bytes.length; i++) {
+      out += String.fromCharCode(bytes[i]!);
+    }
+  }
+  const t = out.replace(/\s+/g, " ").trim();
+  if (t.length < 2 || printableRatio(t) < 0.85) return null;
+  return t;
+}
+
+function looksLikePdfDump(text: string): boolean {
+  if (/%PDF-|endobj|endstream/.test(text) && text.length < 80) return true;
+  if (printableRatio(text) < 0.82) return true;
+  const operators = (text.match(/\b(?:Tj|TJ|BT|ET|Tf|Td|Tm)\b/g) ?? []).length;
+  return operators >= 4 && !/[A-Za-z]{5,}/.test(text.replace(/\b(?:Tj|TJ|BT|ET)\b/g, ""));
+}
+
 /** Best-effort text extraction from text-based PDFs when Python/Gemini are unavailable. */
 export function extractPdfTextBasic(bytes: Uint8Array): string | null {
   const raw = bytesToUtf8(bytes);
   const chunks: string[] = [];
-  const re = /\(([^()\\]*(?:\\.[^()\\]*)*)\)/g;
+
+  const lit = /\(([^()\\]*(?:\\.[^()\\]*)*)\)\s*Tj/gi;
   let match: RegExpExecArray | null;
-  while ((match = re.exec(raw)) !== null) {
-    const piece = match[1]!
-      .replace(/\\n/g, "\n")
-      .replace(/\\r/g, "\r")
-      .replace(/\\\(/g, "(")
-      .replace(/\\\)/g, ")");
+  while ((match = lit.exec(raw)) !== null) {
+    const piece = decodePdfLiteral(match[1]!);
     if (piece.trim().length >= 2) chunks.push(piece);
   }
+
+  if (chunks.length === 0) {
+    const loose = /\(([^()\\]*(?:\\.[^()\\]*)*)\)/g;
+    while ((match = loose.exec(raw)) !== null) {
+      const piece = decodePdfLiteral(match[1]!);
+      if (piece.trim().length >= 2 && printableRatio(piece) >= 0.9) chunks.push(piece);
+    }
+  }
+
+  const hex = /<([0-9A-Fa-f\s]+)>\s*Tj/g;
+  while ((match = hex.exec(raw)) !== null) {
+    const decoded = decodePdfHex(match[1]!);
+    if (decoded) chunks.push(decoded);
+  }
+
   const text = chunks.join(" ").replace(/\s+/g, " ").trim();
-  return text.length >= 20 ? text : null;
+  if (text.length < 20) return null;
+  if (looksLikePdfDump(text)) return null;
+  return text;
 }
 
 export function buildDocumentExtractPayload(fullText: string): DocumentExtractPayload | null {
   const clipped = fullText.trim();
   if (clipped.length < 20) return null;
+  if (looksLikePdfDump(clipped)) return null;
   return {
     full_text: clipped.slice(0, 50_000),
     summary: clipped.slice(0, 400),
@@ -73,4 +146,51 @@ export function tryDeterministicTextExtract(
     return buildDocumentExtractPayload(text);
   }
   return null;
+}
+
+/** Preserve paragraph breaks from OOXML document.xml (skills/sections stay line-oriented). */
+export function extractDocxXmlText(xml: string): string | null {
+  const text = xml
+    .replace(/<w:tab[^/]*\/>/g, "\t")
+    .replace(/<\/w:p>/g, "\n")
+    .replace(/<w:br[^/]*\/>/g, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+  return text.length >= 20 ? text.slice(0, 50_000) : null;
+}
+
+export function extractJdFieldsFromText(text: string): {
+  role: string | null;
+  company: string | null;
+  location: string | null;
+  required_skills: string[];
+  summary: string;
+} {
+  const clipped = text.trim();
+  const roleMatch = clipped.match(/(?:job\s*title|position|role|title)\s*[:\-–]\s*([^\n]{3,120})/i);
+  const companyMatch = clipped.match(/(?:company|employer|organization)\s*[:\-–]\s*([^\n]{2,120})/i);
+  const locationMatch = clipped.match(/(?:location|based in|office)\s*[:\-–]\s*([^\n]{2,80})/i);
+  const skillsBlock = clipped.match(
+    /(?:required skills|key skills|must have|requirements)[:\s]*([\s\S]{20,1200}?)(?:\n\n|responsibilities|qualifications|benefits|$)/i,
+  );
+  const skills = (skillsBlock?.[1] ?? "")
+    .split(/\n|•|,|;/)
+    .map((line) => line.replace(/^[\-\*\d.\s]+/, "").replace(/\s+/g, " ").trim())
+    .filter((line) => line.length >= 2 && line.length <= 80 && line !== "[object Object]")
+    .slice(0, 40);
+  return {
+    role: roleMatch?.[1]?.trim() || null,
+    company: companyMatch?.[1]?.trim() || null,
+    location: locationMatch?.[1]?.trim() || null,
+    required_skills: skills,
+    summary: clipped.slice(0, 400),
+  };
 }

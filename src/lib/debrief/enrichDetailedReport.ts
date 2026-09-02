@@ -1,4 +1,5 @@
 import type { DetailedReport } from "@/components/debrief/DebriefAnalyticsPanels";
+import { keywordToString, normalizeChangeTracking, normalizeKeywordList } from "@/lib/debrief/reportNormalize";
 
 type Segment = {
   wpm?: number | null;
@@ -21,6 +22,29 @@ export function enrichDetailedReport(
   segments: Segment[],
 ): DetailedReport {
   const base: DetailedReport = { ...(report ?? {}) };
+
+  base.missed_keywords = normalizeKeywordList(base.missed_keywords);
+  base.jd_keywords = normalizeKeywordList(base.jd_keywords);
+  base.change_tracking = normalizeChangeTracking(
+    (report as { change_tracking?: unknown } | null | undefined)?.change_tracking,
+  );
+
+  if (Array.isArray(base.keyword_coverage)) {
+    base.keyword_coverage = base.keyword_coverage
+      .map((item) => {
+        const keyword = keywordToString((item as { keyword?: unknown }).keyword) ?? keywordToString(item);
+        if (!keyword) return null;
+        return {
+          keyword,
+          covered: Boolean((item as { covered?: unknown }).covered),
+          coverage_pct: Number((item as { coverage_pct?: unknown }).coverage_pct) || 0,
+          suggestion: typeof (item as { suggestion?: unknown }).suggestion === "string"
+            ? (item as { suggestion: string }).suggestion
+            : undefined,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  }
 
   if (!base.wpm_series?.length) {
     const fromSegments = segments

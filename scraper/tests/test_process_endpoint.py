@@ -21,7 +21,7 @@ os.environ.update(
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.config import Settings
+from app.core.config import get_settings
 from app.main import app
 
 
@@ -43,7 +43,7 @@ def client():
 
 
 def test_process_document_classify_success(client):
-    settings = Settings()
+    settings = get_settings()
     body = (
         b'{"operation":"document_classify","operation_id":"op-1","correlation_id":"corr-1",'
         b'"payload":{"text":"John Doe\\nEmail: jane@example.com\\nSkills: Python, FastAPI\\nExperience: Built APIs"}}'
@@ -65,7 +65,7 @@ def test_process_document_classify_success(client):
 
 
 def test_process_star_evidence_requires_input(client):
-    settings = Settings()
+    settings = get_settings()
     body = (
         b'{"operation":"star_evidence","operation_id":"op-2","correlation_id":"corr-2",'
         b'"payload":{"situation":"","task":"","action":"","result":""}}'
@@ -86,7 +86,7 @@ def test_process_star_evidence_requires_input(client):
 
 
 def test_process_star_evidence_answer_bank_prompt(client):
-    settings = Settings()
+    settings = get_settings()
     body = (
         b'{"operation":"star_evidence","operation_id":"op-ab","correlation_id":"corr-ab",'
         b'"payload":{"operation_type":"star_method","situation":"","task":"",'
@@ -113,7 +113,7 @@ def test_process_star_evidence_answer_bank_prompt(client):
 
 
 def test_process_mock_question_no_safe_fallback(client):
-    settings = Settings()
+    settings = get_settings()
     body = (
         b'{"operation":"mock_question_validate","operation_id":"op-3","correlation_id":"corr-3",'
         b'"payload":{"questions":[],"bank_candidates":[]}}'

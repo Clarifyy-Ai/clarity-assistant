@@ -151,6 +151,13 @@ export default function OnboardingIndex() {
         emailNotifications: profile.email_notifications ?? prev.emailNotifications,
         industry: profile.industry ?? prev.industry,
         interviewDate: profile.interview_date ?? prev.interviewDate,
+        resumeFileId:
+          prev.resumeFileId ??
+          restored?.data?.resumeFileId ??
+          (typeof (profile as { resume_id?: string | null }).resume_id === "string"
+            ? (profile as { resume_id?: string }).resume_id ?? null
+            : null),
+        resumeFileName: prev.resumeFileName ?? restored?.data?.resumeFileName ?? null,
       };
       const prefs =
         profile.notification_prefs &&
@@ -182,6 +189,33 @@ export default function OnboardingIndex() {
     });
     // #endregion
   }, [isRerun, isProfileLoaded, profile, hydratedFromProfile]);
+
+  useEffect(() => {
+    if (isRerun || !user?.id || data.skipResume || data.resumeFileId) return;
+    let cancelled = false;
+    void supabase
+      .from("resumes")
+      .select("id,name")
+      .eq("user_id", user.id)
+      .eq("is_primary", true)
+      .maybeSingle()
+      .then(({ data: row }) => {
+        if (cancelled || !row?.id) return;
+        setData((prev) => {
+          if (prev.resumeFileId || prev.skipResume) return prev;
+          const next = {
+            ...prev,
+            resumeFileId: row.id,
+            resumeFileName: typeof row.name === "string" ? row.name : prev.resumeFileName,
+          };
+          saveOnboardingDraft(currentStep, next);
+          return next;
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isRerun, user?.id, data.skipResume, data.resumeFileId, currentStep]);
 
   useEffect(() => {
     if (!isRerun || !profile) return;

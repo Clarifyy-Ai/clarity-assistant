@@ -67,7 +67,7 @@ export function TabsList({
       aria-orientation="horizontal"
       id={`${baseId}-list`}
       className={cn(
-        "flex gap-1 bg-secondary border border-border rounded-xl p-1 w-fit",
+        "flex gap-1 bg-secondary border border-border rounded-xl p-1 w-fit max-w-full overflow-x-auto",
         className,
       )}
     >

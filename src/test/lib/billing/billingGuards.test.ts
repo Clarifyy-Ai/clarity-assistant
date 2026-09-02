@@ -104,4 +104,15 @@ describe("billing guards", () => {
     expect(src).toContain("RAZORPAY_WEBHOOK_SECRET");
     expect(src).toContain("productionForbidsTestPrefix");
   });
+
+  it("shared razorpay provider treats placeholders as not configured", () => {
+    const src = fs.readFileSync(
+      path.join(root, "supabase/functions/_shared/razorpayProvider.ts"),
+      "utf8",
+    );
+    expect(src).toContain("PAYMENTS_NOT_CONFIGURED");
+    expect(src).toContain("Payments are not configured");
+    expect(src).toContain("keysConfigured");
+    expect(src).toContain("webhookConfigured");
+  });
 });

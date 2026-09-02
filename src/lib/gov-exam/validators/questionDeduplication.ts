@@ -178,6 +178,73 @@ export function evaluateCurrentAffairsStaleness(
   return { isStale: false };
 }
 
+const COLLISION_DECISIONS = new Set([
+  "exact_duplicate",
+  "near_duplicate",
+  "template_clone",
+]);
+
+/**
+ * Drop later collisions so two near-duplicates cannot occupy the same paper.
+ */
+export function filterIntraPaperDuplicates<T extends {
+  id?: string;
+  question_text: string;
+  options?: unknown;
+}>(questions: T[]): {
+  kept: T[];
+  dropped: Array<{ id?: string; decision: DuplicateDecision; matchingQuestionId?: string | null }>;
+} {
+  const kept: T[] = [];
+  const dropped: Array<{
+    id?: string;
+    decision: DuplicateDecision;
+    matchingQuestionId?: string | null;
+  }> = [];
+
+  for (const question of questions) {
+    const options = Array.isArray(question.options)
+      ? question.options.map((opt) =>
+          typeof opt === "string"
+            ? opt
+            : String((opt as { text?: unknown })?.text ?? opt ?? ""),
+        )
+      : [];
+    let collision: SimilarityEvaluation | null = null;
+    for (const existing of kept) {
+      const existingOpts = Array.isArray(existing.options)
+        ? existing.options.map((opt) =>
+            typeof opt === "string"
+              ? opt
+              : String((opt as { text?: unknown })?.text ?? opt ?? ""),
+          )
+        : [];
+      const evaluation = evaluateQuestionSimilarity(
+        question.question_text,
+        options,
+        existing.question_text,
+        existingOpts,
+        existing.id,
+      );
+      if (COLLISION_DECISIONS.has(evaluation.decision)) {
+        collision = evaluation;
+        break;
+      }
+    }
+    if (collision) {
+      dropped.push({
+        id: question.id,
+        decision: collision.decision,
+        matchingQuestionId: collision.matchingQuestionId,
+      });
+      continue;
+    }
+    kept.push(question);
+  }
+
+  return { kept, dropped };
+}
+
 /**
  * Persists a similarity match decision in question_similarity_matches.
  */

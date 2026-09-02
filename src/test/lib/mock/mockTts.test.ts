@@ -200,6 +200,7 @@ describe("mockTts playback", () => {
     });
     await vi.advanceTimersByTimeAsync(50);
     synth.speaking = true;
+    synth.paused = true;
     await vi.advanceTimersByTimeAsync(TTS_KEEPALIVE_MS + 20);
     expect(resume).toHaveBeenCalled();
     stopBrowserTts();

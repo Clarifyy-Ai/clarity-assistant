@@ -96,6 +96,13 @@ export const PUBLIC_MARKETING_CORE_ROUTES: PublicMarketingRoute[] = [
     inventoryNote: "Keyboard shortcuts reference",
   },
   {
+    path: "/download",
+    label: PUBLIC_CTAS.downloadDesktop,
+    heading: "Download Career Pilot",
+    entry: "Footer → Product → Download desktop",
+    inventoryNote: "Windows installer for Practice Coach overlay",
+  },
+  {
     path: "/blog",
     label: "Blog",
     heading: "Blog",
@@ -151,6 +158,7 @@ export const MARKETING_FOOTER_BOTTOM_LINKS: MarketingFooterLink[] = [
   { to: "/terms", label: "Terms" },
   { to: "/privacy", label: "Privacy" },
   { to: "/pricing", label: "Pricing" },
+  { to: "/download", label: PUBLIC_CTAS.downloadDesktop },
   { to: "/blog", label: "Blog" },
   { to: "/gov-exams", label: PRODUCT_NAMES.govExams },
   { to: "/login", label: PUBLIC_CTAS.login },

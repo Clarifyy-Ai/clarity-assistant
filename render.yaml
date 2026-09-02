@@ -33,5 +33,8 @@ services:
         sync: false
       - key: SYSTEM_USER_ID
         sync: false
+      - key: SYSTEM_USER_EMAIL
+        sync: false
       - key: CORS_ORIGINS
         sync: false
+        # Dashboard value should include https://trycareerpilot.com and https://www.trycareerpilot.com

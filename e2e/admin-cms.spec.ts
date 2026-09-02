@@ -36,7 +36,7 @@ test.describe("Admin CMS [ADMIN-CMS]", () => {
     await page.getByLabel(/slug/i).fill("e2e-help-article");
     await page.getByRole("button", { name: /save/i }).click();
 
-    await expect(page.getByText(/saved|created/i).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/saved|created|draft/i).first()).toBeVisible({ timeout: 10_000 });
   });
 
   test("Learning Hub: publish blocked when course has no lesson content", async ({ page }) => {
@@ -53,13 +53,15 @@ test.describe("Admin CMS [ADMIN-CMS]", () => {
         page.getByText(/lesson|content|publish|module/i).first(),
       ).toBeVisible({ timeout: 10_000 });
     }
+  });
+
   test("Help articles: admin draft preview route loads", async ({ page }) => {
     await page.goto("/app/admin/help-articles", { waitUntil: "domcontentloaded" });
     await page.getByTestId("help-new-article").click();
     await page.getByPlaceholder("Question").fill("Preview draft question");
     await page.getByPlaceholder("Slug").fill("preview-draft-e2e");
     await page.getByRole("button", { name: /save/i }).click();
-    await expect(page.getByText(/saved|created/i).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/saved|created|draft/i).first()).toBeVisible({ timeout: 10_000 });
 
     const previewLink = page.locator('a[href*="/app/admin/help-articles/preview/"]').first();
     await expect(previewLink).toBeVisible({ timeout: 10_000 });

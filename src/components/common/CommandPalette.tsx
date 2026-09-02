@@ -29,6 +29,7 @@ import {
   User, Bell, Mic, Brain, Calendar, Sparkles, Lock, CreditCard,
 
   CalendarDays, Building2, Gift, History, Trash2, Shield, ScrollText, Tag,
+  Mail,
 
 } from "lucide-react";
 
@@ -159,6 +160,7 @@ const COMMANDS: NavCommand[] = [
   { label: "Admin questions", path: "/app/admin/questions", icon: FileText, group: "Admin", keywords: "admin question bank editor", adminOnly: true },
   { label: "Admin audit log", path: "/app/admin/audit-log", icon: ScrollText, group: "Admin", keywords: "admin audit", adminOnly: true },
   { label: "Admin diagnostics", path: "/app/admin/diagnostics", icon: Shield, group: "Admin", keywords: "admin diagnostics health", adminOnly: true },
+  { label: "Admin mail", path: "/app/admin/mail", icon: Mail, group: "Admin", keywords: "admin mail inbox hostinger hello", adminOnly: true },
   { label: "Admin blog", path: "/app/admin/blog", icon: FileText, group: "Admin", keywords: "admin blog cms", adminOnly: true },
   { label: "Admin help articles", path: "/app/admin/help-articles", icon: BookOpen, group: "Admin", keywords: "admin help cms faq", adminOnly: true },
   { label: "Admin promo codes", path: "/app/admin/promo-codes", icon: Tag, group: "Admin", keywords: "admin promo coupon credits", adminOnly: true },

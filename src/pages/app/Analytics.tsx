@@ -484,6 +484,19 @@ function ScoreTrendChart({
   sessionsScored: number;
 }) {
   if (!data.length) {
+    if (sessionsInPeriod > 0) {
+      return (
+        <Card className="text-center py-6">
+          <BarChart2 className="w-7 h-7 text-muted-foreground/40 mx-auto mb-2" />
+          <p className="text-sm font-medium text-foreground">
+            {sessionsInPeriod} session{sessionsInPeriod === 1 ? "" : "s"} in this period
+          </p>
+          <p className="text-muted-foreground text-sm mt-1">
+            Score trends appear once {sessionsScored === 0 ? "sessions are analyzed" : "more sessions are scored"}.
+          </p>
+        </Card>
+      );
+    }
     return (
       <Card className="text-center py-6">
         <BarChart2 className="w-7 h-7 text-muted-foreground/40 mx-auto mb-2" />

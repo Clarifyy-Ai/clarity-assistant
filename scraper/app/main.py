@@ -11,10 +11,11 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.config import get_settings
+from app.core.config import get_settings, is_production_app_env
 from app.core.logger import configure_logging, get_logger
 from app.hybrid import SERVICE_VERSION
 from app.paper_factory.config import get_factory_settings
+from app.paper_factory.system_user import ensure_system_user_id
 from app.paper_factory.worker import worker_loop
 from app.routes import (
     document_intelligence,
@@ -56,7 +57,7 @@ async def lifespan(app: FastAPI):
             )
         )
 
-    factory_settings = get_factory_settings()
+    factory_settings = ensure_system_user_id(get_factory_settings())
     if factory_settings.worker_enabled:
         factory_settings.require_worker_configuration()
     start_factory_worker = (
@@ -141,7 +142,7 @@ async def lifespan(app: FastAPI):
 
 
 _settings = get_settings()
-is_production = _settings.app_env.lower() == "production"
+is_production = is_production_app_env(_settings.app_env)
 app = FastAPI(
     title="Clarity.AI Gov-Exam Scraper",
     version=SERVICE_VERSION,
@@ -264,4 +265,31 @@ async def validation_error_handler(
             },
             "details": safe_errors,
         },
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    correlation_id = getattr(request.state, "correlation_id", None)
+    get_logger("http").error(
+        "unhandled_exception",
+        correlation_id=correlation_id,
+        exception_type=type(exc).__name__,
+        method=request.method,
+        path=request.url.path,
+    )
+    headers = {}
+    if correlation_id:
+        headers["x-request-id"] = correlation_id
+        headers["x-correlation-id"] = correlation_id
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": {
+                "code": "INTERNAL_ERROR",
+                "message": "An unexpected error occurred.",
+                "correlation_id": correlation_id,
+            }
+        },
+        headers=headers or None,
     )

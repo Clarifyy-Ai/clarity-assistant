@@ -63,4 +63,17 @@ describe("admin action error formatting", () => {
     );
     expect(msg).toMatch(/slug/i);
   });
+
+  it("admin help and learning pages invalidate public caches after publish", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve, dirname } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
+    const help = readFileSync(resolve(root, "src/pages/app/admin/AdminHelpArticles.tsx"), "utf8");
+    const learning = readFileSync(resolve(root, "src/pages/app/admin/AdminLearning.tsx"), "utf8");
+    expect(help).toContain("invalidatePublicContentCache");
+    expect(learning).toContain("invalidatePublicContentCache");
+    expect(help).toContain('data-testid="help-new-article"');
+    expect(help).toContain('label="Title"');
+  });
 });

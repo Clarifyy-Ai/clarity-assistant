@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
+import { toAdminUserMessage, adminActionFailedMessage } from "@/lib/admin/adminErrors";
 import { Database, Upload, RefreshCw, Sparkles, FileText, Loader2, CheckCircle2, Server, Play, Pause, Square } from "lucide-react";
 import ExcelImportTab from "@/pages/app/mock-test/ExcelImportTab";
 import { cn } from "@/lib/utils";
@@ -68,6 +70,7 @@ export default function AdminSeedQuestions() {
   const [examType, setExamType] = useState<string>("JEE_MAIN");
   const [sourceYear, setSourceYear] = useState<string>(new Date().getFullYear().toString());
   const [parsingPdf, setParsingPdf] = useState(false);
+  const pdfAbortRef = useRef<AbortController | null>(null);
 
   // FastAPI scraper state
   const [scraperJobId, setScraperJobId] = useState<string | null>(null);
@@ -78,6 +81,7 @@ export default function AdminSeedQuestions() {
   const scraperConfigured = scraperApi.isConfigured();
 
   useEffect(() => { void loadStats(); }, []);
+  useEffect(() => () => { pdfAbortRef.current?.abort(); }, []);
 
   useEffect(() => {
     if (!scraperConfigured) {
@@ -142,8 +146,7 @@ export default function AdminSeedQuestions() {
       }
       setStats(Object.values(map).sort((a, b) => b.total - a.total));
     } catch (err) {
-      console.error(err);
-      toast.error("Failed to load stats");
+      toast.error(toAdminUserMessage(err, undefined, "AdminSeed.loadStats"));
     } finally {
       setLoading(false);
     }
@@ -166,11 +169,15 @@ export default function AdminSeedQuestions() {
 
       toast.info("Sending paper to AI for extraction. This takes ~30-60 seconds.");
 
-      // Sends to edge function for Claude/Gemini parsing
+      pdfAbortRef.current?.abort();
+      const ac = new AbortController();
+      pdfAbortRef.current = ac;
+
       const response = await fetch(`${SUPABASE_URL}/functions/v1/parse-question-pdf`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
+        signal: ac.signal,
       });
 
       const json = await response.json().catch(() => ({}));
@@ -242,9 +249,9 @@ export default function AdminSeedQuestions() {
       if (fileRef.current) fileRef.current.value = "";
       void loadStats();
 
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err.message || "Failed to parse PDF.");
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      toast.error(adminActionFailedMessage(err, "AdminSeed.parsePdf"));
     } finally {
       setParsingPdf(false);
     }
@@ -276,7 +283,11 @@ export default function AdminSeedQuestions() {
       } else {
         toast.warning(res.message ?? "No questions imported. Try a custom listing URL.", { id: toastId });
       }
-      if (res.errors?.length) console.warn("[collect-exam-papers]", res.errors);
+      if (res.errors?.length) {
+        logger.warn("admin.seed.collect_exam_papers.partial", {
+          count: res.errors.length,
+        });
+      }
       void loadStats();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Collection failed", { id: toastId });
@@ -286,7 +297,7 @@ export default function AdminSeedQuestions() {
   }
 
   return (
-    <div className="space-y-6 max-w-6xl pb-20">
+    <div className="space-y-6 max-w-6xl">
       <PageHeader
         title="Seed Question Bank"
         description="Automated pipeline for building the public previous-year exam database."

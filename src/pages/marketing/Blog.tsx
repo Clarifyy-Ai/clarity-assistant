@@ -6,6 +6,7 @@ import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { usePageMeta } from "@/hooks/usePageMeta";
+import { seoPageByPath } from "@/lib/seo/publicPages";
 import { supabase } from "@/integrations/supabase/client";
 import { FileText } from "lucide-react";
 
@@ -40,6 +41,7 @@ export default function Blog() {
   usePageMeta({
     title: "Blog — Career Pilot",
     description: "Interview prep guides, STAR method tips, and AI coaching insights from Career Pilot.",
+    keywords: seoPageByPath("/blog")?.keywords,
     canonical: "/blog",
     ogType: "website",
   });

@@ -1,15 +1,58 @@
-// Stable bottom audio status bar (mic / tab / Parakeet transcription provider).
+// Stable bottom audio status bar (mic / tab / live transcription).
 
 import { memo } from "react";
 import { Mic, MicOff, Volume2, Wifi, WifiOff } from "lucide-react";
 import { useAudioStore } from "@/store/audioStore";
 import { useSessionStore } from "@/store/sessionStore";
 import {
-  TRANSCRIPTION_STATUS_COPY,
-  TranscriptionState,
-  providerStatusToTranscription,
+  LIVE_TRANSCRIPTION_BAR_COPY,
+  MIC_STATUS_COPY,
 } from "@/lib/audio/transcriptionStates";
 import { cn } from "@/lib/utils";
+
+function isLiveSessionStatus(status: string | undefined): boolean {
+  return (
+    status === "pending" ||
+    status === "warming_up" ||
+    status === "starting" ||
+    status === "active" ||
+    status === "paused"
+  );
+}
+
+function micBarCopy(input: {
+  sessionPaused: boolean;
+  permissionDenied: boolean;
+  isCapturing: boolean;
+  isMuted: boolean;
+}): { key: keyof typeof MIC_STATUS_COPY; label: string } {
+  if (input.permissionDenied) {
+    return { key: "permission_denied", label: MIC_STATUS_COPY.permission_denied };
+  }
+  if (input.sessionPaused) {
+    return { key: "paused", label: MIC_STATUS_COPY.paused };
+  }
+  if (!input.isCapturing) {
+    return { key: "disconnected", label: MIC_STATUS_COPY.disconnected };
+  }
+  if (input.isMuted) {
+    return { key: "paused", label: MIC_STATUS_COPY.paused };
+  }
+  return { key: "active", label: MIC_STATUS_COPY.active };
+}
+
+function transcriptionBarCopy(providerStatus: string): {
+  key: keyof typeof LIVE_TRANSCRIPTION_BAR_COPY;
+  label: string;
+} {
+  if (providerStatus === "connecting" || providerStatus === "reconnecting") {
+    return { key: "connecting", label: LIVE_TRANSCRIPTION_BAR_COPY.connecting };
+  }
+  if (providerStatus === "connected") {
+    return { key: "connected", label: LIVE_TRANSCRIPTION_BAR_COPY.connected };
+  }
+  return { key: "unavailable", label: LIVE_TRANSCRIPTION_BAR_COPY.unavailable };
+}
 
 export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
@@ -17,19 +60,23 @@ export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
   const isMuted = useAudioStore((s) => s.is_muted ?? false);
   const currentLevel = useAudioStore((s) => s.levels?.current_level ?? 0);
   const providerStatus = useAudioStore((s) => s.transcription_provider_status ?? "idle");
-  const pipelineStatus = useAudioStore((s) => s.pipeline_status ?? "idle");
   const streamError = useAudioStore((s) => s.streams?.error ?? null);
+  const micState = useAudioStore((s) => s.mic_state);
   const sessionStatus = useSessionStore((s) => s.status);
 
-  const isPaused = sessionStatus === "paused" || providerStatus === "paused";
-  if (!isCapturing && providerStatus === "idle" && !isPaused) return null;
+  if (!isLiveSessionStatus(sessionStatus)) return null;
 
-  const providerOk = providerStatus === "connected";
-
-  const transcriptionState = isPaused
-    ? TranscriptionState.PAUSED
-    : providerStatusToTranscription(providerStatus, pipelineStatus);
-  const transcriptionLabel = TRANSCRIPTION_STATUS_COPY[transcriptionState];
+  const sessionPaused = sessionStatus === "paused" || providerStatus === "paused";
+  const permissionDenied = micState === "permission_denied";
+  const mic = micBarCopy({
+    sessionPaused,
+    permissionDenied,
+    isCapturing,
+    isMuted,
+  });
+  const transcription = transcriptionBarCopy(providerStatus);
+  const providerOk = transcription.key === "connected";
+  const micActive = mic.key === "active";
 
   return (
     <div
@@ -40,17 +87,20 @@ export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
       <span
         className={cn(
           "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[10px] font-bold border",
-          isMuted
+          mic.key === "permission_denied" || mic.key === "disconnected"
             ? "text-red-300/90 bg-red-500/10 border-red-500/25"
-            : "text-emerald-300/90 bg-emerald-500/10 border-emerald-500/25",
+            : mic.key === "paused"
+              ? "text-sky-300/80 bg-sky-500/10 border-sky-500/20"
+              : "text-emerald-300/90 bg-emerald-500/10 border-emerald-500/25",
         )}
-        title={isMuted ? "Microphone muted" : "Microphone active"}
+        title={mic.label}
+        data-mic-state={mic.key}
       >
-        {isMuted ? <MicOff className="w-2.5 h-2.5" /> : <Mic className="w-2.5 h-2.5" />}
-        {isMuted ? "Muted" : "Mic"}
+        {micActive ? <Mic className="w-2.5 h-2.5" /> : <MicOff className="w-2.5 h-2.5" />}
+        {mic.label}
       </span>
 
-      {!isMuted && isCapturing && (
+      {micActive && (
         <span
           className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[10px] border border-white/10 bg-white/[0.04]"
           title="Microphone input level"
@@ -91,25 +141,17 @@ export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
       <span
         className={cn(
           "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[10px] font-bold border ml-auto",
-          transcriptionState === TranscriptionState.READY ||
-            transcriptionState === TranscriptionState.TRANSCRIBING ||
-            transcriptionState === TranscriptionState.RECEIVING_AUDIO
+          transcription.key === "connected"
             ? "text-emerald-300/90 bg-emerald-500/10 border-emerald-500/25"
-            : transcriptionState === TranscriptionState.CONNECTING ||
-                transcriptionState === TranscriptionState.RECONNECTING
+            : transcription.key === "connecting"
               ? "text-amber-300/80 bg-amber-500/10 border-amber-500/20"
-              : transcriptionState === TranscriptionState.PAUSED
-                ? "text-sky-300/80 bg-sky-500/10 border-sky-500/20"
-                : transcriptionState === TranscriptionState.TEXT_ONLY ||
-                    transcriptionState === TranscriptionState.ENDED
-                  ? "text-sky-300/80 bg-sky-500/10 border-sky-500/20"
-                  : "text-amber-300/80 bg-amber-500/10 border-amber-500/20",
+              : "text-amber-300/80 bg-amber-500/10 border-amber-500/20",
         )}
-        title={`Transcription: ${transcriptionLabel}`}
-        data-transcription-state={transcriptionState}
+        title={transcription.label}
+        data-transcription-state={transcription.key}
       >
         {providerOk ? <Wifi className="w-2.5 h-2.5" /> : <WifiOff className="w-2.5 h-2.5" />}
-        {transcriptionLabel}
+        {transcription.label}
       </span>
 
       {streamError?.message && (

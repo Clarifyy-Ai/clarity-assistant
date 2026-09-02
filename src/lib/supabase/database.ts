@@ -5,6 +5,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { supabase } from "@/lib/supabase/client";
+import {
+  getOrLoadPublicContent,
+  invalidatePublicContentCache,
+} from "@/lib/cms/publicContentCache";
 import { DatabaseError, ErrorCode, tryCatch } from "@/lib/errors";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase";
 import {
@@ -13,6 +17,7 @@ import {
   omitResumeUpdatedAt,
 } from "@/lib/supabase/resumeSchemaCompat";
 import { catalogPaiseForPlan } from "@/lib/billing/priceCalculator";
+import { bucketIsoDays } from "@/lib/admin/searchFilter";
 import { toDbPreferredModel } from "@/lib/ai/modelOptions";
 import {
   mapRowToScorecard,
@@ -111,50 +116,21 @@ const PROFILE_SAFE_COLUMNS = [
   "years_of_exp",
 ].join(", ");
 
-/** Minimal columns for auth bootstrap — keeps profile load under the 2s budget. */
+/** Minimal columns for auth bootstrap — small payload for high-latency regions. */
 const PROFILE_BOOT_COLUMNS = [
   "id",
   "email",
   "full_name",
   "avatar_url",
-  "bio",
-  "website_url",
-  "portfolio_url",
-  "experience_years",
   "credits",
   "plan_id",
-  "subscription_status",
-  "payment_failed_at",
   "is_banned",
   "ban_reason",
   "onboarding_completed",
-  "onboarding_step",
-  "preferred_model",
-  "hint_style",
-  "coach_tone",
-  "stt_language",
-  "custom_filler_words",
-  "auto_gain",
-  "noise_suppression",
-  "audio_input_device",
-  "audio_output_device",
-  "notification_prefs",
-  "email_notifications",
-  "session_reminders",
-  "marketing_emails",
-  "target_role",
-  "role_type",
+  "is_admin",
   "overlay_opacity",
   "overlay_position",
-  "overlay_font_size",
-  "overlay_settings",
-  "stealth_mode",
-  "timezone",
-  "locale",
-  "referral_code",
   "privacy_prefs",
-  "ui_preferences",
-  "updated_at",
 ].join(", ");
 
 export const profilesDB = {
@@ -2649,6 +2625,30 @@ export const adminAnalyticsDB = {
     return count ?? 0;
   },
 
+  async countCreatedAtByDay(
+    table: "profiles" | "sessions",
+    days: number,
+  ): Promise<{ day: string; count: number }[]> {
+    const span = Math.max(1, Math.min(days, 90));
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - (span - 1));
+    const { data, error } = await supabase
+      .from(table)
+      .select("created_at")
+      .gte("created_at", start.toISOString());
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table,
+        operation: "countCreatedAtByDay",
+      });
+    }
+    return bucketIsoDays(
+      (data ?? []).map((row) => (row as { created_at?: string | null }).created_at),
+      span,
+    );
+  },
+
   async getDauMauSeries(days: number): Promise<AdminDauRow[]> {
     const { data, error } = await supabase.rpc("get_admin_dau_mau", { p_days: days });
     if (error) {
@@ -3466,40 +3466,49 @@ export type HelpArticlePublic = Pick<
 
 export const helpArticlesDB = {
   async listPublished(): Promise<HelpArticlePublic[]> {
-    const { data, error } = await supabase
-      .from("help_articles")
-      .select(
-        "slug, question, answer, body_md, category_slug, category_title, sort_order",
-      )
-      .eq("published", true)
-      .order("sort_order", { ascending: true });
+    return getOrLoadPublicContent("help:listPublished", async () => {
+      const { data, error } = await supabase
+        .from("help_articles")
+        .select(
+          "slug, question, answer, body_md, category_slug, category_title, sort_order",
+        )
+        .eq("published", true)
+        .order("sort_order", { ascending: true });
 
-    if (error) {
-      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
-        table: "help_articles",
-        operation: "listPublished",
-      });
-    }
-    return data ?? [];
+      if (error) {
+        throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+          table: "help_articles",
+          operation: "listPublished",
+        });
+      }
+      return data ?? [];
+    });
   },
 
   async getBySlug(slug: string): Promise<HelpArticlePublic | null> {
-    const { data, error } = await supabase
-      .from("help_articles")
-      .select(
-        "slug, question, answer, body_md, category_slug, category_title, sort_order",
-      )
-      .eq("slug", slug)
-      .eq("published", true)
-      .maybeSingle();
+    return getOrLoadPublicContent(`help:slug:${slug}`, async () => {
+      const { data, error } = await supabase
+        .from("help_articles")
+        .select(
+          "slug, question, answer, body_md, category_slug, category_title, sort_order",
+        )
+        .eq("slug", slug)
+        .eq("published", true)
+        .maybeSingle();
 
-    if (error) {
-      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
-        table: "help_articles",
-        operation: "getBySlug",
-      });
-    }
-    return data;
+      if (error) {
+        throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+          table: "help_articles",
+          operation: "getBySlug",
+        });
+      }
+      return data;
+    });
+  },
+
+  /** Call after admin create/update/publish so public Help does not serve a stale catalog. */
+  invalidatePublicCache() {
+    invalidatePublicContentCache("help");
   },
 };
 

@@ -8,6 +8,7 @@ const { adminAnalyticsDB } = vi.hoisted(() => ({
     countSignupsSince: vi.fn(),
     getDauMauSeries: vi.fn(),
     countSignupsOnDay: vi.fn(),
+    countCreatedAtByDay: vi.fn(),
     getPerfStats: vi.fn(),
     getModelCostLogsSince: vi.fn(),
     countMockTestsCreatedSince: vi.fn(),
@@ -39,7 +40,7 @@ describe("AdminAnalytics smoke", () => {
     adminAnalyticsDB.countSessionsSince.mockResolvedValue(12);
     adminAnalyticsDB.countSignupsSince.mockResolvedValue(3);
     adminAnalyticsDB.getDauMauSeries.mockResolvedValue([{ dau: 5 }]);
-    adminAnalyticsDB.countSignupsOnDay.mockResolvedValue(1);
+    adminAnalyticsDB.countCreatedAtByDay.mockResolvedValue([{ day: "2026-09-01", count: 1 }]);
     adminAnalyticsDB.getPerfStats.mockResolvedValue([]);
     adminAnalyticsDB.getModelCostLogsSince.mockResolvedValue([]);
     adminAnalyticsDB.countMockTestsCreatedSince.mockResolvedValue(0);
@@ -58,7 +59,7 @@ describe("AdminAnalytics smoke", () => {
     render(<AdminAnalytics />);
 
     await waitFor(() => {
-      expect(screen.getByText("Overview DB down")).toBeInTheDocument();
+      expect(screen.getByText("Unable to load this Admin section. Please retry.")).toBeInTheDocument();
     });
     expect(screen.getByText("Overview stats unavailable")).toBeInTheDocument();
     expect(screen.queryByText("Daily active users")).not.toBeInTheDocument();
@@ -78,7 +79,7 @@ describe("AdminAnalytics smoke", () => {
     await user.click(screen.getByRole("tab", { name: /support/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("DB unavailable")).toBeInTheDocument();
+      expect(screen.getByText("This service is temporarily unavailable.")).toBeInTheDocument();
     });
     expect(screen.getByText("Support stats unavailable")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /retry loading this section/i })).toBeInTheDocument();
@@ -92,7 +93,7 @@ describe("AdminAnalytics smoke", () => {
     await user.click(screen.getByRole("tab", { name: /mock tests/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("Mock stats failed")).toBeInTheDocument();
+      expect(screen.getByText("Unable to load this Admin section. Please retry.")).toBeInTheDocument();
     });
     expect(screen.getByText("Mock test stats unavailable")).toBeInTheDocument();
 
@@ -105,6 +106,16 @@ describe("AdminAnalytics smoke", () => {
     await waitFor(() => {
       expect(screen.getByText("Tests created")).toBeInTheDocument();
     });
-    expect(screen.queryByText("Mock stats failed")).not.toBeInTheDocument();
+    expect(screen.queryByText("Unable to load this Admin section. Please retry.")).not.toBeInTheDocument();
+  });
+
+  it("labels the 1-day range DAY, never DUA", async () => {
+    render(<AdminAnalytics />);
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "DAY" })).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: "7d" })).toBeInTheDocument();
+    expect(screen.queryByText("DUA")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "24h" })).not.toBeInTheDocument();
   });
 });

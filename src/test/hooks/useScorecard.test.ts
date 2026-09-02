@@ -145,10 +145,10 @@ describe("useScorecard — persist-first, no mount AI", () => {
     });
 
     expect(fetchEdgeJson).toHaveBeenCalledTimes(1);
-    expect(fetchEdgeJson).toHaveBeenCalledWith(
+      expect(fetchEdgeJson).toHaveBeenCalledWith(
       "generate-scorecard",
       { session_id: "sess-1" },
-      { timeoutMs: 60_000 },
+      { timeoutMs: 90_000 },
     );
 
     await act(async () => {

@@ -1,6 +1,9 @@
 import { memo, useEffect, useRef } from "react";
 import { useAudioStore } from "@/store/audioStore";
 import { cn } from "@/lib/utils";
+import type { TranscriptUtterance } from "@/types/audio.types";
+
+const EMPTY_UTTERANCES: TranscriptUtterance[] = [];
 
 // ─────────────────────────────────────────────────────────────────
 // LiveTranscriptStream
@@ -16,10 +19,8 @@ function formatTimestamp(ms: number): string {
 }
 
 function LiveTranscriptStreamInner() {
-  const transcript = useAudioStore((s) => s.transcript);
-
-  const utterances = transcript?.utterances ?? [];
-  const interim    = transcript?.interim_text ?? "";
+  const utterances = useAudioStore((s) => s.transcript?.utterances ?? EMPTY_UTTERANCES);
+  const interim = useAudioStore((s) => s.transcript?.interim_text ?? "");
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);

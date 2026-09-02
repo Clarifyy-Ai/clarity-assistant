@@ -67,7 +67,7 @@ async function pickBaseUrl() {
     }
   }
   return (
-    env.QA_BASE_URL_STAGING || "https://clarify.ai.sltfinanceindia.com"
+    env.QA_BASE_URL_STAGING || "https://trycareerpilot.com"
   );
 }
 
@@ -233,7 +233,7 @@ async function ensureOnboarded(userId) {
   return { ok: !error, reason: error?.message };
 }
 
-let BASE = "https://clarify.ai.sltfinanceindia.com";
+let BASE = "https://trycareerpilot.com";
 
 /**
  * Navigate + collect console/page errors. Returns body text + metadata.

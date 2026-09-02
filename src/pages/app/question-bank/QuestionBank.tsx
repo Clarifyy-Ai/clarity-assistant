@@ -467,14 +467,22 @@ export default function QuestionBankPage() {
         </Card>
 
         <div className="lg:col-span-3 min-w-0 space-y-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-            <div className="relative min-w-0 flex-1">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input className="pl-9" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" />
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
+            <div className="min-w-0 flex-1">
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search"
+                leftIcon={<Search className="h-4 w-4" />}
+                aria-label="Search question bank"
+              />
             </div>
-            <Filter className="hidden h-4 w-4 sm:block" />
-            <Select value={category} onValueChange={setCategory}>
-              <SelectTrigger className="w-full sm:w-36"><SelectValue placeholder="Category" /></SelectTrigger>
+            <div className="flex w-full items-center gap-2 sm:w-auto">
+              <Filter className="hidden h-4 w-4 shrink-0 text-muted-foreground sm:block" aria-hidden="true" />
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger className="w-full sm:w-36" aria-label="Filter by category">
+                  <SelectValue placeholder="Category" />
+                </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All categories</SelectItem>
                 {categories.map((c) => (
@@ -518,6 +526,7 @@ export default function QuestionBankPage() {
                 ))}
               </SelectContent>
             </Select>
+            </div>
           </div>
 
           {importReport && (

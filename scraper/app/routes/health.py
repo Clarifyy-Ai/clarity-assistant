@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request, Response, status
 
 from app.core.config import Settings, get_settings
+from app.core.internal_auth import require_observability_auth
 from app.core.telemetry import alert_manager, sanitize_telemetry_payload
 from app.hybrid import SERVICE_VERSION
 
@@ -99,7 +100,7 @@ async def ready(
 
 
 @router.get("/alerts")
-async def alerts() -> dict[str, Any]:
+async def alerts(_: None = Depends(require_observability_auth)) -> dict[str, Any]:
     """Returns active monitoring alerts with secrets redacted."""
     return {
         "alerts": sanitize_telemetry_payload(alert_manager.active_alerts),

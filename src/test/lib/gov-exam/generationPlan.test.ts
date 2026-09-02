@@ -70,7 +70,7 @@ describe("decideGenerationPlan", () => {
     expect(plan.aiContribution).toBe(100);
   });
 
-  it("blocks with CAPABILITY_REQUIRED when neither AI nor Python can fill", () => {
+  it("blocks with PLAN_NOT_ALLOWED when neither AI nor Python can fill", () => {
     const plan = decideGenerationPlan({
       requested: 100,
       available: 21,
@@ -80,7 +80,7 @@ describe("decideGenerationPlan", () => {
     });
 
     expect(plan.kind).toBe("blocked");
-    expect(plan.reasonCode).toBe("CAPABILITY_REQUIRED");
+    expect(plan.reasonCode).toBe("PLAN_NOT_ALLOWED");
     expect(plan.maxCustomSetSize).toBe(21);
   });
 
@@ -158,6 +158,45 @@ describe("decideGenerationPlan", () => {
     expect(plan.generator).toBe("edge_assembler");
   });
 
+  it("fails closed on empty official inventory even when AI is up", () => {
+    const plan = decideGenerationPlan({
+      requested: 100,
+      available: 0,
+      mode: "official_previous",
+      canUseAi: true,
+      pythonWorkerEnabled: true,
+    });
+    expect(plan.kind).toBe("blocked");
+    expect(plan.reasonCode).toBe("CONTENT_INSUFFICIENT");
+    expect(plan.skipAiFill).toBe(true);
+    expect(plan.allowDeterministicFill).toBe(false);
+    expect(plan.aiContribution).toBe(0);
+  });
+
+  it("keeps custom practice on the bank when AI is down", () => {
+    const plan = decideGenerationPlan({
+      requested: 20,
+      available: 20,
+      mode: "custom_mock",
+      canUseAi: false,
+      pythonWorkerEnabled: false,
+    });
+    expect(plan.kind).toBe("bank_only");
+    expect(plan.skipAiFill).toBe(true);
+  });
+
+  it("does not treat malformed AI as covering official papers", () => {
+    const plan = decideGenerationPlan({
+      requested: 50,
+      available: 10,
+      mode: "official_previous",
+      canUseAi: true,
+      pythonWorkerEnabled: false,
+    });
+    expect(plan.kind).toBe("blocked");
+    expect(plan.paperClass).toBe("official_previous");
+  });
+
   it("keeps bank-only work on the Edge assembler even when Python is preferred", () => {
     const plan = decideGenerationPlan({
       requested: 10,
@@ -184,7 +223,7 @@ describe("blockedPlanPayload", () => {
       }),
     );
 
-    expect(payload.code).toBe("CAPABILITY_REQUIRED");
+    expect(payload.code).toBe("PLAN_NOT_ALLOWED");
     expect(payload.available).toBe(23);
     expect(payload.requested).toBe(100);
     expect(payload.maxCustomSetSize).toBe(23);

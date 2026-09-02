@@ -11,6 +11,8 @@ import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { supabase } from "@/lib/supabase/client";
 import { writeAdminAudit } from "@/lib/admin/writeAdminAudit";
 import { adminActionFailedMessage, toAdminUserMessage } from "@/lib/admin/adminErrors";
+import { sanitizeAdminSearch } from "@/lib/admin/searchFilter";
+import { invalidatePublicContentCache } from "@/lib/cms/publicContentCache";
 
 type BlogPost = {
   id: string;
@@ -55,7 +57,8 @@ export default function AdminBlog() {
         .from("blog_posts")
         .select("id,slug,title,excerpt,content,category,author,published,published_at,read_time")
         .order("published_at", { ascending: false });
-      if (search.trim()) q = q.or(`title.ilike.%${search.trim()}%,slug.ilike.%${search.trim()}%`);
+      const qTerm = sanitizeAdminSearch(search);
+      if (qTerm) q = q.or(`title.ilike.%${qTerm}%,slug.ilike.%${qTerm}%`);
       const { data, error: err } = await q;
       if (err) throw err;
       setPosts((data as BlogPost[]) ?? []);
@@ -135,6 +138,7 @@ export default function AdminBlog() {
         });
       }
       toast.success("Blog post saved");
+      invalidatePublicContentCache("blog");
       setEditing(null);
       await load();
     } catch (e) {
@@ -160,6 +164,7 @@ export default function AdminBlog() {
         oldValue: { slug: deleteTarget.slug, title: deleteTarget.title },
       });
       toast.success("Blog post deleted");
+      invalidatePublicContentCache("blog");
       setDeleteTarget(null);
       if (editing?.id === deleteTarget.id) setEditing(null);
       await load();
@@ -186,6 +191,7 @@ export default function AdminBlog() {
       newValue: { published },
     });
     toast.success(published ? "Published" : "Unpublished");
+    invalidatePublicContentCache("blog");
     await load();
   }
 
@@ -252,7 +258,7 @@ export default function AdminBlog() {
       )}
 
       {editing && (
-        <Card className="space-y-3 p-4">
+        <Card className="space-y-3 p-4 min-w-0">
           <h2 className="font-medium">{editing.id ? "Edit post" : "New post"}</h2>
           <Input placeholder="Title" value={editing.title} onChange={(e) => setEditing({ ...editing, title: e.target.value })} />
           <Input
