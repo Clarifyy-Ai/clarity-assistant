@@ -1709,7 +1709,7 @@ export const creditsDB = {
         operation: "listRecent",
       });
     }
-    return data ?? [];
+    return (data ?? []) as unknown as CreditTransactionRow[];
   },
 
   async sumPurchasesSince(sinceIso: string): Promise<number> {

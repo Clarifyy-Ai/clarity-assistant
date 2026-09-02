@@ -250,7 +250,7 @@ export function normalizeAnalyticsDashboard(
     filler_trend: raw?.filler_trend ?? [],
     wpm_trend: raw?.wpm_trend ?? [],
     weak_spot_radar: raw?.weak_spot_radar ?? [],
-    dimension_averages: normalizeDimensionAverages(raw?.dimension_averages),
+    dimension_averages: normalizeDimensionAverages(raw?.dimension_averages as unknown as Partial<Record<string, number | null | undefined>>),
     strengths: raw?.strengths ?? [],
     weaknesses: raw?.weaknesses ?? [],
     leaderboard:

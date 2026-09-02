@@ -738,9 +738,10 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
 
     const gate = validatePdfImportFile(file);
     if (!gate.ok) {
+      const gateMessage = (gate as { message?: string }).message ?? "This file cannot be imported.";
       setCanRetry(false);
-      setParseError(gate.message);
-      toast.error(gate.message);
+      setParseError(gateMessage);
+      toast.error(gateMessage);
       return;
     }
 

@@ -147,7 +147,7 @@ export default function SettingsSecurity() {
         confirmPassword: confirmPw,
       });
       if (!result.ok) {
-        toast.error(result.message);
+        toast.error((result as { message?: string }).message ?? "Failed to update password");
         return;
       }
       toast.success("Password updated successfully");

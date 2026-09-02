@@ -139,13 +139,14 @@ export async function runJavascriptSolveTestsAsync(
 
   const compiled = compileJavascriptSolve(source);
   if (!compiled.ok) {
-    const isBlocked = compiled.error.includes("not allowed");
+    const compileError = (compiled as { error: string }).error;
+    const isBlocked = compileError.includes("not allowed");
     return {
       ok: false,
       results: [],
       execution_status: isBlocked ? "blocked" : "compile_error",
-      blockedReason: compiled.error,
-      primary_error: compiled.error,
+      blockedReason: compileError,
+      primary_error: compileError,
     };
   }
 

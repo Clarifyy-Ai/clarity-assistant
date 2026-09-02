@@ -538,7 +538,7 @@ export default function TestSession() {
     };
 
     tick();
-    timerRef.current = window.setInterval(tick, 1000);
+    timerRef.current = window.setInterval(tick, 1000) as unknown as typeof timerRef.current;
     return () => {
       if (timerRef.current) window.clearInterval(timerRef.current);
       timerRef.current = null;
