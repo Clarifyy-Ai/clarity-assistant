@@ -3,8 +3,11 @@ import { toast } from "sonner";
 import { detectOs, osInstallLabel, type DetectedOs } from "@/lib/platform/detectOs";
 import {
   DESKTOP_INSTALL_GUIDE_PATH,
+  DESKTOP_INSTALLER_WIN_OBJECT,
   getPlatformDownloadUrlFromEnv,
   resolveDesktopDownloadUrl,
+  sameOriginInstallerHref,
+  startSameOriginInstallerDownload,
 } from "@/lib/constants/desktopDownload";
 
 export interface DesktopDownloadState {
@@ -63,8 +66,9 @@ export function useDesktopDownload(): DesktopDownloadState & {
     }
 
     if (target) {
-      window.open(target, "_blank", "noopener,noreferrer");
-      toast.success(`Download started — open the ${osLabel} installer when it finishes.`);
+      const href = sameOriginInstallerHref(target, os);
+      startSameOriginInstallerDownload(href, DESKTOP_INSTALLER_WIN_OBJECT);
+      toast.success(`Download started — open ${DESKTOP_INSTALLER_WIN_OBJECT} when it finishes.`);
       return;
     }
 

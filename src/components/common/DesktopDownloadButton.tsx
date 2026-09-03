@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Download, ExternalLink, Loader2 } from "lucide-react";
+import { Download, Loader2 } from "lucide-react";
 import { Button, type ButtonProps } from "@/components/ui/Button";
 import { useDesktopDownload } from "@/hooks/useDesktopDownload";
 import { cn } from "@/lib/utils";
@@ -38,13 +38,13 @@ export function DesktopDownloadButton({
             fullWidth={fullWidth}
             disabled={loading}
             onClick={() => void download()}
-            leftIcon={
-              loading ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <ExternalLink className="w-4 h-4" />
-              )
-            }
+              leftIcon={
+                loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )
+              }
           >
             {loading ? "Finding installer…" : `Download for ${osLabel}`}
           </Button>

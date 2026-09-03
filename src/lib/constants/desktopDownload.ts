@@ -21,8 +21,9 @@ export const DESKTOP_DOWNLOAD_URL = sanitizeProductionUrl(
 
 export const DESKTOP_RELEASES_BUCKET = "desktop-releases";
 export const DESKTOP_INSTALLER_WIN_OBJECT = "Career-Pilot-Setup.exe";
-export const PUBLIC_WINDOWS_INSTALLER_URL =
-  "https://github.com/Clarifyy-Ai/career-pilot-releases/releases/latest/download/Career-Pilot-Setup.exe";
+/** Same-origin path — browser never navigates to GitHub. */
+export const SAME_ORIGIN_WINDOWS_INSTALLER_PATH = "/download/Career-Pilot-Setup.exe";
+export const PUBLIC_WINDOWS_INSTALLER_URL = SAME_ORIGIN_WINDOWS_INSTALLER_PATH;
 
 /** Public installer hosted on the project's Supabase Storage bucket. */
 export function publicDesktopInstallerUrl(filename: string): string {
@@ -98,6 +99,46 @@ export function getDesktopDownloadHref(os: DetectedOs = "windows"): string {
   return DESKTOP_INSTALL_GUIDE_PATH;
 }
 
+export function isGitHubDownloadHost(url: string): boolean {
+  try {
+    const parsed = new URL(url, "https://trycareerpilot.com");
+    const host = parsed.hostname.toLowerCase();
+    return (
+      host === "github.com" ||
+      host.endsWith(".github.com") ||
+      host === "githubusercontent.com" ||
+      host.endsWith(".githubusercontent.com")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Force installer downloads through this site so GitHub is not shown. */
+export function sameOriginInstallerHref(url: string, os: DetectedOs = "windows"): string {
+  if (!url) return os === "windows" ? SAME_ORIGIN_WINDOWS_INSTALLER_PATH : url;
+  if (url.startsWith("/")) return url;
+  if (os === "windows" && isGitHubDownloadHost(url)) {
+    return SAME_ORIGIN_WINDOWS_INSTALLER_PATH;
+  }
+  return url;
+}
+
+/** Trigger a file download without opening an upstream tab. */
+export function startSameOriginInstallerDownload(
+  href: string,
+  filename = DESKTOP_INSTALLER_WIN_OBJECT,
+): void {
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = filename;
+  a.rel = "noopener";
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
 export function pickReleaseAssetUrl(
   assets: { name: string; browser_download_url: string }[],
   os: DetectedOs,
@@ -170,12 +211,16 @@ export function writeCachedDownloadUrl(os: DetectedOs, url: string): void {
 /** Resolve best download URL: env → GitHub latest → null */
 export async function resolveDesktopDownloadUrl(os: DetectedOs): Promise<string | null> {
   const envUrl = getPlatformDownloadUrlFromEnv(os);
-  if (envUrl) return envUrl;
+  if (envUrl) return sameOriginInstallerHref(envUrl, os);
 
   const cached = readCachedDownloadUrl(os);
-  if (cached) return cached;
+  if (cached) return sameOriginInstallerHref(cached, os);
 
   const githubUrl = await fetchLatestGitHubReleaseUrl(os);
-  if (githubUrl) writeCachedDownloadUrl(os, githubUrl);
-  return githubUrl;
+  if (githubUrl) {
+    const href = sameOriginInstallerHref(githubUrl, os);
+    writeCachedDownloadUrl(os, href);
+    return href;
+  }
+  return null;
 }

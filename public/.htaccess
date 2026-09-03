@@ -7,6 +7,10 @@
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
+
+  # Same-origin installer (do not expose GitHub in the browser).
+  RewriteRule ^download/Career-Pilot-Setup\.exe$ download-windows.php [L]
+
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule ^ index.html [L]

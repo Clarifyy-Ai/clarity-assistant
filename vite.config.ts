@@ -97,6 +97,28 @@ export default defineConfig(({ mode }) => {
             name: "local-desktop-installer",
             configureServer(server) {
               installAgentDebugSinks(server);
+              server.middlewares.use("/download/Career-Pilot-Setup.exe", (_req, res, next) => {
+                const candidates = [
+                  path.join(__dirname, "release-new", "Career Pilot Setup 1.0.0.exe"),
+                  path.join(__dirname, "release", "Career Pilot Setup 1.0.0.exe"),
+                  path.join(__dirname, "release", "Career-Pilot-Setup.exe"),
+                ];
+                for (const dir of ["release-new", "release"]) {
+                  const folder = path.join(__dirname, dir);
+                  if (!fs.existsSync(folder)) continue;
+                  const match = fs.readdirSync(folder).find((f) => f.endsWith(".exe") && /setup/i.test(f));
+                  if (match) candidates.unshift(path.join(folder, match));
+                }
+                const file = candidates.find((p) => fs.existsSync(p));
+                if (!file) {
+                  res.statusCode = 404;
+                  res.end("Build the installer first: npm run dist:win");
+                  return;
+                }
+                res.setHeader("Content-Type", "application/octet-stream");
+                res.setHeader("Content-Disposition", 'attachment; filename="Career-Pilot-Setup.exe"');
+                fs.createReadStream(file).pipe(res);
+              });
               server.middlewares.use("/dev-downloads/clarify-ai-setup.exe", (_req, res, next) => {
                 const candidates = [
                   path.join(__dirname, "release-new", "Career Pilot Setup 1.0.0.exe"),
