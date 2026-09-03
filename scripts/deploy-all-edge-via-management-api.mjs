@@ -21,7 +21,6 @@ const NO_JWT = new Set([
   "bulk-import-questions",
   "process-paper-generation-job",
   "run-daily-exam-scrape",
-  "assemble-assessment",
   "cancel-document-processing-job",
   "create-document-processing-job",
   "get-document-processing-job",
