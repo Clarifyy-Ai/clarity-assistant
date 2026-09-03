@@ -141,6 +141,8 @@ export function speakQuestionText(
     onStart?: () => void;
     onEnd?: () => void;
     autoplayDetectMs?: number;
+    /** Optional voiceURI or voice name from the wizard TTS catalogue. */
+    voice?: string | null;
   },
 ): Promise<TtsOutcome> {
   if (typeof window === "undefined" || !window.speechSynthesis) {
@@ -188,6 +190,16 @@ export function speakQuestionText(
 
         const utterance = new SpeechSynthesisUtterance(trimmed);
         utterance.rate = 1.0;
+
+        const preferred = (options.voice ?? "").trim();
+        if (preferred) {
+          const voices = window.speechSynthesis.getVoices();
+          const match =
+            voices.find((v) => v.voiceURI === preferred) ||
+            voices.find((v) => v.name === preferred) ||
+            voices.find((v) => v.name.toLowerCase().includes(preferred.toLowerCase()));
+          if (match) utterance.voice = match;
+        }
 
         utterance.onstart = () => {
           if (!options.isCurrent(options.questionId)) {

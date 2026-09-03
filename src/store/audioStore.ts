@@ -78,6 +78,7 @@ interface AudioStore extends AudioStoreState {
   setNoiseLevel: (level: number) => void;
   setIsMuted: (muted: boolean) => void;
   setVADConfig: (config: Partial<VADConfig>) => void;
+  setQuestionConfidenceMin: (min: number) => void;
 
   // Full reset
   resetAudio: () => void;
@@ -117,6 +118,7 @@ const INITIAL_AUDIO_STATE: AudioStoreState = {
     min_speech_duration_ms: 300,
     noise_floor: 0.05,
   },
+  question_confidence_min: 0.45,
   deepgram_status: "disconnected",
   transcription_provider_status: "idle",
   token_state: "idle",
@@ -358,6 +360,10 @@ export const useAudioStore = create<AudioStore>()(
     setIsMuted: (is_muted) => set({ is_muted }),
 
     setVADConfig: (config) => set((s) => ({ vad_config: { ...s.vad_config, ...config } })),
+    setQuestionConfidenceMin: (min) =>
+      set({
+        question_confidence_min: Math.max(0.15, Math.min(0.9, Number(min) || 0.45)),
+      }),
 
     // ── Full reset ─────────────────────────────────────────
     resetAudio: () => {

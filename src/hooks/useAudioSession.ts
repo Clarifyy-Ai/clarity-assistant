@@ -391,7 +391,12 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
         }
       }, 100);
 
+      const vadNoiseFloor =
+        useAudioStore.getState().vad_config?.noise_floor ?? 0.05;
       const vad = new VADDetector({
+        config: {
+          noise_floor: Math.max(0.01, Math.min(0.2, vadNoiseFloor)),
+        },
         onSpeechStart: () => {
           useOverlayStore.getState().setSessionPipelineState("speech_detected");
         },

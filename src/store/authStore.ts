@@ -726,6 +726,23 @@ export const useAuthStore = create<AuthStore>()(
                   }
 
                   if (event === "PASSWORD_RECOVERY" && session) {
+                    try {
+                      const { markPasswordRecoveryFlow } = await import(
+                        "@/lib/auth/authDeepLinkRedirect"
+                      );
+                      markPasswordRecoveryFlow();
+                      if (
+                        typeof window !== "undefined" &&
+                        !window.location.pathname.includes("reset-password")
+                      ) {
+                        const search = window.location.search;
+                        const hash = window.location.hash;
+                        window.location.replace(`/reset-password${search}${hash}`);
+                        return;
+                      }
+                    } catch {
+                      // continue with in-place recovery session
+                    }
                     dset((state) => {
                       state.session = session as unknown as SupabaseSession;
                       state.user = session.user as unknown as SupabaseUser;

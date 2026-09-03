@@ -22,6 +22,7 @@ interface OverlayTabBarProps {
 
 export function OverlayTabBar({ compactMobile = false }: OverlayTabBarProps) {
   const activeTab = useOverlayStore((s) => s.active_tab);
+  const chatAttention = useOverlayStore((s) => s.chat_attention);
   const sessionStatus = useSessionStore((s) => s.status);
 
   const activeResumeId = useDocumentStore((s) => s.active_resume_id);
@@ -101,6 +102,26 @@ export function OverlayTabBar({ compactMobile = false }: OverlayTabBarProps) {
         Hints
       </button>
 
+      {chatAttention && (
+        <button
+          type="button"
+          role="tab"
+          id="overlay-tab-chat-attention"
+          aria-controls="overlay-panel-chat"
+          aria-selected={activeTab === "chat"}
+          aria-label="Open Chat — type or edit the question"
+          onClick={() => useOverlayStore.getState().setActiveTab("chat")}
+          className={cn(
+            "px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all shrink-0",
+            compactMobile && "px-3 py-1.5 text-xs",
+            "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "bg-amber-500/20 text-amber-200 shadow-[0_0_0_1px_rgba(251,191,36,0.45)] animate-pulse",
+          )}
+        >
+          Chat
+        </button>
+      )}
+
       <div className="relative ml-auto" ref={moreRef} data-coach="more-tools">
         <button
           type="button"
@@ -125,6 +146,7 @@ export function OverlayTabBar({ compactMobile = false }: OverlayTabBarProps) {
             isOnTool || moreOpen
               ? "bg-white/10 text-white/85"
               : "text-white/35 hover:text-white/65 hover:bg-white/[0.05]",
+            chatAttention && !isOnTool && "ring-1 ring-amber-400/50",
           )}
         >
           <MoreHorizontal className="w-3 h-3" aria-hidden />
@@ -132,9 +154,12 @@ export function OverlayTabBar({ compactMobile = false }: OverlayTabBarProps) {
             {isOnTool ? activeToolLabel : compactMobile ? "More" : "More tools"}
           </span>
           <ChevronDown className={cn("w-3 h-3 opacity-60", moreOpen && "rotate-180")} aria-hidden />
-          {hasContext && !isOnTool && (
+          {(hasContext || chatAttention) && !isOnTool && (
             <span
-              className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400"
+              className={cn(
+                "absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full",
+                chatAttention ? "bg-amber-400 animate-pulse" : "bg-emerald-400",
+              )}
               aria-hidden
             />
           )}
@@ -147,6 +172,7 @@ export function OverlayTabBar({ compactMobile = false }: OverlayTabBarProps) {
           >
             {toolTabs.map((tab) => {
               const isActive = activeTab === tab.id;
+              const attentionChat = tab.id === "chat" && chatAttention;
               return (
                 <button
                   key={tab.id}
@@ -162,9 +188,11 @@ export function OverlayTabBar({ compactMobile = false }: OverlayTabBarProps) {
                     isActive
                       ? "text-indigo-300 bg-indigo-500/10 font-semibold"
                       : "text-white/55 hover:text-white/90 hover:bg-white/[0.04]",
+                    attentionChat && "text-amber-200 bg-amber-500/10 font-semibold animate-pulse",
                   )}
                 >
                   {tab.label}
+                  {attentionChat ? " · needs input" : ""}
                 </button>
               );
             })}

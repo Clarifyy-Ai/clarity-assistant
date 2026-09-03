@@ -79,4 +79,21 @@ describe("resolveQuestionFromTranscript", () => {
     expect(resolveQuestionFromTranscript([])).toBe("");
     expect(resolveQuestionFromTranscript(undefined)).toBe("");
   });
+
+  it("AI Help recovery uses last final speech when gate never marked a question", () => {
+    expect(
+      resolveQuestionFromTranscript(
+        [
+          utt({
+            speaker: "unknown",
+            text: "Tell me about a time you led a team.",
+            is_interviewer_question: false,
+            confidence: 0.2,
+          }),
+        ],
+        null,
+        { aiHelpRecovery: true },
+      ),
+    ).toBe("Tell me about a time you led a team.");
+  });
 });

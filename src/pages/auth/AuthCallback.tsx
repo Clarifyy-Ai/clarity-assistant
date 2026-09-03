@@ -27,6 +27,10 @@ import {
   isOAuthStateMismatchError,
 } from "@/lib/auth/oauthProviders";
 import { classifyLoginFailure } from "@/lib/auth/loginFailure";
+import {
+  isPasswordRecoveryFlowMarked,
+  resolveAuthDeepLinkRedirect,
+} from "@/lib/auth/authDeepLinkRedirect";
 
 type CallbackError = {
   loginQueryError: string;
@@ -110,14 +114,31 @@ export default function AuthCallback(): JSX.Element {
   }, [callbackError, navigate]);
 
   useEffect(() => {
+    const recoveryTarget = resolveAuthDeepLinkRedirect({
+      pathname: location.pathname,
+      search: location.search,
+      hash: location.hash,
+      recoveryFlag: isPasswordRecoveryFlowMarked(),
+    });
+    if (recoveryTarget?.startsWith("/reset-password")) {
+      navigate(recoveryTarget, { replace: true });
+    }
+  }, [location.pathname, location.search, location.hash, navigate]);
+
+  useEffect(() => {
     if (callbackError) {
+      return;
+    }
+
+    if (isPasswordRecoveryFlowMarked()) {
+      navigate(`/reset-password${location.search}${location.hash}`, { replace: true });
       return;
     }
 
     if (status === "idle") {
       void initialize();
     }
-  }, [callbackError, initialize, status]);
+  }, [callbackError, initialize, status, navigate, location.search, location.hash]);
 
   useEffect(() => {
     if (callbackError) {
@@ -135,6 +156,11 @@ export default function AuthCallback(): JSX.Element {
 
   useEffect(() => {
     if (callbackError || timedOut) {
+      return;
+    }
+
+    if (isPasswordRecoveryFlowMarked()) {
+      navigate(`/reset-password${location.search}${location.hash}`, { replace: true });
       return;
     }
 
@@ -165,6 +191,8 @@ export default function AuthCallback(): JSX.Element {
     isOnboarded,
     navigate,
     user,
+    location.search,
+    location.hash,
   ]);
 
   if (timedOut) {

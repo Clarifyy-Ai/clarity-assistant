@@ -13,14 +13,17 @@ export function applyAlwaysOnTopPreference(enabled: boolean): void {
   setDesktopAlwaysOnTop(Boolean(enabled));
 }
 
+/**
+ * Presentation-safe is a user preference + copy/honesty signal only.
+ * It must NOT call Electron setContentProtection — that API is incomplete
+ * across capture tools and must not be marketed as screen-share invisibility.
+ * Intentional content-protection remains in ScreenCaptureBlocker with honest UI.
+ */
 export async function applyPresentationSafePreference(
-  enabled: boolean,
+  _enabled: boolean,
 ): Promise<void> {
   if (!isElectronApp()) return;
-  const api = (window as Window & {
-    electronAPI?: { setContentProtection?: (v: boolean) => Promise<void> };
-  }).electronAPI;
-  await api?.setContentProtection?.(Boolean(enabled));
+  // No OS content-protection side effects — preference is store/UI only.
 }
 
 /** Layout → recommended size (Electron shell or in-page panel). */

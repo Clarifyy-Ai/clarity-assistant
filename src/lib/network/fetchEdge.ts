@@ -150,6 +150,8 @@ const OPERATIONAL_EDGE_FNS = new Set([
   "disconnect-calendar",
   "hostinger-mail",
   "send-email",
+  "support-chat",
+  "contact-sales",
 ]);
 
 /** Mutating calls that must not be retried by the browser after a network/CORS glitch. */
@@ -294,6 +296,9 @@ function raceAbort<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
 function unreachableUserMessage(fnName: string): string {
   if (fnName === "delete-account") {
     return "We couldn't complete account deletion right now. Please try again in a moment.";
+  }
+  if (fnName === "support-chat") {
+    return "Live chat couldn't reach the server. Check your connection and try again.";
   }
   if (OPERATIONAL_EDGE_FNS.has(fnName)) {
     return "Couldn't reach the server. Check your internet connection and try again.";

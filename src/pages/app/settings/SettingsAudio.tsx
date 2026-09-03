@@ -53,6 +53,7 @@ export default function SettingsAudio() {
   const { user, profile, updateProfile } = useAuthStore();
   const vadConfig = useAudioStore((s) => s.vad_config);
   const setVADConfig = useAudioStore((s) => s.setVADConfig);
+  const setQuestionConfidenceMin = useAudioStore((s) => s.setQuestionConfidenceMin);
   const setMicDeviceId = useAudioStore((s) => s.setMicDeviceId);
   const setSelectedMicId = useAudioStore((s) => s.setSelectedMicId);
 
@@ -62,6 +63,10 @@ export default function SettingsAudio() {
     typeof uiPrefs.vad_noise_floor === "number"
       ? uiPrefs.vad_noise_floor
       : vadConfig.noise_floor;
+  const savedConfidenceMin =
+    typeof uiPrefs.stt_question_confidence === "number"
+      ? uiPrefs.stt_question_confidence
+      : 0.45;
 
   const savedInputId =
     (typeof overlaySettings.audio_input_device === "string" && overlaySettings.audio_input_device) ||
@@ -91,6 +96,9 @@ export default function SettingsAudio() {
   const [micFallback, setMicFallback] = useState(false);
   const [speakerFallback, setSpeakerFallback] = useState(false);
   const [vadSensitivity, setVadSensitivity] = useState(noiseFloorToVadSensitivity(savedVadFloor));
+  const [confidenceMinPct, setConfidenceMinPct] = useState(
+    Math.round(Math.max(15, Math.min(90, savedConfidenceMin * 100))),
+  );
   const [saving,      setSaving]      = useState(false);
   const [saved,       setSaved]       = useState(false);
   const [saveFailed,  setSaveFailed]  = useState(false);
@@ -123,6 +131,12 @@ export default function SettingsAudio() {
     );
     if (typeof ui.vad_noise_floor === "number") {
       setVadSensitivity(noiseFloorToVadSensitivity(ui.vad_noise_floor));
+    }
+    if (typeof ui.stt_question_confidence === "number") {
+      setConfidenceMinPct(
+        Math.round(Math.max(15, Math.min(90, ui.stt_question_confidence * 100))),
+      );
+      setQuestionConfidenceMin(ui.stt_question_confidence);
     }
   }, [
     profile?.id,
@@ -295,11 +309,13 @@ export default function SettingsAudio() {
     setSaved(false);
     setSaveFailed(false);
     const noiseFloor = vadSensitivityToNoiseFloor(vadSensitivity);
+    const confidenceMin = Math.max(0.15, Math.min(0.9, confidenceMinPct / 100));
     const mergedUiPrefs = {
       ...(typeof profile?.ui_preferences === "object" && profile?.ui_preferences
         ? profile.ui_preferences
         : {}),
       vad_noise_floor: noiseFloor,
+      stt_question_confidence: confidenceMin,
     };
     try {
       await updateProfile({
@@ -319,6 +335,7 @@ export default function SettingsAudio() {
           },
       });
       setVADConfig({ noise_floor: noiseFloor });
+      setQuestionConfidenceMin(confidenceMin);
       setMicDeviceId(selectedMic || null);
       setSelectedMicId(selectedMic || null);
       setSaved(true);
@@ -465,6 +482,25 @@ export default function SettingsAudio() {
             />
             <p className="text-[10px] text-muted-foreground mt-1">
               Higher = picks up quieter speech; lower = ignores more background noise
+            </p>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-foreground">Question confidence</span>
+              <Badge variant="secondary" size="sm">{confidenceMinPct}%</Badge>
+            </div>
+            <input
+              type="range"
+              min={15}
+              max={90}
+              value={confidenceMinPct}
+              onChange={(e) => setConfidenceMinPct(Number(e.target.value))}
+              className="w-full accent-primary"
+              aria-label="Minimum STT confidence for auto questions"
+            />
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Lower accepts unclear interviewer speech sooner; higher waits for clearer STT
             </p>
           </div>
         </div>

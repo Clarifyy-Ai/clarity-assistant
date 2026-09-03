@@ -7,12 +7,28 @@ export const SUPPORT_COMPOSER_PLACEHOLDER = "Write a message…";
 export const SUPPORT_SENDING_LABEL = "Sending…";
 export const SUPPORT_FAILED_LABEL = "Could not send. Retry";
 export const SUPPORT_MAX_BODY = 4000;
-export const SUPPORT_CONNECT_TIMEOUT_MS = 8000;
-export const SUPPORT_AI_TIMEOUT_MS = 20000;
+export const SUPPORT_CONNECT_TIMEOUT_MS = 15000;
+export const SUPPORT_AI_TIMEOUT_MS = 45000;
 /** Guest list poll floor — stay under support-chat's 8 req/min guest cap. */
 export const SUPPORT_GUEST_POLL_MS = 15_000;
 export const SUPPORT_WAITING_HINT =
   "Your conversation is saved. An agent will reply in this chat.";
+export const SUPPORT_NETWORK_ERROR =
+  "Live chat couldn't reach the server. Check your connection and try again.";
+
+export function supportChatUserFacingError(err: unknown): string {
+  const message = err instanceof Error ? err.message : "Failed to send message";
+  if (
+    /AI request did not go through/i.test(message) ||
+    /Failed to fetch/i.test(message) ||
+    /Couldn't reach the server/i.test(message) ||
+    /timed out/i.test(message) ||
+    /Live chat couldn't reach/i.test(message)
+  ) {
+    return SUPPORT_NETWORK_ERROR;
+  }
+  return message;
+}
 
 export type SupportChipId =
   | "interview"

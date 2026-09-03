@@ -28,11 +28,13 @@ import type {
   Speaker,
 } from "@/types/audio.types";
 import { useAudioStore } from "@/store/audioStore";
+import { useOverlayStore } from "@/store/overlayStore";
 import { isInterviewerQuestionText } from "./interviewerQuestion";
 import {
   canBecomeInterviewerQuestion,
   MIN_QUESTION_CONFIDENCE,
 } from "./liveQuestionGate";
+import { isLowConfidenceInterviewerSpeech } from "@/lib/overlay/sessionConversation";
 
 /* ─── FILLER WORD CONSTANTS ──────────────────────────────────────────────── */
 
@@ -245,13 +247,34 @@ export function processUtteranceForDiarization(
     // Forced interviewer implies a dedicated channel; mixed/unknown does not.
     options?.forcedSpeaker === "interviewer";
 
+  const minConfidence =
+    store.question_confidence_min ?? MIN_QUESTION_CONFIDENCE;
+
   const isQuestion = canBecomeInterviewerQuestion({
     speaker,
     text: utterance.text,
     isFinal: utterance.is_final,
     confidence: utterance.confidence,
     hasInterviewerChannel,
+    minConfidence,
   });
+
+  if (
+    !isQuestion &&
+    isLowConfidenceInterviewerSpeech({
+      speaker,
+      text: utterance.text,
+      isFinal: utterance.is_final,
+      confidence: utterance.confidence,
+      hasInterviewerChannel,
+      minConfidence,
+    })
+  ) {
+    const heard = (utterance.text ?? "").trim();
+    useOverlayStore
+      .getState()
+      .setChatAttention(true, "low_confidence", heard.slice(0, 500));
+  }
 
   const enriched: TranscriptUtterance = {
     ...utterance,

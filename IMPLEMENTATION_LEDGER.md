@@ -109,8 +109,12 @@ Last updated: 2026-08-14 — remaining QA master-prompt close-out (local).
 | AUG14-WS7 | P1 | Onboarding hint icons + persist mic on Skip | Distinct hint icons; `audio_input_device` on skip | IMPLEMENTED_AND_LOCALLY_VERIFIED | — |
 | AUG14-WS1 | P1 | QA seed preserves passwords | `QA_*_PASSWORD` env + `.env.qa.local` reuse | IMPLEMENTED_AND_LOCALLY_VERIFIED | Operator rotation still required |
 
-Last updated: 2026-08-14 evening — collected unfinished agent workstreams; remaining local close-out.
+| SEP03-OC1 | P0 | Overlay Chat continuity + attention | Unified `sessionConversation` timeline (chat + hint_history); `chat_attention` pulse Chat; low-confidence/AI Help miss/listening timeout nudges; typed recovery → `requestLiveHint`; docs/OVERLAY_CHAT_CONTINUITY_PHASE1.md | IMPLEMENTED_AND_LOCALLY_VERIFIED | Interactive Live Overlay UAT; full prod still NO_GO |
+| SEP03-P2P7 | P0 | Master-prompt phases 2–7 hardening | finalize cancel path; assemble-assessment JWT; VAD+STT confidence; AI Help recovery; TTS voice; null scorecard dims; deleted_at session counts; presentation-safe honesty; admin reconciliation UI; docs/MASTER_PROMPT_PHASES_2_7.md + PROVIDER_HEALTH_MATRIX.md | IMPLEMENTED_AND_LOCALLY_VERIFIED | Redeploy assemble-assessment; Razorpay sandbox; interactive mic UAT; prod still NO_GO |
+| SEP03-DEBRIEF-JOB | P0 | Durable session debrief jobs | session_debrief_jobs migration; Edge 202+waitUntil; credit reserve/finalize/release; client poll/cancel; DebriefDetail wiring; generateDebriefAsync contracts | IMPLEMENTED_AND_LOCALLY_VERIFIED | Apply migration + redeploy generate-debrief |
+| SEP03-OVERLAY-UAT | P0 | Live Overlay interactive UAT automation | Expanded coachChatContinuity contracts; e2e/overlay-interactive-uat.spec.ts; docs/OVERLAY_UAT.md record sheet | IMPLEMENTED_AND_LOCALLY_VERIFIED | Human mic/share interactive UAT still CONDITIONAL |
 
+Last updated: 2026-09-03 — durable debrief + overlay UAT automation (certification NO_GO).
 | ID | Priority | Requirement | Implementation | Status | Remaining |
 |----|----------|-------------|----------------|--------|-----------|
 | AUG14E-WS10 | P0 | OverlaySettings stale shortcut list (Ctrl+Shift+H/C) | OverlaySettings sourced from `OVERLAY_HOTKEYS`; `DEFAULT_HOTKEYS` C=capture, U=toggle alias | IMPLEMENTED_AND_LOCALLY_VERIFIED | Interactive overlay UAT |

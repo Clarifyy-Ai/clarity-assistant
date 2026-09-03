@@ -49,6 +49,12 @@ const EXTRA_REDIRECTS = [
   `${WWW_URL}/auth/callback`,
   `${SITE_URL}/reset-password`,
   `${WWW_URL}/reset-password`,
+  "https://clarify-aii.lovable.app/**",
+  "https://id-preview--ff2f1c32-d4fd-4bbf-914d-d72bd2dd40a7.lovable.app/**",
+  "http://localhost:8080/**",
+  "http://localhost:5173/**",
+  "http://127.0.0.1:8080/**",
+  "http://127.0.0.1:5173/**",
 ];
 
 function requestJson(hostname, apiPath, { method, token, body }) {

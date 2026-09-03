@@ -163,7 +163,7 @@ export function OverlaySettings({
         void applyPresentationSafePreference(Boolean(value)).then(() => {
           if (value) {
             toast.message(
-              "Presentation-safe mode reduces capture on some platforms — it is not invisible on all screen shares.",
+              "Presentation-safe is a reminder mode only — it does not hide the overlay from screen shares or recordings.",
             );
           }
         });
@@ -327,7 +327,7 @@ export function OverlaySettings({
 
         <SettingRow
           label="Presentation-safe"
-          description="Opt-in content protection where supported — not universal screen-share invisibility"
+          description="Reminder that the overlay may still appear in screen shares — does not enable OS content protection"
           icon={<Shield className="h-3.5 w-3.5 text-amber-400" aria-hidden="true" />}
         >
           <Switch

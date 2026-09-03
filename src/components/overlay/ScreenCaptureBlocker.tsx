@@ -62,7 +62,8 @@ function WarningBanner({ level, reason, misses, onDismiss }: WarningBannerProps)
       <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
         <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
         <p className="text-[11px] text-emerald-400 flex-1">
-          Screen capture protection active (OS-level)
+          OS content protection is on for this window — it may hide the overlay from some
+          capture APIs, but it is not guaranteed invisible on every screen share or recorder.
         </p>
       </div>
     );
@@ -74,12 +75,11 @@ function WarningBanner({ level, reason, misses, onDismiss }: WarningBannerProps)
         <ShieldAlert className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
           <p className="text-[11px] font-semibold text-amber-400">
-            Partial protection — browser mode
+            Limited capture resistance — browser mode
           </p>
           <p className="text-[10px] text-amber-400/70 mt-0.5 leading-relaxed">
-            Defeats browser extensions. Does not block Zoom, OBS or OS-level capture.
-            <br />
-            <strong>Use the desktop app for full protection.</strong>
+            May reduce some browser-extension captures. Does not block Zoom, OBS, or OS-level
+            screen share. Prefer the desktop app for stronger (still imperfect) protection.
           </p>
         </div>
         <button
@@ -99,12 +99,12 @@ function WarningBanner({ level, reason, misses, onDismiss }: WarningBannerProps)
       <ShieldOff className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">
         <p className="text-[11px] font-semibold text-red-400">
-          Screen capture protection unavailable
+          No screen-capture protection available
         </p>
         <p className="text-[10px] text-red-400/70 mt-0.5 leading-relaxed">
-          {reason}. Your browser does not support the required APIs.
+          {reason}. Assume the overlay can appear in any share or recording.
           {misses.length > 0 && (
-            <> The following capture tools are <strong>not blocked</strong>:{" "}
+            <> Known capture paths not blocked:{" "}
               {misses.slice(0, 3).join(", ")}.
             </>
           )}
@@ -115,7 +115,7 @@ function WarningBanner({ level, reason, misses, onDismiss }: WarningBannerProps)
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1 mt-1.5 text-[10px] text-red-300 hover:text-red-200 transition-colors font-medium"
         >
-          Download desktop app for full protection
+          Download desktop app for stronger protection
           <ExternalLink className="w-2.5 h-2.5" />
         </a>
       </div>

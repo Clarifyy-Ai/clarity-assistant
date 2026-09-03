@@ -33,6 +33,7 @@ import { useSessionStore } from "@/store/sessionStore";
 import { feedbackDB } from "@/lib/supabase/database";
 import type { HintState } from "@/store/overlayStore";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { chatAttentionBannerCopy } from "@/lib/overlay/sessionConversation";
 
 const LISTENING_NO_SPEECH_MS = 12_000;
 
@@ -74,6 +75,8 @@ function OverlayHintPanelInner({
   const [feedbackSent, setFeedbackSent] = useState<"up" | "down" | null>(null);
 
   const fontSize = useOverlayStore((s) => s.font_size);
+  const chatAttention = useOverlayStore((s) => s.chat_attention);
+  const chatAttentionReason = useOverlayStore((s) => s.chat_attention_reason);
 
   const historyLen = useOverlayStore((s) => s.hint_history.length);
   const historyIndex = useOverlayStore((s) => s.hint_history_index);
@@ -242,6 +245,16 @@ function OverlayHintPanelInner({
       className="scroll-container min-h-[120px] max-h-[min(52vh,480px)] overflow-y-auto overflow-x-hidden px-3.5 py-3 flex flex-col gap-2.5"
       style={{ fontSize: `${fontSize}px` }}
     >
+      {chatAttention && (
+        <button
+          type="button"
+          onClick={() => useOverlayStore.getState().setActiveTab("chat")}
+          className="w-full text-left rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-100/90 hover:bg-amber-500/15 transition-colors"
+        >
+          {chatAttentionBannerCopy(chatAttentionReason)}{" "}
+          <span className="font-semibold text-amber-200 underline underline-offset-2">Open Chat</span>
+        </button>
+      )}
       {/* ── Mode Toggle ───────────────────────────────────────────────── */}
       {onRequestModeChange && (
         <div className="flex flex-col gap-1">
@@ -870,7 +883,10 @@ function ListeningTimeoutHelp() {
   const [showMicHelp, setShowMicHelp] = useState(false);
 
   useEffect(() => {
-    const id = window.setTimeout(() => setShowMicHelp(true), LISTENING_NO_SPEECH_MS);
+    const id = window.setTimeout(() => {
+      setShowMicHelp(true);
+      useOverlayStore.getState().setChatAttention(true, "listening_timeout");
+    }, LISTENING_NO_SPEECH_MS);
     return () => window.clearTimeout(id);
   }, []);
 
@@ -883,7 +899,10 @@ function ListeningTimeoutHelp() {
       )}
       <button
         type="button"
-        onClick={() => useOverlayStore.getState().setActiveTab("chat")}
+        onClick={() => {
+          useOverlayStore.getState().setChatAttention(true, "listening_timeout");
+          useOverlayStore.getState().setActiveTab("chat");
+        }}
         className="text-[12px] text-indigo-300 hover:text-indigo-200 transition-colors font-medium text-left"
       >
         Type a question instead

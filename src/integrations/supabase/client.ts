@@ -11,6 +11,11 @@ import {
 } from "@/lib/env";
 import { tabAwareAuthStorage } from "@/lib/auth/tabLocalLogout";
 import { shouldDetectSessionInUrl } from "@/lib/auth/accountBootstrap";
+import { maybeRedirectAuthDeepLink } from "@/lib/auth/authDeepLinkRedirect";
+
+// If Site URL ate a recovery/OAuth redirect, bounce to the right path before
+// detectSessionInUrl consumes tokens on `/` or another marketing page.
+maybeRedirectAuthDeepLink();
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {

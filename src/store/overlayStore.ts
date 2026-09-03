@@ -187,6 +187,17 @@ interface OverlayStore {
   chat_history: ChatMessage[];
   is_chat_generating: boolean;
   coach_conversation_id: string | null;
+  /** Pulse Chat control when listen/question detection fails. */
+  chat_attention: boolean;
+  chat_attention_reason:
+    | "listening_timeout"
+    | "audio_unavailable"
+    | "low_confidence"
+    | "stt_reconnect_failed"
+    | "manual_needed"
+    | null;
+  /** Prefill composer when opening Chat from a low-confidence nudge. */
+  chat_prefill: string | null;
 
   resume_context: ResumeContext | null;
   resume_talking_points: ResumeTalkingPoints | null;
@@ -256,6 +267,19 @@ interface OverlayStore {
   clearChatHistory: () => void;
   setChatGenerating: (generating: boolean) => void;
   setCoachConversationId: (id: string | null) => void;
+  setChatAttention: (
+    attention: boolean,
+    reason?:
+      | "listening_timeout"
+      | "audio_unavailable"
+      | "low_confidence"
+      | "stt_reconnect_failed"
+      | "manual_needed"
+      | null,
+    prefill?: string | null,
+  ) => void;
+  clearChatAttention: () => void;
+  consumeChatPrefill: () => string | null;
 
   setResumeContext: (ctx: ResumeContext | null) => void;
   setResumeTalkingPoints: (points: ResumeTalkingPoints | null) => void;
@@ -388,6 +412,9 @@ export const useOverlayStore = create<OverlayStore>()(
       chat_history: [],
       is_chat_generating: false,
       coach_conversation_id: null,
+      chat_attention: false,
+      chat_attention_reason: null,
+      chat_prefill: null,
 
       resume_context: null,
       resume_talking_points: null,
@@ -579,12 +606,27 @@ export const useOverlayStore = create<OverlayStore>()(
         const allowTerminalPath =
           next === "session_ending" || next === "session_saved";
         if (!allowTerminalPath && !guardSessionMutation()) return;
-        set((s) => ({
-          session_pipeline_state: transitionWithMode(
+        set((s) => {
+          const session_pipeline_state = transitionWithMode(
             s.session_pipeline_state,
             next,
-          ),
-        }));
+          );
+          if (next === "audio_unavailable") {
+            return {
+              session_pipeline_state,
+              chat_attention: true,
+              chat_attention_reason: "audio_unavailable" as const,
+            };
+          }
+          if (next === "permission_denied") {
+            return {
+              session_pipeline_state,
+              chat_attention: true,
+              chat_attention_reason: "manual_needed" as const,
+            };
+          }
+          return { session_pipeline_state };
+        });
       },
 
       setAlwaysOnTop: (always_on_top) => set({ always_on_top: Boolean(always_on_top) }),
@@ -843,7 +885,17 @@ export const useOverlayStore = create<OverlayStore>()(
       setSaveTranscript: (save_transcript) => set({ save_transcript }),
       setSessionCallType: (session_call_type) => set({ session_call_type }),
       setSessionLanguage: (session_language) => set({ session_language }),
-      setActiveTab: (active_tab) => set({ active_tab }),
+      setActiveTab: (active_tab) =>
+        set((s) => {
+          if (active_tab === "chat" && s.chat_attention) {
+            return {
+              active_tab,
+              chat_attention: false,
+              chat_attention_reason: null,
+            };
+          }
+          return { active_tab };
+        }),
 
       addChatMessage: (msg) => {
         if (!guardSessionMutation()) return;
@@ -881,6 +933,34 @@ export const useOverlayStore = create<OverlayStore>()(
       setCoachConversationId: (coach_conversation_id) => {
         if (!guardSessionMutation()) return;
         set({ coach_conversation_id });
+      },
+      setChatAttention: (attention, reason = null, prefill) => {
+        if (!guardSessionMutation()) return;
+        set((s) => ({
+          chat_attention: attention,
+          chat_attention_reason: attention ? reason : null,
+          chat_prefill:
+            prefill !== undefined
+              ? prefill
+              : attention
+                ? s.chat_prefill
+                : null,
+        }));
+      },
+      clearChatAttention: () => {
+        if (!guardSessionMutation()) return;
+        set({
+          chat_attention: false,
+          chat_attention_reason: null,
+        });
+      },
+      consumeChatPrefill: () => {
+        let value: string | null = null;
+        set((s) => {
+          value = s.chat_prefill;
+          return { chat_prefill: null };
+        });
+        return value;
       },
 
       setResumeContext: (resume_context) => {
@@ -966,6 +1046,9 @@ export const useOverlayStore = create<OverlayStore>()(
           chat_history: [],
           is_chat_generating: false,
           coach_conversation_id: null,
+          chat_attention: false,
+          chat_attention_reason: null,
+          chat_prefill: null,
 
           resume_context: null,
           resume_talking_points: null,

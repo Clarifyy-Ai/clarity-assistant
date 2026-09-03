@@ -5,6 +5,7 @@ import {
   SUPPORT_WIDGET_SLA,
   SUPPORT_WIDGET_TITLE,
   canSubmitSupportMessage,
+  supportChatUserFacingError,
   validateSupportAttachment,
 } from "@/lib/support/supportCopy";
 
@@ -43,5 +44,14 @@ describe("support copy", () => {
   it("keeps guest polling below the 8 req/min rate limit", async () => {
     const { SUPPORT_GUEST_POLL_MS } = await import("@/lib/support/supportCopy");
     expect(SUPPORT_GUEST_POLL_MS).toBeGreaterThanOrEqual(8_000);
+  });
+
+  it("maps AI/network wording to a live-chat friendly error", () => {
+    expect(
+      supportChatUserFacingError(new Error("The AI request did not go through. Please try again.")),
+    ).toMatch(/Live chat couldn't reach the server/i);
+    expect(supportChatUserFacingError(new Error("Custom support error"))).toBe(
+      "Custom support error",
+    );
   });
 });

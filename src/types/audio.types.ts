@@ -210,6 +210,8 @@ export interface AudioStoreState {
   diarization: DiarizationState;
   transcript: TranscriptState;
   vad_config: VADConfig;
+  /** Minimum STT confidence (0–1) for auto interviewer-question finalize. */
+  question_confidence_min: number;
   /** @deprecated Prefer transcription_provider_status in overlay UI. */
   deepgram_status: DeepgramConnectionStatus;
   transcription_provider_status: TranscriptionProviderStatus;

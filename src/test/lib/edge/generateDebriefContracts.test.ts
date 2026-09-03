@@ -22,18 +22,26 @@ describe("generate-debrief — idempotency contracts", () => {
     const handlerStart = source.indexOf("Deno.serve");
     const handler = source.slice(handlerStart);
     const existingIdx = handler.indexOf("if (existingDebrief)");
-    const hybridIdx = handler.indexOf("await executeHybridOperation");
+    const enqueueIdx = handler.indexOf("insertSessionDebriefJob");
     expect(existingIdx).toBeGreaterThan(0);
-    expect(hybridIdx).toBeGreaterThan(existingIdx);
+    expect(enqueueIdx).toBeGreaterThan(existingIdx);
     expect(source).toContain('.from("session_debriefs")');
     expect(source).toContain("idempotent: true");
   });
 
-  it("uses runDatabase preflight inside executeHybridOperation", () => {
+  it("uses runDatabase preflight inside the background executeHybridOperation path", () => {
     expect(source).toContain("runDatabase:");
     expect(source).toContain('operation: "session_debrief"');
+    const processIdx = source.indexOf("async function processSessionDebriefJob");
+    const runHybridIdx = source.indexOf("async function runDebriefHybrid");
+    const hybridIdx = source.indexOf("await executeHybridOperation");
     const runDbIdx = source.indexOf("runDatabase:");
     const runAiIdx = source.indexOf("runAi:");
+    expect(processIdx).toBeGreaterThan(0);
+    expect(runHybridIdx).toBeGreaterThan(0);
+    expect(hybridIdx).toBeGreaterThan(0);
+    expect(runHybridIdx).toBeLessThan(hybridIdx);
+    expect(source.slice(processIdx)).toContain("runDebriefHybrid");
     expect(runDbIdx).toBeGreaterThan(0);
     expect(runAiIdx).toBeGreaterThan(runDbIdx);
   });
@@ -60,9 +68,9 @@ describe("generate-debrief — NOT_SCORED contracts", () => {
     expect(source).toContain("hasScorableAnswers");
     expect(source).toContain("hasTranscriptContent");
     const notScoredIdx = handler.indexOf('code: "NOT_SCORED"');
-    const hybridIdx = handler.indexOf("await executeHybridOperation");
+    const enqueueIdx = handler.indexOf("insertSessionDebriefJob");
     expect(notScoredIdx).toBeGreaterThan(0);
-    expect(hybridIdx).toBeGreaterThan(notScoredIdx);
+    expect(enqueueIdx).toBeGreaterThan(notScoredIdx);
   });
 
   it("checks transcript content from session_transcripts", () => {

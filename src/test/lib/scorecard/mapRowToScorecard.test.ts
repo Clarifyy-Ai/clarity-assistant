@@ -49,4 +49,21 @@ describe("mapRowToScorecard", () => {
     expect(scorecard.wpm_avg).toBe(128);
     expect(scorecard.coach_note).toBe("Keep drilling STAR answers.");
   });
+
+  it("maps missing dimension scores to null instead of zero", () => {
+    const scorecard = mapRowToScorecard({
+      ...BASE_ROW,
+      overall_score: null,
+      communication: null,
+      technical: null,
+      problem_solving: null,
+      confidence: null,
+      details: null,
+    });
+
+    expect(scorecard.confidence_score).toBeNull();
+    expect(scorecard.clarity_score).toBeNull();
+    expect(scorecard.structure_score).toBeNull();
+    expect(scorecard.relevance_score).toBeNull();
+  });
 });

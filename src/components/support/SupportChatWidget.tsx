@@ -22,6 +22,7 @@ import {
   SUPPORT_WIDGET_SLA,
   SUPPORT_WIDGET_TITLE,
   canSubmitSupportMessage,
+  supportChatUserFacingError,
   validateSupportAttachment,
   type SupportChipId,
 } from "@/lib/support/supportCopy";
@@ -271,11 +272,12 @@ export function SupportChatWidget() {
         action: "bootstrap",
         thread_id: threadId,
         guest_token: guestToken,
-      });
+      }, { timeoutMs: SUPPORT_CONNECT_TIMEOUT_MS });
       window.clearTimeout(timer);
       if (!data.thread_id) {
         setMessages([]);
         setUiState("connected");
+        setError(null);
         return;
       }
       applyResponse(data);
@@ -289,7 +291,7 @@ export function SupportChatWidget() {
         return;
       }
       setUiState("failed");
-      setError(err instanceof Error ? err.message : "Could not load chat");
+      setError(supportChatUserFacingError(err));
     }
   }, [open, hide, threadId, guestToken]);
 
@@ -405,7 +407,7 @@ export function SupportChatWidget() {
       setDraft("");
       setForceGuestFields(false);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to send message";
+      const message = supportChatUserFacingError(err);
       const status = typeof (err as { status?: number })?.status === "number"
         ? (err as { status: number }).status
         : undefined;
@@ -453,7 +455,7 @@ export function SupportChatWidget() {
           });
           applyResponse(data);
         } catch (err) {
-          setError(err instanceof Error ? err.message : "Could not escalate");
+          setError(supportChatUserFacingError(err));
         }
         return;
       }
@@ -686,6 +688,16 @@ export function SupportChatWidget() {
               <p className="px-3 pt-2 text-[11px] text-destructive" role="alert">
                 {error}
               </p>
+            )}
+            {uiState === "failed" && !failedClientId && (
+              <button
+                type="button"
+                onClick={() => void bootstrap()}
+                className="px-3 pt-1 text-[11px] text-primary underline-offset-2 hover:underline text-left inline-flex items-center gap-1"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Retry connection
+              </button>
             )}
             {failedClientId && (
               <button

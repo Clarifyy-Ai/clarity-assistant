@@ -170,6 +170,15 @@ describe("fetchEdgeJson — RPC/edge error handling", () => {
     );
   });
 
+  it("does not blame AI when support-chat is unreachable", async () => {
+    (global.fetch as any).mockRejectedValue(new TypeError("Failed to fetch"));
+    const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
+
+    await expect(fetchEdgeJson("support-chat", { action: "bootstrap" })).rejects.toThrow(
+      /Live chat couldn't reach the server/i,
+    );
+  });
+
   it("retries Failed to fetch once then succeeds for non-mutating calls", async () => {
     (global.fetch as any)
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))

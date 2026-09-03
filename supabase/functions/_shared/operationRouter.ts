@@ -198,7 +198,7 @@ const MATRIX: Record<HybridOperation, Omit<RouteDecision, "operation" | "canUseP
     pythonFallbackOnAiFailure: true,
     aiFallbackOnPythonFailure: false,
     creditCostKey: "session_debrief",
-    durableJob: false,
+    durableJob: true,
   },
   // rule-based scorecard → optional AI enrich
   session_scorecard: {

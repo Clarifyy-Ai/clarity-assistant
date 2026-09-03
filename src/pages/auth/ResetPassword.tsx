@@ -58,6 +58,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatSupabaseAuthError, isHardAuthTransportError } from "@/lib/errors";
 import { recoveryLinkIssueFromUrl } from "@/lib/auth/loginFailure";
+import { clearPasswordRecoveryFlow } from "@/lib/auth/authDeepLinkRedirect";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -412,15 +413,8 @@ export default function ResetPassword(): JSX.Element {
     if (mode !== "success-reset") {
       return;
     }
-
-    const timeoutId = window.setTimeout(() => {
-      navigate(ROUTES.DASHBOARD);
-    }, 3000);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [mode, navigate]);
+    clearPasswordRecoveryFlow();
+  }, [mode]);
 
   async function handleRequestReset(data: ResetPasswordInput): Promise<void> {
     setGeneralError(null);
@@ -642,21 +636,26 @@ export default function ResetPassword(): JSX.Element {
                 </motion.div>
 
                 <CardTitle className="text-xl font-bold">
-                  Check your inbox
+                  Reset link sent
                 </CardTitle>
 
                 <CardDescription className="text-base">
-                  We sent a password reset link to{" "}
+                  We emailed a secure password-reset link to{" "}
                   <span className="font-medium text-foreground">
                     {submittedEmail}
                   </span>
-                  . The link expires in 1 hour.
+                  . Open that email on this device to continue.
                 </CardDescription>
               </CardHeader>
 
-              <CardContent className="space-y-3">
+              <CardContent className="space-y-3 text-left">
+                <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
+                  <li>Open the Career Pilot email (check spam if needed).</li>
+                  <li>Click <span className="font-medium text-foreground">Reset password</span> — you should land on the set-new-password screen.</li>
+                  <li>Choose a new password, then sign in with it.</li>
+                </ol>
                 <p className="text-sm text-muted-foreground">
-                  Email can take a minute. Check spam, wait, then retry. Didn&apos;t receive it?{" "}
+                  The link expires in about 1 hour. Didn&apos;t get it?{" "}
                   <button
                     type="button"
                     onClick={() => {
@@ -922,35 +921,36 @@ export default function ResetPassword(): JSX.Element {
                 </motion.div>
 
                 <CardTitle className="text-xl font-bold">
-                  Password updated!
+                  Password reset complete
                 </CardTitle>
 
                 <CardDescription className="text-base">
-                  Your password has been changed successfully. Redirecting you
-                  to the dashboard…
+                  Your email link worked and your new password is saved. Use it
+                  the next time you sign in.
                 </CardDescription>
               </CardHeader>
 
-              <CardContent>
-                <motion.div
-                  className="h-1 w-full rounded-full bg-primary"
-                  initial={{ scaleX: 0, originX: 0 }}
-                  animate={{ scaleX: 1 }}
-                  transition={{ duration: 3, ease: "linear" }}
-                />
-
-                <p className="mt-3 text-xs text-muted-foreground">
-                  Redirecting in 3 seconds…
-                </p>
+              <CardContent className="space-y-3 text-left">
+                <ol className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
+                  <li>You can close this tab if you are done.</li>
+                  <li>Or continue into Career Pilot with your updated account.</li>
+                  <li>If anything looks off, sign out and sign back in with the new password.</li>
+                </ol>
               </CardContent>
 
-              <CardFooter className="justify-center">
+              <CardFooter className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+                <Button
+                  size="sm"
+                  onClick={() => navigate(ROUTES.LOGIN)}
+                >
+                  Sign in
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => navigate(ROUTES.DASHBOARD)}
                 >
-                  Go to dashboard now
+                  Go to dashboard
                 </Button>
               </CardFooter>
             </Card>

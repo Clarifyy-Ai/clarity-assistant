@@ -366,26 +366,63 @@ function LiveOverlaySession() {
     store.showOverlay();
 
     const utterances = useAudioStore.getState().transcript?.utterances ?? [];
-    const question = resolveQuestionFromTranscript(
+    const micOnly = !config.enable_system_audio;
+    let question = resolveQuestionFromTranscript(
       utterances,
       store.current_question,
-      { allowMicOnlyFallback: !config.enable_system_audio },
+      { allowMicOnlyFallback: micOnly },
     );
+    // Explicit AI Help: re-evaluate transcript with recovery (low-confidence / mislabel).
+    if (!question) {
+      question = resolveQuestionFromTranscript(utterances, null, {
+        allowMicOnlyFallback: true,
+        aiHelpRecovery: true,
+      });
+    }
+    if (!question) {
+      question = (store.chat_prefill ?? "").trim();
+    }
     if (question) {
       store.setCurrentQuestion(question);
+      store.clearChatAttention();
       void copilot.requestLiveHint(question);
       return;
     }
 
     store.setSessionPipelineState("listening");
+    store.setChatAttention(true, "manual_needed");
     toast.info(
-      "Listening for the interviewer. Share tab audio, or type the question in Chat.",
+      "Listening for the interviewer. Share tab audio, or open Chat to type the question.",
     );
-  }, [copilot]);
+  }, [copilot, config.enable_system_audio]);
 
   const handleManualQuestion = useCallback(
-    (question: string) => copilot.submitManualQuestion(question),
-    [copilot]
+    async (question: string) => {
+      const store = useOverlayStore.getState();
+      const reason = store.chat_attention_reason;
+      const trimmed = question.trim();
+      if (!trimmed) return false;
+
+      // Recovery from listen/question failure: treat typed text as the interview question.
+      if (
+        reason === "low_confidence" ||
+        reason === "manual_needed" ||
+        reason === "listening_timeout" ||
+        reason === "audio_unavailable" ||
+        reason === "stt_reconnect_failed"
+      ) {
+        store.clearChatAttention();
+        store.setCurrentQuestion(trimmed);
+        store.setActiveTab("answer");
+        store.setMinimalMode(false);
+        await copilot.requestLiveHint(trimmed);
+        return true;
+      }
+
+      store.clearChatAttention();
+      return copilot.submitManualQuestion(trimmed);
+    },
+    [copilot],
   );
 
   useEffect(() => {

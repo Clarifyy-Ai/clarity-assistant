@@ -7,6 +7,7 @@ import {
 import { ElectronOpenInBrowser } from "@/components/layout/ElectronOpenInBrowser";
 import { CookieConsent } from "@/components/common/CookieConsent";
 import { ScrollToTop } from "@/components/layout/ScrollToTop";
+import { AuthDeepLinkGuard } from "@/components/auth/AuthDeepLinkGuard";
 
 /**
  * Restricts the desktop shell to auth, onboarding, and overlay session routes.
@@ -19,6 +20,7 @@ export function ElectronRouteGate(): JSX.Element {
     return (
       <>
         <ScrollToTop />
+        <AuthDeepLinkGuard />
         <Outlet />
         <CookieConsent />
       </>
@@ -35,6 +37,7 @@ export function ElectronRouteGate(): JSX.Element {
     return (
       <>
         <ScrollToTop />
+        <AuthDeepLinkGuard />
         <Outlet />
         <CookieConsent />
       </>

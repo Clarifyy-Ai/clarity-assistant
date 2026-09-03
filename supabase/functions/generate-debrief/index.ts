@@ -18,6 +18,7 @@
 // - 422 NOT_SCORED when no answers and no transcript
 // - audit logging
 // - safe JSON responses
+// - Credits refunded/released on async provider failure or cancellation
 
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
@@ -70,10 +71,30 @@ import { pythonExecuteOperation } from "../_shared/pythonClient.ts";
 import { DomainError, httpStatusForDomainCode } from "../_shared/domainErrors.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { hybridSuccess } from "../_shared/hybridResponse.ts";
+import { creditDenialResponse } from "../_shared/creditAuthority.ts";
+import {
+  cancelSessionDebriefJob,
+  claimSessionDebriefJob,
+  completeSessionDebriefJob,
+  failSessionDebriefJob,
+  insertSessionDebriefJob,
+  isStaleSessionDebriefJob,
+  isTerminalSessionDebriefStatus,
+  loadSessionDebriefJob,
+  patchSessionDebriefJob,
+  requeueFailedSessionDebriefJob,
+  reserveSessionDebriefCredits,
+  scheduleWaitUntil,
+  toSessionDebriefJobClient,
+  userFacingSessionDebriefError,
+  type SessionDebriefJobRow,
+} from "../_shared/sessionDebriefJob.ts";
 
 const FUNCTION_NAME = "generate-debrief";
 
 const CREDIT_COST = creditCost("session_debrief");
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const SYSTEM_PROMPT = `
 You are a world-class interview coach.
@@ -134,6 +155,17 @@ const requestSchema = z.object({
 });
 
 type GenerateDebriefRequest = z.infer<typeof requestSchema>;
+
+type RequestValidationResult =
+  | {
+      ok: true;
+      data: GenerateDebriefRequest;
+    }
+  | {
+      ok: false;
+      response: Response;
+      details?: unknown;
+    };
 
 type SessionRow = {
   id: string;
@@ -444,34 +476,10 @@ function normalizeDebrief(raw: unknown): DebriefPayload {
   };
 }
 
-async function parseAndValidateRequest(
-  req: Request,
+function parseAndValidateRequest(
+  rawBody: unknown,
   corsHeaders: HeadersInit
-): Promise<
-  | {
-      ok: true;
-      data: GenerateDebriefRequest;
-    }
-  | {
-      ok: false;
-      response: Response;
-      details?: unknown;
-    }
-> {
-  let rawBody: unknown;
-
-  try {
-    rawBody = await parseJsonBody(req);
-  } catch {
-    return {
-      ok: false,
-      response: json(corsHeaders, 400, {
-        error: "Invalid JSON payload.",
-        code: "BAD_REQUEST",
-      }),
-    };
-  }
-
+): RequestValidationResult {
   const validation = requestSchema.safeParse(rawBody);
 
   if (!validation.success) {
@@ -746,6 +754,20 @@ type DebriefHybridData = {
   idempotent?: boolean;
 };
 
+class JobAbortError extends Error {
+  readonly code: string;
+  readonly status: number;
+  readonly retryable: boolean;
+
+  constructor(code: string, message: string, status: number, retryable = true) {
+    super(message);
+    this.name = "JobAbortError";
+    this.code = code;
+    this.status = status;
+    this.retryable = retryable;
+  }
+}
+
 function debriefResponseBody(
   requestId: string,
   debrief: Record<string, unknown>,
@@ -822,6 +844,364 @@ function debriefFromPython(raw: unknown, fallback: DebriefPayload): DebriefPaylo
   });
 }
 
+function jobAcceptedResponse(req: Request, job: SessionDebriefJobRow, replay = false): Response {
+  return json(getCorsHeaders(req), isTerminalSessionDebriefStatus(job.status) ? 200 : 202, {
+    ...toSessionDebriefJobClient(job),
+    accepted: true,
+    async: true,
+    idempotentReplay: replay,
+    message: "Debrief queued. Credits reserved until generation finishes.",
+  });
+}
+
+async function runDebriefHybrid(input: {
+  req: Request;
+  db: ReturnType<typeof createServiceClient>;
+  userId: string;
+  planId: string | null;
+  requestId: string;
+  sessionId: string;
+  model: string | null;
+  idempotencyKey: string | null;
+  byok?: ReturnType<typeof extractBYOK>;
+}): Promise<{ debriefId: string; source: string; response: Response }> {
+  const { req, db, userId, planId, requestId, sessionId, model, idempotencyKey, byok } = input;
+  const corsHeaders = getCorsHeaders(req);
+
+  const { data: sessionData, error: sessionError } = await db
+    .from("sessions")
+    .select("*")
+    .eq("id", sessionId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (sessionError || !sessionData) {
+    throw new JobAbortError("SESSION_NOT_FOUND", "Session not found.", 404, false);
+  }
+
+  const session = sessionData as SessionRow;
+
+  const { data: answersData } = await db
+    .from("session_answers")
+    .select("*")
+    .eq("session_id", sessionId)
+    .eq("user_id", userId)
+    .order("question_index");
+
+  const answers = (answersData ?? []) as AnswerRow[];
+
+  const { data: transcriptsData } = await db
+    .from("session_transcripts")
+    .select("content")
+    .eq("session_id", sessionId)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(20);
+
+  const transcripts = (transcriptsData ?? []) as TranscriptRow[];
+
+  if (!hasScorableAnswers(answers) && !hasTranscriptContent(transcripts)) {
+    throw new JobAbortError(
+      "NOT_SCORED",
+      "No answers or transcript were recorded for this session, so a debrief cannot be generated.",
+      422,
+      false,
+    );
+  }
+
+  let answerSummary = buildAnswerSummary(answers);
+
+  if (!answerSummary) {
+    const joinedTranscript = transcripts
+      .map((item) => sanitizeText(item.content, 1_000))
+      .filter(Boolean)
+      .join("\n");
+
+    answerSummary = joinedTranscript
+      ? `Full session transcript, no per-question answers recorded:\n${joinedTranscript}`
+      : "";
+  }
+
+  const unsafeResponse = validateUntrustedText(
+    answerSummary,
+    "Session answers/transcript",
+    corsHeaders,
+  );
+
+  if (unsafeResponse) {
+    await logValidationFailure({
+      req,
+      userId,
+      functionName: FUNCTION_NAME,
+      details: {
+        reason: "Unsafe transcript/answer content.",
+      },
+    });
+    throw new JobAbortError("VALIDATION_ERROR", "Session answers/transcript contains unsafe content.", 422, false);
+  }
+
+  const durationSeconds = Number(
+    (session as Record<string, unknown>).duration_seconds ??
+      (session as Record<string, unknown>).duration ??
+      0,
+  ) || 0;
+
+  const resolvedModel = await resolveModel(db, userId, sanitizeModelInput(model ?? undefined));
+
+  const prompt = buildPrompt({
+    session,
+    answersSummary: answerSummary,
+    answerCount: answers.length,
+  });
+
+  const hybrid = await executeHybridOperation<DebriefHybridData>({
+    req,
+    auth: { userId, planId },
+    operation: "session_debrief",
+    idempotencyKey,
+    creditCost: 0,
+    creditAction: "debrief_generation",
+    body: {
+      session_id: sessionId,
+      duration_seconds: durationSeconds,
+      questions_asked: answers.length,
+      highlights: [],
+      improvements: [],
+    },
+    runDatabase: async () => {
+      const { data: cached } = await db
+        .from("session_debriefs")
+        .select("*")
+        .eq("session_id", sessionId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (!cached) return null;
+      return debriefResponseBody(
+        requestId,
+        cached as Record<string, unknown>,
+        session,
+        { idempotent: true },
+      );
+    },
+    runDeterministic: async () => {
+      const payload = deterministicDebrief({
+        session,
+        answers,
+        durationSeconds,
+      });
+      const debrief = await persistDebrief(db, userId, sessionId, payload);
+      return debriefResponseBody(requestId, debrief, session, {
+        idempotent: false,
+      });
+    },
+    runPython: async (ctx) => {
+      const baseline = deterministicDebrief({
+        session,
+        answers,
+        durationSeconds,
+      });
+      const py = await pythonExecuteOperation(
+        {
+          operation: "session_debrief",
+          operation_id: ctx.operationId,
+          correlation_id: ctx.correlationId,
+          user_id: userId,
+          payload: {
+            duration_seconds: durationSeconds,
+            questions_asked: answers.length,
+            highlights: baseline.strengths,
+            improvements: baseline.improvements,
+          },
+        },
+        { requestId: ctx.correlationId },
+      );
+      if (!py.ok) return null;
+      const envelope = py.json as { data?: unknown } | unknown;
+      const raw =
+        envelope &&
+          typeof envelope === "object" &&
+          "data" in (envelope as Record<string, unknown>)
+          ? (envelope as { data: unknown }).data
+          : envelope;
+      const payload = debriefFromPython(raw, baseline);
+      const debrief = await persistDebrief(db, userId, sessionId, payload);
+      return debriefResponseBody(requestId, debrief, session, {
+        idempotent: false,
+      });
+    },
+    runAi: async () => {
+      const debriefAi = await generateDebriefText({
+        prompt,
+        userId,
+        model: resolvedModel,
+        byok,
+      });
+      if (!debriefAi) {
+        throw new Error("AI service failed");
+      }
+      const debriefPayload = parseDebriefFromAi(debriefAi.text);
+      if (!debriefPayload) {
+        throw new DomainError(
+          "AI_INVALID_OUTPUT",
+          "Debrief AI returned invalid or empty JSON.",
+        );
+      }
+      const debrief = await persistDebrief(
+        db,
+        userId,
+        sessionId,
+        debriefPayload,
+      );
+      return debriefResponseBody(requestId, debrief, session, {
+        idempotent: false,
+      });
+    },
+    validate: (data, source) => {
+      if (source !== "ai") return data;
+      const row = data.debrief as Record<string, unknown> | undefined;
+      const summary = sanitizeText(row?.summary, 3_000);
+      if (!summary) {
+        throw new DomainError(
+          "AI_INVALID_OUTPUT",
+          "Debrief AI returned an empty summary.",
+        );
+      }
+      return data;
+    },
+  });
+
+  if (!hybrid.ok) {
+    const failure = hybrid as { code?: string };
+    await logAiAudit({
+      req,
+      userId,
+      action: "GENERATE_DEBRIEF",
+      sessionId,
+      status: "failure",
+      metadata: {
+        reason: String(failure.code),
+        requestId,
+      },
+    });
+    throw new JobAbortError(
+      String(failure.code || "AI_PROVIDER_UNAVAILABLE"),
+      userFacingSessionDebriefError(String(failure.code || "AI_PROVIDER_UNAVAILABLE")),
+      httpStatusForDomainCode(String(failure.code || "AI_PROVIDER_UNAVAILABLE")),
+      true,
+    );
+  }
+
+  await logAiAudit({
+    req,
+    userId,
+    action: "GENERATE_DEBRIEF",
+    sessionId,
+    status: "success",
+    metadata: {
+      requestId,
+      cost: CREDIT_COST,
+      answerCount: answers.length,
+      source: hybrid.source,
+    },
+  });
+
+  const debriefId = String((hybrid.data.debrief as Record<string, unknown>)?.id ?? "");
+  if (!debriefId) {
+    throw new DomainError("DATABASE_FAILURE", userFacingSessionDebriefError("DATABASE_FAILURE"));
+  }
+
+  return {
+    debriefId,
+    source: hybrid.source,
+    response: hybrid.response,
+  };
+}
+
+async function processSessionDebriefJob(
+  req: Request,
+  userId: string,
+  planId: string | null,
+  jobId: string,
+): Promise<SessionDebriefJobRow | null> {
+  const db = createServiceClient();
+  let job = await loadSessionDebriefJob(db, jobId, userId);
+  if (!job) return null;
+
+  if (isStaleSessionDebriefJob(job)) {
+    return failSessionDebriefJob(db, job, {
+      code: "JOB_TIMEOUT",
+      message: userFacingSessionDebriefError("JOB_TIMEOUT"),
+      retryable: true,
+    });
+  }
+
+  if (job.cancel_requested_at || job.status === "cancelled") {
+    return job.status === "cancelled" ? job : cancelSessionDebriefJob(db, job);
+  }
+  if (isTerminalSessionDebriefStatus(job.status)) return job;
+
+  job = (await claimSessionDebriefJob(db, jobId, userId)) ?? job;
+  if (job.status !== "processing") return job;
+
+  try {
+    await patchSessionDebriefJob(db, job.id, { progress_stage: "generating" });
+    const requestId = crypto.randomUUID();
+    const generated = await runDebriefHybrid({
+      req,
+      db,
+      userId,
+      planId,
+      requestId,
+      sessionId: job.session_id,
+      model: job.model,
+      idempotencyKey: `job:${job.id}:${job.idempotency_key}`.slice(0, 150),
+    });
+
+    const latest = await loadSessionDebriefJob(db, job.id, userId);
+    if (latest?.cancel_requested_at || latest?.status === "cancelled") {
+      return latest.status === "cancelled" ? latest : cancelSessionDebriefJob(db, latest);
+    }
+
+    await patchSessionDebriefJob(db, job.id, { progress_stage: "saving" });
+    return completeSessionDebriefJob(db, job, {
+      debriefId: generated.debriefId,
+      source: generated.source,
+    });
+  } catch (err) {
+    const code =
+      err instanceof DomainError || err instanceof JobAbortError
+        ? err.code
+        : "AI_PROVIDER_UNAVAILABLE";
+    const message = userFacingSessionDebriefError(
+      code,
+      err instanceof Error ? err.message : undefined,
+    );
+    console.error("[generate-debrief] Job process failed", { jobId, code, error: String(err) });
+    const latest = (await loadSessionDebriefJob(db, job.id, userId)) ?? job;
+    if (latest.status === "cancelled") return latest;
+    return failSessionDebriefJob(db, latest, {
+      code,
+      message,
+      retryable:
+        err instanceof JobAbortError
+          ? err.retryable
+          : code !== "CAPABILITY_REQUIRED" && code !== "INSUFFICIENT_CREDITS",
+    });
+  }
+}
+
+function kickProcess(
+  req: Request,
+  userId: string,
+  planId: string | null,
+  jobId: string,
+): void {
+  const background = processSessionDebriefJob(req, userId, planId, jobId);
+  if (!scheduleWaitUntil(background)) {
+    void background;
+  }
+}
+
 Deno.serve(async (req: Request) => {
   const corsResponse = handleCors(req);
 
@@ -878,22 +1258,119 @@ Deno.serve(async (req: Request) => {
     return withCorsHeaders(req, rateLimitResponse(rateLimitResult));
   }
 
-  const validation = await parseAndValidateRequest(req, corsHeaders);
+  const rawBody = await parseJsonBody(req).catch(() => null);
+  if (!rawBody || typeof rawBody !== "object" || Array.isArray(rawBody)) {
+    return json(corsHeaders, 400, {
+      error: "Invalid JSON payload.",
+      code: "BAD_REQUEST",
+      request_id: requestId,
+    });
+  }
+
+  const body = rawBody as Record<string, unknown>;
+  const action = String(body.action ?? "start").trim().toLowerCase();
+  const jobIdRaw = String(body.jobId ?? body.job_id ?? "").trim();
+  const jobId = UUID_RE.test(jobIdRaw) ? jobIdRaw : "";
+  const db = createServiceClient();
+
+  if (action === "status") {
+    if (!jobId) return json(corsHeaders, 400, { error: "Missing jobId.", code: "INVALID_REQUEST", request_id: requestId });
+    let job = await loadSessionDebriefJob(db, jobId, user.id);
+    if (!job) return json(corsHeaders, 404, { error: "Job not found.", code: "JOB_NOT_FOUND", request_id: requestId });
+    if (isStaleSessionDebriefJob(job)) {
+      job = await failSessionDebriefJob(db, job, {
+        code: "JOB_TIMEOUT",
+        message: userFacingSessionDebriefError("JOB_TIMEOUT"),
+        retryable: true,
+      });
+    }
+    return json(corsHeaders, 200, toSessionDebriefJobClient(job));
+  }
+
+  if (action === "cancel") {
+    if (!jobId) return json(corsHeaders, 400, { error: "Missing jobId.", code: "INVALID_REQUEST", request_id: requestId });
+    const job = await loadSessionDebriefJob(db, jobId, user.id);
+    if (!job) return json(corsHeaders, 404, { error: "Job not found.", code: "JOB_NOT_FOUND", request_id: requestId });
+    const cancelled = await cancelSessionDebriefJob(db, job);
+    return json(corsHeaders, 200, toSessionDebriefJobClient(cancelled));
+  }
+
+  if (action === "process") {
+    if (!jobId) return json(corsHeaders, 400, { error: "Missing jobId.", code: "INVALID_REQUEST", request_id: requestId });
+    const job = await loadSessionDebriefJob(db, jobId, user.id);
+    if (!job) return json(corsHeaders, 404, { error: "Job not found.", code: "JOB_NOT_FOUND", request_id: requestId });
+    if (!isTerminalSessionDebriefStatus(job.status)) {
+      kickProcess(req, user.id, planId, job.id);
+    }
+    return jobAcceptedResponse(req, job);
+  }
+
+  if (action === "retry") {
+    if (!jobId) return json(corsHeaders, 400, { error: "Missing jobId.", code: "INVALID_REQUEST", request_id: requestId });
+    const existing = await loadSessionDebriefJob(db, jobId, user.id);
+    if (!existing) return json(corsHeaders, 404, { error: "Job not found.", code: "JOB_NOT_FOUND", request_id: requestId });
+    if (existing.status === "queued" || existing.status === "processing") {
+      kickProcess(req, user.id, planId, existing.id);
+      return jobAcceptedResponse(req, existing, true);
+    }
+    const requeued = await requeueFailedSessionDebriefJob(db, existing);
+    if (!requeued) {
+      return json(corsHeaders, 409, {
+        error: "This debrief can no longer be retried.",
+        code: "INVALID_REQUEST",
+        request_id: requestId,
+      });
+    }
+    const reserved = await reserveSessionDebriefCredits(
+      db,
+      requeued.id,
+      user.id,
+      CREDIT_COST,
+      `${requeued.idempotency_key}:retry:${requeued.attempt_count + 1}`.slice(0, 150),
+    );
+    if (!reserved.success) {
+      await failSessionDebriefJob(db, requeued, {
+        code: String(reserved.denial?.code ?? "INSUFFICIENT_CREDITS"),
+        message: userFacingSessionDebriefError(
+          String(reserved.denial?.code ?? "INSUFFICIENT_CREDITS"),
+          typeof reserved.denial?.error === "string" ? reserved.denial.error : undefined,
+        ),
+        retryable: true,
+      });
+      return creditDenialResponse(req, {
+        error: String(reserved.denial?.error ?? "Insufficient credits."),
+        code: String(reserved.denial?.code ?? "INSUFFICIENT_CREDITS"),
+        balance: Number(reserved.denial?.balance),
+      }, CREDIT_COST);
+    }
+    kickProcess(req, user.id, planId, requeued.id);
+    return jobAcceptedResponse(req, requeued);
+  }
+
+  if (action !== "start") {
+    return json(corsHeaders, 400, {
+      error: "Unsupported action.",
+      code: "INVALID_REQUEST",
+      request_id: requestId,
+    });
+  }
+
+  const validation = parseAndValidateRequest(rawBody, corsHeaders);
 
   if (!validation.ok) {
+    const failure = validation as Extract<RequestValidationResult, { ok: false }>;
     await logValidationFailure({
       req,
       userId: user.id,
       functionName: FUNCTION_NAME,
-      details: validation.details,
+      details: failure.details,
     });
 
-    return validation.response;
+    return failure.response;
   }
 
   const { session_id, model } = validation.data;
-  const byok = extractBYOK(req);
-  const idempotencyKey = getIdempotencyKey(req);
+  const idempotencyKey = getIdempotencyKey(req) ?? `debrief:${user.id}:${session_id}`;
 
   const sessionEnforcementFailure = await enforceAiSessionAccess({
     sessionId: session_id,
@@ -912,8 +1389,6 @@ Deno.serve(async (req: Request) => {
 
     return withCorsHeaders(req, sessionEnforcementFailure);
   }
-
-  const db = createServiceClient();
 
   try {
     const { data: sessionData, error: sessionError } = await db
@@ -999,7 +1474,7 @@ Deno.serve(async (req: Request) => {
     const unsafeResponse = validateUntrustedText(
       answerSummary,
       "Session answers/transcript",
-      corsHeaders
+      corsHeaders,
     );
 
     if (unsafeResponse) {
@@ -1015,183 +1490,69 @@ Deno.serve(async (req: Request) => {
       return unsafeResponse;
     }
 
-    const durationSeconds = Number(
-      (session as Record<string, unknown>).duration_seconds ??
-        (session as Record<string, unknown>).duration ??
-        0,
-    ) || 0;
-
-    const resolvedModel = await resolveModel(db, user.id, sanitizeModelInput(model));
-
-    const prompt = buildPrompt({
-      session,
-      answersSummary: answerSummary,
-      answerCount: answers.length,
-    });
-
-    const hybrid = await executeHybridOperation<DebriefHybridData>({
-      req,
-      auth: { userId: user.id, planId },
-      operation: "session_debrief",
+    let inserted = await insertSessionDebriefJob(db, {
+      userId: user.id,
+      sessionId: session_id,
+      model,
       idempotencyKey,
-      creditCost: CREDIT_COST,
-      creditAction: "debrief_generation",
-      body: {
-        session_id,
-        duration_seconds: durationSeconds,
-        questions_asked: answers.length,
-        highlights: [],
-        improvements: [],
-      },
-      runDatabase: async () => {
-        const { data: cached } = await db
-          .from("session_debriefs")
-          .select("*")
-          .eq("session_id", session_id)
-          .eq("user_id", user.id)
-          .maybeSingle();
-        if (!cached) return null;
-        return debriefResponseBody(
-          requestId,
-          cached as Record<string, unknown>,
-          session,
-          { idempotent: true },
-        );
-      },
-      runDeterministic: async () => {
-        const payload = deterministicDebrief({
-          session,
-          answers,
-          durationSeconds,
-        });
-        const debrief = await persistDebrief(db, user.id, session_id, payload);
-        return debriefResponseBody(requestId, debrief, session, {
-          idempotent: false,
-        });
-      },
-      runPython: async (ctx) => {
-        const baseline = deterministicDebrief({
-          session,
-          answers,
-          durationSeconds,
-        });
-        const py = await pythonExecuteOperation(
-          {
-            operation: "session_debrief",
-            operation_id: ctx.operationId,
-            correlation_id: ctx.correlationId,
-            user_id: user.id,
-            payload: {
-              duration_seconds: durationSeconds,
-              questions_asked: answers.length,
-              highlights: baseline.strengths,
-              improvements: baseline.improvements,
-            },
-          },
-          { requestId: ctx.correlationId },
-        );
-        if (!py.ok) return null;
-        const envelope = py.json as { data?: unknown } | unknown;
-        const raw =
-          envelope &&
-            typeof envelope === "object" &&
-            "data" in (envelope as Record<string, unknown>)
-            ? (envelope as { data: unknown }).data
-            : envelope;
-        const payload = debriefFromPython(raw, baseline);
-        const debrief = await persistDebrief(db, user.id, session_id, payload);
-        return debriefResponseBody(requestId, debrief, session, {
-          idempotent: false,
-        });
-      },
-      runAi: async () => {
-        const debriefAi = await generateDebriefText({
-          prompt,
-          userId: user.id,
-          model: resolvedModel,
-          byok,
-        });
-        if (!debriefAi) {
-          throw new Error("AI service failed");
-        }
-        const debriefPayload = parseDebriefFromAi(debriefAi.text);
-        if (!debriefPayload) {
-          throw new DomainError(
-            "AI_INVALID_OUTPUT",
-            "Debrief AI returned invalid or empty JSON.",
-          );
-        }
-        const debrief = await persistDebrief(
-          db,
-          user.id,
-          session_id,
-          debriefPayload,
-        );
-        return debriefResponseBody(requestId, debrief, session, {
-          idempotent: false,
-        });
-      },
-      validate: (data, source) => {
-        if (source !== "ai") return data;
-        const row = data.debrief as Record<string, unknown> | undefined;
-        const summary = sanitizeText(row?.summary, 3_000);
-        if (!summary) {
-          throw new DomainError(
-            "AI_INVALID_OUTPUT",
-            "Debrief AI returned an empty summary.",
-          );
-        }
-        return data;
-      },
     });
 
-    if (!hybrid.ok) {
-      await logAiAudit({
-        req,
-        userId: user.id,
-        action: "GENERATE_DEBRIEF",
-        sessionId: session_id,
-        status: "failure",
-        metadata: {
-          reason: String(hybrid.code),
-          requestId,
-        },
-      });
-      if (
-        hybrid.code === "INSUFFICIENT_CREDITS" ||
-        hybrid.code === "CAPABILITY_REQUIRED"
-      ) {
-        return hybrid.response;
-      }
-      const status = httpStatusForDomainCode(
-        String(hybrid.code || "AI_PROVIDER_UNAVAILABLE"),
-      );
-      const invalidAi = hybrid.code === "AI_INVALID_OUTPUT";
-      return json(corsHeaders, status, {
-        error: invalidAi
-          ? "Debrief AI output was invalid. Credits refunded."
-          : "Debrief generation failed. Credits refunded.",
-        code: hybrid.code,
+    if (!inserted.row) {
+      return json(corsHeaders, 503, {
+        error: "Could not queue debrief generation. Please try again.",
+        code: "DATABASE_FAILURE",
         request_id: requestId,
       });
     }
 
-    await logAiAudit({
-      req,
-      userId: user.id,
-      action: "GENERATE_DEBRIEF",
-      sessionId: session_id,
-      status: "success",
-      metadata: {
-        requestId,
-        cost: CREDIT_COST,
-        answerCount: answers.length,
-        source: hybrid.source,
-      },
-    });
+    let job = inserted.row;
+    if (inserted.replay && job.status === "completed" && job.debrief_id) {
+      return json(corsHeaders, 200, toSessionDebriefJobClient(job, { cached: true }));
+    }
 
-    // Prefer hybrid envelope; client unwraps `data` to { success, debrief, session }.
-    return hybrid.response;
+    if (inserted.replay && (job.status === "failed" || job.status === "cancelled")) {
+      const requeued = await requeueFailedSessionDebriefJob(db, job);
+      if (!requeued) {
+        return json(corsHeaders, 503, {
+          error: job.error_message || userFacingSessionDebriefError(job.error_code),
+          code: job.error_code || "PROVIDER_UNAVAILABLE",
+          request_id: requestId,
+        });
+      }
+      job = requeued;
+      inserted = { ...inserted, replay: false };
+    }
+
+    if (!inserted.replay || job.credits_reserved <= 0) {
+      const reserved = await reserveSessionDebriefCredits(
+        db,
+        job.id,
+        user.id,
+        CREDIT_COST,
+        idempotencyKey,
+      );
+      if (!reserved.success) {
+        await failSessionDebriefJob(db, job, {
+          code: String(reserved.denial?.code ?? "INSUFFICIENT_CREDITS"),
+          message: userFacingSessionDebriefError(
+            String(reserved.denial?.code ?? "INSUFFICIENT_CREDITS"),
+            typeof reserved.denial?.error === "string" ? reserved.denial.error : undefined,
+          ),
+          retryable: true,
+        });
+        return creditDenialResponse(req, {
+          error: String(reserved.denial?.error ?? "Insufficient credits."),
+          code: String(reserved.denial?.code ?? "INSUFFICIENT_CREDITS"),
+          balance: Number(reserved.denial?.balance),
+        }, CREDIT_COST);
+      }
+    }
+
+    if (!isTerminalSessionDebriefStatus(job.status)) {
+      kickProcess(req, user.id, planId, job.id);
+    }
+
+    return jobAcceptedResponse(req, job, inserted.replay);
   } catch (error) {
     const message =
       error instanceof Error
@@ -1212,7 +1573,7 @@ Deno.serve(async (req: Request) => {
       },
     });
 
-    if (error instanceof DomainError) {
+    if (error instanceof DomainError || error instanceof JobAbortError) {
       return json(corsHeaders, error.status, {
         error: error.message,
         code: error.code,

@@ -231,7 +231,7 @@ verify_jwt = true
 verify_jwt = false
 
 [functions.assemble-assessment]
-verify_jwt = false
+verify_jwt = true
 
 [functions.score-coding-submission]
 verify_jwt = true

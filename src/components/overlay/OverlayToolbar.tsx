@@ -145,6 +145,7 @@ export function OverlayToolbar({
   const networkColor = useOverlayStore((s) => s.network_color);
 
   const activeTab = useOverlayStore((s) => s.active_tab);
+  const chatAttention = useOverlayStore((s) => s.chat_attention);
   const pinnedHints = useOverlayStore((s) => s.pinned_hints);
   const resumePoints = useOverlayStore((s) => s.resume_talking_points);
 
@@ -315,6 +316,30 @@ export function OverlayToolbar({
           }
         />
 
+        {(chatAttention || activeTab === "chat") && (
+          <PrimaryButton
+            icon={MessageSquare}
+            label="Chat"
+            isActive={activeTab === "chat"}
+            onClick={() => {
+              useOverlayStore.getState().setMinimalMode(false);
+              useOverlayStore.getState().setActiveTab("chat");
+            }}
+            className={
+              chatAttention
+                ? "bg-amber-500/20 border-amber-400/40 text-amber-200 animate-pulse ring-2 ring-amber-400/40"
+                : activeTab === "chat"
+                  ? "bg-indigo-600/25 border-indigo-500/30 text-indigo-200"
+                  : "bg-white/6 border-white/10 text-white/60 hover:bg-white/10 hover:text-white/90"
+            }
+            title={
+              chatAttention
+                ? "Type or edit the question in Chat"
+                : "Open session chat"
+            }
+          />
+        )}
+
         {!compactMobile && capturePrimary && (
           <>
             <PrimaryButton
@@ -426,6 +451,11 @@ export function OverlayToolbar({
                   useOverlayStore.getState().setActiveTab("chat");
                   setShowMoreMenu(false);
                 }}
+                className={
+                  chatAttention
+                    ? "text-amber-200 bg-amber-500/10 animate-pulse"
+                    : undefined
+                }
               />
               <MenuRow
                 icon={ScrollText}
@@ -1053,6 +1083,7 @@ function MenuRow({
   activeColor = "text-brand-300",
   danger,
   onClick,
+  className,
 }: {
   icon: LucideIcon;
   label: string;
@@ -1060,6 +1091,7 @@ function MenuRow({
   activeColor?: string;
   danger?: boolean;
   onClick?: () => void;
+  className?: string;
 }) {
   return (
     <button
@@ -1073,7 +1105,8 @@ function MenuRow({
           ? "text-red-400/60 hover:text-red-400 hover:bg-red-500/10"
           : active
             ? cn(activeColor, "bg-white/[0.04] font-semibold hover:bg-white/[0.07]")
-            : "text-white/45 hover:text-white/80 hover:bg-white/[0.04]"
+            : "text-white/45 hover:text-white/80 hover:bg-white/[0.04]",
+        className,
       )}
     >
       <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />

@@ -26,6 +26,8 @@ export interface LiveQuestionGateInput {
   confidence?: number | null;
   /** True when a dedicated interviewer (tab/system) STT channel is active. */
   hasInterviewerChannel: boolean;
+  /** Override default MIN_QUESTION_CONFIDENCE (Settings / audio store). */
+  minConfidence?: number;
 }
 
 /**
@@ -43,12 +45,17 @@ export function canBecomeInterviewerQuestion(
   const text = (input.text ?? "").trim();
   if (!isInterviewerQuestionText(text)) return false;
 
+  const minConfidence =
+    typeof input.minConfidence === "number" && Number.isFinite(input.minConfidence)
+      ? Math.max(0.15, Math.min(0.9, input.minConfidence))
+      : MIN_QUESTION_CONFIDENCE;
+
   const confidence = input.confidence;
   if (
     typeof confidence === "number" &&
     Number.isFinite(confidence) &&
     confidence > 0 &&
-    confidence < MIN_QUESTION_CONFIDENCE
+    confidence < minConfidence
   ) {
     return false;
   }

@@ -1,4 +1,3 @@
-import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
@@ -30,6 +29,13 @@ import { toast } from "sonner";
 import { formatSessionScore } from "@/lib/analytics/scoreStatus";
 import { HybridSourceLine } from "@/components/hybrid/HybridSourceLine";
 import { getAiUserFacingError } from "@/lib/network/aiErrorUx";
+import {
+  cancelSessionDebriefJob,
+  generateSessionDebrief,
+  isSessionDebriefInFlight,
+  userFacingSessionDebriefError,
+  type SessionDebriefJob,
+} from "@/lib/debrief/debriefJob";
 import { DebriefExtras } from "@/components/session/DebriefExtras";
 import { DebriefLoadingSteps } from "@/components/debrief/DebriefLoadingSteps";
 import {
@@ -60,11 +66,13 @@ export default function DebriefDetail() {
   const [scorecard, setScorecard] = useState<any>(null);
   const [transcriptSegments, setTranscriptSegments] = useState<any[]>([]);
   const [debriefSource, setDebriefSource] = useState<string | null>(null);
+  const [debriefJob, setDebriefJob] = useState<SessionDebriefJob | null>(null);
   const generateInFlightRef = useRef(false);
+  const cancelGenerateRef = useRef(false);
 
   // Persist-first: load DB only. Missing debriefs wait for an explicit Generate click.
   const fetchDebrief = useCallback(async (options?: { silent?: boolean }) => {
-    if (!id || !user) return;
+    if (!id || !user?.id) return;
     if (!options?.silent) {
       setLoading(true);
       setFetchError(null);
@@ -144,26 +152,28 @@ export default function DebriefDetail() {
 
   // ── Generate debrief from edge function ──────────────────────
   const generateDebrief = useCallback(async (sessionId: string) => {
-    if (generateInFlightRef.current) return;
+    if (generateInFlightRef.current || !user?.id) return;
     generateInFlightRef.current = true;
+    cancelGenerateRef.current = false;
     setFetchError(null);
     setGenning(true);
     setLoadStep(2);
     try {
-      const data = await fetchEdgeJson<{
-        debrief?: unknown;
-        session?: unknown;
-        source?: string;
-        meta?: { source?: string };
-      }>(
-        "generate-debrief",
-        { session_id: sessionId }
-      );
+      const job = await generateSessionDebrief({
+        sessionId,
+        userId: user.id,
+        shouldAbort: () => cancelGenerateRef.current,
+        onJob: (nextJob) => {
+          setDebriefJob(nextJob);
+          setDebriefSource(nextJob.source ?? null);
+          setLoadStep(nextJob.status === "completed" ? 3 : 2);
+        },
+      });
       setLoadStep(3);
-      setDebriefSource(data?.source ?? data?.meta?.source ?? null);
+      setDebriefSource(job.source ?? null);
       await fetchDebrief({ silent: true });
     } catch (err: unknown) {
-      const msg = getAiUserFacingError(err);
+      const msg = userFacingSessionDebriefError(err);
       console.error("[DebriefDetail] generateDebrief error:", err);
       toast.error(msg);
       setFetchError(msg);
@@ -171,11 +181,31 @@ export default function DebriefDetail() {
       generateInFlightRef.current = false;
       setGenning(false);
     }
-  }, [fetchDebrief]);
+  }, [fetchDebrief, user?.id]);
+
+  const cancelGenerateDebrief = useCallback(async () => {
+    cancelGenerateRef.current = true;
+    const jobId = debriefJob?.jobId;
+    if (!jobId || !isSessionDebriefInFlight(debriefJob.status)) {
+      setGenning(false);
+      generateInFlightRef.current = false;
+      return;
+    }
+    try {
+      const cancelled = await cancelSessionDebriefJob(jobId);
+      setDebriefJob(cancelled);
+      toast.info("Debrief generation cancelled.");
+    } catch (err: unknown) {
+      toast.error(getAiUserFacingError(err));
+    } finally {
+      setGenning(false);
+      generateInFlightRef.current = false;
+    }
+  }, [debriefJob]);
 
   // FIX 3: include user?.id in dep array so it re-runs if user loads after id
   useEffect(() => {
-    fetchDebrief();
+    void fetchDebrief();
   }, [fetchDebrief]);
 
   // ── Derived values ────────────────────────────────────────────
@@ -253,8 +283,20 @@ export default function DebriefDetail() {
           <p className="text-xs text-muted-foreground">
             AI is analysing your session and building a personalised action plan
           </p>
+          {debriefJob?.progressStage && (
+            <p className="text-[11px] text-muted-foreground">
+              Status: {debriefJob.progressStage}
+            </p>
+          )}
         </div>
         <DebriefLoadingSteps activeIndex={loadStep} />
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => void cancelGenerateDebrief()}
+        >
+          Cancel generation
+        </Button>
       </div>
     );
   }

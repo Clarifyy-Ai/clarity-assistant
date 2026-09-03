@@ -510,7 +510,8 @@ export const sessionsDB = {
     const { count, error } = await supabase
       .from("sessions")
       .select("id", { count: "exact", head: true })
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .is("deleted_at", null);
 
     if (error) {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
@@ -529,6 +530,7 @@ export const sessionsDB = {
       .from("sessions")
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId)
+      .is("deleted_at", null)
       .gte("created_at", today.toISOString());
 
     if (error) {
@@ -553,6 +555,7 @@ export const sessionsDB = {
       .from("sessions")
       .select("id, type, status, overall_score, title, created_at")
       .eq("user_id", userId)
+      .is("deleted_at", null)
       .order("created_at", { ascending: false })
       .limit(limit);
 

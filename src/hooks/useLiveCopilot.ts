@@ -64,7 +64,6 @@ import {
 import {
   startSession as startSessionApi,
   finalizeSession as finalizeSessionApi,
-  endSession as endSessionApi,
   restoreOwnedSession,
 } from "@/lib/api/sessions";
 import { ApiClientError } from "@/lib/api/apiClient";
@@ -1041,7 +1040,8 @@ export function useLiveCopilot({
         console.warn("[useLiveCopilot] Failed to start live session:", normalized.message);
       }
       if (cancelSessionOnFailure && !getPrivateMode()) {
-        void endSessionApi({
+        // Prefer finalize-session — end-session is retired for lifecycle writes.
+        void finalizeSessionApi({
           session_id: cancelSessionOnFailure,
           terminal_reason: "CANCELLED",
         }).catch((cancelErr) => {

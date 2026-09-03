@@ -659,6 +659,7 @@ export default function MockSession() {
 
       void speakQuestionText(qText, {
         questionId: qId,
+        voice: (sessionConfigRef.current as MockConfig | null)?.tts_voice ?? null,
         isCurrent: (id) =>
           ttsGenerationRef.current === generation &&
           speakingQuestionIdRef.current === id &&

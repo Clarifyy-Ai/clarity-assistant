@@ -39,10 +39,10 @@ export interface Scorecard {
   session_id: string;
   user_id: string;
   overall_score: number | null;
-  confidence_score: number;
-  clarity_score: number;
-  structure_score: number;
-  relevance_score: number;
+  confidence_score: number | null;
+  clarity_score: number | null;
+  structure_score: number | null;
+  relevance_score: number | null;
   question_scores: QuestionScore[];
   filler_count: number;
   filler_rate: number;
@@ -160,10 +160,10 @@ export function mapRowToScorecard(row: ScorecardRow): Scorecard {
     session_id: row.session_id ?? "",
     user_id: row.user_id,
     overall_score: row.overall_score ?? null,
-    confidence_score: details.confidence_score ?? row.confidence ?? 0,
-    clarity_score: details.clarity_score ?? row.communication ?? 0,
-    structure_score: details.structure_score ?? row.problem_solving ?? 0,
-    relevance_score: details.relevance_score ?? row.technical ?? 0,
+    confidence_score: finiteScore(details.confidence_score) ?? finiteScore(row.confidence),
+    clarity_score: finiteScore(details.clarity_score) ?? finiteScore(row.communication),
+    structure_score: finiteScore(details.structure_score) ?? finiteScore(row.problem_solving),
+    relevance_score: finiteScore(details.relevance_score) ?? finiteScore(row.technical),
     question_scores: Array.isArray(details.question_scores) ? details.question_scores : [],
     filler_count: details.filler_count ?? 0,
     filler_rate: details.filler_rate ?? 0,

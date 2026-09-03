@@ -132,9 +132,10 @@ export default function Scorecard() {
   const looksEmpty =
     scorecard.overall_score == null &&
     (scorecard.question_scores?.length ?? 0) === 0 &&
-    (scorecard.clarity_score ?? 0) === 0 &&
-    (scorecard.structure_score ?? 0) === 0 &&
-    (scorecard.relevance_score ?? 0) === 0;
+    scorecard.clarity_score == null &&
+    scorecard.structure_score == null &&
+    scorecard.relevance_score == null &&
+    scorecard.confidence_score == null;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -146,10 +147,10 @@ export default function Scorecard() {
             className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:text-amber-100"
           >
             <p className="leading-relaxed whitespace-normal">
-              This scorecard shows all zeros because no answers were scored for the session.
-              Incomplete sessions are saved without a real score — this is not a performance
-              result. Start a new mock and answer at least one question to generate a real
-              scorecard. Retry is only available when AI scoring fails after answers exist.
+              This scorecard was not fully scored — dimension scores show as “—” when missing.
+              Incomplete sessions are saved without inventing zeros. Start a new mock and answer
+              at least one question to generate a real scorecard. Retry is only available when AI
+              scoring fails after answers exist.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Link
@@ -217,7 +218,9 @@ export default function Scorecard() {
               { label: "Relevance",  value: scorecard.relevance_score },
             ].map((s) => (
               <div key={s.label} className="bg-background/40 rounded-xl p-3">
-                <div className="text-xl font-bold text-foreground">{s.value}</div>
+                <div className="text-xl font-bold text-foreground">
+                  {s.value == null ? "—" : s.value}
+                </div>
                 <div className="text-xs text-muted-foreground">{s.label}</div>
                 <MiniScoreBar value={s.value} />
               </div>
@@ -462,7 +465,14 @@ function MetricCard({
   );
 }
 
-function MiniScoreBar({ value }: { value: number }) {
+function MiniScoreBar({ value }: { value: number | null }) {
+  if (value == null) {
+    return (
+      <div className="mt-2 h-1 bg-secondary rounded-full overflow-hidden">
+        <div className="h-full w-0 rounded-full bg-muted-foreground/30" />
+      </div>
+    );
+  }
   return (
     <div className="mt-2 h-1 bg-secondary rounded-full overflow-hidden">
       <div

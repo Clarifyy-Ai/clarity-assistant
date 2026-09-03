@@ -144,7 +144,7 @@ describe("Live Practice Coach — useLiveCopilot client contracts", () => {
     const source = readSrc("src/hooks/useLiveCopilot.ts");
     expect(source).toContain("cancelSessionOnFailure");
     expect(source).toContain('terminal_reason: "CANCELLED"');
-    expect(source).toContain("endSessionApi");
+    expect(source).toContain("finalizeSessionApi");
     expect(source).toContain("restoreOwnedSession");
   });
 });
