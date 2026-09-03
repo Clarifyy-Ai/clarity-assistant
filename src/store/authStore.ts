@@ -61,6 +61,7 @@ import {
   AUTH_ACCOUNT_FRIENDLY_ERROR,
   AUTH_SESSION_TIMEOUT_MS_ELECTRON,
   AUTH_SESSION_TIMEOUT_MS_WEB,
+  PROFILE_COLD_RETRY_DELAY_MS,
   PROFILE_FETCH_TIMEOUT_MS,
   ROLE_CHECK_TIMEOUT_MS,
   asLoginCredentials,
@@ -75,7 +76,7 @@ import {
   withTimeout,
   type AccountPhase,
 } from "@/lib/auth/accountBootstrap";
-
+import { ensureSupabaseWarmed } from "@/lib/supabase/ensureWarmed";
 import type {
   SupabaseSession,
   SupabaseUser,
@@ -122,6 +123,8 @@ async function resolveAdminRole(
       operation: "role.load",
       attempt: 1,
     });
+
+    await ensureSupabaseWarmed();
 
     const attempt = () =>
       withTimeout(
@@ -802,7 +805,10 @@ export const useAuthStore = create<AuthStore>()(
                 data: { session: initialSession },
                 error,
               } = await withTimeout(
-                supabase.auth.getSession(),
+                (async () => {
+                  await ensureSupabaseWarmed();
+                  return supabase.auth.getSession();
+                })(),
                 AUTH_SESSION_TIMEOUT_MS,
                 "Session check",
               );
@@ -1248,6 +1254,8 @@ export const useAuthStore = create<AuthStore>()(
             try {
               let profile: Awaited<ReturnType<typeof profilesDB.getByIdMaybe>>;
 
+              await ensureSupabaseWarmed();
+
               try {
                 profile = await fetchProfile();
               } catch (firstErr) {
@@ -1279,7 +1287,34 @@ export const useAuthStore = create<AuthStore>()(
                   "[authStore] Profile load failed; retrying once:",
                   firstErr,
                 );
-                profile = await fetchProfile();
+                try {
+                  profile = await fetchProfile();
+                } catch (secondErr) {
+                  // Cold start: first Auth RTT can exceed one budget (seen ~12s).
+                  // One delayed third attempt after warm before failing the session.
+                  if (
+                    !abort.signal.aborted &&
+                    isTimeoutError(secondErr) &&
+                    !hadLoadedProfile
+                  ) {
+                    logger.warn(LogEvents.AUTH_PROFILE_LOAD_TIMED_OUT, {
+                      operation: "profile.load",
+                      attempt: 2,
+                      durationMs: Date.now() - profileStartedAt,
+                      outcome: "timed_out",
+                      retryable: true,
+                      recoveryAction: "cold_retry",
+                    });
+                    await new Promise((r) =>
+                      setTimeout(r, PROFILE_COLD_RETRY_DELAY_MS),
+                    );
+                    if (abort.signal.aborted) throw secondErr;
+                    await ensureSupabaseWarmed();
+                    profile = await fetchProfile();
+                  } else {
+                    throw secondErr;
+                  }
+                }
               }
 
               if (!profile) {

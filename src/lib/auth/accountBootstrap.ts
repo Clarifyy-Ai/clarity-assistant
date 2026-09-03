@@ -18,14 +18,17 @@ export const AUTH_NETWORK_FAILURE_MESSAGE =
 export const AUTH_SERVER_FAILURE_MESSAGE =
   "Sign-in is temporarily unavailable. Please try again in a moment.";
 
-/** Per-attempt profile read budget (includes India ↔ us-east latency). */
-export const PROFILE_FETCH_TIMEOUT_MS = 10_000;
+/** Per-attempt profile read budget (India ↔ us-east cold starts can exceed 10s). */
+export const PROFILE_FETCH_TIMEOUT_MS = 15_000;
 
 /** Per-attempt admin role budget — must NOT gate Free-user routing. */
-export const ROLE_CHECK_TIMEOUT_MS = 6_000;
+export const ROLE_CHECK_TIMEOUT_MS = 12_000;
 
-export const AUTH_SESSION_TIMEOUT_MS_WEB = 8_000;
-export const AUTH_SESSION_TIMEOUT_MS_ELECTRON = 10_000;
+export const AUTH_SESSION_TIMEOUT_MS_WEB = 15_000;
+export const AUTH_SESSION_TIMEOUT_MS_ELECTRON = 18_000;
+
+/** Delay before a cold-start profile retry after consecutive timeouts. */
+export const PROFILE_COLD_RETRY_DELAY_MS = 1_500;
 
 export const MAX_ACCOUNT_RECOVERY_ATTEMPTS = 3;
 

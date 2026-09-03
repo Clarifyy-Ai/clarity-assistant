@@ -41,6 +41,7 @@ describe("classifyAccountLoadFailure / userFacingAccountError", () => {
 
   it("detects timeout errors", () => {
     expect(isTimeoutError(new Error("Profile load timed out after 6s"))).toBe(true);
+    expect(isTimeoutError(new Error("Profile load timed out after 15s"))).toBe(true);
     expect(isTimeoutError(new Error("network down"))).toBe(false);
   });
 });

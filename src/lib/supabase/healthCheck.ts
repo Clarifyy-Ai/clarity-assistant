@@ -4,6 +4,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "@/lib/env";
+import { ensureSupabaseWarmed } from "@/lib/supabase/ensureWarmed";
 
 export type SupabaseHealth = {
   ok: boolean;
@@ -40,6 +41,8 @@ export async function checkSupabaseHealth(): Promise<SupabaseHealth> {
 
   const start = performance.now();
   try {
+    // Join the shared warm so auth bootstrap and health don't open two cold RTTs.
+    await ensureSupabaseWarmed();
     const { error } = await supabase.auth.getSession();
     const latencyMs = Math.round(performance.now() - start);
     if (error) {
