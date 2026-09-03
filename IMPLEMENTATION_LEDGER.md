@@ -133,7 +133,10 @@ Last updated: 2026-09-03 — durable debrief + overlay UAT automation (certifica
 | P0-20260815-DEL | P0 | Account deletion map | Expanded wipe + retain/anonymize billing; session revoke | IMPLEMENTED_NOT_DEPLOYED wait Edge deployed | Disposable-user E2E |
 | P0-20260815-RPC | P0 | mark_gap_analyses_* PUBLIC execute | Revoked from anon/authenticated | IMPLEMENTED_AND_RUNTIME_VERIFIED (privilege query) | Trigger still works on resume/JD update |
 | SEP03-AUTH-SOFT | P0 | Auth bootstrap soft-fail on cold timeout | SUPERSEDED by SEP03-AUTH-ISADMIN — provisional profile removed | — | — | SUPERSEDED | — |
-| SEP03-AUTH-ISADMIN | P0 | Profile boot selected dropped profiles.is_admin | Removed is_admin from PROFILE_BOOT_COLUMNS; admin via user_roles/is_admin() RPC; schema errors non-retryable | `database.ts`, `authStore.ts`, `sessionErrors.ts`, `accountBootstrap.ts` | profileBootColumns + authStoreBootstrap | IMPLEMENTED_NOT_DEPLOYED | Frontend host deploy + Documents hard refresh |
+| SEP03-AUTH-ISADMIN | P0 | Profile boot selected dropped profiles.is_admin | Removed is_admin from PROFILE_BOOT_COLUMNS; admin via user_roles/is_admin() RPC; schema errors non-retryable | `database.ts`, `authStore.ts`, `sessionErrors.ts`, `accountBootstrap.ts` | profileBootColumns + authStoreBootstrap | Deployed FE `BNmyCn_d` | Login still blocked by hung getSession |
+| SEP03-AUTH-HANG | P0 | Health/getSession hung ~35s; profile 15s timeout; login failed | Timed supabase fetch; health ping not getSession; abort profile on timeout; hydrate from cache first; login retries profile | `timedFetch.ts`, `client.ts`, `ensureWarmed.ts`, `healthCheck.ts`, `authStore.ts` | timedFetch + ensureWarmed + authStoreBootstrap | IMPLEMENTED_NOT_DEPLOYED | Redeploy trycareerpilot.com |
+
+
 
 
 

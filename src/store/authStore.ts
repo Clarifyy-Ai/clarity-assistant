@@ -806,14 +806,22 @@ export const useAuthStore = create<AuthStore>()(
                 return;
               }
 
+              const cached = readCachedAuthSession();
+              if (cached?.session?.user) {
+                await hydrateFromSession(
+                  cached.session as {
+                    access_token?: string;
+                    user?: SupabaseUser;
+                  },
+                  "INITIAL_SESSION",
+                );
+              }
+
               const {
                 data: { session: initialSession },
                 error,
               } = await withTimeout(
-                (async () => {
-                  await ensureSupabaseWarmed();
-                  return supabase.auth.getSession();
-                })(),
+                supabase.auth.getSession(),
                 AUTH_SESSION_TIMEOUT_MS,
                 "Session check",
               );
@@ -841,17 +849,30 @@ export const useAuthStore = create<AuthStore>()(
                 session = refreshed.data.session;
               }
 
-              await hydrateFromSession(
-                session as {
-                  access_token?: string;
-                  user?: SupabaseUser;
-                } | null,
-                "INITIAL_SESSION",
-              );
+              if (
+                session?.user &&
+                session.access_token !== cached?.session?.access_token
+              ) {
+                await hydrateFromSession(
+                  session as {
+                    access_token?: string;
+                    user?: SupabaseUser;
+                  },
+                  "INITIAL_SESSION",
+                );
+              } else if (!cached?.session?.user) {
+                await hydrateFromSession(
+                  session as {
+                    access_token?: string;
+                    user?: SupabaseUser;
+                  } | null,
+                  "INITIAL_SESSION",
+                );
+              }
 
               logger.info(LogEvents.BOOTSTRAP_COMPLETED, {
                 operation: "initialize",
-                authState: session ? "authenticated" : "anonymous",
+                authState: session || cached?.session ? "authenticated" : "anonymous",
                 outcome: "succeeded",
               });
             } catch (error) {
@@ -876,25 +897,23 @@ export const useAuthStore = create<AuthStore>()(
                   timedOut: isTimeoutError(error),
                 })
               ) {
-                // onAuthStateChange INITIAL_SESSION often hydrates in parallel.
-                // A timed-out getSession must not wipe that in-flight load.
-                logger.warn(LogEvents.BOOTSTRAP_FAILED, {
+                logger.warn(LogEvents.BOOTSTRAP_SESSION_SLOW, {
                   outcome: "timed_out",
                   operation: "session.check",
                   recoveryAction: "keep_in_flight_hydrate",
                   retryable: true,
                 });
               } else {
-                const cached = readCachedAuthSession();
-                if (cached?.session?.user && isTimeoutError(error)) {
-                  logger.warn(LogEvents.BOOTSTRAP_FAILED, {
+                const cachedOnError = readCachedAuthSession();
+                if (cachedOnError?.session?.user && isTimeoutError(error)) {
+                  logger.warn(LogEvents.BOOTSTRAP_SESSION_SLOW, {
                     outcome: "timed_out",
                     operation: "session.check",
                     recoveryAction: "cached_session",
                     retryable: true,
                   });
                   await hydrateFromSession(
-                    cached.session as {
+                    cachedOnError.session as {
                       access_token?: string;
                       user?: SupabaseUser;
                     },
@@ -1003,9 +1022,25 @@ export const useAuthStore = create<AuthStore>()(
                 // Ignore storage failures.
               }
 
-              throw new Error(
-                banMessage ?? get().error ?? PROFILE_ERROR_MESSAGE
-              );
+              if (banMessage) {
+                throw new Error(banMessage);
+              }
+
+              // Password grant already succeeded. Retry profile once before
+              // failing the login form (slow Auth init must not look like a bad password).
+              if (get().user) {
+                const retried = await get().loadProfile({ force: true });
+                if (retried) {
+                  dset((state) => {
+                    state.status = "authenticated";
+                    state.recoveryAttempts = 0;
+                    state.error = null;
+                  });
+                  return;
+                }
+              }
+
+              throw new Error(get().error ?? PROFILE_ERROR_MESSAGE);
             }
 
             dset((state) => {
@@ -1281,13 +1316,22 @@ export const useAuthStore = create<AuthStore>()(
               correlationId,
             });
 
-            const fetchProfile = () =>
-              withTimeout(
-                profilesDB.getByIdMaybe(userId),
+            const fetchProfile = () => {
+              const attemptAbort = new AbortController();
+              const onParentAbort = () => attemptAbort.abort();
+              abort.signal.addEventListener("abort", onParentAbort);
+              return withTimeout(
+                profilesDB.getByIdMaybe(userId, { signal: attemptAbort.signal }),
                 PROFILE_FETCH_TIMEOUT_MS,
                 "Profile load",
-                { signal: abort.signal },
-              );
+                {
+                  signal: attemptAbort.signal,
+                  onTimeout: () => attemptAbort.abort(),
+                },
+              ).finally(() => {
+                abort.signal.removeEventListener("abort", onParentAbort);
+              });
+            };
 
             try {
               let profile: Awaited<ReturnType<typeof profilesDB.getByIdMaybe>>;

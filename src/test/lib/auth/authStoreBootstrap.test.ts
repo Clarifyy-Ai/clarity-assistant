@@ -296,4 +296,23 @@ describe("authStore account bootstrap", () => {
     expect(useAuthStore.getState().status).toBe("error");
     expect(useAuthStore.getState().error).toMatch(/Unable to load your account/i);
   });
+
+  it("retries profile once after password grant if the first load times out", async () => {
+    mockSignIn.mockResolvedValueOnce({
+      data: { session: mockSession, user: mockUser },
+      error: null,
+    });
+    mockGetByIdMaybe
+      .mockRejectedValueOnce(new Error("Profile load timed out after 15s"))
+      .mockRejectedValueOnce(new Error("Profile load timed out after 15s"))
+      .mockResolvedValueOnce(mockProfile);
+
+    await useAuthStore
+      .getState()
+      .signInWithEmail("free@example.com", "password123");
+
+    expect(useAuthStore.getState().status).toBe("authenticated");
+    expect(useAuthStore.getState().isProfileLoaded).toBe(true);
+    expect(mockGetByIdMaybe.mock.calls.length).toBeGreaterThanOrEqual(3);
+  });
 });

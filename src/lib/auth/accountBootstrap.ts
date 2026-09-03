@@ -313,7 +313,7 @@ export function withTimeout<T>(
   promise: Promise<T>,
   ms: number,
   label: string,
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; onTimeout?: () => void },
 ): Promise<T> {
   const signal = options?.signal;
   if (signal?.aborted) {
@@ -335,6 +335,7 @@ export function withTimeout<T>(
     signal?.addEventListener("abort", onAbort, { once: true });
     timer = setTimeout(() => {
       cleanup();
+      options?.onTimeout?.();
       reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`));
     }, ms);
 

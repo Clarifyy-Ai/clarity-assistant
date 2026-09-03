@@ -238,6 +238,7 @@ export const LogEvents = {
   BOOTSTRAP_STARTED:                    "app.bootstrap.started",
   BOOTSTRAP_COMPLETED:                  "app.bootstrap.completed",
   BOOTSTRAP_FAILED:                     "app.bootstrap.failed",
+  BOOTSTRAP_SESSION_SLOW:               "auth.session.check.slow",
   BOOTSTRAP_DUPLICATE_PREVENTED:        "auth.bootstrap.duplicate_prevented",
 
   AUTH_CLIENT_INITIALIZED:              "auth.client.initialized",

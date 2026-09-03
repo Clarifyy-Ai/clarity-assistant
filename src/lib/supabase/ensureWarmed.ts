@@ -1,45 +1,47 @@
 // Shared first-connect warm for Supabase Auth.
-// Profile/role/bootstrap all race on cold start; one in-flight getSession
-// prevents concurrent 4–6s timeouts while the first RTT is still opening.
+// Profile/role/bootstrap must not share a hung getSession() with health.
+// A lightweight /auth/v1/health ping opens TCP without occupying GoTrue init.
 
-import { supabase } from "@/integrations/supabase/client";
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "@/lib/env";
 
-let warmPromise: Promise<void> | null = null;
+let warmPromise: Promise<boolean> | null = null;
 let warmedAt = 0;
 
 const WARM_TTL_MS = 30_000;
-/** Cap warm so a hung getSession cannot starve profile/role budgets. */
-const WARM_BUDGET_MS = 5_000;
+const WARM_BUDGET_MS = 4_000;
+
+export async function pingSupabaseAuthHealth(): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), WARM_BUDGET_MS);
+  try {
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/health`, {
+      method: "GET",
+      headers: {
+        apikey: SUPABASE_PUBLISHABLE_KEY,
+        Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+      },
+      signal: controller.signal,
+    });
+    return res.ok || res.status === 401;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /**
- * Ensures at least one Auth round-trip has completed recently.
- * Safe to call from health check and auth bootstrap in parallel.
+ * Ensures at least one Auth HTTP round-trip has completed recently.
+ * Does NOT call getSession() — that can serialize behind a 30s+ token refresh.
  */
-export function ensureSupabaseWarmed(): Promise<void> {
+export function ensureSupabaseWarmed(): Promise<boolean> {
   const now = Date.now();
   if (warmPromise && now - warmedAt < WARM_TTL_MS) {
     return warmPromise;
   }
 
   warmedAt = now;
-  warmPromise = (async () => {
-    try {
-      await Promise.race([
-        supabase.auth.getSession(),
-        new Promise<never>((_, reject) => {
-          setTimeout(
-            () => reject(new Error("Supabase warm timed out")),
-            WARM_BUDGET_MS,
-          );
-        }),
-      ]);
-    } catch {
-      // Callers still run their own timed requests; warm is best-effort.
-    }
-  })().finally(() => {
-    // Keep the resolved promise for TTL so concurrent callers join it.
-  });
-
+  warmPromise = pingSupabaseAuthHealth();
   return warmPromise;
 }
 

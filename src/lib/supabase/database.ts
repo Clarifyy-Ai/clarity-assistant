@@ -144,12 +144,18 @@ export const profilesDB = {
     );
   },
 
-  async getByIdMaybe(userId: string): Promise<Tables<"profiles"> | null> {
-    const { data, error } = await supabase
+  async getByIdMaybe(
+    userId: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<Tables<"profiles"> | null> {
+    let q = supabase
       .from("profiles")
       .select(PROFILE_BOOT_COLUMNS)
-      .eq("id", userId)
-      .maybeSingle();
+      .eq("id", userId);
+    if (options?.signal) {
+      q = q.abortSignal(options.signal);
+    }
+    const { data, error } = await q.maybeSingle();
 
     if (error) {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {

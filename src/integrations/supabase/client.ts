@@ -12,6 +12,7 @@ import {
 import { tabAwareAuthStorage } from "@/lib/auth/tabLocalLogout";
 import { shouldDetectSessionInUrl } from "@/lib/auth/accountBootstrap";
 import { maybeRedirectAuthDeepLink } from "@/lib/auth/authDeepLinkRedirect";
+import { createTimedFetch } from "@/lib/supabase/timedFetch";
 
 // If Site URL ate a recovery/OAuth redirect, bounce to the right path before
 // detectSessionInUrl consumes tokens on `/` or another marketing page.
@@ -28,6 +29,9 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     // query params on /login would POST /auth/v1/token and return HTTP 400.
     detectSessionInUrl: shouldDetectSessionInUrl(),
     flowType: "pkce",
+  },
+  global: {
+    fetch: createTimedFetch(),
   },
 });
 

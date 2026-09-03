@@ -4,29 +4,25 @@ import {
   resetSupabaseWarmForTests,
 } from "@/lib/supabase/ensureWarmed";
 
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    auth: {
-      getSession: vi.fn(async () => ({ data: { session: null }, error: null })),
-    },
-  },
-}));
-
-import { supabase } from "@/integrations/supabase/client";
-
 describe("ensureSupabaseWarmed", () => {
   beforeEach(() => {
     resetSupabaseWarmForTests();
-    vi.mocked(supabase.auth.getSession).mockClear();
+    vi.unstubAllGlobals();
   });
 
-  it("dedupes concurrent warm calls into one getSession", async () => {
+  it("dedupes concurrent warm calls into one health ping", async () => {
+    const ping = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", ping);
+
     const [a, b] = await Promise.all([
       ensureSupabaseWarmed(),
       ensureSupabaseWarmed(),
     ]);
-    expect(a).toBeUndefined();
-    expect(b).toBeUndefined();
-    expect(supabase.auth.getSession).toHaveBeenCalledTimes(1);
+    expect(a).toBe(true);
+    expect(b).toBe(true);
+    expect(ping).toHaveBeenCalledTimes(1);
+    expect(String(ping.mock.calls[0]?.[0])).toMatch(/\/auth\/v1\/health$/);
+
+    vi.unstubAllGlobals();
   });
 });

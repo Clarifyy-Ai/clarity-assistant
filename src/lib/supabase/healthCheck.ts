@@ -2,7 +2,6 @@
 // Verifies VITE_SUPABASE_URL + VITE_SUPABASE_PUBLISHABLE_KEY are present
 // and that the client can reach Supabase auth.
 
-import { supabase } from "@/integrations/supabase/client";
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "@/lib/env";
 import { ensureSupabaseWarmed } from "@/lib/supabase/ensureWarmed";
 
@@ -41,11 +40,11 @@ export async function checkSupabaseHealth(): Promise<SupabaseHealth> {
 
   const start = performance.now();
   try {
-    // Join the shared warm so auth bootstrap and health don't open two cold RTTs.
-    await ensureSupabaseWarmed();
-    const { error } = await supabase.auth.getSession();
+    // Ping /auth/v1/health only. Never call getSession() here — that races
+    // token refresh against profile bootstrap and was logging ~35s "connected".
+    const reachable = await ensureSupabaseWarmed();
     const latencyMs = Math.round(performance.now() - start);
-    if (error) {
+    if (!reachable) {
       return {
         ok: false,
         envPresent: true,
@@ -53,7 +52,7 @@ export async function checkSupabaseHealth(): Promise<SupabaseHealth> {
         url: SUPABASE_URL,
         keyPreview,
         latencyMs,
-        error: error.message,
+        error: "Auth health ping failed or timed out.",
       };
     }
     return {
