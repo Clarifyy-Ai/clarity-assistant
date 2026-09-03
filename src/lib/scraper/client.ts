@@ -13,7 +13,7 @@
  * - **bulk-import-questions** — `x-ingest-key` / `INGEST_API_KEY` (server worker only).
  */
 import { supabase } from "@/lib/supabase/client";
-import { resolveProductionSafeUrl } from "@/lib/env/serviceUrl";
+import { resolveProductionSafeUrl } from "@/lib/serviceUrl";
 
 export type ScrapeJobStatus =
   | "queued"
