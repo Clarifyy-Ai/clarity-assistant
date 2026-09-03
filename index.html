@@ -7,7 +7,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
 
     <!-- Responsive viewport -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 
     <!--
       Security Policy:
@@ -171,39 +171,275 @@
     <div id="root">
       <div
         id="boot-splash"
+        class="boot-splash"
         role="status"
         aria-live="polite"
         aria-busy="true"
-        style="
-          min-height: 100vh;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 16px;
-          background: #0B1220;
-          color: #F5F7FA;
-          font-family: system-ui, -apple-system, Segoe UI, sans-serif;
-        "
       >
-        <div
-          style="
-            width: 40px;
-            height: 40px;
-            border: 3px solid rgba(148, 163, 184, 0.25);
-            border-top-color: #38BDF8;
-            border-radius: 9999px;
-            animation: clarify-boot-spin 0.8s linear infinite;
-          "
-        ></div>
-        <p style="margin: 0; font-size: 14px; font-weight: 600;">Loading Career Pilot…</p>
-        <p style="margin: 0; font-size: 12px; opacity: 0.65;">Preparing your workspace</p>
+        <div class="boot-splash-ambient" aria-hidden="true">
+          <div class="boot-splash-glow"></div>
+          <div class="boot-splash-grid"></div>
+          <div class="boot-splash-wave"></div>
+        </div>
+        <div class="boot-splash-content">
+          <div class="boot-splash-logo-wrap">
+            <img
+              class="boot-splash-logo"
+              src="/brand/logo-192.png"
+              alt="Career Pilot"
+              width="64"
+              height="64"
+            />
+            <span class="boot-splash-sweep"></span>
+          </div>
+          <p class="boot-splash-name">Career <span>Pilot</span></p>
+          <p class="boot-splash-tagline">Navigate Your Career. Prepare With Confidence.</p>
+          <p class="boot-splash-support">
+            Your AI-powered companion for interviews, career preparation, and Government Exams.
+          </p>
+          <div class="boot-splash-bar" aria-hidden="true"><span></span></div>
+          <p class="boot-splash-status">Preparing your workspace…</p>
+        </div>
       </div>
     </div>
     <style>
-      @keyframes clarify-boot-spin {
-        to {
-          transform: rotate(360deg);
+      .boot-splash {
+        box-sizing: border-box;
+        position: relative;
+        isolation: isolate;
+        overflow-x: hidden;
+        min-height: 100vh;
+        min-height: 100dvh;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding:
+          max(24px, env(safe-area-inset-top))
+          max(24px, env(safe-area-inset-right))
+          max(24px, env(safe-area-inset-bottom))
+          max(24px, env(safe-area-inset-left));
+        background: hsl(216, 33%, 97%);
+        color: hsl(221, 49%, 8%);
+        font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+      }
+      html.dark .boot-splash {
+        background: hsl(221, 49%, 8%);
+        color: hsl(210, 40%, 96%);
+      }
+      .boot-splash-ambient {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        overflow: hidden;
+      }
+      .boot-splash-glow {
+        position: absolute;
+        left: 50%;
+        top: 38%;
+        width: min(72vw, 28rem);
+        height: min(72vw, 28rem);
+        transform: translate(-50%, -50%);
+        border-radius: 9999px;
+        background: radial-gradient(circle, rgba(37, 99, 235, 0.22) 0%, transparent 68%);
+        animation: boot-splash-glow-in 600ms cubic-bezier(0, 0, 0.2, 1) both;
+      }
+      html.dark .boot-splash-glow {
+        background: radial-gradient(circle, rgba(56, 189, 248, 0.18) 0%, transparent 68%);
+      }
+      .boot-splash-grid {
+        position: absolute;
+        inset: 0;
+        opacity: 0.28;
+        background-image:
+          linear-gradient(rgba(37, 99, 235, 0.08) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(37, 99, 235, 0.08) 1px, transparent 1px);
+        background-size: 48px 48px;
+        mask-image: radial-gradient(ellipse at 50% 42%, black 20%, transparent 72%);
+        animation: boot-splash-grid-drift 18s linear infinite;
+      }
+      html.dark .boot-splash-grid {
+        opacity: 0.2;
+      }
+      .boot-splash-wave {
+        position: absolute;
+        left: 50%;
+        bottom: 18%;
+        width: min(90vw, 36rem);
+        height: 48px;
+        transform: translateX(-50%);
+        opacity: 0.45;
+        background:
+          radial-gradient(ellipse at 20% 50%, rgba(56, 189, 248, 0.35) 0 2px, transparent 3px),
+          radial-gradient(ellipse at 50% 50%, rgba(37, 99, 235, 0.28) 0 2px, transparent 3px),
+          radial-gradient(ellipse at 80% 50%, rgba(56, 189, 248, 0.35) 0 2px, transparent 3px);
+        background-size: 100% 100%;
+        animation: boot-splash-wave 4.5s ease-in-out infinite;
+      }
+      .boot-splash-content {
+        position: relative;
+        z-index: 1;
+        width: min(100%, 28rem);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+      }
+      .boot-splash-logo-wrap {
+        position: relative;
+        width: 4rem;
+        height: 4rem;
+        margin-bottom: 1.1rem;
+        overflow: hidden;
+        border-radius: 0.9rem;
+        animation: boot-splash-logo-in 500ms cubic-bezier(0, 0, 0.2, 1) 120ms both;
+      }
+      .boot-splash-logo {
+        display: block;
+        width: 4rem;
+        height: 4rem;
+        object-fit: cover;
+        border-radius: 0.9rem;
+      }
+      .boot-splash-sweep {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.45) 50%, transparent 65%);
+        transform: translateX(-120%);
+        animation: boot-splash-sweep 900ms cubic-bezier(0.4, 0, 0.2, 1) 520ms 1 both;
+      }
+      .boot-splash-name {
+        margin: 0;
+        font-size: clamp(1.35rem, 4vw, 1.75rem);
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        line-height: 1.2;
+        animation: boot-splash-rise 420ms cubic-bezier(0, 0, 0.2, 1) 380ms both;
+      }
+      .boot-splash-name span {
+        color: #2563EB;
+      }
+      html.dark .boot-splash-name span {
+        color: #38BDF8;
+      }
+      .boot-splash-tagline {
+        margin: 0.55rem 0 0;
+        max-width: 22rem;
+        font-size: clamp(0.92rem, 2.6vw, 1.05rem);
+        font-weight: 600;
+        line-height: 1.4;
+        animation: boot-splash-rise 420ms cubic-bezier(0, 0, 0.2, 1) 520ms both;
+      }
+      .boot-splash-support {
+        margin: 0.45rem 0 0;
+        max-width: 24rem;
+        font-size: clamp(0.78rem, 2.2vw, 0.875rem);
+        line-height: 1.5;
+        opacity: 0.72;
+        animation: boot-splash-rise 420ms cubic-bezier(0, 0, 0.2, 1) 640ms both;
+      }
+      .boot-splash-bar {
+        width: min(12rem, 70%);
+        height: 3px;
+        margin-top: 1.35rem;
+        overflow: hidden;
+        border-radius: 9999px;
+        background: rgba(37, 99, 235, 0.16);
+        animation: boot-splash-rise 300ms cubic-bezier(0, 0, 0.2, 1) 760ms both;
+      }
+      html.dark .boot-splash-bar {
+        background: rgba(56, 189, 248, 0.18);
+      }
+      .boot-splash-bar span {
+        display: block;
+        width: 40%;
+        height: 100%;
+        border-radius: inherit;
+        background: #2563EB;
+        animation: boot-splash-bar 1.4s ease-in-out infinite;
+      }
+      html.dark .boot-splash-bar span {
+        background: #38BDF8;
+      }
+      .boot-splash-status {
+        box-sizing: border-box;
+        min-height: 2.6rem;
+        margin: 0.85rem 0 0;
+        width: 100%;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        line-height: 1.45;
+        opacity: 0.78;
+        animation: boot-splash-rise 300ms cubic-bezier(0, 0, 0.2, 1) 840ms both;
+      }
+      @keyframes boot-splash-glow-in {
+        from { opacity: 0; transform: translate(-50%, -50%) scale(0.92); }
+        to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      }
+      @keyframes boot-splash-logo-in {
+        from { opacity: 0; transform: scale(0.92); }
+        to { opacity: 1; transform: scale(1); }
+      }
+      @keyframes boot-splash-rise {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes boot-splash-sweep {
+        from { transform: translateX(-120%); }
+        to { transform: translateX(120%); }
+      }
+      @keyframes boot-splash-bar {
+        0% { transform: translateX(-120%); }
+        100% { transform: translateX(280%); }
+      }
+      @keyframes boot-splash-grid-drift {
+        from { background-position: 0 0; }
+        to { background-position: 48px 48px; }
+      }
+      @keyframes boot-splash-wave {
+        0%, 100% { opacity: 0.28; transform: translateX(-50%) scaleX(1); }
+        50% { opacity: 0.5; transform: translateX(-50%) scaleX(1.04); }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .boot-splash-glow,
+        .boot-splash-logo-wrap,
+        .boot-splash-name,
+        .boot-splash-tagline,
+        .boot-splash-support,
+        .boot-splash-bar,
+        .boot-splash-status {
+          animation: boot-splash-fade 200ms ease both;
+        }
+        .boot-splash-grid,
+        .boot-splash-wave,
+        .boot-splash-sweep,
+        .boot-splash-bar span {
+          animation: none;
+        }
+        .boot-splash-sweep {
+          display: none;
+        }
+        @keyframes boot-splash-fade {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+      }
+      @media (max-width: 360px) {
+        .boot-splash-logo-wrap,
+        .boot-splash-logo {
+          width: 3.25rem;
+          height: 3.25rem;
+        }
+      }
+      @media (orientation: landscape) and (max-height: 500px) {
+        .boot-splash {
+          justify-content: flex-start;
+          padding-top: max(16px, env(safe-area-inset-top));
+        }
+        .boot-splash-wave {
+          display: none;
         }
       }
     </style>

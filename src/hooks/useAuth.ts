@@ -17,7 +17,7 @@ import { supabase, STORAGE_BUCKETS, uploadFile } from "@/lib/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { useAuthStore } from "@/store/authStore";
 import { sanitizeFileName } from "@/lib/security";
-import { buildAuthRedirectUrl } from "@/lib/auth/redirectUrl";
+import { authAbsoluteUrl } from "@/lib/auth/appOrigin";
 
 import type { AuthProvider, ProfileRow } from "@/types";
 import type { UserProfile } from "@/types/user.types";
@@ -293,13 +293,7 @@ export function useAuth() {
           type: "signup",
           email,
           options: {
-            emailRedirectTo: buildAuthRedirectUrl({
-              path: "/auth/callback",
-              configuredAppUrl: import.meta.env.VITE_APP_URL,
-              appEnv: import.meta.env.VITE_APP_ENV,
-              windowOrigin:
-                typeof window !== "undefined" ? window.location.origin : null,
-            }),
+            emailRedirectTo: authAbsoluteUrl("/auth/callback"),
           },
         });
 

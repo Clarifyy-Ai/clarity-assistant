@@ -50,7 +50,7 @@ import {
   SIGNED_OUT_ELSEWHERE_MESSAGE,
   SIGNED_OUT_ELSEWHERE_REASON,
 } from "@/lib/auth/sessionErrors";
-import { buildAuthRedirectUrl } from "@/lib/auth/redirectUrl";
+import { authAbsoluteUrl } from "@/lib/auth/appOrigin";
 import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
 import { buildOAuthCallbackUrl } from "@/lib/auth/oauthCallbackUrl";
 import {
@@ -1075,13 +1075,7 @@ export const useAuthStore = create<AuthStore>()(
                 data: {
                   full_name: fullName.trim(),
                 },
-                emailRedirectTo: buildAuthRedirectUrl({
-                  path: "/auth/callback",
-                  configuredAppUrl: import.meta.env.VITE_APP_URL,
-                  appEnv: import.meta.env.VITE_APP_ENV,
-                  windowOrigin:
-                    typeof window !== "undefined" ? window.location.origin : null,
-                }),
+                emailRedirectTo: authAbsoluteUrl("/auth/callback"),
               },
             });
 
@@ -1219,13 +1213,7 @@ export const useAuthStore = create<AuthStore>()(
           },
 
           sendPasswordReset: async (email) => {
-            const redirectTo = buildAuthRedirectUrl({
-              path: "/reset-password",
-              configuredAppUrl: import.meta.env.VITE_APP_URL,
-              appEnv: import.meta.env.VITE_APP_ENV,
-              windowOrigin:
-                typeof window !== "undefined" ? window.location.origin : null,
-            });
+            const redirectTo = authAbsoluteUrl("/reset-password");
 
             const { error } = await supabase.auth.resetPasswordForEmail(
               email.trim(),

@@ -505,6 +505,289 @@ body.cookie-banner-visible #main-content {
 }
 
 /* ─────────────────────────────────────────────────────────────────
+   Brand splash (React) — tokens only, CSS transform/opacity motion
+   ───────────────────────────────────────────────────────────────── */
+.brand-splash {
+  box-sizing: border-box;
+  position: relative;
+  isolation: isolate;
+  overflow-x: hidden;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding:
+    max(1.5rem, env(safe-area-inset-top))
+    max(1.5rem, env(safe-area-inset-right))
+    max(1.5rem, env(safe-area-inset-bottom))
+    max(1.5rem, env(safe-area-inset-left));
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+.brand-splash--inline {
+  position: relative;
+  min-height: 12.5rem;
+  padding: 2rem 1.5rem;
+}
+
+.brand-splash-ambient {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.brand-splash-glow {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  width: min(72vw, 28rem);
+  height: min(72vw, 28rem);
+  border-radius: 9999px;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, hsl(var(--primary) / 0.22) 0%, transparent 68%);
+  animation: brand-splash-glow-in var(--motion-slow) var(--motion-ease-out) both;
+}
+
+.brand-splash-grid {
+  position: absolute;
+  inset: 0;
+  opacity: 0.28;
+  background-image:
+    linear-gradient(hsl(var(--primary) / 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--primary) / 0.08) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at 50% 42%, black 20%, transparent 72%);
+  animation: brand-splash-grid-drift 18s linear infinite;
+}
+
+.dark .brand-splash-grid {
+  opacity: 0.2;
+}
+
+.brand-splash-wave {
+  position: absolute;
+  left: 50%;
+  bottom: 18%;
+  width: min(90vw, 36rem);
+  height: 48px;
+  transform: translateX(-50%);
+  opacity: 0.45;
+  background:
+    radial-gradient(ellipse at 20% 50%, hsl(var(--accent) / 0.35) 0 2px, transparent 3px),
+    radial-gradient(ellipse at 50% 50%, hsl(var(--primary) / 0.28) 0 2px, transparent 3px),
+    radial-gradient(ellipse at 80% 50%, hsl(var(--accent) / 0.35) 0 2px, transparent 3px);
+  animation: brand-splash-wave 4.5s ease-in-out infinite;
+}
+
+.brand-splash-content {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 28rem);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.brand-splash-logo-wrap {
+  position: relative;
+  margin-bottom: 1.1rem;
+  overflow: hidden;
+  border-radius: 0.9rem;
+  animation: brand-splash-logo-in 500ms var(--motion-ease-out) 120ms both;
+}
+
+.brand-splash-sweep {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 35%,
+    hsl(0 0% 100% / 0.45) 50%,
+    transparent 65%
+  );
+  transform: translateX(-120%);
+  animation: brand-splash-sweep 900ms var(--motion-ease) 520ms 1 both;
+}
+
+.brand-splash-name {
+  margin: 0;
+  font-size: clamp(1.35rem, 4vw, 1.75rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  animation: brand-splash-rise 420ms var(--motion-ease-out) 380ms both;
+}
+
+.brand-splash-tagline {
+  margin: 0.55rem 0 0;
+  max-width: 22rem;
+  font-size: clamp(0.92rem, 2.6vw, 1.05rem);
+  font-weight: 600;
+  line-height: 1.4;
+  animation: brand-splash-rise 420ms var(--motion-ease-out) 520ms both;
+}
+
+.brand-splash-support {
+  margin: 0.45rem 0 0;
+  max-width: 24rem;
+  font-size: clamp(0.78rem, 2.2vw, 0.875rem);
+  line-height: 1.5;
+  color: hsl(var(--muted-foreground));
+  animation: brand-splash-rise 420ms var(--motion-ease-out) 640ms both;
+}
+
+.brand-splash-bar {
+  width: min(12rem, 70%);
+  height: 3px;
+  margin-top: 1.35rem;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: hsl(var(--primary) / 0.16);
+  animation: brand-splash-rise 300ms var(--motion-ease-out) 760ms both;
+}
+
+.brand-splash-bar span {
+  display: block;
+  width: 40%;
+  height: 100%;
+  border-radius: inherit;
+  background: hsl(var(--primary));
+  animation: brand-splash-bar 1.4s ease-in-out infinite;
+}
+
+.brand-splash-status {
+  box-sizing: border-box;
+  min-height: 2.6rem;
+  margin: 0.85rem 0 0;
+  width: 100%;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.45;
+  color: hsl(var(--muted-foreground));
+  animation: brand-splash-rise 300ms var(--motion-ease-out) 840ms both;
+}
+
+.brand-splash-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+}
+
+.brand-splash-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  border-radius: 0.75rem;
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.brand-splash-link:hover {
+  background: hsl(var(--secondary));
+}
+
+.brand-splash-link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
+}
+
+.brand-splash[data-splash-motion="reduced"] .brand-splash-glow,
+.brand-splash[data-splash-motion="reduced"] .brand-splash-logo-wrap,
+.brand-splash[data-splash-motion="reduced"] .brand-splash-name,
+.brand-splash[data-splash-motion="reduced"] .brand-splash-tagline,
+.brand-splash[data-splash-motion="reduced"] .brand-splash-support,
+.brand-splash[data-splash-motion="reduced"] .brand-splash-bar,
+.brand-splash[data-splash-motion="reduced"] .brand-splash-status {
+  animation: brand-splash-fade var(--motion-base) var(--motion-ease-out) both;
+}
+
+.brand-splash[data-splash-motion="reduced"] .brand-splash-grid,
+.brand-splash[data-splash-motion="reduced"] .brand-splash-wave,
+.brand-splash[data-splash-motion="reduced"] .brand-splash-sweep,
+.brand-splash[data-splash-motion="reduced"] .brand-splash-bar span {
+  animation: none;
+}
+
+.brand-splash[data-splash-motion="reduced"] .brand-splash-sweep {
+  display: none;
+}
+
+.brand-splash[data-splash-motion="calm"] .brand-splash-sweep,
+.brand-splash[data-splash-motion="calm"] .brand-splash-wave {
+  display: none;
+}
+
+.brand-splash[data-splash-motion="calm"] .brand-splash-grid,
+.brand-splash[data-splash-motion="calm"] .brand-splash-bar span {
+  animation: none;
+}
+
+@keyframes brand-splash-glow-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.92); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@keyframes brand-splash-logo-in {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes brand-splash-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes brand-splash-sweep {
+  from { transform: translateX(-120%); }
+  to { transform: translateX(120%); }
+}
+
+@keyframes brand-splash-bar {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(280%); }
+}
+
+@keyframes brand-splash-grid-drift {
+  from { background-position: 0 0; }
+  to { background-position: 48px 48px; }
+}
+
+@keyframes brand-splash-wave {
+  0%, 100% { opacity: 0.28; transform: translateX(-50%) scaleX(1); }
+  50% { opacity: 0.5; transform: translateX(-50%) scaleX(1.04); }
+}
+
+@keyframes brand-splash-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .brand-splash {
+    justify-content: flex-start;
+    padding-top: max(1rem, env(safe-area-inset-top));
+  }
+  .brand-splash-wave {
+    display: none;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
    Print Styles
    ───────────────────────────────────────────────────────────────── */
 @media print {

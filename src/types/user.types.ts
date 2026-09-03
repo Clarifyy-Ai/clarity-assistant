@@ -91,6 +91,7 @@ export interface UserProfile {
 
   // Onboarding
   onboarding_completed: boolean;
+  mfa_reenrollment_required?: boolean;
   onboarding_step: number;           // 1–5
 
   // Privacy

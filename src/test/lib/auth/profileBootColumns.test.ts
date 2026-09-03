@@ -7,7 +7,7 @@ describe("PROFILE_BOOT_COLUMNS", () => {
     const cols = PROFILE_BOOT_COLUMNS.split(",").map((c) => c.trim());
     expect(cols).not.toContain("is_admin");
     expect(cols).toEqual(
-      expect.arrayContaining([
+        expect.arrayContaining([
         "id",
         "email",
         "full_name",
@@ -15,6 +15,7 @@ describe("PROFILE_BOOT_COLUMNS", () => {
         "plan_id",
         "is_banned",
         "onboarding_completed",
+        "mfa_reenrollment_required",
       ]),
     );
   });

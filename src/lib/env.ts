@@ -138,7 +138,13 @@ const SUPABASE_PUBLISHABLE_KEY_VALUE = optional(
 );
 
 
-const APP_URL_VALUE = normalizeOptionalUrl(optional(["VITE_APP_URL"]));
+const APP_URL_RAW = normalizeOptionalUrl(optional(["VITE_APP_URL"]));
+const APP_URL_VALUE =
+  APP_ENV_VALUE === "production" &&
+  APP_URL_RAW &&
+  /^(https?:\/\/)?(localhost|127\.0\.0\.1|0\.0\.0\.0|::1)\b/i.test(APP_URL_RAW)
+    ? ""
+    : APP_URL_RAW;
 
 const API_URL_VALUE = normalizePathOrUrl(
   optional(["VITE_API_URL"], "/api"),

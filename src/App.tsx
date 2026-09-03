@@ -112,6 +112,8 @@ const Signup = lazy(() => import("@/pages/auth/Signup"));
 const VerifyEmail = lazy(() => import("@/pages/auth/VerifyEmail"));
 const ResetPassword = lazy(() => import("@/pages/auth/ResetPassword"));
 const AuthCallback = lazy(() => import("@/pages/auth/AuthCallback"));
+const MfaEnroll = lazy(() => import("@/pages/auth/MfaEnroll"));
+const MfaRecovery = lazy(() => import("@/pages/auth/MfaRecovery"));
 
 // Onboarding
 const OnboardingIndex = lazy(
@@ -606,6 +608,8 @@ const routes = [
   { path: "/forgot-password", element: <Page component={ResetPassword} /> },
   { path: "/reset-password", element: <Page component={ResetPassword} /> },
   { path: "/auth/callback", element: <Page component={AuthCallback} /> },
+  { path: "/auth/mfa-enroll", element: <Page component={MfaEnroll} /> },
+  { path: "/auth/mfa-recovery", element: <Page component={MfaRecovery} /> },
 
   // Onboarding — authenticated + email verified (unverified users stay on /verify-email)
   {

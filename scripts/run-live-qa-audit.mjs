@@ -70,6 +70,17 @@ const PUBLIC_ROUTES = [
   { id: "AUTH-01", path: "/login", expect: /sign in|welcome|email/i },
   { id: "AUTH-02", path: "/signup", expect: /create|sign up|account/i },
   { id: "AUTH-03", path: "/forgot-password", expect: /reset|forgot|password|email/i },
+  // MFA re-enroll / email-recovery confirm — public routes (prompt sign-in when anon)
+  {
+    id: "AUTH-04",
+    path: "/auth/mfa-enroll",
+    expect: /sign in|authenticator|setup|required/i,
+  },
+  {
+    id: "AUTH-05",
+    path: "/auth/mfa-recovery",
+    expect: /authenticator recovery|recovery|sign in|two-factor/i,
+  },
 ];
 
 /** Authenticated app routes (Pro user) */
@@ -676,6 +687,64 @@ async function main() {
     const r = await auditWithRetry(route, "anon");
     report.publicRoutes.push(r);
     console.log(`  ${r.id} ${r.path} → ${r.status}`);
+  }
+
+  // Soft: /login page or JS bundle should mention lost-device / recovery when deployed.
+  // The visible "I don't have my old device" UI is MFA-challenge-gated, so missing
+  // anonymous DOM text is not a Fail — only Blocked if neither page nor bundle mentions it.
+  console.log("Soft MFA recovery mention on /login…");
+  {
+    await page.goto(BASE + "/login", { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await page
+      .waitForFunction(
+        () => {
+          const t = document.body?.innerText || "";
+          return !/Loading Career Pilot/i.test(t) && t.trim().length > 20;
+        },
+        { timeout: 25_000 },
+      )
+      .catch(() => {});
+    await dismissNoise(page);
+    const bodyText = (await page.locator("body").innerText().catch(() => "")).slice(0, 4000);
+    const html = await page.content().catch(() => "");
+    const mentionRe =
+      /lost.?device|don.?t have my old device|use recovery code|email a recovery link|mfa-recovery|authenticator recovery|recovery code/i;
+    const foundInPage = mentionRe.test(`${bodyText}\n${html}`);
+    let foundInBundle = false;
+    if (!foundInPage) {
+      foundInBundle = await page
+        .evaluate(async () => {
+          const re =
+            /I don.?t have my old device|Use recovery code|Email a recovery link|mfa-recovery|authenticator recovery/i;
+          const srcs = [...document.querySelectorAll("script[src]")].map((s) => s.src).slice(0, 16);
+          for (const src of srcs) {
+            try {
+              const t = await fetch(src).then((r) => r.text());
+              if (re.test(t)) return true;
+            } catch {
+              /* ignore fetch failures */
+            }
+          }
+          return false;
+        })
+        .catch(() => false);
+    }
+    const found = foundInPage || foundInBundle;
+    const soft = resultBase({
+      id: "AUTH-MFA-SOFT",
+      path: "/login",
+      module: "Marketing/Auth",
+      role: "anon",
+      status: found ? "Pass" : "Blocked",
+      notes: found
+        ? `Lost-device/recovery mention found (${foundInPage ? "page HTML/DOM" : "JS bundle"})`
+        : "Soft: lost-device/recovery UI is MFA-gated; not found in anonymous login HTML or script bundles yet (CDN may be stale)",
+      httpStatus: null,
+      finalUrl: page.url(),
+      snippet: bodyText.replace(/\s+/g, " ").slice(0, 180),
+    });
+    report.publicRoutes.push(soft);
+    console.log(`  ${soft.id} → ${soft.status}`);
   }
 
   // Free user: dashboard + billing gate sample

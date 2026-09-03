@@ -48,6 +48,7 @@ const PROFILE_CLIENT_UPDATE_BLOCKLIST = new Set([
   "byok_gemini",
   "byok_openai",
   "byok_anthropic",
+  "mfa_reenrollment_required",
 ]);
 
 function sanitizeProfileClientUpdate(
@@ -131,6 +132,7 @@ export const PROFILE_BOOT_COLUMNS = [
   "is_banned",
   "ban_reason",
   "onboarding_completed",
+  "mfa_reenrollment_required",
   "overlay_opacity",
   "overlay_position",
   "privacy_prefs",

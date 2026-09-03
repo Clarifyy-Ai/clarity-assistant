@@ -103,6 +103,7 @@ describe("billing guards", () => {
     expect(src).toContain("requireRazorpay && environment === \"production\"");
     expect(src).toContain("RAZORPAY_WEBHOOK_SECRET");
     expect(src).toContain("productionForbidsTestPrefix");
+    expect(src).toContain("razorpayAllowsTestKeys");
   });
 
   it("shared razorpay provider treats placeholders as not configured", () => {
@@ -114,5 +115,7 @@ describe("billing guards", () => {
     expect(src).toContain("Payments are not configured");
     expect(src).toContain("keysConfigured");
     expect(src).toContain("webhookConfigured");
+    expect(src).toContain("testCheckoutAllowed");
+    expect(src).toContain("RAZORPAY_ALLOW_TEST_KEYS");
   });
 });

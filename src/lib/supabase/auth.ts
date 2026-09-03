@@ -7,7 +7,7 @@
 import { supabase } from "@/lib/supabase/client";
 import { AuthError, ErrorCode, formatSupabaseAuthError, tryCatch } from "@/lib/errors";
 import { classifyLoginFailure } from "@/lib/auth/loginFailure";
-import { buildAuthRedirectUrl } from "@/lib/auth/redirectUrl";
+import { authAbsoluteUrl } from "@/lib/auth/appOrigin";
 import { buildOAuthCallbackUrl } from "@/lib/auth/oauthCallbackUrl";
 import type { User, Session, AuthChangeEvent } from "@supabase/supabase-js";
 
@@ -100,13 +100,7 @@ export async function signUp(credentials: SignUpCredentials): Promise<AuthResult
           full_name:  fullName  ?? "",
           avatar_url: avatarUrl ?? "",
         },
-        emailRedirectTo: buildAuthRedirectUrl({
-          path: "/auth/callback",
-          configuredAppUrl: import.meta.env.VITE_APP_URL,
-          appEnv: import.meta.env.VITE_APP_ENV,
-          windowOrigin:
-            typeof window !== "undefined" ? window.location.origin : null,
-        }),
+        emailRedirectTo: authAbsoluteUrl("/auth/callback"),
       },
     });
 
@@ -193,13 +187,7 @@ export async function sendMagicLink(email: string): Promise<void> {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: buildAuthRedirectUrl({
-          path: "/auth/callback",
-          configuredAppUrl: import.meta.env.VITE_APP_URL,
-          appEnv: import.meta.env.VITE_APP_ENV,
-          windowOrigin:
-            typeof window !== "undefined" ? window.location.origin : null,
-        }),
+        emailRedirectTo: authAbsoluteUrl("/auth/callback"),
       },
     });
     if (error) throw error;
@@ -221,13 +209,7 @@ export async function sendMagicLink(email: string): Promise<void> {
  */
 export async function sendPasswordReset(email: string): Promise<void> {
   const [, err] = await tryCatch(async () => {
-    const redirectTo = buildAuthRedirectUrl({
-      path: "/reset-password",
-      configuredAppUrl: import.meta.env.VITE_APP_URL,
-      appEnv: import.meta.env.VITE_APP_ENV,
-      windowOrigin:
-        typeof window !== "undefined" ? window.location.origin : null,
-    });
+    const redirectTo = authAbsoluteUrl("/reset-password");
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo,
     });
@@ -339,13 +321,7 @@ export async function resendVerificationEmail(email: string): Promise<void> {
       type:  "signup",
       email,
       options: {
-        emailRedirectTo: buildAuthRedirectUrl({
-          path: "/auth/callback",
-          configuredAppUrl: import.meta.env.VITE_APP_URL,
-          appEnv: import.meta.env.VITE_APP_ENV,
-          windowOrigin:
-            typeof window !== "undefined" ? window.location.origin : null,
-        }),
+        emailRedirectTo: authAbsoluteUrl("/auth/callback"),
       },
     });
     if (error) throw error;

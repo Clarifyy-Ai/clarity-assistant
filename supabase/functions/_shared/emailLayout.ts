@@ -13,7 +13,20 @@ export function publicAppUrl(): string {
     Deno.env.get("PUBLIC_URL") ??
     Deno.env.get("SITE_URL") ??
     PUBLIC_WEBSITE_URL;
-  return String(raw).trim().replace(/\/+$/, "") || PUBLIC_WEBSITE_URL;
+  const trimmed = String(raw).trim().replace(/\/+$/, "") || PUBLIC_WEBSITE_URL;
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "0.0.0.0") {
+      return PUBLIC_WEBSITE_URL;
+    }
+    if (parsed.protocol !== "https:") {
+      return PUBLIC_WEBSITE_URL;
+    }
+    return trimmed;
+  } catch {
+    return PUBLIC_WEBSITE_URL;
+  }
 }
 
 export function emailButton(href: string, label: string): string {

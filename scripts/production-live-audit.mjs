@@ -123,6 +123,8 @@ async function auditHttpRoutes() {
     "/",
     "/login",
     "/signup",
+    "/auth/mfa-enroll",
+    "/auth/mfa-recovery",
     "/pricing",
     "/help",
     "/terms",
@@ -438,8 +440,15 @@ async function auditBrowser() {
     pageErrors.length ? pageErrors.slice(0, 3).join(" || ") : "none",
   );
 
-  // Public pages smoke
-  for (const route of ["/login", "/signup", "/pricing", "/help"]) {
+  // Public pages smoke (incl. MFA enroll/recovery shells)
+  for (const route of [
+    "/login",
+    "/signup",
+    "/auth/mfa-enroll",
+    "/auth/mfa-recovery",
+    "/pricing",
+    "/help",
+  ]) {
     await page.goto(BASE + route, {
       waitUntil: "domcontentloaded",
       timeout: 45_000,

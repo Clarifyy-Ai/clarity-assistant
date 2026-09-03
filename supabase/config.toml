@@ -291,3 +291,6 @@ verify_jwt = true
 
 [functions.start-exam-attempt]
 verify_jwt = true
+
+[functions.mfa-recovery]
+verify_jwt = true

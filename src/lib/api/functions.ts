@@ -76,6 +76,7 @@ export type EdgeFunctionName =
   | "ingest-source-document"
   | "issue-course-certificate"
   | "list-previous-papers"
+  | "mfa-recovery"
   | "moderate-content"
   | "parse-document"
   | "parse-question-pdf"

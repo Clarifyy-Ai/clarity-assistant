@@ -26,6 +26,7 @@ export const PROFILE_CLIENT_PINNED_COLUMNS = [
   "byok_anthropic",
   "onboarding_completed",
   "onboarding_step",
+  "mfa_reenrollment_required",
 ] as const;
 
 export type ProfilePinnedColumn = (typeof PROFILE_CLIENT_PINNED_COLUMNS)[number];

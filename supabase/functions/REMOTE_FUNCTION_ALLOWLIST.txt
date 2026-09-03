@@ -55,6 +55,7 @@ ingest-source-document
 issue-course-certificate
 list-previous-papers
 moderate-content
+mfa-recovery
 parse-document
 parse-question-pdf
 parse-resume

@@ -324,11 +324,26 @@ function checkAppConfig(env) {
   }
 
   if (appEnv === "production") {
+    if (!env.VITE_APP_URL) {
+      errors.push(
+        "VITE_APP_URL is required in production so auth/MFA/OAuth redirects never fall back to localhost.",
+      );
+    }
     if (
       env.VITE_APP_URL?.includes("localhost") ||
       env.VITE_APP_URL?.includes("127.0.0.1")
     ) {
       errors.push("VITE_APP_URL must not use localhost/127.0.0.1 in production.");
+    }
+    if (env.VITE_APP_URL && isValidUrl(env.VITE_APP_URL)) {
+      try {
+        const parsed = new URL(env.VITE_APP_URL);
+        if (parsed.protocol !== "https:") {
+          errors.push("VITE_APP_URL must use https in production.");
+        }
+      } catch {
+        /* isValidUrl already ran */
+      }
     }
 
     if (env.VITE_ENABLE_DEBUG_PANEL === "true") {

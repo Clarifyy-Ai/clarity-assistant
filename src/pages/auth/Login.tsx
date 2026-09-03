@@ -52,6 +52,12 @@ import {
 import { MFA_ENFORCEMENT_PAUSED, resolveMfaGateFromAal } from "@/lib/auth/mfaGate";
 import { verifyTotpChallenge } from "@/lib/auth/mfaFactors";
 import {
+  consumeMfaRecoveryCode,
+  recoveryErrorMessage,
+  startMfaEmailRecovery,
+} from "@/lib/auth/mfaRecoveryClient";
+import { AUTH_PATHS } from "@/lib/auth/appOrigin";
+import {
   MFA_AAL_START_FAILED_MESSAGE,
   MFA_REQUIRED_REASON,
 } from "@/hooks/useAuth";
@@ -160,6 +166,7 @@ export default function Login(): JSX.Element {
   const authUser = useAuthStore((state) => state.user);
   const isAdmin = useAuthStore((state) => state.isAdmin);
   const isProfileLoaded = useAuthStore((state) => state.isProfileLoaded);
+  const profile = useAuthStore((state) => state.profile);
   const signInWithEmail = useAuthStore((state) => state.signInWithEmail);
   const storeError = useAuthStore((state) => state.error);
 
@@ -175,6 +182,10 @@ export default function Login(): JSX.Element {
   const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
   const [mfaCode, setMfaCode] = useState("");
   const [mfaVerifying, setMfaVerifying] = useState(false);
+  const [lostDeviceOpen, setLostDeviceOpen] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
+  const [recoveryNotice, setRecoveryNotice] = useState<string | null>(null);
   /** Blocks dashboard redirect until AAL is evaluated (fail-closed MFA). */
   const [mfaGateResolved, setMfaGateResolved] = useState(false);
 
@@ -221,7 +232,8 @@ export default function Login(): JSX.Element {
     } else if (reason === SIGNED_OUT_ELSEWHERE_REASON) {
       setAuthError(SIGNED_OUT_ELSEWHERE_MESSAGE);
     } else if (reason === MFA_REQUIRED_REASON) {
-      setAuthError(MFA_AAL_START_FAILED_MESSAGE);
+      // Session is AAL1 with a verified TOTP — the gate effect shows the challenge.
+      // Do not treat this as a failed MFA start.
     } else if (errorCode === "cancelled") {
       setAuthError("Sign-in was cancelled. You can try again whenever you are ready.");
     } else if (errorCode === "not_configured") {
@@ -338,6 +350,11 @@ export default function Login(): JSX.Element {
       return;
     }
 
+    if (profile?.mfa_reenrollment_required) {
+      navigate(AUTH_PATHS.mfaEnroll, { replace: true });
+      return;
+    }
+
     // Unverified email/password sessions must not skip into /app or onboarding.
     if (!isUserEmailConfirmed(authUser)) {
       navigate("/verify-email", { replace: true });
@@ -365,6 +382,7 @@ export default function Login(): JSX.Element {
     accountSuspended,
     authUser,
     mfaGateResolved,
+    profile?.mfa_reenrollment_required,
   ]);
 
   useEffect(() => {
@@ -530,6 +548,7 @@ export default function Login(): JSX.Element {
         factorId: mfaFactorId,
         code: mfaCode,
       });
+      await supabase.auth.refreshSession();
       setMfaPending(false);
       setMfaFactorId(null);
       setMfaCode("");
@@ -537,6 +556,38 @@ export default function Login(): JSX.Element {
       setAuthError(classifyLoginFailure(error).message);
     } finally {
       setMfaVerifying(false);
+    }
+  }
+
+  async function handleLostDeviceCode(): Promise<void> {
+    if (!recoveryCode.trim()) {
+      setAuthError("Enter a recovery code from when you enabled authenticator MFA.");
+      return;
+    }
+    setRecoveryBusy(true);
+    setAuthError(null);
+    try {
+      await consumeMfaRecoveryCode(recoveryCode);
+      setMfaPending(false);
+      navigate(AUTH_PATHS.mfaEnroll, { replace: true });
+    } catch (error) {
+      setAuthError(recoveryErrorMessage(error));
+    } finally {
+      setRecoveryBusy(false);
+    }
+  }
+
+  async function handleLostDeviceEmail(): Promise<void> {
+    setRecoveryBusy(true);
+    setAuthError(null);
+    setRecoveryNotice(null);
+    try {
+      await startMfaEmailRecovery();
+      setRecoveryNotice("Recovery email sent. Open it on this signed-in device.");
+    } catch (error) {
+      setAuthError(recoveryErrorMessage(error));
+    } finally {
+      setRecoveryBusy(false);
     }
   }
 
@@ -625,6 +676,50 @@ export default function Login(): JSX.Element {
               >
                 Verify and continue
               </Button>
+              <button
+                type="button"
+                className="text-xs text-primary hover:opacity-80"
+                onClick={() => setLostDeviceOpen((v) => !v)}
+              >
+                I don&apos;t have my old device
+              </button>
+              {lostDeviceOpen && (
+                <div className="space-y-3 rounded-xl border border-border p-3">
+                  <p className="text-xs text-muted-foreground">
+                    This does not skip two-factor authentication. Prove ownership with a recovery code
+                    or a message to your verified email, then enroll a new authenticator.
+                  </p>
+                  <Input
+                    label="Recovery code"
+                    value={recoveryCode}
+                    onChange={(e) => setRecoveryCode(e.target.value.toUpperCase())}
+                    autoComplete="off"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    fullWidth
+                    loading={recoveryBusy}
+                    onClick={() => void handleLostDeviceCode()}
+                  >
+                    Use recovery code
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    fullWidth
+                    loading={recoveryBusy}
+                    onClick={() => void handleLostDeviceEmail()}
+                  >
+                    Email a recovery link
+                  </Button>
+                  {recoveryNotice && (
+                    <p className="text-xs text-emerald-600">{recoveryNotice}</p>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
           <div>

@@ -139,11 +139,19 @@ async function main() {
     .filter((f) => f.endsWith(".sql"))
     .sort();
 
+  const filters = process.argv.slice(2).filter((a) => !a.startsWith("--"));
   const pending = files.filter((f) => !applied.has(f.split("_")[0]));
-  console.log(`Pending migrations: ${pending.length}\n`);
+  const selected = filters.length
+    ? pending.filter((f) => filters.some((q) => f.includes(q)))
+    : pending;
+  if (filters.length && selected.length === 0) {
+    console.log(`No pending migrations matched: ${filters.join(", ")}`);
+    process.exit(0);
+  }
+  console.log(`Pending migrations: ${selected.length}\n`);
 
   const results = [];
-  for (const file of pending) {
+  for (const file of selected) {
     const result = await applyMigration(file);
     results.push(result);
     if (!result.ok) {
@@ -154,7 +162,7 @@ async function main() {
 
   const failed = results.filter((r) => !r.ok);
   console.log(
-    `\nDone: ${results.filter((r) => r.ok).length}/${pending.length} applied`,
+    `\nDone: ${results.filter((r) => r.ok).length}/${selected.length} applied`,
   );
   process.exit(failed.length ? 1 : 0);
 }

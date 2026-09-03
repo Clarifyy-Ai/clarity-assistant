@@ -16,6 +16,10 @@ import { MFA_ENFORCEMENT_PAUSED } from "@/lib/auth/mfaGate";
 import { getPasswordStrength, validatePassword } from "@/lib/validators/emailValidator";
 import { changeAccountPassword } from "@/lib/account/changePassword";
 import { debugLog161d95 } from "@/lib/debug/debugLog161d95";
+import {
+  fetchMfaRecoveryStatus,
+  issueMfaRecoveryCodes,
+} from "@/lib/auth/mfaRecoveryClient";
 
 type MfaUiState =
   | "NOT_CONFIGURED"
@@ -51,6 +55,9 @@ export default function SettingsSecurity() {
   const [enrollFactorId, setEnrollFactorId] = useState<string | null>(null);
   const [verifyCode, setVerifyCode] = useState("");
   const [verifying, setVerifying] = useState(false);
+  const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
+  const [unusedCodes, setUnusedCodes] = useState<number | null>(null);
+  const [signingOutOthers, setSigningOutOthers] = useState(false);
 
   async function loadFactors(): Promise<ListedMfaFactor[]> {
     setMfaLoading(true);
@@ -84,6 +91,9 @@ export default function SettingsSecurity() {
 
   useEffect(() => {
     void loadFactors();
+    void fetchMfaRecoveryStatus()
+      .then((s) => setUnusedCodes(s.unused_codes))
+      .catch(() => setUnusedCodes(null));
   }, []);
 
   const verifiedTotp = findVerifiedTotp(factors);
@@ -231,11 +241,19 @@ export default function SettingsSecurity() {
       });
       if (vErr) throw vErr;
 
+      await supabase.auth.refreshSession();
       toast.success("Two-factor authentication enabled.");
       setQrCode(null);
       setEnrollFactorId(null);
       setVerifyCode("");
       await loadFactors();
+      try {
+        const codes = await issueMfaRecoveryCodes();
+        setRecoveryCodes(codes);
+        setUnusedCodes(codes.length);
+      } catch {
+        setRecoveryCodes([]);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Invalid verification code");
     } finally {
@@ -253,6 +271,19 @@ export default function SettingsSecurity() {
       await loadFactors();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to remove 2FA");
+    }
+  }
+
+  async function signOutOtherSessions(): Promise<void> {
+    setSigningOutOthers(true);
+    try {
+      const { error } = await supabase.auth.signOut({ scope: "others" });
+      if (error) throw error;
+      toast.success("Other sessions were signed out.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not sign out other sessions.");
+    } finally {
+      setSigningOutOthers(false);
     }
   }
 
@@ -390,10 +421,46 @@ export default function SettingsSecurity() {
             <Loader2 className="w-3 h-3 animate-spin" /> Checking 2FA status…
           </p>
         ) : mfaUiState === "ENABLED" && verifiedTotp ? (
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => void unenrollMfa(verifiedTotp.id)}>
-              Disable 2FA
-            </Button>
+          <div className="mt-4 space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Factor: Authenticator app (TOTP). Login requires this code after your password.
+              Unused recovery codes: {unusedCodes ?? "—"}.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => void unenrollMfa(verifiedTotp.id)}>
+                Disable 2FA
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  void issueMfaRecoveryCodes()
+                    .then((codes) => {
+                      setRecoveryCodes(codes);
+                      setUnusedCodes(codes.length);
+                    })
+                    .catch((err) =>
+                      toast.error(err instanceof Error ? err.message : "Could not generate codes"),
+                    );
+                }}
+              >
+                Generate recovery codes
+              </Button>
+            </div>
+            {recoveryCodes && recoveryCodes.length > 0 && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 space-y-2">
+                <p className="text-xs font-medium">Save these now. Each code works once. We cannot show them again.</p>
+                <ul className="font-mono text-xs space-y-1">
+                  {recoveryCodes.map((c) => (
+                    <li key={c}>{c}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Lost your phone? Sign in with your password on a new device and choose
+              “I don&apos;t have my old device”. Do not disable 2FA from here without a working authenticator.
+            </p>
           </div>
         ) : enrollFactorId && qrCode ? (
           <div className="mt-4 space-y-3 max-w-sm">
@@ -457,6 +524,14 @@ export default function SettingsSecurity() {
               Active
             </span>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={signingOutOthers}
+            onClick={() => void signOutOtherSessions()}
+          >
+            {signingOutOthers ? "Signing out…" : "Sign out other sessions"}
+          </Button>
         </div>
       </Card>
     </div>

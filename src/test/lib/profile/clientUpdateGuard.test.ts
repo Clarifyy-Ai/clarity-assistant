@@ -32,5 +32,6 @@ describe("client profile update guard", () => {
     expect(PROFILE_CLIENT_PINNED_COLUMNS).toContain("referred_by");
     expect(PROFILE_CLIENT_PINNED_COLUMNS).toContain("onboarding_completed");
     expect(PROFILE_CLIENT_PINNED_COLUMNS).toContain("onboarding_step");
+    expect(PROFILE_CLIENT_PINNED_COLUMNS).toContain("mfa_reenrollment_required");
   });
 });

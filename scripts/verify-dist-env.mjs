@@ -119,6 +119,10 @@ function main() {
   const forbiddenPatterns = [
     { label: "localhost debug ingest", pattern: /127\.0\.0\.1:7572\/ingest|localhost:7572\/ingest/ },
     { label: "agent debug sink path", pattern: /__agent_debug_/ },
+    {
+      label: "localhost auth redirect",
+      pattern: /https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/(auth|login|reset-password|verify-email|signup)/,
+    },
   ];
 
   const violations = [];

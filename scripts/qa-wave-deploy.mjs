@@ -23,6 +23,7 @@ const QA_WAVE_EDGE_FUNCTIONS = [
   "prep-tool",
   "parse-document",
   "search-exams",
+  "mfa-recovery",
 ];
 
 const QA_WAVE_MIGRATIONS = [
@@ -30,6 +31,8 @@ const QA_WAVE_MIGRATIONS = [
   "20260902220000_answer_persistence_lifecycle.sql",
   "20260902230000_release_gov_paper_credits_fail_closed.sql",
   "20260902231000_gov_paper_atomic_enqueue_and_sweeper.sql",
+  "20260903140000_mfa_recovery.sql",
+  "20260903150000_mfa_reenrollment_column_guard.sql",
 ];
 
 function loadEnv(file) {

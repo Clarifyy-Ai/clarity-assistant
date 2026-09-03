@@ -36,7 +36,7 @@
           "</pre>"
         : "") +
       '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">' +
-      '<button id="boot-retry" style="cursor:pointer;border:0;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:600;background:#8b5cf6;color:#fff">Retry</button>' +
+      '<button id="boot-retry" style="cursor:pointer;border:0;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:600;background:#2563EB;color:#fff">Retry</button>' +
       '<a href="https://developer.chrome.com/docs/devtools/open" target="_blank" rel="noopener noreferrer" style="border:1px solid rgba(148,163,184,.35);border-radius:8px;padding:9px 16px;font-size:13px;font-weight:600;color:#e2e8f0;text-decoration:none">How to open DevTools</a>' +
       "</div></div>";
 

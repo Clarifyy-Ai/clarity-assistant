@@ -34,6 +34,12 @@ function detectEnvironment(): AppEnvironment {
   return "development";
 }
 
+/** Closed-beta opt-in: allow rzp_test_* while APP_ENV=production. */
+export function razorpayAllowsTestKeys(): boolean {
+  const raw = (Deno.env.get("RAZORPAY_ALLOW_TEST_KEYS") ?? "").trim().toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+}
+
 /** Example IDs from .env.example / sync script — never allow into the live catalog. */
 const PLACEHOLDER_PRICE_ID_RE =
   /^price_(starter|pro|elite|enterprise|credits)(_\d+)?_(monthly|yearly)$/i;
@@ -160,11 +166,13 @@ export function validateBillingConfig(options?: {
     );
   }
 
+  const allowRazorpayTestKeys = razorpayAllowsTestKeys();
   checks.push(
     check("RAZORPAY_KEY_ID", Deno.env.get("RAZORPAY_KEY_ID"), {
       required: requireRazorpay,
       pattern: /^rzp_(live|test)_[A-Za-z0-9]+$/,
-      productionForbidsTestPrefix: true,
+      // Live prod forbids test keys unless RAZORPAY_ALLOW_TEST_KEYS is explicit.
+      productionForbidsTestPrefix: !allowRazorpayTestKeys,
       environment,
     }),
   );

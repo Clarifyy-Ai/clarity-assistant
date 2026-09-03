@@ -720,6 +720,100 @@ async function main() {
     );
   }
 
+  // ─── MFA enroll / recovery public shells (anon sign-in prompt; no bypass) ───
+  console.log("MFA recovery routes…");
+  await freshContext();
+  for (const route of [
+    {
+      id: "DEEP-MFA-01",
+      path: "/auth/mfa-enroll",
+      module: "Marketing/Auth",
+      expect: /sign in|authenticator|setup|required/i,
+    },
+    {
+      id: "DEEP-MFA-02",
+      path: "/auth/mfa-recovery",
+      module: "Marketing/Auth",
+      expect: /authenticator recovery|recovery|sign in|two-factor/i,
+    },
+  ]) {
+    report.checks.push(
+      await check(route.id, route.module, async () => {
+        const g = await gotoCollect(page, route.path);
+        const notes = failIfBlankOrCrash({ ...g, path: route.path });
+        if (!route.expect.test(g.bodyText || "")) {
+          notes.push("Expected MFA enroll/recovery shell content missing");
+        }
+        const status = notes.length === 0 ? "Pass" : "Fail";
+        return {
+          path: route.path,
+          role: "anon",
+          status,
+          notes: notes.join("; ") || "MFA auth shell OK (no bypass)",
+          httpStatus: g.httpStatus,
+          finalUrl: g.finalUrl,
+          consoleErrors: g.severe.slice(0, 8),
+          snippet: g.bodyText.replace(/\s+/g, " ").slice(0, 180),
+        };
+      }),
+    );
+  }
+
+  // Soft: /login source or bundle mentions lost-device / recovery (UI is MFA-gated)
+  report.checks.push(
+    await check("DEEP-MFA-SOFT", "Marketing/Auth", async () => {
+      const g = await gotoCollect(page, "/login");
+      const notes = failIfBlankOrCrash({ ...g, path: "/login" });
+      const html = await page.content().catch(() => "");
+      const mentionRe =
+        /lost.?device|don.?t have my old device|use recovery code|email a recovery link|mfa-recovery|authenticator recovery|recovery code/i;
+      const foundInPage = mentionRe.test(`${g.bodyText || ""}\n${html}`);
+      let foundInBundle = false;
+      if (!foundInPage) {
+        foundInBundle = await page
+          .evaluate(async () => {
+            const re =
+              /I don.?t have my old device|Use recovery code|Email a recovery link|mfa-recovery|authenticator recovery/i;
+            const srcs = [...document.querySelectorAll("script[src]")].map((s) => s.src).slice(0, 16);
+            for (const src of srcs) {
+              try {
+                const t = await fetch(src).then((r) => r.text());
+                if (re.test(t)) return true;
+              } catch {
+                /* ignore */
+              }
+            }
+            return false;
+          })
+          .catch(() => false);
+      }
+      const found = foundInPage || foundInBundle;
+      const hard = notes.filter((n) => /Stuck|Crash|Blank|HTTP 5/.test(n));
+      let status = "Pass";
+      const n = [...hard];
+      if (hard.length) {
+        status = "Fail";
+      } else if (!found) {
+        status = "Blocked";
+        n.push(
+          "Soft: lost-device/recovery UI is MFA-gated; not found in anonymous login HTML or script bundles yet",
+        );
+      } else {
+        n.push(`Lost-device/recovery mention found (${foundInPage ? "page" : "bundle"})`);
+      }
+      return {
+        path: "/login",
+        role: "anon",
+        status,
+        notes: n.join("; ") || "Login MFA recovery mention OK",
+        httpStatus: g.httpStatus,
+        finalUrl: g.finalUrl,
+        consoleErrors: g.severe.slice(0, 8),
+        snippet: (g.bodyText || "").replace(/\s+/g, " ").slice(0, 160),
+      };
+    }),
+  );
+
   // ─── Terms / Privacy: not all-caps, left aligned ───
   console.log("Legal typography…");
   await freshContext();

@@ -16,6 +16,7 @@ const PAST_DUE_ALLOWED_FUNCTIONS = new Set([
   "cancel-subscription",
   "resume-subscription",
   "send-email",
+  "mfa-recovery",
   "delete-account",
   "export-user-data",
   "billing-status",

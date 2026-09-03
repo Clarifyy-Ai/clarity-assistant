@@ -60,6 +60,7 @@ const PRIVATE_MODE_ALLOWLIST = new Set([
   "contact-sales",
   "hostinger-mail",
   "send-email",
+  "mfa-recovery",
 ]);
 
 /** Edge functions that do not deduct credits — skip balance refresh. */
@@ -108,6 +109,7 @@ const CREDIT_REFRESH_SKIP = new Set([
   "start-exam",
   "hostinger-mail",
   "send-email",
+  "mfa-recovery",
 ]);
 
 /** Non-AI functions should not blame an "AI request" on CORS / network failure. */
@@ -150,6 +152,7 @@ const OPERATIONAL_EDGE_FNS = new Set([
   "disconnect-calendar",
   "hostinger-mail",
   "send-email",
+  "mfa-recovery",
   "support-chat",
   "contact-sales",
 ]);
@@ -194,6 +197,7 @@ const NO_NETWORK_RETRY_FNS = new Set([
   "cancel-document-processing-job",
   "company-research",
   "export-user-data",
+  "mfa-recovery",
   "razorpay-create-order",
   "razorpay-verify-payment",
   "moderate-content",

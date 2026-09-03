@@ -224,7 +224,8 @@ if (import.meta.env.PROD && !isElectronApp()) {
 }
 
 // ── Mount React ───────────────────────────────────────────────────────────
-document.getElementById("boot-splash")?.remove();
+// Keep #boot-splash until React's first commit replaces #root children.
+// Removing it here flashes an empty root between bundle parse and paint.
 
 // Runtime check: confirm Supabase env + connectivity. Non-blocking.
 void logSupabaseHealth();

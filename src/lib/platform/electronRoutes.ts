@@ -10,6 +10,8 @@ const ELECTRON_ALLOWED_EXACT = new Set([
   "/forgot-password",
   "/reset-password",
   "/auth/callback",
+  "/auth/mfa-enroll",
+  "/auth/mfa-recovery",
   "/onboarding",
   "/app/live",
   "/app/live/overlay",

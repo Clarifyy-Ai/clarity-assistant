@@ -17,8 +17,15 @@ import { AuthShell } from "@/components/layout/AuthShell";
 import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
 import { getAuthenticatedEntryPath } from "@/lib/auth/postAuthRedirect";
 import { assignLoginWithReturnTo } from "@/lib/auth/safeReturnTo";
-import { buildAuthRedirectUrl } from "@/lib/auth/redirectUrl";
+import { authAbsoluteUrl } from "@/lib/auth/appOrigin";
 import { formatSupabaseAuthError } from "@/lib/errors";
+import {
+  classifyEmailOtpError,
+  isCompleteEmailOtp,
+  normalizeEmailOtpInput,
+  type EmailOtpStatus,
+} from "@/lib/auth/emailOtp";
+import { emailOtpSatisfiesMfa } from "@/lib/auth/securityModel";
 
 /**
  * Verify Email gate — shown when an authenticated user has not yet
@@ -45,14 +52,19 @@ export default function VerifyEmail() {
   const [resendOk, setResendOk] = useState(false);
   const [resendError, setResendError] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
+  const [otp, setOtp] = useState("");
+  const [otpStatus, setOtpStatus] = useState<EmailOtpStatus>("idle");
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpBusy, setOtpBusy] = useState(false);
 
   useEffect(() => {
     if (!isUserEmailConfirmed(user)) return;
+    if (otpStatus !== "verified" && otpStatus !== "idle") return;
     navigate(
       getAuthenticatedEntryPath({ isAdmin, isOnboarded }),
       { replace: true },
     );
-  }, [user, isAdmin, isOnboarded, navigate]);
+  }, [user, isAdmin, isOnboarded, navigate, otpStatus]);
 
   // Refresh auth user after the confirmation link is opened in another tab.
   useEffect(() => {
@@ -83,23 +95,64 @@ export default function VerifyEmail() {
       type: "signup",
       email,
       options: {
-        emailRedirectTo: buildAuthRedirectUrl({
-          path: "/auth/callback",
-          configuredAppUrl: import.meta.env.VITE_APP_URL,
-          appEnv: import.meta.env.VITE_APP_ENV,
-          windowOrigin:
-            typeof window !== "undefined" ? window.location.origin : null,
-        }),
+            emailRedirectTo: authAbsoluteUrl("/auth/callback"),
       },
     });
 
     setResending(false);
     if (error) {
       setResendError(formatSupabaseAuthError(error));
+      setOtpStatus("idle");
     } else {
       setResendOk(true);
+      setOtpStatus("sent");
       setCooldown(60);
     }
+  }
+
+  async function handleVerifyOtp(): Promise<void> {
+    if (!email || !isCompleteEmailOtp(otp) || otpBusy) return;
+    if (emailOtpSatisfiesMfa()) {
+      setOtpError("Email confirmation cannot satisfy two-factor authentication.");
+      setOtpStatus("invalid");
+      return;
+    }
+    setOtpBusy(true);
+    setOtpError(null);
+    setOtpStatus("verifying");
+    const token = normalizeEmailOtpInput(otp);
+    const attempts: Array<"signup" | "email"> = ["signup", "email"];
+    let lastError: unknown = null;
+    for (const type of attempts) {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type,
+      });
+      if (!error && (data.session || data.user)) {
+        const confirmed = data.user ?? (await supabase.auth.getUser()).data.user;
+        if (confirmed && isUserEmailConfirmed(confirmed)) {
+          if (data.session) {
+            useAuthStore.getState().setSession(data.session as never);
+          } else {
+            useAuthStore.getState().setUser(confirmed as never);
+          }
+          try {
+            await useAuthStore.getState().loadProfile({ force: true });
+          } catch {
+            /* auth listener hydrates new accounts */
+          }
+          setOtpStatus("verified");
+          setOtpBusy(false);
+          return;
+        }
+      }
+      lastError = error;
+    }
+    const classified = classifyEmailOtpError(lastError);
+    setOtpStatus(classified.status);
+    setOtpError(classified.message);
+    setOtpBusy(false);
   }
 
   async function handleSignOut() {
@@ -155,6 +208,41 @@ export default function VerifyEmail() {
               {resendError}
             </div>
           )}
+
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              If the email includes a code, enter it here. This confirms your inbox — it is not two-factor MFA.
+            </p>
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={otp}
+              onChange={(e) => setOtp(normalizeEmailOtpInput(e.target.value))}
+              placeholder="6 or 8 digit code"
+              aria-label="Email confirmation code"
+              className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
+            />
+            {otpStatus === "sent" && (
+              <p className="text-xs text-muted-foreground">Confirmation email sent. Enter the code or open the link.</p>
+            )}
+            {otpStatus === "verified" && (
+              <p className="text-xs text-emerald-600">Email verified.</p>
+            )}
+            {otpError && (
+              <p role="alert" className="text-xs text-destructive">{otpError}</p>
+            )}
+            <Button
+              variant="secondary"
+              size="md"
+              onClick={() => void handleVerifyOtp()}
+              loading={otpBusy}
+              disabled={!email || !isCompleteEmailOtp(otp) || otpBusy}
+              fullWidth
+            >
+              Verify code
+            </Button>
+          </div>
 
           <div className="flex flex-col gap-2">
             <Button

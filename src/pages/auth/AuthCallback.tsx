@@ -27,6 +27,9 @@ import {
   isOAuthStateMismatchError,
 } from "@/lib/auth/oauthProviders";
 import { classifyLoginFailure } from "@/lib/auth/loginFailure";
+import { resolveMfaGateDecision } from "@/lib/auth/mfaGate";
+import { AUTH_PATHS } from "@/lib/auth/appOrigin";
+import { MFA_REQUIRED_REASON } from "@/hooks/useAuth";
 import {
   isPasswordRecoveryFlowMarked,
   resolveAuthDeepLinkRedirect,
@@ -96,6 +99,7 @@ export default function AuthCallback(): JSX.Element {
   const isOnboarded = useAuthStore((state) => state.isOnboarded);
   const isAdmin = useAuthStore((state) => state.isAdmin);
   const isProfileLoaded = useAuthStore((state) => state.isProfileLoaded);
+  const profile = useAuthStore((state) => state.profile);
   const initialize = useAuthStore((state) => state.initialize);
 
   const [timedOut, setTimedOut] = useState(false);
@@ -170,13 +174,27 @@ export default function AuthCallback(): JSX.Element {
         return;
       }
 
-      const target = getSafeRedirectTarget({
-        isAdmin,
-        isOnboarded,
-      });
-
-      navigate(target, { replace: true });
-      return;
+      let cancelled = false;
+      void (async () => {
+        const gate = await resolveMfaGateDecision();
+        if (cancelled) return;
+        if (gate.decision !== "allow") {
+          navigate(`/login?reason=${encodeURIComponent(MFA_REQUIRED_REASON)}`, { replace: true });
+          return;
+        }
+        if (profile?.mfa_reenrollment_required) {
+          navigate(AUTH_PATHS.mfaEnroll, { replace: true });
+          return;
+        }
+        const target = getSafeRedirectTarget({
+          isAdmin,
+          isOnboarded,
+        });
+        navigate(target, { replace: true });
+      })();
+      return () => {
+        cancelled = true;
+      };
     }
 
     if (status === "unauthenticated" || status === "error") {
@@ -193,6 +211,7 @@ export default function AuthCallback(): JSX.Element {
     user,
     location.search,
     location.hash,
+    profile?.mfa_reenrollment_required,
   ]);
 
   if (timedOut) {

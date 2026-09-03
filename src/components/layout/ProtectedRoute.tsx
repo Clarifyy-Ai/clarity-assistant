@@ -21,6 +21,7 @@ import { canRetryAccountRecovery } from "@/lib/auth/accountBootstrap";
 import { SUPPORT_EMAIL } from "@/lib/constants/contact";
 import { useClaimStoredReferral } from "@/hooks/useClaimStoredReferral";
 import { MFA_REQUIRED_REASON } from "@/hooks/useAuth";
+import { AUTH_PATHS } from "@/lib/auth/appOrigin";
 import { MFA_ENFORCEMENT_PAUSED, resolveMfaGateDecision } from "@/lib/auth/mfaGate";
 import {
   canBrowseGovExamsBeforeProfileReady,
@@ -287,9 +288,23 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     }
   }
 
-  // 3a) Email verification — always enforced for authenticated protected routes.
+  // Email verification — always enforced for authenticated protected routes.
   if (!isUserEmailConfirmed(user)) {
     return <Navigate to="/verify-email" state={{ from: location }} replace />;
+  }
+
+  if (
+    isProfileLoaded &&
+    profile?.mfa_reenrollment_required &&
+    location.pathname !== AUTH_PATHS.mfaEnroll
+  ) {
+    logger.info(LogEvents.ROUTE_GUARD_DECISION, {
+      route: location.pathname,
+      authState: "recovery_required",
+      outcome: "succeeded",
+      recoveryAction: "redirect_mfa_enroll",
+    });
+    return <Navigate to={AUTH_PATHS.mfaEnroll} replace />;
   }
 
   // 3b) Billing suspension — past_due beyond 3-day grace (stripe-webhook sets payment_failed_at)
