@@ -303,3 +303,39 @@ describe("classifyAccountLoadFailure extra kinds", () => {
     expect(userFacingAccountError("network_failure")).not.toMatch(/PGRST|postgres|jwt/i);
   });
 });
+
+describe("soft-fail helpers", () => {
+  it("keeps in-flight hydrate on session-check timeout", async () => {
+    const { shouldKeepHydrateOnSessionCheckFailure } = await import(
+      "@/lib/auth/accountBootstrap"
+    );
+
+    expect(
+      shouldKeepHydrateOnSessionCheckFailure({
+        hasUser: true,
+        status: "loading",
+        isProfileLoaded: false,
+        timedOut: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldKeepHydrateOnSessionCheckFailure({
+        hasUser: false,
+        status: "loading",
+        isProfileLoaded: false,
+        timedOut: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("classifies missing-column errors as schema config failures", async () => {
+    const { classifyAccountLoadFailure } = await import(
+      "@/lib/auth/accountBootstrap"
+    );
+    expect(
+      classifyAccountLoadFailure(
+        new Error("column profiles.is_admin does not exist"),
+      ),
+    ).toBe("schema_config_failure");
+  });
+});

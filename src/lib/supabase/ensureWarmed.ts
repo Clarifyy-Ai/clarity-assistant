@@ -8,6 +8,8 @@ let warmPromise: Promise<void> | null = null;
 let warmedAt = 0;
 
 const WARM_TTL_MS = 30_000;
+/** Cap warm so a hung getSession cannot starve profile/role budgets. */
+const WARM_BUDGET_MS = 5_000;
 
 /**
  * Ensures at least one Auth round-trip has completed recently.
@@ -22,7 +24,15 @@ export function ensureSupabaseWarmed(): Promise<void> {
   warmedAt = now;
   warmPromise = (async () => {
     try {
-      await supabase.auth.getSession();
+      await Promise.race([
+        supabase.auth.getSession(),
+        new Promise<never>((_, reject) => {
+          setTimeout(
+            () => reject(new Error("Supabase warm timed out")),
+            WARM_BUDGET_MS,
+          );
+        }),
+      ]);
     } catch {
       // Callers still run their own timed requests; warm is best-effort.
     }

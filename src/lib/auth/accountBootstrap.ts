@@ -62,6 +62,7 @@ export type AccountLoadFailureKind =
   | "missing_role"
   | "role_query_failure"
   | "restricted_account"
+  | "schema_config_failure"
   | "timeout"
   | "unknown";
 
@@ -105,6 +106,27 @@ export function isTimeoutError(error: unknown): boolean {
   return msg.toLowerCase().includes("timed out");
 }
 
+/**
+ * Session-check timeout must not clobber an in-flight hydrate from
+ * onAuthStateChange (INITIAL_SESSION often races getSession()).
+ */
+export function shouldKeepHydrateOnSessionCheckFailure(input: {
+  hasUser: boolean;
+  status: "idle" | "loading" | "authenticated" | "unauthenticated" | "error";
+  isProfileLoaded: boolean;
+  timedOut: boolean;
+}): boolean {
+  if (!input.hasUser) return false;
+  if (input.status === "authenticated" || input.isProfileLoaded) return true;
+  if (
+    input.timedOut &&
+    (input.status === "loading" || input.status === "idle")
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function errorText(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
@@ -122,6 +144,17 @@ export function classifyAccountLoadFailure(error: unknown): AccountLoadFailureKi
   const msg = errorText(error).toLowerCase();
 
   if (!msg) return "unknown";
+  if (
+    msg.includes("does not exist") ||
+    msg.includes("could not find the") ||
+    msg.includes("schema cache") ||
+    msg.includes("pgrst204") ||
+    msg.includes("pgrst202") ||
+    msg.includes("42703") ||
+    msg.includes("42p01")
+  ) {
+    return "schema_config_failure";
+  }
   if (msg.includes("timed out")) return "timeout";
   if (
     msg.includes("invalid login credentials") ||
@@ -191,6 +224,7 @@ export function userFacingAccountError(kind: AccountLoadFailureKind): string {
       return AUTH_NETWORK_FAILURE_MESSAGE;
     case "auth_server_failure":
       return AUTH_SERVER_FAILURE_MESSAGE;
+    case "schema_config_failure":
     case "missing_profile":
     case "profile_query_failure":
     case "missing_role":

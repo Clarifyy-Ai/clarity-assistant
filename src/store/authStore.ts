@@ -41,6 +41,7 @@ import {
   hasRecentLogoutBroadcast,
   isInvalidRefreshTokenError,
   isNonRetryableAuthError,
+  isSchemaConfigError,
   markExplicitLogoutBroadcast,
   redirectAfterCrossTabSignOut,
   redirectToSessionExpiredLogin,
@@ -61,7 +62,6 @@ import {
   AUTH_ACCOUNT_FRIENDLY_ERROR,
   AUTH_SESSION_TIMEOUT_MS_ELECTRON,
   AUTH_SESSION_TIMEOUT_MS_WEB,
-  PROFILE_COLD_RETRY_DELAY_MS,
   PROFILE_FETCH_TIMEOUT_MS,
   ROLE_CHECK_TIMEOUT_MS,
   asLoginCredentials,
@@ -70,6 +70,7 @@ import {
   createInFlightMap,
   deriveAccountPhase,
   isTimeoutError,
+  shouldKeepHydrateOnSessionCheckFailure,
   shouldLoadAccountOnAuthEvent,
   shouldSkipSoftProfileRefresh,
   userFacingAccountError,
@@ -145,13 +146,15 @@ async function resolveAdminRole(
       return { resolved: true, isAdmin, isModerator: false };
     } catch (err) {
       if (isNonRetryableAuthError(err)) {
+        const schemaErr = isSchemaConfigError(err);
         logger.warn(LogEvents.AUTH_ROLE_LOAD_FAILED, {
           operation: "role.load",
           attempt: 1,
           durationMs: Date.now() - startedAt,
           outcome: "failed",
           retryable: false,
-          recoveryAction: "fail_closed",
+          recoveryAction: schemaErr ? "schema_config_error" : "fail_closed",
+          diagnosticCode: schemaErr ? "ROLE_SCHEMA_ERROR" : undefined,
         });
         console.warn(
           "[authStore] Admin role check: non-retryable auth error",
@@ -187,6 +190,7 @@ async function resolveAdminRole(
         return { resolved: true, isAdmin, isModerator: false };
       } catch (retryErr) {
         const retryTimedOut = isTimeoutError(retryErr);
+        const schemaErr = isSchemaConfigError(retryErr);
         logger.error(
           retryTimedOut
             ? LogEvents.AUTH_ROLE_LOAD_TIMED_OUT
@@ -197,7 +201,8 @@ async function resolveAdminRole(
             durationMs: Date.now() - startedAt,
             outcome: retryTimedOut ? "timed_out" : "failed",
             retryable: false,
-            recoveryAction: "fail_closed",
+            recoveryAction: schemaErr ? "schema_config_error" : "fail_closed",
+            diagnosticCode: schemaErr ? "ROLE_SCHEMA_ERROR" : undefined,
           },
         );
         console.warn(
@@ -380,7 +385,7 @@ function applyAdminRoleResult(
   });
 }
 
-/** Kick off moderator lookup — admin flag may already come from profile.is_admin. */
+/** Kick off moderator lookup after admin resolution. */
 function scheduleModeratorRoleResolve(
   userId: string,
   set: (fn: (state: AuthStore) => void) => void,
@@ -863,16 +868,49 @@ export const useAuthStore = create<AuthStore>()(
                 resetPostHog();
                 get().reset();
                 redirectToSessionExpiredLogin();
-              } else {
-                logger.error(LogEvents.BOOTSTRAP_FAILED, {
-                  outcome: "failed",
+              } else if (
+                shouldKeepHydrateOnSessionCheckFailure({
+                  hasUser: Boolean(get().user),
+                  status: get().status,
+                  isProfileLoaded: get().isProfileLoaded,
+                  timedOut: isTimeoutError(error),
+                })
+              ) {
+                // onAuthStateChange INITIAL_SESSION often hydrates in parallel.
+                // A timed-out getSession must not wipe that in-flight load.
+                logger.warn(LogEvents.BOOTSTRAP_FAILED, {
+                  outcome: "timed_out",
                   operation: "session.check",
+                  recoveryAction: "keep_in_flight_hydrate",
+                  retryable: true,
                 });
-                const kind = classifyAccountLoadFailure(error);
-                dset((state) => {
-                  state.status = "error";
-                  state.error = userFacingAccountError(kind);
-                });
+              } else {
+                const cached = readCachedAuthSession();
+                if (cached?.session?.user && isTimeoutError(error)) {
+                  logger.warn(LogEvents.BOOTSTRAP_FAILED, {
+                    outcome: "timed_out",
+                    operation: "session.check",
+                    recoveryAction: "cached_session",
+                    retryable: true,
+                  });
+                  await hydrateFromSession(
+                    cached.session as {
+                      access_token?: string;
+                      user?: SupabaseUser;
+                    },
+                    "INITIAL_SESSION",
+                  );
+                } else {
+                  logger.error(LogEvents.BOOTSTRAP_FAILED, {
+                    outcome: "failed",
+                    operation: "session.check",
+                  });
+                  const kind = classifyAccountLoadFailure(error);
+                  dset((state) => {
+                    state.status = "error";
+                    state.error = userFacingAccountError(kind);
+                  });
+                }
               }
             } finally {
               _bootstrapping = false;
@@ -1290,30 +1328,7 @@ export const useAuthStore = create<AuthStore>()(
                 try {
                   profile = await fetchProfile();
                 } catch (secondErr) {
-                  // Cold start: first Auth RTT can exceed one budget (seen ~12s).
-                  // One delayed third attempt after warm before failing the session.
-                  if (
-                    !abort.signal.aborted &&
-                    isTimeoutError(secondErr) &&
-                    !hadLoadedProfile
-                  ) {
-                    logger.warn(LogEvents.AUTH_PROFILE_LOAD_TIMED_OUT, {
-                      operation: "profile.load",
-                      attempt: 2,
-                      durationMs: Date.now() - profileStartedAt,
-                      outcome: "timed_out",
-                      retryable: true,
-                      recoveryAction: "cold_retry",
-                    });
-                    await new Promise((r) =>
-                      setTimeout(r, PROFILE_COLD_RETRY_DELAY_MS),
-                    );
-                    if (abort.signal.aborted) throw secondErr;
-                    await ensureSupabaseWarmed();
-                    profile = await fetchProfile();
-                  } else {
-                    throw secondErr;
-                  }
+                  throw secondErr;
                 }
               }
 
@@ -1416,15 +1431,10 @@ export const useAuthStore = create<AuthStore>()(
                 );
                 state.planId = getProfileString(row, "plan_id", "free");
                 state.credits = getProfileNumber(row, "credits", 0);
-                if (Object.prototype.hasOwnProperty.call(row, "is_admin")) {
-                  state.isAdmin = getProfileBoolean(row, "is_admin", false);
-                  state.isAdminResolved = true;
-                }
               });
 
-              if (Object.prototype.hasOwnProperty.call(row, "is_admin")) {
-                scheduleModeratorRoleResolve(userId, set, get);
-              } else if (!(options?.background && get().isAdminResolved)) {
+              // Admin/moderator come from user_roles via RPC — never profiles.is_admin.
+              if (!(options?.background && get().isAdminResolved)) {
                 scheduleAdminRoleResolve(userId, set, get);
               }
 
@@ -1479,6 +1489,7 @@ export const useAuthStore = create<AuthStore>()(
               }
 
               const timedOut = isTimeoutError(err);
+              const kind = classifyAccountLoadFailure(err);
 
               // Tab switches / token refresh often re-fetch the profile. A
               // transient failure must not replace a working session with the
@@ -1517,7 +1528,6 @@ export const useAuthStore = create<AuthStore>()(
                 return true;
               }
 
-              const kind = classifyAccountLoadFailure(err);
               logger.error(
                 timedOut
                   ? LogEvents.AUTH_PROFILE_LOAD_TIMED_OUT
@@ -1527,6 +1537,16 @@ export const useAuthStore = create<AuthStore>()(
                   durationMs: Date.now() - profileStartedAt,
                   outcome: timedOut ? "timed_out" : "failed",
                   retryable: false,
+                  recoveryAction:
+                    kind === "schema_config_failure"
+                      ? "schema_config_error"
+                      : undefined,
+                  diagnosticCode:
+                    kind === "schema_config_failure"
+                      ? "PROFILE_SCHEMA_ERROR"
+                      : kind === "timeout"
+                        ? "AUTH_BOOTSTRAP_ERROR"
+                        : undefined,
                 },
               );
 

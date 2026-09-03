@@ -25,12 +25,30 @@ export function isInvalidRefreshTokenError(error: unknown): boolean {
 }
 
 /**
+ * PostgREST / Postgres schema mismatches (missing column, unknown relation).
+ * Retrying these only burns timeout budgets and masks deployment drift.
+ */
+export function isSchemaConfigError(error: unknown): boolean {
+  const msg = getErrorMessage(error).toLowerCase();
+  return (
+    msg.includes("does not exist") ||
+    msg.includes("could not find the") ||
+    msg.includes("schema cache") ||
+    msg.includes("pgrst204") ||
+    msg.includes("pgrst202") ||
+    msg.includes("42703") || // undefined_column
+    msg.includes("42p01") // undefined_table
+  );
+}
+
+/**
  * Supabase errors that must NOT be retried — retrying burns time and creates log noise.
  */
 export function isNonRetryableAuthError(error: unknown): boolean {
   const msg = getErrorMessage(error).toLowerCase();
   return (
     isInvalidRefreshTokenError(error) ||
+    isSchemaConfigError(error) ||
     msg.includes("jwt expired") ||
     msg.includes("not authenticated") ||
     msg.includes("invalid api key") ||

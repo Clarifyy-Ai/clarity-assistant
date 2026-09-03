@@ -41,6 +41,11 @@ vi.mock("@/lib/supabase/sessionCache", () => ({
   readCachedAuthSession: () => null,
 }));
 
+vi.mock("@/lib/supabase/ensureWarmed", () => ({
+  ensureSupabaseWarmed: vi.fn(async () => undefined),
+  resetSupabaseWarmForTests: vi.fn(),
+}));
+
 const mockProfile = {
   id: "u1",
   email: "free@example.com",
@@ -270,5 +275,25 @@ describe("authStore account bootstrap", () => {
     const ok = await useAuthStore.getState().retryAccountLoad();
     expect(ok).toBe(false);
     expect(mockGetByIdMaybe).not.toHaveBeenCalled();
+  });
+
+  it("does not retry profile schema/config errors", async () => {
+    useAuthStore.setState({
+      user: mockUser as never,
+      session: mockSession as never,
+      status: "loading",
+      isProfileLoaded: false,
+      profile: null,
+    });
+    mockGetByIdMaybe.mockRejectedValue(
+      new Error("column profiles.is_admin does not exist"),
+    );
+
+    const ok = await useAuthStore.getState().loadProfile();
+
+    expect(ok).toBe(false);
+    expect(mockGetByIdMaybe).toHaveBeenCalledTimes(1);
+    expect(useAuthStore.getState().status).toBe("error");
+    expect(useAuthStore.getState().error).toMatch(/Unable to load your account/i);
   });
 });

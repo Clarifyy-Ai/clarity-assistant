@@ -116,8 +116,12 @@ const PROFILE_SAFE_COLUMNS = [
   "years_of_exp",
 ].join(", ");
 
-/** Minimal columns for auth bootstrap — small payload for high-latency regions. */
-const PROFILE_BOOT_COLUMNS = [
+/**
+ * Minimal columns for auth bootstrap — small payload for high-latency regions.
+ * Admin is NOT on profiles (dropped 20260616); authoritative source is
+ * user_roles + SECURITY DEFINER rpc is_admin() via userRolesDB.hasRole.
+ */
+export const PROFILE_BOOT_COLUMNS = [
   "id",
   "email",
   "full_name",
@@ -127,7 +131,6 @@ const PROFILE_BOOT_COLUMNS = [
   "is_banned",
   "ban_reason",
   "onboarding_completed",
-  "is_admin",
   "overlay_opacity",
   "overlay_position",
   "privacy_prefs",

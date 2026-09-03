@@ -13,7 +13,7 @@ import {
 
 /**
  * Soft stuck UI after soft budget; hard reload only when the user chooses Reload.
- * Budget: session ≤8s + profile ≤6s × 2 attempts ≈ 20s (role no longer blocks paint).
+ * Budget: session ≤15s; profile soft-fails to provisional after 2×15s timeouts.
  */
 const STUCK_TIMEOUT_MS = 22_000;
 
