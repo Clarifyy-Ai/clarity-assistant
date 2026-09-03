@@ -105,7 +105,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           />
 
           {rightIcon && (
-            <span className="pointer-events-none absolute inset-y-0 right-0 flex w-10 items-center justify-center text-muted-foreground">
+            <span className="pointer-events-none absolute inset-y-0 right-0 z-10 flex w-10 items-center justify-center text-muted-foreground [&_button]:pointer-events-auto">
               {rightIcon}
             </span>
           )}

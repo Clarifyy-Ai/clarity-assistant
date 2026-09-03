@@ -662,7 +662,7 @@ export default function Login(): JSX.Element {
                   <button
                     type="button"
                     onClick={() => setShowPassword((value) => !value)}
-                    className="text-muted-foreground hover:text-foreground transition-colors"
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors"
                     aria-label={
                       showPassword ? "Hide password" : "Show password"
                     }
