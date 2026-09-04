@@ -698,6 +698,169 @@ export type Database = {
           },
         ]
       }
+      assessment_blueprints: {
+        Row: {
+          blueprint_policy_version: string
+          boosted_categories: string[]
+          category_weights: Json
+          context_snapshot_id: string
+          created_at: string
+          difficulty_weights: Json
+          duration_minutes: number | null
+          id: string
+          question_count: number
+          role_slug: string
+          selection_policy_version: string
+          selection_seed: string
+          user_id: string
+          why_selected: string | null
+        }
+        Insert: {
+          blueprint_policy_version?: string
+          boosted_categories?: string[]
+          category_weights?: Json
+          context_snapshot_id: string
+          created_at?: string
+          difficulty_weights?: Json
+          duration_minutes?: number | null
+          id?: string
+          question_count: number
+          role_slug: string
+          selection_policy_version?: string
+          selection_seed: string
+          user_id: string
+          why_selected?: string | null
+        }
+        Update: {
+          blueprint_policy_version?: string
+          boosted_categories?: string[]
+          category_weights?: Json
+          context_snapshot_id?: string
+          created_at?: string
+          difficulty_weights?: Json
+          duration_minutes?: number | null
+          id?: string
+          question_count?: number
+          role_slug?: string
+          selection_policy_version?: string
+          selection_seed?: string
+          user_id?: string
+          why_selected?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assessment_blueprints_context_snapshot_id_fkey"
+            columns: ["context_snapshot_id"]
+            isOneToOne: false
+            referencedRelation: "assessment_context_snapshots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assessment_context_snapshots: {
+        Row: {
+          created_at: string
+          domain: string | null
+          experience_level: string | null
+          force_general: boolean
+          id: string
+          jd_version_id: string | null
+          performance_snapshot: Json
+          personalized: boolean
+          policy_versions: Json
+          resume_version_id: string | null
+          role_slug: string
+          selection_seed: string
+          setup_payload: Json
+          skill_snapshot: Json
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          domain?: string | null
+          experience_level?: string | null
+          force_general?: boolean
+          id?: string
+          jd_version_id?: string | null
+          performance_snapshot?: Json
+          personalized?: boolean
+          policy_versions?: Json
+          resume_version_id?: string | null
+          role_slug: string
+          selection_seed: string
+          setup_payload?: Json
+          skill_snapshot?: Json
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          domain?: string | null
+          experience_level?: string | null
+          force_general?: boolean
+          id?: string
+          jd_version_id?: string | null
+          performance_snapshot?: Json
+          personalized?: boolean
+          policy_versions?: Json
+          resume_version_id?: string | null
+          role_slug?: string
+          selection_seed?: string
+          setup_payload?: Json
+          skill_snapshot?: Json
+          user_id?: string
+        }
+        Relationships: []
+      }
+      assessment_question_selections: {
+        Row: {
+          attempt_id: string
+          created_at: string
+          difficulty: string | null
+          id: string
+          question_id: string
+          selection_policy_version: string
+          selection_reason: Json
+          selection_score: number | null
+          sequence: number
+          skill_or_category: string | null
+          user_id: string
+        }
+        Insert: {
+          attempt_id: string
+          created_at?: string
+          difficulty?: string | null
+          id?: string
+          question_id: string
+          selection_policy_version?: string
+          selection_reason?: Json
+          selection_score?: number | null
+          sequence: number
+          skill_or_category?: string | null
+          user_id: string
+        }
+        Update: {
+          attempt_id?: string
+          created_at?: string
+          difficulty?: string | null
+          id?: string
+          question_id?: string
+          selection_policy_version?: string
+          selection_reason?: Json
+          selection_score?: number | null
+          sequence?: number
+          skill_or_category?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assessment_question_selections_attempt_id_fkey"
+            columns: ["attempt_id"]
+            isOneToOne: false
+            referencedRelation: "mock_tests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_logs: {
         Row: {
           action: string
@@ -828,7 +991,10 @@ export type Database = {
           credits_50_inr_paise: number
           credits_500_inr_paise: number
           enterprise_monthly_inr_paise: number
+          finance_currency: string
           id: number
+          payment_fee_cost_type: string | null
+          payment_fee_rate_bps: number | null
           pro_monthly_inr_paise: number
           razorpay_enabled: boolean
           referee_credit_reward: number
@@ -842,7 +1008,10 @@ export type Database = {
           credits_50_inr_paise?: number
           credits_500_inr_paise?: number
           enterprise_monthly_inr_paise?: number
+          finance_currency?: string
           id?: number
+          payment_fee_cost_type?: string | null
+          payment_fee_rate_bps?: number | null
           pro_monthly_inr_paise?: number
           razorpay_enabled?: boolean
           referee_credit_reward?: number
@@ -856,7 +1025,10 @@ export type Database = {
           credits_50_inr_paise?: number
           credits_500_inr_paise?: number
           enterprise_monthly_inr_paise?: number
+          finance_currency?: string
           id?: number
+          payment_fee_cost_type?: string | null
+          payment_fee_rate_bps?: number | null
           pro_monthly_inr_paise?: number
           razorpay_enabled?: boolean
           referee_credit_reward?: number
@@ -1241,10 +1413,12 @@ export type Database = {
       }
       coding_submissions: {
         Row: {
+          case_set_checksum: string | null
           code: string
           execution_status: string | null
           failed_tests: number | null
           id: string
+          judge_version: string | null
           language: string
           passed_tests: number | null
           question_id: string
@@ -1255,10 +1429,12 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          case_set_checksum?: string | null
           code: string
           execution_status?: string | null
           failed_tests?: number | null
           id?: string
+          judge_version?: string | null
           language: string
           passed_tests?: number | null
           question_id: string
@@ -1269,10 +1445,12 @@ export type Database = {
           user_id: string
         }
         Update: {
+          case_set_checksum?: string | null
           code?: string
           execution_status?: string | null
           failed_tests?: number | null
           id?: string
+          judge_version?: string | null
           language?: string
           passed_tests?: number | null
           question_id?: string
@@ -4801,6 +4979,116 @@ export type Database = {
           },
         ]
       }
+      mfa_recovery_code_sets: {
+        Row: {
+          created_at: string
+          id: string
+          remaining_count: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          remaining_count?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          remaining_count?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      mfa_recovery_codes: {
+        Row: {
+          code_hash: string
+          created_at: string
+          id: string
+          set_id: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          code_hash: string
+          created_at?: string
+          id?: string
+          set_id: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          code_hash?: string
+          created_at?: string
+          id?: string
+          set_id?: string
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mfa_recovery_codes_set_id_fkey"
+            columns: ["set_id"]
+            isOneToOne: false
+            referencedRelation: "mfa_recovery_code_sets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mfa_recovery_tokens: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          token_hash: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          token_hash: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          token_hash?: string
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      mfa_security_events: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          metadata: Json
+          status: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          status: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          status?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       mock_tests: {
         Row: {
           attempt_phase: string | null
@@ -4811,6 +5099,7 @@ export type Database = {
           expires_at: string | null
           id: string
           overall_score: number | null
+          paused_at: string | null
           question_ids: string[]
           rank_status: string
           started_at: string | null
@@ -4818,6 +5107,7 @@ export type Database = {
           submitted_at: string | null
           test_name: string
           time_limit_minutes: number | null
+          total_paused_ms: number
           updated_at: string | null
           user_id: string
         }
@@ -4830,6 +5120,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           overall_score?: number | null
+          paused_at?: string | null
           question_ids?: string[]
           rank_status?: string
           started_at?: string | null
@@ -4837,6 +5128,7 @@ export type Database = {
           submitted_at?: string | null
           test_name: string
           time_limit_minutes?: number | null
+          total_paused_ms?: number
           updated_at?: string | null
           user_id: string
         }
@@ -4849,6 +5141,7 @@ export type Database = {
           expires_at?: string | null
           id?: string
           overall_score?: number | null
+          paused_at?: string | null
           question_ids?: string[]
           rank_status?: string
           started_at?: string | null
@@ -4856,6 +5149,7 @@ export type Database = {
           submitted_at?: string | null
           test_name?: string
           time_limit_minutes?: number | null
+          total_paused_ms?: number
           updated_at?: string | null
           user_id?: string
         }
@@ -5722,6 +6016,7 @@ export type Database = {
           longest_streak: number
           marketing_emails: boolean
           metadata: Json
+          mfa_reenrollment_required: boolean
           noise_suppression: boolean
           notice_period: string | null
           notification_prefs: Json | null
@@ -5743,6 +6038,7 @@ export type Database = {
           privacy_prefs: Json | null
           profile_visibility: string
           referral_code: string | null
+          referral_credits_earned: number
           referred_by: string | null
           region: string | null
           response_style: string
@@ -5817,6 +6113,7 @@ export type Database = {
           longest_streak?: number
           marketing_emails?: boolean
           metadata?: Json
+          mfa_reenrollment_required?: boolean
           noise_suppression?: boolean
           notice_period?: string | null
           notification_prefs?: Json | null
@@ -5838,6 +6135,7 @@ export type Database = {
           privacy_prefs?: Json | null
           profile_visibility?: string
           referral_code?: string | null
+          referral_credits_earned?: number
           referred_by?: string | null
           region?: string | null
           response_style?: string
@@ -5912,6 +6210,7 @@ export type Database = {
           longest_streak?: number
           marketing_emails?: boolean
           metadata?: Json
+          mfa_reenrollment_required?: boolean
           noise_suppression?: boolean
           notice_period?: string | null
           notification_prefs?: Json | null
@@ -5933,6 +6232,7 @@ export type Database = {
           privacy_prefs?: Json | null
           profile_visibility?: string
           referral_code?: string | null
+          referral_credits_earned?: number
           referred_by?: string | null
           region?: string | null
           response_style?: string
@@ -6020,6 +6320,137 @@ export type Database = {
           {
             foreignKeyName: "promo_codes_created_by_fkey"
             columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      provider_unit_costs: {
+        Row: {
+          cost_type: string
+          created_at: string
+          currency: string
+          effective_from: string
+          effective_to: string | null
+          id: string
+          notes: string | null
+          operation: string
+          provider: string
+          service: string
+          source: string
+          unit: string
+          unit_cost: number
+          updated_at: string
+        }
+        Insert: {
+          cost_type: string
+          created_at?: string
+          currency?: string
+          effective_from?: string
+          effective_to?: string | null
+          id?: string
+          notes?: string | null
+          operation: string
+          provider: string
+          service: string
+          source?: string
+          unit: string
+          unit_cost: number
+          updated_at?: string
+        }
+        Update: {
+          cost_type?: string
+          created_at?: string
+          currency?: string
+          effective_from?: string
+          effective_to?: string | null
+          id?: string
+          notes?: string | null
+          operation?: string
+          provider?: string
+          service?: string
+          source?: string
+          unit?: string
+          unit_cost?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      provider_usage: {
+        Row: {
+          actual_cost_microcents: number | null
+          billing_mode: string | null
+          cost_type: string
+          created_at: string
+          currency: string
+          duration_ms: number | null
+          estimated_cost_microcents: number | null
+          feature: string | null
+          id: string
+          input_tokens: number | null
+          metadata: Json
+          operation: string
+          output_tokens: number | null
+          provider: string
+          request_id: string | null
+          service: string
+          source_id: string | null
+          status: string
+          usage_quantity: number | null
+          usage_unit: string | null
+          user_id: string | null
+        }
+        Insert: {
+          actual_cost_microcents?: number | null
+          billing_mode?: string | null
+          cost_type: string
+          created_at?: string
+          currency?: string
+          duration_ms?: number | null
+          estimated_cost_microcents?: number | null
+          feature?: string | null
+          id?: string
+          input_tokens?: number | null
+          metadata?: Json
+          operation: string
+          output_tokens?: number | null
+          provider: string
+          request_id?: string | null
+          service: string
+          source_id?: string | null
+          status?: string
+          usage_quantity?: number | null
+          usage_unit?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          actual_cost_microcents?: number | null
+          billing_mode?: string | null
+          cost_type?: string
+          created_at?: string
+          currency?: string
+          duration_ms?: number | null
+          estimated_cost_microcents?: number | null
+          feature?: string | null
+          id?: string
+          input_tokens?: number | null
+          metadata?: Json
+          operation?: string
+          output_tokens?: number | null
+          provider?: string
+          request_id?: string | null
+          service?: string
+          source_id?: string | null
+          status?: string
+          usage_quantity?: number | null
+          usage_unit?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provider_usage_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -6568,44 +6999,234 @@ export type Database = {
         }
         Relationships: []
       }
+      referral_events: {
+        Row: {
+          attribution_id: string | null
+          event_status: string
+          event_type: string
+          id: string
+          metadata: Json
+          occurred_at: string
+          operation_id: string | null
+          source_record_id: string | null
+        }
+        Insert: {
+          attribution_id?: string | null
+          event_status: string
+          event_type: string
+          id?: string
+          metadata?: Json
+          occurred_at?: string
+          operation_id?: string | null
+          source_record_id?: string | null
+        }
+        Update: {
+          attribution_id?: string | null
+          event_status?: string
+          event_type?: string
+          id?: string
+          metadata?: Json
+          occurred_at?: string
+          operation_id?: string | null
+          source_record_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_events_attribution_id_fkey"
+            columns: ["attribution_id"]
+            isOneToOne: false
+            referencedRelation: "referrals"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      referral_programmes: {
+        Row: {
+          created_at: string
+          eligibility_rules: Json
+          end_at: string | null
+          id: string
+          maximum_rewards: number | null
+          name: string
+          qualifying_event: string
+          referee_credit_reward: number
+          referral_discount_percent: number
+          referrer_credit_reward: number
+          start_at: string
+          status: string
+          terms_url: string | null
+          updated_at: string
+          version: string
+        }
+        Insert: {
+          created_at?: string
+          eligibility_rules?: Json
+          end_at?: string | null
+          id?: string
+          maximum_rewards?: number | null
+          name: string
+          qualifying_event?: string
+          referee_credit_reward?: number
+          referral_discount_percent?: number
+          referrer_credit_reward?: number
+          start_at?: string
+          status?: string
+          terms_url?: string | null
+          updated_at?: string
+          version: string
+        }
+        Update: {
+          created_at?: string
+          eligibility_rules?: Json
+          end_at?: string | null
+          id?: string
+          maximum_rewards?: number | null
+          name?: string
+          qualifying_event?: string
+          referee_credit_reward?: number
+          referral_discount_percent?: number
+          referrer_credit_reward?: number
+          start_at?: string
+          status?: string
+          terms_url?: string | null
+          updated_at?: string
+          version?: string
+        }
+        Relationships: []
+      }
+      referral_rewards: {
+        Row: {
+          attribution_id: string
+          beneficiary_user_id: string
+          created_at: string
+          credit_transaction_id: string | null
+          description: string | null
+          granted_at: string | null
+          id: string
+          idempotency_key: string
+          pending_at: string
+          rejected_at: string | null
+          rejection_reason: string | null
+          reward_amount: number
+          reward_status: string
+          reward_type: string
+          updated_at: string
+        }
+        Insert: {
+          attribution_id: string
+          beneficiary_user_id: string
+          created_at?: string
+          credit_transaction_id?: string | null
+          description?: string | null
+          granted_at?: string | null
+          id?: string
+          idempotency_key: string
+          pending_at?: string
+          rejected_at?: string | null
+          rejection_reason?: string | null
+          reward_amount: number
+          reward_status?: string
+          reward_type: string
+          updated_at?: string
+        }
+        Update: {
+          attribution_id?: string
+          beneficiary_user_id?: string
+          created_at?: string
+          credit_transaction_id?: string | null
+          description?: string | null
+          granted_at?: string | null
+          id?: string
+          idempotency_key?: string
+          pending_at?: string
+          rejected_at?: string | null
+          rejection_reason?: string | null
+          reward_amount?: number
+          reward_status?: string
+          reward_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_rewards_attribution_id_fkey"
+            columns: ["attribution_id"]
+            isOneToOne: false
+            referencedRelation: "referrals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referral_rewards_beneficiary_user_id_fkey"
+            columns: ["beneficiary_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referral_rewards_credit_transaction_id_fkey"
+            columns: ["credit_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "credit_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       referrals: {
         Row: {
+          attribution_source: string | null
           converted_at: string | null
           created_at: string
           credits_awarded: number | null
           id: string
+          policy_version: string | null
+          programme_id: string | null
           referred_email: string
           referred_id: string | null
           referrer_id: string
+          rejection_reason: string | null
           rewarded_at: string | null
           signed_up_at: string | null
           status: Database["public"]["Enums"]["referral_status"]
         }
         Insert: {
+          attribution_source?: string | null
           converted_at?: string | null
           created_at?: string
           credits_awarded?: number | null
           id?: string
+          policy_version?: string | null
+          programme_id?: string | null
           referred_email: string
           referred_id?: string | null
           referrer_id: string
+          rejection_reason?: string | null
           rewarded_at?: string | null
           signed_up_at?: string | null
           status?: Database["public"]["Enums"]["referral_status"]
         }
         Update: {
+          attribution_source?: string | null
           converted_at?: string | null
           created_at?: string
           credits_awarded?: number | null
           id?: string
+          policy_version?: string | null
+          programme_id?: string | null
           referred_email?: string
           referred_id?: string | null
           referrer_id?: string
+          rejection_reason?: string | null
           rewarded_at?: string | null
           signed_up_at?: string | null
           status?: Database["public"]["Enums"]["referral_status"]
         }
         Relationships: [
+          {
+            foreignKeyName: "referrals_programme_id_fkey"
+            columns: ["programme_id"]
+            isOneToOne: false
+            referencedRelation: "referral_programmes"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "referrals_referred_id_fkey"
             columns: ["referred_id"]
@@ -7063,6 +7684,7 @@ export type Database = {
           details: Json
           eligibility_reason: string | null
           evaluated_answer_count: number | null
+          evaluation_input_snapshot: Json | null
           evaluation_status: string
           feedback: string | null
           generated_at: string | null
@@ -7089,6 +7711,7 @@ export type Database = {
           details?: Json
           eligibility_reason?: string | null
           evaluated_answer_count?: number | null
+          evaluation_input_snapshot?: Json | null
           evaluation_status?: string
           feedback?: string | null
           generated_at?: string | null
@@ -7115,6 +7738,7 @@ export type Database = {
           details?: Json
           eligibility_reason?: string | null
           evaluated_answer_count?: number | null
+          evaluation_input_snapshot?: Json | null
           evaluation_status?: string
           feedback?: string | null
           generated_at?: string | null
@@ -7361,6 +7985,93 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "session_answers_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      session_debrief_jobs: {
+        Row: {
+          attempt_count: number
+          cancel_requested_at: string | null
+          completed_at: string | null
+          created_at: string
+          credit_reservation: string | null
+          credits_finalized_at: string | null
+          credits_released_at: string | null
+          credits_reserved: number
+          debrief_id: string | null
+          error_code: string | null
+          error_message: string | null
+          id: string
+          idempotency_key: string
+          model: string | null
+          progress_stage: string | null
+          retryable: boolean
+          session_id: string
+          source: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attempt_count?: number
+          cancel_requested_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          credit_reservation?: string | null
+          credits_finalized_at?: string | null
+          credits_released_at?: string | null
+          credits_reserved?: number
+          debrief_id?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          idempotency_key: string
+          model?: string | null
+          progress_stage?: string | null
+          retryable?: boolean
+          session_id: string
+          source?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attempt_count?: number
+          cancel_requested_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          credit_reservation?: string | null
+          credits_finalized_at?: string | null
+          credits_released_at?: string | null
+          credits_reserved?: number
+          debrief_id?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          idempotency_key?: string
+          model?: string | null
+          progress_stage?: string | null
+          retryable?: boolean
+          session_id?: string
+          source?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_debrief_jobs_debrief_id_fkey"
+            columns: ["debrief_id"]
+            isOneToOne: false
+            referencedRelation: "session_debriefs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "session_debrief_jobs_session_id_fkey"
             columns: ["session_id"]
             isOneToOne: false
             referencedRelation: "sessions"
@@ -8581,6 +9292,45 @@ export type Database = {
         }
         Relationships: []
       }
+      user_skill_evidence: {
+        Row: {
+          confidence: number
+          created_at: string
+          evidence_timestamp: string
+          id: string
+          performance: number | null
+          skill_id: string
+          source_id: string | null
+          source_type: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          confidence?: number
+          created_at?: string
+          evidence_timestamp?: string
+          id?: string
+          performance?: number | null
+          skill_id: string
+          source_id?: string | null
+          source_type: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          confidence?: number
+          created_at?: string
+          evidence_timestamp?: string
+          id?: string
+          performance?: number | null
+          skill_id?: string
+          source_id?: string | null
+          source_type?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_topic_performance: {
         Row: {
           accuracy: number | null
@@ -8924,6 +9674,17 @@ export type Database = {
             Args: { p_idempotency_key?: string; p_template_id: string }
             Returns: Json
           }
+      assemble_assessment_with_blueprint: {
+        Args: {
+          p_category_weights?: Json
+          p_idempotency_key?: string
+          p_question_count?: number
+          p_role_slug?: string
+          p_selection_seed?: string
+          p_template_id: string
+        }
+        Returns: Json
+      }
       assert_owned_session_rpc: {
         Args: { p_user_id: string }
         Returns: undefined
@@ -8933,6 +9694,27 @@ export type Database = {
         Returns: string[]
       }
       assessment_option_labels: { Args: { p_options: Json }; Returns: string[] }
+      assessment_template_availability: {
+        Args: { p_template_id: string }
+        Returns: Json
+      }
+      assessment_templates_availability: {
+        Args: { p_template_ids: string[] }
+        Returns: Json
+      }
+      attach_assessment_personalization: {
+        Args: {
+          p_category_weights?: Json
+          p_force_general?: boolean
+          p_ledger?: Json
+          p_personalized?: boolean
+          p_selection_seed?: string
+          p_setup?: Json
+          p_test_id: string
+          p_why_selected?: string
+        }
+        Returns: Json
+      }
       begin_test_submission: {
         Args: { p_test_id: string; p_user_id: string }
         Returns: Json
@@ -9013,6 +9795,10 @@ export type Database = {
         Args: { p_approved_count: number; p_required: number }
         Returns: string
       }
+      count_eligible_assessment_questions: {
+        Args: { p_template_id: string; p_user_id?: string }
+        Returns: number
+      }
       count_gov_exam_eligible_questions: {
         Args: {
           p_difficulty?: string
@@ -9026,6 +9812,13 @@ export type Database = {
       create_own_in_app_notification: {
         Args: { p_body?: string; p_title: string }
         Returns: string
+      }
+      create_scorecard_share: {
+        Args: { p_session_id: string }
+        Returns: {
+          share_token: string
+          share_url_path: string
+        }[]
       }
       create_test_atomic: {
         Args: {
@@ -9107,6 +9900,10 @@ export type Database = {
         }
         Returns: Json
       }
+      finalize_session_debrief_credits: {
+        Args: { p_job_id: string }
+        Returns: Json
+      }
       flag_stale_current_affairs: { Args: never; Returns: number }
       get_admin_dau_mau: {
         Args: { p_days?: number }
@@ -9171,27 +9968,28 @@ export type Database = {
         Args: { p_session_id: string }
         Returns: Json
       }
-      get_session_history: {
-        Args: {
-          p_types?: string[] | null
-          p_statuses?: string[] | null
-          p_search?: string | null
-          p_date_from?: string | null
-          p_date_to?: string | null
-          p_score_state?: string | null
-          p_debrief_state?: string | null
-          p_sort?: string | null
-          p_cursor?: string | null
-          p_page_size?: number | null
-        }
-        Returns: Json
-      }
       get_public_feature_flags: {
         Args: never
         Returns: {
           is_enabled: boolean
           key: string
         }[]
+      }
+      get_referral_dashboard: { Args: never; Returns: Json }
+      get_session_history: {
+        Args: {
+          p_cursor?: string
+          p_date_from?: string
+          p_date_to?: string
+          p_debrief_state?: string
+          p_page_size?: number
+          p_score_state?: string
+          p_search?: string
+          p_sort?: string
+          p_statuses?: string[]
+          p_types?: string[]
+        }
+        Returns: Json
       }
       get_shared_debrief: {
         Args: { p_token: string }
@@ -9222,17 +10020,26 @@ export type Database = {
       get_shared_scorecard: {
         Args: { p_token: string }
         Returns: {
+          answer_count: number | null
+          attempt_count: number
           communication: number | null
           confidence: number | null
           created_at: string
           details: Json
+          eligibility_reason: string | null
+          evaluated_answer_count: number | null
+          evaluation_input_snapshot: Json | null
+          evaluation_status: string
           feedback: string | null
           generated_at: string | null
           id: string
           improvements: string[] | null
           is_shared: boolean
+          last_error_code: string | null
           overall_score: number | null
           problem_solving: number | null
+          question_count: number | null
+          rubric_version: string | null
           session_id: string | null
           share_token: string | null
           strengths: string[] | null
@@ -9291,9 +10098,14 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: undefined
       }
+      mark_referral_converted: {
+        Args: { p_referred_user_id: string }
+        Returns: Json
+      }
       mask_email: { Args: { p_email: string }; Returns: string }
       next_support_public_ref: { Args: never; Returns: string }
       normalize_company_name: { Args: { p_name: string }; Returns: string }
+      pause_owned_mock_test: { Args: { p_test_id: string }; Returns: Json }
       plan_monthly_credits: { Args: { p_plan: string }; Returns: number }
       profiles_own_update_allowed: {
         Args: { proposed: Database["public"]["Tables"]["profiles"]["Row"] }
@@ -9351,6 +10163,10 @@ export type Database = {
         Args: { p_job_id: string; p_reason?: string }
         Returns: Json
       }
+      release_session_debrief_credits: {
+        Args: { p_job_id: string; p_reason?: string }
+        Returns: Json
+      }
       release_test_submission: {
         Args: { p_test_id: string; p_user_id: string }
         Returns: boolean
@@ -9373,6 +10189,15 @@ export type Database = {
         }
         Returns: Json
       }
+      reserve_session_debrief_credits: {
+        Args: {
+          p_cost: number
+          p_idempotency_key: string
+          p_job_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       resolve_gov_exam_bank_type_keys: {
         Args: { p_exam_id: string }
         Returns: string[]
@@ -9380,6 +10205,11 @@ export type Database = {
       restore_owned_session: {
         Args: { p_session_id?: string; p_type?: string; p_user_id: string }
         Returns: Json
+      }
+      resume_owned_mock_test: { Args: { p_test_id: string }; Returns: Json }
+      revoke_scorecard_share: {
+        Args: { p_session_id: string }
+        Returns: boolean
       }
       save_owned_test_answer: {
         Args: {

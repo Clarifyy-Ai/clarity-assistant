@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useIndiaRegion } from "@/hooks/useIndiaRegion";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/Card";
 
 interface IndiaRegionGateProps {
   children: React.ReactNode;
