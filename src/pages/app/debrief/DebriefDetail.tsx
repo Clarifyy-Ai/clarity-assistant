@@ -762,7 +762,7 @@ export default function DebriefDetail() {
       <div>
       <DebriefExtras
         debriefId={debrief.id}
-        wpmSeries={detailedReport.wpm_series}
+        wpmSeries={detailedReport.wpm_series as any}
         missedKeywords={detailedReport.missed_keywords}
         speakers={detailedReport.speakers}
         initialRating={detailedReport.rating ?? null}

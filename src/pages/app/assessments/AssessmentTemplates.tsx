@@ -244,7 +244,7 @@ export default function AssessmentTemplatesPage() {
                 )}
                 <Button
                   data-testid={`start-assessment-${template.id}`}
-                  variant={resumable ? "default" : "outline"}
+                  variant={resumable ? "primary" : "outline"}
                   loading={starting === template.id}
                   disabled={starting !== null || !startable}
                   onClick={() => void start(template)}

@@ -2316,8 +2316,8 @@ export default function GenerateGovPaper(): React.ReactElement {
                   <JobProgressCard
                     title="Preparing your Government Exam"
                     progress={mapPaperJobToProgress({
-                      jobId: job.jobId ?? job.id,
-                      id: job.id,
+                      jobId: job.jobId ?? (job as { id?: string }).id,
+                      id: (job as { id?: string }).id,
                       status: job.status,
                       progressStage: job.progressStage,
                       errorCode: job.errorCode,

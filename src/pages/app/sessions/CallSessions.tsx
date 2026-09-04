@@ -392,7 +392,7 @@ export default function CallSessions() {
                         <Clock className="w-3 h-3" />
                         {formatDistanceToNow(new Date(item.lastActivityAt), { addSuffix: true })}
                       </span>
-                      <span>{formatSessionDuration(item.durationSeconds ?? null)}</span>
+                      <span>{formatSessionDuration({ duration_seconds: item.durationSeconds ?? null })}</span>
                       <span>
                         {item.answeredCount != null || item.totalQuestionCount != null
                           ? `${item.answeredCount ?? "—"}/${item.totalQuestionCount ?? "—"} answered`

@@ -2211,10 +2211,10 @@ export default function MockSession() {
       const streams = useAudioStore.getState().streams;
       const level =
         typeof (streams as { mic_level?: number } | null | undefined)?.mic_level === "number"
-          ? (streams as { mic_level: number }).mic_level
+          ? (streams as unknown as { mic_level: number }).mic_level
           : typeof (streams as { input_level?: number } | null | undefined)?.input_level ===
               "number"
-            ? (streams as { input_level: number }).input_level
+            ? (streams as unknown as { input_level: number }).input_level
             : 0;
       return Math.min(1, Math.max(0, level > 1 ? level / 100 : level));
     });
