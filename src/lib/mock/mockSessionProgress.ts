@@ -119,7 +119,8 @@ export function parseMockProgressNotes(
   try {
     const raw = JSON.parse(trimmed) as Record<string, unknown>;
     if (!raw || raw[MOCK_PROGRESS_MARKER] !== true) return null;
-    const parsed = raw as unknown as Partial<MockSessionProgressV2 & MockSessionProgressV1>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const parsed = raw as any;
     if (parsed.v !== 1 && parsed.v !== 2) return null;
     if (!Array.isArray(parsed.questions) || typeof parsed.current_question_index !== "number") {
       return null;
