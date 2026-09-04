@@ -28,6 +28,9 @@ const connectSrc = [
   "https://app.posthog.com",
   "https://us.i.posthog.com",
   "https://eu.i.posthog.com",
+  // FastAPI scraper / Python worker (VITE_SCRAPER_URL / PYTHON_SERVICE_URL)
+  "https://clarity-assistant-az05.onrender.com",
+  "https://*.onrender.com",
   ...(isDev ? ["http://localhost:*", "ws://localhost:*"] : []),
 ].join(" ");
 

@@ -17,7 +17,7 @@ import {
   PROFILE_FRIENDLY_ERROR,
   supportMailto,
 } from "@/lib/auth/recoveryActions";
-import { canRetryAccountRecovery } from "@/lib/auth/accountBootstrap";
+import { canRetryAccountRecovery, ADMIN_ROLE_WAIT_MS } from "@/lib/auth/accountBootstrap";
 import { SUPPORT_EMAIL } from "@/lib/constants/contact";
 import { useClaimStoredReferral } from "@/hooks/useClaimStoredReferral";
 import { MFA_REQUIRED_REASON } from "@/hooks/useAuth";
@@ -37,7 +37,11 @@ interface ProtectedRouteProps {
   children?: React.ReactNode;
 }
 
-const ADMIN_ROLE_WAIT_MS = 6_000;
+/** Session-scoped MFA allow cache — avoids full-app splash on ProtectedRoute remount. */
+let mfaAllowCacheUserId: string | null = null;
+let mfaAllowCacheAt = 0;
+const MFA_ALLOW_CACHE_MS = 90_000;
+
 
 function AccountLoadErrorCard({
   message,
@@ -144,6 +148,7 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     if (!userId || status === "unauthenticated" || status === "idle" || status === "loading") {
       setMfaAal("ok");
       setMfaVerifiedUserId(null);
+      mfaAllowCacheUserId = null;
       return;
     }
     if (status !== "authenticated") {
@@ -156,8 +161,19 @@ export const ProtectedRoute = memo(function ProtectedRoute({
       return;
     }
 
+    if (
+      mfaAllowCacheUserId === userId &&
+      Date.now() - mfaAllowCacheAt < MFA_ALLOW_CACHE_MS
+    ) {
+      setMfaVerifiedUserId(userId);
+      setMfaAal("ok");
+      return;
+    }
+
     if (isMfaEnforcementPaused()) {
       setMfaVerifiedUserId(userId);
+      mfaAllowCacheUserId = userId;
+      mfaAllowCacheAt = Date.now();
       setMfaAal("ok");
       return;
     }
@@ -171,12 +187,18 @@ export const ProtectedRoute = memo(function ProtectedRoute({
         if (cancelled) return;
         if (gate.decision === "allow") {
           setMfaVerifiedUserId(userId);
+          mfaAllowCacheUserId = userId;
+          mfaAllowCacheAt = Date.now();
           setMfaAal("ok");
         } else {
+          mfaAllowCacheUserId = null;
           setMfaAal("block");
         }
       } catch {
-        if (!cancelled) setMfaAal("block");
+        if (!cancelled) {
+          mfaAllowCacheUserId = null;
+          setMfaAal("block");
+        }
       }
     })();
 

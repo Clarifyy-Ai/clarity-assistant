@@ -65,6 +65,7 @@ function isTokenFresh(entry: CachedDeepgramToken, nowMs = Date.now()): boolean {
 export async function fetchDeepgramTokenBounded(options?: {
   signal?: AbortSignal;
   force?: boolean;
+  purpose?: "stt" | "agent";
 }): Promise<CachedDeepgramToken> {
   if (options?.force) {
     unblockDeepgramTokenClient();
@@ -90,7 +91,7 @@ export async function fetchDeepgramTokenBounded(options?: {
       }
       const data = await fetchEdgeJson<DeepgramTokenResponse>(
         "deepgram-token",
-        {},
+        { purpose: options?.purpose ?? "stt" },
         { signal: options?.signal, timeoutMs: 15_000 },
       );
       if (!data?.token) {

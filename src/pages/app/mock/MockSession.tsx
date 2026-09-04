@@ -83,6 +83,13 @@ import {
 import { speakInterviewerWithFallback, stopBrowserTts, unlockBrowserTts, questionTtsIdentity } from "@/lib/mock/mockTts";
 import type { TtsOutcomeStatus } from "@/lib/mock/mockTts";
 import {
+  isDeepgramVoiceAgentEnabled,
+} from "@/lib/mock/deepgramVoiceAgentSettings";
+import {
+  createMockVoiceAgentSession,
+  type DeepgramVoiceAgentSession,
+} from "@/lib/mock/deepgramVoiceAgentSession";
+import {
   isDuplicateQuestionText,
   normalizeQuestionText,
 } from "@/lib/mock/validateGeneratedQuestion";
@@ -423,6 +430,8 @@ export default function MockSession() {
   );
   const pendingTtsQuestionRef = useRef<{ qId: string; qText: string } | null>(null);
   const ttsGenerationRef = useRef(0);
+  const voiceAgentRef = useRef<DeepgramVoiceAgentSession | null>(null);
+  const voiceAgentConnectGenRef = useRef(0);
 
   const questionsCacheRef = useRef<SessionQuestion[] | null>(null);
   const isStartingRef = useRef(false);
@@ -552,6 +561,13 @@ export default function MockSession() {
     } else {
       if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
       audio.stop();
+      voiceAgentConnectGenRef.current += 1;
+      try {
+        voiceAgentRef.current?.disconnect();
+      } catch {
+        /* ignore */
+      }
+      voiceAgentRef.current = null;
       setIsPaused(true);
       toast.message("Session paused — timer and recording stopped");
     }
@@ -778,6 +794,63 @@ export default function MockSession() {
     return () => setGenerateAnswerHandler(null);
   }, [phase, handleRequestHint]);
 
+  const teardownVoiceAgent = useCallback(() => {
+    voiceAgentConnectGenRef.current += 1;
+    try {
+      voiceAgentRef.current?.disconnect();
+    } catch {
+      /* ignore */
+    }
+    voiceAgentRef.current = null;
+  }, []);
+
+  const ensureVoiceAgent = useCallback(async (): Promise<DeepgramVoiceAgentSession | null> => {
+    if (!isDeepgramVoiceAgentEnabled()) return null;
+    if (voiceAgentRef.current?.isReady) return voiceAgentRef.current;
+
+    const connectGen = ++voiceAgentConnectGenRef.current;
+    const ctx = interviewContextRef.current;
+    const voiceId =
+      ctx?.voice_id ?? (sessionConfigRef.current as MockConfig | null)?.tts_voice ?? null;
+    const micStream = useAudioStore.getState().streams.mic_stream;
+
+    try {
+      // Inject-only: speak scripted questions via Flux Hannah; nova-3 owns candidate STT.
+      const session = await createMockVoiceAgentSession({
+        micStream,
+        voiceId,
+        captureMic: false,
+        context: {
+          role: ctx?.role,
+          company: ctx?.company,
+          interviewType: ctx?.interview_type,
+          jobDescription: ctx?.jd_text,
+          resumeSummary: ctx?.resume_text,
+        },
+        handlers: {
+          onError: (err) => {
+            console.warn("[MockSession] Voice Agent error:", err.message);
+          },
+        },
+      });
+      if (connectGen !== voiceAgentConnectGenRef.current) {
+        session.disconnect();
+        return null;
+      }
+      voiceAgentRef.current = session;
+      return session;
+    } catch (err) {
+      console.warn("[MockSession] Voice Agent unavailable — falling back to TTS:", err);
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      teardownVoiceAgent();
+    };
+  }, [teardownVoiceAgent]);
+
   const playInterviewerVoice = useCallback(
     (qText: string, qId: string, fromGesture = false) => {
       if (!isMockSessionMutable(lifecycleRef.current)) return;
@@ -827,28 +900,85 @@ export default function MockSession() {
       audioRef.current.suspendCandidateCapture();
       ttsPlaybackRef.current = reduceTtsPlayback(ttsPlaybackRef.current, { type: "START" });
 
-      void speakInterviewerWithFallback(qText, {
-        questionId: qId,
-        playbackId,
-        catalogueVoiceId: voiceId,
-        isCurrent: (id) =>
-          ttsGenerationRef.current === generation &&
-          speakingQuestionIdRef.current === id &&
-          isMockSessionMutable(lifecycleRef.current) &&
-          getOverlaySessionAuthority().canAcceptSessionMutations(),
-        onStart: () => {
-          if (ttsGenerationRef.current !== generation) return;
-          interviewerAudioActiveRef.current = true;
-          setTtsState("playing");
-          audioRef.current.suspendCandidateCapture();
-          if (getOverlaySessionAuthority().canAcceptSessionMutations()) {
-            useOverlayStore.getState().setSessionPipelineState("question_spoken");
+      const finishOk = () => {
+        if (ttsGenerationRef.current !== generation) return;
+        if (speakingQuestionIdRef.current !== qId) return;
+        setTtsState("idle");
+        setCanReplayTts(true);
+        setPendingTtsQuestion(null);
+        pendingTtsQuestionRef.current = null;
+        ttsPlaybackRef.current = reduceTtsPlayback(ttsPlaybackRef.current, {
+          type: "COMPLETE",
+        });
+        beginCandidateListening(qId);
+      };
+
+      const finishFail = (status: TtsOutcomeStatus) => {
+        if (ttsGenerationRef.current !== generation) return;
+        if (speakingQuestionIdRef.current !== qId) return;
+        if (status === "blocked") {
+          setTtsState("blocked");
+          interviewerAudioActiveRef.current = false;
+          ttsPlaybackRef.current = reduceTtsPlayback(ttsPlaybackRef.current, {
+            type: "FAIL",
+          });
+          return;
+        }
+        setTtsState("unavailable");
+        setCanReplayTts(true);
+        ttsPlaybackRef.current = reduceTtsPlayback(ttsPlaybackRef.current, {
+          type: "FAIL",
+        });
+        const caption = getInterviewerVoiceTextFallback(voiceId);
+        toast.message(
+          caption
+            ? "Interviewer voice unavailable — read the question on screen."
+            : "Interviewer voice unavailable — continue with text.",
+        );
+        beginCandidateListening(qId);
+      };
+
+      void (async () => {
+        const agent = await ensureVoiceAgent();
+        if (ttsGenerationRef.current !== generation) return;
+        if (speakingQuestionIdRef.current !== qId) return;
+
+        if (agent?.isReady) {
+          try {
+            if (getOverlaySessionAuthority().canAcceptSessionMutations()) {
+              useOverlayStore.getState().setSessionPipelineState("question_spoken");
+            }
+            await agent.speakInjected(qText, { behavior: "interrupt" });
+            finishOk();
+            return;
+          } catch (err) {
+            console.warn("[MockSession] Voice Agent speak failed — falling back:", err);
           }
-        },
-        onEnd: () => {
-          /* beginCandidateListening handles pipeline transition */
-        },
-      }).then((outcome) => {
+        }
+
+        const outcome = await speakInterviewerWithFallback(qText, {
+          questionId: qId,
+          playbackId,
+          catalogueVoiceId: voiceId,
+          isCurrent: (id) =>
+            ttsGenerationRef.current === generation &&
+            speakingQuestionIdRef.current === id &&
+            isMockSessionMutable(lifecycleRef.current) &&
+            getOverlaySessionAuthority().canAcceptSessionMutations(),
+          onStart: () => {
+            if (ttsGenerationRef.current !== generation) return;
+            interviewerAudioActiveRef.current = true;
+            setTtsState("playing");
+            audioRef.current.suspendCandidateCapture();
+            if (getOverlaySessionAuthority().canAcceptSessionMutations()) {
+              useOverlayStore.getState().setSessionPipelineState("question_spoken");
+            }
+          },
+          onEnd: () => {
+            /* beginCandidateListening handles pipeline transition */
+          },
+        });
+
         if (ttsGenerationRef.current !== generation) return;
         if (speakingQuestionIdRef.current !== qId) return;
         if (outcome.status === "cancelled") {
@@ -858,41 +988,19 @@ export default function MockSession() {
           return;
         }
         if (outcome.status === "blocked") {
-          setTtsState("blocked");
-          interviewerAudioActiveRef.current = false;
-          ttsPlaybackRef.current = reduceTtsPlayback(ttsPlaybackRef.current, {
-            type: "FAIL",
-          });
+          finishFail("blocked");
           return;
         }
         if (outcome.status === "unavailable" || outcome.status === "error") {
-          setTtsState("unavailable");
-          setCanReplayTts(true);
-          ttsPlaybackRef.current = reduceTtsPlayback(ttsPlaybackRef.current, {
-            type: "FAIL",
-          });
-          const caption = getInterviewerVoiceTextFallback(voiceId);
-          toast.message(
-            caption
-              ? "Interviewer voice unavailable — read the question on screen."
-              : "Interviewer voice unavailable — continue with text.",
-          );
-          beginCandidateListening(qId);
+          finishFail(outcome.status);
           return;
         }
         if (outcome.status === "ended") {
-          setTtsState("idle");
-          setCanReplayTts(true);
-          setPendingTtsQuestion(null);
-          pendingTtsQuestionRef.current = null;
-          ttsPlaybackRef.current = reduceTtsPlayback(ttsPlaybackRef.current, {
-            type: "COMPLETE",
-          });
-          beginCandidateListening(qId);
+          finishOk();
         }
-      });
+      })();
     },
-    [beginCandidateListening],
+    [beginCandidateListening, ensureVoiceAgent],
   );
 
   const playInterviewerVoiceRef = useRef(playInterviewerVoice);
@@ -1688,6 +1796,7 @@ export default function MockSession() {
       setSetupStep("audio");
       unlockBrowserTts();
       await audio.start({ restore: restored });
+      void ensureVoiceAgent();
       const restoredElapsed = restoredElapsedRef.current;
       sessionElapsedRef.current = restoredElapsed;
       setSessionElapsed(restoredElapsed);
@@ -1695,6 +1804,7 @@ export default function MockSession() {
       setIsPaused(false);
       if (!getOverlaySessionAuthority().matchesGeneration(generation)) {
         audio.stop();
+        teardownVoiceAgent();
         isStartingRef.current = false;
         return;
       }
@@ -1877,6 +1987,7 @@ export default function MockSession() {
     clearSessionTimers();
 
     audio.stop();
+    teardownVoiceAgent();
     useOverlayStore.getState().hideOverlay();
     overlayMountedSessionRef.current = null;
     lifecycleRef.current = reduceMockSessionLifecycle(lifecycleRef.current, {

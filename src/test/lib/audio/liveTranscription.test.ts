@@ -81,7 +81,7 @@ describe("loadLiveTranscriptionConfig", () => {
     const cfg = loadLiveTranscriptionConfig();
     expect(cfg.enabled).toBe(true);
     expect(cfg.language).toBe("en-US");
-    expect(cfg.model ?? "nova-2-meeting").toMatch(/nova-2/);
+    expect(cfg.model ?? "nova-3").toMatch(/nova-3/);
     expect(cfg).not.toHaveProperty("apiKey");
     expect(cfg).not.toHaveProperty("nvidiaApiKey");
     expect(JSON.stringify(cfg)).not.toMatch(/NVIDIA_API_KEY|PARAKEET_NIM_URL|parakeet-token/);

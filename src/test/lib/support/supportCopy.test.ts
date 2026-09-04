@@ -41,7 +41,9 @@ describe("support copy", () => {
     expect(validateSupportAttachment(huge)).toMatch(/5 MB/i);
   });
 
-  it("keeps guest polling below the 8 req/min rate limit", async () => {
+  it("keeps guest polling below the 8 req/min write rate limit", async () => {
+    // list/bootstrap are exempt from the guest write budget; poll still stays
+    // polite so IP limits and UX remain healthy.
     const { SUPPORT_GUEST_POLL_MS } = await import("@/lib/support/supportCopy");
     expect(SUPPORT_GUEST_POLL_MS).toBeGreaterThanOrEqual(8_000);
   });

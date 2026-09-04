@@ -21,6 +21,7 @@ import {
   enforceAdmin,
   createServiceRoleClient,
 } from "../_shared/auth.ts";
+import { resolveGeminiApiKey } from "../_shared/geminiKey.ts";
 import { isPythonConfigured, pythonFetch, pythonHealth, pythonReady } from "../_shared/pythonClient.ts";
 import { isPythonGovExamConfigured } from "../_shared/pythonGovExamClient.ts";
 import { validateBillingConfig } from "../_shared/billingConfig.ts";
@@ -244,7 +245,7 @@ Deno.serve(async (req) => {
       metrics: pythonMetrics,
     },
     ai: {
-      gemini: classifyOptional(present("GEMINI_API_KEY") || present("GOOGLE_AI_API_KEY")),
+      gemini: classifyOptional(Boolean(resolveGeminiApiKey())),
       openai: classifyOptional(present("OPENAI_API_KEY")),
       anthropic: classifyOptional(present("ANTHROPIC_API_KEY")),
     },

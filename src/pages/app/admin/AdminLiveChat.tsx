@@ -231,6 +231,17 @@ export default function AdminLiveChat() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId]);
 
+  // When Realtime is degraded, poll so the queue does not look frozen.
+  useEffect(() => {
+    if (!realtimeDegraded) return;
+    const id = window.setInterval(() => {
+      void loadThreads();
+      if (activeId) void loadThreadExtras(activeId);
+    }, 12_000);
+    return () => window.clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [realtimeDegraded, activeId]);
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages.length]);
@@ -326,8 +337,8 @@ export default function AdminLiveChat() {
         </h1>
         <div className="flex gap-2 items-center flex-wrap">
           {realtimeDegraded && (
-            <p className="text-xs text-amber-600 max-w-[220px]">
-              Realtime unavailable — use Refresh for updates.
+            <p className="text-xs text-amber-600 max-w-[260px]" data-testid="live-chat-realtime-degraded">
+              Realtime unavailable — auto-refreshing every 12s. Use Refresh for an immediate update.
             </p>
           )}
           <Button type="button" variant="outline" size="sm" onClick={() => void loadThreads()}>

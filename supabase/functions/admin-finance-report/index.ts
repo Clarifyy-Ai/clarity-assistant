@@ -15,6 +15,7 @@ import {
   redactSecrets,
   usdMicrocentsToInrPaise,
 } from "../_shared/adminFinanceMath.ts";
+import { resolveGeminiApiKey } from "../_shared/geminiKey.ts";
 
 const USD_TO_INR = Number(Deno.env.get("FINANCE_USD_TO_INR") ?? "83") || 83;
 
@@ -431,14 +432,20 @@ Deno.serve(async (req) => {
     apiCostPaise: usdMicrocentsToInrPaise(costByDay[day] ?? 0, USD_TO_INR),
   }));
 
+  const geminiKey = resolveGeminiApiKey();
   const providerStatus = [
-    { provider: "gemini", service: "ai", ...envMasked("GEMINI_API_KEY") },
+    {
+      provider: "gemini",
+      service: "ai",
+      status: present(geminiKey) ? ("configured" as const) : ("missing" as const),
+      identifier: present(geminiKey) ? maskCredentialIdentifier(geminiKey) : null,
+    },
     { provider: "openai", service: "ai", ...envMasked("OPENAI_API_KEY") },
     { provider: "anthropic", service: "ai", ...envMasked("ANTHROPIC_API_KEY") },
     { provider: "deepgram", service: "stt", ...envMasked("DEEPGRAM_API_KEY") },
     { provider: "razorpay", service: "payments", ...envMasked("RAZORPAY_KEY_SECRET") },
     { provider: "resend", service: "email", ...envMasked("RESEND_API_KEY") },
-    { provider: "hostinger", service: "email", ...envMasked("HOSTINGER_MAIL_TOKEN") },
+    { provider: "hostinger", service: "email", ...envMasked("HOSTINGER_MAIL_API_TOKEN") },
     { provider: "ocr_space", service: "ocr", ...envMasked("OCR_API_KEY") },
     {
       provider: "python_hybrid",

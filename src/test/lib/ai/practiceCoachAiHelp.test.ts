@@ -130,15 +130,13 @@ describe("Practice Coach AI Help error separation [T-12]", () => {
 });
 
 describe("Practice Coach hybrid fallback contracts (Wave 1 coach-prep)", () => {
-  it("generate-hint throws on empty AI so python fallback can run", () => {
+  it("generate-hint is AI-required and fails closed on empty AI (no python scaffold as success)", () => {
     const source = readFunction("generate-hint");
     expect(source).toContain('operation: "practice_coach_help"');
-    expect(source).toContain('operation: "practice_coach"');
-    expect(source).toContain("callPythonProcess");
-    expect(source).toContain("normalizePythonCoachData");
     expect(source).toContain("AI returned empty hints");
-    expect(source).not.toMatch(/source:\s*rawHints\s*\?\s*"ai"\s*:\s*"fallback"/);
     expect(source).toContain("hybridResult.response");
+    expect(source).toMatch(/practice_coach_help is AI-required|never finalize FALLBACK_HINTS/i);
+    expect(source).not.toMatch(/source:\s*rawHints\s*\?\s*"ai"\s*:\s*"fallback"/);
   });
 
   it("ai-coach-chat requires Gemini AI and refuses python/deterministic scaffolds", () => {

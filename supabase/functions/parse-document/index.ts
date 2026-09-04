@@ -26,11 +26,14 @@ import {
   documentErrorMessage,
   fileByteLengthFailure,
 } from "../_shared/documentErrors.ts";
+import { resolveGeminiApiKey } from "../_shared/geminiKey.ts";
 import JSZip from "https://esm.sh/jszip@3.10.1";
 
 const PARSE_DOCUMENT_COST = creditCost("parse_document");
 
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
+function geminiApiKey(): string {
+  return resolveGeminiApiKey();
+}
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 const PARSER_VERSION = "document-parser-v2";
 
@@ -115,7 +118,7 @@ async function extractWithGemini(
   base64: string,
   docType: string,
 ): Promise<DocumentExtractPayload | null> {
-  if (!GEMINI_API_KEY) return null;
+  if (!geminiApiKey()) return null;
 
   const prompt =
     docType === "cover_letter"

@@ -61,4 +61,15 @@ describe("debug telemetry source guard", () => {
     const html = readFileSync(join(root, "index.html"), "utf8");
     expect(html).toMatch(/https:\/\/\*\.razorpay\.com/);
   });
+
+  it("allows the FastAPI scraper host in connect-src (VITE_SCRAPER_URL)", () => {
+    const html = readFileSync(join(root, "index.html"), "utf8");
+    const production = readFileSync(join(root, ".env.production"), "utf8");
+    const scraperMatch = production.match(/^\s*VITE_SCRAPER_URL=(.+)$/m);
+    const scraperUrl = scraperMatch?.[1]?.trim().replace(/^["']|["']$/g, "") ?? "";
+    expect(scraperUrl).toMatch(/^https:\/\//);
+    const host = new URL(scraperUrl).origin;
+    expect(html).toContain(host);
+    expect(html).toMatch(/https:\/\/\*\.onrender\.com/);
+  });
 });

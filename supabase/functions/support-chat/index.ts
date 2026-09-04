@@ -571,12 +571,20 @@ Deno.serve(async (req) => {
       return json(corsHeaders, { error: "Invalid JSON body", code: "INVALID_REQUEST" }, 400);
     }
 
+    const action = String(body.action ?? "");
+    const isReadAction =
+      action === "list" ||
+      action === "bootstrap" ||
+      action === "list_threads";
+
     const guestEmailKey = normalizeEmail(body.guest_email);
     const guestTokenRaw =
       typeof body.guest_token === "string" && body.guest_token.length >= 16
         ? body.guest_token
         : null;
-    if (guestEmailKey) {
+    // Guest list/bootstrap polls must not share the tight write budget (8/min),
+    // or the widget looks "broken" under normal refresh.
+    if (!isReadAction && guestEmailKey) {
       const emailRl = await checkRateLimitAsync(db, {
         key: createRateLimitKey(FUNCTION_NAME, `email:${guestEmailKey}`),
         limit: 8,
@@ -584,7 +592,7 @@ Deno.serve(async (req) => {
       });
       if (!emailRl.allowed) return withCorsHeaders(req, rateLimitResponse(emailRl));
     }
-    if (guestTokenRaw) {
+    if (!isReadAction && guestTokenRaw) {
       const tokenRl = await checkRateLimitAsync(db, {
         key: createRateLimitKey(FUNCTION_NAME, `guest:${guestTokenRaw}`),
         limit: 8,
@@ -592,8 +600,6 @@ Deno.serve(async (req) => {
       });
       if (!tokenRl.allowed) return withCorsHeaders(req, rateLimitResponse(tokenRl));
     }
-
-    const action = String(body.action ?? "");
     let userId: string | null = null;
     if (!isAnonOrMissingBearer(req)) {
       const auth = await authenticateRequest(req);

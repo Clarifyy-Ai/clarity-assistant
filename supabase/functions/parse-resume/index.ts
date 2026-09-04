@@ -22,12 +22,16 @@ import {
   mapHybridDocumentCode,
 } from "../_shared/documentErrors.ts";
 import { extractPdfTextBasic } from "../_shared/documentTextExtract.ts";
+import { resolveGeminiApiKey } from "../_shared/geminiKey.ts";
 import JSZip from "https://esm.sh/jszip@3.10.1";
 
 const RESUME_PARSE_COST = creditCost("resume_analysis");
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
 const OCR_API_KEY = Deno.env.get("OCR_API_KEY") ?? "";
+
+function geminiApiKey(): string {
+  return resolveGeminiApiKey();
+}
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const GEMINI_MODEL = "gemini-2.5-flash";
@@ -385,7 +389,7 @@ function buildParseSuccess(source: string, parsed: unknown) {
 }
 
 async function callGemini(contents: any[]) {
-  if (!GEMINI_API_KEY) return null;
+  if (!geminiApiKey()) return null;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 45_000);
   try {
@@ -395,7 +399,7 @@ async function callGemini(contents: any[]) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-goog-api-key": GEMINI_API_KEY,
+          "x-goog-api-key": geminiApiKey(),
         },
         signal: controller.signal,
         body: JSON.stringify({
@@ -596,7 +600,7 @@ async function parseResumeHybrid(opts: {
       if (!pythonParsed) return null;
 
       // Optional AI enrichment when structured is thin (same credit lifecycle).
-      if (isThinResumeStructured(pythonParsed) && (GEMINI_API_KEY || ANTHROPIC_API_KEY)) {
+      if (isThinResumeStructured(pythonParsed) && (geminiApiKey() || ANTHROPIC_API_KEY)) {
         try {
           const enriched = await parseFromPlainText(
             textHint || JSON.stringify(pythonParsed),

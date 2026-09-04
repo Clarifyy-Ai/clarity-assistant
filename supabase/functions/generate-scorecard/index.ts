@@ -28,6 +28,7 @@ import {
   type ScorecardEvaluationStatus,
 } from "../_shared/scorecardEligibility.ts";
 import { isAuthoritativeSessionComplete } from "../_shared/sessionShareability.ts";
+import { resolveGeminiApiKey } from "../_shared/geminiKey.ts";
 
 const FUNCTION_NAME = "generate-scorecard";
 const RUBRIC_VERSION = "scorecard_v2";
@@ -1404,7 +1405,7 @@ Deno.serve(async (req: Request) => {
           feature: policy.feature,
           needed: true,
           permitted: policy.aiAllowed,
-          providerConfigured: Boolean(Deno.env.get("GEMINI_API_KEY")),
+          providerConfigured: Boolean(resolveGeminiApiKey()),
         });
         if (decision !== "AI_REQUIRED") {
           throw new DomainError(

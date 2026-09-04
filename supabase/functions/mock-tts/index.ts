@@ -1,9 +1,10 @@
 /**
- * Mock interviewer TTS Edge function.
+ * Interviewer / coach TTS Edge function (Deepgram Flux Speak v2).
  *
  * Honesty:
- * - Returns unavailable unless SERVER_TTS_ENABLED=true AND a provider key exists.
- * - Does not claim licensed voices work when only STT keys (e.g. Deepgram listen) are set.
+ * - Returns unavailable unless DEEPGRAM_API_KEY is configured (SERVER_TTS_ENABLED
+ *   defaults on when the key is present; set SERVER_TTS_ENABLED=false to force off).
+ * - Speaks AI-generated question/hint text via flux-* models on POST /v2/speak.
  * - Provider voice IDs stay server-side; clients send catalogue voice_id only.
  */
 
@@ -12,15 +13,17 @@ import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { enforceSessionRateLimitAsync } from "../_shared/rateLimit.ts";
 
-/** Catalogue id → Deepgram Aura speak model (server-only). */
-const CATALOGUE_TO_DEEPGRAM: Record<string, string> = {
-  classic_professional: "aura-orion-en",
-  calm_mentor: "aura-luna-en",
-  clear_interviewer: "aura-asteria-en",
-  warm_recruiter: "aura-stella-en",
-  technical_panelist: "aura-arcas-en",
-  executive_formal: "aura-helios-en",
+/** Catalogue id → Deepgram Flux Speak v2 model (server-only). */
+const CATALOGUE_TO_FLUX: Record<string, string> = {
+  classic_professional: "flux-hannah-en",
+  calm_mentor: "flux-heather-en",
+  clear_interviewer: "flux-marcus-en",
+  warm_recruiter: "flux-hannah-en",
+  technical_panelist: "flux-wade-en",
+  executive_formal: "flux-bruce-en",
 };
+
+const DEFAULT_FLUX_MODEL = "flux-hannah-en";
 
 function json(
   headers: HeadersInit,
@@ -34,13 +37,6 @@ function json(
 }
 
 function serverTtsConfigured(): { ok: boolean; reason: string; apiKey?: string } {
-  const enabled = (Deno.env.get("SERVER_TTS_ENABLED") ?? "").trim().toLowerCase();
-  if (!(enabled === "1" || enabled === "true" || enabled === "yes")) {
-    return {
-      ok: false,
-      reason: "Server TTS not enabled (set SERVER_TTS_ENABLED=true) — using browser voice.",
-    };
-  }
   const apiKey = (Deno.env.get("DEEPGRAM_API_KEY") ?? "").trim();
   if (!apiKey) {
     return {
@@ -48,11 +44,30 @@ function serverTtsConfigured(): { ok: boolean; reason: string; apiKey?: string }
       reason: "Server TTS provider key missing — using browser voice.",
     };
   }
+  const enabledRaw = (Deno.env.get("SERVER_TTS_ENABLED") ?? "").trim().toLowerCase();
+  // Key present → on by default. Explicit false/0/no disables.
+  if (enabledRaw === "0" || enabledRaw === "false" || enabledRaw === "no") {
+    return {
+      ok: false,
+      reason: "Server TTS disabled (SERVER_TTS_ENABLED=false) — using browser voice.",
+    };
+  }
   return { ok: true, reason: "ok", apiKey };
 }
 
-function resolveDeepgramModel(voiceId: string): string {
-  return CATALOGUE_TO_DEEPGRAM[voiceId] ?? CATALOGUE_TO_DEEPGRAM.classic_professional;
+function resolveFluxModel(voiceId: string): string {
+  const override = (Deno.env.get("DEEPGRAM_AGENT_SPEAK_MODEL") ?? "").trim();
+  if (override.startsWith("flux-")) return override;
+  return CATALOGUE_TO_FLUX[voiceId] ?? DEFAULT_FLUX_MODEL;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
 }
 
 Deno.serve(async (req: Request) => {
@@ -80,7 +95,6 @@ Deno.serve(async (req: Request) => {
 
     const config = serverTtsConfigured();
     if (!config.ok || !config.apiKey) {
-      // Honest unavailable — client must fall back to browser TTS + text.
       return json(headers, 200, {
         unavailable: true,
         message: config.reason,
@@ -93,6 +107,8 @@ Deno.serve(async (req: Request) => {
       voice_id?: string;
       language?: string;
       playback_id?: string;
+      speed?: number;
+      expressivity?: number;
     } = {};
     try {
       body = (await req.json()) as typeof body;
@@ -121,32 +137,42 @@ Deno.serve(async (req: Request) => {
     }
 
     const voiceId = String(body.voice_id ?? "classic_professional").trim();
-    const model = resolveDeepgramModel(voiceId);
+    const model = resolveFluxModel(voiceId);
+    const speed = Number.isFinite(Number(body.speed)) ? Number(body.speed) : 1;
+    const expressivity = Number.isFinite(Number(body.expressivity))
+      ? Math.round(Number(body.expressivity))
+      : 0;
+
+    const params = new URLSearchParams({
+      model,
+      encoding: "mp3",
+      speed: String(speed),
+      expressivity: String(expressivity),
+    });
+
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15_000);
+    const timeout = setTimeout(() => controller.abort(), 20_000);
 
     let speakRes: Response;
     try {
-      speakRes = await fetch(
-        `https://api.deepgram.com/v1/speak?model=${encodeURIComponent(model)}`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Token ${config.apiKey}`,
-            "Content-Type": "application/json",
-            Accept: "audio/mpeg",
-          },
-          body: JSON.stringify({ text }),
-          signal: controller.signal,
+      // Flux TTS batch — matches Deepgram speak.v2 / POST /v2/speak
+      speakRes = await fetch(`https://api.deepgram.com/v2/speak?${params.toString()}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Token ${config.apiKey}`,
+          "Content-Type": "application/json",
+          Accept: "audio/mpeg",
         },
-      );
+        body: JSON.stringify({ text }),
+        signal: controller.signal,
+      });
     } finally {
       clearTimeout(timeout);
     }
 
     if (!speakRes.ok) {
       const errText = await speakRes.text().catch(() => "");
-      console.error("[mock-tts] Deepgram speak failed:", speakRes.status, errText.slice(0, 200));
+      console.error("[mock-tts] Deepgram speak v2 failed:", speakRes.status, errText.slice(0, 300));
       return json(headers, 200, {
         unavailable: true,
         message: "Server TTS provider failed — using browser voice.",
@@ -163,18 +189,13 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    let binary = "";
-    const chunk = 0x8000;
-    for (let i = 0; i < bytes.length; i += chunk) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-    }
-    const audio_base64 = btoa(binary);
-
     return json(headers, 200, {
       unavailable: false,
-      audio_base64,
+      audio_base64: bytesToBase64(bytes),
       audio_mime: "audio/mpeg",
       voice_id: voiceId,
+      model,
+      speak_api: "v2",
       playback_id: body.playback_id ?? null,
       message: "ok",
     });

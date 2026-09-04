@@ -13,6 +13,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { callAI } from "./utils.ts";
 import type { ModelId } from "./types.ts";
+import { resolveGeminiApiKey } from "./geminiKey.ts";
 import { DEFAULT_TEXT_MODEL, providerForModel } from "./modelCatalog.ts";
 import { getFallbackModelsAsync } from "./resolveModel.ts";
 import { createServiceClient } from "./supabase.ts";
@@ -20,6 +21,69 @@ import {
   geminiCircuitCanAttempt,
   tripGeminiCircuit,
 } from "./aiFeaturePolicy.ts";
+
+/** Stable provider failure codes for Edge → Admin / clients. */
+export type ProviderErrorCode =
+  | "PROVIDER_NOT_CONFIGURED"
+  | "PROVIDER_AUTH_FAILED"
+  | "MODEL_NOT_AVAILABLE"
+  | "RATE_LIMITED"
+  | "PROVIDER_TIMEOUT"
+  | "PROVIDER_UNAVAILABLE"
+  | "INVALID_PROVIDER_RESPONSE"
+  | "CONTENT_POLICY_BLOCK"
+  | "UNKNOWN_PROVIDER_ERROR";
+
+export class ProviderError extends Error {
+  readonly code: ProviderErrorCode;
+  constructor(code: ProviderErrorCode, message: string) {
+    super(message);
+    this.name = "ProviderError";
+    this.code = code;
+  }
+}
+
+export function classifyProviderError(err: unknown): ProviderErrorCode {
+  const msg = err instanceof Error ? err.message : String(err);
+  const lower = msg.toLowerCase();
+  if (/not configured|api key not available|no gemini api key/i.test(msg)) {
+    return "PROVIDER_NOT_CONFIGURED";
+  }
+  if (/API_KEY_INVALID|invalid.?api.?key|401|403|auth/i.test(msg)) {
+    return "PROVIDER_AUTH_FAILED";
+  }
+  if (/404|not found|INVALID_ARGUMENT|deprecated|model.?not.?available/i.test(msg)) {
+    return "MODEL_NOT_AVAILABLE";
+  }
+  if (/429|quota|rate limit|resource_exhausted/i.test(lower)) {
+    return "RATE_LIMITED";
+  }
+  if (/timed? ?out|abort/i.test(lower)) {
+    return "PROVIDER_TIMEOUT";
+  }
+  if (/policy|safety|blocked|moderation/i.test(lower)) {
+    return "CONTENT_POLICY_BLOCK";
+  }
+  if (/empty response|invalid.?json|parse/i.test(lower)) {
+    return "INVALID_PROVIDER_RESPONSE";
+  }
+  if (/5\d\d|unavailable|fetch failed|network/i.test(lower)) {
+    return "PROVIDER_UNAVAILABLE";
+  }
+  return "UNKNOWN_PROVIDER_ERROR";
+}
+
+/** Fallback only for transient / capacity failures — not auth or policy. */
+export function isFallbackEligibleError(err: unknown): boolean {
+  const code = err instanceof ProviderError ? err.code : classifyProviderError(err);
+  return (
+    code === "RATE_LIMITED" ||
+    code === "PROVIDER_TIMEOUT" ||
+    code === "PROVIDER_UNAVAILABLE" ||
+    code === "MODEL_NOT_AVAILABLE" ||
+    code === "UNKNOWN_PROVIDER_ERROR"
+  );
+}
 
 const GEMINI_API_VERSION = Deno.env.get("GEMINI_API_VERSION") ?? "v1beta";
 const GEMINI_BASE = `https://generativelanguage.googleapis.com/${GEMINI_API_VERSION}`;
@@ -128,9 +192,12 @@ type GeminiResponse = {
 };
 
 function getGeminiKey(): string {
-  const key = Deno.env.get("GEMINI_API_KEY") ?? "";
+  const key = resolveGeminiApiKey();
   if (!key) {
-    throw new Error("GEMINI_API_KEY is not configured.");
+    throw new ProviderError(
+      "PROVIDER_NOT_CONFIGURED",
+      "Gemini API key is not configured. Set GOOGLE_API_KEY or GEMINI_API_KEY in Supabase Secrets.",
+    );
   }
   return key;
 }
@@ -372,8 +439,10 @@ export async function generateWithFallback(
     }
   }
 
-  throw new Error(
-    `All AI models failed. Last error: ${lastError?.message ?? "Unknown"}`
+  const code = lastError ? classifyProviderError(lastError) : "PROVIDER_UNAVAILABLE";
+  throw new ProviderError(
+    code,
+    `All AI models failed. Last error: ${lastError?.message ?? "Unknown"}`,
   );
 }
 

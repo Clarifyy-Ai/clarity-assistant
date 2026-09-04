@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import {
+  ADMIN_ROLE_WAIT_MS,
   AUTH_ACCOUNT_FRIENDLY_ERROR,
   AUTH_INVALID_CREDENTIALS_MESSAGE,
   buildResolvedAccountContext,
@@ -8,6 +9,7 @@ import {
   createInFlightMap,
   isTimeoutError,
   normalizeLoginEmail,
+  ROLE_CHECK_TIMEOUT_MS,
   shouldDetectSessionInUrl,
   shouldLoadAccountOnAuthEvent,
   shouldSkipSoftProfileRefresh,
@@ -20,6 +22,12 @@ describe("normalizeLoginEmail", () => {
     expect(normalizeLoginEmail("  Free.User@Example.COM ")).toBe(
       "free.user@example.com",
     );
+  });
+});
+
+describe("admin role wait budget", () => {
+  it("covers role check + one retry before staff gate errors", () => {
+    expect(ADMIN_ROLE_WAIT_MS).toBeGreaterThanOrEqual(ROLE_CHECK_TIMEOUT_MS * 2);
   });
 });
 

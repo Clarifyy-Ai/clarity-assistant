@@ -389,6 +389,11 @@ export default function AdminMail() {
                       Tracking folders ({HOSTINGER_TRACKING_FOLDERS.map((f) => f.label).join(", ")}) are created on first load.
                     </p>
                   )}
+                  {tracking.length > 0 && (
+                    <p className="text-[11px] text-muted-foreground px-2.5 pt-1" data-testid="mail-tracking-empty-hint">
+                      Tracking folders stay empty until mail is filed into them — they are labels for ops, not auto-sorted inboxes.
+                    </p>
+                  )}
                 </>
               );
             })()}
@@ -400,7 +405,11 @@ export default function AdminMail() {
           {listLoading ? (
             <p className="text-xs text-muted-foreground">Loading messages…</p>
           ) : messages.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No messages in this folder.</p>
+            <p className="text-xs text-muted-foreground" data-testid="mail-folder-empty">
+              {isTrackingFolder({ path: folder, name: folder })
+                ? "No messages here yet. Tracking folders are empty until ops files mail into them."
+                : "No messages in this folder."}
+            </p>
           ) : (
             <ul className="divide-y divide-border">
               {messages.map((msg) => (

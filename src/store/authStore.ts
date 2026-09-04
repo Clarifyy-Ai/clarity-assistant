@@ -142,14 +142,28 @@ async function resolveAdminRole(
 
     try {
       const isAdmin = await attempt();
+      let isModerator = false;
+      if (isAdmin) {
+        isModerator = true;
+      } else {
+        try {
+          isModerator = await withTimeout(
+            userRolesDB.hasRole(userId, "moderator"),
+            ROLE_CHECK_TIMEOUT_MS,
+            "Moderator role check",
+          );
+        } catch {
+          isModerator = false;
+        }
+      }
       logger.info(LogEvents.AUTH_ROLE_LOAD_SUCCEEDED, {
         operation: "role.load",
         attempt: 1,
         durationMs: Date.now() - startedAt,
         outcome: "succeeded",
-        authState: isAdmin ? "admin" : "non_admin",
+        authState: isAdmin ? "admin" : isModerator ? "moderator" : "non_admin",
       });
-      return { resolved: true, isAdmin, isModerator: false };
+      return { resolved: true, isAdmin, isModerator };
     } catch (err) {
       if (isNonRetryableAuthError(err)) {
         const schemaErr = isSchemaConfigError(err);
@@ -186,14 +200,28 @@ async function resolveAdminRole(
       console.warn("[authStore] Admin role check failed; retrying once:", err);
       try {
         const isAdmin = await attempt();
+        let isModerator = false;
+        if (isAdmin) {
+          isModerator = true;
+        } else {
+          try {
+            isModerator = await withTimeout(
+              userRolesDB.hasRole(userId, "moderator"),
+              ROLE_CHECK_TIMEOUT_MS,
+              "Moderator role check",
+            );
+          } catch {
+            isModerator = false;
+          }
+        }
         logger.info(LogEvents.AUTH_ROLE_LOAD_SUCCEEDED, {
           operation: "role.load",
           attempt: 2,
           durationMs: Date.now() - startedAt,
           outcome: "succeeded",
-          authState: isAdmin ? "admin" : "non_admin",
+          authState: isAdmin ? "admin" : isModerator ? "moderator" : "non_admin",
         });
-        return { resolved: true, isAdmin, isModerator: false };
+        return { resolved: true, isAdmin, isModerator };
       } catch (retryErr) {
         const retryTimedOut = isTimeoutError(retryErr);
         const schemaErr = isSchemaConfigError(retryErr);
@@ -420,28 +448,6 @@ function applyAdminRoleResult(
   });
 }
 
-/** Kick off moderator lookup after admin resolution. */
-function scheduleModeratorRoleResolve(
-  userId: string,
-  set: (fn: (state: AuthStore) => void) => void,
-  get: () => AuthStore,
-): void {
-  void withTimeout(
-    userRolesDB.hasRole(userId, "moderator"),
-    ROLE_CHECK_TIMEOUT_MS,
-    "Moderator role check",
-  )
-    .then((isModerator) => {
-      if (get().user?.id !== userId) return;
-      set((state) => {
-        state.isModerator = isModerator;
-      });
-    })
-    .catch(() => {
-      // Moderator access fails closed.
-    });
-}
-
 /** Kick off (or join) the shared role load — never awaited by Free-user routing. */
 function scheduleAdminRoleResolve(
   userId: string,
@@ -450,7 +456,6 @@ function scheduleAdminRoleResolve(
 ): void {
   void resolveAdminRole(userId).then((roleResult) => {
     applyAdminRoleResult(userId, roleResult, set, get);
-    scheduleModeratorRoleResolve(userId, set, get);
   });
 }
 

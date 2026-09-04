@@ -4,6 +4,7 @@
  */
 
 import { buildGeminiStreamUrl } from "./gemini.ts";
+import { resolveGeminiApiKey } from "./geminiKey.ts";
 
 const DEFAULT_TIMEOUT_MS = 50_000;
 const MAX_PROMPT_LENGTH = 100_000;
@@ -116,9 +117,9 @@ function buildStreamPayload(opts: StreamGeminiContentOpts): Record<string, unkno
 export async function* streamGeminiContent(
   opts: StreamGeminiContentOpts,
 ): AsyncGenerator<string> {
-  const apiKey = (Deno.env.get("GEMINI_API_KEY") ?? "").trim();
+  const apiKey = resolveGeminiApiKey();
   if (!apiKey) {
-    throw new Error("No Gemini API key available. Set GEMINI_API_KEY in Supabase Secrets.");
+    throw new Error("No Gemini API key available. Set GOOGLE_API_KEY or GEMINI_API_KEY in Supabase Secrets.");
   }
 
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;

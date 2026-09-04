@@ -652,7 +652,7 @@ export default function MockTestHub(): React.ReactElement {
                           size="sm"
                           variant="outline"
                           disabled
-                          title="This exam is missing a registry code"
+                          title="This exam is missing a registry code — ask an admin to fix the exam registry row"
                           data-testid="gov-exam-view"
                         >
                           View exam
@@ -663,11 +663,19 @@ export default function MockTestHub(): React.ReactElement {
                           to={generatePath}
                           className={CTA_PRIMARY}
                           data-testid="gov-exam-generate"
+                          onMouseEnter={() => {
+                            void import("@/pages/app/mock-test/GenerateGovPaper");
+                          }}
                         >
                           Generate mock
                         </Link>
                       ) : (
-                        <Button size="sm" disabled data-testid="gov-exam-generate">
+                        <Button
+                          size="sm"
+                          disabled
+                          title="Missing exam id or stage — cannot open generate"
+                          data-testid="gov-exam-generate"
+                        >
                           Generate mock
                         </Button>
                       )}

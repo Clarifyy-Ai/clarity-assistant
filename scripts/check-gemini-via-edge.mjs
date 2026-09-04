@@ -1,9 +1,22 @@
 #!/usr/bin/env node
 /**
  * Confirms whether deployed GEMINI_API_KEY works by calling generate-questions.
- * Also retries with a session-bound generate-hint after start-session.
+ * Also retries with a session-bound generate-hint / generate-answer after start-session.
+ *
+ * generate-answer post-gates on factual integrity: empty resume_context often yields
+ * AI_INVALID_OUTPUT when the model invents metrics. Pass a minimal honest resume so
+ * the smoke proves provider success without disabling groundedness validation.
  */
 import fs from "node:fs";
+
+/** Minimal honest resume facts for generate-answer smoke (not a fabricated "AI success" bypass). */
+const SMOKE_RESUME_CONTEXT = [
+  "Backend engineer at Northwind Labs.",
+  "Built TypeScript and Node.js REST APIs backed by PostgreSQL.",
+  "Owned reliability work on billing webhooks and partner integrations.",
+  "Collaborated with product on incident response and on-call runbooks.",
+  "Seeking senior backend roles focused on distributed systems.",
+].join(" ");
 
 function loadEnv(filePath) {
   const out = {};
@@ -60,7 +73,8 @@ async function call(name, body) {
     name,
     status: res.status,
     ms: Date.now() - t0,
-    body: text.slice(0, 400).replace(/\s+/g, " "),
+    body: text,
+    preview: text.slice(0, 400).replace(/\s+/g, " "),
   };
 }
 
@@ -71,7 +85,7 @@ const session = await call("start-session", {
   interview_type: "behavioral",
   duration_minutes: 15,
 });
-console.log(JSON.stringify(session));
+console.log(JSON.stringify({ ...session, body: session.preview }));
 
 let sessionId = null;
 try {
@@ -80,38 +94,47 @@ try {
   /* ignore */
 }
 
+let hint = null;
+let answer = null;
 if (sessionId) {
-  console.log(
-    JSON.stringify(
-      await call("generate-hint", {
-        session_id: sessionId,
-        question: "Tell me about a challenge you faced at work.",
-        mode: "rehearsal",
-        session_type: "rehearsal",
-        is_practice: true,
-      }),
-    ),
-  );
-  console.log(
-    JSON.stringify(
-      await call("generate-answer", {
-        session_id: sessionId,
-        question: "Why do you want this role?",
-        mode: "rehearsal",
-        session_type: "rehearsal",
-        is_practice: true,
-      }),
-    ),
-  );
+  hint = await call("generate-hint", {
+    session_id: sessionId,
+    question: "Tell me about a challenge you faced at work.",
+    mode: "rehearsal",
+    session_type: "rehearsal",
+    is_practice: true,
+    resume_context: SMOKE_RESUME_CONTEXT,
+  });
+  console.log(JSON.stringify({ ...hint, body: hint.preview }));
+  answer = await call("generate-answer", {
+    session_id: sessionId,
+    question: "Why do you want this role?",
+    mode: "rehearsal",
+    session_type: "rehearsal",
+    is_practice: true,
+    resume_context: SMOKE_RESUME_CONTEXT,
+  });
+  console.log(JSON.stringify({ ...answer, body: answer.preview }));
 }
 
-console.log(
-  JSON.stringify(
-    await call("generate-questions", {
-      type: "behavioral",
-      count: 1,
-      role: "Engineer",
-      free_session: true,
-    }),
-  ),
-);
+const questions = await call("generate-questions", {
+  type: "behavioral",
+  count: 1,
+  role: "Engineer",
+  free_session: true,
+});
+console.log(JSON.stringify({ ...questions, body: questions.preview }));
+
+function edgeOk(result) {
+  if (!result || result.status >= 400) return false;
+  const body = String(result.body ?? "");
+  // Streamed factual-gate failures still return HTTP 200 with this code in the SSE body.
+  if (/"AI_INVALID_OUTPUT"|AI returned invalid output/i.test(body)) return false;
+  return true;
+}
+
+const ok =
+  session.status === 200 &&
+  questions.status === 200 &&
+  (!sessionId || (edgeOk(hint) && edgeOk(answer)));
+process.exit(ok ? 0 : 1);

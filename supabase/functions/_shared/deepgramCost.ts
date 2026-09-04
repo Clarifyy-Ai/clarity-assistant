@@ -16,7 +16,7 @@ const USD_CENTS_PER_MINUTE: Record<string, number> = {
   whisper: 0.48,
 };
 
-const DEFAULT_STT_MODEL = "nova-2-meeting";
+const DEFAULT_STT_MODEL = "nova-3";
 
 export function resolveDeepgramSttModel(): string {
   const raw = (Deno.env.get("DEEPGRAM_STT_MODEL") ?? "").trim();

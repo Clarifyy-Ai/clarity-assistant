@@ -97,7 +97,7 @@ export const DEEPGRAM_ENDPOINTS = {
 } as const;
 
 export const DEEPGRAM_WS_PARAMS = {
-  MODEL:          "nova-2",
+  MODEL:          "nova-3",
   LANGUAGE:       "en-US",
   PUNCTUATE:      true,
   DIARIZE:        true,

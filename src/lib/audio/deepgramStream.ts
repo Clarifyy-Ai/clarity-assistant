@@ -128,7 +128,7 @@ export class DeepgramStreamClient {
     };
 
     this.config = {
-      model: "nova-2-meeting",
+      model: "nova-3",
       language: "en-US",
       smart_format: true,
       interim_results: true,

@@ -1,5 +1,5 @@
 // src/components/overlay/OverlayHintPanel.tsx
-import { memo, useMemo, useState, useCallback, useEffect } from "react";
+import { memo, useMemo, useState, useCallback, useEffect, useRef } from "react";
 import type { HintStyle } from "@/types/user.types";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
@@ -24,6 +24,8 @@ import {
   Pencil,
   Keyboard,
   X,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { OverlayAnswerStrength } from "./OverlayAnswerStrength";
 import { checkCreditsForAction, SERVER_AI_CREDIT_COSTS } from "@/lib/billing/creditsManager";
@@ -38,6 +40,7 @@ import type { HintState } from "@/store/overlayStore";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { chatAttentionBannerCopy } from "@/lib/overlay/sessionConversation";
 import { confidenceTierLabel } from "@/lib/session/aiHelpConfirm";
+import { speakAiGeneratedText, stopAiTextSpeech } from "@/lib/audio/speakAiText";
 
 const LISTENING_NO_SPEECH_MS = 12_000;
 
@@ -116,6 +119,8 @@ function OverlayHintPanelInner({
   const [codeCopied, setCodeCopied] = useState(false);
   const [saved, setSaved] = useState(false);
   const [feedbackSent, setFeedbackSent] = useState<"up" | "down" | null>(null);
+  const [speakingHint, setSpeakingHint] = useState(false);
+  const speakHintIdRef = useRef(0);
 
   const fontSize = useOverlayStore((s) => s.font_size);
   const chatAttention = useOverlayStore((s) => s.chat_attention);
@@ -244,6 +249,37 @@ function OverlayHintPanelInner({
     useOverlayStore.getState().setHintState("idle");
     onRetry?.();
   }, [onRetry]);
+
+  const handleSpeakHint = useCallback(async () => {
+    const toSpeak = (textForCompose || liveText || "").trim();
+    if (!toSpeak) {
+      toast.message("Nothing to speak yet.");
+      return;
+    }
+    if (speakingHint) {
+      stopAiTextSpeech();
+      setSpeakingHint(false);
+      return;
+    }
+    const id = `coach-hint-${++speakHintIdRef.current}`;
+    setSpeakingHint(true);
+    try {
+      const outcome = await speakAiGeneratedText({
+        text: toSpeak.slice(0, 1500),
+        playbackId: id,
+        catalogueVoiceId: "classic_professional",
+        isCurrent: (checkId) => checkId === id && speakHintIdRef.current > 0,
+        onEnd: () => setSpeakingHint(false),
+      });
+      if (outcome.status === "blocked") {
+        toast.message("Tap Speak again after interacting with the page to unlock audio.");
+      } else if (outcome.status === "unavailable" || outcome.status === "error") {
+        toast.message("Could not speak this hint — read it on screen.");
+      }
+    } finally {
+      setSpeakingHint(false);
+    }
+  }, [textForCompose, liveText, speakingHint]);
 
   const handleHintFeedback = useCallback(
     async (rating: "up" | "down") => {
@@ -659,6 +695,22 @@ function OverlayHintPanelInner({
               touchSafe={isMobile}
             />
 
+            <ActionButton
+              onClick={() => void handleSpeakHint()}
+              title={speakingHint ? "Stop speaking" : "Speak AI hint aloud (Deepgram Flux)"}
+              icon={
+                speakingHint ? (
+                  <VolumeX className="w-3 h-3 text-amber-300" />
+                ) : (
+                  <Volume2 className="w-3 h-3" />
+                )
+              }
+              label={speakingHint ? "Stop" : "Speak"}
+              active={speakingHint}
+              touchSafe={isMobile}
+              disabled={!hasContent || isGenerating}
+            />
+
             {(codeExtract.length > 0 || composed?.hasCode) && (
               <ActionButton
                 onClick={() => void handleCopyCode()}
@@ -893,6 +945,7 @@ function ActionButton({
   label,
   active,
   touchSafe = false,
+  disabled = false,
 }: {
   onClick: () => void;
   title: string;
@@ -900,6 +953,7 @@ function ActionButton({
   label: string;
   active?: boolean;
   touchSafe?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
@@ -907,9 +961,11 @@ function ActionButton({
       onClick={onClick}
       title={title}
       aria-label={title}
+      disabled={disabled}
       className={cn(
         "flex items-center justify-center gap-1.5 text-[11px] font-semibold rounded-lg transition-all border",
         touchSafe ? "min-h-11 min-w-11 px-3 py-2" : "px-2.5 py-1",
+        disabled && "opacity-40 pointer-events-none",
         active
           ? "text-emerald-400 bg-emerald-500/[0.12] border-emerald-500/20"
           : "text-white/35 hover:text-white/75 bg-white/[0.04] hover:bg-white/[0.08] border-white/[0.07]"

@@ -239,13 +239,24 @@ class PaperFactory:
                     f"{needed} official questions are missing and cannot be fabricated.",
                     retryable=False,
                 )
-            gemini_key = getattr(self.settings, "gemini_api_key", "") or ""
+            gemini_key = (
+                self.settings.resolved_gemini_api_key()
+                if hasattr(self.settings, "resolved_gemini_api_key")
+                else (getattr(self.settings, "gemini_api_key", "") or "")
+            )
             openai_key = getattr(self.settings, "openai_api_key", "") or ""
-            keys_empty = isinstance(gemini_key, str) and isinstance(openai_key, str) and not gemini_key and not openai_key
+            anthropic_key = getattr(self.settings, "anthropic_api_key", "") or ""
+            keys_empty = (
+                isinstance(gemini_key, str)
+                and isinstance(openai_key, str)
+                and not gemini_key
+                and not openai_key
+                and not (isinstance(anthropic_key, str) and anthropic_key)
+            )
             if keys_empty and not request.allow_deterministic_fill:
                 raise PaperFactoryError(
                     "AI_PROVIDER_UNCONFIGURED",
-                    "No AI provider configured. Set GEMINI_API_KEY or OPENAI_API_KEY.",
+                    "No AI provider configured. Set GOOGLE_API_KEY/GEMINI_API_KEY or OPENAI_API_KEY.",
                     retryable=False,
                 )
             have = blueprint.total_questions - needed

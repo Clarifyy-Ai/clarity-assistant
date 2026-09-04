@@ -134,7 +134,7 @@ describe("server TTS honesty", () => {
   });
 
   it("reports disabled when VITE_ENABLE_SERVER_TTS is off", async () => {
-    vi.stubEnv("VITE_ENABLE_SERVER_TTS", "");
+    vi.stubEnv("VITE_ENABLE_SERVER_TTS", "false");
     expect(isServerTtsClientEnabled()).toBe(false);
     expect(getServerTtsClientStatus().enabled).toBe(false);
     const res = await requestServerTts({
@@ -207,7 +207,7 @@ describe("mockTts playback + fallback honesty", () => {
   beforeEach(() => {
     resetTtsModuleStateForTests();
     vi.useFakeTimers();
-    vi.stubEnv("VITE_ENABLE_SERVER_TTS", "");
+    vi.stubEnv("VITE_ENABLE_SERVER_TTS", "false");
     fetchEdgeJson.mockReset();
   });
 

@@ -108,7 +108,7 @@ export type AudioPipelineStatus =
   | "ended";
 
 export interface DeepgramConfig {
-  model: "nova-2" | "nova-2-meeting" | "nova-2-phonecall";
+  model: "nova-2" | "nova-2-meeting" | "nova-2-phonecall" | "nova-3" | "nova-3-general";
   language: string;                // "en-US"
   smart_format: boolean;
   interim_results: boolean;

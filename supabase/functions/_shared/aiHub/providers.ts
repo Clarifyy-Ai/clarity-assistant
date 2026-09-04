@@ -7,6 +7,7 @@ import {
   getHubModel,
   type AIHubProvider,
 } from "./registry.ts";
+import { resolveGeminiApiKey } from "../geminiKey.ts";
 
 export interface HubGenerateRequest {
   provider: AIHubProvider;
@@ -72,9 +73,12 @@ function missingKeyMessage(provider: AIHubProvider): string {
 }
 
 function getKey(provider: AIHubProvider): string | null {
-  const map: Record<AIHubProvider, string | undefined> = {
+  if (provider === "gemini") {
+    const v = resolveGeminiApiKey();
+    return v || null;
+  }
+  const map: Record<"openai" | "anthropic", string | undefined> = {
     openai: Deno.env.get("OPENAI_API_KEY"),
-    gemini: Deno.env.get("GEMINI_API_KEY"),
     anthropic: Deno.env.get("ANTHROPIC_API_KEY"),
   };
   const v = (map[provider] ?? "").trim();

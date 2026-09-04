@@ -1,4 +1,6 @@
 // @ts-nocheck -- Deno runtime file, not typechecked by the app tsconfig
+import { resolveGeminiApiKey } from "./geminiKey.ts";
+
 export const SESSION_ELIGIBILITY_REASONS = [
   "ALLOWED",
   "DAILY_LIMIT_REACHED",
@@ -62,9 +64,7 @@ export function configuredAiProviders(): {
   openai: boolean;
   anthropic: boolean;
 } {
-  const gemini = Boolean(
-    (Deno.env.get("GEMINI_API_KEY") ?? Deno.env.get("GOOGLE_AI_API_KEY") ?? "").trim(),
-  );
+  const gemini = Boolean(resolveGeminiApiKey());
   const openai = Boolean((Deno.env.get("OPENAI_API_KEY") ?? "").trim());
   const anthropic = Boolean((Deno.env.get("ANTHROPIC_API_KEY") ?? "").trim());
   return { gemini, openai, anthropic };

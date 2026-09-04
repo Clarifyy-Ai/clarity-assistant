@@ -7,6 +7,8 @@
 // - Safely parse Gemini JSON-like responses
 // - Normalize Gemini errors without leaking sensitive data
 
+import { resolveGeminiApiKey } from "./geminiKey.ts";
+
 const GEMINI_API_VERSION = Deno.env.get("GEMINI_API_VERSION") ?? "v1beta";
 const GEMINI_BASE = `https://generativelanguage.googleapis.com/${GEMINI_API_VERSION}`;
 const DEFAULT_MODEL =
@@ -51,14 +53,15 @@ type GeminiResponse = {
 };
 
 function getServerGeminiKey(): string {
-  return Deno.env.get("GEMINI_API_KEY") ?? "";
+  return resolveGeminiApiKey();
 }
 
 /**
- * Server-side GEMINI_API_KEY only (BYOK headers removed — M1).
+ * Server-side Gemini key only (BYOK headers removed — M1).
+ * Resolves GOOGLE_API_KEY → GEMINI_API_KEY → GOOGLE_AI_API_KEY.
  */
 function resolveGeminiKey(): string {
-  return getServerGeminiKey().trim();
+  return getServerGeminiKey();
 }
 
 function sanitizePrompt(input: string, maxLength = MAX_PROMPT_LENGTH): string {
@@ -147,7 +150,7 @@ async function geminiRequest(
 
   if (!apiKey) {
     throw new Error(
-      "No Gemini API key available. Set GEMINI_API_KEY in Supabase Secrets."
+      "No Gemini API key available. Set GOOGLE_API_KEY or GEMINI_API_KEY in Supabase Secrets."
     );
   }
 

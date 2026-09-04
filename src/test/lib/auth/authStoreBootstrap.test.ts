@@ -106,13 +106,14 @@ describe("authStore account bootstrap", () => {
   });
 
   it("normalizes email and loads profile without waiting on a slow role check", async () => {
-    let resolveRole: (v: boolean) => void = () => undefined;
-    mockHasRole.mockImplementation(
-      () =>
-        new Promise<boolean>((resolve) => {
-          resolveRole = resolve;
-        }),
-    );
+    const roleResolvers: Array<(v: boolean) => void> = [];
+    mockHasRole.mockImplementation((_userId: string, role: string) => {
+      // Moderator resolves immediately; hang only the admin check under test.
+      if (role === "moderator") return Promise.resolve(false);
+      return new Promise<boolean>((resolve) => {
+        roleResolvers.push(resolve);
+      });
+    });
     mockSignIn.mockResolvedValueOnce({
       data: { session: mockSession, user: mockUser },
       error: null,
@@ -133,11 +134,13 @@ describe("authStore account bootstrap", () => {
     expect(useAuthStore.getState().status).toBe("authenticated");
 
     await signInPromise;
-    resolveRole(false);
+    expect(roleResolvers.length).toBeGreaterThan(0);
+    roleResolvers.forEach((resolve) => resolve(false));
     await vi.waitFor(() => {
       expect(useAuthStore.getState().isAdminResolved).toBe(true);
     });
     expect(useAuthStore.getState().isAdmin).toBe(false);
+    expect(useAuthStore.getState().isModerator).toBe(false);
   });
 
   it("dedupes concurrent sign-in calls into one token request", async () => {

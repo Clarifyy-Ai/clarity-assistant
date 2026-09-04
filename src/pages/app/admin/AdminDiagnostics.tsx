@@ -520,27 +520,80 @@ export async function runAdminHealthChecks(): Promise<HealthCheck[]> {
     });
   }
 
-  // Admin provider key presence (no secret values)
+  // Admin provider live health (no secret values)
   try {
+    type AiKeyCheckPayload = {
+      providers?: Record<string, boolean>;
+      live?: Record<
+        string,
+        {
+          configured?: boolean;
+          format_valid?: boolean;
+          authenticated?: boolean;
+          available?: boolean;
+          model?: string;
+          latency_ms?: number;
+          reason?: string;
+        }
+      >;
+    };
     const keys = await withTimeout(
-      fetchEdgeJson<{ providers?: Record<string, boolean> }>("ai-key-check", {}),
-      8_000,
+      fetchEdgeJson<AiKeyCheckPayload>("ai-key-check", {}),
+      20_000,
       "ai-key-check",
     );
+    const live = keys.live ?? {};
+    for (const id of ["gemini", "openai", "anthropic"] as const) {
+      const row = live[id];
+      if (!row) {
+        const present = Boolean(keys.providers?.[id]);
+        checks.push({
+          id: `provider_${id}`,
+          label: `${id} provider`,
+          status: present ? "WARNING" : "NOT_CONFIGURED",
+          detail: present
+            ? "Key present but live probe details unavailable"
+            : "Not configured on Edge",
+        });
+        continue;
+      }
+      const status = !row.configured
+        ? "NOT_CONFIGURED"
+        : row.available
+          ? "PASS"
+          : row.authenticated === false && row.format_valid
+            ? "FAIL"
+            : "WARNING";
+      const parts = [
+        row.configured ? "Configured" : "Missing",
+        row.format_valid === false ? "invalid format" : null,
+        row.authenticated ? "Authenticated" : row.configured ? "Auth failed/unavailable" : null,
+        row.available ? "Available" : null,
+        row.model ? `model=${row.model}` : null,
+        typeof row.latency_ms === "number" ? `${row.latency_ms}ms` : null,
+        row.reason ? `reason=${row.reason}` : null,
+      ].filter(Boolean);
+      checks.push({
+        id: `provider_${id}`,
+        label: `${id[0]!.toUpperCase()}${id.slice(1)} live`,
+        status,
+        detail: parts.join(" · "),
+      });
+    }
     const configured = Object.values(keys.providers ?? {}).filter(Boolean).length;
     checks.push({
       id: "ai_key_check",
-      label: "Provider keys (presence)",
+      label: "Provider keys summary",
       status: configured > 0 ? "PASS" : "NOT_CONFIGURED",
       detail:
         configured > 0
-          ? `${configured} provider integration(s) configured (values never returned)`
+          ? `${configured} integration flag(s) set (secret values never returned)`
           : "No provider keys configured on Edge",
     });
   } catch (e) {
     checks.push({
       id: "ai_key_check",
-      label: "Provider keys (presence)",
+      label: "Provider live health",
       status: "WARNING",
       detail: toAdminUserMessage(e, undefined, "diagnostics.ai_key_check"),
     });

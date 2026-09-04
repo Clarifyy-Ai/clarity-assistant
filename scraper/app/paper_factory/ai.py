@@ -137,7 +137,7 @@ class MCQGenerator:
         if not settings.has_ai_provider:
             raise PaperFactoryError(
                 "AI_PROVIDER_UNCONFIGURED",
-                "No AI provider configured. Set GEMINI_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY.",
+                "No AI provider configured. Set GOOGLE_API_KEY/GEMINI_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY.",
             )
         self.settings = settings
         self._client = client
@@ -179,14 +179,14 @@ class MCQGenerator:
             errors: list[str] = []
             available = await get_available_models(
                 self.client,
-                gemini_key=self.settings.gemini_api_key,
+                gemini_key=self.settings.resolved_gemini_api_key(),
                 openai_key=self.settings.openai_api_key,
                 anthropic_key=self.settings.anthropic_api_key,
                 gemini_api_version=self.settings.gemini_api_version,
             )
             chain = build_fallback_chain(
                 self.settings.gemini_model or self.settings.openai_model or self.settings.anthropic_model,
-                gemini=bool(self.settings.gemini_api_key),
+                gemini=bool(self.settings.resolved_gemini_api_key()),
                 openai=bool(self.settings.openai_api_key),
                 anthropic=bool(self.settings.anthropic_api_key),
                 available_gemini=available.get("gemini"),
@@ -209,7 +209,7 @@ class MCQGenerator:
                     retryable=True,
                 )
 
-            if self.settings.gemini_api_key and gemini_circuit.can_attempt():
+            if self.settings.resolved_gemini_api_key() and gemini_circuit.can_attempt():
                 quota_hits = 0
                 for model in gemini_models or [self.settings.gemini_model]:
                     try:
@@ -237,7 +237,7 @@ class MCQGenerator:
                         "Gemini quota exhausted; skipping paid fallback to avoid double spend.",
                         retryable=True,
                     )
-            elif self.settings.gemini_api_key:
+            elif self.settings.resolved_gemini_api_key():
                 errors.append("gemini: circuit_open")
 
             if gemini_quota:
@@ -290,7 +290,7 @@ class MCQGenerator:
         }
         response = await self.client.post(
             url,
-            params={"key": self.settings.gemini_api_key},
+            params={"key": self.settings.resolved_gemini_api_key()},
             json=payload,
             headers={"content-type": "application/json"},
         )

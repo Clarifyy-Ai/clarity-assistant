@@ -43,8 +43,8 @@ import {
 import {
   createServiceClient,
 } from "../_shared/supabase.ts";
-import { callAI } from "../_shared/utils.ts";
 import {
+  generateWithFallback,
   logAICost,
   TOKEN_LIMITS,
   truncateChatHistory,
@@ -84,21 +84,6 @@ const FALLBACK_ANSWER =
   "State your specific role and the actions you took using I-statements. " +
   "Close with a result you can substantiate — never invent metrics or employers. " +
   "If you lack details, say what information is still needed instead of fabricating.";
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function retryTransient<T>(operation: () => Promise<T>, attempts = 3): Promise<T> {
-  let lastError: unknown;
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    try {
-      return await operation();
-    } catch (error) {
-      lastError = error;
-      if (attempt < attempts - 1) await sleep(250 * 2 ** attempt);
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error("AI request failed");
-}
 
 const SYSTEM_PROMPT_BEHAVIORAL = `You are an expert interview coach helping a candidate answer live interview questions.
 
@@ -686,28 +671,15 @@ Deno.serve(async (req: Request) => {
     const hybridResult = await executeHybridOperation<AnswerHybridData>({
       ...hybridInput,
       runAi: async () => {
-        const aiAttempts = Math.max(1, ANSWER_AI_POLICY.maxRetries);
-        const result = await retryTransient(
-          () =>
-            callAI({
-              model: model as ModelId,
-              messages: [
-                { role: "system", content: boundedSystemPrompt },
-                { role: "user", content: boundedUserPrompt },
-              ],
-              maxTokens: ANSWER_AI_POLICY.maxOutputTokens,
-              temperature: 0.7,
-            }),
-          aiAttempts,
-        );
-        void logAICost(db, {
+        const result = await generateWithFallback({
+          prompt: boundedUserPrompt,
+          systemPrompt: boundedSystemPrompt,
+          maxTokens: ANSWER_AI_POLICY.maxOutputTokens,
+          temperature: 0.7,
           userId: user.id,
           action: "generate_answer",
-          model: result.model,
-          inputTokens: result.tokensIn,
-          outputTokens: result.tokensOut,
-          latencyMs: Date.now() - aiStartMs,
-          wasFallback: false,
+          model,
+          skipSecondaryOnQuota: ANSWER_AI_POLICY.skipSecondaryOnQuota,
         });
         if (!result.text?.trim()) throw new Error("AI returned empty answer");
         assertLiveCoachOutputGrounded(

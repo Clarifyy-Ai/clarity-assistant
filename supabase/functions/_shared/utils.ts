@@ -53,13 +53,18 @@ for (const key of REQUIRED) {
   }
 }
 
+import { resolveGeminiApiKey } from "./geminiKey.ts";
+
 export const ENV = {
   SUPABASE_URL:         Deno.env.get("SUPABASE_URL") ?? "",
   SUPABASE_ANON_KEY:    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
   SUPABASE_SERVICE_KEY: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   OPENAI_API_KEY:       Deno.env.get("OPENAI_API_KEY") ?? "",
   ANTHROPIC_API_KEY:    Deno.env.get("ANTHROPIC_API_KEY") ?? "",
-  GEMINI_API_KEY:       Deno.env.get("GEMINI_API_KEY") ?? "",
+  /** @deprecated Prefer resolveGeminiApiKey() — kept for callers reading ENV snapshot. */
+  get GEMINI_API_KEY(): string {
+    return resolveGeminiApiKey();
+  },
   GEMINI_API_VERSION:   Deno.env.get("GEMINI_API_VERSION") ?? "v1beta", // set "v1" for stable 【3-96ce52】
   RESEND_API_KEY:       Deno.env.get("RESEND_API_KEY") ?? "",
 };
@@ -502,9 +507,9 @@ async function callGemini(
   req: AICompletionRequest,
   start: number,
 ): Promise<AICompletionResponse> {
-  const apiKey = ENV.GEMINI_API_KEY;
+  const apiKey = resolveGeminiApiKey();
   if (!apiKey) {
-    throw new Error("Gemini API key not available. Set GEMINI_API_KEY in Supabase Secrets.");
+    throw new Error("Gemini API key not available. Set GOOGLE_API_KEY or GEMINI_API_KEY in Supabase Secrets.");
   }
 
   const base = `https://generativelanguage.googleapis.com/${ENV.GEMINI_API_VERSION}`;

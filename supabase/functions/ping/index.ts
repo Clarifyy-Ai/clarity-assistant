@@ -3,6 +3,7 @@ import { createServiceClient } from "../_shared/supabase.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { logger, withRequestId } from "../_shared/logger.ts";
 import { startTimer } from "../_shared/timing.ts";
+import { resolveGeminiApiKey } from "../_shared/geminiKey.ts";
 
 const BOOT_TIME = Date.now();
 
@@ -64,7 +65,7 @@ Deno.serve(async (req) => {
   const aiTimer = startTimer();
   try {
     const anyAi = Boolean(
-      (Deno.env.get("GEMINI_API_KEY") ?? Deno.env.get("GOOGLE_AI_API_KEY") ?? "").trim() ||
+      resolveGeminiApiKey() ||
         (Deno.env.get("OPENAI_API_KEY") ?? "").trim() ||
         (Deno.env.get("ANTHROPIC_API_KEY") ?? "").trim(),
     );

@@ -13,6 +13,7 @@ import {
   RATE_LIMIT_PRESETS,
 } from "../_shared/rateLimit.ts";
 import { collectExamPapers, sanitizeText } from "../_shared/collectExamPapers.ts";
+import { resolveGeminiApiKey } from "../_shared/geminiKey.ts";
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
@@ -33,9 +34,9 @@ Deno.serve(async (req) => {
     });
     if (rateLimited) return rateLimited;
 
-    if (!Deno.env.get("GEMINI_API_KEY")?.trim()) {
+    if (!resolveGeminiApiKey()) {
       return errorResponse(
-        "GEMINI_API_KEY not configured on Supabase",
+        "Gemini API key not configured on Supabase (GOOGLE_API_KEY or GEMINI_API_KEY)",
         "CONFIG_ERROR",
         503,
         req,

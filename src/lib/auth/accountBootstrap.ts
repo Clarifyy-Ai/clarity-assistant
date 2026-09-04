@@ -24,6 +24,13 @@ export const PROFILE_FETCH_TIMEOUT_MS = 15_000;
 /** Per-attempt admin role budget — must NOT gate Free-user routing. */
 export const ROLE_CHECK_TIMEOUT_MS = 12_000;
 
+/**
+ * Max wait on staff routes before showing a recoverable error.
+ * Must cover admin role check + one retry (+ moderator follow-up).
+ */
+export const ADMIN_ROLE_WAIT_MS = ROLE_CHECK_TIMEOUT_MS * 2 + 4_000;
+
+
 export const AUTH_SESSION_TIMEOUT_MS_WEB = 15_000;
 export const AUTH_SESSION_TIMEOUT_MS_ELECTRON = 18_000;
 

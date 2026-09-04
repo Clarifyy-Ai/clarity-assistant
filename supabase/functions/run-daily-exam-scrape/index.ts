@@ -23,6 +23,7 @@ import {
   DAILY_EXAM_TYPES,
   sanitizeText,
 } from "../_shared/collectExamPapers.ts";
+import { resolveGeminiApiKey } from "../_shared/geminiKey.ts";
 
 function json(req: Request, payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -79,8 +80,8 @@ Deno.serve(async (req) => {
     }
   }
 
-  if (!Deno.env.get("GEMINI_API_KEY")?.trim()) {
-    return json(req, { error: "GEMINI_API_KEY not configured", code: "CONFIG_ERROR" }, 503);
+  if (!resolveGeminiApiKey()) {
+    return json(req, { error: "Gemini API key not configured", code: "CONFIG_ERROR" }, 503);
   }
 
   const db = createServiceClient();

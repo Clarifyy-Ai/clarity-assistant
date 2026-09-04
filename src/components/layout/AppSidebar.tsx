@@ -99,6 +99,7 @@ const ROUTE_PREFETCH: Record<string, () => Promise<unknown>> = {
   "/app/mock": () => import("@/pages/app/mock/MockInterview"),
   "/app/prep": () => import("@/pages/app/prep/PrepLab"),
   "/app/mock-test": () => import("@/pages/app/mock-test/MockTestHub"),
+  "/app/mock-test/generate": () => import("@/pages/app/mock-test/GenerateGovPaper"),
   "/app/assessments": () => import("@/pages/app/assessments/AssessmentTemplates"),
   "/app/learn": () => import("@/pages/app/learn/LearningHub"),
   "/app/practice-workspace": () => import("@/pages/app/practice/PracticeWorkspace"),
@@ -108,6 +109,8 @@ const ROUTE_PREFETCH: Record<string, () => Promise<unknown>> = {
   "/app/answers": () => import("@/pages/app/answer-bank/AnswerBank"),
   "/app/settings": () => import("@/pages/app/settings/Settings"),
   "/app/admin": () => import("@/pages/app/admin/AdminDashboard"),
+  "/app/admin/mail": () => import("@/pages/app/admin/AdminMail"),
+  "/app/admin/live-chat": () => import("@/pages/app/admin/AdminLiveChat"),
 };
 
 interface AppSidebarProps {

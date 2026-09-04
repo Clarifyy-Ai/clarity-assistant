@@ -22,13 +22,18 @@ function readEnvFlag(name: string, defaultValue: boolean): boolean {
 }
 
 export function loadLiveTranscriptionConfig(): LiveTranscriptionConfig {
-  const modelRaw = import.meta.env.VITE_STT_MODEL as string | undefined;
-  const model =
-    modelRaw === "nova-2" ||
-    modelRaw === "nova-2-meeting" ||
-    modelRaw === "nova-2-phonecall"
-      ? modelRaw
-      : "nova-2-meeting";
+  const modelRaw = (import.meta.env.VITE_STT_MODEL as string | undefined)?.trim();
+  const allowed = new Set([
+    "nova-2",
+    "nova-2-meeting",
+    "nova-2-phonecall",
+    "nova-3",
+    "nova-3-general",
+  ]);
+  // Default nova-3 for mock interview + Practice Coach listen (Deepgram listen v1).
+  const model = (modelRaw && allowed.has(modelRaw)
+    ? modelRaw
+    : "nova-3") as LiveTranscriptionConfig["model"];
 
   return {
     enabled: readEnvFlag("VITE_ENABLE_LIVE_TRANSCRIPTION", true),

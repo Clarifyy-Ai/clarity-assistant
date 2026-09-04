@@ -28,8 +28,10 @@ class FactorySettings(BaseSettings):
     # Optional fallback: resolve publishing UUID from profiles.email when SYSTEM_USER_ID unset.
     system_user_email: str = Field("", alias="SYSTEM_USER_EMAIL")
 
-    # AI providers. Gemini is primary; OpenAI is the fallback when configured.
+    # AI providers. Precedence for Gemini: GOOGLE_API_KEY → GEMINI_API_KEY → GOOGLE_AI_API_KEY.
+    google_api_key: str = Field("", alias="GOOGLE_API_KEY")
     gemini_api_key: str = Field("", alias="GEMINI_API_KEY")
+    google_ai_api_key: str = Field("", alias="GOOGLE_AI_API_KEY")
     gemini_api_version: str = Field("v1beta", alias="GEMINI_API_VERSION")
     gemini_model: str = Field("gemini-2.5-flash", alias="PAPER_FACTORY_GEMINI_MODEL")
     openai_api_key: str = Field("", alias="OPENAI_API_KEY")
@@ -38,6 +40,14 @@ class FactorySettings(BaseSettings):
     anthropic_model: str = Field(
         "claude-3-haiku-20240307", alias="PAPER_FACTORY_ANTHROPIC_MODEL"
     )
+
+    def resolved_gemini_api_key(self) -> str:
+        """Google docs: GOOGLE_API_KEY takes precedence when both exist."""
+        for value in (self.google_api_key, self.gemini_api_key, self.google_ai_api_key):
+            trimmed = (value or "").strip()
+            if trimmed:
+                return trimmed
+        return ""
 
     # Generation tuning
     batch_size: int = Field(8, alias="PAPER_FACTORY_BATCH_SIZE")
@@ -143,7 +153,11 @@ class FactorySettings(BaseSettings):
 
     @property
     def has_ai_provider(self) -> bool:
-        return bool(self.gemini_api_key or self.openai_api_key or self.anthropic_api_key)
+        return bool(
+            self.resolved_gemini_api_key()
+            or self.openai_api_key
+            or self.anthropic_api_key
+        )
 
     @property
     def worker_enabled(self) -> bool:

@@ -11,7 +11,7 @@
 // - BYOK Gemini support
 // - audit logging
 // - safe JSON responses
-// - fallback hints if AI is unavailable
+// - typed unavailable + credit refund if AI is unavailable (never charge for static fallback)
 
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
@@ -58,9 +58,7 @@ import { resolveModel } from "../_shared/resolveModel.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { extractBYOK } from "../_shared/utils.ts";
 import { executeHybridOperation, prepareHybridStreamOperation } from "../_shared/hybridExecute.ts";
-import { callPythonProcess, livePythonTimeoutMs } from "../_shared/pythonClient.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
-import { normalizePythonCoachData } from "../_shared/practiceCoachContract.ts";
 import { createSseStreamResponse, requestWantsSse, sseFromText } from "../_shared/sse.ts";
 import { streamGeminiContent } from "../_shared/geminiStream.ts";
 import { FACTUAL_INTEGRITY_SYSTEM_RULE, assertLiveCoachOutputGrounded } from "../_shared/factualIntegrity.ts";
@@ -524,41 +522,9 @@ Deno.serve(async (req: Request) => {
     user.id,
     sanitizeModelInput(body.model),
   );
-  const pythonTimeoutMs = livePythonTimeoutMs();
   const wantsSse = requestWantsSse(req);
   const policy = getAiFeaturePolicy("generate_hint");
   const maxHintTokens = Math.min(500, Math.max(300, policy.maxOutputTokens));
-
-  const runPythonHint = async (ctx: { operationId: string; correlationId: string }) => {
-    const py = await callPythonProcess({
-      operation: "practice_coach",
-      operationId: ctx.operationId,
-      correlationId: ctx.correlationId,
-      timeoutMs: pythonTimeoutMs,
-      payload: {
-        operation_type: "hint",
-        question: body.question,
-        transcript: body.transcript,
-        interview_type: body.interview_type,
-        resume_context: body.resume_context,
-        target_company: body.target_company,
-      },
-    });
-    if (!py.ok) return null;
-    const normalized = normalizePythonCoachData(py.data);
-    if (!normalized) return null;
-    const hintsRaw =
-      normalized.hints.length > 0
-        ? normalized.hints.map((h) => (h.startsWith("•") ? h : `• ${h}`)).join("\n")
-        : normalized.reply;
-    if (!hintsRaw.trim()) return null;
-    return {
-      request_id: requestId,
-      hints: normalizeHints(hintsRaw),
-      source: "python_structured",
-      model: "python",
-    };
-  };
 
   const hybridShared = {
     req,
@@ -576,15 +542,13 @@ Deno.serve(async (req: Request) => {
       session_id: body.session_id,
       mode: body.mode,
     },
-    runDeterministic: async () => ({
-      request_id: requestId,
-      hints: FALLBACK_HINTS,
-      source: "fallback",
-      model: "deterministic",
-    }),
-    runPython: runPythonHint,
+    runDeterministic: async () => null,
+    runPython: async () => null,
     aiMeta: { provider: "gemini", modelVersion: resolvedModel },
     validate: async (data: HintHybridData, source: string) => {
+      if (source !== "ai") {
+        throw new Error("Hints require AI completion");
+      }
       if (source === "ai" && data.hints?.trim()) {
         assertLiveCoachOutputGrounded(
           `${body.resume_context ?? ""}\n${body.question ?? ""}`,
@@ -656,7 +620,6 @@ Deno.serve(async (req: Request) => {
           ) {
             if (!firstTokenAt) {
               firstTokenAt = Date.now();
-              prepared.keepCharge();
             }
             full += delta;
             // Buffer tokens until factual gate passes — do not stream ungated partials.
@@ -754,46 +717,27 @@ Deno.serve(async (req: Request) => {
             writer.sendDone();
             return;
           }
-          let fallback: HintHybridData | null = null;
-          try {
-            fallback = await prepared.runPython();
-          } catch {
-            fallback = null;
-          }
-          if (!fallback?.hints?.trim()) {
-            fallback = await prepared.runDeterministic();
-          }
-          const hints = fallback?.hints ?? FALLBACK_HINTS;
-          await prepared.finalizeSuccess(
-            fallback ?? {
-              request_id: requestId,
-              hints: FALLBACK_HINTS,
-              source: "fallback",
-              model: "deterministic",
-            },
-            fallback?.source === "python_structured" ? "python" : "deterministic",
-            { fallback_reason: "ai_failed_before_token" },
-          );
+          // practice_coach_help is AI-required: never finalize FALLBACK_HINTS / deterministic.
+          await prepared.refundOnFailure("AI_PROVIDER_UNAVAILABLE");
           await logAiAudit({
             req,
             userId: user.id,
             action: "GENERATE_HINT",
             sessionId: body.session_id ?? null,
-            status: "success",
+            status: "failure",
             metadata: {
               requestId,
-              source: fallback?.source ?? "fallback",
-              model: fallback?.model ?? "deterministic",
-              cost: CREDIT_COST,
-              hybrid_source: fallback?.source ?? "fallback",
+              reason: "AI_PROVIDER_UNAVAILABLE",
               operation_id: prepared.operationId,
-              fallback: true,
+              cost_refunded: CREDIT_COST,
             },
           });
           writer.sendJson({
-            source: fallback?.source ?? "fallback",
+            error: "AI Help is temporarily unavailable. Please try again.",
+            code: "AI_PROVIDER_UNAVAILABLE",
+            retryable: true,
+            source: "unavailable",
           });
-          writer.sendText(hints);
           writer.sendDone();
         }
       },

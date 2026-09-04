@@ -7,6 +7,7 @@ import {
   stripModelPrefix,
   type AvailableByProvider,
 } from "./modelCatalog.ts";
+import { resolveGeminiApiKey } from "./geminiKey.ts";
 
 const TTL_MS = 10 * 60 * 1000;
 const LIST_TIMEOUT_MS = 1_500;
@@ -119,7 +120,7 @@ async function listAnthropic(key: string): Promise<Set<string> | null> {
 }
 
 async function refreshAvailable(): Promise<AvailableByProvider> {
-  const geminiKey = envKey("GEMINI_API_KEY");
+  const geminiKey = resolveGeminiApiKey();
   const openaiKey = envKey("OPENAI_API_KEY");
   const anthropicKey = envKey("ANTHROPIC_API_KEY");
   const [gemini, openai, anthropic] = await Promise.all([
@@ -152,7 +153,7 @@ export function configuredProviderKeys(): {
   anthropic: boolean;
 } {
   return {
-    gemini: Boolean(envKey("GEMINI_API_KEY")),
+    gemini: Boolean(resolveGeminiApiKey()),
     openai: Boolean(envKey("OPENAI_API_KEY")),
     anthropic: Boolean(envKey("ANTHROPIC_API_KEY")),
   };

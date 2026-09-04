@@ -6,6 +6,7 @@
 
 import { createServiceClient } from "./supabase.ts";
 import { generateWithFallback } from "./aiProvider.ts";
+import { resolveGeminiApiKey } from "./geminiKey.ts";
 import { getAiFeaturePolicy, mcqOutputTokenBudget } from "./aiFeaturePolicy.ts";
 import { parseJSON } from "./gemini.ts";
 import { buildGapFillPrompt, type WeakTopicStat } from "./examAIPrompts.ts";
@@ -80,7 +81,7 @@ export async function fillUntilCount(
   opts: FillUntilOpts,
 ): Promise<{ added: GapFillRow[]; error?: string }> {
   if (
-    !Deno.env.get("GEMINI_API_KEY")?.trim() &&
+    !resolveGeminiApiKey() &&
     !Deno.env.get("OPENAI_API_KEY")?.trim() &&
     !Deno.env.get("ANTHROPIC_API_KEY")?.trim()
   ) {

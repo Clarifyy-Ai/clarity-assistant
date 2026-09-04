@@ -130,8 +130,10 @@ export default function AdminSeedQuestions() {
   async function loadStats() {
     setLoading(true);
     try {
+      // Cap rows — unbounded bank selects can 500 (statement timeout / payload).
       const data = await questionsDB.list({
         columns: "exam_type, source, is_verified, subject, source_year",
+        limit: 5000,
       });
 
       const map: Record<string, BankStat> = {};

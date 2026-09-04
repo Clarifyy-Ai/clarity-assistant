@@ -12,3 +12,5 @@ Government Exam hub (`/app/mock-test`) CTAs must never silently land on Dashboar
 8. Incognito: open generate deep link → `/login?returnTo=…mock-test/generate…`.
 
 Remaining blocker if CI cannot run Playwright against a live browser session: complete steps 3–8 manually before production FIXED.
+
+**2026-09-05 triage:** Routing soft-gate (BUG13) already in code. Remaining “feature dead” symptoms are usually missing `exam.code`/stage (disabled CTAs with titles), Edge/Python workers, or India override — see [`MULTI_FEATURE_OUTAGE_TRIAGE.md`](./MULTI_FEATURE_OUTAGE_TRIAGE.md). Hub now prefetches generate chunk on hover and clarifies disabled CTA titles.

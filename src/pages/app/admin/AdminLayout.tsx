@@ -36,6 +36,14 @@ function isModeratorAllowedPath(pathname: string): boolean {
   return MODERATOR_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
+const ADMIN_ROUTE_PREFETCH: Record<string, () => Promise<unknown>> = {
+  "/app/admin": () => import("@/pages/app/admin/AdminDashboard"),
+  "/app/admin/mail": () => import("@/pages/app/admin/AdminMail"),
+  "/app/admin/live-chat": () => import("@/pages/app/admin/AdminLiveChat"),
+  "/app/admin/users": () => import("@/pages/app/admin/AdminUsers"),
+  "/app/admin/gov/exams": () => import("@/pages/app/admin/AdminGovExamRegistry"),
+};
+
 const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
   {
     label: "Users & Support",
@@ -115,6 +123,12 @@ function AdminNavLinks({
               to={item.to}
               end={item.to === "/app/admin"}
               onClick={onNavigate}
+              onMouseEnter={() => {
+                void ADMIN_ROUTE_PREFETCH[item.to]?.();
+              }}
+              onFocus={() => {
+                void ADMIN_ROUTE_PREFETCH[item.to]?.();
+              }}
               className={({ isActive }) =>
                 cn(
                   "flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all duration-150",

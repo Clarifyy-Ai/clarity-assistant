@@ -221,14 +221,34 @@ Deno.serve(async (req: Request) => {
     });
 
     /* ── RETURN SCOPED TOKEN ────────────────────────────────────────────── */
+    let purpose = "stt";
+    try {
+      const body = await req.clone().json().catch(() => ({})) as { purpose?: string };
+      purpose = String(body?.purpose ?? "stt").trim().toLowerCase() || "stt";
+    } catch {
+      purpose = "stt";
+    }
+
+    const payload: Record<string, unknown> = {
+      token: minted.token,
+      expires_in: minted.expires_in,
+      key_id: minted.key_id,
+      type: "scoped",
+      cached: false,
+    };
+
+    if (purpose === "agent" || purpose === "voice_agent") {
+      try {
+        const { resolveDeepgramAgentSettings } = await import("../_shared/deepgramAgentDefaults.ts");
+        payload.agent_settings = resolveDeepgramAgentSettings();
+        payload.agent_ws_url = "wss://agent.deepgram.com/v1/agent/converse";
+      } catch (agentErr) {
+        console.warn("[deepgram-token] agent settings attach failed:", agentErr);
+      }
+    }
+
     return new Response(
-      JSON.stringify({
-        token: minted.token,
-        expires_in: minted.expires_in,
-        key_id: minted.key_id,
-        type: "scoped",
-        cached: false,
-      }),
+      JSON.stringify(payload),
       { status: 200, headers: { ...headers, "Content-Type": "application/json" } },
     );
   } catch (err) {

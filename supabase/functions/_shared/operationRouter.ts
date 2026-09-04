@@ -576,6 +576,42 @@ export function isKnownHybridOperation(op: string): op is HybridOperation {
 
 
 
+
+export function assertFinalizeSourceAllowed(
+  operation: string,
+  source: "database" | "deterministic" | "python" | "ai" | "fallback",
+): void {
+  if (!isKnownHybridOperation(operation)) {
+    throw new DomainError(
+      "UNKNOWN_OPERATION",
+      `Cannot finalize unknown hybrid operation: ${operation}`,
+    );
+  }
+  const route = MATRIX[operation];
+  if (source === "ai") return;
+  if (source === "python") {
+    if (route.pythonFallbackOnAiFailure || route.preferredOrder.includes("python")) {
+      return;
+    }
+    throw new DomainError(
+      "AI_PROVIDER_UNAVAILABLE",
+      `Operation ${operation} forbids Python finalize`,
+    );
+  }
+  if (source === "deterministic" || source === "fallback") {
+    if (route.canCompleteDeterministically) return;
+    throw new DomainError(
+      "AI_PROVIDER_UNAVAILABLE",
+      `Operation ${operation} forbids deterministic finalize`,
+    );
+  }
+  if (source === "database" && route.canCompleteWithDatabase) return;
+  throw new DomainError(
+    "AI_PROVIDER_UNAVAILABLE",
+    `Operation ${operation} forbids finalize source ${source}`,
+  );
+}
+
 function isKnownOperation(op: string): op is HybridOperation {
 
   return isKnownHybridOperation(op);
