@@ -117,6 +117,9 @@ export const MAX_SESSION_CHECK_SOFT_KEEPS = 1;
  * onAuthStateChange (INITIAL_SESSION often races getSession()).
  * Soft-keeps are budgeted so a hung hydrate cannot leave private routes
  * spinning forever.
+ *
+ * When the profile is already loaded, soft-keep is false — the caller must
+ * promote status to authenticated instead of looping.
  */
 export function shouldKeepHydrateOnSessionCheckFailure(input: {
   hasUser: boolean;
@@ -127,8 +130,9 @@ export function shouldKeepHydrateOnSessionCheckFailure(input: {
   softKeepCount?: number;
 }): boolean {
   if (!input.hasUser) return false;
-  // Hydrate already completed — keep; no soft-loop risk.
-  if (input.status === "authenticated" || input.isProfileLoaded) return true;
+  // Profile already available — do not soft-loop; promote to authenticated.
+  if (input.isProfileLoaded) return false;
+  if (input.status === "authenticated") return false;
   if (
     input.timedOut &&
     (input.status === "loading" || input.status === "idle")

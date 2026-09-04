@@ -926,6 +926,18 @@ export const useAuthStore = create<AuthStore>()(
                 resetPostHog();
                 get().reset();
                 redirectToSessionExpiredLogin();
+              } else if (get().isProfileLoaded && get().user) {
+                // Session check timed out but profile is already available — finish READY.
+                dset((state) => {
+                  state.status = "authenticated";
+                  state.error = null;
+                });
+                logger.warn(LogEvents.BOOTSTRAP_SESSION_SLOW, {
+                  outcome: "timed_out",
+                  operation: "session.check",
+                  recoveryAction: "promote_authenticated_from_loaded_profile",
+                  retryable: false,
+                });
               } else if (
                 shouldKeepHydrateOnSessionCheckFailure({
                   hasUser: Boolean(get().user),
@@ -1524,7 +1536,9 @@ export const useAuthStore = create<AuthStore>()(
                 if (get().user?.id !== userId) return;
                 state.profile = profile as unknown as ProfileRow;
                 state.isProfileLoaded = true;
-                if (state.status === "error") state.status = "authenticated";
+                // Profile success must leave loading — retry/soft-keep can otherwise
+                // leave status=loading forever and trap ProtectedRoute on BrandSplash.
+                if (state.user) state.status = "authenticated";
 
                 state.error = null;
                 state.isOnboarded = getProfileBoolean(

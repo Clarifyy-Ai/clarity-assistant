@@ -353,7 +353,16 @@ describe("soft-fail helpers", () => {
         timedOut: true,
         softKeepCount: 99,
       }),
-    ).toBe(true);
+    ).toBe(false);
+    expect(
+      shouldKeepHydrateOnSessionCheckFailure({
+        hasUser: true,
+        status: "loading",
+        isProfileLoaded: true,
+        timedOut: true,
+        softKeepCount: 0,
+      }),
+    ).toBe(false);
   });
 
   it("classifies missing-column errors as schema config failures", async () => {

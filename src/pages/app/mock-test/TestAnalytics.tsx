@@ -22,6 +22,7 @@ import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { Card, CardContent } from "@/components/ui/Card";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { clampMockTestDisplayScore } from "@/lib/gov-exam/mockTestScoring";
 import { finiteOrNull, formatPercentOrUnavailable, RESULT_UNAVAILABLE } from "@/lib/results/resultDisplay";
 import { cn } from "@/lib/utils";
@@ -85,25 +86,36 @@ export default function TestAnalytics() {
   const user = useAuthStore((s) => s.user);
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [tests, setTests] = useState<MockTestSummary[]>([]);
   const [analyses, setAnalyses] = useState<TestAnalysisSummary[]>([]);
   const [topicPerformance, setTopicPerformance] = useState<TopicPerformance[]>([]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setLoading(false);
+      setLoadError(null);
+      return;
+    }
     void loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
   async function loadData() {
+    if (!user?.id) {
+      setLoading(false);
+      setLoadError("Sign in again to load analytics.");
+      return;
+    }
     setLoading(true);
+    setLoadError(null);
 
     try {
       const [testsRes, analysesRes, topicRes] = await Promise.all([
         supabase
           .from("mock_tests")
           .select("id, test_name, created_at")
-          .eq("user_id", user!.id)
+          .eq("user_id", user.id)
           .eq("status", "COMPLETED")
           .order("created_at", { ascending: false })
           .limit(20),
@@ -112,7 +124,7 @@ export default function TestAnalytics() {
           .select(
             "test_id, total_score, max_score, accuracy, attempt_percentage, subject_breakdown, topic_breakdown, time_analysis, created_at"
           )
-          .eq("user_id", user!.id)
+          .eq("user_id", user.id)
           .order("created_at", { ascending: false })
           .limit(20),
         supabase
@@ -120,7 +132,7 @@ export default function TestAnalytics() {
           .select(
             "topic, subject, accuracy, total_attempted, total_correct, last_practiced"
           )
-          .eq("user_id", user!.id)
+          .eq("user_id", user.id)
           .order("accuracy", { ascending: true })
           .limit(100),
       ]);
@@ -134,6 +146,7 @@ export default function TestAnalytics() {
       setTopicPerformance((topicRes.data ?? []) as TopicPerformance[]);
     } catch (error) {
       console.error("[TestAnalytics] load failed:", error);
+      setLoadError("Failed to load analytics. Check your connection and retry.");
       toast.error("Failed to load analytics.");
     } finally {
       setLoading(false);
@@ -252,8 +265,21 @@ export default function TestAnalytics() {
 
   if (loading) {
     return (
-      <div className="flex h-64 items-center justify-center">
+      <div className="flex h-64 flex-col items-center justify-center gap-3">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <p className="text-sm text-muted-foreground">Loading exam analytics…</p>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Performance Analytics"
+          description="Cross-test trends, topic heatmap, and improvement insights."
+        />
+        <InlineErrorRetry message={loadError} onRetry={() => void loadData()} />
       </div>
     );
   }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { NavLink, Outlet, Link, useLocation, Navigate } from "react-router-dom";
+import { NavLink, Outlet, Link, useLocation, Navigate, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import { logger } from "@/lib/logger";
 import {
@@ -8,7 +8,7 @@ import {
   MessageSquare, FileText, Database, ScrollText, LifeBuoy,
   ExternalLink, Upload, Menu, Tag, Settings2,
   Link2, BookOpen, ListChecks, FileStack, Languages, FileUp, Factory, ShieldCheck,
-  Mail, ClipboardList, Wallet,
+  Mail, ClipboardList, Wallet, LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { COMMUNITY_MODULE_LABEL } from "@/lib/community/moderation";
@@ -135,10 +135,21 @@ function AdminNavLinks({
 }
 
 export default function AdminLayout() {
-  const { isAdmin, isModerator, isAdminResolved, isProfileLoaded } = useAuthStore();
+  const { isAdmin, isModerator, isAdminResolved, isProfileLoaded, signOut } = useAuthStore();
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
   const isStaff = isAdmin || isModerator;
+
+  async function handleLogout(): Promise<void> {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error("[AdminLayout] Sign out failed:", error);
+    } finally {
+      navigate("/login", { replace: true });
+    }
+  }
 
   const navSections = useMemo(() => {
     if (isAdmin) return ADMIN_NAV_SECTIONS;
@@ -231,6 +242,19 @@ export default function AdminLayout() {
                 <ChevronRight className="w-3 h-3 rotate-180" aria-hidden="true" />
                 Back to app
               </NavLink>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileOpen(false);
+                  void handleLogout();
+                }}
+                aria-label="Log out"
+                title="Log out"
+                className="flex w-full items-center gap-2 px-3 py-2 rounded-xl text-xs text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors duration-150"
+              >
+                <LogOut className="w-3 h-3" aria-hidden="true" />
+                Log out
+              </button>
               <a
                 href="/help"
                 target="_blank"
@@ -277,6 +301,16 @@ export default function AdminLayout() {
             <ChevronRight className="w-3 h-3 rotate-180" aria-hidden="true" />
             Back to app
           </NavLink>
+          <button
+            type="button"
+            onClick={() => void handleLogout()}
+            aria-label="Log out"
+            title="Log out"
+            className="flex w-full items-center gap-2 px-3 py-2 rounded-xl text-xs text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors duration-150"
+          >
+            <LogOut className="w-3 h-3" aria-hidden="true" />
+            Log out
+          </button>
           <a
             href="/help"
             target="_blank"

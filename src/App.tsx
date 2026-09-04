@@ -44,6 +44,11 @@ import { AppWalkthrough, InstallPromptModal, ElectronFirstRunModal } from "@/com
 import { ErrorBoundary } from "@/components/layout/ErrorBoundary";
 import { GlobalErrorBoundary } from "@/components/layout/GlobalErrorBoundary";
 import { AppLoadingFallback } from "@/components/layout/AppLoadingFallback";
+import { RouteErrorFallback } from "@/components/layout/RouteErrorFallback";
+import {
+  QaForceRouteErrorProbe,
+  ShellRouteOutlet,
+} from "@/components/layout/ShellRouteOutlet";
 import { Toaster } from "@/components/ui/sonner";
 import { TabAudioGuideHost } from "@/components/audio/TabAudioGuideHost";
 import { isElectronApp } from "@/lib/platform/isElectron";
@@ -377,9 +382,23 @@ function PageLoader(): JSX.Element {
   );
 }
 
+/** Spinner for content inside AppShell / AdminLayout — does not replace chrome. */
+function ShellPageLoader(): JSX.Element {
+  return (
+    <div
+      className="flex w-full items-center justify-center py-20"
+      data-testid="shell-page-loader"
+      role="status"
+      aria-label="Loading page"
+    >
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+    </div>
+  );
+}
+
 function Page({ component: Component }: { component: ComponentType }): JSX.Element {
   return (
-    <Suspense fallback={<PageLoader />}>
+    <Suspense fallback={<ShellPageLoader />}>
       <Component />
     </Suspense>
   );
@@ -497,7 +516,7 @@ function AppShell(): JSX.Element {
         <NetworkBanner />
         <AppHotkeyListener />
         <main id="main-content" className="flex-1 overflow-y-auto min-w-0">
-          <Suspense fallback={<AppLoadingFallback />}>
+          <Suspense fallback={<ShellPageLoader />}>
             <Outlet />
           </Suspense>
         </main>
@@ -540,7 +559,7 @@ function AppShell(): JSX.Element {
             )}
 
             <PageContent>
-              <Suspense fallback={<AppLoadingFallback />}>
+              <Suspense fallback={<ShellPageLoader />}>
                 <Outlet />
               </Suspense>
             </PageContent>
@@ -663,9 +682,24 @@ const routes = [
       {
         element: <AppShell />,
         children: [
+          {
+            element: (
+              <ShellRouteOutlet homeTo="/app/dashboard" scope="app-shell" />
+            ),
+            errorElement: (
+              <RouteErrorFallback homeTo="/app/dashboard" scope="app-shell" />
+            ),
+            children: [
           { index: true, element: <Navigate to="dashboard" replace /> },
 
-          { path: "dashboard", element: <Page component={Dashboard} /> },
+          {
+            path: "dashboard",
+            element: (
+              <QaForceRouteErrorProbe>
+                <Page component={Dashboard} />
+              </QaForceRouteErrorProbe>
+            ),
+          },
           { path: "interview-day", element: <Page component={InterviewDay} /> },
           {
             path: "analytics",
@@ -957,6 +991,8 @@ const routes = [
           },
 
           { path: "*", element: <Page component={NotFound} /> },
+            ],
+          },
         ],
       },
 
@@ -965,12 +1001,20 @@ const routes = [
         path: "admin",
         element: (
           <ProtectedRoute requireStaff requireOnboarded>
-            <Suspense fallback={<PageLoader />}>
+            <Suspense fallback={<ShellPageLoader />}>
               <AdminLayout />
             </Suspense>
           </ProtectedRoute>
         ),
         children: [
+          {
+            element: (
+              <ShellRouteOutlet homeTo="/app/admin" scope="admin-shell" />
+            ),
+            errorElement: (
+              <RouteErrorFallback homeTo="/app/admin" scope="admin-shell" />
+            ),
+            children: [
           { index: true, element: <Page component={AdminDashboard} /> },
           { path: "users", element: <Page component={AdminUsers} /> },
           { path: "analytics", element: <Page component={AdminAnalytics} /> },
@@ -1057,6 +1101,8 @@ const routes = [
           {
             path: "security-config",
             element: <Navigate to="/app/admin/diagnostics" replace />,
+          },
+            ],
           },
         ],
       },

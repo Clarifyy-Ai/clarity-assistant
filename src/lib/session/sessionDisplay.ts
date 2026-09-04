@@ -6,20 +6,36 @@ export type SessionDurationSource = {
   lifecycle_status?: string | null;
 };
 
-export function formatSessionDuration(session: SessionDurationSource): string {
-  if (typeof session.duration_seconds === "number" && session.duration_seconds >= 0) {
-    const minutes = Math.floor(session.duration_seconds / 60);
-    const seconds = session.duration_seconds % 60;
+/**
+ * Format a session's duration for display.
+ * Contract: pass a session-like object (or null/undefined). Never pass a bare number.
+ * Null / missing / malformed duration → "—".
+ */
+export function formatSessionDuration(
+  session: SessionDurationSource | null | undefined,
+): string {
+  if (session == null || typeof session !== "object") {
+    return "—";
+  }
+
+  const rawDuration = session.duration_seconds;
+  if (typeof rawDuration === "number" && Number.isFinite(rawDuration) && rawDuration >= 0) {
+    const totalSeconds = Math.floor(rawDuration);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
     if (minutes <= 0) return `${seconds}s`;
     return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
   }
+
   if (session.started_at && session.ended_at) {
-    const ms = new Date(session.ended_at).getTime() - new Date(session.started_at).getTime();
-    if (ms > 0) {
+    const ms =
+      new Date(session.ended_at).getTime() - new Date(session.started_at).getTime();
+    if (Number.isFinite(ms) && ms > 0) {
       const minutes = Math.floor(ms / 60000);
       return minutes > 0 ? `${minutes}m` : `${Math.floor(ms / 1000)}s`;
     }
   }
+
   if (session.status === "active" && !session.ended_at) return "In progress";
   return "—";
 }

@@ -1,576 +1,575 @@
 {
-  "base": "https://clarify.ai.sltfinanceindia.com",
-  "ts": "2026-08-08T09:14:50.981Z",
+  "base": "https://trycareerpilot.com",
+  "ts": "2026-09-04T18:10:41.051Z",
   "summary": {
-    "Pass": 164,
-    "Fail": 0,
-    "Blocked": 99,
-    "Not Run": 0,
-    "N/A": 1
+    "Pass": 81,
+    "Fail": 13,
+    "Blocked": 42,
+    "Not Run": 0
   },
   "results": {
     "SMOKE-APP-001": {
       "status": "Pass",
-      "actual": "Loaded HTTP 200; title=Career Pilot — Practice every interview with AI by your side",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/",
+      "actual": "Loaded HTTP 200; title=Career Pilot — AI Career & Exam Preparation",
+      "evidence": "https://trycareerpilot.com/",
       "notes": ""
     },
     "SMOKE-APP-002": {
       "status": "Pass",
-      "actual": "Loaded HTTP 200; title=Career Pilot — Practice every interview with AI by your side",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/",
+      "actual": "Loaded HTTP 200; title=Career Pilot — AI Career & Exam Preparation",
+      "evidence": "https://trycareerpilot.com/",
       "notes": ""
     },
     "PUBLIC-001": {
       "status": "Pass",
-      "actual": "Loaded HTTP 200; title=Career Pilot — Practice every interview with AI by your side",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/",
+      "actual": "Loaded HTTP 200; title=Career Pilot — AI Career & Exam Preparation",
+      "evidence": "https://trycareerpilot.com/",
       "notes": ""
     },
     "PUBLIC-003": {
       "status": "Pass",
       "actual": "plans=true starter/elite=false",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/pricing",
+      "evidence": "https://trycareerpilot.com/pricing",
       "notes": ""
     },
     "PUBLIC-005": {
       "status": "Pass",
-      "actual": "Loaded HTTP 200; title=Gov Exam Mock Tests — UPSC, SSC, IBPS & more | Career Pilot",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/gov-exams",
+      "actual": "Loaded HTTP 200; title=Government Exams — UPSC, SSC, IBPS & more | Career Pilot",
+      "evidence": "https://trycareerpilot.com/gov-exams",
       "notes": ""
     },
     "PUBLIC-006": {
       "status": "Pass",
       "actual": "Loaded HTTP 200; title=Help Center — Career Pilot",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/help",
+      "evidence": "https://trycareerpilot.com/help",
       "notes": ""
     },
     "PUBLIC-008": {
       "status": "Pass",
       "actual": "Loaded HTTP 200; title=Keyboard Shortcuts — Career Pilot",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/shortcuts",
+      "evidence": "https://trycareerpilot.com/shortcuts",
       "notes": ""
     },
     "PUBLIC-009": {
       "status": "Pass",
       "actual": "Loaded HTTP 200; title=Blog — Career Pilot",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/blog",
+      "evidence": "https://trycareerpilot.com/blog",
       "notes": ""
     },
     "PUBLIC-011": {
       "status": "Pass",
       "actual": "Loaded HTTP 200; title=Terms of Service | Career Pilot",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/terms",
+      "evidence": "https://trycareerpilot.com/terms",
       "notes": ""
     },
     "PUBLIC-012": {
       "status": "Pass",
       "actual": "Loaded HTTP 200; title=Privacy Policy | Career Pilot",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/privacy",
+      "evidence": "https://trycareerpilot.com/privacy",
       "notes": ""
     },
     "PUBLIC-016": {
       "status": "Pass",
       "actual": "Loaded HTTP 200; title=Page not found — Career Pilot",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/unknown-route-test",
+      "evidence": "https://trycareerpilot.com/unknown-route-test",
       "notes": ""
     },
     "AUTH-SIGNUP-001": {
       "status": "Pass",
       "actual": "email=1 password=2 confirm=1",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/signup",
+      "evidence": "https://trycareerpilot.com/signup",
       "notes": ""
     },
     "SMOKE-AUTH-001": {
       "status": "Pass",
       "actual": "Loaded HTTP 200; title=Sign in | Career Pilot",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/login",
+      "evidence": "https://trycareerpilot.com/login",
       "notes": ""
     },
     "AUTH-LOGIN-003": {
       "status": "Pass",
       "actual": "password type before=password afterToggle=password",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/login",
+      "evidence": "https://trycareerpilot.com/login",
       "notes": ""
     },
     "AUTH-RESET-001": {
       "status": "Pass",
-      "actual": "Forgot-password submit response: Career Pilot Practice interviews with an AI coach that feels real. Practice Coach Scorecards and Skills Analytics Prep Lab and Mock Interviews “Career Pilot helped",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/forgot-password",
+      "actual": "Forgot-password submit response: Skip to content Career Pilot Welcome to Career Pilot. Navigate your career. Prepare with confidence. Practice Coach Scorecards and Skills Analytics Prep Lab and",
+      "evidence": "https://trycareerpilot.com/forgot-password",
       "notes": ""
     },
     "PUBLIC-014": {
       "status": "Pass",
-      "actual": "Loaded HTTP 200; title=Shared session · Career Pilot",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/share/invalid-token-test",
+      "actual": "Loaded HTTP 200; title=Career Pilot — AI Career & Exam Preparation",
+      "evidence": "https://trycareerpilot.com/share/invalid-token-test",
       "notes": ""
     },
     "HONESTY-001": {
       "status": "Pass",
       "actual": "Loaded HTTP 200; title=Sign in | Career Pilot",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/rooms",
+      "evidence": "https://trycareerpilot.com/app/rooms",
       "notes": ""
     },
     "SHELL-008": {
       "status": "Pass",
       "actual": "Loaded HTTP 200; title=Sign in | Career Pilot",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/dashboard",
+      "evidence": "https://trycareerpilot.com/dashboard",
       "notes": ""
     },
     "RELIABILITY-002": {
       "status": "Pass",
       "actual": "Loaded HTTP 200; title=Page not found — Career Pilot",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/unknown-route-test",
+      "evidence": "https://trycareerpilot.com/unknown-route-test",
       "notes": ""
     },
     "SMOKE-APP-003": {
       "status": "Pass",
       "actual": "No uncaught pageerror on cold load without prior consent",
-      "evidence": "https://clarify.ai.sltfinanceindia.com",
+      "evidence": "https://trycareerpilot.com",
       "notes": ""
     },
     "PUBLIC-002": {
       "status": "Pass",
       "actual": "Mobile landing HTTP 200; crashed=false",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/",
+      "evidence": "https://trycareerpilot.com/",
       "notes": ""
     },
     "PUBLIC-007": {
       "status": "Pass",
       "actual": "Help article /help/gs-1 HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/help/gs-1",
+      "evidence": "https://trycareerpilot.com/help/gs-1",
       "notes": ""
     },
     "PUBLIC-010": {
       "status": "Pass",
-      "actual": "Invalid blog slug handled HTTP 200; title=Post not found | Career Pilot Blog",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/blog/this-slug-should-not-exist-xyz",
+      "actual": "Invalid blog slug handled HTTP 200; title=Blog | Career Pilot",
+      "evidence": "https://trycareerpilot.com/blog/this-slug-should-not-exist-xyz",
       "notes": ""
     },
     "SMOKE-SEC-001": {
       "status": "Pass",
       "actual": "Post-logout protected denial",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/login?returnTo=%2Fapp%2Fdashboard",
+      "evidence": "https://trycareerpilot.com/login?returnTo=%2Fapp%2Fdashboard",
       "notes": ""
     },
     "SEC-AUTH-001": {
       "status": "Pass",
-      "actual": "Anon cannot use /app. url=https://clarify.ai.sltfinanceindia.com/login?returnTo=%2Fapp%2Fdashboard",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/login?returnTo=%2Fapp%2Fdashboard",
+      "actual": "Anon cannot use /app. url=https://trycareerpilot.com/login?returnTo=%2Fapp%2Fdashboard",
+      "evidence": "https://trycareerpilot.com/login?returnTo=%2Fapp%2Fdashboard",
       "notes": ""
     },
     "AUTH-SIGNUP-004": {
       "status": "Pass",
-      "actual": "confirm fields=1; eye-like buttons≈8; password inputs=2",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/signup",
+      "actual": "confirm fields=1; eye-like buttons≈4; password inputs=2",
+      "evidence": "https://trycareerpilot.com/signup",
       "notes": "Confirm both Password and Confirm Password have show/hide toggles visually."
     },
     "BILL-PLAN-005": {
       "status": "Pass",
       "actual": "Free/Pro/Max visible; Starter/Elite=false",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/pricing",
+      "evidence": "https://trycareerpilot.com/pricing",
       "notes": ""
     },
     "HONESTY-005": {
       "status": "Pass",
       "actual": "Plan naming check starter/elite=false",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/pricing",
+      "evidence": "https://trycareerpilot.com/pricing",
       "notes": ""
     },
     "HONESTY-003": {
       "status": "Pass",
       "actual": "stealth overclaim home=false pricing=false",
-      "evidence": "https://clarify.ai.sltfinanceindia.com",
+      "evidence": "https://trycareerpilot.com",
       "notes": ""
     },
     "AUTH-LOGIN-002": {
       "status": "Pass",
-      "actual": "url=https://clarify.ai.sltfinanceindia.com/login; errorShown=true",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/login",
+      "actual": "url=https://trycareerpilot.com/login; errorShown=true",
+      "evidence": "https://trycareerpilot.com/login",
       "notes": ""
     },
     "AUTH-SIGNUP-002": {
       "status": "Pass",
       "actual": "Invalid email does not navigate away; HTML5/RHF validation present",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/signup",
+      "evidence": "https://trycareerpilot.com/signup",
       "notes": ""
     },
     "AUTH-SIGNUP-003": {
       "status": "Pass",
       "actual": "Password policy hint visibility check",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/signup",
+      "evidence": "https://trycareerpilot.com/signup",
       "notes": ""
     },
     "AUTH-SIGNUP-005": {
       "status": "Pass",
       "actual": "T&C checkbox count≈1",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/signup",
+      "evidence": "https://trycareerpilot.com/signup",
       "notes": ""
     },
     "SMOKE-AUTH-002": {
       "status": "Pass",
-      "actual": "Pro login reached https://clarify.ai.sltfinanceindia.com/app/dashboard",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "actual": "Pro login reached https://trycareerpilot.com/app/dashboard",
+      "evidence": "https://trycareerpilot.com/app/dashboard",
       "notes": ""
     },
     "AUTH-LOGIN-001": {
       "status": "Pass",
-      "actual": "Valid Pro credentials → https://clarify.ai.sltfinanceindia.com/app/dashboard",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "actual": "Valid Pro credentials → https://trycareerpilot.com/app/dashboard",
+      "evidence": "https://trycareerpilot.com/app/dashboard",
       "notes": ""
     },
     "SHELL-001": {
       "status": "Pass",
-      "actual": "Dashboard reachable after login: https://clarify.ai.sltfinanceindia.com/app/dashboard",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "actual": "Dashboard reachable after login: https://trycareerpilot.com/app/dashboard",
+      "evidence": "https://trycareerpilot.com/app/dashboard",
       "notes": ""
     },
     "DASH-002": {
-      "status": "Pass",
-      "actual": "Loaded /app/dashboard without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "status": "Fail",
+      "actual": "Fatal console on /app/dashboard: TypeError: Failed to fetch\n    at https://trycareerpilot.com/assets/chunk-app-core-sFphrsj8.js:33:69111\n    at https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:28:2927\n    at mn (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:28:9766)\n    at m (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:28:9515)\n    at https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:9947\n    at ci._useSession (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:8165)\n    at async ci._getUser (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:9733)\n    at async https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:9539",
+      "evidence": "https://trycareerpilot.com/app/dashboard",
       "notes": ""
     },
     "LIVE-SETUP-001": {
       "status": "Pass",
       "actual": "Practice Coach page rendered",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live",
+      "evidence": "https://trycareerpilot.com/app/live",
       "notes": ""
     },
     "LIVE-SETUP-002": {
-      "status": "Pass",
-      "actual": "Loaded /app/live without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live",
+      "status": "Fail",
+      "actual": "Fatal console on /app/live: TypeError: Failed to fetch\n    at https://trycareerpilot.com/assets/chunk-app-core-sFphrsj8.js:33:69111\n    at https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:28:2927\n    at mn (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:28:9766)\n    at m (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:28:9515)\n    at https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:9947\n    at ci._useSession (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:8165)\n    at async ci._getUser (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:9733)\n    at async https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:9539",
+      "evidence": "https://trycareerpilot.com/app/live",
       "notes": ""
     },
     "MOCK-001": {
       "status": "Pass",
       "actual": "Mock config page content check",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock",
+      "evidence": "https://trycareerpilot.com/app/mock",
       "notes": ""
     },
     "MOCK-003": {
       "status": "Pass",
       "actual": "Loaded /app/mock/warmup without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock/warmup",
+      "evidence": "https://trycareerpilot.com/app/mock/warmup",
       "notes": ""
     },
     "PREP-001": {
       "status": "Pass",
       "actual": "Loaded /app/prep without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep",
+      "evidence": "https://trycareerpilot.com/app/prep",
       "notes": ""
     },
     "DOC-001": {
       "status": "Pass",
       "actual": "Documents page rendered",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "evidence": "https://trycareerpilot.com/app/documents",
       "notes": ""
     },
     "ANSWER-001": {
       "status": "Pass",
       "actual": "Loaded /app/answers without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
+      "evidence": "https://trycareerpilot.com/app/answers",
       "notes": ""
     },
     "INTERVIEW-001": {
       "status": "Pass",
       "actual": "Loaded /app/interviews without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/interviews",
+      "evidence": "https://trycareerpilot.com/app/interviews",
       "notes": ""
     },
     "INTERVIEW-002": {
       "status": "Pass",
       "actual": "Loaded /app/interviews/new without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/interviews/new",
+      "evidence": "https://trycareerpilot.com/app/interviews/new",
       "notes": ""
     },
     "DAY-001": {
       "status": "Pass",
       "actual": "Loaded /app/interview-day without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/interview-day",
+      "evidence": "https://trycareerpilot.com/app/interview-day",
       "notes": ""
     },
     "COMPANY-001": {
       "status": "Pass",
       "actual": "Loaded /app/companies without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/companies",
+      "evidence": "https://trycareerpilot.com/app/companies",
       "notes": ""
     },
     "SESSION-001": {
       "status": "Pass",
       "actual": "Loaded /app/sessions without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/sessions",
+      "evidence": "https://trycareerpilot.com/app/sessions",
       "notes": ""
     },
     "SESSION-004": {
       "status": "Pass",
       "actual": "Loaded /app/debrief without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/debrief",
+      "evidence": "https://trycareerpilot.com/app/debrief",
       "notes": ""
     },
     "ANALYTICS-001": {
       "status": "Pass",
       "actual": "Loaded /app/analytics without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/analytics",
+      "evidence": "https://trycareerpilot.com/app/analytics",
       "notes": ""
     },
     "USAGE-001": {
       "status": "Pass",
       "actual": "Usage/credits page content",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/usage",
+      "evidence": "https://trycareerpilot.com/app/usage",
       "notes": ""
     },
     "NOTIFY-001": {
       "status": "Pass",
       "actual": "Loaded /app/notifications without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/notifications",
+      "evidence": "https://trycareerpilot.com/app/notifications",
       "notes": ""
     },
     "REFERRAL-001": {
       "status": "Pass",
       "actual": "Loaded /app/referrals without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/referrals",
+      "evidence": "https://trycareerpilot.com/app/referrals",
       "notes": ""
     },
     "GUIDE-001": {
       "status": "Pass",
       "actual": "Loaded /app/guide without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/guide",
+      "evidence": "https://trycareerpilot.com/app/guide",
       "notes": ""
     },
     "GUIDE-002": {
       "status": "Pass",
       "actual": "Loaded /app/guide/practice-coach without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/guide/practice-coach",
+      "evidence": "https://trycareerpilot.com/app/guide/practice-coach",
       "notes": ""
     },
     "GOV-002": {
-      "status": "Pass",
-      "actual": "Loaded /app/mock-test without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
+      "status": "Fail",
+      "actual": "Fatal console on /app/mock-test: TypeError: Failed to fetch\n    at https://trycareerpilot.com/assets/chunk-app-core-sFphrsj8.js:33:69111\n    at https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:28:2927\n    at mn (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:28:9766)\n    at m (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:28:9515)\n    at https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:9947\n    at ci._useSession (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:8165)\n    at async ci._getUser (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:9733)\n    at async https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:9539",
+      "evidence": "https://trycareerpilot.com/app/mock-test",
       "notes": ""
     },
     "SETTINGS-PROFILE-001": {
       "status": "Pass",
       "actual": "Settings page loaded; confirm name save manually if input not found",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/settings",
+      "evidence": "https://trycareerpilot.com/app/settings",
       "notes": ""
     },
     "SETTINGS-PREF-001": {
       "status": "Pass",
       "actual": "Loaded /app/settings/preferences without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/settings/preferences",
+      "evidence": "https://trycareerpilot.com/app/settings/preferences",
       "notes": ""
     },
     "BILL-PLAN-002": {
       "status": "Pass",
       "actual": "Loaded /app/billing without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/billing",
+      "evidence": "https://trycareerpilot.com/app/billing",
       "notes": ""
     },
     "SHELL-002": {
       "status": "Pass",
       "actual": "Sidebar items present",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "evidence": "https://trycareerpilot.com/app/dashboard",
       "notes": ""
     },
     "DASH-004": {
       "status": "Pass",
       "actual": "Loaded /app/live without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live",
+      "evidence": "https://trycareerpilot.com/app/live",
       "notes": ""
     },
     "DASH-005": {
       "status": "Pass",
       "actual": "Loaded /app/mock without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock",
+      "evidence": "https://trycareerpilot.com/app/mock",
       "notes": ""
     },
     "DASH-006": {
       "status": "Pass",
       "actual": "Loaded /app/prep without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep",
+      "evidence": "https://trycareerpilot.com/app/prep",
       "notes": ""
     },
     "PREP-002": {
-      "status": "Pass",
-      "actual": "Loaded /app/prep/star-builder without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep/star-builder",
+      "status": "Fail",
+      "actual": "Fatal console on /app/prep/star-builder: TypeError: Failed to fetch\n    at https://trycareerpilot.com/assets/chunk-app-core-sFphrsj8.js:33:69111\n    at https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:28:2927\n    at mn (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:28:9766)\n    at m (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:28:9515)\n    at https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:9947\n    at ci._useSession (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:8165)\n    at async ci._getUser (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:9733)\n    at async https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:9539",
+      "evidence": "https://trycareerpilot.com/app/prep/star-builder",
       "notes": ""
     },
     "PREP-004": {
       "status": "Pass",
       "actual": "Rephraser produced output without error banner",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep/rephraser",
+      "evidence": "https://trycareerpilot.com/app/prep/rephraser",
       "notes": ""
     },
     "PREP-003": {
       "status": "Pass",
       "actual": "Loaded /app/prep/project-builder without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep/project-builder",
+      "evidence": "https://trycareerpilot.com/app/prep/project-builder",
       "notes": ""
     },
     "PREP-005": {
       "status": "Pass",
       "actual": "Loaded /app/prep/coding-hints without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep/coding-hints",
+      "evidence": "https://trycareerpilot.com/app/prep/coding-hints",
       "notes": ""
     },
     "PREP-006": {
       "status": "Pass",
       "actual": "Loaded /app/prep/system-design without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep/system-design",
+      "evidence": "https://trycareerpilot.com/app/prep/system-design",
       "notes": ""
     },
     "ONBOARD-007": {
       "status": "Pass",
       "actual": "Loaded /onboarding without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/onboarding",
+      "evidence": "https://trycareerpilot.com/onboarding",
       "notes": ""
     },
     "MOCK-002": {
       "status": "Pass",
       "actual": "Role/company controls visible",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock",
+      "evidence": "https://trycareerpilot.com/app/mock",
       "notes": ""
     },
     "AUTH-SESSION-001": {
       "status": "Pass",
-      "actual": "Session kept after refresh → https://clarify.ai.sltfinanceindia.com/app/documents",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "actual": "Session kept after refresh → https://trycareerpilot.com/app/documents",
+      "evidence": "https://trycareerpilot.com/app/documents",
       "notes": ""
     },
     "DOC-002": {
       "status": "Pass",
       "actual": "Documents upload affordance visible",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "evidence": "https://trycareerpilot.com/app/documents",
       "notes": ""
     },
     "BILL-PLAN-001": {
       "status": "Pass",
       "actual": "Billing/plan page content",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/billing",
+      "evidence": "https://trycareerpilot.com/app/billing",
       "notes": ""
     },
     "BILL-PLAN-003": {
       "status": "Pass",
       "actual": "Billing management CTAs present or plan summary shown",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/billing",
+      "evidence": "https://trycareerpilot.com/app/billing",
       "notes": ""
     },
     "CREDIT-001": {
-      "status": "Pass",
+      "status": "Fail",
       "actual": "Credits visible on usage",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/usage",
+      "evidence": "https://trycareerpilot.com/app/usage",
       "notes": ""
     },
     "CREDIT-002": {
       "status": "Pass",
       "actual": "Usage history section",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/usage",
+      "evidence": "https://trycareerpilot.com/app/usage",
       "notes": ""
     },
     "DEBRIEF-001": {
-      "status": "Pass",
+      "status": "Fail",
       "actual": "Debrief list/empty state",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/debrief",
+      "evidence": "https://trycareerpilot.com/app/debrief",
       "notes": ""
     },
     "ANALYTICS-004": {
       "status": "Pass",
       "actual": "Analytics content/empty state",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/analytics",
+      "evidence": "https://trycareerpilot.com/app/analytics",
       "notes": ""
     },
     "ANSWER-002": {
       "status": "Pass",
       "actual": "Answer Bank list/empty state",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
+      "evidence": "https://trycareerpilot.com/app/answers",
       "notes": ""
     },
     "DASH-007": {
-      "status": "Pass",
+      "status": "Fail",
       "actual": "Dashboard shows credits",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "evidence": "https://trycareerpilot.com/app/dashboard",
       "notes": ""
     },
     "DASH-008": {
-      "status": "Pass",
+      "status": "Fail",
       "actual": "Dashboard primary CTAs",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "evidence": "https://trycareerpilot.com/app/dashboard",
       "notes": ""
     },
     "AUTH-LOGIN-004": {
       "status": "Pass",
-      "actual": "After login with returnTo landed https://clarify.ai.sltfinanceindia.com/app/usage",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/usage",
+      "actual": "After login with returnTo landed https://trycareerpilot.com/app/usage",
+      "evidence": "https://trycareerpilot.com/app/usage",
       "notes": ""
     },
     "AUTH-SESSION-002": {
       "status": "Pass",
       "actual": "After logout, /app gated",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/login?returnTo=%2Fapp%2Fdashboard",
+      "evidence": "https://trycareerpilot.com/login?returnTo=%2Fapp%2Fdashboard",
       "notes": ""
     },
     "SETTINGS-AUTH-001": {
       "status": "Pass",
       "actual": "Logout from settings path worked",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/login?returnTo=%2Fapp%2Fdashboard",
+      "evidence": "https://trycareerpilot.com/login?returnTo=%2Fapp%2Fdashboard",
       "notes": ""
     },
     "DASH-001": {
-      "status": "Pass",
-      "actual": "Loaded /app/dashboard without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "status": "Fail",
+      "actual": "Fatal console on /app/dashboard: TypeError: Failed to fetch\n    at https://trycareerpilot.com/assets/chunk-app-core-sFphrsj8.js:33:69111\n    at https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:28:2927\n    at mn (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:28:9766)\n    at m (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:28:9515)\n    at https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:9947\n    at ci._useSession (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:8165)\n    at async ci._getUser (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:9733)\n    at async https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:9539",
+      "evidence": "https://trycareerpilot.com/app/dashboard",
       "notes": ""
     },
     "COMPANY-002": {
-      "status": "Pass",
-      "actual": "Free company page gate/content check gated=true",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/companies",
+      "status": "Fail",
+      "actual": "Free company page gate/content check gated=false",
+      "evidence": "https://trycareerpilot.com/app/companies",
       "notes": ""
     },
     "ADMIN-001": {
       "status": "Pass",
-      "actual": "Non-admin admin route denied=true adminUi=false",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/admin",
+      "actual": "Non-admin admin route denied=false adminUi=false",
+      "evidence": "https://trycareerpilot.com/app/admin",
       "notes": ""
     },
     "SEC-AUTH-003": {
       "status": "Pass",
-      "actual": "Server/client admin gate for free user denied=true",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/admin",
+      "actual": "Server/client admin gate for free user denied=false",
+      "evidence": "https://trycareerpilot.com/app/admin",
       "notes": ""
     },
     "DASH-003": {
-      "status": "Pass",
-      "actual": "Loaded /app/dashboard without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "status": "Fail",
+      "actual": "Fatal console on /app/dashboard: TypeError: Failed to fetch\n    at https://trycareerpilot.com/assets/chunk-app-core-sFphrsj8.js:33:69111\n    at https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:28:2927\n    at mn (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:28:9766)\n    at m (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:28:9515)\n    at https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:9947\n    at ci._useSession (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:8165)\n    at async ci._getUser (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:9733)\n    at async https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:9539",
+      "evidence": "https://trycareerpilot.com/app/dashboard",
       "notes": ""
     },
     "ADMIN-002": {
-      "status": "Pass",
-      "actual": "Loaded /app/admin without crash; HTTP 200",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/admin",
+      "status": "Fail",
+      "actual": "Fatal console on /app/admin: TypeError: Failed to fetch\n    at https://trycareerpilot.com/assets/chunk-app-core-sFphrsj8.js:33:69111\n    at https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:28:2927\n    at mn (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:28:9766)\n    at m (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:28:9515)\n    at https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:9947\n    at ci._useSession (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:8165)\n    at async ci._getUser (https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:9733)\n    at async https://trycareerpilot.com/assets/vendor-supabase-BSpPsyrg.js:44:9539",
+      "evidence": "https://trycareerpilot.com/app/admin",
       "notes": ""
     },
     "ADMIN-003": {
-      "status": "Pass",
-      "actual": "Admin dashboard content ok=true",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/admin",
+      "status": "Fail",
+      "actual": "Admin dashboard content ok=false",
+      "evidence": "https://trycareerpilot.com/app/admin",
       "notes": ""
     },
     "PREP-008": {
       "status": "Pass",
       "actual": "Charge path exercised (verify ledger manually once)",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep/rephraser",
+      "evidence": "https://trycareerpilot.com/app/prep/rephraser",
       "notes": ""
     },
     "SMOKE-API-001": {
       "status": "Pass",
       "actual": "Authenticated Edge call succeeded (no CORS block)",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep/rephraser",
+      "evidence": "https://trycareerpilot.com/app/prep/rephraser",
       "notes": ""
     },
     "AUTH-VERIFY-001": {
@@ -718,22 +717,22 @@
       "notes": "External dependency — not auto-passable"
     },
     "SEC-RLS-001": {
-      "status": "Pass",
-      "actual": "Free cannot read Pro session 2147fb46-ff23-4e54-b039-2d253320fc3f; stolen=false err=",
+      "status": "Blocked",
+      "actual": "Needs User A/B session IDs",
       "evidence": "",
-      "notes": ""
+      "notes": "External dependency — not auto-passable"
     },
     "SEC-RLS-002": {
-      "status": "Pass",
-      "actual": "Doc isolation id=ae58e594-99c0-42ea-a9e3-e7eb4d28546f stolen=false",
+      "status": "Blocked",
+      "actual": "Needs User A/B document IDs",
       "evidence": "",
-      "notes": ""
+      "notes": "External dependency — not auto-passable"
     },
     "SEC-RLS-003": {
-      "status": "Pass",
-      "actual": "Answer isolation id=0808cacf-8ec1-4a0a-a7d3-d417f3997fb7 denied=true",
+      "status": "Blocked",
+      "actual": "Needs User A/B answer IDs",
       "evidence": "",
-      "notes": ""
+      "notes": "External dependency — not auto-passable"
     },
     "ELECTRON-001": {
       "status": "Blocked",
@@ -779,33 +778,33 @@
     },
     "DOC-003": {
       "status": "Blocked",
-      "actual": "PDF fixture not uploaded in this unlock pass (TXT covered by DOC-004)",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
-      "notes": ""
+      "actual": "Needs real PDF/DOCX/TXT upload file + parse pipeline",
+      "evidence": "",
+      "notes": "External dependency — not auto-passable"
     },
     "DOC-004": {
-      "status": "Pass",
-      "actual": "TXT upload signals=true",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
-      "notes": ""
+      "status": "Blocked",
+      "actual": "Needs real resume parse success fixture",
+      "evidence": "",
+      "notes": "External dependency — not auto-passable"
     },
     "DOC-005": {
       "status": "Blocked",
-      "actual": "JD-specific upload path not exercised (needs JD type selector)",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
-      "notes": ""
+      "actual": "Needs corrupt file upload fixture",
+      "evidence": "",
+      "notes": "External dependency — not auto-passable"
     },
     "ANSWER-003": {
-      "status": "Pass",
-      "actual": "Create answer path completed found=false",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
-      "notes": ""
+      "status": "Blocked",
+      "actual": "Needs create/edit answer bank entry",
+      "evidence": "",
+      "notes": "External dependency — not auto-passable"
     },
     "ANSWER-004": {
-      "status": "Pass",
-      "actual": "Create succeeded; edit control soft-pass via create form",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
-      "notes": ""
+      "status": "Blocked",
+      "actual": "Needs delete answer confirmation",
+      "evidence": "",
+      "notes": "External dependency — not auto-passable"
     },
     "MOCK-004": {
       "status": "Blocked",
@@ -824,773 +823,6 @@
       "actual": "Needs speaker test tone heard by human",
       "evidence": "",
       "notes": "External dependency — not auto-passable"
-    },
-    "PUBLIC-004": {
-      "status": "Pass",
-      "actual": "Pricing CTAs visible=true",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/pricing",
-      "notes": ""
-    },
-    "PUBLIC-013": {
-      "status": "Blocked",
-      "actual": "No durable valid share token fixture in QA env; invalid token path is safe",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/share/invalid-token-test",
-      "notes": "Needs seeded share token for full Pass"
-    },
-    "PUBLIC-015": {
-      "status": "Pass",
-      "actual": "Footer anchors=28; sampled=8; broken5xx=0",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/",
-      "notes": ""
-    },
-    "AUTH-SIGNUP-010": {
-      "status": "Pass",
-      "actual": "Signup legal links count=2",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/signup",
-      "notes": ""
-    },
-    "AUTH-LOGIN-005": {
-      "status": "Pass",
-      "actual": "After 4 bad logins still gated/error UI; crashed=false",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/login",
-      "notes": "Full lockout threshold may be higher than 4 — UI remains safe"
-    },
-    "AUTH-SESSION-004": {
-      "status": "Pass",
-      "actual": "Offline login attempt recoverable UI=true; snippet=Career Pilot\nPractice interviews with an AI coach that feels real.\nPractice Coach\nScorecards and Skills Analytics\nPrep Lab",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/login",
-      "notes": ""
-    },
-    "AUTH-RESET-004": {
-      "status": "Pass",
-      "actual": "Invalid reset handling url=https://clarify.ai.sltfinanceindia.com/reset-password; expiredMsg=true; fakeHashCrash=false",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/reset-password",
-      "notes": ""
-    },
-    "AUTH-VERIFY-004": {
-      "status": "Blocked",
-      "actual": "Needs unverified account fixture (QA accounts are verified)",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/verify-email",
-      "notes": ""
-    },
-    "AUTH-OAUTH-003": {
-      "status": "Blocked",
-      "actual": "LinkedIn button present — interactive OAuth required",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/login",
-      "notes": ""
-    },
-    "AUTH-OAUTH-004": {
-      "status": "Blocked",
-      "actual": "Azure button present — interactive OAuth required",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/login",
-      "notes": ""
-    },
-    "ONBOARD-001": {
-      "status": "Blocked",
-      "actual": "Needs onboarding-incomplete verified user fixture; QA pro/free/max are onboarded",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/onboarding",
-      "notes": ""
-    },
-    "ONBOARD-002": {
-      "status": "Blocked",
-      "actual": "Needs onboarding-incomplete verified user fixture; QA pro/free/max are onboarded",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/onboarding",
-      "notes": ""
-    },
-    "ONBOARD-003": {
-      "status": "Blocked",
-      "actual": "Needs onboarding-incomplete verified user fixture; QA pro/free/max are onboarded",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/onboarding",
-      "notes": ""
-    },
-    "ONBOARD-004": {
-      "status": "Blocked",
-      "actual": "Needs onboarding-incomplete verified user fixture; QA pro/free/max are onboarded",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/onboarding",
-      "notes": ""
-    },
-    "ONBOARD-005": {
-      "status": "Blocked",
-      "actual": "Needs onboarding-incomplete verified user fixture; QA pro/free/max are onboarded",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/onboarding",
-      "notes": ""
-    },
-    "ONBOARD-009": {
-      "status": "Blocked",
-      "actual": "Needs onboarding-incomplete verified user fixture; QA pro/free/max are onboarded",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/onboarding",
-      "notes": ""
-    },
-    "ONBOARD-010": {
-      "status": "Blocked",
-      "actual": "Needs onboarding-incomplete verified user fixture; QA pro/free/max are onboarded",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/onboarding",
-      "notes": ""
-    },
-    "ONBOARD-011": {
-      "status": "Blocked",
-      "actual": "Needs onboarding-incomplete verified user fixture; QA pro/free/max are onboarded",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/onboarding",
-      "notes": ""
-    },
-    "ONBOARD-012": {
-      "status": "Blocked",
-      "actual": "Needs onboarding-incomplete verified user fixture; QA pro/free/max are onboarded",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/onboarding",
-      "notes": ""
-    },
-    "ONBOARD-006": {
-      "status": "Pass",
-      "actual": "Legacy/current onboarding route safe; url=https://clarify.ai.sltfinanceindia.com/app/dashboard",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
-      "notes": ""
-    },
-    "ONBOARD-008": {
-      "status": "Pass",
-      "actual": "rerun=1 handled url=https://clarify.ai.sltfinanceindia.com/app/dashboard",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
-      "notes": "Rerun not supported; redirected to app (honest)"
-    },
-    "SHELL-003": {
-      "status": "Pass",
-      "actual": "Mobile bottom nav signals=true",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
-      "notes": ""
-    },
-    "LIVE-SETUP-005": {
-      "status": "Pass",
-      "actual": "System/tab audio guidance present=false (limitation ok if explained)",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live",
-      "notes": ""
-    },
-    "LIVE-SETUP-006": {
-      "status": "Pass",
-      "actual": "Permission guidance area present or setup reachable; permHints=true",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live",
-      "notes": ""
-    },
-    "LIVE-OVERLAY-013": {
-      "status": "Pass",
-      "actual": "Live page loaded; mobile limitation notice=true",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live",
-      "notes": ""
-    },
-    "LIVE-OVERLAY-017": {
-      "status": "Pass",
-      "actual": "Electron preferred path messaging=true (honest absence ok)",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live",
-      "notes": ""
-    },
-    "LIVE-OVERLAY-001": {
-      "status": "Pass",
-      "actual": "Overlay/setup path reachable without fatal crash url=https://clarify.ai.sltfinanceindia.com/app/live/overlay",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live/overlay",
-      "notes": ""
-    },
-    "LIVE-OVERLAY-002": {
-      "status": "Pass",
-      "actual": "Overlay route renders (dock/resize needs interactive desktop)",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live/overlay",
-      "notes": ""
-    },
-    "LIVE-OVERLAY-009": {
-      "status": "Pass",
-      "actual": "No stealth-evasion claim on overlay path",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live/overlay",
-      "notes": ""
-    },
-    "LIVE-OVERLAY-010": {
-      "status": "Pass",
-      "actual": "Silence: page remains interactive without freeze after idle wait",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live/overlay",
-      "notes": ""
-    },
-    "LIVE-OVERLAY-005": {
-      "status": "Blocked",
-      "actual": "Needs live question + AI answer framework",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live/overlay",
-      "notes": ""
-    },
-    "LIVE-OVERLAY-008": {
-      "status": "Blocked",
-      "actual": "Needs calm/coaching mode toggle during live session",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live/overlay",
-      "notes": ""
-    },
-    "LIVE-OVERLAY-011": {
-      "status": "Blocked",
-      "actual": "Needs forced Deepgram disconnect",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live/overlay",
-      "notes": ""
-    },
-    "LIVE-OVERLAY-012": {
-      "status": "Blocked",
-      "actual": "Needs zero-credit fixture for exhaustion UI",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live/overlay",
-      "notes": ""
-    },
-    "LIVE-OVERLAY-015": {
-      "status": "Blocked",
-      "actual": "Needs long live session soak",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live/overlay",
-      "notes": ""
-    },
-    "LIVE-OVERLAY-016": {
-      "status": "Blocked",
-      "actual": "Needs live double-click charge ledger proof",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live/overlay",
-      "notes": ""
-    },
-    "MOCK-005": {
-      "status": "Pass",
-      "actual": "Start mock → url=https://clarify.ai.sltfinanceindia.com/app/mock/session/b5b271de-1a2f-4b25-889a-e574347db338; sessionSignals=true",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock/session/b5b271de-1a2f-4b25-889a-e574347db338",
-      "notes": ""
-    },
-    "MOCK-006": {
-      "status": "Pass",
-      "actual": "Session UI present; question marks≈0",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock/session/b5b271de-1a2f-4b25-889a-e574347db338",
-      "notes": ""
-    },
-    "MOCK-009": {
-      "status": "Pass",
-      "actual": "After refresh url=https://clarify.ai.sltfinanceindia.com/app/mock/session/b5b271de-1a2f-4b25-889a-e574347db338",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock/session/b5b271de-1a2f-4b25-889a-e574347db338",
-      "notes": ""
-    },
-    "MOCK-012": {
-      "status": "Pass",
-      "actual": "Invalid session handling url=https://clarify.ai.sltfinanceindia.com/app/mock",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock",
-      "notes": ""
-    },
-    "MOCK-007": {
-      "status": "Blocked",
-      "actual": "Needs TTS-enabled mock session + audible check",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock",
-      "notes": ""
-    },
-    "MOCK-008": {
-      "status": "Blocked",
-      "actual": "Needs multi-turn mock answers for follow-ups",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock",
-      "notes": ""
-    },
-    "MOCK-010": {
-      "status": "Blocked",
-      "actual": "Needs credit ledger diff around mock start",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock",
-      "notes": ""
-    },
-    "MOCK-011": {
-      "status": "Blocked",
-      "actual": "Needs completed mock for scorecard",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock",
-      "notes": ""
-    },
-    "MOCK-013": {
-      "status": "Blocked",
-      "actual": "Needs forced provider failure fixture",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock",
-      "notes": ""
-    },
-    "MOCK-014": {
-      "status": "Blocked",
-      "actual": "Needs User A/B transcript IDs",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock",
-      "notes": ""
-    },
-    "PREP-011": {
-      "status": "Pass",
-      "actual": "STAR builder loaded; anti-fabrication cues=false",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep/star-builder",
-      "notes": ""
-    },
-    "PREP-007": {
-      "status": "Blocked",
-      "actual": "No save-to-answer control after generate",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep/rephraser",
-      "notes": ""
-    },
-    "DOC-006": {
-      "status": "Pass",
-      "actual": "Upload not stuck on Parsing forever",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
-      "notes": ""
-    },
-    "DOC-007": {
-      "status": "Pass",
-      "actual": "Invalid type interaction; rejectHints=true",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
-      "notes": ""
-    },
-    "DOC-008": {
-      "status": "Blocked",
-      "actual": "Needs oversized file fixture (>limit)",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
-      "notes": ""
-    },
-    "DOC-009": {
-      "status": "Blocked",
-      "actual": "Needs forced parse-failure document",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
-      "notes": ""
-    },
-    "DOC-010": {
-      "status": "Blocked",
-      "actual": "Live setup document selectors present=false",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live",
-      "notes": ""
-    },
-    "DOC-011": {
-      "status": "Blocked",
-      "actual": "Needs existing document to rename",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
-      "notes": ""
-    },
-    "DOC-012": {
-      "status": "Blocked",
-      "actual": "Needs existing document delete confirm",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
-      "notes": ""
-    },
-    "DOC-013": {
-      "status": "Blocked",
-      "actual": "Needs document detail ID",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
-      "notes": ""
-    },
-    "DOC-014": {
-      "status": "Blocked",
-      "actual": "Needs parse credit ledger before/after",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
-      "notes": ""
-    },
-    "GAP-001": {
-      "status": "Blocked",
-      "actual": "Needs resume+JD pair",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
-      "notes": ""
-    },
-    "GAP-002": {
-      "status": "Blocked",
-      "actual": "Needs gap-analysis Edge success",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
-      "notes": ""
-    },
-    "GAP-003": {
-      "status": "Blocked",
-      "actual": "Depends on GAP-002",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
-      "notes": ""
-    },
-    "GAP-004": {
-      "status": "Blocked",
-      "actual": "Needs gap credit ledger",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
-      "notes": ""
-    },
-    "GAP-005": {
-      "status": "Blocked",
-      "actual": "Needs double-submit gap ledger",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
-      "notes": ""
-    },
-    "GAP-006": {
-      "status": "Blocked",
-      "actual": "Needs saved gap analysis",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
-      "notes": ""
-    },
-    "GAP-007": {
-      "status": "Blocked",
-      "actual": "Needs resume update after gap",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
-      "notes": ""
-    },
-    "GAP-008": {
-      "status": "Blocked",
-      "actual": "Needs gap output review",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
-      "notes": ""
-    },
-    "GAP-009": {
-      "status": "Blocked",
-      "actual": "Needs oversized JD fixture",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
-      "notes": ""
-    },
-    "GAP-010": {
-      "status": "Blocked",
-      "actual": "Needs free-tier gap deny path",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
-      "notes": ""
-    },
-    "GOV-001": {
-      "status": "Pass",
-      "actual": "Hub reachable for QA locale; url=https://clarify.ai.sltfinanceindia.com/app/mock-test (non-India redirect N/A for India-targeted prod)",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
-      "notes": ""
-    },
-    "GOV-003": {
-      "status": "Pass",
-      "actual": "Certified families/signals=true",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
-      "notes": ""
-    },
-    "GOV-004": {
-      "status": "Pass",
-      "actual": "Exam search interacted",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
-      "notes": ""
-    },
-    "GOV-GEN-001": {
-      "status": "Pass",
-      "actual": "Select/start control present for certified exam path",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
-      "notes": ""
-    },
-    "GOV-GEN-003": {
-      "status": "Blocked",
-      "actual": "Needs successful paper generation",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
-      "notes": ""
-    },
-    "GOV-GEN-005": {
-      "status": "Blocked",
-      "actual": "Needs generation credit ledger",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
-      "notes": ""
-    },
-    "GOV-TEST-001": {
-      "status": "Blocked",
-      "actual": "Needs active full-screen test attempt",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
-      "notes": ""
-    },
-    "GOV-TEST-002": {
-      "status": "Blocked",
-      "actual": "Needs running server timer",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
-      "notes": ""
-    },
-    "GOV-TEST-007": {
-      "status": "Blocked",
-      "actual": "Needs in-progress attempt submit",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
-      "notes": ""
-    },
-    "GOV-TEST-008": {
-      "status": "Blocked",
-      "actual": "Needs near-expiry attempt",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
-      "notes": ""
-    },
-    "GOV-TEST-009": {
-      "status": "Blocked",
-      "actual": "Needs scored attempt",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
-      "notes": ""
-    },
-    "GOV-CONTENT-010": {
-      "status": "Blocked",
-      "actual": "Needs User A/B attempt IDs",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
-      "notes": ""
-    },
-    "SETTINGS-PROFILE-002": {
-      "status": "Pass",
-      "actual": "Preferences/settings reachable for role/experience",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/settings/preferences",
-      "notes": ""
-    },
-    "SETTINGS-SECURITY-001": {
-      "status": "Pass",
-      "actual": "Password change fields count=4 (will not change shared QA password)",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/settings/profile",
-      "notes": "Interactive password change skipped to preserve QA accounts"
-    },
-    "SETTINGS-DANGER-001": {
-      "status": "Blocked",
-      "actual": "Needs disposable account — do not delete qa.* accounts",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/settings",
-      "notes": ""
-    },
-    "SETTINGS-DANGER-003": {
-      "status": "Blocked",
-      "actual": "Depends on SETTINGS-DANGER-001 disposable delete",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/login",
-      "notes": ""
-    },
-    "CREDIT-005": {
-      "status": "Blocked",
-      "actual": "Needs past-due billing fixture",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/billing",
-      "notes": ""
-    },
-    "ADMIN-018": {
-      "status": "Pass",
-      "actual": "Forged localStorage admin useless; denied=true; url=https://clarify.ai.sltfinanceindia.com/app/admin",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/admin",
-      "notes": ""
-    },
-    "SEC-AUTH-002": {
-      "status": "Pass",
-      "actual": "Free paid-path probe completed without privilege escalation; cues=true",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep/rephraser",
-      "notes": ""
-    },
-    "MOBILE-001": {
-      "status": "Pass",
-      "actual": "Landing 375px crashed=false",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/",
-      "notes": ""
-    },
-    "MOBILE-003": {
-      "status": "Pass",
-      "actual": "Login mobile emailVisible=true",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/login",
-      "notes": ""
-    },
-    "COMPAT-001": {
-      "status": "Pass",
-      "actual": "Chrome/Chromium desktop core flows exercised by this Playwright suite",
-      "evidence": "https://clarify.ai.sltfinanceindia.com",
-      "notes": ""
-    },
-    "RELIABILITY-001": {
-      "status": "Pass",
-      "actual": "Offline reload recoverable; offlineSnippet=",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
-      "notes": ""
-    },
-    "RELIABILITY-008": {
-      "status": "N/A",
-      "actual": "Prod has valid VITE_SUPABASE_* baked in; missing-config UI is staging-only",
-      "evidence": "https://clarify.ai.sltfinanceindia.com",
-      "notes": ""
-    },
-    "SESSION-006": {
-      "status": "Pass",
-      "actual": "Cross-user session deny=true",
-      "evidence": "",
-      "notes": ""
-    },
-    "ANSWER-014": {
-      "status": "Pass",
-      "actual": "User B cannot read User A answer=true",
-      "evidence": "",
-      "notes": ""
-    },
-    "ANALYTICS-010": {
-      "status": "Pass",
-      "actual": "Analytics RLS covered by session/doc isolation pattern + prior admin gates",
-      "evidence": "",
-      "notes": ""
-    },
-    "SHELL-004": {
-      "status": "Pass",
-      "actual": "More sheet content ok=true; snippet=More\nSession History\nDocuments\nAnswer Bank\nSkills Analytics\nCredits & Usage\nDebrief\nInterview Day\nInterviews\nCompany Research\nNotifications\nReferrals\nGuide\nProfile\nSettings\nLog out",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
-      "notes": "Recheck after dismissing WhatsNew + walkthrough"
-    },
-    "MOBILE-004": {
-      "status": "Pass",
-      "actual": "Dashboard mobile crashed=false",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
-      "notes": ""
-    },
-    "MOBILE-005": {
-      "status": "Pass",
-      "actual": "Bottom navigation usable=true",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
-      "notes": ""
-    },
-    "SHELL-005": {
-      "status": "Pass",
-      "actual": "Cmd/Ctrl+K search open=true",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
-      "notes": ""
-    },
-    "SHELL-006": {
-      "status": "Pass",
-      "actual": "Global search results after typing prep",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
-      "notes": ""
-    },
-    "SHELL-007": {
-      "status": "Pass",
-      "actual": "Nav while walkthrough suppressed ok=true",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep",
-      "notes": ""
-    },
-    "SHELL-009": {
-      "status": "Pass",
-      "actual": "rooms redirect url=https://clarify.ai.sltfinanceindia.com/app/rooms; loop=false",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/rooms",
-      "notes": ""
-    },
-    "SHELL-010": {
-      "status": "Pass",
-      "actual": "Discreet labels only; stealth overclaim=false",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
-      "notes": ""
-    },
-    "SHELL-011": {
-      "status": "Pass",
-      "actual": "No blocking PWA prompt present",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
-      "notes": ""
-    },
-    "DASH-009": {
-      "status": "Pass",
-      "actual": "Credits→Usage direct nav url=https://clarify.ai.sltfinanceindia.com/app/usage",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/usage",
-      "notes": ""
-    },
-    "DASH-010": {
-      "status": "Pass",
-      "actual": "Notifications entry reachable url=https://clarify.ai.sltfinanceindia.com/app/notifications",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/notifications",
-      "notes": ""
-    },
-    "PREP-009": {
-      "status": "Pass",
-      "actual": "Free rephraser path completed; insufficient/gate cues=true bodyLen=562",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep/rephraser",
-      "notes": "Pass if gated or succeeds within free allowance without crash"
-    },
-    "PREP-010": {
-      "status": "Pass",
-      "actual": "Covered by prior PREP-004 success path; provider-down case remains ops-dependent",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep/rephraser",
-      "notes": ""
-    },
-    "CREDIT-003": {
-      "status": "Pass",
-      "actual": "Double-click generate did not crash; idempotency depends on Idempotency-Key (client sends)",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep/rephraser",
-      "notes": "Ledger exactness still verify in Usage if suspicious"
-    },
-    "ANSWER-005": {
-      "status": "Pass",
-      "actual": "Create/edit path reachable (delete/archive UI present or list updated)",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
-      "notes": ""
-    },
-    "ANSWER-007": {
-      "status": "Pass",
-      "actual": "Answer Bank search/filter affordance check",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
-      "notes": ""
-    },
-    "ANSWER-006": {
-      "status": "Pass",
-      "actual": "Filter/tags UI presence soft-checked on Answer Bank",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
-      "notes": ""
-    },
-    "ANSWER-008": {
-      "status": "Blocked",
-      "actual": "Needs prep→answer save artifact",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
-      "notes": ""
-    },
-    "ANSWER-009": {
-      "status": "Blocked",
-      "actual": "Needs AI assist on answer bank",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
-      "notes": ""
-    },
-    "ANSWER-010": {
-      "status": "Blocked",
-      "actual": "Needs AI assist output review",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
-      "notes": ""
-    },
-    "ANSWER-011": {
-      "status": "Blocked",
-      "actual": "Needs practice-with-coach handoff",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
-      "notes": ""
-    },
-    "ANSWER-012": {
-      "status": "Blocked",
-      "actual": "Needs practice context nav",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
-      "notes": ""
-    },
-    "ANSWER-013": {
-      "status": "Blocked",
-      "actual": "Needs practice history update",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
-      "notes": ""
-    },
-    "INTERVIEW-003": {
-      "status": "Pass",
-      "actual": "Create interview found=true",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/interviews"
-    },
-    "INTERVIEW-004": {
-      "status": "Blocked",
-      "actual": "No interview detail target",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/interviews",
-      "notes": ""
-    },
-    "INTERVIEW-005": {
-      "status": "Blocked",
-      "actual": "Depends on create",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/interviews/new",
-      "notes": ""
-    },
-    "DAY-002": {
-      "status": "Pass",
-      "actual": "Interview Day loaded (empty checklist ok)",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/interview-day",
-      "notes": ""
-    },
-    "DAY-006": {
-      "status": "Pass",
-      "actual": "Launch coach url=https://clarify.ai.sltfinanceindia.com/app/live",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live",
-      "notes": ""
-    },
-    "COMPANY-003": {
-      "status": "Pass",
-      "actual": "Pro company search/generate signals present",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/companies",
-      "notes": ""
-    },
-    "COMPANY-005": {
-      "status": "Pass",
-      "actual": "Company card nav url=https://clarify.ai.sltfinanceindia.com/app/companies/google?name=Google",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/companies/google?name=Google",
-      "notes": ""
-    },
-    "SESSION-002": {
-      "status": "Pass",
-      "actual": "Session detail https://clarify.ai.sltfinanceindia.com/app/sessions",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/sessions",
-      "notes": ""
-    },
-    "SESSION-003": {
-      "status": "Pass",
-      "actual": "Session detail content loaded",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/sessions",
-      "notes": ""
-    },
-    "DEBRIEF-004": {
-      "status": "Blocked",
-      "actual": "Share token needs completed debrief + share action",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/debrief",
-      "notes": ""
-    },
-    "USAGE-002": {
-      "status": "Pass",
-      "actual": "Usage balance/ledger UI=true",
-      "evidence": "https://clarify.ai.sltfinanceindia.com/app/usage",
-      "notes": ""
     }
   }
 }

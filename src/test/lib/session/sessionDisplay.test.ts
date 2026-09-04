@@ -28,11 +28,54 @@ describe("formatSessionDuration", () => {
       }),
     ).toBe("7m");
   });
+
+  it("returns em dash for null or undefined session (never throws)", () => {
+    expect(formatSessionDuration(null)).toBe("—");
+    expect(formatSessionDuration(undefined)).toBe("—");
+  });
+
+  it("returns em dash when duration_seconds is null", () => {
+    expect(formatSessionDuration({ duration_seconds: null })).toBe("—");
+  });
+
+  it("formats zero duration", () => {
+    expect(formatSessionDuration({ duration_seconds: 0 })).toBe("0s");
+  });
+
+  it("returns em dash for missing duration without timestamps", () => {
+    expect(formatSessionDuration({})).toBe("—");
+  });
+
+  it("returns em dash for malformed non-finite duration", () => {
+    expect(formatSessionDuration({ duration_seconds: Number.NaN })).toBe("—");
+    expect(formatSessionDuration({ duration_seconds: Number.POSITIVE_INFINITY })).toBe(
+      "—",
+    );
+  });
+
+  it("shows In progress for active sessions without ended_at", () => {
+    expect(
+      formatSessionDuration({
+        status: "active",
+        started_at: "2026-08-30T10:00:00.000Z",
+      }),
+    ).toBe("In progress");
+  });
+
+  it("does not throw when a bare number is passed by mistake", () => {
+    // @ts-expect-error intentional contract misuse regression
+    expect(formatSessionDuration(42)).toBe("—");
+  });
 });
 
 describe("resolveOverallScore", () => {
-  it("uses the scorecard when the session row is null", () => {
-    expect(resolveOverallScore({ overall_score: null }, { overall_score: 81 })).toBe(81);
+  it("uses a completed scorecard when the session overall_score is null", () => {
+    expect(
+      resolveOverallScore(
+        { overall_score: null },
+        { overall_score: 81, evaluation_status: "completed" },
+      ),
+    ).toBe(81);
   });
 });
 

@@ -22,7 +22,11 @@ import {
 } from "@/components/ui/pagination";
 import { EmptyState } from "@/components/common/EmptyState";
 import { writeAdminAudit } from "@/lib/admin/writeAdminAudit";
-import { adminActionFailedMessage } from "@/lib/admin/adminErrors";
+import {
+  adminActionFailedMessage,
+  classifyAdminError,
+  toAdminUserMessage,
+} from "@/lib/admin/adminErrors";
 import { sanitizeAdminSearch } from "@/lib/admin/searchFilter";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { toast } from "sonner";
@@ -53,6 +57,7 @@ export default function AdminUsers() {
   const [selected, setSelected] = useState<UserRow | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const requestSequence = useRef(0);
+  const fetchAbortRef = useRef<AbortController | null>(null);
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedSearch(sanitizeAdminSearch(search)), 350);
     return () => window.clearTimeout(t);
@@ -62,10 +67,15 @@ export default function AdminUsers() {
     void fetchUsers();
     return () => {
       requestSequence.current += 1;
+      fetchAbortRef.current?.abort();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional page/search/filter deps
   }, [page, debouncedSearch, filter]);
   async function fetchUsers() {
     const requestId = ++requestSequence.current;
+    fetchAbortRef.current?.abort();
+    const abort = new AbortController();
+    fetchAbortRef.current = abort;
     setLoading(true);
     setFetchError(null);
     try {
@@ -75,7 +85,8 @@ export default function AdminUsers() {
           count: "exact",
         })
         .order("created_at", { ascending: false })
-        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+        .abortSignal(abort.signal);
       if (debouncedSearch) {
         q = q.or(`full_name.ilike.%${debouncedSearch}%,email.ilike.%${debouncedSearch}%`);
       }
@@ -96,7 +107,8 @@ export default function AdminUsers() {
           .from("user_roles")
           .select("user_id, role")
           .in("role", ["admin", "moderator"])
-          .in("user_id", ids);
+          .in("user_id", ids)
+          .abortSignal(abort.signal);
         if (roleErr) throw roleErr;
         for (const r of roles ?? []) {
           if (r.role === "admin") adminIds.add(r.user_id);
@@ -111,8 +123,8 @@ export default function AdminUsers() {
       })));
       setTotal(count ?? 0);
     } catch (err) {
-      const message = adminActionFailedMessage(err, "AdminUsers.load");
-      if (requestId !== requestSequence.current) return;
+      if (abort.signal.aborted || requestId !== requestSequence.current) return;
+      const message = toAdminUserMessage(err, classifyAdminError(err), "AdminUsers.load");
       setFetchError(message);
       setUsers([]);
       setTotal(0);

@@ -214,10 +214,10 @@ export const ProtectedRoute = memo(function ProtectedRoute({
 
   // Wait for authoritative account context. Government Exam search may render
   // once auth + MFA are ready even if profile bootstrap is still in flight.
+  // Note: deriveAccountPhase never returns "AUTHENTICATED" — do not splash on it.
   if (
     accountPhase === "INITIALIZING" ||
-    (accountPhase === "ACCOUNT_LOADING" && !govBrowseBeforeProfile) ||
-    accountPhase === "AUTHENTICATED"
+    (accountPhase === "ACCOUNT_LOADING" && !govBrowseBeforeProfile)
   ) {
     return <AppLoadingFallback />;
   }

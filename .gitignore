@@ -86,6 +86,7 @@ Thumbs.db
 # 🧪 QA artifacts (may contain plaintext passwords)
 # =========================
 .env.qa.local
+CAREER_PILOT_COMPLETE_QA_AUDIT_PROMPT.txt
 Clarify_AI_QA_Checklist_Basic*.xlsx
 Clarify_AI_QA_Checklist_Basic*.xls
 Clarify_AI_*.xlsx
