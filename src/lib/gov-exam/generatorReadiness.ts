@@ -193,10 +193,7 @@ export function isCustomPracticeGenerateDisabled(
       readiness.generateLabelHint === "checking_credits" ||
       readiness.generateLabelHint === "top_up" ||
       readiness.generateLabelHint === "retry_credits" ||
-      readiness.generateLabelHint === "busy" ||
-      readiness.reason === "no_stage" ||
-      readiness.reason === "no_exam" ||
-      readiness.reason === "hydrating"
+      readiness.generateLabelHint === "busy"
     );
   }
   return readiness.generateDisabled;

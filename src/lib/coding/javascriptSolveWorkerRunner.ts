@@ -215,12 +215,12 @@ export async function runJavascriptSolveTestsAsync(
     const limited = limitSolveOutput(outcome.actual);
     if (!limited.ok) {
       sawRuntime = true;
-      if (!primaryError) primaryError = `${testCase.name}: ${limited.error} (input ${inputPreview})`;
+      if (!primaryError) primaryError = `${testCase.name}: ${(limited as { error: string }).error} (input ${inputPreview})`;
       results.push({
         id: testCase.id,
         name: testCase.name,
         passed: false,
-        error: limited.error,
+        error: (limited as { error: string }).error,
         error_kind: "runtime" as const,
         input_preview: inputPreview,
         stdout,

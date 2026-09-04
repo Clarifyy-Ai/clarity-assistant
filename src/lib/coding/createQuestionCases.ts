@@ -92,21 +92,21 @@ export function buildCodingCreateCasePayload(
   }
 
   const visibleIn = parseJsonValue(fields.visibleInput, "Visible case input");
-  if (!visibleIn.ok) return visibleIn;
+  if (!visibleIn.ok) return visibleIn as { ok: false; error: string };
   const visibleEx = parseJsonValue(fields.visibleExpected, "Visible case expected");
-  if (!visibleEx.ok) return visibleEx;
+  if (!visibleEx.ok) return visibleEx as { ok: false; error: string };
   const hiddenIn = parseJsonValue(fields.hiddenInput, "Hidden case input");
-  if (!hiddenIn.ok) return hiddenIn;
+  if (!hiddenIn.ok) return hiddenIn as { ok: false; error: string };
   const hiddenEx = parseJsonValue(fields.hiddenExpected, "Hidden case expected");
-  if (!hiddenEx.ok) return hiddenEx;
+  if (!hiddenEx.ok) return hiddenEx as { ok: false; error: string };
 
   const aligned = assertSampleMatchesVisibleCase(
     sampleIn,
     sampleOut,
-    visibleIn.value,
-    visibleEx.value,
+    (visibleIn as { value: unknown }).value,
+    (visibleEx as { value: unknown }).value,
   );
-  if (!aligned.ok) return aligned;
+  if (!aligned.ok) return aligned as { ok: false; error: string };
 
   return {
     ok: true,
