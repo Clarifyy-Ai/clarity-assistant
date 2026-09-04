@@ -24,7 +24,7 @@ export const AUTH_FACTOR = {
   EMAIL_OTP: "email_otp",
 } as const;
 
-export type AuthFactor = (typeof AUTH_FACTOR)[number];
+export type AuthFactor = (typeof AUTH_FACTOR)[keyof typeof AUTH_FACTOR];
 
 /** Email/magic-link OTP proves inbox access. It is not TOTP MFA. */
 export function emailOtpSatisfiesMfa(): false {
