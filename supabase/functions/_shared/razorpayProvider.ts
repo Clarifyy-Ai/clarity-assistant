@@ -32,21 +32,28 @@ function razorpayCheckOk(
  * Read Razorpay secrets using the same placeholder / format rules as billingConfig.
  */
 export function getRazorpayProviderConfig(): RazorpayProviderConfig {
+  const keyId = (Deno.env.get("RAZORPAY_KEY_ID") ?? "").trim();
+  // Closed-beta: rzp_test_* + RAZORPAY_ALLOW_TEST_KEYS may checkout via
+  // razorpay-verify-payment without a webhook secret. Live keys still require webhook.
+  const testCheckoutAllowed =
+    razorpayAllowsTestKeys() && keyId.startsWith("rzp_test_");
   const report = validateBillingConfig({
     requireStripe: false,
     requireRazorpay: true,
-    requireRazorpayWebhook: true,
+    requireRazorpayWebhook: !testCheckoutAllowed,
   });
-  const keyId = (Deno.env.get("RAZORPAY_KEY_ID") ?? "").trim();
   const keysConfigured =
     razorpayCheckOk(report, "RAZORPAY_KEY_ID") &&
     razorpayCheckOk(report, "RAZORPAY_KEY_SECRET");
   const webhookConfigured = razorpayCheckOk(report, "RAZORPAY_WEBHOOK_SECRET");
-  const testCheckoutAllowed =
-    razorpayAllowsTestKeys() && keyId.startsWith("rzp_test_");
   const productionExtrasOk =
     report.environment !== "production" ||
-    report.errors.every((err) => err.startsWith("STRIPE_") || err.startsWith("STRIPE "));
+    report.errors.every(
+      (err) =>
+        err.startsWith("STRIPE_") ||
+        err.startsWith("STRIPE ") ||
+        (testCheckoutAllowed && err.startsWith("RAZORPAY_WEBHOOK_SECRET")),
+    );
   // Production normally requires webhook. Closed-beta test keys may checkout via
   // verify-payment without webhook; webhook events still need the secret.
   const productionCheckoutOk =

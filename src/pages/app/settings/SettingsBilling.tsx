@@ -24,6 +24,8 @@ import {
 import {
   openRazorpayCheckout,
   toPaymentUserFacingError,
+  isPaymentsNotConfiguredError,
+  PAYMENTS_NOT_CONFIGURED,
   type RazorpayProductType,
 } from "@/lib/api/payments";
 import {
@@ -52,6 +54,10 @@ import {
   Zap,
 } from "lucide-react";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
+import {
+  getCatalogPaymentsConfigured,
+  hydrateBillingCatalog,
+} from "@/lib/billing/liveCatalog";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   active: {
@@ -96,7 +102,7 @@ const PLAN_COLORS: Record<string, "violet" | "amber" | "emerald" | "blue"> = {
   enterprise: "emerald",
 };
 
-type CheckoutPhase = "creating" | "processing";
+type CheckoutPhase = "creating" | "processing" | "verifying" | "confirming";
 
 function razorpayProductForPlan(planId: string): RazorpayProductType | null {
   if (planId === "enterprise") return "enterprise_monthly";
@@ -119,7 +125,10 @@ function checkoutBusyLabel(
   idle: string,
 ): string {
   if (busyKey !== currentKey) return idle;
-  return phase === "processing" ? "Payment processing" : "Creating secure checkout…";
+  if (phase === "processing") return "Waiting for payment…";
+  if (phase === "verifying") return "Verifying payment…";
+  if (phase === "confirming") return "Confirming your credits…";
+  return "Preparing checkout…";
 }
 
 function checkoutErrorMessage(error: unknown): string {
@@ -144,6 +153,8 @@ export default function SettingsBilling(): JSX.Element {
   /** Sum of debit amounts this calendar month; null when unknown / N/A. */
   const [creditsUsedThisPeriod, setCreditsUsedThisPeriod] = useState<number | null>(null);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  /** Persistent when create-order returns PAYMENTS_NOT_CONFIGURED (not toast-only). */
+  const [paymentsConfigError, setPaymentsConfigError] = useState<string | null>(null);
   /** Sync lock so double-click before React re-render cannot start two checkouts. */
   const checkoutLockRef = useRef(false);
 
@@ -151,7 +162,7 @@ export default function SettingsBilling(): JSX.Element {
   const effectivePlanId = (planId as PlanId) || "free";
   const currentPlan = PLANS[effectivePlanId] ?? PLANS.free;
   const currentPlanLabel = getPlanDisplayName(effectivePlanId);
-  const checkoutBusy = Boolean(razorpayLoading);
+  const checkoutBusy = Boolean(razorpayLoading) || Boolean(paymentsConfigError);
 
   const loadPeriodUsage = useCallback(async (): Promise<void> => {
     if (!user?.id) {
@@ -209,6 +220,17 @@ export default function SettingsBilling(): JSX.Element {
   }, [user?.id]);
 
   useEffect(() => {
+    void (async () => {
+      await hydrateBillingCatalog({ force: true });
+      if (getCatalogPaymentsConfigured() === false) {
+        setPaymentsConfigError(PAYMENTS_NOT_CONFIGURED);
+      } else if (getCatalogPaymentsConfigured() === true) {
+        setPaymentsConfigError(null);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
     const checkoutStatus = searchParams.get("checkout");
     const legacySuccess = searchParams.get("success");
     const legacyCanceled = searchParams.get("canceled");
@@ -256,7 +278,7 @@ export default function SettingsBilling(): JSX.Element {
   );
 
   async function handleRazorpayCheckout(productType: RazorpayProductType): Promise<void> {
-    if (checkoutLockRef.current || razorpayLoading) return;
+    if (checkoutLockRef.current || razorpayLoading || paymentsConfigError) return;
     checkoutLockRef.current = true;
     setRazorpayLoading(productType);
     setCheckoutPhase("creating");
@@ -269,6 +291,7 @@ export default function SettingsBilling(): JSX.Element {
         userName: profile?.full_name ?? undefined,
         onReady: (order: RazorpayOrderResponse) => {
           setCheckoutPhase("processing");
+          setPaymentsConfigError(null);
           if (enteredPromo && order.promo_applied) {
             toast.success(`Promo “${order.promo_applied}” applied to this checkout.`);
           } else if (enteredPromo && !order.promo_applied) {
@@ -276,13 +299,20 @@ export default function SettingsBilling(): JSX.Element {
           }
         },
         onSuccess: () => {
-          toast.success("Payment completed — credits update from your ledger.");
+          setCheckoutPhase("verifying");
+          toast.success("Payment completed — confirming your credits…");
+          setCheckoutPhase("confirming");
+          setPaymentsConfigError(null);
           void reloadBillingState();
         },
       });
     } catch (error) {
       console.error("[SettingsBilling] Razorpay", error);
-      toast.error(checkoutErrorMessage(error));
+      const message = checkoutErrorMessage(error);
+      toast.error(message);
+      if (isPaymentsNotConfiguredError(error) || message === PAYMENTS_NOT_CONFIGURED) {
+        setPaymentsConfigError(PAYMENTS_NOT_CONFIGURED);
+      }
       throw error;
     } finally {
       checkoutLockRef.current = false;
@@ -334,6 +364,40 @@ export default function SettingsBilling(): JSX.Element {
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5 shrink-0" />
             <p className="text-sm text-red-300">{subError}</p>
+          </div>
+        </Card>
+      )}
+
+      {paymentsConfigError && (
+        <Card
+          className="border-amber-500/40 bg-amber-500/5"
+          data-testid="payments-not-configured-banner"
+          role="alert"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-start gap-3 p-1">
+            <div className="flex items-start gap-3 flex-1 min-w-0">
+              <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+              <div className="min-w-0 space-y-1">
+                <p className="text-sm font-semibold text-amber-200">
+                  Payments are not configured on this environment
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Catalog prices still show, but Razorpay checkout cannot open until Edge
+                  secrets are set (keys, optional webhook for live keys,{" "}
+                  <span className="font-mono">RAZORPAY_ALLOW_TEST_KEYS</span> for sandbox
+                  on production). This is a configuration issue — not a card decline.
+                  Contact support or an admin if you were trying to purchase.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="shrink-0 self-start"
+              onClick={() => setPaymentsConfigError(null)}
+            >
+              Dismiss
+            </Button>
           </div>
         </Card>
       )}

@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Award, Loader2 } from "lucide-react";
+import { Award, Download, Loader2, Printer } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { certificateKindLabel, formatCertificateDate } from "@/lib/learning/certificates";
+import {
+  certificatePdfInputFromVerifyPayload,
+  downloadCertificatePdf,
+} from "@/lib/learning/certificatePdf";
 import {
   type CertificateVerifyPayload,
   type CertificateVerifyStatus,
@@ -25,6 +30,7 @@ import { MARKETING_SHELL } from "@/lib/ui/responsivePage";
 /**
  * Public certificate verification (TC-PUB-011).
  * Invalid IDs must not leak private learning data — RPC returns { valid: false } only.
+ * Download PDF / Print use only the verified public payload.
  */
 export default function VerifyCertificatePage() {
   const { certificateId } = useParams<{ certificateId?: string }>();
@@ -105,6 +111,24 @@ export default function VerifyCertificatePage() {
     navigate(`/verify-certificate/${encodeURIComponent(code)}`);
   }
 
+  const handleDownloadPdf = useCallback(() => {
+    const input = certificatePdfInputFromVerifyPayload(result ?? { valid: false });
+    if (!input) {
+      toast.error("Certificate details are incomplete. Refresh and try again.");
+      return;
+    }
+    try {
+      downloadCertificatePdf(input);
+      toast.success("Certificate PDF downloaded.");
+    } catch {
+      toast.error("Could not create the PDF. Please try again.");
+    }
+  }, [result]);
+
+  const handlePrint = useCallback(() => {
+    window.print();
+  }, []);
+
   const notFoundCopy = certificateNotFoundCopy();
   const malformedCopy = certificateMalformedCopy();
 
@@ -112,10 +136,10 @@ export default function VerifyCertificatePage() {
     <MarketingLayout>
       <section
         data-testid="dd-layout-root"
-        className={`${MARKETING_SHELL} px-4 sm:px-6 pt-8 pb-16`}
+        className={`${MARKETING_SHELL} px-4 sm:px-6 pt-8 pb-16 certificate-verify-page`}
       >
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-          <header className="space-y-2 text-center sm:text-left">
+        <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
+          <header className="no-print space-y-2 text-center sm:text-left">
             <p className="text-xs font-semibold uppercase tracking-widest text-primary">
               {PRODUCT_NAMES.brand} verification
             </p>
@@ -130,7 +154,7 @@ export default function VerifyCertificatePage() {
           {status === "idle" && (
             <form
               onSubmit={submitManual}
-              className="space-y-3 rounded-2xl border border-border bg-card/40 p-4 sm:p-5"
+              className="no-print space-y-3 rounded-2xl border border-border bg-card/40 p-4 sm:p-5"
               data-testid="certificate-verify-form"
             >
               <label className="block text-sm font-medium text-foreground" htmlFor="cert-code">
@@ -150,7 +174,7 @@ export default function VerifyCertificatePage() {
           )}
 
           {status === "loading" && (
-            <div className="space-y-3" data-testid="certificate-verify-loading">
+            <div className="no-print space-y-3" data-testid="certificate-verify-loading">
               <SkeletonCard />
               <p className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin text-primary" aria-hidden />
@@ -160,7 +184,7 @@ export default function VerifyCertificatePage() {
           )}
 
           {status === "malformed" && (
-            <div data-testid="certificate-verify-malformed">
+            <div className="no-print" data-testid="certificate-verify-malformed">
               <PublicErrorState
                 title={malformedCopy.title}
                 description={malformedCopy.description}
@@ -171,7 +195,7 @@ export default function VerifyCertificatePage() {
           )}
 
           {status === "invalid" && (
-            <div data-testid="certificate-verify-invalid">
+            <div className="no-print" data-testid="certificate-verify-invalid">
               <p className="mb-2 text-center text-xs font-semibold uppercase tracking-widest text-primary">
                 {PRODUCT_NAMES.brand}
               </p>
@@ -186,7 +210,7 @@ export default function VerifyCertificatePage() {
 
           {status === "error" && (
             <div
-              className="space-y-4"
+              className="no-print space-y-4"
               data-testid="certificate-verify-error"
               role="alert"
             >
@@ -213,22 +237,61 @@ export default function VerifyCertificatePage() {
           )}
 
           {status === "valid" && result?.valid && (
-            <div data-testid="certificate-card" className="flex flex-1 flex-col justify-center">
+            <div data-testid="certificate-card" className="flex flex-1 flex-col gap-4 justify-center">
+              <div
+                className="no-print flex flex-wrap items-center justify-center gap-2 sm:justify-start"
+                data-testid="certificate-actions"
+              >
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="md"
+                  leftIcon={<Download className="h-4 w-4" aria-hidden />}
+                  onClick={handleDownloadPdf}
+                  data-testid="certificate-download-pdf"
+                >
+                  Download PDF
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="md"
+                  leftIcon={<Printer className="h-4 w-4" aria-hidden />}
+                  onClick={handlePrint}
+                  data-testid="certificate-print"
+                >
+                  Print
+                </Button>
+              </div>
+
               <div
                 data-certificate-surface
-                className="w-full rounded-2xl border-2 border-primary/25 bg-gradient-to-br from-background via-background to-primary/5 px-6 py-10 shadow-sm sm:px-10 sm:py-12"
+                className="certificate-print-surface relative w-full overflow-hidden rounded-sm border-[3px] border-primary/40 bg-[linear-gradient(145deg,hsl(var(--background))_0%,hsl(var(--background))_55%,hsl(var(--primary)/0.08)_100%)] px-6 py-10 shadow-md sm:px-12 sm:py-14"
               >
-                <p className="inline-flex items-center gap-2 text-sm uppercase tracking-wide text-muted-foreground">
-                  <Award className="h-5 w-5 text-primary" aria-hidden />
-                  {result.kind}
-                </p>
-                <p className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">
-                  {result.student_name}
-                </p>
-                <p className="mt-3 max-w-3xl text-base text-foreground/90 sm:text-lg">
-                  {result.course_name}
-                </p>
-                <dl className="mt-8 grid grid-cols-1 gap-4 text-sm sm:grid-cols-2 md:gap-6 md:text-base">
+                <div
+                  className="pointer-events-none absolute inset-3 rounded-sm border border-primary/20"
+                  aria-hidden
+                />
+                <div className="relative text-center space-y-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary">
+                    {PRODUCT_NAMES.brand}
+                  </p>
+                  <p className="inline-flex items-center justify-center gap-2 text-sm uppercase tracking-wide text-muted-foreground">
+                    <Award className="h-5 w-5 text-primary" aria-hidden />
+                    {result.kind || certificateKindLabel()}
+                  </p>
+                  <p className="pt-2 text-xs uppercase tracking-widest text-muted-foreground">
+                    This is to certify that
+                  </p>
+                  <p className="text-3xl font-semibold tracking-tight sm:text-4xl">
+                    {result.student_name}
+                  </p>
+                  <p className="text-sm text-muted-foreground">has successfully completed</p>
+                  <p className="mx-auto max-w-2xl text-xl font-medium text-foreground/95 sm:text-2xl">
+                    {result.course_name}
+                  </p>
+                </div>
+                <dl className="relative mt-10 grid grid-cols-1 gap-5 text-sm sm:grid-cols-2 sm:gap-6 md:text-base">
                   <div>
                     <dt className="text-muted-foreground">Certificate ID</dt>
                     <dd className="mt-0.5 break-all font-medium">{result.certificate_code}</dd>
@@ -248,11 +311,14 @@ export default function VerifyCertificatePage() {
                     <dd className="mt-0.5 font-medium">{result.completion_percentage}%</dd>
                   </div>
                 </dl>
+                <p className="relative mt-8 text-center text-[11px] text-muted-foreground">
+                  Course completion record — not an accredited professional license.
+                </p>
               </div>
             </div>
           )}
 
-          <p className="text-center text-xs text-muted-foreground sm:text-left">
+          <p className="no-print text-center text-xs text-muted-foreground sm:text-left">
             Need help with verification?{" "}
             <Link to="/help" className="font-medium text-primary hover:underline">
               Open Help Center

@@ -72,12 +72,15 @@ describe("evaluateGovExamCreditGate", () => {
 });
 
 describe("GenerateGovPaper credit button gate", () => {
-  it("disables Generate whenever the credit gate is closed, including unknown balance", () => {
+  it("disables Generate via readiness when the credit gate is closed, including unknown balance", () => {
     const src = fs.readFileSync(
       path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../pages/app/mock-test/GenerateGovPaper.tsx"),
       "utf8",
     );
-    expect(src).toContain("!creditGate.allowed");
+    expect(src).toContain("resolveGeneratorReadiness");
+    expect(src).toContain("creditAllowed: creditGate.allowed");
+    expect(src).toContain("creditsKnown");
+    expect(src).toContain("generateDisabled");
     expect(src).not.toContain("creditsKnown && !creditGate.allowed");
   });
 

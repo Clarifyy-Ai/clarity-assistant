@@ -72,7 +72,7 @@ export default function LearningHubPage() {
         <EmptyState
           icon={BookOpen}
           title="No published courses yet"
-          description="Content is unpublished. Published courses will appear here."
+          description="Preview only — no published Career Pilot courses are available. Content will appear here after an admin publishes a course."
           actionLabel={isAdmin ? "Create a course" : undefined}
           onAction={isAdmin ? () => navigate("/app/admin/learning") : undefined}
         />

@@ -14,7 +14,8 @@ export type DomainErrorCode =
   | "PYTHON_PROCESSING_FAILED"
   | "DATABASE_FAILURE"
   | "INSUFFICIENT_CREDITS"
-  | "CAPABILITY_REQUIRED";
+  | "CAPABILITY_REQUIRED"
+  | "UNKNOWN_OPERATION";
 
 export class DomainError extends Error {
   readonly code: DomainErrorCode;
@@ -54,6 +55,8 @@ export function defaultMessage(code: DomainErrorCode): string {
       return "Insufficient credits.";
     case "CAPABILITY_REQUIRED":
       return "This feature requires a supported plan.";
+    case "UNKNOWN_OPERATION":
+      return "Unknown or unregistered AI operation.";
     default:
       return "Something went wrong. Please try again.";
   }
@@ -65,6 +68,8 @@ export function httpStatusForDomainCode(code: DomainErrorCode | string): number 
       return 402;
     case "CAPABILITY_REQUIRED":
       return 403;
+    case "UNKNOWN_OPERATION":
+      return 400;
     case "AI_INVALID_OUTPUT":
     case "PYTHON_PROCESSING_FAILED":
       return 422;
@@ -91,6 +96,7 @@ export function isRetryable(code: DomainErrorCode | string): boolean {
     case "PYTHON_PROCESSING_FAILED":
     case "INSUFFICIENT_CREDITS":
     case "CAPABILITY_REQUIRED":
+    case "UNKNOWN_OPERATION":
       return false;
     default:
       return false;
@@ -142,6 +148,9 @@ export function classifyAiFailure(err: unknown): DomainErrorCode {
     msg.includes("parse") ||
     msg.includes("schema") ||
     msg.includes("empty response") ||
+    msg.includes("empty coach reply") ||
+    msg.includes("empty reply") ||
+    msg.includes("empty") ||
     msg.includes("malformed") ||
     msg.includes("validation failed")
   ) {

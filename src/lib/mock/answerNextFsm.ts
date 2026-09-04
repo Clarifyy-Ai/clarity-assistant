@@ -6,8 +6,8 @@
  *   → next_question_pending → (ready | completed | failed)
  *
  * Skip may enter from listening / answer_detected / ready.
- * Silence alone never advances the question; it only marks answer_detected
- * when candidate content was already observed.
+ * Confirmed silence (silencePolicy) may FINALIZE then REQUEST_NEXT via the
+ * same idempotent Next path as the manual button.
  */
 
 export type AnswerNextState =
@@ -56,6 +56,7 @@ export type AnswerNextEvent =
   | { type: "ANSWER_SAVED" }
   | { type: "SKIP" }
   | { type: "REQUEST_NEXT" }
+  | { type: "FOLLOW_UP" }
   | { type: "NEXT_READY" }
   | { type: "COMPLETE" }
   | { type: "FAIL" };
@@ -120,9 +121,15 @@ const ALLOWED: Record<AnswerNextState, ReadonlySet<AnswerNextState>> = {
     "ready",
     "completed",
   ]),
-  answer_saved: new Set(["next_question_pending", "ready", "completed", "failed"]),
+  answer_saved: new Set([
+    "next_question_pending",
+    "follow_up_pending",
+    "ready",
+    "completed",
+    "failed",
+  ]),
   skipped: new Set(["next_question_pending", "ready", "completed", "answer_saved"]),
-  follow_up_pending: new Set(["ready", "next_question_pending", "failed"]),
+  follow_up_pending: new Set(["ready", "next_question_pending", "question_generating", "failed"]),
   next_question_pending: new Set([
     "ready",
     "question_generating",
@@ -178,6 +185,8 @@ export function reduceAnswerNext(
         return "skipped";
       case "REQUEST_NEXT":
         return "next_question_pending";
+      case "FOLLOW_UP":
+        return "follow_up_pending";
       case "NEXT_READY":
         return "ready";
       case "COMPLETE":
@@ -236,6 +245,7 @@ export function isAnswerNextBusy(state: AnswerNextState): boolean {
     state === "answer_finalizing" ||
     state === "answer_finalized" ||
     state === "answer_saved" ||
+    state === "follow_up_pending" ||
     state === "next_question_pending"
   );
 }
@@ -246,6 +256,8 @@ export function answerNextStatusLabel(state: AnswerNextState): string | null {
     case "question_generating":
     case "next_question_pending":
       return "Generating next question…";
+    case "follow_up_pending":
+      return "Preparing a follow-up…";
     case "question_speaking":
       return "Interviewer speaking…";
     case "listening":

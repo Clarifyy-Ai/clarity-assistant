@@ -110,6 +110,18 @@ async function mockAssessmentApis(
     const url = route.request().url();
     const method = route.request().method();
 
+    if (method === "OPTIONS" && url.includes("/functions/v1/check-assessment-availability")) {
+      return route.fulfill({
+        status: 204,
+        headers: {
+          "access-control-allow-origin": "http://127.0.0.1:5000",
+          "access-control-allow-methods": "GET,POST,OPTIONS",
+          "access-control-allow-headers": "authorization,apikey,content-type,x-idempotency-key,idempotency-key",
+        },
+        body: "",
+      });
+    }
+
     if (method === "OPTIONS" && url.includes("/functions/v1/assemble-assessment")) {
       return route.fulfill({
         status: 204,
@@ -167,6 +179,70 @@ async function mockAssessmentApis(
         reused: startCalls.count > 1,
         template_slug: "backend-developer",
       });
+    }
+
+    if (url.includes("/functions/v1/check-assessment-availability") && method === "POST") {
+      let ids: string[] = [];
+      try {
+        const body = route.request().postDataJSON() as {
+          template_ids?: string[];
+          template_id?: string;
+        };
+        ids = body.template_ids ?? (body.template_id ? [body.template_id] : []);
+      } catch {
+        ids = [];
+      }
+      const items = ids.map((id) => {
+        if (id === EMPTY_TEMPLATE.id) {
+          return {
+            success: true,
+            template_id: id,
+            requested: 6,
+            available: 1,
+            shortage: 5,
+            attempts_used: 0,
+            max_attempts: 5,
+            startable: false,
+            code: "INSUFFICIENT_QUESTION_INVENTORY",
+          };
+        }
+        if (id === LIMITED_TEMPLATE.id || options?.maxAttempts) {
+          return {
+            success: true,
+            template_id: id,
+            requested: 6,
+            available: 6,
+            shortage: 0,
+            attempts_used: 5,
+            max_attempts: 5,
+            startable: false,
+            code: "MAX_ATTEMPTS_REACHED",
+          };
+        }
+        if (id === INVALID_TEMPLATE.id) {
+          return {
+            success: false,
+            template_id: id,
+            requested: 6,
+            available: 0,
+            shortage: 6,
+            startable: false,
+            code: "ASSESSMENT_NOT_FOUND",
+          };
+        }
+        return {
+          success: true,
+          template_id: id,
+          requested: 6,
+          available: 6,
+          shortage: 0,
+          attempts_used: 0,
+          max_attempts: 5,
+          startable: true,
+          code: null,
+        };
+      });
+      return fulfillJson(route, 200, { success: true, items });
     }
 
     if (url.includes("/rest/v1/mock_tests") && method === "GET") {
@@ -230,21 +306,26 @@ test.describe("Backend Developer Assessment start", () => {
 
   test("invalid template shows a controlled error", async ({ page }) => {
     await openAssessments(page);
-    await startButton(page, INVALID_TEMPLATE.id).click({ force: true });
-    await expect(page.getByText(/not found/i)).toBeVisible({ timeout: 10_000 });
+    const start = startButton(page, INVALID_TEMPLATE.id);
+    await expect(start).toBeDisabled({ timeout: 10_000 });
+    await expect(page.getByText(/not found|cannot be started/i)).toBeVisible({ timeout: 10_000 });
     await expect(page).not.toHaveURL(/\/app\/assessments\/session\//);
   });
 
   test("insufficient inventory does not start the assessment", async ({ page }) => {
     await openAssessments(page);
-    await startButton(page, EMPTY_TEMPLATE.id).click({ force: true });
-    await expect(page.getByText(/not enough eligible questions|needs 6 eligible questions/i)).toBeVisible({ timeout: 10_000 });
+    const start = startButton(page, EMPTY_TEMPLATE.id);
+    await expect(start).toBeDisabled({ timeout: 10_000 });
+    await expect(page.getByText(/needs 6 eligible questions|not enough eligible questions/i)).toBeVisible({
+      timeout: 10_000,
+    });
     await expect(page).not.toHaveURL(/\/app\/assessments\/session\//);
   });
 
   test("attempt limit shows the limit message, not a payment error", async ({ page }) => {
     await openAssessments(page);
-    await startButton(page, LIMITED_TEMPLATE.id).click({ force: true });
+    const start = startButton(page, LIMITED_TEMPLATE.id);
+    await expect(start).toBeDisabled({ timeout: 10_000 });
     await expect(page.getByText(/maximum number of attempts/i)).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(/pay|credit|upgrade/i)).toHaveCount(0);
     await expect(page).not.toHaveURL(/\/app\/assessments\/session\//);

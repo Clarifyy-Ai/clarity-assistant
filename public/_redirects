@@ -1,4 +1,9 @@
-# Cloudflare Pages / Netlify SPA fallback.
-# Serves index.html for all non-file routes so React Router can handle
-# /dashboard → /app/dashboard and /app/* without a CDN 404/503.
+# Cloudflare Pages / Netlify — installer before SPA catch-all.
+# Hostinger Apache uses .htaccess (static file → PHP proxy).
+# Static hosts that cannot run PHP: 302 the same pretty path to GitHub Releases
+# so the app still only references /download/Career-Pilot-Setup.exe.
+/download/Career-Pilot-Setup.exe  https://github.com/Clarifyy-Ai/career-pilot-releases/releases/latest/download/Career-Pilot-Setup.exe  302
+/download/Career-Pilot-Setup.exe/ https://github.com/Clarifyy-Ai/career-pilot-releases/releases/latest/download/Career-Pilot-Setup.exe  302
+
+# SPA fallback — React Router handles /dashboard → /app/dashboard and /app/*.
 /*    /index.html   200

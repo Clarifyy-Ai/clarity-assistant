@@ -3,7 +3,7 @@ import { useRef, useEffect, useState, useMemo } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
 import { OverlayChatInput } from "./OverlayChatInput";
 import { cn } from "@/lib/utils";
-import { hybridSourceLabel } from "@/lib/hybrid/hybridSourceMeta";
+import { hybridSourceLabel, isDegradedCoachSource } from "@/lib/hybrid/hybridSourceMeta";
 import { ChevronDown, StickyNote, MessageSquare } from "lucide-react";
 import {
   buildSessionConversationTimeline,
@@ -173,6 +173,11 @@ function ConversationBubble({ message }: { message: SessionConversationItem }) {
         <p className="whitespace-pre-wrap break-words">
           {safeText || (message.pending ? "…" : "…")}
         </p>
+        {!isUser && !message.pending && isDegradedCoachSource(message.source) ? (
+          <p className="text-[10px] mt-1.5 text-amber-200/80">
+            Offline / degraded coach — not a full AI answer. Retry when AI is available.
+          </p>
+        ) : null}
         <p
           className={cn(
             "text-[10px] mt-1.5",

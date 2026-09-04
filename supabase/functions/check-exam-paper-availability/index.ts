@@ -362,6 +362,8 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
       inventoryClass:
         mode === "official_previous" ? "official_pyq" : "approved_practice",
       inventorySource,
+      availabilitySnapshotId: correlationId,
+      correlationId,
       billable: false,
       creditCost: 0,
       creditsCharged: 0,

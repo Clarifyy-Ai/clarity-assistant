@@ -22,6 +22,7 @@ import { recomputeTopicMasteryFromAttempt } from "../_shared/recomputeTopicMaste
 import type { AttemptSignal } from "../_shared/masteryEngine.ts";
 import { isExamExpired } from "../_shared/examTimer.ts";
 import {
+  MOCK_TEST_SCORE_ALGORITHM_VERSION,
   scoreMockTest,
 } from "../_shared/mockTestScoring.ts";
 
@@ -507,6 +508,11 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
 
     const rankTier = "Ranking data is not yet available.";
 
+    const paperScoringPolicy = safeString(config.scoring_version, "gov_exam_snapshot_v1");
+    const paperSnapshotId = safeString(
+      config.availability_snapshot_id ?? config.paper_snapshot_id ?? config.snapshot_id,
+      "",
+    );
     const analysisPayload = {
       test_id: testId,
       user_id: userId,
@@ -528,10 +534,14 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
           positive_marks: positiveMarks,
           negative_marks: negativeMarks,
           score_percentage: score.percentage,
-          scoring_version: safeString(config.scoring_version, "gov_exam_snapshot_v1"),
+          scoring_version: paperScoringPolicy,
+          scoring_policy_version: paperScoringPolicy,
+          paper_snapshot_id: paperSnapshotId || null,
+          algorithm_version: MOCK_TEST_SCORE_ALGORITHM_VERSION,
         },
       },
-      algorithm_version: safeString(config.scoring_version, "gov_exam_snapshot_v1"),
+      // Marks algorithm (not paper policy / AI narrative version).
+      algorithm_version: MOCK_TEST_SCORE_ALGORITHM_VERSION,
       predicted_percentile: predictedPercentile,
       rank_status: rankStatus,
     };
@@ -553,7 +563,7 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
       p_time_analysis: analysisPayload.time_analysis,
       p_predicted_percentile: analysisPayload.predicted_percentile ?? 0,
       p_responses: responseUpserts,
-      p_algorithm_version: "mock_test_score_v1",
+      p_algorithm_version: MOCK_TEST_SCORE_ALGORITHM_VERSION,
     });
 
     const completion = (claimResult.data ?? {}) as {

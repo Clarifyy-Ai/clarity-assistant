@@ -16,7 +16,10 @@ import type {
   AudioError,
   VADConfig,
   TranscriptionProviderStatus,
+  DualChannelHealthState,
+  AudioChannelHealthSnapshotState,
 } from "@/types/audio.types";
+import { emptyChannelHealth } from "@/lib/audio/audioChannelHealth";
 
 // ─────────────────────────────────────────────────────────────────
 // Audio Store
@@ -64,6 +67,10 @@ interface AudioStore extends AudioStoreState {
   setTokenState: (state: DeepgramTokenState) => void;
   setMicState: (state: RuntimeMicState) => void;
   setPipelineStatus: (status: AudioPipelineStatus) => void;
+  setInterviewerChannelActive: (active: boolean) => void;
+  noteInterviewerCaptureFrame: (sentToStt: boolean) => void;
+  noteInterviewerCaptureHeartbeat: () => void;
+  resetInterviewerCaptureHealth: () => void;
 
   // Setup wizard actions
   setSetupStep: (step: AudioSetupStep) => void;
@@ -79,6 +86,11 @@ interface AudioStore extends AudioStoreState {
   setIsMuted: (muted: boolean) => void;
   setVADConfig: (config: Partial<VADConfig>) => void;
   setQuestionConfidenceMin: (min: number) => void;
+  setChannelHealth: (health: DualChannelHealthState) => void;
+  patchChannelHealth: (
+    channel: "mic" | "interviewer",
+    snapshot: AudioChannelHealthSnapshotState,
+  ) => void;
 
   // Full reset
   resetAudio: () => void;
@@ -124,6 +136,12 @@ const INITIAL_AUDIO_STATE: AudioStoreState = {
   token_state: "idle",
   mic_state: "not_checked",
   pipeline_status: "idle",
+  interviewer_channel_active: false,
+  interviewer_capture_health: {
+    framesReceived: 0,
+    framesSentToStt: 0,
+    lastHeartbeatAt: null,
+  },
   setup: {
     step: "device_selection",
     mic_devices: [],
@@ -135,6 +153,10 @@ const INITIAL_AUDIO_STATE: AudioStoreState = {
   },
   noise_level: 0,
   is_muted: false,
+  channel_health: {
+    mic: emptyChannelHealth(),
+    interviewer: emptyChannelHealth(),
+  },
 };
 
 export const useAudioStore = create<AudioStore>()(
@@ -334,6 +356,32 @@ export const useAudioStore = create<AudioStore>()(
     setTokenState: (token_state) => set({ token_state }),
     setMicState: (mic_state) => set({ mic_state }),
     setPipelineStatus: (pipeline_status) => set({ pipeline_status }),
+    setInterviewerChannelActive: (interviewer_channel_active) =>
+      set({ interviewer_channel_active }),
+    noteInterviewerCaptureFrame: (sentToStt) =>
+      set((s) => ({
+        interviewer_capture_health: {
+          framesReceived: s.interviewer_capture_health.framesReceived + 1,
+          framesSentToStt:
+            s.interviewer_capture_health.framesSentToStt + (sentToStt ? 1 : 0),
+          lastHeartbeatAt: Date.now(),
+        },
+      })),
+    noteInterviewerCaptureHeartbeat: () =>
+      set((s) => ({
+        interviewer_capture_health: {
+          ...s.interviewer_capture_health,
+          lastHeartbeatAt: Date.now(),
+        },
+      })),
+    resetInterviewerCaptureHealth: () =>
+      set({
+        interviewer_capture_health: {
+          framesReceived: 0,
+          framesSentToStt: 0,
+          lastHeartbeatAt: null,
+        },
+      }),
 
     // ── Setup wizard actions ───────────────────────────────
     setSetupStep: (step) => set((s) => ({ setup: { ...s.setup, step } })),
@@ -364,6 +412,16 @@ export const useAudioStore = create<AudioStore>()(
       set({
         question_confidence_min: Math.max(0.15, Math.min(0.9, Number(min) || 0.45)),
       }),
+
+    setChannelHealth: (channel_health) => set({ channel_health }),
+
+    patchChannelHealth: (channel, snapshot) =>
+      set((s) => ({
+        channel_health: {
+          ...s.channel_health,
+          [channel]: snapshot,
+        },
+      })),
 
     // ── Full reset ─────────────────────────────────────────
     resetAudio: () => {

@@ -233,6 +233,7 @@ export default function Rephraser() {
         description="One click returns formal, confident, and concise versions."
         isGenerating={loading}
         generationLabel="Generating alternatives…"
+        generationStage="rephraser"
         error={error}
         onRetry={() => void handleRephrase()}
       >

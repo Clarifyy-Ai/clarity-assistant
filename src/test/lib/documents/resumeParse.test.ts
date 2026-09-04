@@ -38,4 +38,19 @@ describe("parseResumeContentString", () => {
     expect(parsed?.total_years_experience).toBe(60);
     expect(() => formatParsedResumeForAI(parsed)).not.toThrow();
   });
+
+  it("recovers skills from stubbed summary when skills array is empty", () => {
+    const parsed = parseResumeContentString(
+      JSON.stringify({
+        name: "Shabeena Sultana Shaik",
+        summary:
+          "Software Testing (SDET) Trainee at QSpiders.\n\nKey Skills\nSelenium\nJava\nAPI Testing\nPostman\n\nExperience\nQA trainee",
+        skills: [],
+        experience: [],
+      }),
+    );
+    expect(parsed?.full_name).toMatch(/Shabeena/i);
+    expect(parsed?.skills.join(" ")).toMatch(/Selenium/i);
+    expect(parsed?.skills.join(" ")).toMatch(/Java/i);
+  });
 });

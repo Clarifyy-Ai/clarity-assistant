@@ -95,6 +95,13 @@ if (
         blockAllMedia: true,
       }),
     ],
+    // Chrome DevTools injects web-vitals that can throw on SPA soft-nav:
+    // "Cannot read properties of undefined (reading 'startTime')" via reportAllChanges.
+    // That is not Interview Scheduler code (no app reportAllChanges / startTime field).
+    ignoreErrors: [
+      /Cannot read properties of undefined \(reading 'startTime'\)/,
+      /Cannot read property 'startTime' of undefined/,
+    ],
     tracesSampleRate: import.meta.env.PROD ? 0.1 : 1.0,
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: import.meta.env.PROD ? 1.0 : 0,

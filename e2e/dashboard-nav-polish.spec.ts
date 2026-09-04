@@ -9,6 +9,10 @@ test.describe("Dashboard / navigation polish (WS20)", () => {
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     // Session activity / empty feed should render without blanking the page
     await expect(page.locator("body")).not.toBeEmpty();
+    // Activity readiness must not be labeled as interview score
+    await expect(page.getByText(/activity readiness/i).first()).toBeVisible({
+      timeout: 15_000,
+    });
   });
 
   test("primary nav routes resolve without blank pages", async ({ page }) => {

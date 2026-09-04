@@ -14,7 +14,8 @@ describe("session ownership — client defense in depth", () => {
     const hook = read("src/hooks/useScorecard.ts");
     expect(hook).toContain("getBySessionIdForUser(sessionId, userId)");
     expect(hook).toContain("listBySessionIdForUser(sessionId, userId)");
-    expect(hook).toContain("markShared(sessionId, userId, token)");
+    expect(hook).toContain("scorecardsDB.createShare(sessionId)");
+    expect(hook).not.toContain("markShared(sessionId, userId, token)");
     expect(hook).not.toContain("getBySessionId(sessionId)");
     expect(hook).not.toContain("listBySessionId(sessionId)");
   });
@@ -87,7 +88,8 @@ describe("session ownership — edge functions", () => {
 describe("session ownership — route guards", () => {
   it("App shell routes require onboarded + verified auth", () => {
     const app = read("src/App.tsx");
-    expect(app).toContain("<ProtectedRoute requireOnboarded requireEmailVerification />");
+    expect(app).toContain("<ProtectedRoute requireOnboarded />");
+    expect(app).not.toContain("requireEmailVerification");
     expect(app).toContain('path: "debriefs/:id"');
     expect(app).toContain('path: "sessions/:id"');
     expect(app).toContain('path: "scorecard/:sessionId"');
@@ -97,5 +99,6 @@ describe("session ownership — route guards", () => {
     const guard = read("src/components/layout/ProtectedRoute.tsx");
     expect(guard).toContain("if (!isUserEmailConfirmed(user))");
     expect(guard).not.toMatch(/requireEmailVerification && !isUserEmailConfirmed/);
+    expect(guard).not.toContain("requireEmailVerification");
   });
 });

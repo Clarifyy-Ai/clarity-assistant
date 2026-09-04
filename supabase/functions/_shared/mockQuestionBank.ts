@@ -48,13 +48,13 @@ const TECHNICAL: FallbackBankQuestion[] = [
     question: "Explain the difference between a stack and a queue. When would you use each?",
     difficulty: "easy",
     type: "technical",
-    tags: ["data-structures", "fallback_bank"],
+    tags: ["data-structures", "algorithms", "fallback_bank"],
   },
   {
     question: "How would you design an API rate limiter?",
     difficulty: "hard",
     type: "technical",
-    tags: ["system-design", "backend", "fallback_bank"],
+    tags: ["system-design", "backend", "api", "fallback_bank"],
   },
   {
     question: "What is the time complexity of binary search and why?",
@@ -66,7 +66,7 @@ const TECHNICAL: FallbackBankQuestion[] = [
     question: "Explain how you would debug a slow database query in production.",
     difficulty: "medium",
     type: "technical",
-    tags: ["database", "debugging", "fallback_bank"],
+    tags: ["database", "debugging", "sql", "backend", "data", "analytics", "fallback_bank"],
   },
 ];
 
@@ -134,11 +134,56 @@ function poolForType(type: string): FallbackBankQuestion[] {
   }
 }
 
+function tokenizeContext(...parts: Array<string | null | undefined>): string[] {
+  const raw = parts
+    .filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+    .join(" ")
+    .toLowerCase();
+  const tokens = raw
+    .split(/[^a-z0-9+#.]/g)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2);
+  return [...new Set(tokens)];
+}
+
+/** Score bank stems by role/domain/skill overlap (tags + question text). */
+export function scoreFallbackQuestionRelevance(
+  question: FallbackBankQuestion,
+  contextTokens: string[],
+): number {
+  if (contextTokens.length === 0) return 0;
+  const hay = `${question.question} ${(question.tags ?? []).join(" ")}`.toLowerCase();
+  let score = 0;
+  for (const token of contextTokens) {
+    if (hay.includes(token)) score += 2;
+    if ((question.tags ?? []).some((t) => t.toLowerCase().includes(token))) score += 3;
+  }
+  // Prefer technical/system tags when role looks engineering-heavy.
+  const eng =
+    contextTokens.some((t) =>
+      ["backend", "frontend", "engineer", "developer", "api", "react", "python", "java", "sql", "data", "analytics"].includes(t),
+    );
+  if (eng && (question.type === "technical" || question.type === "system_design")) {
+    score += 4;
+  }
+  if (
+    contextTokens.some((t) => ["hr", "recruiter", "people"].includes(t)) &&
+    question.type === "hr"
+  ) {
+    score += 4;
+  }
+  return score;
+}
+
 export function selectApprovedFallbackQuestions(options: {
   interviewType: string;
   count: number;
   excludeTexts?: string[];
   difficulty?: string;
+  role?: string | null;
+  company?: string | null;
+  skills?: string[];
+  focusAreas?: string[];
 }): FallbackBankQuestion[] {
   const exclude = new Set(
     (options.excludeTexts ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean),
@@ -149,11 +194,23 @@ export function selectApprovedFallbackQuestions(options: {
     if (filtered.length >= 1) pool = filtered;
   }
 
-  // Deterministic shuffle by rotating on exclude size to avoid pure randomness flakiness.
+  const contextTokens = tokenizeContext(
+    options.role,
+    options.company,
+    ...(options.skills ?? []),
+    ...(options.focusAreas ?? []),
+  );
+
+  // Rank by domain relevance; break ties with exclude-size rotation for variety.
   const rotate = exclude.size % Math.max(pool.length, 1);
-  if (rotate > 0) {
-    pool = [...pool.slice(rotate), ...pool.slice(0, rotate)];
-  }
+  pool = pool
+    .map((q, index) => ({
+      q,
+      score: scoreFallbackQuestionRelevance(q, contextTokens),
+      order: (index + rotate) % Math.max(pool.length, 1),
+    }))
+    .sort((a, b) => b.score - a.score || a.order - b.order)
+    .map((row) => row.q);
 
   const out: FallbackBankQuestion[] = [];
   for (const q of pool) {

@@ -1,8 +1,9 @@
-import { useEffect, useRef, type ReactNode } from "react";
-import { Loader2 } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
+import { ProcessingStatus } from "@/components/async/ProcessingStatus";
+import { AsyncOperationBanner } from "@/components/async/AsyncOperationBanner";
 
 interface PrepToolShellProps {
   title: string;
@@ -10,6 +11,7 @@ interface PrepToolShellProps {
   children: ReactNode;
   isGenerating?: boolean;
   generationLabel?: string;
+  generationStage?: string;
   error?: string | null;
   onRetry?: () => void;
   className?: string;
@@ -22,14 +24,31 @@ export function PrepToolShell({
   children,
   isGenerating = false,
   generationLabel = "Generating…",
+  generationStage = "generating",
   error,
   onRetry,
   className,
 }: PrepToolShellProps) {
   const errorRef = useRef<HTMLDivElement>(null);
+  const startedAtRef = useRef<number | null>(null);
+  const [elapsedMs, setElapsedMs] = useState(0);
+
   useEffect(() => {
     if (error) errorRef.current?.focus();
   }, [error]);
+
+  useEffect(() => {
+    if (!isGenerating) {
+      startedAtRef.current = null;
+      setElapsedMs(0);
+      return;
+    }
+    if (!startedAtRef.current) startedAtRef.current = Date.now();
+    const id = window.setInterval(() => {
+      setElapsedMs(Date.now() - (startedAtRef.current ?? Date.now()));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [isGenerating]);
 
   return (
     <div className={cn("space-y-4", className)}>
@@ -44,26 +63,24 @@ export function PrepToolShell({
         <div
           role="status"
           aria-live="polite"
-          className="flex items-center gap-2 rounded-xl border border-border bg-secondary/40 px-3 py-2 text-sm text-muted-foreground"
+          className="rounded-xl border border-border bg-secondary/40 px-3 py-2"
         >
-          <Loader2 className="w-4 h-4 animate-spin shrink-0" aria-hidden="true" />
-          {generationLabel}
+          <ProcessingStatus
+            message={generationLabel}
+            stage={generationStage}
+            elapsedMs={elapsedMs}
+          />
         </div>
       )}
 
       {error && (
-        <div
-          ref={errorRef}
-          role="alert"
-          tabIndex={-1}
-          className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive space-y-2 outline-none"
-        >
-          <p className="whitespace-normal break-words">{error}</p>
-          {onRetry && (
-            <Button type="button" size="sm" variant="outline" onClick={onRetry}>
-              Retry
-            </Button>
-          )}
+        <div ref={errorRef} tabIndex={-1} className="outline-none">
+          <AsyncOperationBanner
+            title="Generation failed"
+            message={error}
+            retryable={Boolean(onRetry)}
+            onRetry={onRetry}
+          />
         </div>
       )}
 

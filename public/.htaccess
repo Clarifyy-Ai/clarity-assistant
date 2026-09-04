@@ -1,17 +1,44 @@
+# Acceptance baseline (2026-09-04 live probes against trycareerpilot.com):
+#
+#   /download/Career-Pilot-Setup.exe  → 404 text/plain "Not found"
+#   /download-windows.php             → 500 / broken proxy
+#   GitHub career-pilot-releases v1.0.0 asset → 200 ~85MB
+#
+# Fix: prefer static public/download/*.exe when present; else PHP proxy;
+# client HEAD-probes before enabling Download so Chrome never gets
+# "File wasn't available on site".
+
+# Align with index.html Permissions-Policy (HTTP header preferred over meta-only).
+<IfModule mod_headers.c>
+  Header always set Permissions-Policy "camera=(), microphone=(self), geolocation=(), payment=(self), usb=(), fullscreen=(self)"
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
 # SPA fallback — serve static files (manifest.json, sw.js) when present.
 # All other paths (including /dashboard, /app/*, /login, etc.) are served
 # via index.html and handled by React Router on the client.
 #
-# /dashboard \u2192 React Router \u2192 <Navigate to="/app/dashboard" replace />
+# /dashboard → React Router → <Navigate to="/app/dashboard" replace />
 # If this rewrite is missing, /dashboard returns 404/503 from the server.
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /
 
-  # Same-origin installer (do not expose GitHub in the browser).
-  RewriteRule ^download/Career-Pilot-Setup\.exe$ download-windows.php [L]
+  # Same-origin Windows installer — must run before SPA fallback.
+  # 1) Prefer a published static binary under public/download/.
+  RewriteCond %{DOCUMENT_ROOT}/download/Career-Pilot-Setup.exe -f
+  RewriteRule ^download/Career-Pilot-Setup\.exe/?$ download/Career-Pilot-Setup.exe [L,NC]
+
+  # 2) Otherwise proxy via PHP (Supabase Storage → GitHub Releases).
+  RewriteRule ^download/Career-Pilot-Setup\.exe/?$ download-windows.php [L,NC,QSA]
 
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteRule ^ index.html [L]
+</IfModule>
+
+# Helpful MIME for static .exe when Apache serves the file directly.
+<IfModule mod_mime.c>
+  AddType application/octet-stream .exe
 </IfModule>

@@ -49,8 +49,18 @@ const QUESTIONS = [
   },
 ];
 
-async function mockGovSession(page: Page): Promise<{ startCalls: number; saveCalls: number; submitCalls: number }> {
-  const counters = { startCalls: 0, saveCalls: 0, submitCalls: 0 };
+async function mockGovSession(page: Page): Promise<{
+  startCalls: number;
+  saveCalls: number;
+  submitCalls: number;
+  savedAnswers: Record<string, { user_answer: string; is_marked_review: boolean }>;
+}> {
+  const counters = {
+    startCalls: 0,
+    saveCalls: 0,
+    submitCalls: 0,
+    savedAnswers: {} as Record<string, { user_answer: string; is_marked_review: boolean }>,
+  };
   let status = "DRAFT";
   const startedAt = new Date().toISOString();
   const expiresAt = new Date(Date.now() + 60 * 60_000).toISOString();
@@ -68,6 +78,7 @@ async function mockGovSession(page: Page): Promise<{ startCalls: number; saveCal
       expiresAt,
       status: "IN_PROGRESS",
       attemptPhase: "ACTIVE",
+      alreadyStarted: counters.startCalls > 1,
     });
   });
 
@@ -77,6 +88,28 @@ async function mockGovSession(page: Page): Promise<{ startCalls: number; saveCal
       return;
     }
     counters.saveCalls += 1;
+    try {
+      const body = route.request().postDataJSON() as {
+        answers?: Array<{
+          questionId?: string;
+          userAnswer?: string | null;
+          isMarkedReview?: boolean;
+        }>;
+      };
+      for (const a of body.answers ?? []) {
+        if (!a.questionId) continue;
+        counters.savedAnswers[a.questionId] = {
+          user_answer: a.userAnswer ?? "",
+          is_marked_review: Boolean(a.isMarkedReview),
+        };
+      }
+    } catch {
+      /* ignore */
+    }
+    if (status === "COMPLETED") {
+      await fulfillJson(route, 409, { success: false, code: "SUBMISSION_CONFLICT" });
+      return;
+    }
     await fulfillJson(route, 200, { success: true, savedCount: 2, staleQuestionIds: [] });
   });
 
@@ -132,7 +165,14 @@ async function mockGovSession(page: Page): Promise<{ startCalls: number; saveCal
       return fulfillJson(route, 200, QUESTIONS);
     }
     if (url.includes("test_responses") && method === "GET") {
-      return fulfillJson(route, 200, []);
+      const rows = Object.entries(counters.savedAnswers).map(([question_id, row]) => ({
+        question_id,
+        user_answer: row.user_answer,
+        is_attempted: Boolean(row.user_answer),
+        is_marked_review: row.is_marked_review,
+        time_spent_seconds: 5,
+      }));
+      return fulfillJson(route, 200, rows);
     }
     if (url.includes("gov_paper_questions_playable")) {
       return fulfillJson(route, 200, []);
@@ -141,6 +181,7 @@ async function mockGovSession(page: Page): Promise<{ startCalls: number; saveCal
       return fulfillJson(route, 200, [
         {
           test_id: TEST_ID,
+          user_id: "e2e-user-0001-0001-0001-000000000001",
           total_score: 2,
           max_score: 4,
           accuracy: 100,
@@ -185,5 +226,37 @@ test.describe("Government mock exam session", () => {
     await expect(page).toHaveURL(/\/app\/mock-test\/results\//, { timeout: 20_000 });
     expect(counters.submitCalls).toBeGreaterThanOrEqual(1);
     expect(counters.saveCalls).toBeGreaterThanOrEqual(1);
+  });
+
+  test("refresh restores answers; submit stops further autosave", async ({ page }) => {
+    await loginAsTestUser(page);
+    const counters = await mockGovSession(page);
+    await page.goto(`/app/mock-test/session/${TEST_ID}`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("button", { name: /Start Test/i }).click();
+    await expect(page.getByText(/What is 2 \+ 2/i)).toBeVisible({ timeout: 15_000 });
+    await page.getByText("4", { exact: true }).click();
+    await expect.poll(() => Boolean(counters.savedAnswers[Q1]?.user_answer), {
+      timeout: 15_000,
+    }).toBe(true);
+
+    const savesBeforeRefresh = counters.saveCalls;
+    await page.reload({ waitUntil: "domcontentloaded" });
+    // Already started — no second Start gate; answer restored from test_responses.
+    await expect(page.getByText(/What is 2 \+ 2/i)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText("4", { exact: true })).toBeVisible();
+    expect(counters.startCalls).toBe(1);
+
+    const savesBeforeSubmit = counters.saveCalls;
+    await page.getByRole("button", { name: /Submit/i }).first().click();
+    await page.getByRole("button", { name: /Yes, submit/i }).click();
+    await expect(page).toHaveURL(/\/app\/mock-test\/results\//, { timeout: 20_000 });
+    await expect.poll(() => counters.submitCalls, { timeout: 5_000 }).toBe(1);
+    // Autosave interval must not keep posting after submit locks answers.
+    const savesAfterSubmit = counters.saveCalls;
+    await expect
+      .poll(() => counters.saveCalls, { timeout: 2_500 })
+      .toBeLessThanOrEqual(savesAfterSubmit + 1);
+    expect(counters.saveCalls).toBeLessThanOrEqual(savesBeforeSubmit + 3);
+    void savesBeforeRefresh;
   });
 });

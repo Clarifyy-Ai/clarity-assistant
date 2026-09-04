@@ -13,17 +13,22 @@ import {
   razorpayPaiseForPack,
   razorpayPaiseForPlan,
 } from "@/lib/billing/priceCalculator"
-import { Check, Crown, Sparkles, Zap } from "lucide-react"
+import { AlertTriangle, Check, Crown, Sparkles, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
+  isPaymentsNotConfiguredError,
   openRazorpayCheckout,
+  PAYMENTS_NOT_CONFIGURED,
   RAZORPAY_QA_SANDBOX_HINT,
   showRazorpayQaSandboxHint,
   toPaymentUserFacingError,
   type RazorpayProductType,
 } from "@/lib/billing/razorpayCheckout"
 import { toast } from "sonner"
-import { hydrateBillingCatalog } from "@/lib/billing/liveCatalog"
+import {
+  getCatalogPaymentsConfigured,
+  hydrateBillingCatalog,
+} from "@/lib/billing/liveCatalog"
 
 const MODAL_PLANS: Array<{
   id: PlanId
@@ -51,16 +56,27 @@ export function UpgradeModal() {
   const { planId, user, profile, refreshCredits, loadProfile } = useAuthStore()
   const [loading, setLoading] = useState<string | null>(null)
   const [checkoutPhase, setCheckoutPhase] = useState<CheckoutPhase | null>(null)
+  const [paymentsConfigError, setPaymentsConfigError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (uiStore.upgrade_modal_open) void hydrateBillingCatalog()
+    if (!uiStore.upgrade_modal_open) return
+    void (async () => {
+      await hydrateBillingCatalog({ force: true })
+      if (getCatalogPaymentsConfigured() === false) {
+        setPaymentsConfigError(PAYMENTS_NOT_CONFIGURED)
+      } else if (getCatalogPaymentsConfigured() === true) {
+        setPaymentsConfigError(null)
+      }
+    })()
   }, [uiStore.upgrade_modal_open])
+
+  const checkoutDisabled = Boolean(loading) || Boolean(paymentsConfigError)
 
   const handleRazorpay = async (
     loadingKey: string,
     productType: RazorpayProductType,
   ) => {
-    if (loading) return
+    if (loading || paymentsConfigError) return
     setLoading(loadingKey)
     setCheckoutPhase("creating")
     try {
@@ -68,7 +84,10 @@ export function UpgradeModal() {
         productType,
         userEmail: profile?.email ?? user?.email ?? undefined,
         userName: profile?.full_name ?? undefined,
-        onReady: () => setCheckoutPhase("processing"),
+        onReady: () => {
+          setCheckoutPhase("processing")
+          setPaymentsConfigError(null)
+        },
         onSuccess: () => {
           toast.success("Payment completed")
           void refreshCredits()
@@ -77,7 +96,11 @@ export function UpgradeModal() {
         },
       })
     } catch (error) {
-      toast.error(checkoutErrorMessage(error))
+      const message = checkoutErrorMessage(error)
+      toast.error(message)
+      if (isPaymentsNotConfiguredError(error) || message === PAYMENTS_NOT_CONFIGURED) {
+        setPaymentsConfigError(PAYMENTS_NOT_CONFIGURED)
+      }
     } finally {
       setLoading(null)
       setCheckoutPhase(null)
@@ -113,6 +136,26 @@ export function UpgradeModal() {
           ? "You already have Max. Buy a credit pack — Razorpay does not auto-renew."
           : "One-time Pro or Max access and credit packs. Razorpay does not auto-renew."}
       </p>
+      {paymentsConfigError ? (
+        <div
+          className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2"
+          data-testid="payments-not-configured-banner"
+          role="alert"
+        >
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" aria-hidden />
+            <div className="min-w-0 space-y-1">
+              <p className="text-sm font-semibold text-amber-200">
+                Payments are not configured on this environment
+              </p>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Catalog prices still show, but Razorpay checkout cannot open until Edge
+                secrets are set. This is a configuration issue — not a card decline.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {showRazorpayQaSandboxHint() ? (
         <p className="mb-4 text-xs text-sky-800 dark:text-sky-300 bg-sky-500/10 border border-sky-500/20 rounded-lg px-3 py-2">
           {RAZORPAY_QA_SANDBOX_HINT}
@@ -188,11 +231,11 @@ export function UpgradeModal() {
               <button
                 type="button"
                 onClick={() => !isCurrentPlan && void handleUpgrade(mp.id, mp.productType)}
-                disabled={isCurrentPlan || Boolean(loading)}
-                aria-disabled={isCurrentPlan}
+                disabled={isCurrentPlan || checkoutDisabled}
+                aria-disabled={isCurrentPlan || Boolean(paymentsConfigError)}
                 className={cn(
                   "mt-auto w-full rounded-xl py-2.5 text-sm font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-transparent",
-                  isCurrentPlan
+                  isCurrentPlan || paymentsConfigError
                     ? "cursor-not-allowed bg-secondary text-muted-foreground"
                     : mp.color === "violet"
                     ? "bg-primary text-white hover:bg-primary/90 focus:ring-primary"
@@ -203,7 +246,9 @@ export function UpgradeModal() {
                   ? checkoutBusyLabel(checkoutPhase, `Upgrade to ${displayName}`)
                   : isCurrentPlan
                   ? "Current plan"
-                  : `Buy ${displayName} (one-time)`}
+                  : paymentsConfigError
+                    ? "Checkout unavailable"
+                    : `Buy ${displayName} (one-time)`}
               </button>
             </div>
           )
@@ -229,13 +274,19 @@ export function UpgradeModal() {
               <button
                 type="button"
                 onClick={() => void handleBuyCredits(productType)}
-                disabled={Boolean(loading)}
-                title={`Buy ${pack.credits} credits`}
+                disabled={checkoutDisabled}
+                title={
+                  paymentsConfigError
+                    ? "Payments are not configured"
+                    : `Buy ${pack.credits} credits`
+                }
                 className="mt-auto rounded-xl border border-border bg-secondary px-3 py-2 text-xs font-medium text-foreground transition-all hover:bg-secondary/80 focus:outline-none focus:ring-2 focus:ring-white/30 disabled:opacity-50"
               >
                 {busy
                   ? checkoutBusyLabel(checkoutPhase, `Buy ${pack.credits}`)
-                  : `Buy ${pack.credits}`}
+                  : paymentsConfigError
+                    ? "Unavailable"
+                    : `Buy ${pack.credits}`}
               </button>
             </div>
           )

@@ -175,7 +175,7 @@ ACCOUNTS = [
     ("MFA_USER_01", "MFA enrolled", "pro", "TOTP challenge (TC-AUTH-015)", "qa.mfa@ (.env.qa.local)", "Closed Beta / QA Target", "npm run qa:seed-mfa", "Password + OTP required"),
     ("SUFFICIENT_CREDIT_01", "Sufficient credits", "pro", "Happy-path AI/credit consume", "Credential store", "Closed Beta / QA Target", "Do not drain completely", "Successful AI flows"),
     ("EXPIRED_SESSION_01", "Any valid user", "any", "Session expiry / idle timeout", "Reuse FREE/PRO", "Closed Beta / QA Target", "Expire session per QA playbook", "Re-auth required"),
-    ("HISTORY_USER_01", "User with completed history", "pro", "Sessions/reports/compare", "Credential store", "Closed Beta / QA Target", "Pre-seeded sessions", "History present"),
+    ("HISTORY_USER_01", "User with completed history", "pro", "Sessions/reports/compare", "qa.history@clarify.ai.test — npm run qa:seed-accounts && npm run qa:seed-compare", "Closed Beta / QA Target", "Pre-seeded via qa:seed-compare (2 scored + 1 unscored)", "History present"),
     ("NO_HISTORY_01", "User with no history", "free", "Empty sessions/analytics", "Same as FREE_USER_02", "Closed Beta / QA Target", "No prior sessions", "Empty states"),
     ("USER_A_01", "User A (isolation)", "pro", "Cross-user resource isolation", "Credential store", "Closed Beta / QA Target", "Pair with USER_B", "Own data only"),
     ("USER_B_01", "User B (isolation)", "pro", "Cross-user resource isolation", "Credential store", "Closed Beta / QA Target", "Pair with USER_A", "Own data only"),

@@ -107,7 +107,7 @@ export default function GovExams() {
                 <ArrowRight className="w-4 h-4" />
               </Link>
               <Link
-                to="/login"
+                to="/login?returnTo=%2Fapp%2Fmock-test"
                 className="text-sm font-medium px-5 py-2.5 rounded-xl border border-border hover:bg-secondary/60 transition-all"
               >
                 Log in to mock test hub

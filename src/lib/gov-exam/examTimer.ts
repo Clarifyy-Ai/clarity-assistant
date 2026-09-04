@@ -1,7 +1,8 @@
 /**
  * Server-authoritative exam remaining time.
  * Prefer persisted expires_at when present; else started_at + time_limit_minutes.
- * Client clock skew cannot extend the attempt: pause must not rewrite started_at.
+ * Pause freezes the displayed remaining time using paused_at; resume extends
+ * expires_at server-side so clients cannot invent extra time via DevTools.
  */
 
 export function examExpiresAtMs(
@@ -25,6 +26,7 @@ export function computeRemainingSeconds(
   timeLimitMinutes: number | null | undefined,
   nowMs = Date.now(),
   expiresAt?: string | null,
+  pausedAt?: string | null,
 ): number {
   const limitMins = Number(timeLimitMinutes ?? 0);
   if (!Number.isFinite(limitMins) || limitMins <= 0) return 0;
@@ -32,7 +34,9 @@ export function computeRemainingSeconds(
   if (!startedAt && !expiresAt) return limitSecs;
   const expires = examExpiresAtMs(startedAt, limitMins, expiresAt);
   if (expires == null) return limitSecs;
-  return Math.max(0, Math.floor((expires - nowMs) / 1000));
+  const pauseMs = pausedAt ? Date.parse(pausedAt) : NaN;
+  const effectiveNow = Number.isFinite(pauseMs) ? pauseMs : nowMs;
+  return Math.max(0, Math.floor((expires - effectiveNow) / 1000));
 }
 
 export function isExamExpired(
@@ -41,28 +45,33 @@ export function isExamExpired(
   nowMs = Date.now(),
   graceMs = 2_000,
   expiresAt?: string | null,
+  pausedAt?: string | null,
 ): boolean {
+  if (pausedAt) return false;
   const expires = examExpiresAtMs(startedAt, timeLimitMinutes, expiresAt);
   if (expires == null) return false;
   return nowMs > expires + graceMs;
 }
 
-/** True when an in-progress timed attempt must be submitted (including while paused). */
+/** True when an in-progress timed attempt must be submitted (not while paused). */
 export function shouldAutoSubmitAttempt(
   status: string | null | undefined,
   startedAt: string | null | undefined,
   timeLimitMinutes: number | null | undefined,
   nowMs = Date.now(),
   expiresAt?: string | null,
+  pausedAt?: string | null,
+  attemptPhase?: string | null,
 ): boolean {
   if (status !== "IN_PROGRESS") return false;
+  if (pausedAt || attemptPhase === "PAUSED") return false;
   const limitMins = Number(timeLimitMinutes ?? 0);
   if ((!startedAt && !expiresAt) || !Number.isFinite(limitMins) || limitMins <= 0) {
     return false;
   }
   return (
-    computeRemainingSeconds(startedAt, timeLimitMinutes, nowMs, expiresAt) <= 0 ||
-    isExamExpired(startedAt, timeLimitMinutes, nowMs, 2_000, expiresAt)
+    computeRemainingSeconds(startedAt, timeLimitMinutes, nowMs, expiresAt, pausedAt) <= 0 ||
+    isExamExpired(startedAt, timeLimitMinutes, nowMs, 2_000, expiresAt, pausedAt)
   );
 }
 
@@ -71,27 +80,33 @@ export type ExamTimerOrigin = {
   startedAt: string | null;
   expiresAt: string | null;
   timeLimitMinutes: number;
+  pausedAt?: string | null;
+  attemptPhase?: string | null;
 };
 
 export function examTimerOriginFromAttempt(attempt: {
   started_at?: string | null;
   expires_at?: string | null;
   time_limit_minutes?: number | null;
+  paused_at?: string | null;
+  attempt_phase?: string | null;
 } | null | undefined): ExamTimerOrigin | null {
   if (!attempt) return null;
   const timeLimitMinutes = Number(attempt.time_limit_minutes ?? 0);
   if (!Number.isFinite(timeLimitMinutes) || timeLimitMinutes <= 0) return null;
   const startedAt = attempt.started_at ?? null;
   const expiresAt = attempt.expires_at ?? null;
+  const pausedAt = attempt.paused_at ?? null;
+  const attemptPhase = attempt.attempt_phase ?? null;
   if (!startedAt && !expiresAt) {
-    return { startedAt: null, expiresAt: null, timeLimitMinutes };
+    return { startedAt: null, expiresAt: null, timeLimitMinutes, pausedAt, attemptPhase };
   }
-  return { startedAt, expiresAt, timeLimitMinutes };
+  return { startedAt, expiresAt, timeLimitMinutes, pausedAt, attemptPhase };
 }
 
 export function examTimerOriginKey(origin: ExamTimerOrigin | null | undefined): string {
   if (!origin) return "";
-  return `${origin.startedAt ?? ""}|${origin.expiresAt ?? ""}|${origin.timeLimitMinutes}`;
+  return `${origin.startedAt ?? ""}|${origin.expiresAt ?? ""}|${origin.timeLimitMinutes}|${origin.pausedAt ?? ""}|${origin.attemptPhase ?? ""}`;
 }
 
 export function sameExamTimerOrigin(
@@ -111,10 +126,15 @@ export function remainingFromTimerOrigin(
     origin.timeLimitMinutes,
     nowMs,
     origin.expiresAt,
+    origin.pausedAt,
   );
 }
 
 /** Timer chrome is safe only when limit metadata exists. */
 export function canRenderExamTimer(origin: ExamTimerOrigin | null | undefined): boolean {
   return origin != null && origin.timeLimitMinutes > 0;
+}
+
+export function isTimerPaused(origin: ExamTimerOrigin | null | undefined): boolean {
+  return Boolean(origin?.pausedAt) || origin?.attemptPhase === "PAUSED";
 }

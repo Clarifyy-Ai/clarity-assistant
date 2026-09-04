@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/Input";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { ProcessingStatus } from "@/components/async/ProcessingStatus";
+import { AI_OP_STAGES } from "@/lib/async/aiOpStages";
 import { toast } from "sonner";
 import {
   BookOpen, Search, Star, Trash2,
@@ -842,6 +844,13 @@ function AddAnswerModal({
               Generate with AI
             </Button>
           </div>
+          {generating && (
+            <ProcessingStatus
+              message={AI_OP_STAGES.answerBank.generating}
+              stage="answer_bank"
+              className="mb-2"
+            />
+          )}
           <textarea
             value={answer}
             onChange={(e) => setAnswer(e.target.value.slice(0, MAX_ANSWER_LENGTH))}

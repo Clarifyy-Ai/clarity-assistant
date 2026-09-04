@@ -37,13 +37,13 @@ const companyResearchRoute = {
   canUsePython: true,
 };
 
-/** Mirrors MATRIX mock_question_generation — database → ai → python */
+/** Mirrors MATRIX mock_question_generation — AI → python (bank is terminal only) */
 const mockQuestionRoute = {
-  preferredOrder: ["database", "ai", "python"] as HybridRouteSource[],
+  preferredOrder: ["ai", "python"] as HybridRouteSource[],
   pythonFallbackOnAiFailure: true,
   aiFallbackOnPythonFailure: true,
   canCompleteDeterministically: false,
-  canCompleteWithDatabase: true,
+  canCompleteWithDatabase: false,
   canUseAI: true,
   canUsePython: true,
 };
@@ -83,7 +83,7 @@ describe("gap-company-mock Edge hybrid contracts", () => {
     expect(source).toContain("generateBriefWithAi");
   });
 
-  it("generate-questions uses database → ai → python bank chain", () => {
+  it("generate-questions prefers AI then python; bank is not count=1 preflight", () => {
     const source = readFunction("generate-questions");
     expect(source).toContain("executeHybridOperation");
     expect(source).toMatch(/operation:\s*"mock_question_generation"/);
@@ -93,6 +93,10 @@ describe("gap-company-mock Edge hybrid contracts", () => {
     expect(source).toContain("runDatabase:");
     expect(source).toContain("runAi:");
     expect(source).toContain("runPython:");
+    expect(source).toContain("isAiForceUnavailable()");
+    expect(source).not.toMatch(/questionCount === 1[\s\S]{0,120}buildQuestionsHybridData/);
+    expect(source).toContain("resume_digest");
+    expect(source).toContain("jd_digest");
   });
 });
 
@@ -225,7 +229,7 @@ describe("mock_question_generation hybrid fallback simulation", () => {
     }
   });
 
-  it("database bank used before AI when sufficient", async () => {
+  it("AI preferred over database bank when both available", async () => {
     const result = await simulateHybridExecution({
       route: mockQuestionRoute,
       creditCost: 3,
@@ -235,14 +239,21 @@ describe("mock_question_generation hybrid fallback simulation", () => {
           count: 1,
           source: "fallback",
         }),
-        ai: async () => {
-          throw new Error("should not run when bank hits");
-        },
+        ai: async () => ({
+          questions: [
+            {
+              question_text: "Walk me through a backend API you shipped from your resume.",
+              order: 1,
+            },
+          ],
+          count: 1,
+          source: "ai",
+        }),
       },
     });
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.source).toBe("database");
+      expect(result.source).toBe("ai");
       expect(result.deductCount).toBe(1);
     }
   });

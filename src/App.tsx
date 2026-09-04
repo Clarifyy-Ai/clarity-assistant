@@ -154,6 +154,8 @@ const GenerateGovPaper = lazy(() => import("@/pages/app/mock-test/GenerateGovPap
 const InterviewPracticePlan = lazy(() => import("@/pages/app/plan/InterviewPracticePlan"));
 const QuestionBank = lazy(() => import("@/pages/app/question-bank/QuestionBank"));
 const AssessmentTemplates = lazy(() => import("@/pages/app/assessments/AssessmentTemplates"));
+const AssessmentSetup = lazy(() => import("@/pages/app/assessments/AssessmentSetup"));
+const AssessmentReview = lazy(() => import("@/pages/app/assessments/AssessmentReview"));
 const LearningHub = lazy(() => import("@/pages/app/learn/LearningHub"));
 const CourseDetail = lazy(() => import("@/pages/app/learn/CourseDetail"));
 const LessonPlayer = lazy(() => import("@/pages/app/learn/LessonPlayer"));
@@ -288,6 +290,9 @@ const AdminAnalytics = lazy(
 const AdminRevenue = lazy(
   () => import("@/pages/app/admin/AdminRevenue")
 );
+const AdminFinance = lazy(
+  () => import("@/pages/app/admin/AdminFinance")
+);
 const AdminModelCosts = lazy(
   () => import("@/pages/app/admin/AdminModelCosts")
 );
@@ -306,6 +311,9 @@ const AdminLiveChat = lazy(
 );
 const AdminQuestionEditor = lazy(
   () => import("@/pages/app/admin/AdminQuestionEditor")
+);
+const AdminAssessmentsPreview = lazy(
+  () => import("@/pages/app/admin/AdminAssessmentsPreview")
 );
 const AdminCommunity = lazy(() => import("@/pages/app/admin/AdminCommunity"));
 const AdminLearning = lazy(() => import("@/pages/app/admin/AdminLearning"));
@@ -613,7 +621,7 @@ const routes = [
 
   // Onboarding — authenticated + email verified (unverified users stay on /verify-email)
   {
-    element: <ProtectedRoute requireEmailVerification />,
+    element: <ProtectedRoute />,
     children: [
       { path: "/onboarding", element: <Page component={OnboardingIndex} /> },
       { path: "/onboarding/step-1", element: <OnboardingRedirect /> },
@@ -626,7 +634,7 @@ const routes = [
 
   // Full-screen protected routes (verified + onboarded)
   {
-    element: <ProtectedRoute requireOnboarded requireEmailVerification />,
+    element: <ProtectedRoute requireOnboarded />,
     children: [
       {
         path: "/app/live/overlay",
@@ -650,7 +658,7 @@ const routes = [
   // Main app shell
   {
     path: "/app",
-    element: <ProtectedRoute requireOnboarded requireEmailVerification />,
+    element: <ProtectedRoute requireOnboarded />,
     children: [
       {
         element: <AppShell />,
@@ -853,6 +861,8 @@ const routes = [
           { path: "plan", element: <Page component={InterviewPracticePlan} /> },
           { path: "question-bank", element: <Page component={QuestionBank} /> },
           { path: "assessments", element: <Page component={AssessmentTemplates} /> },
+          { path: "assessments/setup", element: <Page component={AssessmentSetup} /> },
+          { path: "assessments/review", element: <Page component={AssessmentReview} /> },
           { path: "assessments/results/:testId", element: <Page component={MockTestResults} /> },
           { path: "learn", element: <Page component={LearningHub} /> },
           { path: "learn/:courseId", element: <Page component={CourseDetail} /> },
@@ -924,6 +934,7 @@ const routes = [
               },
               {
                 path: "byok",
+                // BYOK product retired — never surface a key-entry settings page.
                 element: <Navigate to="/app/settings/models" replace />,
               },
               {
@@ -953,7 +964,7 @@ const routes = [
       {
         path: "admin",
         element: (
-          <ProtectedRoute requireStaff requireOnboarded requireEmailVerification>
+          <ProtectedRoute requireStaff requireOnboarded>
             <Suspense fallback={<PageLoader />}>
               <AdminLayout />
             </Suspense>
@@ -964,6 +975,7 @@ const routes = [
           { path: "users", element: <Page component={AdminUsers} /> },
           { path: "analytics", element: <Page component={AdminAnalytics} /> },
           { path: "revenue", element: <Page component={AdminRevenue} /> },
+          { path: "finance", element: <Page component={AdminFinance} /> },
           {
             path: "model-costs",
             element: <Page component={AdminModelCosts} />,
@@ -988,6 +1000,10 @@ const routes = [
           {
             path: "questions",
             element: <Page component={AdminQuestionEditor} />,
+          },
+          {
+            path: "assessments",
+            element: <Page component={AdminAssessmentsPreview} />,
           },
           {
             path: "questions/:id",

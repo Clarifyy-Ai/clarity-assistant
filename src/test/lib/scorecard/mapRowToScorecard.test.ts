@@ -66,4 +66,40 @@ describe("mapRowToScorecard", () => {
     expect(scorecard.structure_score).toBeNull();
     expect(scorecard.relevance_score).toBeNull();
   });
+
+  it("maps missing speech metrics to null instead of zero", () => {
+    const scorecard = mapRowToScorecard({
+      ...BASE_ROW,
+      details: {
+        question_scores: [],
+      },
+    });
+
+    expect(scorecard.filler_count).toBeNull();
+    expect(scorecard.filler_rate).toBeNull();
+    expect(scorecard.wpm_avg).toBeNull();
+    expect(scorecard.star_adherence).toBeNull();
+  });
+
+  it("maps durable evaluation_status columns", () => {
+    const scorecard = mapRowToScorecard({
+      ...BASE_ROW,
+      evaluation_status: "processing",
+      eligibility_reason: "EVALUATION_PROCESSING",
+      question_count: 5,
+      answer_count: 4,
+      evaluated_answer_count: 0,
+      rubric_version: "scorecard_v2",
+      attempt_count: 2,
+      last_error_code: null,
+    });
+
+    expect(scorecard.evaluation_status).toBe("processing");
+    expect(scorecard.eligibility_reason).toBe("EVALUATION_PROCESSING");
+    expect(scorecard.question_count).toBe(5);
+    expect(scorecard.answer_count).toBe(4);
+    expect(scorecard.evaluated_answer_count).toBe(0);
+    expect(scorecard.rubric_version).toBe("scorecard_v2");
+    expect(scorecard.attempt_count).toBe(2);
+  });
 });

@@ -342,6 +342,19 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
     };
     inventoryVersion = inventory.inventoryVersion ?? "gov_inventory_v1";
 
+    const clientSnapshotId = String(
+      (body as Record<string, unknown>).availabilitySnapshotId ??
+        (body as Record<string, unknown>).availability_snapshot_id ??
+        "",
+    ).trim();
+    if (clientSnapshotId) {
+      inventorySnapshot = {
+        ...(inventorySnapshot ?? {}),
+        availability_snapshot_id: clientSnapshotId,
+        review_snapshot_id: clientSnapshotId,
+      };
+    }
+
     if (isPythonGovExamConfigured()) {
       const py = await pythonGovAvailability({
         exam_id: examId,

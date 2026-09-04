@@ -5,12 +5,21 @@ import {
   isStaleOrAbortError,
   toSafeUiError,
 } from "@/lib/focusRecovery";
-import type { Tables } from "@/integrations/supabase/types";
+import { fetchSessionHistory } from "@/lib/session/sessionHistoryApi";
+import { matchesCountBucket } from "@/lib/session/sessionCountPolicy";
+import { sessionHistoryTypeLabel, sessionHistoryContextLine } from "@/lib/session/sessionHistoryTypes";
 
-export type DashboardSessionRow = Pick<
-  Tables<"sessions">,
-  "id" | "type" | "status" | "overall_score" | "title" | "created_at"
->;
+export type DashboardSessionRow = {
+  id: string;
+  type: string;
+  status: string;
+  overall_score: number | null;
+  title: string | null;
+  /** Role / objective context for assessments when present. */
+  contextLine?: string | null;
+  created_at: string;
+  detailRoute: string;
+};
 
 const INITIAL_TIMEOUT_MS = 15_000;
 
@@ -46,7 +55,23 @@ export function useDashboardData(userId: string | undefined) {
       }
 
       try {
-        const count = await sessionsDB.countByUserId(userId);
+        // Prefer unified history page (same policy as Session History). Fall back to interview count.
+        let count: number;
+        try {
+          const history = await fetchSessionHistory({ pageSize: 50, sort: "newest" });
+          if (generation !== countGen.current || controller.signal.aborted) return;
+          const visible = history.items.filter((i) =>
+            matchesCountBucket(i.status, "history_visible"),
+          );
+          count = visible.length;
+          if (history.hasMore) {
+            // Lower bound when more pages exist — keep interview total as floor check.
+            const interviewCount = await sessionsDB.countByUserId(userId);
+            count = Math.max(count, interviewCount);
+          }
+        } catch {
+          count = await sessionsDB.countByUserId(userId);
+        }
         if (generation !== countGen.current || controller.signal.aborted) return;
         setSessionCount(count);
         setSessionCountError(null);
@@ -84,14 +109,44 @@ export function useDashboardData(userId: string | undefined) {
       }
 
       try {
-        const rows = await sessionsDB.listRecentSummary(userId, 10);
+        const history = await fetchSessionHistory({ pageSize: 10, sort: "newest" });
         if (generation !== recentGen.current || controller.signal.aborted) return;
-        setRecentSessions(rows as DashboardSessionRow[]);
+        setRecentSessions(
+          history.items.map((item) => ({
+            id: item.sourceId,
+            type: sessionHistoryTypeLabel(item),
+            status: item.status,
+            overall_score: item.score ?? null,
+            title: item.title,
+            contextLine:
+              item.sessionType === "assessment" ? sessionHistoryContextLine(item) : null,
+            created_at: item.lastActivityAt || item.createdAt,
+            detailRoute: item.detailRoute,
+          })),
+        );
         setRecentError(null);
         lastRecentAt.current = Date.now();
       } catch (err: unknown) {
         if (generation !== recentGen.current || isStaleOrAbortError(err)) return;
-        setRecentError(toSafeUiError(err, "Couldn't load recent sessions"));
+        // Fallback to interview-only recent if RPC unavailable.
+        try {
+          const rows = await sessionsDB.listRecentSummary(userId, 10);
+          if (generation !== recentGen.current || controller.signal.aborted) return;
+          setRecentSessions(
+            rows.map((r) => ({
+              id: r.id,
+              type: r.type,
+              status: r.status,
+              overall_score: r.overall_score,
+              title: r.title,
+              created_at: r.created_at,
+              detailRoute: `/app/sessions/${r.id}`,
+            })),
+          );
+          setRecentError(null);
+        } catch {
+          setRecentError(toSafeUiError(err, "Couldn't load recent sessions"));
+        }
       } finally {
         if (generation === recentGen.current) {
           setRecentInitialLoading(false);
@@ -110,7 +165,6 @@ export function useDashboardData(userId: string | undefined) {
       countAbort.current?.abort();
       recentAbort.current?.abort();
     };
-    // Only re-run when the authenticated user changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 

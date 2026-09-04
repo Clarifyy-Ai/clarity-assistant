@@ -33,6 +33,7 @@ import { usePageMeta } from "@/hooks/usePageMeta";
 import { debugLog161d95 } from "@/lib/debug/debugLog161d95";
 import { AuthShell } from "@/components/layout/AuthShell";
 import { sanitizeReturnTo } from "@/lib/auth/safeReturnTo";
+import { getAuthenticatedEntryPath } from "@/lib/auth/postAuthRedirect";
 import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
 import { supportMailto } from "@/lib/auth/recoveryActions";
 import {
@@ -49,7 +50,7 @@ import {
   SIGNED_OUT_ELSEWHERE_MESSAGE,
   SIGNED_OUT_ELSEWHERE_REASON,
 } from "@/lib/auth/sessionErrors";
-import { MFA_ENFORCEMENT_PAUSED, resolveMfaGateFromAal } from "@/lib/auth/mfaGate";
+import { isMfaEnforcementPaused, resolveMfaGateFromAal } from "@/lib/auth/mfaGate";
 import { verifyTotpChallenge } from "@/lib/auth/mfaFactors";
 import {
   consumeMfaRecoveryCode,
@@ -61,6 +62,7 @@ import {
   MFA_AAL_START_FAILED_MESSAGE,
   MFA_REQUIRED_REASON,
 } from "@/hooks/useAuth";
+import { getStoredRefCode, normalizeRefCode, storeRefCode } from "@/lib/referrals";
 
 type LocationState = {
   from?: {
@@ -152,6 +154,11 @@ export default function Login(): JSX.Element {
   const explicitReturnTo = returnToFromQuery ?? returnToFromState;
   const planFromQuery = searchParams.get("plan");
   const intervalFromQuery = searchParams.get("interval");
+  const rawRefCode = searchParams.get("ref");
+  const refCode = useMemo(
+    () => normalizeRefCode(rawRefCode) ?? getStoredRefCode(),
+    [rawRefCode],
+  );
   const signupHref = isPaidSignupPlan(planFromQuery)
     ? `/signup?plan=${planFromQuery}${
         intervalFromQuery === "yearly" ? "&interval=yearly" : ""
@@ -215,6 +222,12 @@ export default function Login(): JSX.Element {
   useEffect(() => {
     setPendingPlan(searchParams.get("plan"), searchParams.get("interval"));
   }, [searchParams]);
+
+  useEffect(() => {
+    if (rawRefCode) {
+      storeRefCode(rawRefCode);
+    }
+  }, [rawRefCode]);
 
   useEffect(() => {
     const message = searchParams.get("message");
@@ -288,7 +301,7 @@ export default function Login(): JSX.Element {
       setMfaGateResolved(true);
       return;
     }
-    if (MFA_ENFORCEMENT_PAUSED) {
+    if (isMfaEnforcementPaused()) {
       setMfaPending(false);
       setMfaGateResolved(true);
       return;
@@ -351,27 +364,38 @@ export default function Login(): JSX.Element {
     }
 
     if (profile?.mfa_reenrollment_required) {
-      navigate(AUTH_PATHS.mfaEnroll, { replace: true });
+      navigate(AUTH_PATHS.mfaEnroll, {
+        replace: true,
+        state: explicitReturnTo ? { from: explicitReturnTo } : undefined,
+      });
       return;
     }
 
     // Unverified email/password sessions must not skip into /app or onboarding.
     if (!isUserEmailConfirmed(authUser)) {
-      navigate("/verify-email", { replace: true });
+      navigate("/verify-email", {
+        replace: true,
+        state: explicitReturnTo ? { from: explicitReturnTo } : undefined,
+      });
       return;
     }
 
     const pendingPlan = getPendingPlan();
     const pendingInterval = getPendingInterval();
-    // Honor deep-link returnTo when present; else paid-plan CTAs → billing; else admin/dashboard.
-    const target =
+    const isOnboarded = profile?.onboarding_completed === true;
+    // Honor deep-link returnTo when present; else paid-plan CTAs → billing; else entry path.
+    const preferred =
       explicitReturnTo ??
-      (pendingPlan
-        ? billingReturnPathForPlan(pendingPlan, pendingInterval)
-        : isAdmin
-          ? "/app/admin"
-          : "/app/dashboard");
-    navigate(target, { replace: true });
+      (pendingPlan ? billingReturnPathForPlan(pendingPlan, pendingInterval) : null);
+    const target = getAuthenticatedEntryPath({
+      isAdmin,
+      isOnboarded,
+      preferredReturnTo: preferred,
+    });
+    navigate(target, {
+      replace: true,
+      state: preferred ? { from: preferred } : undefined,
+    });
   }, [
     authStatus,
     isProfileLoaded,
@@ -383,6 +407,7 @@ export default function Login(): JSX.Element {
     authUser,
     mfaGateResolved,
     profile?.mfa_reenrollment_required,
+    profile?.onboarding_completed,
   ]);
 
   useEffect(() => {
@@ -468,6 +493,10 @@ export default function Login(): JSX.Element {
     setAuthError(null);
     setAccountSuspended(false);
     setMfaGateResolved(false);
+
+    if (rawRefCode) {
+      storeRefCode(rawRefCode);
+    }
 
     try {
       await signInWithEmail(data.email, data.password);
@@ -723,6 +752,13 @@ export default function Login(): JSX.Element {
             </div>
           ) : (
           <div>
+          {refCode && (
+            <div className="mb-4 px-3 py-2.5 bg-primary/10 border border-primary/20 rounded-xl text-xs text-primary text-center">
+              Referral code{" "}
+              <span className="font-mono font-bold">{refCode}</span> applied —
+              you&apos;ll both earn bonus credits!
+            </div>
+          )}
           <OAuthProviderSection dividerLabel="or sign in with email" />
 
           <form

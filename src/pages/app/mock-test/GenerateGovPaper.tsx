@@ -5,6 +5,11 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { ExamSearchCombobox } from "@/components/gov-exam/ExamSearchCombobox";
 import { GovPaperReviewGenerationTimer } from "@/components/gov-exam/GovPaperReviewGenerationTimer";
+import { JobProgressCard } from "@/components/async/JobProgressCard";
+import {
+  mapPaperJobToProgress,
+  paperJobChecklist,
+} from "@/lib/async/jobAdapters";
 import {
   CREATE_EXAM_PAPER_CREDIT_COST,
   cancelPaperGenerationJob,
@@ -44,6 +49,10 @@ import { useAuthStore } from "@/store/userStore";
 import { resolveCreditBalance } from "@/lib/billing/resolveCreditBalance";
 import { fetchSpendableCredits } from "@/lib/billing/fetchSpendableCredits";
 import { evaluateGovExamCreditGate } from "@/lib/gov-exam/govExamCreditGate";
+import {
+  isCustomPracticeGenerateDisabled,
+  resolveGeneratorReadiness,
+} from "@/lib/gov-exam/generatorReadiness";
 import { openUpgradeIfInsufficientCredits } from "@/lib/network/aiErrorUx";
 import {
   GOV_EXAM_AFFILIATION_DISCLAIMER,
@@ -56,6 +65,7 @@ import {
   clearPaperJobPollTimedOut,
   isPaperJobPollTimedOut,
   isPaperJobPollTimeoutError,
+  isPaperJobStillRunningAdvisory,
   isPaperJobTerminal,
   loadActivePaperJob,
   mapPaperJobPublicStatus,
@@ -142,12 +152,10 @@ function rememberPollTimeoutIfNeeded(job: PaperJobResult): void {
   }
 }
 
+/** Best-effort credit release via cancel-paper-generation-job (DB release_*). */
 function releaseCreditsOnTerminalFailure(job: PaperJobResult): void {
   const jobId = job.jobId;
   if (!jobId) return;
-  const timedOut =
-    isPaperJobPollTimeoutError(job) || job.errorCode === "GENERATION_POLL_TIMEOUT";
-  if (!timedOut) return;
   void cancelPaperGenerationJob(jobId).catch(() => undefined);
 }
 
@@ -180,9 +188,20 @@ export default function GenerateGovPaper(): React.ReactElement {
   const [examId, setExamId] = useState(params.get("examId") ?? "");
   const [stageId, setStageId] = useState(params.get("stageId") ?? "");
   const [basis, setBasis] = useState<PaperBasis>(parsePaperBasis(params.get("basis")));
-  const [language, setLanguage] = useState("en");
-  const [questionCount, setQuestionCount] = useState(25);
-  const [questionCountInput, setQuestionCountInput] = useState("25");
+  const [language, setLanguage] = useState(() => {
+    const fromUrl = params.get("language")?.trim();
+    return fromUrl || "en";
+  });
+  const [questionCount, setQuestionCount] = useState(() => {
+    const raw = Number(params.get("questionCount"));
+    if (Number.isFinite(raw) && raw > 0) return Math.floor(raw);
+    return 25;
+  });
+  const [questionCountInput, setQuestionCountInput] = useState(() => {
+    const raw = Number(params.get("questionCount"));
+    if (Number.isFinite(raw) && raw > 0) return String(Math.floor(raw));
+    return "25";
+  });
   const [questionCountError, setQuestionCountError] = useState<string | null>(null);
   const [patternLoadError, setPatternLoadError] = useState<string | null>(null);
   const [durationMinutes, setDurationMinutes] = useState(30);
@@ -210,16 +229,32 @@ export default function GenerateGovPaper(): React.ReactElement {
     storeCredits,
   });
   const [serverCredits, setServerCredits] = useState<number | null>(null);
+  const [creditsTimedOut, setCreditsTimedOut] = useState(false);
+  const [deepLinkHydrating, setDeepLinkHydrating] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    return Boolean(p.get("examId") || p.get("code")?.trim());
+  });
+  const [selectionError, setSelectionError] = useState<string | null>(null);
 
   useEffect(() => {
     const userId = profile?.id;
     if (!userId) return;
     let cancelled = false;
+    setCreditsTimedOut(false);
+    const timeoutId = window.setTimeout(() => {
+      if (!cancelled) setCreditsTimedOut(true);
+    }, 8_000);
     void fetchSpendableCredits(userId).then((balance) => {
-      if (!cancelled && balance != null) setServerCredits(balance);
+      if (cancelled) return;
+      if (balance != null) {
+        setServerCredits(balance);
+        setCreditsTimedOut(false);
+      }
+      // null → keep profile fallback via displayCredits; stop "Checking…" once profile known
     });
     return () => {
       cancelled = true;
+      window.clearTimeout(timeoutId);
     };
   }, [profile?.id]);
 
@@ -341,16 +376,69 @@ export default function GenerateGovPaper(): React.ReactElement {
     );
   }
 
+  /** Keep exam context in the URL for refresh / deep-link (never bounce to dashboard). */
+  function syncGenerateContextInUrl(patch?: {
+    examId?: string;
+    stageId?: string;
+    code?: string;
+    basis?: PaperBasis;
+    language?: string;
+    questionCount?: number;
+  }) {
+    const next = new URLSearchParams(params);
+    const nextExamId = patch?.examId ?? examId;
+    const nextStageId = patch?.stageId ?? stageId;
+    const nextCode = patch?.code ?? selectedExam?.code ?? params.get("code") ?? "";
+    const nextBasis = patch?.basis ?? basis;
+    const nextLanguage = patch?.language ?? language;
+    const nextCount = patch?.questionCount ?? questionCount;
+
+    if (nextExamId) next.set("examId", nextExamId);
+    else next.delete("examId");
+    if (nextStageId) next.set("stageId", nextStageId);
+    else next.delete("stageId");
+    if (nextCode) next.set("code", nextCode);
+    else next.delete("code");
+    if (nextBasis) next.set("basis", nextBasis);
+    else next.delete("basis");
+    if (nextLanguage) next.set("language", nextLanguage);
+    else next.delete("language");
+    if (nextCount > 0) next.set("questionCount", String(nextCount));
+    else next.delete("questionCount");
+
+    const search = next.toString();
+    const current = params.toString();
+    if (search === current) return;
+    navigate(
+      { pathname: "/app/mock-test/generate", search: search ? `?${search}` : "" },
+      { replace: true },
+    );
+  }
+
   function applyExamSelection(exam: GovExamSearchResult) {
+    const id = String(exam.examId ?? "").trim();
+    if (!id) {
+      setSelectionError("That exam is missing a registry id. Pick another exam.");
+      return;
+    }
+    const nextStageId = exam.stage?.id ?? exam.stages[0]?.id ?? "";
     setSelectedExam(exam);
-    setExamId(exam.examId);
-    setStageId(exam.stage?.id ?? exam.stages[0]?.id ?? "");
+    setExamId(id);
+    setStageId(nextStageId);
     setLanguage(exam.languages?.[0] ?? "en");
     setAvailabilitySession(resetAvailabilitySession());
     setSelectedTopics([]);
     setTopicChoices([]);
     setTopicDraft("");
     setDifficulty("");
+    setDeepLinkHydrating(false);
+    if (!nextStageId) {
+      setSelectionError(
+        "This exam has no stage in the registry yet. Pick another exam or try again later.",
+      );
+    } else {
+      setSelectionError(null);
+    }
     if (exam.pattern) {
       if (basis === "full_sim") {
         setQuestionCount(exam.pattern.totalQuestions);
@@ -368,6 +456,7 @@ export default function GenerateGovPaper(): React.ReactElement {
     setTopicChoices([]);
     setTopicDraft("");
     setDifficulty("");
+    setSelectionError(null);
   }
 
   // Hydrate selection from deep-link: prefer getExamDetails for truthful bankReadiness.
@@ -376,8 +465,12 @@ export default function GenerateGovPaper(): React.ReactElement {
     const linkedExamId = params.get("examId");
     const linkedStageId = params.get("stageId");
     const linkedCode = params.get("code")?.trim() ?? "";
-    if ((!linkedExamId && !linkedCode) || selectedExam) return;
+    if ((!linkedExamId && !linkedCode) || selectedExam) {
+      if (!linkedExamId && !linkedCode || selectedExam) setDeepLinkHydrating(false);
+      return;
+    }
     let cancelled = false;
+    setDeepLinkHydrating(true);
 
     function mapDetailsToSearchResult(
       details: Awaited<ReturnType<typeof import("@/lib/gov-exam/api").getExamDetails>>,
@@ -444,38 +537,57 @@ export default function GenerateGovPaper(): React.ReactElement {
       void Promise.allSettled([detailsPromise, searchPromise]).then(([detailsResult, searchResult]) => {
         if (cancelled) return;
 
-        if (detailsResult.status === "fulfilled") {
-          const details = detailsResult.value as {
-            exam?: { examId?: string };
-          } | null;
-          // Catch-all mocks / partial payloads can fulfill without an exam —
-          // do not throw; fall through to search hydration.
-          if (details?.exam?.examId) {
-            applyExamSelection(mapDetailsToSearchResult(detailsResult.value));
-            if (linkedStageId) setStageId(linkedStageId);
-            return;
+        try {
+          if (detailsResult.status === "fulfilled") {
+            const details = detailsResult.value as {
+              exam?: { examId?: string };
+            } | null;
+            // Catch-all mocks / partial payloads can fulfill without an exam —
+            // do not throw; fall through to search hydration.
+            if (details?.exam?.examId) {
+              applyExamSelection(mapDetailsToSearchResult(detailsResult.value));
+              if (linkedStageId) setStageId(linkedStageId);
+              return;
+            }
           }
-        }
 
-        if (searchResult.status === "fulfilled") {
-          const hit =
-            searchResult.value.results.find((r) => linkedExamId && r.examId === linkedExamId) ??
-            searchResult.value.results.find(
-              (r) => linkedCode && r.code?.toUpperCase() === linkedCode.toUpperCase(),
-            ) ??
-            null;
-          if (hit) {
-            applyExamSelection(hit);
-            if (linkedStageId) setStageId(linkedStageId);
+          if (searchResult.status === "fulfilled") {
+            const hit =
+              searchResult.value.results.find((r) => linkedExamId && r.examId === linkedExamId) ??
+              searchResult.value.results.find(
+                (r) => linkedCode && r.code?.toUpperCase() === linkedCode.toUpperCase(),
+              ) ??
+              null;
+            if (hit) {
+              applyExamSelection(hit);
+              if (linkedStageId) setStageId(linkedStageId);
+            } else {
+              setSelectionError(
+                "That exam could not be found. Return to the hub and pick another exam — you will stay on this page.",
+              );
+            }
+          } else if (detailsResult.status === "rejected") {
+            setSelectionError(
+              "That exam could not be loaded. Return to the hub and try again — you will stay on this page.",
+            );
           }
+        } finally {
+          if (!cancelled) setDeepLinkHydrating(false);
         }
       });
     });
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- primitive deep-link keys only
+  }, [params.get("examId"), params.get("code"), params.get("stageId")]);
+
+  // Persist context in the URL for refresh / shareable deep links.
+  useEffect(() => {
+    if (deepLinkHydrating) return;
+    syncGenerateContextInUrl();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params]);
+  }, [examId, stageId, basis, language, questionCount, selectedExam?.code, deepLinkHydrating]);
 
   // Resume an in-flight job after refresh — never auto-restart generation.
   useEffect(() => {
@@ -638,6 +750,7 @@ export default function GenerateGovPaper(): React.ReactElement {
           syncJobIdInUrl(null);
           if (publicStatus === "failed_retryable" || publicStatus === "failed_permanent" || publicStatus === "failed") {
             rememberPollTimeoutIfNeeded(current);
+            releaseCreditsOnTerminalFailure(current);
             setGenerationSession((prev) =>
               failGenerationSession(prev, jobId, {
                 errorCode: current.errorCode,
@@ -1048,10 +1161,13 @@ export default function GenerateGovPaper(): React.ReactElement {
     }
     const requested = overrideCount ?? requestedForConfig;
     generatingRef.current = true;
-    setBusy(true);
     try {
       const creditsOk = await ensureSufficientCreditsForGeneration();
-      if (!creditsOk) return;
+      if (!creditsOk) {
+        generatingRef.current = false;
+        return;
+      }
+      setBusy(true);
 
       clearPaperJobPollTimedOut();
 
@@ -1192,6 +1308,9 @@ export default function GenerateGovPaper(): React.ReactElement {
                       ? "official_previous"
                       : "custom",
               }),
+              availabilitySnapshotId:
+                serverAvailability?.availabilitySnapshotId ??
+                serverAvailability?.correlationId,
             });
       setJob(result);
       if (result.jobId && !isPaperJobTerminal(result.status)) {
@@ -1332,6 +1451,7 @@ export default function GenerateGovPaper(): React.ReactElement {
         toast.error(paperJobErrorMessage(current));
         void ensureSufficientCreditsForGeneration();
       } else if (terminal === "failed_permanent" || terminal === "failed") {
+        releaseCreditsOnTerminalFailure(current);
         idempotencyKeyRef.current = null;
         clearActivePaperJob();
         clearPaperJobPollTimedOut();
@@ -1351,6 +1471,17 @@ export default function GenerateGovPaper(): React.ReactElement {
         syncJobIdInUrl(null);
         setGenerationSession(resetGenerationSession());
         toast.message("Generation cancelled.");
+      } else if (isPaperJobStillRunningAdvisory(current) || !isPaperJobTerminal(current.status)) {
+        // Client poll window ended — durable job may still be running. Do not cancel credits.
+        setGenerationSession((prev) =>
+          beginGenerationSession(current.jobId ?? result.jobId, {
+            idempotencyKey: idempotencyKeyRef.current ?? undefined,
+          }),
+        );
+        toast.message(
+          current.errorMessage ??
+            "Still generating on the server. Tap Continue waiting when you are ready.",
+        );
       } else {
         rememberPollTimeoutIfNeeded(current);
         releaseCreditsOnTerminalFailure({
@@ -1427,6 +1558,7 @@ export default function GenerateGovPaper(): React.ReactElement {
             syncJobIdInUrl(null);
             navigate(`/app/mock-test/session/${current.mockTestId}`);
           } else if (isPaperJobTerminal(current.status)) {
+            releaseCreditsOnTerminalFailure(current);
             toast.error(paperJobErrorMessage(current));
           }
           return;
@@ -1445,11 +1577,72 @@ export default function GenerateGovPaper(): React.ReactElement {
     void handleGenerate();
   }
 
-  const generateDisabled =
-    busy ||
-    (job != null && !isPaperJobTerminal(job.status)) ||
-    !stageId ||
-    !creditGate.allowed;
+  const readiness = useMemo(
+    () =>
+      resolveGeneratorReadiness({
+        examId,
+        stageId,
+        step,
+        creditsKnown,
+        creditAllowed: creditGate.allowed,
+        creditInsufficient: insufficientCredits,
+        busy,
+        jobInFlight: job != null && !isPaperJobTerminal(job.status),
+        inventoryCanGenerate: canGenerateRequested,
+        customPracticeMax,
+        deepLinkHydrating,
+        creditsTimedOut: creditsTimedOut && !creditsKnown,
+      }),
+    [
+      examId,
+      stageId,
+      step,
+      creditsKnown,
+      creditGate.allowed,
+      insufficientCredits,
+      busy,
+      job,
+      canGenerateRequested,
+      customPracticeMax,
+      deepLinkHydrating,
+      creditsTimedOut,
+    ],
+  );
+
+  const generateDisabled = readiness.generateDisabled;
+  const continueEnabled = readiness.continueEnabled;
+  const customGenerateDisabled = isCustomPracticeGenerateDisabled(
+    readiness,
+    customPracticeMax,
+  );
+
+  function generatePrimaryLabel(): string {
+    if (busy || readiness.generateLabelHint === "busy") return "";
+    if (readiness.generateLabelHint === "top_up") return "Top up to generate";
+    if (readiness.generateLabelHint === "retry_credits") return "Retry credit check";
+    if (readiness.generateLabelHint === "checking_credits") return "Checking credits…";
+    if (job && isPaperJobStillRunningAdvisory(job)) return "Continue waiting";
+    if (
+      job &&
+      (mapPaperJobPublicStatus(job.status) === "failed_retryable" ||
+        mapPaperJobPublicStatus(job.status) === "failed")
+    ) {
+      return "Retry";
+    }
+    if (basis === "official_previous") return "Generate Previous-Year Style Practice";
+    if (basis === "hybrid") return "Generate Hybrid Practice Mock";
+    if (basis === "full_sim") return generateButtonLabel(inventory);
+    return "Generate Practice Paper";
+  }
+
+  function customPracticePrimaryLabel(): string {
+    if (busy || readiness.generateLabelHint === "busy") return "";
+    if (readiness.generateLabelHint === "top_up") return "Top up to generate";
+    if (readiness.generateLabelHint === "retry_credits") return "Retry credit check";
+    if (readiness.generateLabelHint === "checking_credits") return "Checking credits…";
+    return customPracticeSetLabel(customPracticeMax);
+  }
+
   // #region agent log
   useEffect(() => {
     debugLog4a9592({
@@ -1461,6 +1654,9 @@ export default function GenerateGovPaper(): React.ReactElement {
         jobStatus: job?.status ?? null,
         jobTerminal: job ? isPaperJobTerminal(job.status) : null,
         generateDisabled,
+        readinessPhase: readiness.phase,
+        readinessReason: readiness.reason,
+        continueEnabled,
         currentUserStage: job
           ? mapProgressToUiState(job.progressStage, job.status)
           : "IDLE",
@@ -1468,7 +1664,17 @@ export default function GenerateGovPaper(): React.ReactElement {
         displayCredits,
       },
     });
-  }, [busy, job?.status, job?.progressStage, generateDisabled, displayCredits, stageId]);
+  }, [
+    busy,
+    job?.status,
+    job?.progressStage,
+    generateDisabled,
+    displayCredits,
+    stageId,
+    readiness.phase,
+    readiness.reason,
+    continueEnabled,
+  ]);
   // #endregion
 
   const currentUiState = job
@@ -1482,7 +1688,12 @@ export default function GenerateGovPaper(): React.ReactElement {
   );
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div
+      className="space-y-6 max-w-3xl"
+      data-testid="gov-generate-wizard"
+      data-hydrating={deepLinkHydrating ? "1" : "0"}
+      data-exam-ready={examId.trim() ? "1" : "0"}
+    >
       <PageHeader
         title="Generate practice paper"
         description="Pattern-based assembly from the approved registry — not an official or leaked paper."
@@ -1491,6 +1702,22 @@ export default function GenerateGovPaper(): React.ReactElement {
           { label: "Generate" },
         ]}
       />
+
+      {selectionError && !selectedExam && !deepLinkHydrating && (
+        <div
+          className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 space-y-2"
+          role="alert"
+          data-testid="gov-generate-selection-error"
+        >
+          <p className="text-sm text-amber-900 dark:text-amber-100">{selectionError}</p>
+          <Link
+            to="/app/mock-test"
+            className="inline-flex text-sm font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Back to exam hub
+          </Link>
+        </div>
+      )}
 
       <p className="text-xs text-muted-foreground border border-border/60 rounded-lg px-3 py-2">
         {GOV_EXAM_AFFILIATION_DISCLAIMER}
@@ -1535,6 +1762,11 @@ export default function GenerateGovPaper(): React.ReactElement {
                     });
                 }}
               />
+              {selectionError && (
+                <p className="text-sm text-amber-700 dark:text-amber-400" role="alert">
+                  {selectionError}
+                </p>
+              )}
               {selected && (
                 <div className="space-y-1 text-xs text-muted-foreground">
                   <p>
@@ -1932,6 +2164,19 @@ export default function GenerateGovPaper(): React.ReactElement {
                     </dd>
                   </>
                 )}
+                {serverAvailability?.inventorySource && (
+                  <>
+                    <dt className="text-muted-foreground">Inventory source</dt>
+                    <dd>
+                      {serverAvailability.inventorySource === "python_authoritative"
+                        ? "Python (authoritative)"
+                        : "Edge / canonical RPC"}
+                      {serverAvailability.availabilitySnapshotId
+                        ? ` · snapshot ${serverAvailability.availabilitySnapshotId.slice(0, 8)}`
+                        : ""}
+                    </dd>
+                  </>
+                )}
                 <dt className="text-muted-foreground">Question sources</dt>
                 <dd>{generationSourceSummary(inventory)}</dd>
                 {basis === "topic" && (
@@ -1975,7 +2220,48 @@ export default function GenerateGovPaper(): React.ReactElement {
                   )}
                 </p>
               )}
-              {creditGate.allowed === false && creditGate.reason === "unknown_balance" && (
+              {selectionError && step === 3 && (
+                <p className="text-sm text-amber-700 dark:text-amber-400" role="alert">
+                  {selectionError}
+                </p>
+              )}
+              {readiness.reason === "credits_timeout" && (
+                <div
+                  className="rounded-md border border-border bg-muted/40 p-3 text-sm"
+                  role="status"
+                >
+                  <p className="text-muted-foreground">
+                    We couldn’t confirm your credit balance. Retry or refresh, or open Billing if
+                    this keeps happening.
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setCreditsTimedOut(false);
+                        const userId = profile?.id;
+                        if (!userId) return;
+                        void fetchSpendableCredits(userId).then((balance) => {
+                          if (balance != null) setServerCredits(balance);
+                        });
+                      }}
+                    >
+                      Retry credit check
+                    </Button>
+                    <Link
+                      to="/app/settings/billing"
+                      className="inline-flex min-h-9 items-center justify-center rounded-lg border border-border bg-background px-3 text-xs font-medium hover:bg-secondary"
+                    >
+                      Billing settings
+                    </Link>
+                  </div>
+                </div>
+              )}
+              {creditGate.allowed === false &&
+                creditGate.reason === "unknown_balance" &&
+                readiness.reason !== "credits_timeout" && (
                 <p className="text-sm text-muted-foreground" role="status">
                   Checking your credit balance before generation can start.
                 </p>
@@ -2027,56 +2313,37 @@ export default function GenerateGovPaper(): React.ReactElement {
               {job && (
                 <div className="space-y-2 mt-4">
                   <GovPaperReviewGenerationTimer session={generationSession} />
-                  <ul className="space-y-1.5" aria-live="polite">
-                    {PAPER_JOB_UI_STATES.map((s, i) => {
-                      const done =
-                        currentStageIdx > i ||
-                        job.status === "completed" ||
-                        currentUiState === "READY";
-                      const active =
-                        currentUiState === s ||
-                        ((currentUiState === "FAILED_RETRYABLE" ||
-                          currentUiState === "FAILED_PERMANENT") &&
-                          s === "GENERATING" &&
-                          i === 2);
-                      return (
-                        <li key={s} className="flex items-center gap-2 text-xs">
-                          {done ? (
-                            <Check className="h-3.5 w-3.5 text-green-600" />
-                          ) : active && !isPaperJobTerminal(job.status) ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <span className="h-3.5 w-3.5 rounded-full border border-border" />
-                          )}
-                          {PAPER_JOB_UI_LABEL[s]}
-                        </li>
-                      );
+                  <JobProgressCard
+                    title="Preparing your Government Exam"
+                    progress={mapPaperJobToProgress({
+                      jobId: job.jobId ?? job.id,
+                      id: job.id,
+                      status: job.status,
+                      progressStage: job.progressStage,
+                      errorCode: job.errorCode,
+                      errorMessage: paperJobErrorMessage(job),
+                      retryable:
+                        mapPaperJobPublicStatus(job.status) === "failed_retryable",
                     })}
-                  </ul>
-                  {currentUserStage === "failed" && (
-                    <p className="text-sm text-amber-700 dark:text-amber-400">
-                      {paperJobErrorMessage(job)}
+                    steps={paperJobChecklist(job.progressStage, job.status)}
+                    onRetry={
+                      currentUserStage === "failed"
+                        ? () => void handleRetry()
+                        : isPaperJobStillRunningAdvisory(job)
+                          ? () => void handleRetry()
+                          : undefined
+                    }
+                    onCancel={
+                      !isPaperJobTerminal(job.status)
+                        ? () => void handleCancelJob()
+                        : undefined
+                    }
+                  />
+                  {isPaperJobStillRunningAdvisory(job) && (
+                    <p className="text-sm text-muted-foreground" role="status">
+                      {job.errorMessage ??
+                        "Server is still working. Tap Continue waiting to resume polling."}
                     </p>
-                  )}
-                  {currentUserStage === "failed" && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => void handleRetry()}
-                      disabled={busy}
-                    >
-                      Retry
-                    </Button>
-                  )}
-                  {!isPaperJobTerminal(job.status) && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void handleCancelJob()}
-                    >
-                      Cancel generation
-                    </Button>
                   )}
                 </div>
               )}
@@ -2092,59 +2359,75 @@ export default function GenerateGovPaper(): React.ReactElement {
               Back
             </Button>
             {step < 3 ? (
-              <Button onClick={() => setStep((s) => Math.min(3, s + 1))} disabled={!examId}>
+              <Button
+                data-testid="gov-generate-continue"
+                onClick={() => setStep((s) => Math.min(3, s + 1))}
+                disabled={!continueEnabled}
+              >
                 Continue
               </Button>
             ) : canGenerateRequested ? (
               <Button
-                onClick={() =>
+                onClick={() => {
+                  if (readiness.generateLabelHint === "retry_credits") {
+                    setCreditsTimedOut(false);
+                    const userId = profile?.id;
+                    if (userId) {
+                      void fetchSpendableCredits(userId).then((balance) => {
+                        if (balance != null) setServerCredits(balance);
+                      });
+                    }
+                    return;
+                  }
                   void (job &&
                   (mapPaperJobPublicStatus(job.status) === "failed_retryable" ||
-                    mapPaperJobPublicStatus(job.status) === "failed")
+                    mapPaperJobPublicStatus(job.status) === "failed" ||
+                    isPaperJobStillRunningAdvisory(job))
                     ? handleRetry()
-                    : handleGenerate())
+                    : handleGenerate());
+                }}
+                disabled={
+                  generateDisabled &&
+                  !isPaperJobStillRunningAdvisory(job ?? { errorCode: null }) &&
+                  readiness.generateLabelHint !== "retry_credits"
                 }
-                disabled={generateDisabled}
               >
                 {busy ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Generating…
                   </>
-                ) : insufficientCredits ? (
-                  "Top up to generate"
-                ) : !creditGate.allowed ? (
-                  "Checking credits…"
-                ) : job &&
-                  (mapPaperJobPublicStatus(job.status) === "failed_retryable" ||
-                    mapPaperJobPublicStatus(job.status) === "failed") ? (
-                  "Retry"
-                ) : basis === "official_previous" ? (
-                  "Generate Official Paper"
-                ) : basis === "hybrid" ? (
-                  "Generate Hybrid Mock"
-                ) : basis === "full_sim" ? (
-                  generateButtonLabel(inventory)
                 ) : (
-                  "Generate Practice Paper"
+                  generatePrimaryLabel()
                 )}
               </Button>
             ) : (
               <Button
-                onClick={() => void handleGenerate(customPracticeMax)}
-                disabled={generateDisabled || customPracticeMax < 5}
+                onClick={() => {
+                  if (readiness.generateLabelHint === "retry_credits") {
+                    setCreditsTimedOut(false);
+                    const userId = profile?.id;
+                    if (userId) {
+                      void fetchSpendableCredits(userId).then((balance) => {
+                        if (balance != null) setServerCredits(balance);
+                      });
+                    }
+                    return;
+                  }
+                  void handleGenerate(customPracticeMax);
+                }}
+                disabled={
+                  customGenerateDisabled &&
+                  readiness.generateLabelHint !== "retry_credits"
+                }
               >
                 {busy ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Generating…
                   </>
-                ) : insufficientCredits ? (
-                  "Top up to generate"
-                ) : !creditGate.allowed ? (
-                  "Checking credits…"
                 ) : (
-                  customPracticeSetLabel(customPracticeMax)
+                  customPracticePrimaryLabel()
                 )}
               </Button>
             )}
@@ -2166,10 +2449,13 @@ export default function GenerateGovPaper(): React.ReactElement {
           <p>Your credits: {displayCredits ?? "…"}</p>
           <p>Bank: {formatInventoryCoverage(inventory.available, requestedForConfig)}</p>
           {inventory.mode === "ai_assisted" && canGenerateRequested && (
-            <p>AI-generated: {inventory.aiQuestions} questions</p>
+            <p>
+              AI practice fill: {inventory.aiQuestions} questions (not Official/PYQ)
+            </p>
           )}
           <p className="pt-2 border-t border-border">
-            Official / AI label set from paper class after assembly.
+            Assembled papers show Previous-year style or AI-generated practice labels —
+            never Official PYQ for gap-fill content.
           </p>
         </aside>
       </div>

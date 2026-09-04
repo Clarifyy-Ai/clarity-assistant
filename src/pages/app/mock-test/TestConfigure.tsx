@@ -177,7 +177,7 @@ const EXAM_TOPICS: Record<string, string[]> = {
 
 const SOURCE_OPTIONS = [
   { id: "OFFICIAL_PYP", label: "Previous Year Papers", premiumOnly: false },
-  { id: "AI_GENERATED", label: "AI-Generated", premiumOnly: true },
+  { id: "AI_GENERATED", label: "AI practice content", premiumOnly: true },
   { id: "USER_UPLOAD", label: "My Uploads", premiumOnly: false },
 ] as const;
 
@@ -190,17 +190,17 @@ const SOURCE_PRESETS = [
   },
   {
     id: "mixed",
-    label: "Mixed (Official + AI)",
+    label: "Mixed (Official + AI practice)",
     sources: ["OFFICIAL_PYP", "AI_GENERATED"] as string[],
     premiumOnly: true,
-    description: "Pro — fills gaps with analytics-driven AI questions",
+    description: "Pro — fills gaps with AI practice content (not Official/PYQ)",
   },
   {
     id: "full",
     label: "All sources",
     sources: ["OFFICIAL_PYP", "AI_GENERATED", "USER_UPLOAD"] as string[],
     premiumOnly: true,
-    description: "Pro — official, your uploads, and AI gap-fill",
+    description: "Pro — official, your uploads, and AI practice gap-fill",
   },
 ];
 
@@ -328,7 +328,7 @@ export default function TestConfigure() {
   function toggleSource(source: string) {
     if (source === "AI_GENERATED" && !canUseAiQuestions) {
       openUpgradeModal("pro");
-      toast.info("AI-generated exam questions require a Pro plan or higher.");
+      toast.info("AI practice questions require a Pro plan or higher.");
       return;
     }
     setConfig((prev) => ({
@@ -375,7 +375,7 @@ export default function TestConfigure() {
     }
 
     if (config.source_types.includes("AI_GENERATED") && !canUseAiQuestions) {
-      toast.error("AI-generated questions require a Pro plan. Upgrade or use official papers only.");
+      toast.error("AI practice content requires a Pro plan. Upgrade or use official papers only.");
       openUpgradeModal("pro");
       return;
     }
@@ -431,7 +431,7 @@ export default function TestConfigure() {
       toast.success(`Test created with ${question_count} questions.`);
       if (ai_generated_count && ai_generated_count > 0) {
         toast.info(
-          `${ai_generated_count} AI questions added from your analytics profile.`,
+          `${ai_generated_count} AI practice questions added (not Official/PYQ) from your analytics profile.`,
         );
       }
       navigate(`/app/mock-test/session/${testId}`);
@@ -690,8 +690,8 @@ export default function TestConfigure() {
               <SectionLabel>Question Source</SectionLabel>
               <p className="text-xs text-muted-foreground">
                 Free users: official previous-year papers and your uploads.
-                Pro users can add AI-generated questions — mixed with manual papers and
-                tailored to your weak topics from analytics.
+                Pro users can add AI practice content (never labeled Official/PYQ) —
+                mixed with bank papers and tailored to your weak topics from analytics.
               </p>
               <div className="flex flex-wrap gap-2">
                 {SOURCE_PRESETS.map((preset) => (

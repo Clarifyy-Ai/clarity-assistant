@@ -3,15 +3,16 @@
  *
  * Flow:
  * 1. Resolve correlation_id / operation_id
- * 2. Idempotency lookup (getIdempotentResponse) when key provided
- * 3. decideRoute via operationRouter
- * 4. Reserve credits ONCE via deductCreditsAtomic (if cost > 0)
- * 5. Try preferredOrder; skip AI/python when force flags / not configured
- * 6. On AI failure → python when pythonFallbackOnAiFailure (no re-deduct)
- * 7. On Python failure → AI when aiFallbackOnPythonFailure; else deterministic/database
- * 8. validate → storeIdempotentResponse → recordOperationSource → hybridSuccess
- * 9. On total failure → refund reserved credits → hybridFailure
- * 10. Never fake success
+ * 2. Reject unknown operations (UNKNOWN_OPERATION) before any credit charge
+ * 3. Idempotency lookup (getIdempotentResponse) when key provided
+ * 4. decideRoute via operationRouter
+ * 5. Reserve credits ONCE via deductCreditsAtomic (if cost > 0)
+ * 6. Try preferredOrder; skip AI/python when force flags / not configured
+ * 7. On AI failure → python when pythonFallbackOnAiFailure (no re-deduct)
+ * 8. On Python failure → AI when aiFallbackOnPythonFailure; else deterministic/database
+ * 9. validate → storeIdempotentResponse → recordOperationSource → hybridSuccess
+ * 10. On total failure → refund reserved credits → hybridFailure
+ * 11. Never fake success
  *
  * Env notes:
  * - PYTHON_SERVICE_URL + DOCUMENT_INTELLIGENCE_AUTH_SECRET for Python path
@@ -37,6 +38,7 @@ import {
 } from "./hybridResponse.ts";
 import {
   decideRoute,
+  isKnownHybridOperation,
   type HybridOperation,
   type HybridRouteSource,
   type RouteDecision,
@@ -138,6 +140,30 @@ function asOperationSource(source: HybridRouteSource, fallbackUsed: boolean): Op
   if (source === "database") return "database";
   if (source === "python") return "python";
   return "ai";
+}
+
+/** Fail closed before any credit reserve or source walk. */
+function unknownOperationResult<T>(
+  req: Request,
+  operation: string,
+  correlationId: string,
+  started: number,
+): HybridResult<T> {
+  const executionMs = Date.now() - started;
+  const message = `Unknown or unregistered hybrid operation: ${operation || "(empty)"}`;
+  return {
+    ok: false,
+    code: "UNKNOWN_OPERATION",
+    correlationId,
+    executionMs,
+    response: hybridFailure({
+      req,
+      code: "UNKNOWN_OPERATION",
+      message,
+      correlationId,
+      retryable: false,
+    }),
+  };
 }
 
 type AttemptOutcome<T> =
@@ -296,6 +322,11 @@ export async function executeHybridOperation<T = unknown>(
       ? Math.max(0, Math.floor(input.creditCost))
       : 0;
 
+  // Refuse unknown ops before idempotency / credit reserve (no charge path).
+  if (!isKnownHybridOperation(operation)) {
+    return unknownOperationResult<T>(input.req, operation, correlationId, started);
+  }
+
   const route = decideRoute({ operation });
   const db = createServiceClient();
 
@@ -449,7 +480,10 @@ export async function executeHybridOperation<T = unknown>(
   const queue = buildTriedOrder(route);
   const queued = new Set<HybridRouteSource>(queue);
   let fallbackReason: string | undefined;
-  let lastFailCode: DomainErrorCode = "PYTHON_SERVICE_UNAVAILABLE";
+  // AI-required ops (e.g. practice_coach_help) must not report PYTHON_* when the queue empties.
+  let lastFailCode: DomainErrorCode = route.isAiRequired
+    ? "AI_PROVIDER_UNAVAILABLE"
+    : "PYTHON_SERVICE_UNAVAILABLE";
   let attempts = 0;
   const maxAttempts = 8;
 
@@ -574,6 +608,13 @@ export async function executeHybridOperation<T = unknown>(
 
     // Total failure
     const executionMs = Date.now() - started;
+    if (
+      route.isAiRequired &&
+      (lastFailCode === "PYTHON_SERVICE_UNAVAILABLE" ||
+        lastFailCode === "PYTHON_PROCESSING_FAILED")
+    ) {
+      lastFailCode = "AI_PROVIDER_UNAVAILABLE";
+    }
     if (creditsReserved && !creditFinalized) {
       await refundCredits({
         userId,
@@ -686,6 +727,14 @@ export async function prepareHybridStreamOperation<T = unknown>(
     typeof input.creditCost === "number" && Number.isFinite(input.creditCost)
       ? Math.max(0, Math.floor(input.creditCost))
       : 0;
+
+  // Refuse unknown ops before credit reserve (no charge path).
+  if (!isKnownHybridOperation(operation)) {
+    return {
+      kind: "terminal",
+      result: unknownOperationResult<T>(input.req, operation, correlationId, started),
+    };
+  }
 
   const route = decideRoute({ operation });
   const db = createServiceClient();

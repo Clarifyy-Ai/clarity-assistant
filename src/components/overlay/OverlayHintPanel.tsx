@@ -21,11 +21,14 @@ import {
   ThumbsDown,
   Minimize2,
   Maximize2,
+  Pencil,
+  Keyboard,
+  X,
 } from "lucide-react";
 import { OverlayAnswerStrength } from "./OverlayAnswerStrength";
 import { checkCreditsForAction, SERVER_AI_CREDIT_COSTS } from "@/lib/billing/creditsManager";
 import { toast } from "sonner";
-import { composeHint, splitInlineCode } from "@/lib/overlay/overlayCompositor";
+import { composeHint, splitInlineRich, type InlinePart } from "@/lib/overlay/overlayCompositor";
 import { copyTextToClipboard, extractCodeFromAnswer } from "@/lib/overlay/answerTextUtils";
 import { structureForMode } from "@/lib/overlay/responseFormatters";
 import { useOverlayStore } from "@/store/overlayStore";
@@ -34,8 +37,38 @@ import { feedbackDB } from "@/lib/supabase/database";
 import type { HintState } from "@/store/overlayStore";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { chatAttentionBannerCopy } from "@/lib/overlay/sessionConversation";
+import { confidenceTierLabel } from "@/lib/session/aiHelpConfirm";
 
 const LISTENING_NO_SPEECH_MS = 12_000;
+
+function renderInlineParts(parts: InlinePart[], keyPrefix: string) {
+  return parts.map((part, j) => {
+    if (part.isCode) {
+      return (
+        <code
+          key={`${keyPrefix}-code-${j}`}
+          className="rounded-md bg-black/50 border border-white/[0.07] px-1.5 py-0.5 font-mono text-[11px] text-indigo-200"
+        >
+          {part.text}
+        </code>
+      );
+    }
+    return (
+      <span
+        key={`${keyPrefix}-txt-${j}`}
+        className={
+          part.bold
+            ? "font-semibold text-white/90"
+            : part.italic
+              ? "italic text-white/70"
+              : undefined
+        }
+      >
+        {part.text}
+      </span>
+    );
+  });
+}
 
 /* ─── TYPES ─────────────────────────────────────────────────────────────── */
 
@@ -53,6 +86,11 @@ interface OverlayHintPanelProps {
   onRegenerate?: () => void;
   onShorten?: () => void;
   onExpand?: () => void;
+  onConfirmGenerateAnswer?: () => void;
+  onConfirmEditQuestion?: () => void;
+  onConfirmRetryListening?: () => void;
+  onConfirmTypeManually?: () => void;
+  onConfirmCancel?: () => void;
 }
 
 function OverlayHintPanelInner({
@@ -67,6 +105,11 @@ function OverlayHintPanelInner({
   onRegenerate,
   onShorten,
   onExpand,
+  onConfirmGenerateAnswer,
+  onConfirmEditQuestion,
+  onConfirmRetryListening,
+  onConfirmTypeManually,
+  onConfirmCancel,
 }: OverlayHintPanelProps) {
   const isMobile = useIsMobile();
   const [copied, setCopied] = useState(false);
@@ -77,6 +120,7 @@ function OverlayHintPanelInner({
   const fontSize = useOverlayStore((s) => s.font_size);
   const chatAttention = useOverlayStore((s) => s.chat_attention);
   const chatAttentionReason = useOverlayStore((s) => s.chat_attention_reason);
+  const aiHelpConfirm = useOverlayStore((s) => s.ai_help_confirm);
 
   const historyLen = useOverlayStore((s) => s.hint_history.length);
   const historyIndex = useOverlayStore((s) => s.hint_history_index);
@@ -95,6 +139,8 @@ function OverlayHintPanelInner({
   const isIdle = hintState === "idle" || hintState === "listening";
   const isOffline = hintState === "offline_fallback";
   const isError = hintState === "error" || Boolean(errorMessage);
+  const offlineCategory = useOverlayStore((s) => s.offline_fallback_category);
+  const offlineReason = useOverlayStore((s) => s.offline_fallback_reason);
 
   const isHintMode = hintStyle === "short_hints" || hintStyle === "keywords_only";
   const isFullAnswerMode = hintStyle === "full_answer";
@@ -255,6 +301,23 @@ function OverlayHintPanelInner({
           <span className="font-semibold text-amber-200 underline underline-offset-2">Open Chat</span>
         </button>
       )}
+
+      {aiHelpConfirm && (
+        <AiHelpConfirmPanel
+          question={aiHelpConfirm.question}
+          confidence={aiHelpConfirm.confidence}
+          editing={aiHelpConfirm.editing}
+          onQuestionChange={(q) =>
+            useOverlayStore.getState().updateAiHelpConfirmQuestion(q)
+          }
+          onGenerateAnswer={onConfirmGenerateAnswer}
+          onEditQuestion={onConfirmEditQuestion}
+          onRetryListening={onConfirmRetryListening}
+          onTypeManually={onConfirmTypeManually}
+          onCancel={onConfirmCancel}
+        />
+      )}
+
       {/* ── Mode Toggle ───────────────────────────────────────────────── */}
       {onRequestModeChange && (
         <div className="flex flex-col gap-1">
@@ -353,18 +416,32 @@ function OverlayHintPanelInner({
             <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "150ms" }} />
             <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "300ms" }} />
           </div>
-          <span className="text-[12px] text-white/45">{isFullAnswerMode ? "Generating full answer…" : "Generating hints…"}</span>
+          <span className="text-[12px] text-white/45">
+            {isFullAnswerMode
+              ? "Preparing full answer…"
+              : "Preparing hint…"}
+          </span>
         </div>
       )}
 
       {/* ── Idle state ────────────────────────────────────────────────── */}
       {isIdle && !isError && !screenshotHint && !hasContent && <IdleStateContent />}
 
-      {/* ── Offline badge ─────────────────────────────────────────────── */}
+      {/* ── Offline / AI-unavailable category badge ───────────────────── */}
       {isOffline && (
         <div className="flex items-center gap-1.5 rounded-lg bg-amber-500/[0.08] border border-amber-500/15 px-2.5 py-1.5">
           <span className="text-[11px] text-amber-400">⚡</span>
-          <p className="font-mono text-[11px] text-amber-400/70">OFFLINE TEMPLATE — real answer queued</p>
+          <p className="font-mono text-[11px] text-amber-400/70">
+            Offline · {offlineCategory ?? "General"} framework — real answer queued
+          </p>
+        </div>
+      )}
+      {!isOffline && offlineReason === "ai_unavailable" && hasContent && (
+        <div className="flex items-center gap-1.5 rounded-lg bg-amber-500/[0.08] border border-amber-500/15 px-2.5 py-1.5">
+          <span className="text-[11px] text-amber-400">⚡</span>
+          <p className="font-mono text-[11px] text-amber-400/70">
+            AI unavailable · {offlineCategory ?? "General"} framework
+          </p>
         </div>
       )}
 
@@ -445,6 +522,7 @@ function OverlayHintPanelInner({
               }
 
               if (line.type === "bullet") {
+                const parts = line.parts ?? splitInlineRich(line.content);
                 return (
                   <div
                     key={`bul-${i}`}
@@ -452,41 +530,20 @@ function OverlayHintPanelInner({
                     style={{ paddingLeft: (line.indent ?? 0) * 14 }}
                   >
                     <span className="shrink-0 text-indigo-400/70 mt-1.5 text-[7px]">●</span>
-                    <span>
-                      {splitInlineCode(line.content).map((part, j) =>
-                        part.isCode ? (
-                          <code
-                            key={`bulcode-${i}-${j}`}
-                            className="rounded-md bg-black/50 border border-white/[0.07] px-1.5 py-0.5 font-mono text-[11px] text-indigo-200"
-                          >
-                            {part.text}
-                          </code>
-                        ) : (
-                          <span key={`bultxt-${i}-${j}`}>{part.text}</span>
-                        )
-                      )}
+                    <span className={line.bold ? "font-semibold text-white/90" : undefined}>
+                      {renderInlineParts(parts, `bul-${i}`)}
                     </span>
                   </div>
                 );
               }
 
+              const parts = line.parts ?? splitInlineRich(line.content);
               return (
                 <p
                   key={`p-${i}`}
                   className={cn("text-[13px] leading-relaxed text-white/80", line.bold && "font-semibold text-white/90")}
                 >
-                  {splitInlineCode(line.content).map((part, j) =>
-                    part.isCode ? (
-                      <code
-                        key={`pcode-${i}-${j}`}
-                        className="rounded-md bg-black/50 border border-white/[0.07] px-1.5 py-0.5 font-mono text-[11px] text-indigo-200"
-                      >
-                        {part.text}
-                      </code>
-                    ) : (
-                      <span key={`ptxt-${i}-${j}`}>{part.text}</span>
-                    )
-                  )}
+                  {renderInlineParts(parts, `p-${i}`)}
                 </p>
               );
             })}
@@ -514,9 +571,10 @@ function OverlayHintPanelInner({
         <div className="flex items-center gap-1 flex-wrap pt-1">
           <ActionButton
             onClick={() =>
-              useOverlayStore
-                .getState()
-                .setOfflineFallback(structureForMode("star", currentQ))
+              useOverlayStore.getState().setOfflineFallback(structureForMode("star", currentQ), {
+                categoryLabel: "Behavioral / STAR",
+                reason: "offline",
+              })
             }
             title="Show STAR structure (framework only — no invented stories)"
             icon={<Sparkles className="w-3 h-3" />}
@@ -527,7 +585,10 @@ function OverlayHintPanelInner({
             onClick={() =>
               useOverlayStore
                 .getState()
-                .setOfflineFallback(structureForMode("technical", currentQ))
+                .setOfflineFallback(structureForMode("technical", currentQ), {
+                  categoryLabel: "Technical",
+                  reason: "offline",
+                })
             }
             title="Show technical answer structure"
             icon={<AlignLeft className="w-3 h-3" />}
@@ -536,9 +597,10 @@ function OverlayHintPanelInner({
           />
           <ActionButton
             onClick={() =>
-              useOverlayStore
-                .getState()
-                .setOfflineFallback(structureForMode("coding", currentQ))
+              useOverlayStore.getState().setOfflineFallback(structureForMode("coding", currentQ), {
+                categoryLabel: "Coding",
+                reason: "offline",
+              })
             }
             title="Show coding approach structure"
             icon={<FileText className="w-3 h-3" />}
@@ -671,6 +733,122 @@ function OverlayHintPanelInner({
 }
 
 /* ─── SUB-COMPONENTS ────────────────────────────────────────────────────── */
+
+function AiHelpConfirmPanel({
+  question,
+  confidence,
+  editing,
+  onQuestionChange,
+  onGenerateAnswer,
+  onEditQuestion,
+  onRetryListening,
+  onTypeManually,
+  onCancel,
+}: {
+  question: string;
+  confidence: "high" | "medium" | "low";
+  editing: boolean;
+  onQuestionChange: (q: string) => void;
+  onGenerateAnswer?: () => void;
+  onEditQuestion?: () => void;
+  onRetryListening?: () => void;
+  onTypeManually?: () => void;
+  onCancel?: () => void;
+}) {
+  const tierLabel = confidenceTierLabel(confidence);
+  const tierClass =
+    confidence === "high"
+      ? "text-emerald-300 bg-emerald-500/15 border-emerald-500/25"
+      : confidence === "medium"
+        ? "text-amber-200 bg-amber-500/15 border-amber-500/25"
+        : "text-orange-200 bg-orange-500/15 border-orange-500/30";
+
+  return (
+    <div
+      className="rounded-xl border border-indigo-500/25 bg-indigo-500/[0.08] px-3 py-2.5 space-y-2.5"
+      role="region"
+      aria-label="Confirm question before AI Help"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-indigo-300/80">
+          Confirm question
+        </p>
+        <span
+          className={cn(
+            "inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+            tierClass,
+          )}
+        >
+          {tierLabel} confidence
+        </span>
+      </div>
+
+      {editing ? (
+        <textarea
+          value={question}
+          onChange={(e) => onQuestionChange(e.target.value)}
+          rows={3}
+          className="w-full rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 text-[13px] text-white/90 placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-indigo-400/40 resize-y min-h-[4.5rem]"
+          aria-label="Edit detected question"
+          autoFocus
+        />
+      ) : (
+        <p className="text-[13px] text-white/85 leading-snug break-words">{question}</p>
+      )}
+
+      {confidence === "low" && (
+        <p className="text-[11px] text-orange-200/80 leading-snug">
+          Low confidence — edit the question or type manually. Generation starts only when you
+          confirm.
+        </p>
+      )}
+
+      <div className="flex flex-wrap gap-1.5">
+        <button
+          type="button"
+          onClick={onEditQuestion}
+          className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] font-semibold text-white/70 hover:bg-white/[0.08] hover:text-white transition-colors"
+        >
+          <Pencil className="w-3 h-3" />
+          Edit Question
+        </button>
+        <button
+          type="button"
+          onClick={onRetryListening}
+          className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] font-semibold text-white/70 hover:bg-white/[0.08] hover:text-white transition-colors"
+        >
+          <RefreshCw className="w-3 h-3" />
+          Retry Listening
+        </button>
+        <button
+          type="button"
+          onClick={onTypeManually}
+          className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] font-semibold text-white/70 hover:bg-white/[0.08] hover:text-white transition-colors"
+        >
+          <Keyboard className="w-3 h-3" />
+          Type Manually
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] font-semibold text-white/50 hover:bg-white/[0.08] hover:text-white/80 transition-colors"
+        >
+          <X className="w-3 h-3" />
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onGenerateAnswer}
+          disabled={!question.trim()}
+          className="inline-flex items-center gap-1 rounded-lg border border-indigo-400/30 bg-indigo-500/25 px-2.5 py-1 text-[11px] font-bold text-indigo-100 hover:bg-indigo-500/35 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ml-auto"
+        >
+          <Sparkles className="w-3 h-3" />
+          Generate Answer
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function ModeToggleButton({
   active,

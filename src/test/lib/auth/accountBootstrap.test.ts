@@ -305,19 +305,38 @@ describe("classifyAccountLoadFailure extra kinds", () => {
 });
 
 describe("soft-fail helpers", () => {
-  it("keeps in-flight hydrate on session-check timeout", async () => {
-    const { shouldKeepHydrateOnSessionCheckFailure } = await import(
+  it("exports PROFILE_COLD_RETRY_DELAY_MS for cold PostgREST retry pause", async () => {
+    const { PROFILE_COLD_RETRY_DELAY_MS } = await import(
       "@/lib/auth/accountBootstrap"
     );
+    expect(PROFILE_COLD_RETRY_DELAY_MS).toBe(1_500);
+  });
 
+  it("keeps in-flight hydrate on session-check timeout within budget", async () => {
+    const {
+      shouldKeepHydrateOnSessionCheckFailure,
+      MAX_SESSION_CHECK_SOFT_KEEPS,
+    } = await import("@/lib/auth/accountBootstrap");
+
+    expect(MAX_SESSION_CHECK_SOFT_KEEPS).toBe(1);
     expect(
       shouldKeepHydrateOnSessionCheckFailure({
         hasUser: true,
         status: "loading",
         isProfileLoaded: false,
         timedOut: true,
+        softKeepCount: 0,
       }),
     ).toBe(true);
+    expect(
+      shouldKeepHydrateOnSessionCheckFailure({
+        hasUser: true,
+        status: "loading",
+        isProfileLoaded: false,
+        timedOut: true,
+        softKeepCount: MAX_SESSION_CHECK_SOFT_KEEPS,
+      }),
+    ).toBe(false);
     expect(
       shouldKeepHydrateOnSessionCheckFailure({
         hasUser: false,
@@ -326,6 +345,15 @@ describe("soft-fail helpers", () => {
         timedOut: true,
       }),
     ).toBe(false);
+    expect(
+      shouldKeepHydrateOnSessionCheckFailure({
+        hasUser: true,
+        status: "authenticated",
+        isProfileLoaded: true,
+        timedOut: true,
+        softKeepCount: 99,
+      }),
+    ).toBe(true);
   });
 
   it("classifies missing-column errors as schema config failures", async () => {

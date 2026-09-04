@@ -555,13 +555,14 @@ export default function InterviewDay() {
         >
           Continue in browser
         </Button>
-        {!isElectronApp() && (desktopInstallerUrl || desktopInstallerLoading) && (
+        {!isElectronApp() && (
           <DesktopDownloadButton
             fullWidth
             size="md"
             variant="outline"
             webCoachHref={practiceCoachHref}
             showGuideLink={false}
+            compact
           />
         )}
         {!isElectronApp() && !desktopInstallerUrl && !desktopInstallerLoading && (

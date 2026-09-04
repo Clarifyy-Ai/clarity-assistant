@@ -38,6 +38,8 @@ export default function AdminBillingSettings() {
   const [incidents, setIncidents] = useState<ReconciliationIncident[]>([]);
   const [incidentsError, setIncidentsError] = useState<string | null>(null);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [programmeEnabled, setProgrammeEnabled] = useState(true);
+  const [programmeId, setProgrammeId] = useState<string | null>(null);
 
   const loadIncidents = useCallback(async () => {
     const { data, error } = await supabase
@@ -83,6 +85,16 @@ export default function AdminBillingSettings() {
       } else {
         setLoadError("Billing settings are unavailable.");
       }
+
+      const { data: prog } = await supabase
+        .from("referral_programmes")
+        .select("id, status")
+        .eq("version", "referral-v1")
+        .maybeSingle();
+      if (prog?.id) {
+        setProgrammeId(prog.id);
+        setProgrammeEnabled(prog.status === "active");
+      }
     })();
     void loadIncidents();
   }, [loadIncidents]);
@@ -93,23 +105,61 @@ export default function AdminBillingSettings() {
     const { error } = await supabase
       .from("billing_settings")
       .upsert({ id: 1, ...settings, updated_at: new Date().toISOString() });
-    setSaving(false);
     if (error) {
+      setSaving(false);
       const { adminActionFailedMessage } = await import("@/lib/admin/adminErrors");
       toast.error(adminActionFailedMessage(error, "AdminBillingSettings"));
-    } else {
-      const { writeAdminAudit } = await import("@/lib/admin/writeAdminAudit");
-      await writeAdminAudit({
-        action: "update",
-        targetType: "billing_settings",
-        targetId: "1",
-        newValue: {
-          referral_discount_percent: settings.referral_discount_percent,
-          razorpay_enabled: settings.razorpay_enabled,
-        },
-      });
-      toast.success("Billing settings saved");
+      return;
     }
+
+    // Keep active referral programme row in sync for one release (billing_settings + programmes).
+    const targetId =
+      programmeId ??
+      (
+        await supabase
+          .from("referral_programmes")
+          .select("id")
+          .eq("version", "referral-v1")
+          .maybeSingle()
+      ).data?.id ??
+      null;
+
+    if (targetId) {
+      const { error: progErr } = await supabase
+        .from("referral_programmes")
+        .update({
+          status: programmeEnabled ? "active" : "disabled",
+          referrer_credit_reward: settings.referrer_credit_reward,
+          referee_credit_reward: settings.referee_credit_reward,
+          referral_discount_percent: settings.referral_discount_percent,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", targetId);
+      if (progErr) {
+        setSaving(false);
+        const { adminActionFailedMessage } = await import("@/lib/admin/adminErrors");
+        toast.error(adminActionFailedMessage(progErr, "AdminBillingSettings.programme"));
+        return;
+      }
+      setProgrammeId(targetId);
+    }
+
+    setSaving(false);
+    const { writeAdminAudit } = await import("@/lib/admin/writeAdminAudit");
+    await writeAdminAudit({
+      action: "update",
+      targetType: "billing_settings",
+      targetId: "1",
+      newValue: {
+        referral_discount_percent: settings.referral_discount_percent,
+        referrer_credit_reward: settings.referrer_credit_reward,
+        referee_credit_reward: settings.referee_credit_reward,
+        razorpay_enabled: settings.razorpay_enabled,
+        programme_enabled: programmeEnabled,
+        programme_synced: Boolean(targetId),
+      },
+    });
+    toast.success("Billing settings saved");
   }
 
   async function resolveIncident(id: string) {
@@ -183,10 +233,22 @@ export default function AdminBillingSettings() {
       {settings && (
         <>
           <Card className="p-4 space-y-4">
-            <h3 className="font-semibold text-sm">Referral program</h3>
+            <h3 className="font-semibold text-sm">Referral programme</h3>
+            <p className="text-xs text-muted-foreground">
+              Edits update billing_settings and the active referral_programmes row (referral-v1).
+              Historical rewarded attributions keep their original amounts.
+            </p>
             {field("Referral discount on first purchase (%)", "referral_discount_percent")}
             {field("Credits for referrer", "referrer_credit_reward")}
             {field("Credits for new user", "referee_credit_reward")}
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={programmeEnabled}
+                onChange={(e) => setProgrammeEnabled(e.target.checked)}
+              />
+              Programme enabled (active)
+            </label>
           </Card>
 
           <Card className="p-4 space-y-4">

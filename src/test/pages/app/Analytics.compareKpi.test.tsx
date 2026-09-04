@@ -209,5 +209,31 @@ describe("Analytics session KPI scope — BUG-028 / TC-REP-003", () => {
     expect(kpi).toHaveTextContent("Sessions in this comparison");
     expect(kpi).toHaveTextContent(/no comparable sessions/i);
     expect(kpi).not.toHaveTextContent(/^10$|10 sessions/i);
+    expect(screen.getByTestId("compare-empty-state")).toHaveTextContent(
+      "Complete another interview to compare sessions.",
+    );
+    expect(screen.getByRole("button", { name: /Start mock interview/i })).toBeInTheDocument();
+  });
+
+  it("shows one-more-session empty copy when only one comparable exists", async () => {
+    const user = userEvent.setup();
+    useAnalytics.mockReturnValue(
+      analyticsState({
+        recent_sessions: [
+          ...Array.from({ length: 9 }, (_, i) => sessionRow(`skip-${i}`, false)),
+          sessionRow("only-one", true),
+        ],
+      }),
+    );
+    render(
+      <MemoryRouter>
+        <Analytics />
+      </MemoryRouter>,
+    );
+    await user.click(screen.getByRole("tab", { name: "Compare" }));
+    expect(screen.getByTestId("compare-empty-state")).toHaveTextContent(
+      "Complete one more scored interview to unlock comparison.",
+    );
+    expect(screen.getByRole("button", { name: /Start mock interview/i })).toBeInTheDocument();
   });
 });

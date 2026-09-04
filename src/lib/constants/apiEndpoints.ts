@@ -43,6 +43,7 @@ export const EDGE_FUNCTIONS = {
   // Auth & User / GDPR
   DELETE_ACCOUNT:         "delete-account",
   EXPORT_USER_DATA:       "export-user-data",
+  GET_USER_STORAGE_USAGE: "get-user-storage-usage",
 
   // Notifications
   SEND_EMAIL:             "send-email",

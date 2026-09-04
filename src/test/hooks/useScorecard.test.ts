@@ -31,9 +31,12 @@ vi.mock("@/lib/network/fetchEdge", () => ({
   fetchEdgeJson: (...args: unknown[]) => fetchEdgeJson(...args),
 }));
 
+const createShare = vi.fn();
+
 vi.mock("@/lib/supabase/database", () => ({
   scorecardsDB: {
     getBySessionIdForUser: (...args: unknown[]) => getBySessionIdForUser(...args),
+    createShare: (...args: unknown[]) => createShare(...args),
     markShared: vi.fn(),
   },
   sessionAnswersDB: {
@@ -44,10 +47,23 @@ vi.mock("@/lib/supabase/database", () => ({
 vi.mock("@/store/userStore", () => {
   const state = {
     user: { id: "u1" },
-    profile: { privacy_prefs: {} },
+    profile: { privacy_prefs: {}, credits: 100 },
+    credits: 100,
+    isProfileLoaded: true,
   };
   return {
     useAuthStore: Object.assign(() => state, { getState: () => state }),
+  };
+});
+
+vi.mock("@/lib/network/aiErrorUx", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/network/aiErrorUx")>(
+    "@/lib/network/aiErrorUx",
+  );
+  return {
+    ...actual,
+    openUpgradeIfInsufficientCredits: vi.fn(() => false),
+    openUpgradeIfCapabilityRequired: vi.fn(() => false),
   };
 });
 
@@ -80,6 +96,14 @@ const PERSISTED = {
   share_token: null,
   pdf_url: null,
   generated_at: "2026-08-01T00:00:00.000Z",
+  evaluation_status: "completed" as const,
+  eligibility_reason: null,
+  question_count: 1,
+  answer_count: 1,
+  evaluated_answer_count: 1,
+  rubric_version: "scorecard_v2",
+  attempt_count: 1,
+  last_error_code: null,
 };
 
 beforeEach(() => {
@@ -87,6 +111,10 @@ beforeEach(() => {
   getBySessionIdForUser.mockResolvedValue(null);
   listBySessionIdForUser.mockResolvedValue([{ answer: "I led a migration." }]);
   fetchEdgeJson.mockResolvedValue({});
+  createShare.mockResolvedValue({
+    share_token: "abc123def456ghi789jkl012mno345",
+    share_url_path: "/share/abc123def456ghi789jkl012mno345",
+  });
 });
 
 describe("useScorecard — persist-first, no mount AI", () => {
@@ -160,5 +188,161 @@ describe("useScorecard — persist-first, no mount AI", () => {
     });
 
     expect(result.current.isGenerating).toBe(false);
+  });
+
+  it("does not treat overall_score alone as completed when evaluation_status is missing", async () => {
+    getBySessionIdForUser.mockResolvedValue({
+      ...PERSISTED,
+      evaluation_status: null,
+    });
+
+    const { result } = renderHook(() => useScorecard({ sessionId: "sess-1" }));
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.status).not.toBe("scored");
+    expect(result.current.status).toBe("not_scored");
+    expect(result.current.eligibilityCode).toBe("EVALUATION_FAILED");
+    expect(fetchEdgeJson).not.toHaveBeenCalled();
+  });
+
+  it("requires explicit evaluation_status=completed with overall_score to show scored", async () => {
+    getBySessionIdForUser.mockResolvedValue({
+      ...PERSISTED,
+      evaluation_status: "completed",
+      overall_score: 88,
+    });
+
+    const { result } = renderHook(() => useScorecard({ sessionId: "sess-1" }));
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.status).toBe("scored");
+    expect(result.current.eligibilityCode).toBe("SCORECARD_ELIGIBLE");
+  });
+
+  it("polls while processing then becomes scored (BUG 17)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const processing = {
+      ...PERSISTED,
+      overall_score: null as number | null,
+      evaluation_status: "processing" as const,
+      question_scores: [],
+    };
+    getBySessionIdForUser
+      .mockResolvedValueOnce(processing)
+      .mockResolvedValue(PERSISTED);
+
+    const { result } = renderHook(() => useScorecard({ sessionId: "sess-1" }));
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("pending");
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_100);
+    });
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("scored");
+    });
+
+    expect(result.current.scorecard?.overall_score).toBe(72);
+    expect(getBySessionIdForUser.mock.calls.length).toBeGreaterThanOrEqual(2);
+    vi.useRealTimers();
+  });
+
+  it("times out pending poll to failed with retryable message", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const processing = {
+      ...PERSISTED,
+      overall_score: null as number | null,
+      evaluation_status: "processing" as const,
+      question_scores: [],
+    };
+    getBySessionIdForUser.mockResolvedValue(processing);
+
+    const { result } = renderHook(() => useScorecard({ sessionId: "sess-1" }));
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("pending");
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(91_000);
+    });
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("failed");
+    });
+
+    expect(result.current.error).toMatch(/taking too long|Retry/i);
+    vi.useRealTimers();
+  });
+});
+
+describe("isCompletedScorecard", () => {
+  it("requires completed status and finite overall", async () => {
+    const { isCompletedScorecard } = await import("@/hooks/useScorecard");
+    expect(
+      isCompletedScorecard({
+        evaluation_status: "completed",
+        overall_score: 70,
+      }),
+    ).toBe(true);
+    expect(
+      isCompletedScorecard({
+        evaluation_status: "processing",
+        overall_score: 70,
+      }),
+    ).toBe(false);
+    expect(
+      isCompletedScorecard({
+        evaluation_status: "completed",
+        overall_score: null,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("useScorecard — share RPC + export PDF", () => {
+  it("shareScorecard calls createShare and returns a public URL", async () => {
+    getBySessionIdForUser.mockResolvedValue(PERSISTED);
+
+    const { result } = renderHook(() => useScorecard({ sessionId: "sess-1" }));
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("scored");
+    });
+
+    let url: string | null = null;
+    await act(async () => {
+      url = await result.current.shareScorecard();
+    });
+
+    expect(createShare).toHaveBeenCalledWith("sess-1");
+    expect(url).toMatch(/\/share\/abc123def456ghi789jkl012mno345$/);
+    expect(result.current.isShared).toBe(true);
+    expect(result.current.shareToken).toBe("abc123def456ghi789jkl012mno345");
+  });
+
+  it("exportPDF is not aliased to exportJSON", async () => {
+    getBySessionIdForUser.mockResolvedValue(PERSISTED);
+    const exportScorecardPdf = vi.fn();
+    vi.doMock("@/lib/export/scorecardPdf", () => ({ exportScorecardPdf }));
+
+    const { result } = renderHook(() => useScorecard({ sessionId: "sess-1" }));
+
+    await waitFor(() => {
+      expect(result.current.status).toBe("scored");
+    });
+
+    expect(result.current.exportPDF).not.toBe(result.current.exportJSON);
+    expect(typeof result.current.exportPDF).toBe("function");
+    expect(typeof result.current.exportJSON).toBe("function");
   });
 });

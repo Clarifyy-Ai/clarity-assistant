@@ -30,6 +30,8 @@ export type GeminiRequestOptions = {
   model?: string;
   stream?: boolean;
   timeoutMs?: number;
+  /** Total attempts including the first. Default 4. Coach chat uses 2 to stay under client 90s. */
+  maxAttempts?: number;
 };
 
 type GeminiCandidatePart = {
@@ -153,7 +155,10 @@ async function geminiRequest(
   const method = options.stream ? "streamGenerateContent" : "generateContent";
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
-  const maxAttempts = 4;
+  const maxAttempts = Math.max(
+    1,
+    Math.min(options.maxAttempts ?? 4, 8),
+  );
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -303,7 +308,8 @@ export async function geminiChat(
   systemPrompt?: string,
   temperature = 0.7,
   maxTokens = 1024,
-  model?: string
+  model?: string,
+  requestOptions?: Pick<GeminiRequestOptions, "timeoutMs" | "maxAttempts">,
 ): Promise<string> {
   const safeMessages = messages
     .filter((message) => message.role === "user" || message.role === "model")
@@ -337,6 +343,8 @@ export async function geminiChat(
 
   const data = await geminiRequest(payload, {
     model,
+    timeoutMs: requestOptions?.timeoutMs,
+    maxAttempts: requestOptions?.maxAttempts,
   });
 
   return extractTextFromGemini(data);

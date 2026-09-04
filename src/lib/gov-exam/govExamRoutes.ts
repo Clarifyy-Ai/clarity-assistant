@@ -22,7 +22,6 @@ export function canBrowseGovExamsBeforeProfileReady(input: {
   );
 }
 
-
 /** Keep Government Exam usable when profile bootstrap times out — auth is still required. */
 export function canBrowseGovExamsDuringAccountRecovery(input: {
   pathname: string;
@@ -36,4 +35,56 @@ export function canBrowseGovExamsDuringAccountRecovery(input: {
     input.hasUser &&
     !input.mfaBlocked
   );
+}
+
+/** Exam detail deep link — requires a non-empty registry code. */
+export function govExamDetailPath(code: string): string | null {
+  const trimmed = String(code ?? "").trim();
+  if (!trimmed) return null;
+  return `/app/mock-test/exam/${encodeURIComponent(trimmed)}`;
+}
+
+export type GovExamGeneratePathInput = {
+  examId: string;
+  stageId?: string | null;
+  code: string;
+  basis?: string | null;
+  language?: string | null;
+  questionCount?: number | null;
+  topics?: string | null;
+  jobId?: string | null;
+};
+
+/**
+ * Paper generator deep link with encoded exam context.
+ * Returns null when examId and code are both missing (nothing to generate for).
+ */
+export function govExamGeneratePath(input: GovExamGeneratePathInput): string | null {
+  const examId = String(input.examId ?? "").trim();
+  const code = String(input.code ?? "").trim();
+  if (!examId && !code) return null;
+
+  const q = new URLSearchParams();
+  if (examId) q.set("examId", examId);
+  const stageId = String(input.stageId ?? "").trim();
+  if (stageId) q.set("stageId", stageId);
+  if (code) q.set("code", code);
+  const basis = String(input.basis ?? "").trim();
+  if (basis) q.set("basis", basis);
+  const language = String(input.language ?? "").trim();
+  if (language) q.set("language", language);
+  if (
+    typeof input.questionCount === "number" &&
+    Number.isFinite(input.questionCount) &&
+    input.questionCount > 0
+  ) {
+    q.set("questionCount", String(Math.floor(input.questionCount)));
+  }
+  const topics = String(input.topics ?? "").trim();
+  if (topics) q.set("topics", topics);
+  const jobId = String(input.jobId ?? "").trim();
+  if (jobId) q.set("jobId", jobId);
+
+  const search = q.toString();
+  return search ? `/app/mock-test/generate?${search}` : "/app/mock-test/generate";
 }

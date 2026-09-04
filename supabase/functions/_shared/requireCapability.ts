@@ -7,7 +7,7 @@
  *   free/starter = 0, pro/elite = 2, enterprise = 4
  */
 
-import { launchPlanRank, normalizePlanId, type CanonicalPlanId } from "./billingCatalog.ts";
+import { launchPlanRank, type CanonicalPlanId } from "./billingCatalog.ts";
 import { errorResponse } from "./utils.ts";
 import {
   CAPABILITY_KILL_FLAG,
@@ -58,9 +58,10 @@ export function hasCapability(
   planId: string | null | undefined,
   capability: Capability,
 ): boolean {
-  const id = normalizePlanId(planId);
-  if (!id) return false;
-  return launchPlanRank(id) >= CAPABILITY_MIN_RANK[capability];
+  // Unknown / legacy plan strings fall back via launchPlanRank → free,
+  // so free-tier capabilities (e.g. detailed_debrief) stay available for Pro
+  // aliases that are not yet in the alias table — never blank-deny entitled users.
+  return launchPlanRank(planId) >= CAPABILITY_MIN_RANK[capability];
 }
 
 export function requireCapability(

@@ -31,10 +31,42 @@ import {
 import { loadPersistedMicDeviceId } from "@/lib/audio/micDevicePersistence";
 import { generateId } from "@/lib/utils";
 import { processUtteranceForDiarization } from "@/lib/audio/diarization";
+import { resolvePostMicSttPipeline } from "@/lib/audio/interviewerChannelState";
 import { VADDetector, SilenceBoundaryDetector } from "@/lib/audio/vadDetector";
 import { WPMTracker } from "@/lib/audio/wpmTracker";
 import { toast } from "sonner";
-import type { Speaker, TranscriptUtterance } from "@/types/audio.types";
+import type { Speaker, TranscriptUtterance, TranscriptionProviderStatus } from "@/types/audio.types";
+import { joinRecentInterviewerText } from "@/lib/session/aiHelpConfirm";
+import {
+  buildChannelHealth,
+  ENERGY_THRESHOLD,
+  EMPTY_CHANNEL_METRICS,
+  emptyChannelHealth,
+  isChannelUiActive,
+  mergeFrameHealth,
+  readTrackFlags,
+  type AudioChannelMetrics,
+} from "@/lib/audio/audioChannelHealth";
+
+function mapProviderToHealthStt(
+  status: TranscriptionProviderStatus | string | undefined,
+): AudioChannelMetrics["sttStatus"] {
+  switch (status) {
+    case "connecting":
+      return "connecting";
+    case "connected":
+      return "connected";
+    case "reconnecting":
+      return "reconnecting";
+    case "error":
+      return "error";
+    case "unavailable":
+      return "unavailable";
+    default:
+      return "idle";
+  }
+}
+
 
 // ─────────────────────────────────────────────────────────────────
 // useAudioSession — Live dual-channel pipeline:
@@ -80,6 +112,15 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
   const fillerRTRef = useRef<RealTimeFillerCounter | null>(null);
   const wpmRef = useRef<WPMTracker | null>(null);
   const levelAnalyserRef = useRef<ReturnType<typeof createLevelAnalyser> | null>(null);
+  const systemLevelAnalyserRef = useRef<ReturnType<typeof createLevelAnalyser> | null>(null);
+  const healthTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const interviewerMonitorStartedAtRef = useRef<number | null>(null);
+  const micMonitorStartedAtRef = useRef<number | null>(null);
+  const systemRmsRef = useRef(0);
+  const systemLastEnergyAtRef = useRef<number | null>(null);
+  const micLastEnergyAtRef = useRef<number | null>(null);
+  const silentSourceToastShownRef = useRef(false);
+  const interviewerConnectFailedRef = useRef(false);
   const cleanupMicRef = useRef<(() => void) | null>(null);
   const cleanupSysRef = useRef<(() => void) | null>(null);
   const cleanupDevicesRef = useRef<(() => void) | null>(null);
@@ -90,19 +131,98 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
   const lastAudioAtRef = useRef(0);
   /** True while a dedicated interviewer (tab) Deepgram client is connected. */
   const hasInterviewerChannelRef = useRef(false);
+  /** Frozen interviewer text from the last AI Help click (stable confirm window). */
+  const frozenInterviewerSnapshotRef = useRef<string | null>(null);
   const optsRef = useRef(opts);
   optsRef.current = opts;
 
   const markInterviewerChannel = useCallback((active: boolean) => {
     hasInterviewerChannelRef.current = active;
     const store = useAudioStore.getState();
+    store.setInterviewerChannelActive(active);
     store.setSystemAudioAvailable(active);
     if (active) {
+      interviewerConnectFailedRef.current = false;
+      interviewerMonitorStartedAtRef.current = Date.now();
+      silentSourceToastShownRef.current = false;
       if (store.pipeline_status === "microphone_only") {
         store.setPipelineStatus("listening");
       }
     } else if (isStartedRef.current && store.deepgram_status === "connected") {
       store.setPipelineStatus("microphone_only");
+      interviewerMonitorStartedAtRef.current = null;
+      store.patchChannelHealth("interviewer", emptyChannelHealth());
+    }
+    if (!active) {
+      store.resetInterviewerCaptureHealth();
+      systemLevelAnalyserRef.current?.disconnect();
+      systemLevelAnalyserRef.current = null;
+      systemRmsRef.current = 0;
+      systemLastEnergyAtRef.current = null;
+    }
+  }, []);
+
+  const publishChannelHealth = useCallback(() => {
+    if (!isStartedRef.current) return;
+    const store = useAudioStore.getState();
+    const service = transcriptionServiceRef.current;
+    const now = Date.now();
+
+    const sysAnalyser = systemLevelAnalyserRef.current;
+    if (sysAnalyser) {
+      const sysLevel = sysAnalyser.getLevel();
+      systemRmsRef.current = sysLevel;
+      if (sysLevel >= ENERGY_THRESHOLD) {
+        systemLastEnergyAtRef.current = now;
+      }
+    }
+
+    const micProbe = service?.getChannelHealthProbe("candidate");
+    const micStream = store.streams.mic_stream;
+    const micTrack = readTrackFlags(micStream);
+    let micMetrics: AudioChannelMetrics = {
+      ...EMPTY_CHANNEL_METRICS,
+      ...micTrack,
+      rmsLevel: store.levels?.current_level ?? 0,
+      lastEnergyAt: micLastEnergyAtRef.current,
+      sttStatus: mapProviderToHealthStt(
+        micProbe?.sttStatus ?? store.transcription_provider_status,
+      ),
+      lastTranscriptEventAt: micProbe?.lastTranscriptEventAt ?? null,
+      monitoringStartedAt: micMonitorStartedAtRef.current,
+      connectFailed: false,
+      fatalError: false,
+    };
+    micMetrics = mergeFrameHealth(micMetrics, micProbe?.frames ?? null);
+    store.patchChannelHealth("mic", buildChannelHealth(micMetrics, now));
+
+    const intProbe = service?.getChannelHealthProbe("interviewer");
+    const sysStream = store.streams.system_stream;
+    const sysTrack = readTrackFlags(sysStream);
+    let intMetrics: AudioChannelMetrics = {
+      ...EMPTY_CHANNEL_METRICS,
+      ...sysTrack,
+      rmsLevel: systemRmsRef.current,
+      lastEnergyAt: systemLastEnergyAtRef.current,
+      sttStatus: mapProviderToHealthStt(intProbe?.sttStatus),
+      lastTranscriptEventAt: intProbe?.lastTranscriptEventAt ?? null,
+      monitoringStartedAt: interviewerMonitorStartedAtRef.current,
+      connectFailed: interviewerConnectFailedRef.current,
+      fatalError: false,
+    };
+    intMetrics = mergeFrameHealth(intMetrics, intProbe?.frames ?? null);
+    const interviewerHealth = buildChannelHealth(intMetrics, now);
+    store.patchChannelHealth("interviewer", interviewerHealth);
+
+    if (
+      interviewerHealth.status === "silent_source" &&
+      !silentSourceToastShownRef.current
+    ) {
+      silentSourceToastShownRef.current = true;
+      toast.warning(
+        "Tab audio is connected but no interviewer speech is detected — check Share tab audio, meeting mute, or the shared surface.",
+        { duration: 10_000 },
+      );
     }
   }, []);
 
@@ -362,14 +482,16 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       const analyser = createLevelAnalyser(micStream);
       levelAnalyserRef.current = analyser;
       lastAudioAtRef.current = Date.now();
+      micMonitorStartedAtRef.current = Date.now();
       levelTimerRef.current = setInterval(() => {
         if (!isStartedRef.current) return;
         const level = analyser.getLevel();
         const currentStore = useAudioStore.getState();
         currentStore.setCurrentLevel(level);
         currentStore.setIsSpeaking(level > 0.015);
-        if (level > 0.01) {
+        if (level > ENERGY_THRESHOLD) {
           lastAudioAtRef.current = Date.now();
+          micLastEnergyAtRef.current = Date.now();
           if (
             currentStore.pipeline_status !== "microphone_only" &&
             currentStore.pipeline_status !== "transcribing"
@@ -390,6 +512,11 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
           });
         }
       }, 100);
+
+      if (healthTimerRef.current) clearInterval(healthTimerRef.current);
+      healthTimerRef.current = setInterval(() => {
+        publishChannelHealth();
+      }, 500);
 
       const vadNoiseFloor =
         useAudioStore.getState().vad_config?.noise_floor ?? 0.05;
@@ -437,20 +564,16 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       try {
         await connectTranscriptionChannel(micStream, "candidate");
 
-        if (opts.enableSystemAudio) {
-          markInterviewerChannel(false);
-          store.setPipelineStatus("microphone_only");
-        }
+        // Auto tab-share may already have connected interviewer (setTimeout(0)).
+        // Never clear hasInterviewerChannelRef / force microphone_only in that case.
+        const pipeline = resolvePostMicSttPipeline({
+          enableSystemAudio: Boolean(opts.enableSystemAudio),
+          interviewerChannelActive: hasInterviewerChannelRef.current,
+        });
+        store.setPipelineStatus(pipeline);
 
         store.setDeepgramStatus("connected");
         store.setTokenState("ready");
-        if (hasInterviewerChannelRef.current) {
-          store.setPipelineStatus("listening");
-        } else {
-          store.setPipelineStatus(
-            opts.enableSystemAudio ? "microphone_only" : "listening",
-          );
-        }
         useOverlayStore.getState().setSessionPipelineState("listening");
       } catch (sttErr) {
         console.warn("[useAudioSession] Live transcription unavailable:", sttErr);
@@ -536,16 +659,23 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     opts.micOptional,
     connectTranscriptionChannel,
     markInterviewerChannel,
+    publishChannelHealth,
   ]);
 
   const stop = useCallback((stopOpts?: AudioStopOptions) => {
     const preserveTranscript = stopOpts?.preserveTranscript === true;
     isStartedRef.current = false;
     hasInterviewerChannelRef.current = false;
+    useAudioStore.getState().setInterviewerChannelActive(false);
+    useAudioStore.getState().resetInterviewerCaptureHealth();
 
     if (levelTimerRef.current) {
       clearInterval(levelTimerRef.current);
       levelTimerRef.current = null;
+    }
+    if (healthTimerRef.current) {
+      clearInterval(healthTimerRef.current);
+      healthTimerRef.current = null;
     }
 
     transcriptionServiceRef.current?.destroy({
@@ -561,6 +691,12 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
 
     levelAnalyserRef.current?.disconnect();
     levelAnalyserRef.current = null;
+    systemLevelAnalyserRef.current?.disconnect();
+    systemLevelAnalyserRef.current = null;
+    micMonitorStartedAtRef.current = null;
+    interviewerMonitorStartedAtRef.current = null;
+    interviewerConnectFailedRef.current = false;
+    silentSourceToastShownRef.current = false;
 
     fillerAccRef.current = null;
     fillerRTRef.current = null;
@@ -592,6 +728,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       store.setPipelineStatus("idle");
       store.updateInterimText("");
     } else {
+      frozenInterviewerSnapshotRef.current = null;
       store.resetAudio();
       store.setPipelineStatus("ended");
       store.setTranscriptionProviderStatus("ended");
@@ -677,11 +814,11 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     const store = useAudioStore.getState();
     const currentSysStream = store.streams.system_stream;
 
-    if (currentSysStream) {
+    if (currentSysStream || hasInterviewerChannelRef.current) {
       transcriptionServiceRef.current?.disconnectChannel("interviewer");
       cleanupSysRef.current?.();
       cleanupSysRef.current = null;
-      stopStream(currentSysStream);
+      if (currentSysStream) stopStream(currentSysStream);
       store.setSystemStream(null);
       markInterviewerChannel(false);
       toast.message(
@@ -703,40 +840,114 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     const proceed = await confirmTabAudioCapture();
     if (!proceed) return;
 
+    interviewerConnectFailedRef.current = false;
+    store.patchChannelHealth(
+      "interviewer",
+      buildChannelHealth({
+        ...EMPTY_CHANNEL_METRICS,
+        hasStream: false,
+        trackReadyState: "none",
+        sttStatus: "connecting",
+        monitoringStartedAt: Date.now(),
+      }),
+    );
+
     try {
       const sysStream = await captureSystemAudio();
+      const track = sysStream.getAudioTracks()[0];
+      if (!track || track.readyState !== "live") {
+        stopStream(sysStream);
+        throw Object.assign(new Error("Tab audio track is not live."), {
+          code: "SYSTEM_AUDIO_FAILED",
+        });
+      }
+      if (!track.enabled) {
+        stopStream(sysStream);
+        throw Object.assign(new Error("Tab audio track is disabled."), {
+          code: "SYSTEM_AUDIO_FAILED",
+        });
+      }
+
+      // Keep UI in connecting until STT connects — do not mark interviewer active yet.
       store.setSystemStream(sysStream);
+      interviewerMonitorStartedAtRef.current = Date.now();
+      systemLevelAnalyserRef.current?.disconnect();
+      const sysAnalyser = createLevelAnalyser(sysStream);
+      systemLevelAnalyserRef.current = sysAnalyser;
 
       cleanupSysRef.current = watchStreamEnded(sysStream, () => {
         if (!isStartedRef.current) return;
         transcriptionServiceRef.current?.disconnectChannel("interviewer");
+        systemLevelAnalyserRef.current?.disconnect();
+        systemLevelAnalyserRef.current = null;
         store.setSystemStream(null);
         markInterviewerChannel(false);
         toast.warning("Interviewer audio unavailable — tab share ended.");
+        publishChannelHealth();
       });
 
       await connectTranscriptionChannel(sysStream, "interviewer");
       markInterviewerChannel(true);
       store.setPipelineStatus("listening");
       useOverlayStore.getState().setSessionPipelineState("listening");
-      toast.success("Interviewer (tab) audio connected.");
+      publishChannelHealth();
+      toast.success("Interviewer (tab) audio connected — waiting for speech.");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "System audio capture failed";
+      cleanupSysRef.current?.();
+      cleanupSysRef.current = null;
+      systemLevelAnalyserRef.current?.disconnect();
+      systemLevelAnalyserRef.current = null;
+      const stale = useAudioStore.getState().streams.system_stream;
+      if (stale) {
+        stopStream(stale);
+        useAudioStore.getState().setSystemStream(null);
+      }
+      interviewerConnectFailedRef.current = true;
+      markInterviewerChannel(false);
+      store.patchChannelHealth(
+        "interviewer",
+        buildChannelHealth({
+          ...EMPTY_CHANNEL_METRICS,
+          connectFailed: true,
+          fatalError: false,
+        }),
+      );
+
+      const tabMiss =
+        err instanceof Error &&
+        (err.name === "TabAudioCaptureError" ||
+          (err as { code?: string }).code === "NO_SHARE_AUDIO_TICKED");
+      const message = tabMiss
+        ? err instanceof Error
+          ? err.message
+          : "Share tab audio was not enabled."
+        : err instanceof Error
+          ? err.message
+          : typeof err === "object" &&
+              err !== null &&
+              "message" in err &&
+              typeof (err as { message: unknown }).message === "string"
+            ? (err as { message: string }).message
+            : "System audio capture failed";
       store.setStreamError({
         code: "SYSTEM_AUDIO_FAILED",
         message,
         recoverable: true,
-        suggestion: "Make sure you selected 'Share audio' in the dialog. Try again.",
+        suggestion: tabMiss
+          ? "In the share dialog, select the interview tab and tick “Share tab audio”, then try again."
+          : "Make sure you selected 'Share audio' in the dialog. Try again.",
       });
-      markInterviewerChannel(false);
+      toast.message(message, { duration: 8000 });
     }
-  }, [connectTranscriptionChannel, markInterviewerChannel]);
+  }, [connectTranscriptionChannel, markInterviewerChannel, publishChannelHealth]);
 
   useEffect(() => {
     toggleSystemAudioRef.current = toggleSystemAudio;
   }, [toggleSystemAudio]);
 
-  const isSystemAudioActive = useAudioStore((s) => s.streams.system_stream !== null);
+  const isSystemAudioActive = useAudioStore((s) =>
+    isChannelUiActive(s.channel_health?.interviewer?.status ?? "disconnected"),
+  );
 
   const reconnect = useCallback(async () => {
     useOverlayStore.getState().setSessionPipelineState("reconnecting");
@@ -744,8 +955,20 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     const service = transcriptionServiceRef.current;
     if (service && isStartedRef.current) {
       try {
+        const store = useAudioStore.getState();
+        const sys = store.streams.system_stream;
+        if (sys && sys.getAudioTracks().every((t) => t.readyState === "ended")) {
+          store.setSystemStream(null);
+          markInterviewerChannel(false);
+        }
+        interviewerMonitorStartedAtRef.current = hasInterviewerChannelRef.current
+          ? Date.now()
+          : null;
+        micMonitorStartedAtRef.current = Date.now();
+        store.resetInterviewerCaptureHealth();
         await service.reconnectAll();
         useOverlayStore.getState().setSessionPipelineState("listening");
+        publishChannelHealth();
         return;
       } catch {
         /* fall through to restore start */
@@ -754,7 +977,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     if (!isStartedRef.current) {
       await start({ restore: true });
     }
-  }, [start]);
+  }, [start, markInterviewerChannel, publishChannelHealth]);
 
   const getFillerSnapshot = useCallback(
     () => fillerAccRef.current?.getSnapshot() ?? [],
@@ -765,6 +988,32 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     [],
   );
   const getAverageWPM = useCallback(() => wpmRef.current?.getAverageWPM() ?? 0, []);
+
+  /**
+   * Freeze recent interviewer transcript for Manual AI Help.
+   * Prefers LiveTranscriptionService ring buffer; falls back to audioStore utterances.
+   */
+  const snapshotRecentInterviewerTranscript = useCallback(
+    (opts?: { maxChars?: number }) => {
+      const maxChars = opts?.maxChars ?? 2_000;
+      const fromService =
+        transcriptionServiceRef.current?.snapshotRecentInterviewerTranscript(maxChars) ??
+        "";
+      const fromStore = joinRecentInterviewerText(
+        useAudioStore.getState().transcript?.utterances,
+        { maxChars },
+      );
+      const text = (fromService.trim() || fromStore).trim();
+      frozenInterviewerSnapshotRef.current = text;
+      return text;
+    },
+    [],
+  );
+
+  const getFrozenInterviewerTranscript = useCallback(
+    () => frozenInterviewerSnapshotRef.current ?? "",
+    [],
+  );
 
   useEffect(() => {
     if (!opts.enableSystemAudio) return;
@@ -819,6 +1068,8 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       getFillerSnapshot,
       getWPMDataPoints,
       getAverageWPM,
+      snapshotRecentInterviewerTranscript,
+      getFrozenInterviewerTranscript,
       isCapturing,
       isMuted,
       deepgramStatus,
@@ -846,6 +1097,8 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       getFillerSnapshot,
       getWPMDataPoints,
       getAverageWPM,
+      snapshotRecentInterviewerTranscript,
+      getFrozenInterviewerTranscript,
       isCapturing,
       isMuted,
       deepgramStatus,

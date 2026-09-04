@@ -1,6 +1,6 @@
 // Security-hardened build v2
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   BookmarkPlus,
   CheckCircle2,
@@ -19,7 +19,7 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { formatGovExamOperationError } from "@/lib/gov-exam/examOperationErrors";
-import { saveTestAnswers, startExam } from "@/lib/gov-exam/api";
+import { saveTestAnswers, startExam, pauseTest, resumeTest } from "@/lib/gov-exam/api";
 import { ApiClientError } from "@/lib/api/apiClient";
 import {
   buildPersistableAnswerRows,
@@ -32,7 +32,8 @@ import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/env";
 import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { InlineSaveStatus } from "@/components/async/InlineSaveStatus";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { isUsableQuestionImageUrl, resolveQuestionImageUrl, uniqueImageUrls } from "@/lib/mock-test/questionMedia";
 import { dedupeExactQuestionCopies } from "@/lib/mock-test/dedupeQuestions";
@@ -50,6 +51,7 @@ import {
   examTimerOriginKey,
   remainingFromTimerOrigin,
   canRenderExamTimer,
+  isTimerPaused,
   type ExamTimerOrigin,
 } from "@/lib/gov-exam/examTimer";
 import {
@@ -71,6 +73,27 @@ function resultsPathForTest(testId: string, config: unknown): string {
   return source === "exam_template"
     ? `/app/assessments/results/${testId}`
     : `/app/mock-test/results/${testId}`;
+}
+
+function isAssessmentProductPath(pathname: string): boolean {
+  return pathname.startsWith("/app/assessments");
+}
+
+function catalogPathForTest(config: unknown, pathname = ""): string {
+  const source =
+    config && typeof config === "object" && "source" in config
+      ? String((config as { source?: string }).source ?? "")
+      : "";
+  if (source === "exam_template" || isAssessmentProductPath(pathname)) {
+    return "/app/assessments";
+  }
+  return "/app/mock-test";
+}
+
+function catalogLabelForTest(config: unknown, pathname = ""): string {
+  return catalogPathForTest(config, pathname) === "/app/assessments"
+    ? "Back to assessments"
+    : "Back to mock tests";
 }
 
 type LearningQuizConfig = {
@@ -216,6 +239,8 @@ interface MockTest {
   time_limit_minutes: number | null;
   started_at?: string | null;
   expires_at?: string | null;
+  paused_at?: string | null;
+  total_paused_ms?: number | null;
 }
 
 interface TestResponseRow {
@@ -269,6 +294,7 @@ function computeRemainingSeconds(test: MockTest): number {
     test.time_limit_minutes,
     Date.now(),
     test.expires_at,
+    test.paused_at,
   );
 }
 
@@ -403,6 +429,7 @@ function estimateAttempted(
 export default function TestSession() {
   const { testId } = useParams<{ testId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const user = useAuthStore((s) => s.user);
 
   const [test, setTest] = useState<MockTest | null>(null);
@@ -412,14 +439,22 @@ export default function TestSession() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [timerOrigin, setTimerOrigin] = useState<ExamTimerOrigin | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadFailure, setLoadFailure] = useState<null | {
+    kind: "not_found" | "temporary";
+    message: string;
+  }>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [savingBookmark, setSavingBookmark] = useState(false);
   const [paused, setPaused] = useState(false);
   const [pausedAt, setPausedAt] = useState<number | null>(null);
+  const [saveUiStatus, setSaveUiStatus] = useState<"idle" | "saving" | "saved" | "failed">("idle");
+  const [pausing, setPausing] = useState(false);
   const [startingTest, setStartingTest] = useState(false);
   const [timerWarningAnnouncement, setTimerWarningAnnouncement] = useState("");
 
+  const catalogHref = catalogPathForTest(test?.config, location.pathname);
+  const catalogLabel = catalogLabelForTest(test?.config, location.pathname);
   const lastTimerWarnRef = useRef<number | null>(null);
   const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -518,6 +553,10 @@ export default function TestSession() {
   useEffect(() => {
     if (!hasTimer || !timerOrigin) return;
     if (!test || test.status !== "IN_PROGRESS") return;
+    if (isTimerPaused(timerOrigin) || paused) {
+      setTimeLeft(remainingFromTimerOrigin(timerOrigin));
+      return;
+    }
 
     const origin = timerOrigin;
     const tick = () => {
@@ -529,6 +568,8 @@ export default function TestSession() {
           origin.timeLimitMinutes,
           Date.now(),
           origin.expiresAt,
+          origin.pausedAt,
+          origin.attemptPhase,
         )
       ) {
         queueMicrotask(() => {
@@ -545,7 +586,7 @@ export default function TestSession() {
     };
     // Official clock is frozen to timerOrigin so bootstrap refresh cannot reset it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [test?.id, test?.status, examTimerOriginKey(timerOrigin), lifecycleEpoch]);
+  }, [test?.id, test?.status, examTimerOriginKey(timerOrigin), lifecycleEpoch, paused]);
 
   useEffect(() => {
     if (!testId || !user?.id) return;
@@ -663,6 +704,7 @@ export default function TestSession() {
 
   async function loadTest() {
     setLoading(true);
+    setLoadFailure(null);
 
     try {
       const { data: testData, error: testError } = await supabase
@@ -672,9 +714,18 @@ export default function TestSession() {
         .eq("user_id", user!.id)
         .maybeSingle();
 
-      if (testError || !testData) {
-        toast.error("Test not found.");
-        navigate("/app/mock-test");
+      if (testError) {
+        setLoadFailure({
+          kind: "temporary",
+          message: testError.message || "Failed to load test. Please retry.",
+        });
+        return;
+      }
+      if (!testData) {
+        setLoadFailure({
+          kind: "not_found",
+          message: "This test session was not found or you do not have access.",
+        });
         return;
       }
 
@@ -825,12 +876,22 @@ export default function TestSession() {
       setQuestions(orderedQuestions);
       setResponses(restoredResponses);
       setTimeLeft(remainingSeconds);
+      const isPaused =
+        loadedTest.attempt_phase === "PAUSED" || Boolean(loadedTest.paused_at);
+      setPaused(isPaused);
+      setPausedAt(
+        isPaused && loadedTest.paused_at
+          ? Date.parse(loadedTest.paused_at)
+          : null,
+      );
       timeSpentMapRef.current = restoredTimeMap;
       answerVersionRef.current = restoredVersions;
     } catch (error) {
       console.error("[TestSession] load error:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to load test.");
-      navigate("/app/mock-test");
+      const message =
+        error instanceof Error ? error.message : "Failed to load test.";
+      toast.error(message);
+      setLoadFailure({ kind: "temporary", message });
     } finally {
       if (mountedRef.current) setLoading(false);
     }
@@ -862,20 +923,59 @@ export default function TestSession() {
     }
   }
 
-  function handlePause() {
-    if (!test || paused) return;
-    setPausedAt(Date.now());
-    setPaused(true);
-    void saveResponses();
-    toast.message("Test paused. Official remaining time still counts down from start.");
+  async function handlePause() {
+    if (!test || paused || pausing) return;
+    setPausing(true);
+    try {
+      await saveResponses();
+      const result = await pauseTest(test.id);
+      const pausedAtIso =
+        typeof result.pausedAt === "string" ? result.pausedAt : new Date().toISOString();
+      const updated: MockTest = {
+        ...test,
+        attempt_phase: "PAUSED",
+        paused_at: pausedAtIso,
+        expires_at: result.expiresAt ?? test.expires_at,
+      };
+      setTest(updated);
+      adoptTimerOrigin(updated);
+      setTimeLeft(computeRemainingSeconds(updated));
+      setPausedAt(Date.parse(pausedAtIso));
+      setPaused(true);
+      toast.message("Test paused. Remaining time is frozen until you resume.");
+    } catch (err) {
+      console.error("[TestSession] pause error:", err);
+      toast.error(formatGovExamOperationError(err));
+    } finally {
+      setPausing(false);
+    }
   }
 
   async function handleResume() {
-    if (!test || !paused) return;
-    setPausedAt(null);
-    setPaused(false);
-    setTimeLeft(computeRemainingSeconds(test));
-    toast.message("Timer resumed from remaining official time.");
+    if (!test || !paused || pausing) return;
+    setPausing(true);
+    try {
+      const result = await resumeTest(test.id);
+      const updated: MockTest = {
+        ...test,
+        attempt_phase: "ACTIVE",
+        paused_at: null,
+        expires_at: result.expiresAt ?? test.expires_at,
+        total_paused_ms: result.totalPausedMs ?? test.total_paused_ms,
+      };
+      setTest(updated);
+      adoptTimerOrigin(updated);
+      setPausedAt(null);
+      setPaused(false);
+      setTimeLeft(computeRemainingSeconds(updated));
+      setLifecycleEpoch((n) => n + 1);
+      toast.message("Timer resumed from remaining official time.");
+    } catch (err) {
+      console.error("[TestSession] resume error:", err);
+      toast.error(formatGovExamOperationError(err));
+    } finally {
+      setPausing(false);
+    }
   }
 
   async function saveResponses(options?: { throwOnError?: boolean }) {
@@ -899,6 +999,7 @@ export default function TestSession() {
       return;
     }
     saveInFlightRef.current = true;
+    setSaveUiStatus("saving");
 
     try {
       const currentId = currentQuestion?.id;
@@ -921,7 +1022,10 @@ export default function TestSession() {
         clientUpdatedAt,
         answerVersionRef.current,
       ).filter((answer) => !staleAnswerIdsRef.current.has(answer.questionId));
-      if (answers.length === 0) return;
+      if (answers.length === 0) {
+        setSaveUiStatus("idle");
+        return;
+      }
 
       const result = await saveTestAnswers(testId, answers);
       answerVersionRef.current = mergeServerAnswerVersions(
@@ -932,7 +1036,9 @@ export default function TestSession() {
         staleAnswerIdsRef.current.add(questionId);
       }
       if (user?.id) clearAttemptRecovery(testId, user.id);
+      setSaveUiStatus("saved");
     } catch (error) {
+      setSaveUiStatus("failed");
       const code = error instanceof ApiClientError ? error.code : undefined;
       if (code && lockAnswerPersistence(code)) {
         if (!options?.throwOnError) return;
@@ -982,7 +1088,7 @@ export default function TestSession() {
   }
 
   function updateAnswer(answer: string) {
-    if (!currentQuestion) return;
+    if (!currentQuestion || paused) return;
     staleAnswerIdsRef.current.delete(currentQuestion.id);
 
     setResponses((prev) => {
@@ -1235,6 +1341,36 @@ export default function TestSession() {
     );
   }
 
+  if (loadFailure) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background p-6">
+        <div className="max-w-md text-center space-y-4">
+          <p className="text-foreground font-semibold">
+            {loadFailure.kind === "not_found" ? "Exam not found" : "Couldn’t load this exam"}
+          </p>
+          <p className="text-sm text-muted-foreground">{loadFailure.message}</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {loadFailure.kind === "temporary" && (
+              <Button
+                onClick={() => {
+                  void loadTest();
+                }}
+              >
+                Retry
+              </Button>
+            )}
+            <Button
+              variant="secondary"
+              onClick={() => navigate(catalogHref)}
+            >
+              {catalogLabel}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!test || !currentQuestion) {
     return (
       <div className="flex h-screen items-center justify-center bg-background p-6">
@@ -1243,8 +1379,11 @@ export default function TestSession() {
           <p className="text-sm text-muted-foreground">
             The test may not have been created (network error) or this link is invalid.
           </p>
-          <Button variant="secondary" onClick={() => navigate("/app/mock-test")}>
-            Back to mock tests
+          <Button
+            variant="secondary"
+            onClick={() => navigate(catalogHref)}
+          >
+            {catalogLabel}
           </Button>
         </div>
       </div>
@@ -1303,7 +1442,11 @@ export default function TestSession() {
             </p>
           )}
           <div className="flex gap-2">
-            <Button variant="outline" className="flex-1" onClick={() => navigate("/app/mock-test")}>
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => navigate(catalogHref)}
+            >
               Cancel
             </Button>
             <Button className="flex-1" onClick={() => void handleStartTest()} disabled={startingTest}>
@@ -1411,7 +1554,9 @@ export default function TestSession() {
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="flex w-[85vw] max-w-xs flex-col p-0">
-              <div className="border-b p-4 font-bold bg-muted/20">Questions Navigator</div>
+              <SheetTitle className="border-b p-4 font-bold bg-muted/20 text-base">
+                Questions Navigator
+              </SheetTitle>
               <div className="flex-1 overflow-y-auto p-4">
                 <NavigatorGrid />
               </div>
@@ -1644,9 +1789,11 @@ export default function TestSession() {
                     <button
                       key={option.label}
                       type="button"
+                      disabled={paused}
                       onClick={() => updateAnswer(option.label)}
                       className={cn(
                         "group flex w-full items-center gap-4 rounded-xl border-2 p-4 text-left transition-all duration-200",
+                        paused && "cursor-not-allowed opacity-60",
                         currentResponse?.answer === option.label
                           ? "border-blue-500 bg-blue-500/10 shadow-sm"
                           : "border-border hover:border-blue-500/40 hover:bg-muted/30"
@@ -1862,14 +2009,24 @@ export default function TestSession() {
           <div className="mt-auto border-t border-border bg-muted/5 p-5 space-y-2">
             {hasTimer && (
               paused ? (
-                <Button variant="outline" size="sm" className="w-full" onClick={() => void handleResume()}>
+                <Button variant="outline" size="sm" className="w-full" loading={pausing} onClick={() => void handleResume()}>
                   Resume Test
                 </Button>
               ) : (
-                <Button variant="outline" size="sm" className="w-full" onClick={handlePause}>
+                <Button variant="outline" size="sm" className="w-full" loading={pausing} onClick={() => void handlePause()}>
                   Pause Test
                 </Button>
               )
+            )}
+            {saveUiStatus !== "idle" && (
+              <div className="flex justify-center" data-testid="answer-save-status">
+                <InlineSaveStatus
+                  status={saveUiStatus}
+                  onRetry={
+                    saveUiStatus === "failed" ? () => void saveResponses() : undefined
+                  }
+                />
+              </div>
             )}
             <Button
               size="lg"
@@ -1892,7 +2049,7 @@ export default function TestSession() {
           <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 text-center shadow-2xl space-y-4">
             <h2 className="text-xl font-black text-foreground">Test Paused</h2>
             <p className="text-sm text-muted-foreground">
-              Answering is paused. Official remaining time still counts down from when the test started.
+              Answering is paused. Remaining time is frozen until you resume.
             </p>
             <Button className="w-full" onClick={() => void handleResume()}>
               Resume Test

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from app.engines.schemas import EngineError
 from app.hybrid.operations import (
     analyze_test,
     gap_analysis,
@@ -45,20 +46,19 @@ class TestGapAnalysis:
 
 
 class TestSessionDebrief:
-    def test_empty_payload(self) -> None:
-        result = session_debrief({})
-        _assert_truthful(result)
-        assert result["title"]
-        assert isinstance(result["strengths"], list)
-        assert isinstance(result["improvements"], list)
+    def test_requires_ai_instead_of_canned_strengths(self) -> None:
+        with pytest.raises(EngineError) as exc:
+            session_debrief({})
+        assert exc.value.code == "DEBRIEF_AI_REQUIRED"
+        assert exc.value.retryable is True
 
-    def test_minimal_metrics(self) -> None:
-        result = session_debrief(
-            {"duration_seconds": 120, "questions_asked": 2, "highlights": ["Clear opener"]}
-        )
-        _assert_truthful(result)
-        assert "2 question" in result["summary"]
-        assert "Clear opener" in result["strengths"]
+    def test_minimal_metrics_also_requires_ai(self) -> None:
+        with pytest.raises(EngineError) as exc:
+            session_debrief(
+                {"duration_seconds": 120, "questions_asked": 2, "highlights": ["Clear opener"]}
+            )
+        assert exc.value.code == "DEBRIEF_AI_REQUIRED"
+        assert "Stayed engaged" not in str(exc.value)
 
 
 class TestSessionScorecard:
@@ -153,7 +153,6 @@ class TestRunOperationDispatch:
         "op",
         [
             "gap_analysis",
-            "session_debrief",
             "session_scorecard",
             "analyze_test",
             "prep_rephrase",
@@ -166,3 +165,8 @@ class TestRunOperationDispatch:
     def test_registered_ops_accept_empty_payload(self, op: str) -> None:
         result = run_operation(op, {})
         _assert_truthful(result, expect_invented_facts_key=op != "speech_process")
+
+    def test_session_debrief_dispatch_requires_ai(self) -> None:
+        with pytest.raises(EngineError) as exc:
+            run_operation("session_debrief", {})
+        assert exc.value.code == "DEBRIEF_AI_REQUIRED"

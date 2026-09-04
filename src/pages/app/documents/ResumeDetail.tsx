@@ -19,17 +19,25 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
+  getResumeParseStatus,
   normalizeParsedResume,
   parseResumeContentString,
 } from "@/lib/documents/resumeParse";
+import { assessExtractedDocumentQuality, normalizeSkillList } from "@/lib/documents/parseNormalize";
 import type { ParsedResume } from "@/types/ai.types";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
+import { formatMatchScore } from "@/lib/results/resultDisplay";
 import { cn } from "@/lib/utils";
 import {
   getAiUserFacingError,
+  isInsufficientCreditsError,
   openUpgradeIfCapabilityRequired,
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
+import { InsufficientCreditsAction } from "@/components/billing/InsufficientCreditsAction";
+import { useCredits } from "@/hooks/useCredits";
+import { evaluateActionCreditGate } from "@/lib/billing/actionCreditGate";
+import { ApiClientError } from "@/lib/api/apiClient";
 import { userFacingDocumentError } from "@/lib/documents/processingJobs";
 import { clearSessionAiContext } from "@/lib/ai/sessionAiContext";
 import { HybridSourceLine } from "@/components/hybrid/HybridSourceLine";
@@ -126,6 +134,7 @@ export default function ResumeDetail() {
   const { id }     = useParams<{ id: string }>();
   const navigate   = useNavigate();
   const { user }   = useAuthStore();
+  const credits = useCredits();
 
   const [doc,        setDoc]        = useState<Resume | null>(null);
   const [loading,    setLoading]    = useState(true);
@@ -146,9 +155,28 @@ export default function ResumeDetail() {
   const [gapStale, setGapStale] = useState(false);
   const [gapUpdatedAt, setGapUpdatedAt] = useState<string | null>(null);
   const [gapError, setGapError] = useState<string | null>(null);
+  const [gapCreditDenied, setGapCreditDenied] = useState(false);
 
   const parsed = useMemo(
     () => parseResumeContentString(doc?.content ?? null),
+    [doc?.content],
+  );
+  const parseStatus = useMemo(
+    () => getResumeParseStatus(doc?.content ?? null, false),
+    [doc?.content],
+  );
+  const contentQuality = useMemo(
+    () => assessExtractedDocumentQuality(
+      (() => {
+        try {
+          const raw = JSON.parse(doc?.content ?? "") as Record<string, unknown>;
+          return typeof raw.summary === "string" ? raw.summary : (doc?.content ?? "");
+        } catch {
+          return doc?.content ?? "";
+        }
+      })(),
+      "resume",
+    ),
     [doc?.content],
   );
 
@@ -274,8 +302,25 @@ export default function ResumeDetail() {
       toast.error("Select a job description to compare against this resume.");
       return;
     }
+    const gate = evaluateActionCreditGate({
+      operationKey: "gap_analysis",
+      balance: credits.balance,
+      balanceKnown: true,
+    });
+    if (gate.status === "insufficient" || gate.status === "unknown_balance") {
+      setGapCreditDenied(true);
+      openUpgradeIfInsufficientCredits(
+        new ApiClientError({
+          message: "Not enough credits for gap analysis.",
+          status: 402,
+          code: "INSUFFICIENT_CREDITS",
+        }),
+      );
+      return;
+    }
     setGapRunning(true);
     setGapError(null);
+    setGapCreditDenied(false);
     try {
       const result = await fetchEdgeJson<GapAnalysisResult>(
         "gap-analysis",
@@ -294,6 +339,7 @@ export default function ResumeDetail() {
       setGapUpdatedAt(new Date().toISOString());
       toast.success("Gap analysis saved");
     } catch (err) {
+      if (isInsufficientCreditsError(err)) setGapCreditDenied(true);
       openUpgradeIfInsufficientCredits(err);
       openUpgradeIfCapabilityRequired(err);
       const message = getAiUserFacingError(err);
@@ -407,9 +453,14 @@ export default function ResumeDetail() {
     );
   }
 
-  const skills = parsed?.skills ?? [];
+  const skills = normalizeSkillList(parsed?.skills ?? []);
   const summary = parsed?.summary ?? "";
   const fileName = doc.file_path?.split("/").pop() ?? "—";
+  const showParseFailure =
+    parseStatus === "error" ||
+    (!parsed && Boolean(doc.content?.trim())) ||
+    contentQuality.kind === "binary" ||
+    contentQuality.kind === "filename_stub";
 
   return (
     <div>
@@ -467,6 +518,31 @@ export default function ResumeDetail() {
       />
 
       <div className="space-y-4">
+        {showParseFailure && (
+          <Card>
+            <h3 className="text-sm font-semibold text-foreground mb-2">Parse status</h3>
+            <p className="text-sm text-muted-foreground mb-3">
+              {contentQuality.kind === "binary"
+                ? "This file looks like raw PDF binary, not readable text. Re-upload a text-based PDF or DOCX, or edit fields manually."
+                : contentQuality.kind === "filename_stub"
+                  ? "Only the file name was stored; the resume body was not extracted. Re-parse the file."
+                  : contentQuality.warnings[0] ||
+                    "We could not extract a usable resume profile from this file. Re-parse or edit fields manually — we did not invent content."}
+            </p>
+            {doc.file_path && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleReparse}
+                disabled={reparse}
+                leftIcon={reparse ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              >
+                Re-parse file
+              </Button>
+            )}
+          </Card>
+        )}
+
         {editing ? (
           <Card>
             <h3 className="text-sm font-semibold text-foreground mb-4">Edit extracted resume data</h3>
@@ -665,6 +741,16 @@ export default function ResumeDetail() {
             </p>
           ) : (
             <div className="space-y-3">
+              {gapCreditDenied && (
+                <InsufficientCreditsAction
+                  operationKey="gap_analysis"
+                  required={AI_CREDIT_COSTS.gap_analysis}
+                  balance={credits.balance}
+                  mode="credits"
+                  returnTo={id ? `/app/documents/resume/${id}` : "/app/documents"}
+                  compact
+                />
+              )}
               <div>
                 <p className="text-xs text-muted-foreground mb-2">Select job description</p>
                 <div className="flex flex-wrap gap-2">
@@ -747,7 +833,7 @@ export default function ResumeDetail() {
               <div className="flex items-center gap-3">
                 <div className="rounded-xl bg-primary/10 px-3 py-2 text-center min-w-[72px]">
                   <p className="text-lg font-bold text-primary tabular-nums">
-                    {Math.round(Number(gapResult.match_score) || 0)}
+                    {formatMatchScore(gapResult.match_score)}
                   </p>
                   <p className="text-[10px] text-muted-foreground uppercase">Match</p>
                 </div>

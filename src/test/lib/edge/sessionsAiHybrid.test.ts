@@ -16,7 +16,18 @@ function readFunction(name: string): string {
   return fs.readFileSync(path.join(functionsDir, name, "index.ts"), "utf8");
 }
 
-/** Mirrors MATRIX session_debrief / session_scorecard. */
+/** Mirrors MATRIX session_debrief — AI-only fail-closed. */
+const sessionDebriefRoute: RouteFallbackFlags = {
+  preferredOrder: ["ai"],
+  pythonFallbackOnAiFailure: false,
+  aiFallbackOnPythonFailure: false,
+  canCompleteDeterministically: false,
+  canCompleteWithDatabase: true,
+  canUseAI: true,
+  canUsePython: true,
+};
+
+/** Mirrors MATRIX session_scorecard. */
 const sessionHybridRoute: RouteFallbackFlags = {
   preferredOrder: ["deterministic", "python", "ai"],
   pythonFallbackOnAiFailure: true,
@@ -60,13 +71,14 @@ describe("sessions-ai Wave 1 edge contracts", () => {
     expect(source).toContain("runDeterministic:");
     expect(source).toContain("runPython:");
     expect(source).toContain("runAi:");
-    expect(source).toContain("existing && !recalculate");
+    expect(source).toContain("hasCompletedScore");
+    expect(source).toContain("!recalculate");
     expect(source).toContain("getAiFeaturePolicy(\"generate_scorecard\")");
     expect(source).toContain("skipSecondaryOnQuota: true");
     expect(source).not.toContain("using deterministic rubric");
     expect(source).toContain("Scorecard AI returned invalid JSON");
     expect(source).toContain("Credits refunded");
-    expect(source.indexOf("existing && !recalculate")).toBeLessThan(
+    expect(source.indexOf("hasCompletedScore")).toBeLessThan(
       source.indexOf("await generateWithFallback"),
     );
   });
@@ -108,16 +120,16 @@ describe("sessions-ai Wave 1 edge contracts", () => {
 });
 
 describe("sessions-ai hybrid fallback simulation", () => {
-  it("session_debrief: invalid AI JSON enqueues python, deterministic, database", () => {
+  it("session_debrief: invalid AI JSON does not enqueue python/deterministic", () => {
     const remaining: HybridRouteSource[] = [];
     const queued = new Set<HybridRouteSource>(["ai"]);
-    enqueueFallbacks("ai", sessionHybridRoute, remaining, queued);
-    expect(remaining).toEqual(["python", "deterministic", "database"]);
+    enqueueFallbacks("ai", sessionDebriefRoute, remaining, queued);
+    expect(remaining).toEqual([]);
   });
 
-  it("session_debrief: AI validation fail → deterministic succeeds, single deduct", async () => {
+  it("session_debrief: AI validation fail → fail closed (no deterministic coaching)", async () => {
     const result = await simulateHybridExecution({
-      route: { ...sessionHybridRoute, preferredOrder: ["ai"] },
+      route: sessionDebriefRoute,
       creditCost: 15,
       runners: {
         ai: async () => ({ debrief: { summary: "" } }),
@@ -131,11 +143,10 @@ describe("sessions-ai hybrid fallback simulation", () => {
         return data;
       },
     });
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.source).toBe("fallback");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
       expect(result.deductCount).toBe(1);
-      expect(result.refundCount).toBe(0);
+      expect(result.refundCount).toBe(1);
     }
   });
 

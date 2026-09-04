@@ -38,6 +38,10 @@ test.describe("Reports / Compare sessions", () => {
     await expect(page.getByText("Globex", { exact: true }).first()).toBeVisible();
     await expect(page.getByText("Delta summary")).toBeVisible();
     await expect(page.getByText("Score", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("Fillers/min").first()).toBeVisible();
+    await expect(page.getByText("WPM", { exact: true }).first()).toBeVisible();
+    // COMPARE_PAYLOAD deltas: +12 score, -0.8 fillers, +12 WPM
+    await expect(page.getByText(/\+12|12/).first()).toBeVisible();
     const sessionKpi = page.getByTestId("analytics-kpi-sessions");
     await expect(sessionKpi).toHaveAttribute("data-kpi-scope", "compare");
     await expect(sessionKpi).toContainText("Sessions in this comparison");
@@ -67,7 +71,56 @@ test.describe("Reports / Compare sessions", () => {
     await expect(page.getByRole("option", { name: /Acme|Globex/i }).first()).toBeVisible();
     await expect(page.locator('[role="option"][data-disabled]')).toHaveCount(0);
     // Unscored session must not appear as a selectable option
-    await expect(page.getByRole("option", { name: /e2e-unscored/i })).toHaveCount(0);
+    await expect(page.getByRole("option", { name: /e2e-unscored|Unscored Co/i })).toHaveCount(0);
+  });
+
+  test("shows empty-state CTA when fewer than two comparable sessions", async ({ page }) => {
+    await loginAsTestUser(page);
+    await page.route("**/functions/v1/analytics-dashboard**", async (route) => {
+      const origin = route.request().headers()["origin"] ?? "http://127.0.0.1:5000";
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: {
+          "access-control-allow-origin": origin,
+          "access-control-allow-credentials": "true",
+        },
+        body: JSON.stringify({
+          total_sessions: 1,
+          recent_sessions: [
+            {
+              session_id: "only-one",
+              date: "2026-08-20T10:00:00.000Z",
+              started_at: "2026-08-20T10:00:00.000Z",
+              mode: "mock",
+              title: "Mock — Solo",
+              company: "Solo",
+              overall_score: 70,
+              score_status: "scored",
+              completion_state: "completed",
+              comparable: true,
+            },
+          ],
+          avg_confidence_score: 70,
+          confidence_trend: [],
+          filler_trend: [],
+          weak_spot_radar: [],
+          category_scores: [],
+          filler_stats: { total_fillers: 0, top_fillers: [] },
+          wpm_trend: [],
+          score_trend: [],
+        }),
+      });
+    });
+    await page.goto("/app/analytics", { waitUntil: "domcontentloaded" });
+    await dismissCookieBanner(page);
+    await dismissWalkthrough(page);
+    await page.getByRole("tab", { name: "Compare" }).click();
+    await expect(page.getByTestId("compare-empty-state")).toBeVisible({ timeout: 20_000 });
+    await expect(
+      page.getByText(/Complete one more scored interview to unlock comparison/i),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: /Start mock interview/i })).toBeVisible();
   });
 
   test("User A cannot load User B session IDs", async ({ page }) => {

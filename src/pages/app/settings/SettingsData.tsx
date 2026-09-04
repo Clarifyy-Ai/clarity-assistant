@@ -1,9 +1,5 @@
-// @ts-nocheck -- retained: Supabase .from() data types for profiles/sessions/answer_bank/etc.
-// are typed as `any` in current generated schema due to manual migration columns; removing
-// suppression produces ~15 implicit-any errors on data row field accesses.
 import { fetchEdge } from "@/lib/network/fetchEdge";
-import { useRef, useState } from "react";
-import { useAuthStore } from "@/store/userStore";
+import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -18,15 +14,23 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import {
   createExportIdempotencyKey,
   messageFromExportCaught,
   messageFromExportResponse,
 } from "@/lib/export/exportUserFacingError";
-
-// ─────────────────────────────────────────────────────────────────
-// SettingsData — export specific data, storage summary
-// ─────────────────────────────────────────────────────────────────
+import {
+  exportFormatBadge,
+  serializeExportDownload,
+  triggerBlobDownload,
+} from "@/lib/export/exportFormats";
+import {
+  fetchStorageUsage,
+  formatStorageCardSubtext,
+  formatStorageCardValue,
+  type UserStorageUsage,
+} from "@/lib/settings/storageUsage";
 
 const EXPORT_TYPES = [
   {
@@ -34,7 +38,6 @@ const EXPORT_TYPES = [
     icon: BarChart2,
     label: "Sessions & scores",
     desc: "All mock sessions with scores, timestamps, and metadata.",
-    format: "JSON",
     color: "text-primary",
     bg: "bg-primary/10",
   },
@@ -43,7 +46,6 @@ const EXPORT_TYPES = [
     icon: MessageSquare,
     label: "Session transcripts",
     desc: "Full answer transcripts from all recorded sessions.",
-    format: "JSON",
     color: "text-blue-400",
     bg: "bg-blue-500/10",
   },
@@ -52,7 +54,6 @@ const EXPORT_TYPES = [
     icon: BookOpen,
     label: "Answer bank",
     desc: "All saved STAR answers and practice responses.",
-    format: "JSON",
     color: "text-emerald-400",
     bg: "bg-emerald-500/10",
   },
@@ -61,7 +62,6 @@ const EXPORT_TYPES = [
     icon: CalendarDays,
     label: "Interview schedule",
     desc: "All scheduled interviews and their details.",
-    format: "JSON",
     color: "text-amber-400",
     bg: "bg-amber-500/10",
   },
@@ -69,19 +69,42 @@ const EXPORT_TYPES = [
     id: "full",
     icon: FileJson,
     label: "Full data export",
-    desc: "Everything — profile, sessions, answers, settings.",
-    format: "JSON",
+    desc: "Everything — profile, sessions, answers, settings (JSON).",
     color: "text-foreground",
     bg: "bg-secondary",
   },
-];
+] as const;
 
 export default function SettingsData() {
-  const { user: _user } = useAuthStore();
-
   const [exporting, setExporting] = useState<string | null>(null);
   const [done, setDone] = useState<string[]>([]);
   const retryKeys = useRef(new Map<string, string>());
+
+  const [usage, setUsage] = useState<UserStorageUsage | null>(null);
+  const [usageLoading, setUsageLoading] = useState(true);
+  const [usageError, setUsageError] = useState<string | null>(null);
+
+  async function loadUsage() {
+    setUsageLoading(true);
+    setUsageError(null);
+    try {
+      const next = await fetchStorageUsage();
+      setUsage(next);
+    } catch (err) {
+      setUsage(null);
+      setUsageError(
+        err instanceof Error && err.message.trim()
+          ? err.message
+          : "Storage usage could not be loaded.",
+      );
+    } finally {
+      setUsageLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadUsage();
+  }, []);
 
   async function handleExport(type: string) {
     if (exporting) return;
@@ -94,7 +117,7 @@ export default function SettingsData() {
       const res = await fetchEdge(
         "export-user-data",
         { type, idempotencyKey },
-        { headers: { "Idempotency-Key": idempotencyKey } }
+        { headers: { "Idempotency-Key": idempotencyKey } },
       );
 
       if (!res.ok) {
@@ -108,25 +131,28 @@ export default function SettingsData() {
       if (!blob.size || !contentType.includes("application/json")) {
         throw new Error("Export response was invalid.");
       }
-      // Parse the downloaded payload before creating a browser download. This
-      // prevents an HTML/proxy error page from being saved as a successful file.
+      // Parse before download so an HTML/proxy error page is never saved as success.
       const payload = JSON.parse(await blob.text()) as unknown;
       if (!payload || typeof payload !== "object") {
         throw new Error("Export response was invalid.");
       }
-      const downloadBlob = new Blob([JSON.stringify(payload, null, 2)], {
-        type: "application/json;charset=utf-8",
-      });
-      const url = URL.createObjectURL(downloadBlob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `clarify-ai-${type}-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+
+      const download = serializeExportDownload(type, payload);
+      if (!download.mime.toLowerCase().includes(download.format === "CSV" ? "csv" : "json")) {
+        throw new Error("Export MIME did not match the advertised format.");
+      }
+      if (
+        (download.format === "CSV" && !download.filename.endsWith(".csv")) ||
+        (download.format === "JSON" && !download.filename.endsWith(".json"))
+      ) {
+        throw new Error("Export filename extension did not match the format.");
+      }
+
+      triggerBlobDownload(download.blob, download.filename);
       retryKeys.current.delete(type);
       setDone((p) => [...p, type]);
       setTimeout(() => setDone((p) => p.filter((d) => d !== type)), 3000);
-      toast.success("Export downloaded successfully");
+      toast.success(`${download.format} export downloaded`);
     } catch (e) {
       toast.error(messageFromExportCaught(e));
     } finally {
@@ -134,39 +160,83 @@ export default function SettingsData() {
     }
   }
 
+  const storageCards = [
+    { key: "sessions" as const, label: "Sessions", icon: "🎤" },
+    { key: "transcripts" as const, label: "Transcripts", icon: "📝" },
+    { key: "documents" as const, label: "Documents", icon: "📄" },
+    { key: "total" as const, label: "Total", icon: "💾" },
+  ];
+
   return (
     <div className="space-y-5">
       <h2 className="text-lg font-bold text-foreground">Data & Export</h2>
 
-      {/* Storage summary */}
       <Card>
-        <h3 className="mb-4 text-sm font-semibold text-foreground">Storage usage</h3>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[
-            { label: "Sessions", value: "—", icon: "🎤" },
-            { label: "Transcripts", value: "—", icon: "📝" },
-            { label: "Documents", value: "—", icon: "📄" },
-            { label: "Total", value: "—", icon: "💾" },
-          ].map((item) => (
-            <div
-              key={item.label}
-              className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-secondary p-3"
-            >
-              <span className="text-xl">{item.icon}</span>
-              <p className="text-sm font-bold text-foreground">{item.value}</p>
-              <p className="text-[10px] text-muted-foreground">{item.label}</p>
-            </div>
-          ))}
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-foreground">Storage usage</h3>
+          <Button
+            variant="ghost"
+            size="xs"
+            disabled={usageLoading}
+            onClick={() => void loadUsage()}
+            data-testid="storage-usage-refresh"
+          >
+            Refresh
+          </Button>
         </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {storageCards.map((item) => {
+            const segment = usage?.[item.key];
+            const value = usageLoading
+              ? "…"
+              : usageError
+                ? "Unavailable"
+                : formatStorageCardValue(segment);
+            const sub = usageLoading
+              ? "Loading"
+              : usageError
+                ? usageError
+                : formatStorageCardSubtext(segment);
+            return (
+              <div
+                key={item.label}
+                className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-secondary p-3"
+                data-testid={`storage-card-${item.key}`}
+              >
+                <span className="text-xl" aria-hidden>
+                  {item.icon}
+                </span>
+                <p className="text-sm font-bold text-foreground">{value}</p>
+                <p className="text-[10px] text-muted-foreground">{item.label}</p>
+                <p className="text-[10px] text-muted-foreground text-center leading-snug">{sub}</p>
+              </div>
+            );
+          })}
+        </div>
+        {(usageError ||
+          usage?.documents.status === "unavailable" ||
+          usage?.total.status === "unavailable") && (
+          <p className="mt-3 text-xs text-muted-foreground" data-testid="storage-usage-footnote">
+            {usageError
+              ? "Live storage measurement is unavailable right now. Exports still work."
+              : usage?.documents.reason ||
+                usage?.total.reason ||
+                "Some storage segments could not be measured from the provider."}
+          </p>
+        )}
       </Card>
 
-      {/* Export types */}
       <div>
         <h3 className="mb-3 text-sm font-semibold text-foreground">Export data</h3>
+        <p className="mb-3 text-xs text-muted-foreground">
+          Sessions, transcripts, answers, and interviews download as CSV. Full export is pretty-printed JSON.
+          Files are never labeled as PDF.
+        </p>
         <div className="space-y-2">
           {EXPORT_TYPES.map((exp) => {
             const isDone = done.includes(exp.id);
             const isExporting = exporting === exp.id;
+            const format = exportFormatBadge(exp.id);
 
             return (
               <Card key={exp.id} padding="sm">
@@ -174,7 +244,7 @@ export default function SettingsData() {
                   <div
                     className={cn(
                       "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl",
-                      exp.bg
+                      exp.bg,
                     )}
                   >
                     <exp.icon className={cn("h-4 w-4", exp.color)} />
@@ -184,7 +254,7 @@ export default function SettingsData() {
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium text-foreground">{exp.label}</p>
                       <Badge variant="gray" size="sm">
-                        {exp.format}
+                        {format}
                       </Badge>
                     </div>
                     <p className="mt-0.5 text-xs text-muted-foreground">{exp.desc}</p>
@@ -214,7 +284,6 @@ export default function SettingsData() {
         </div>
       </div>
 
-      {/* Data retention notice */}
       <Card className="bg-blue-500/3 border-blue-500/15">
         <div className="flex items-start gap-3">
           <FileText className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" />
@@ -222,15 +291,11 @@ export default function SettingsData() {
             <p className="text-xs font-semibold text-blue-300">Data retention policy</p>
             <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
               Free plan: data retained for 6 months of inactivity. Pro plan: data retained
-              indefinitely. Transcripts can be disabled in Privacy settings.
+              indefinitely while subscribed. You can export or delete your data at any time.
             </p>
           </div>
         </div>
       </Card>
     </div>
   );
-}
-
-function cn(...classes: (string | boolean | undefined)[]) {
-  return classes.filter(Boolean).join(" ");
 }

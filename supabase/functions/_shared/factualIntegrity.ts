@@ -66,6 +66,74 @@ export function assessStarFactualIntegrity(
   return { ok: true, inventedNumbers: [], inventedTerms: [] };
 }
 
+const LIVE_COACH_ALLOWLIST = new Set(
+  [
+    "situation",
+    "task",
+    "action",
+    "result",
+    "star",
+    "interviewer",
+    "candidate",
+    "resume",
+    "company",
+    "team",
+    "project",
+    "system",
+  ].map((t) => t.toLowerCase()),
+);
+
+/**
+ * Post-generation gate for live hint / answer.
+ * Thin evidence (short/empty source) only fails on invented metrics — scaffolds are allowed.
+ */
+export function assessLiveCoachFactualIntegrity(
+  sourceText: string,
+  outputText: string,
+): FactualCheck {
+  const source = String(sourceText ?? "").trim();
+  const output = String(outputText ?? "");
+  if (!output.trim()) {
+    return { ok: false, inventedNumbers: [], inventedTerms: ["(empty)"] };
+  }
+
+  // Scaffold / thin-evidence path: no employer-rich resume — only block invented numbers.
+  if (source.length < 80) {
+    const sourceNumbers = collectNumbers(source);
+    const inventedNumbers: string[] = [];
+    for (const n of collectNumbers(output)) {
+      if (!sourceNumbers.has(n)) inventedNumbers.push(n);
+    }
+    if (inventedNumbers.length > 0) {
+      return { ok: false, inventedNumbers, inventedTerms: [] };
+    }
+    return { ok: true, inventedNumbers: [], inventedTerms: [] };
+  }
+
+  const base = assessStarFactualIntegrity(source, output);
+  if (base.ok) return base;
+
+  // Soften proper-noun false positives for common coaching vocabulary.
+  const filteredTerms = base.inventedTerms.filter(
+    (t) => !LIVE_COACH_ALLOWLIST.has(t.toLowerCase()),
+  );
+  if (base.inventedNumbers.length === 0 && filteredTerms.length < 2) {
+    return { ok: true, inventedNumbers: [], inventedTerms: [] };
+  }
+  return { ...base, inventedTerms: filteredTerms };
+}
+
+/** Throw when live coach output fails the post-generation gate. */
+export function assertLiveCoachOutputGrounded(
+  sourceText: string,
+  outputText: string,
+): void {
+  const check = assessLiveCoachFactualIntegrity(sourceText, outputText);
+  if (!check.ok) {
+    throw new Error("AI returned invalid output (factual integrity gate)");
+  }
+}
+
 /** Lightweight system-design section presence check (edge mirror). */
 export function isValidSystemDesignOutput(text: string): boolean {
   const t = String(text ?? "").trim();
@@ -83,7 +151,9 @@ export function isValidSystemDesignOutput(text: string): boolean {
 export const FACTUAL_INTEGRITY_SYSTEM_RULE = `
 FACTUAL INTEGRITY (mandatory):
 - Only use employers, job titles, technologies, metrics, dates, awards, and outcomes present in the user input.
+- Never invent employers, metrics, technologies, titles, or team sizes.
 - If a measurable result is missing, write [Add measurable result if available] or [NEEDS EVIDENCE] — never invent numbers, percentages, revenue, team size, or business results.
+- If resume evidence is thin or missing, give a brief scaffold/structure and clearly state what information is still needed — do not fabricate a full answer.
 - You may improve wording, structure, and clarity.
 - You must NOT silently invent factual claims.
 `.trim();

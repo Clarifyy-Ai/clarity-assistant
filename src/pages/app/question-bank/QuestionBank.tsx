@@ -32,7 +32,10 @@ import {
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 import { questionFingerprint } from "@/lib/gov-exam/validators/similarity";
 import { ASSESSMENT_ROLE_SLUGS, REVIEW_STATUSES } from "@/lib/assessments/taxonomy";
-import { isAssessmentReadyQuestion } from "@/lib/assessments/questionQuality";
+import {
+  assertPublishableForTrigger,
+  buildQuestionPublishPatch,
+} from "@/lib/question-bank/questionPublishPatch";
 import { userFacingDbError } from "@/lib/errors/userFacingDbError";
 import { cn } from "@/lib/utils";
 
@@ -212,42 +215,26 @@ export default function QuestionBankPage() {
 
   async function setStatusFor(id: string, publish_status: "draft" | "published" | "archived") {
     const row = rows.find((r) => r.id === id);
-    if (publish_status === "published" && !canPublishLicense(row?.license_type)) {
-      toast.error("UNKNOWN license content cannot be published.");
-      return;
-    }
     if (publish_status === "published") {
-      const quality = isAssessmentReadyQuestion({
-        question_text: row.question_text,
-        question_type: row.question_type,
-        options: row.options,
-        correct_answer: row.correct_answer,
-        explanation: row.explanation,
-        difficulty: row.difficulty,
-        category: row.category,
-        subject: row.subject,
-        topic: row.topic,
-        publish_status: "published",
-        review_status: row.review_status ?? "approved",
-        license_type: row.license_type,
-      });
-      if (!quality) {
-        toast.error("This question is missing required fields (text, options, answer, explanation, or difficulty) and cannot be published.");
+      const gate = assertPublishableForTrigger(row);
+      if (gate) {
+        toast.error(gate);
         return;
       }
     }
-    const patch: {
-      publish_status: "draft" | "published" | "archived";
-      is_public: boolean;
-      review_status?: "unreviewed" | "approved" | "rejected";
-    } = {
-      publish_status,
-      is_public: publish_status === "published",
-    };
-    if (isAdmin && publish_status === "published") patch.review_status = "approved";
+
+    const built = buildQuestionPublishPatch({
+      targetStatus: publish_status,
+      isAdmin: Boolean(isAdmin),
+    });
+    if (!built.ok) {
+      toast.error(built.reason);
+      return;
+    }
+
     const { error } = await supabase
       .from("questions")
-      .update(patch)
+      .update(built.patch)
       .eq("id", id);
     if (error) toast.error(userFacingDbError(error, "save"));
     else void load();
@@ -467,8 +454,8 @@ export default function QuestionBankPage() {
         </Card>
 
         <div className="lg:col-span-3 min-w-0 space-y-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
-            <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="min-w-[12rem] flex-1 basis-full sm:basis-64 md:basis-72">
               <Input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
@@ -477,12 +464,11 @@ export default function QuestionBankPage() {
                 aria-label="Search question bank"
               />
             </div>
-            <div className="flex w-full items-center gap-2 sm:w-auto">
-              <Filter className="hidden h-4 w-4 shrink-0 text-muted-foreground sm:block" aria-hidden="true" />
-              <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger className="w-full sm:w-36" aria-label="Filter by category">
-                  <SelectValue placeholder="Category" />
-                </SelectTrigger>
+            <Filter className="hidden h-4 w-4 shrink-0 text-muted-foreground sm:block" aria-hidden="true" />
+            <Select value={category} onValueChange={setCategory}>
+              <SelectTrigger className="w-full sm:w-auto sm:min-w-[8.5rem] shrink-0" aria-label="Filter by category">
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All categories</SelectItem>
                 {categories.map((c) => (
@@ -491,7 +477,9 @@ export default function QuestionBankPage() {
               </SelectContent>
             </Select>
             <Select value={difficulty} onValueChange={setDifficulty}>
-              <SelectTrigger className="w-full sm:w-32"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-auto sm:min-w-[8.5rem] shrink-0" aria-label="Filter by difficulty">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Difficulty</SelectItem>
                 {DIFFICULTIES.map((d) => (
@@ -500,7 +488,9 @@ export default function QuestionBankPage() {
               </SelectContent>
             </Select>
             <Select value={type} onValueChange={setType}>
-              <SelectTrigger className="w-full sm:w-36"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-auto sm:min-w-[8.5rem] shrink-0" aria-label="Filter by type">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Type</SelectItem>
                 {QUESTION_TYPES.map((t) => (
@@ -509,7 +499,9 @@ export default function QuestionBankPage() {
               </SelectContent>
             </Select>
             <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger className="w-full sm:w-32"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-auto sm:min-w-[8.5rem] shrink-0" aria-label="Filter by status">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Status</SelectItem>
                 <SelectItem value="draft">Draft</SelectItem>
@@ -518,7 +510,9 @@ export default function QuestionBankPage() {
               </SelectContent>
             </Select>
             <Select value={license} onValueChange={setLicense}>
-              <SelectTrigger className="w-full sm:w-36"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-auto sm:min-w-[8.5rem] shrink-0" aria-label="Filter by license">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">License</SelectItem>
                 {LICENSE_TYPES.map((l) => (
@@ -526,7 +520,6 @@ export default function QuestionBankPage() {
                 ))}
               </SelectContent>
             </Select>
-            </div>
           </div>
 
           {importReport && (

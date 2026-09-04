@@ -25,9 +25,15 @@ import {
 } from "@/lib/session/practiceContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { isElectronApp } from "@/lib/platform/isElectron";
+import {
+  getSystemAudioAvailability,
+  isSystemAudioFullyAvailable,
+} from "@/lib/platform/electronRoutes";
 import { OverlaySetupGuidePanel } from "@/components/overlay/OverlaySetupGuidePanel";
 import { OVERLAY_VISIBILITY_WARNING } from "@/lib/constants/overlaySetupGuide";
-import { CreditExhaustedState, useCreditExhaustedState } from "@/components/billing/CreditExhaustedState";
+import { useCreditBalance } from "@/components/billing/useCreditState";
+import { InsufficientCreditsAction } from "@/components/billing/InsufficientCreditsAction";
+import { evaluateActionCreditGate } from "@/lib/billing/actionCreditGate";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import {
@@ -67,6 +73,13 @@ import {
 } from "@/lib/session/lastPracticeSetup";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import {
+  INTERVIEWER_VOICE_CATALOGUE,
+  getInterviewerVoice,
+  getInterviewerVoiceTextFallback,
+} from "@/lib/mock/interviewerVoiceCatalog";
+import { previewCatalogueVoice, unlockBrowserTts } from "@/lib/mock/mockTts";
+import { getServerTtsClientStatus } from "@/lib/mock/serverTts";
 import {
   INTERVIEW_COMPANIES,
   INTERVIEW_ROLES,
@@ -119,7 +132,17 @@ function BooleanSwitch({
 
 export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSessionSetupWizardProps) {
   const { profile, user } = useAuthStore();
-  const { isExhausted: creditsExhausted } = useCreditExhaustedState();
+  const { balance: creditBalance, known: creditBalanceKnown } = useCreditBalance();
+  const sessionCreditOperation =
+    sessionType === "mock" ? "mock_session" : "live_answer";
+  const sessionCreditGate = evaluateActionCreditGate({
+    operationKey: sessionCreditOperation,
+    balance: creditBalanceKnown ? creditBalance : null,
+    balanceKnown: creditBalanceKnown,
+  });
+  const sessionCreditsBlocked =
+    sessionCreditGate.status === "insufficient" ||
+    sessionCreditGate.status === "unknown_balance";
   const {
     loadError: documentsLoadError,
     reload: reloadDocuments,
@@ -170,6 +193,8 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const [interviewStage,   setInterviewStage]   = useState("");
   const [focusCompetencies, setFocusCompetencies] = useState<string[]>([]);
   const [topicsToAvoid,    setTopicsToAvoid]    = useState<string[]>([]);
+  const [skillsToEmphasize, setSkillsToEmphasize] = useState<string[]>([]);
+  const [skillsNotToClaim, setSkillsNotToClaim] = useState<string[]>([]);
 
   // Step 2 — Language & AI Settings
   const [language,         setLanguage]         = useState("English");
@@ -222,6 +247,8 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     if (draft.interviewStage) setInterviewStage(draft.interviewStage);
     if (draft.focusCompetencies) setFocusCompetencies(draft.focusCompetencies);
     if (draft.topicsToAvoid) setTopicsToAvoid(draft.topicsToAvoid);
+    if (draft.skillsToEmphasize) setSkillsToEmphasize(draft.skillsToEmphasize);
+    if (draft.skillsNotToClaim) setSkillsNotToClaim(draft.skillsNotToClaim);
     if (draft.answerBankContextIds) setAnswerBankContextIds(draft.answerBankContextIds);
     if (draft.textVoiceMode) setTextVoiceMode(draft.textVoiceMode);
     if (draft.ttsVoice) setTtsVoice(draft.ttsVoice);
@@ -250,6 +277,8 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       interviewStage,
       focusCompetencies,
       topicsToAvoid,
+      skillsToEmphasize,
+      skillsNotToClaim,
       answerBankContextIds,
       textVoiceMode,
       ttsVoice,
@@ -258,7 +287,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       durationMinutes,
       model,
     });
-  }, [step, company, role, interviewType, resumeId, jdId, sessionCallType, language, seniority, industry, interviewStage, focusCompetencies, topicsToAvoid, answerBankContextIds, textVoiceMode, ttsVoice, followUpDepth, feedbackStyle, durationMinutes, model]);
+  }, [step, company, role, interviewType, resumeId, jdId, sessionCallType, language, seniority, industry, interviewStage, focusCompetencies, topicsToAvoid, skillsToEmphasize, skillsNotToClaim, answerBankContextIds, textVoiceMode, ttsVoice, followUpDepth, feedbackStyle, durationMinutes, model]);
 
   // Step 4 — Auto-Generate
   const [autoGenerate,     setAutoGenerate]     = useState(false);
@@ -267,7 +296,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const [saveTranscript,   setSaveTranscript]   = useState(true);
 
   // Step 6 — Connect
-  const [enableSystemAudio, setEnableSystemAudio] = useState(true);
+  const [enableSystemAudio, setEnableSystemAudio] = useState(false);
   const [stealthMode,        setStealthMode]       = useState(false);
   const [isOnline,           setIsOnline]          = useState(
     typeof navigator !== "undefined" ? navigator.onLine : true,
@@ -275,10 +304,11 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const [visibilityAck,      setVisibilityAck]     = useState(false);
   const [responsibleUseAck,  setResponsibleUseAck] = useState(false);
 
-  const systemAudioSupported =
-    typeof navigator !== "undefined" &&
-    !!navigator.mediaDevices &&
-    "getDisplayMedia" in navigator.mediaDevices;
+  const systemAudioAvailability = getSystemAudioAvailability();
+  /** Tab-share or desktop path exists — checkbox may be enabled. */
+  const systemAudioSupported = systemAudioAvailability !== "unavailable";
+  /** Full system-audio is desktop-only; browser must not claim it. */
+  const systemAudioFullyAvailable = isSystemAudioFullyAvailable();
 
   useEffect(() => {
     if (!showWizard) setResumeId(activeResumeId);
@@ -434,6 +464,8 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     setInterviewStage(setup.interview_stage ?? "");
     setFocusCompetencies(setup.focus_competencies ?? []);
     setTopicsToAvoid(setup.topics_to_avoid ?? []);
+    setSkillsToEmphasize(setup.skills_to_emphasize ?? []);
+    setSkillsNotToClaim(setup.skills_not_to_claim ?? []);
     setAnswerBankContextIds(setup.answer_bank_context_ids ?? []);
     setLanguage(setup.language ?? "English");
     setSimpleLanguage(setup.simple_language ?? false);
@@ -506,6 +538,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       model,
       smartRouting,
       resumeId,
+      seniority,
     });
     if (requiredBlocker) {
       toast.message(requiredBlocker);
@@ -525,6 +558,14 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       return;
     }
     if (!isOnline) return;
+    if (sessionCreditsBlocked) {
+      toast.message(
+        sessionCreditGate.status === "insufficient"
+          ? `Not enough credits. This action requires ${sessionCreditGate.cost}. You have ${sessionCreditGate.balance}.`
+          : "We could not confirm your credit balance. Top up or refresh before starting.",
+      );
+      return;
+    }
     if (voiceRequired && devicePrecheck.speakerState !== SpeakerState.READY) {
       toast.message("Play the speaker test so we know you can hear session audio.");
       return;
@@ -567,6 +608,8 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       interview_stage: interviewStage || null,
       focus_competencies: focusCompetencies,
       topics_to_avoid: topicsToAvoid,
+      skills_to_emphasize: skillsToEmphasize,
+      skills_not_to_claim: skillsNotToClaim,
       answer_bank_context_ids: answerBankContextIds,
       text_voice_mode: textVoiceMode,
       tts_voice: textVoiceMode === "voice" ? ttsVoice : null,
@@ -600,6 +643,15 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
 
   function startFromSavedSetup() {
     if (!lastSetup) return;
+    if (sessionCreditsBlocked) {
+      toast.message(
+        sessionCreditGate.status === "insufficient"
+          ? `Not enough credits. This action requires ${sessionCreditGate.cost}. You have ${sessionCreditGate.balance}.`
+          : "We could not confirm your credit balance. Top up or refresh before starting.",
+      );
+      setShowWizard(true);
+      return;
+    }
     const requiredBlocker = wizardRequiredFieldsBlocker({
       sessionCallType: lastSetup.session_call_type ?? "interview",
       role: lastSetup.role ?? "",
@@ -607,6 +659,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       model: lastSetup.model,
       smartRouting: lastSetup.smart_routing,
       resumeId: lastSetup.resume_id,
+      seniority: lastSetup.seniority,
     });
     if (requiredBlocker) {
       applyLastSetup(lastSetup);
@@ -641,6 +694,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     model,
     smartRouting,
     resumeId,
+    seniority,
   };
   const selectedResume = resumes.find((item) => item.id === resumeId);
   const selectedJd = jds.find((item) => item.id === jdId);
@@ -765,16 +819,6 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     }, 100);
     return () => clearTimeout(timer);
   }, [step]);
-
-  if (creditsExhausted) {
-    return (
-      <div className="w-full bg-background text-foreground flex items-center justify-center p-4 sm:p-6">
-        <div className="w-full max-w-md rounded-2xl border border-border bg-card">
-          <CreditExhaustedState />
-        </div>
-      </div>
-    );
-  }
 
   if (contextLoadError) {
     return (
@@ -1077,7 +1121,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {[
-                      ["Seniority", seniority, setSeniority, ["Intern", "Junior", "Mid", "Senior", "Lead", "Manager"]],
+                      ["Experience level (required)", seniority, setSeniority, ["Intern", "Junior", "Mid", "Senior", "Lead", "Manager"]],
                       ["Interview stage", interviewStage, setInterviewStage, ["Phone screen", "Technical", "Onsite", "Final round", "HR"]],
                       ["Industry", industry, setIndustry, ["Technology", "Finance", "Healthcare", "Consulting", "Education", "Other"]],
                     ].map(([label, value, setter, options]) => (
@@ -1088,7 +1132,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                           onChange={(e) => (setter as (value: string) => void)(e.target.value)}
                           className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-4 py-2.5 text-sm"
                         >
-                          <option value="">Not specified</option>
+                          <option value="">{String(label).includes("required") ? "Select…" : "Not specified"}</option>
                           {(options as string[]).map((option) => <option key={option} value={option}>{option}</option>)}
                         </select>
                       </div>
@@ -1264,13 +1308,59 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 </div>
                 {textVoiceMode === "voice" && (
                   <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1.5">TTS voice</label>
-                    <select value={ttsVoice ?? ""} onChange={(e) => setTtsVoice(e.target.value || null)} className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm">
-                      <option value="">Browser default</option>
-                      {availableTtsVoices.map((voice) => (
-                        <option key={`${voice.name}-${voice.lang}`} value={voice.name}>{voice.name} ({voice.lang})</option>
-                      ))}
-                    </select>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                      {sessionType === "mock" ? "Interviewer voice" : "TTS voice"}
+                    </label>
+                    {sessionType === "mock" ? (
+                      <select
+                        value={ttsVoice ?? "classic_professional"}
+                        onChange={(e) => setTtsVoice(e.target.value || "classic_professional")}
+                        className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm"
+                        data-testid="mock-interviewer-voice"
+                      >
+                        {INTERVIEWER_VOICE_CATALOGUE.map((voice) => (
+                          <option key={voice.id} value={voice.id}>
+                            {voice.label} — {voice.description}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <select
+                        value={ttsVoice ?? ""}
+                        onChange={(e) => setTtsVoice(e.target.value || null)}
+                        className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm"
+                      >
+                        <option value="">Browser default</option>
+                        {availableTtsVoices.map((voice) => (
+                          <option key={`${voice.name}-${voice.lang}`} value={voice.name}>
+                            {voice.name} ({voice.lang})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    {sessionType === "mock" && (
+                      <div className="mt-1.5 space-y-1">
+                        <p className="text-[10px] text-muted-foreground" data-testid="mock-voice-text-fallback">
+                          {getInterviewerVoiceTextFallback(ttsVoice)}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground/80">
+                          {getServerTtsClientStatus().enabled
+                            ? "Server voice when available; browser fallback otherwise."
+                            : "Browser voice fallback — server TTS not configured."}
+                        </p>
+                        <button
+                          type="button"
+                          className="text-[11px] font-medium text-primary hover:underline"
+                          data-testid="mock-voice-preview"
+                          onClick={() => {
+                            unlockBrowserTts();
+                            void previewCatalogueVoice(ttsVoice ?? "classic_professional");
+                          }}
+                        >
+                          Preview voice
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1425,6 +1515,14 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1.5">Topics to avoid</label>
                   <input value={topicsToAvoid.join(", ")} onChange={(e) => setTopicsToAvoid(e.target.value.split(",").map((v) => v.trim()).filter(Boolean).slice(0, 8))} placeholder="Optional" className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">Skills to emphasize</label>
+                  <input value={skillsToEmphasize.join(", ")} onChange={(e) => setSkillsToEmphasize(e.target.value.split(",").map((v) => v.trim()).filter(Boolean).slice(0, 8))} placeholder="React, stakeholder management" className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">Skills not to claim</label>
+                  <input value={skillsNotToClaim.join(", ")} onChange={(e) => setSkillsNotToClaim(e.target.value.split(",").map((v) => v.trim()).filter(Boolean).slice(0, 8))} placeholder="Never invent experience with these" className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm" />
                 </div>
               </div>
               {allAnswers.length > 0 && (
@@ -1636,7 +1734,21 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                   <li>Open your interview platform (Zoom, Meet, etc.) in a <strong className="text-foreground">browser tab</strong></li>
                   <li>Click "Start" below — Career Pilot will listen automatically</li>
                   {!isMobile && (
-                    <li>For <strong className="text-foreground">system audio</strong> capture, enable "Share tab audio" when screen-sharing</li>
+                    <li>
+                      For interviewer audio:{" "}
+                      {systemAudioFullyAvailable ? (
+                        <>
+                          enable <strong className="text-foreground">system audio</strong> in the
+                          desktop app
+                        </>
+                      ) : (
+                        <>
+                          in the browser, enable{" "}
+                          <strong className="text-foreground">Share tab audio</strong> when
+                          screen-sharing (limited — not full system audio)
+                        </>
+                      )}
+                    </li>
                   )}
                 </ol>
               </div>
@@ -1690,12 +1802,15 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                   />
                   <div>
                     <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
-                      <Volume2 className="w-3.5 h-3.5" /> System Audio
+                      <Volume2 className="w-3.5 h-3.5" />{" "}
+                      {systemAudioFullyAvailable ? "System Audio" : "Tab audio (limited)"}
                     </p>
                     <p className="text-[10px] text-muted-foreground mt-0.5">
-                      {systemAudioSupported
-                        ? "We'll ask you to share the interview tab and tick \"Share audio\"."
-                        : "Not supported in this browser"}
+                      {systemAudioAvailability === "desktop_full"
+                        ? "Desktop app can capture interviewer / system audio."
+                        : systemAudioAvailability === "browser_tab_limited"
+                          ? "Browser: optional tab-share audio only — not full system audio. Prefer the desktop app for interviews."
+                          : "Not supported in this browser"}
                     </p>
                   </div>
                 </label>
@@ -1745,9 +1860,21 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                 <div className="rounded-lg border border-border px-3 py-2">
                   <span className="text-muted-foreground">Desktop application</span>
-                  <strong className="ml-2 text-foreground">{isElectronApp() ? "available" : "optional — browser mode active"}</strong>
+                  <strong className="ml-2 text-foreground">
+                    {isElectronApp() ? "active" : "optional — browser (limited audio)"}
+                  </strong>
                 </div>
                 <div className="rounded-lg border border-border px-3 py-2">
+                  <span className="text-muted-foreground">System audio</span>
+                  <strong className="ml-2 text-foreground">
+                    {systemAudioFullyAvailable
+                      ? "available"
+                      : systemAudioSupported
+                        ? "not fully available (tab share only)"
+                        : "unavailable"}
+                  </strong>
+                </div>
+                <div className="rounded-lg border border-border px-3 py-2 sm:col-span-2">
                   <span className="text-muted-foreground">Network</span>
                   <strong className="ml-2 text-foreground">{isOnline ? "online" : "offline"}</strong>
                 </div>
@@ -1832,7 +1959,11 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                   ["Difficulty", difficulty],
                   ["Duration", `${durationMinutes} minutes`],
                   ["Mode", textVoiceMode === "voice" ? "Voice" : "Text only"],
-                  ["TTS voice", textVoiceMode === "voice" ? (ttsVoice || "Browser default") : "Not used"],
+                  ["TTS voice", textVoiceMode === "voice"
+                    ? sessionType === "mock"
+                      ? getInterviewerVoice(ttsVoice).label
+                      : (ttsVoice || "Browser default")
+                    : "Not used"],
                   ["Follow-up depth", followUpDepth],
                   ["Feedback", feedbackStyle],
                   ["AI model", smartRouting ? "Configured smart routing" : (CANONICAL_MODEL_OPTIONS.find((item) => item.value === normalizePreferredModel(model))?.label ?? model)],
@@ -1964,21 +2095,43 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
           )}
 
           {isLastStep ? (
-            <button
-              onClick={handleStart}
-              disabled={Boolean(startDisabledReason)}
-              title={startDisabledReason ?? undefined}
-              aria-disabled={Boolean(startDisabledReason)}
-              className={cn(
-                "flex-1 py-3.5 font-semibold rounded-xl transition-all flex items-center justify-center gap-2",
-                startDisabledReason
-                  ? "bg-muted text-muted-foreground cursor-not-allowed"
-                  : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-foreground"
+            <div className="flex-1 space-y-3">
+              {sessionCreditsBlocked && (
+                <InsufficientCreditsAction
+                  operationKey={sessionCreditOperation}
+                  required={
+                    "cost" in sessionCreditGate ? sessionCreditGate.cost : null
+                  }
+                  balance={
+                    "balance" in sessionCreditGate
+                      ? sessionCreditGate.balance
+                      : creditBalance
+                  }
+                  mode="credits"
+                  returnTo={location.pathname}
+                  compact
+                />
               )}
-            >
-              <Zap className="w-4 h-4" />
-              {sessionType === "live" ? "Start Practice Session" : "Start Mock Session"}
-            </button>
+              <button
+                onClick={handleStart}
+                disabled={Boolean(startDisabledReason) || sessionCreditsBlocked}
+                title={
+                  sessionCreditsBlocked
+                    ? "Not enough credits for this session"
+                    : startDisabledReason ?? undefined
+                }
+                aria-disabled={Boolean(startDisabledReason) || sessionCreditsBlocked}
+                className={cn(
+                  "w-full py-3.5 font-semibold rounded-xl transition-all flex items-center justify-center gap-2",
+                  startDisabledReason || sessionCreditsBlocked
+                    ? "bg-muted text-muted-foreground cursor-not-allowed"
+                    : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-foreground"
+                )}
+              >
+                <Zap className="w-4 h-4" />
+                {sessionType === "live" ? "Start Practice Session" : "Start Mock Session"}
+              </button>
+            </div>
           ) : (
             <button
               onClick={() => {

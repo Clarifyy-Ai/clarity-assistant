@@ -10,6 +10,14 @@ export type { GeminiStreamOptions, GeminiModel } from "./geminiClient";
 // ─── Model Router ─────────────────────────────────────────────────────────────
 export { routeHint, selectModel } from "./modelRouter";
 export type { RouteHintOptions } from "./modelRouter";
+export {
+  classifyCoachQuestion,
+  buildOfflineCategoryHint,
+  coachClassToStructureMode,
+  coachClassToTemplateType,
+  normalizeInterviewType,
+} from "./coachQuestionClassify";
+export type { CoachQuestionClass, OfflineCategoryHint } from "./coachQuestionClassify";
 
 // ─── AI Hub fallback walk (mirrors Edge ai-hub-router) ───────────────────────
 export {

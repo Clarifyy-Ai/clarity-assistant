@@ -149,9 +149,10 @@ describe("library poll and resume parse contracts", () => {
   const parseResume = read("supabase/functions/parse-resume/index.ts");
   const mockSession = read("src/pages/app/mock/MockSession.tsx");
 
-  it("does not fall back to sync parse after a durable job times out", () => {
-    expect(library).toContain('error_code === "PARSER_TIMEOUT"');
+  it("does not fall back to sync parse after a durable job soft-wait elapses", () => {
+    expect(library).toContain("isClientWaitElapsed");
     expect(library).toContain("if (!created?.jobId && shouldFallbackToSyncParse(err))");
+    expect(library).not.toContain('error_code === "PARSER_TIMEOUT"');
   });
 
   it("parse-resume classifies empty vs oversized via fileByteLengthFailure", () => {

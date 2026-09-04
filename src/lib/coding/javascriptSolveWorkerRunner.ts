@@ -3,7 +3,11 @@
  */
 
 import {
+  DEFAULT_TIMEOUT_MS,
+  MAX_STDERR_CHARS,
+  MAX_STDOUT_CHARS,
   compileJavascriptSolve,
+  limitSolveOutput,
   normalizeSolveValue,
   previewSolveValue,
   runJavascriptSolveTests,
@@ -125,7 +129,7 @@ function runCaseInWorker(
 export async function runJavascriptSolveTestsAsync(
   source: string,
   cases: SolveTestCase[],
-  timeoutMs = 800,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
 ): Promise<SolveRunOutcome> {
   if (!Array.isArray(cases) || cases.length === 0) {
     return {
@@ -173,6 +177,17 @@ export async function runJavascriptSolveTestsAsync(
     if (kind === "service") sawService = true;
     if (kind === "compile" || kind === "blocked") sawCompile = true;
 
+    const stdoutText = outcome.stdout?.join("\n").trim();
+    const stderrText = outcome.stderr?.join("\n").trim();
+    const stdout =
+      stdoutText && stdoutText.length > MAX_STDOUT_CHARS
+        ? `${stdoutText.slice(0, MAX_STDOUT_CHARS - 1)}…`
+        : stdoutText || undefined;
+    const stderr =
+      stderrText && stderrText.length > MAX_STDERR_CHARS
+        ? `${stderrText.slice(0, MAX_STDERR_CHARS - 1)}…`
+        : stderrText || undefined;
+
     if (!outcome.ok) {
       const error = outcome.error ?? "Runtime error";
       if (!primaryError) primaryError = `${testCase.name}: ${error} (input ${inputPreview})`;
@@ -191,15 +206,32 @@ export async function runJavascriptSolveTestsAsync(
         error,
         error_kind: mappedKind,
         input_preview: inputPreview,
-        stdout: outcome.stdout?.join("\n").trim() || undefined,
-        stderr: outcome.stderr?.join("\n").trim() || undefined,
+        stdout,
+        stderr,
+      });
+      continue;
+    }
+
+    const limited = limitSolveOutput(outcome.actual);
+    if (!limited.ok) {
+      sawRuntime = true;
+      if (!primaryError) primaryError = `${testCase.name}: ${limited.error} (input ${inputPreview})`;
+      results.push({
+        id: testCase.id,
+        name: testCase.name,
+        passed: false,
+        error: limited.error,
+        error_kind: "runtime" as const,
+        input_preview: inputPreview,
+        stdout,
+        stderr,
       });
       continue;
     }
 
     let passed = false;
     try {
-      passed = stableJsonEqual(outcome.actual, expected);
+      passed = stableJsonEqual(limited.value, expected);
     } catch (error) {
       sawRuntime = true;
       const message = error instanceof Error ? error.message : "Could not compare outputs.";
@@ -208,12 +240,12 @@ export async function runJavascriptSolveTestsAsync(
         id: testCase.id,
         name: testCase.name,
         passed: false,
-        actual: outcome.actual,
+        actual: limited.value,
         error: message,
         error_kind: "compare" as const,
         input_preview: inputPreview,
-        stdout: outcome.stdout?.join("\n").trim() || undefined,
-        stderr: outcome.stderr?.join("\n").trim() || undefined,
+        stdout,
+        stderr,
       });
       continue;
     }
@@ -222,14 +254,14 @@ export async function runJavascriptSolveTestsAsync(
       id: testCase.id,
       name: testCase.name,
       passed,
-      actual: outcome.actual,
+      actual: limited.value,
       input_preview: inputPreview,
-      stdout: outcome.stdout?.join("\n").trim() || undefined,
-      stderr: outcome.stderr?.join("\n").trim() || undefined,
+      stdout,
+      stderr,
       ...(passed
         ? {}
         : {
-            error: `Expected ${previewSolveValue(expected)}, got ${previewSolveValue(outcome.actual)}`,
+            error: `Expected ${previewSolveValue(expected)}, got ${previewSolveValue(limited.value)}`,
             error_kind: "wrong_answer" as const,
           }),
     });

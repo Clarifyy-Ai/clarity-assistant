@@ -1,7 +1,6 @@
 // src/components/overlay/ScreenCaptureBlocker.tsx
-// Manages screen capture detection and content protection.
-// Renders a user-facing warning for unsupported environments instead of
-// silently failing — users deserve to know the overlay is not protected.
+// Detects screen capture / share activity and shows an honesty notice.
+// Capture exclusion is intentionally disabled — the overlay stays visible.
 
 import { useEffect, useRef, useCallback, useState } from "react";
 import {
@@ -9,11 +8,10 @@ import {
   patchGetDisplayMedia,
   enableContentProtection,
   onCaptureStateChange,
-  isElectron,
+  CAPTURE_EXCLUSION_DISCLAIMER,
 } from "@/lib/overlay/screenCaptureEvasion";
-import type { SupportLevel } from "@/lib/overlay/screenCaptureEvasion";
-import { ShieldAlert, ShieldCheck, ShieldOff, X, ExternalLink } from "lucide-react";
-import { cn } from "@/lib/utils";
+import type { SupportInfo } from "@/lib/overlay/screenCaptureEvasion";
+import { ShieldAlert, X } from "lucide-react";
 
 /* ─── TYPES ─────────────────────────────────────────────────────────────── */
 
@@ -26,7 +24,7 @@ interface ScreenCaptureBlockerProps {
   pollIntervalMs?:   number;
   /** Called once per unique CaptureType detected in the current visibility window */
   onCaptureDetected?: (type: CaptureType) => void;
-  /** When true, the unsupported-browser warning is shown inline below children */
+  /** When true, the honesty warning is shown inline below children */
   showWarning?:       boolean;
   children?:          React.ReactNode;
 }
@@ -50,78 +48,28 @@ function emitCaptureEvent(type: CaptureType) {
 /* ─── WARNING BANNER ─────────────────────────────────────────────────────── */
 
 interface WarningBannerProps {
-  level:   SupportLevel;
-  reason:  string;
-  misses:  string[];
+  info: SupportInfo;
   onDismiss: () => void;
 }
 
-function WarningBanner({ level, reason, misses, onDismiss }: WarningBannerProps) {
-  if (level === "full") {
-    return (
-      <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-        <p className="text-[11px] text-emerald-400 flex-1">
-          OS content protection is on for this window — it may hide the overlay from some
-          capture APIs, but it is not guaranteed invisible on every screen share or recorder.
-        </p>
-      </div>
-    );
-  }
-
-  if (level === "partial") {
-    return (
-      <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
-        <ShieldAlert className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-        <div className="flex-1 min-w-0">
-          <p className="text-[11px] font-semibold text-amber-400">
-            Limited capture resistance — browser mode
-          </p>
-          <p className="text-[10px] text-amber-400/70 mt-0.5 leading-relaxed">
-            May reduce some browser-extension captures. Does not block Zoom, OBS, or OS-level
-            screen share. Prefer the desktop app for stronger (still imperfect) protection.
-          </p>
-        </div>
-        <button
-          onClick={onDismiss}
-          className="text-amber-400/50 hover:text-amber-400 transition-colors shrink-0"
-          aria-label="Dismiss warning"
-        >
-          <X className="w-3 h-3" />
-        </button>
-      </div>
-    );
-  }
-
-  // level === "none"
+function WarningBanner({ info, onDismiss }: WarningBannerProps) {
   return (
-    <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/20">
-      <ShieldOff className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
+    <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
+      <ShieldAlert className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">
-        <p className="text-[11px] font-semibold text-red-400">
-          No screen-capture protection available
+        <p className="text-[11px] font-semibold text-amber-400">
+          Capture exclusion: {info.label}
         </p>
-        <p className="text-[10px] text-red-400/70 mt-0.5 leading-relaxed">
-          {reason}. Assume the overlay can appear in any share or recording.
-          {misses.length > 0 && (
-            <> Known capture paths not blocked:{" "}
-              {misses.slice(0, 3).join(", ")}.
-            </>
-          )}
+        <p className="text-[10px] text-amber-400/70 mt-0.5 leading-relaxed">
+          {info.reason}
         </p>
-        <a
-          href="https://clarity.app/download"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 mt-1.5 text-[10px] text-red-300 hover:text-red-200 transition-colors font-medium"
-        >
-          Download desktop app for stronger protection
-          <ExternalLink className="w-2.5 h-2.5" />
-        </a>
+        <p className="text-[10px] text-amber-400/60 mt-1.5 leading-relaxed">
+          {info.disclaimer || CAPTURE_EXCLUSION_DISCLAIMER}
+        </p>
       </div>
       <button
         onClick={onDismiss}
-        className="text-red-400/50 hover:text-red-400 transition-colors shrink-0"
+        className="text-amber-400/50 hover:text-amber-400 transition-colors shrink-0"
         aria-label="Dismiss warning"
       >
         <X className="w-3 h-3" />
@@ -239,17 +187,15 @@ export function ScreenCaptureBlocker({
         >
           <span className="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0" />
           <p className="text-[10px] font-semibold text-red-400">
-            Screen sharing detected — overlay remains visible
+            Screen sharing detected — overlay remains visible ({supportInfo.label})
           </p>
         </div>
       )}
 
-      {/* Support level warning — only when showWarning=true and not dismissed */}
+      {/* Honesty warning — disclaimer before any capture-exclusion claim */}
       {isActive && showWarning && !dismissed && (
         <WarningBanner
-          level={supportInfo.level}
-          reason={supportInfo.reason}
-          misses={supportInfo.misses}
+          info={supportInfo}
           onDismiss={() => setDismissed(true)}
         />
       )}

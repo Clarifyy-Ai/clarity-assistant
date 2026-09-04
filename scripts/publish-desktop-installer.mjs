@@ -104,6 +104,15 @@ async function main() {
 
   const fileBuffer = fs.readFileSync(installerPath);
   const mb = (fileBuffer.length / (1024 * 1024)).toFixed(1);
+
+  // Stage static artifact for Hostinger / Apache when public/ is deployed.
+  // Binary is gitignored — publish copies at release time.
+  const staticDir = path.join(ROOT, "public", "download");
+  fs.mkdirSync(staticDir, { recursive: true });
+  const staticDest = path.join(staticDir, OBJECT_NAME);
+  fs.copyFileSync(installerPath, staticDest);
+  console.log(`Staged static Hostinger path: public/download/${OBJECT_NAME} (${mb} MB)`);
+
   const fileSizeLimit = 524288000;
   console.log(`Raising ${BUCKET} file size limit to ${fileSizeLimit} bytes`);
   const bucketRes = await fetch(`${supabaseUrl}/storage/v1/bucket/${BUCKET}`, {
@@ -150,32 +159,71 @@ async function main() {
 
   console.log(`Uploading ${path.basename(installerPath)} (${mb} MB) → ${BUCKET}/${OBJECT_NAME}`);
 
-  const uploadUrl = `${supabaseUrl}/storage/v1/object/${BUCKET}/${OBJECT_NAME}`;
-  const res = await fetch(uploadUrl, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${serviceKey}`,
-      "Content-Type": "application/octet-stream",
-      "x-upsert": "true",
-    },
-    body: fileBuffer,
-  });
-
+  async function uploadObject(objectName, label) {
+    const uploadUrl = `${supabaseUrl}/storage/v1/object/${BUCKET}/${objectName}`;
+    const res = await fetch(uploadUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${serviceKey}`,
+        "Content-Type": "application/octet-stream",
+        "x-upsert": "true",
+      },
+      body: fileBuffer,
+    });
   if (!res.ok) {
     const body = await res.text();
-    console.error(`Upload failed (${res.status}): ${body}`);
+    console.error(`${label} upload failed (${res.status}): ${body}`);
     if (res.status === 404) {
       console.error("\nRun migrations first: npx supabase db push");
     }
-    process.exit(1);
+    if (res.status === 400 || res.status === 413 || /EntityTooLarge|file size limit/i.test(body)) {
+      console.error(
+        "\nSupabase Storage plan limit blocks this .exe (often 50MB on free).\n" +
+          "Keep GitHub Releases asset as the PHP fallback upstream, or upgrade Storage.\n" +
+          "Same-origin /download/Career-Pilot-Setup.exe still works via download-windows.php → GitHub.",
+      );
+    }
+    return false;
+  }
+    return true;
+  }
+
+  const versionMatch = path.basename(installerPath).match(/(\d+\.\d+\.\d+)/);
+  const version = versionMatch?.[1] ?? null;
+  const versionedName = version ? `Career-Pilot-Setup-${version}.exe` : null;
+
+  let storageOk = await uploadObject(OBJECT_NAME, "Stable");
+  if (storageOk && versionedName && versionedName !== OBJECT_NAME) {
+    if (!(await uploadObject(versionedName, `Versioned ${versionedName}`))) {
+      console.warn("Versioned twin upload failed — stable object is still published.");
+    } else {
+      console.log(`Also published ${BUCKET}/${versionedName}`);
+    }
   }
 
   const publicUrl = `${supabaseUrl}/storage/v1/object/public/${BUCKET}/${OBJECT_NAME}`;
-  console.log("\n✅ Upload complete.\n");
-  console.log("Public download URL:");
-  console.log(publicUrl);
-  console.log("\nAdd to production env and redeploy the web app:");
-  console.log(`VITE_DESKTOP_DOWNLOAD_URL_WIN=${publicUrl}`);
+  console.log("\nStatic deploy copy (include in Hostinger public/):");
+  console.log(`  ${path.relative(ROOT, staticDest)} (${mb} MB)`);
+  if (storageOk) {
+    console.log("\n✅ Storage upload complete.");
+    console.log("Public download URL (Storage):");
+    console.log(publicUrl);
+  } else {
+    console.warn(
+      "\n⚠️  Storage upload skipped/failed (plan size limit). Static public/download copy is staged.\n" +
+        "Hostinger will serve the static .exe when present; otherwise download-windows.php → GitHub Releases.",
+    );
+  }
+  console.log("\nSame-origin product entry (keep this in web env):");
+  console.log("VITE_DESKTOP_DOWNLOAD_URL_WIN=/download/Career-Pilot-Setup.exe");
+  console.log("\nValidate after Hostinger deploy:");
+  console.log("node scripts/validate-desktop-installer.mjs --base https://trycareerpilot.com");
+
+  // Artifact published when static stage succeeds (Storage is optional on free plans).
+  if (!fs.existsSync(staticDest) || fs.statSync(staticDest).size < 1_000_000) {
+    console.error("Static public/download artifact missing or too small.");
+    process.exit(1);
+  }
 }
 
 main().catch((err) => {

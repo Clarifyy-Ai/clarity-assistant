@@ -18,5 +18,6 @@ describe("prep-tool credit-first gate", () => {
     expect(src).toContain('"raw_prompt"');
     expect(src).toContain("creditDenialResponse");
     expect(src).not.toContain("Unknown tool_id:");
+    expect(src).not.toMatch(/TOOL_COSTS\[tool_id\]\s*\?\?\s*creditCost\("rephraser"\)/);
   });
 });

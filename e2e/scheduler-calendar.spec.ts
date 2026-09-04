@@ -222,6 +222,189 @@ test.describe("Scheduler + calendar", () => {
     await expect(calendarBtn).toBeDisabled();
   });
 
+  test("verification_pending gates Connect and still allows scheduling", async ({ page }) => {
+    await setupSupabaseMocks(page);
+    let oauthStartHit = false;
+    await page.route("**/functions/v1/sync-calendar**", async (route) => {
+      const body = route.request().postDataJSON() as {
+        probe?: boolean;
+        action?: string;
+      } | null;
+      if (body?.probe) {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            data: {
+              available: true,
+              configured: true,
+              publicOauth: false,
+              connectAllowed: false,
+              reason: "verification_pending",
+            },
+          }),
+        });
+      }
+      if (body?.action === "oauth_start") {
+        oauthStartHit = true;
+        return route.fulfill({
+          status: 403,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "Calendar sync not available yet (Google verification pending).",
+            code: "OAUTH_NOT_PUBLIC",
+          }),
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: { ok: true } }),
+      });
+    });
+    await page.route("**/functions/v1/disconnect-calendar**", async (route) => {
+      if (route.request().method() === "GET") {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            connected: false,
+            status: "disconnected",
+            configured: true,
+          }),
+        });
+      }
+      return route.fallback();
+    });
+
+    await loginAsTestUser(page, { planId: "pro" });
+    await page.goto("/app/interviews/new", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("calendar-verification-pending-banner")).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.getByTestId("new-interview-calendar-connect")).toHaveCount(0);
+    await expect(page.getByLabel(/company/i)).toBeVisible({ timeout: 15_000 });
+
+    await page.goto("/app/settings/integrations", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("calendar-connect-gated")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("calendar-connect-cta")).toHaveCount(0);
+    expect(oauthStartHit).toBe(false);
+
+    await page.goto("/app/interviews", { waitUntil: "domcontentloaded" });
+    const comingSoon = page.getByTestId("interviews-calendar-cta");
+    await expect(comingSoon).toBeVisible({ timeout: 15_000 });
+    await expect(comingSoon).toBeDisabled();
+    await expect(comingSoon).toContainText(/coming soon/i);
+  });
+
+  test("settings shows denied banner from calendar=denied query", async ({ page }) => {
+    await setupSupabaseMocks(page);
+    await page.route("**/functions/v1/sync-calendar**", async (route) => {
+      const body = route.request().postDataJSON() as { probe?: boolean } | null;
+      if (body?.probe) {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            data: {
+              available: true,
+              configured: true,
+              publicOauth: false,
+              connectAllowed: true,
+              reason: "ok",
+            },
+          }),
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: { ok: true } }),
+      });
+    });
+    await page.route("**/functions/v1/disconnect-calendar**", async (route) => {
+      if (route.request().method() === "GET") {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            connected: false,
+            status: "disconnected",
+            configured: true,
+          }),
+        });
+      }
+      return route.fallback();
+    });
+    await loginAsTestUser(page, { planId: "pro" });
+    await page.goto("/app/settings/integrations?calendar=denied", {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(page.getByTestId("calendar-oauth-denied-banner")).toBeVisible({
+      timeout: 15_000,
+    });
+  });
+
+  test("allowlisted probe shows Connect CTA without navigation until click", async ({ page }) => {
+    await setupSupabaseMocks(page);
+    await page.route("**/functions/v1/sync-calendar**", async (route) => {
+      const body = route.request().postDataJSON() as {
+        probe?: boolean;
+        action?: string;
+      } | null;
+      if (body?.probe) {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            data: {
+              available: true,
+              configured: true,
+              publicOauth: false,
+              connectAllowed: true,
+              reason: "ok",
+            },
+          }),
+        });
+      }
+      if (body?.action === "oauth_start") {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            data: {
+              authorization_url:
+                "https://accounts.google.com/o/oauth2/v2/auth?client_id=test",
+            },
+          }),
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ data: { ok: true } }),
+      });
+    });
+    await page.route("**/functions/v1/disconnect-calendar**", async (route) => {
+      if (route.request().method() === "GET") {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            connected: false,
+            status: "disconnected",
+            configured: true,
+          }),
+        });
+      }
+      return route.fallback();
+    });
+    await loginAsTestUser(page, { planId: "pro" });
+    await page.goto("/app/settings/integrations", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("calendar-connect-cta")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("calendar-connect-gated")).toHaveCount(0);
+  });
+
   test("calendar probe is honest NOT_CONFIGURED when secrets are missing", async ({ page }) => {
     await setupSupabaseMocks(page);
     await page.route("**/functions/v1/sync-calendar**", async (route) => {
@@ -239,6 +422,32 @@ test.describe("Scheduler + calendar", () => {
     await expect(page.getByText(/not configured|not available|Google Calendar/i).first()).toBeVisible({
       timeout: 15_000,
     });
+    await expect(page.getByRole("button", { name: /Checking/i })).toHaveCount(0, { timeout: 15_000 });
+    await expect(
+      page.getByRole("button", { name: /Requires Configuration|Connect|Reconnect/i }).first(),
+    ).toBeVisible();
+  });
+
+  test("calendar preferences save and persist after refresh", async ({ page }) => {
+    await loginAsTestUser(page, { planId: "pro" });
+    await page.goto("/app/settings/integrations", { waitUntil: "domcontentloaded" });
+
+    const autoCreate = page.getByTestId("calendar-pref-auto-create");
+    await expect(autoCreate).toBeVisible({ timeout: 15_000 });
+    await expect(autoCreate).toHaveAttribute("data-state", "checked");
+
+    await autoCreate.click();
+    await expect(autoCreate).toHaveAttribute("data-state", "unchecked");
+    await page.getByTestId("integrations-save").click();
+    await expect(page.getByRole("button", { name: /Saved/i })).toBeVisible({ timeout: 10_000 });
+
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("calendar-pref-auto-create")).toHaveAttribute(
+      "data-state",
+      "unchecked",
+      { timeout: 15_000 },
+    );
+    await expect(page.getByRole("button", { name: /Disconnect/i })).toHaveCount(0);
   });
 
   test("configured calendar write and delete are live actions", async ({ page }) => {

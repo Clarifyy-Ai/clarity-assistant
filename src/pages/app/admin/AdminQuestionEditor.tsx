@@ -159,6 +159,7 @@ function ListView() {
         is_public: true,
         review_status: "approved",
         publish_status: "published",
+        validation_status: "valid",
       });
       void writeAdminAudit({
         action: "publish",
@@ -169,6 +170,7 @@ function ListView() {
           is_public: true,
           review_status: "approved",
           publish_status: "published",
+          validation_status: "valid",
         },
       });
       toast.success("Question approved and published");

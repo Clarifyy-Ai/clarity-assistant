@@ -87,6 +87,32 @@ describe("razorpay verify-payment config contract", () => {
   });
 });
 
+describe("razorpay provider closed-beta test keys", () => {
+  const src = fs.readFileSync(
+    path.join(root, "supabase/functions/_shared/razorpayProvider.ts"),
+    "utf8",
+  );
+
+  it("allows closed-beta test keys to checkout without requiring webhook secret", () => {
+    expect(src).toContain("requireRazorpayWebhook: !testCheckoutAllowed");
+    expect(src).toContain("testCheckoutAllowed");
+  });
+});
+
+describe("billing-catalog payments_configured contract", () => {
+  const src = fs.readFileSync(
+    path.join(root, "supabase/functions/billing-catalog/index.ts"),
+    "utf8",
+  );
+
+  it("exposes payments_configured from checkoutConfigured without leaking secrets", () => {
+    expect(src).toContain("getRazorpayProviderConfig");
+    expect(src).toContain("payments_configured");
+    expect(src).toContain("checkoutConfigured");
+    expect(src).not.toMatch(/key_id|key_secret|RAZORPAY_KEY_SECRET/);
+  });
+});
+
 describe("billing config production parity", () => {
   const src = fs.readFileSync(
     path.join(root, "supabase/functions/_shared/billingConfig.ts"),

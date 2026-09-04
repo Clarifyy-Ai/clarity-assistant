@@ -1,9 +1,4 @@
 import { invokeFunction } from "@/lib/api/functions";
-import {
-  openRazorpayCheckout,
-  toPaymentUserFacingError,
-  type RazorpayProductType,
-} from "@/lib/billing/razorpayCheckout";
 
 // Live checkout is Razorpay one-time purchases. Stripe Checkout/portal
 // helpers in billing.ts must not be called from pages.
@@ -28,7 +23,12 @@ export async function recordReferralViaEdge(
   });
 }
 
-export { openRazorpayCheckout, toPaymentUserFacingError, type RazorpayProductType };
+export {
+  openRazorpayCheckout,
+  toPaymentUserFacingError,
+  isPaymentsNotConfiguredError,
+  type RazorpayProductType,
+} from "@/lib/billing/razorpayCheckout";
 export { PAYMENTS_NOT_CONFIGURED } from "@/lib/billing/razorpayCheckout";
 
 export type PaymentOrderRow = {

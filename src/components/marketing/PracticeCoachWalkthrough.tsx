@@ -167,21 +167,21 @@ export function PracticeCoachWalkthrough() {
   const Demo = DEMO_MAP[step.id];
 
   return (
-    <section className="pb-14 sm:pb-16 px-4 sm:px-6">
-      <div className="max-w-6xl mx-auto">
+    <section className="pb-14 sm:pb-16 px-4 sm:px-6 overflow-visible">
+      <div className="max-w-6xl mx-auto overflow-visible">
         <m.div
-          className="text-center mb-10"
+          className="text-center mb-10 px-1 sm:px-2"
           initial={{ opacity: 0, y: 24 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
         >
-          <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-2">
-            {PRODUCT_NAMES.practiceCoach}
+          <p className="text-[11px] font-semibold tracking-wide text-primary mb-2">
+            {PRODUCT_NAMES.practiceCoach.toUpperCase()}
           </p>
-          <h2 className="text-2xl sm:text-3xl font-bold">
+          <h2 className="text-2xl sm:text-3xl font-bold text-balance">
             How {PRODUCT_NAMES.practiceCoach} works
           </h2>
-          <p className="mt-3 text-sm text-muted-foreground max-w-xl mx-auto">
+          <p className="mt-3 text-sm text-muted-foreground max-w-2xl mx-auto leading-relaxed text-pretty">
             Three steps from question to coached answer — powered by multi-model AI routing
             and sub-second overlay delivery.
           </p>

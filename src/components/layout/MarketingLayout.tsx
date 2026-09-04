@@ -23,6 +23,7 @@ import {
   MARKETING_FOOTER_COMPANY_LINKS,
   type MarketingFooterLink,
 } from "@/lib/routes/publicMarketing";
+import { storeRefCode } from "@/lib/referrals";
 
 type NavItem = MarketingFooterLink;
 
@@ -134,7 +135,7 @@ interface MarketingLayoutProps {
 }
 
 export function MarketingLayout({ children }: MarketingLayoutProps) {
-  const { pathname, hash } = useLocation();
+  const { pathname, hash, search } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
 
   useBodyScrollLock(menuOpen);
@@ -142,6 +143,10 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
   useEffect(() => {
     setMenuOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    storeRefCode(new URLSearchParams(search).get("ref"));
+  }, [search]);
 
   useEffect(() => {
     void hydrateBillingCatalog();
@@ -175,7 +180,7 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
       </a>
       <nav
         aria-label="Main navigation"
-        className="fixed top-0 inset-x-0 z-[110] border-b border-border bg-background/80 backdrop-blur-xl"
+        className="no-print fixed top-0 inset-x-0 z-[110] border-b border-border bg-background/80 backdrop-blur-xl"
       >
         <div className={`${MARKETING_SHELL} flex items-center justify-between px-4 sm:px-6 h-16`}>
           <Link
@@ -295,7 +300,7 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
         {children}
       </main>
 
-      <footer className="border-t border-border bg-background" role="contentinfo">
+      <footer className="no-print border-t border-border bg-background" role="contentinfo">
         <div className={`${MARKETING_SHELL} px-4 sm:px-6 pt-12 pb-8`}>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-6 gap-y-10 mb-10 text-left items-start">
             <div className="col-span-2 sm:col-span-3 lg:col-span-1">
@@ -362,7 +367,9 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
           </div>
         </div>
       </footer>
-      <SupportChatWidget />
+      <div className="no-print">
+        <SupportChatWidget />
+      </div>
     </div>
   );
 }

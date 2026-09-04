@@ -1,5 +1,9 @@
 /**
  * Edge copy of javascriptSolveRunner — keep in sync with src/lib/coding/javascriptSolveRunner.ts
+ *
+ * Honesty: JavaScript/TypeScript practice execution with soft limits — NOT a secure multi-language sandbox (PARTIAL).
+ * Sync wall-clock timeout is cooperative (checked after solve returns); infinite-loop patterns
+ * are blocked at compile. True interrupt requires a Worker (browser practice path).
  */
 
 export type SolveTestCase = {
@@ -38,11 +42,21 @@ export type SolveRunOutcome = {
   primary_error?: string;
 };
 
-const DEFAULT_TIMEOUT_MS = 800;
+/** Per-case wall-clock budget (ms). Sync loops are not truly interruptible without a Worker. */
+export const DEFAULT_TIMEOUT_MS = 800;
+/** Hard cap on source length accepted for compile/run. */
+export const MAX_SOURCE_CHARS = 50_000;
+/** Max captured stdout characters retained per case. */
+export const MAX_STDOUT_CHARS = 4_000;
+/** Max captured stderr characters retained per case. */
+export const MAX_STDERR_CHARS = 4_000;
+/** Max JSON-serialized actual/expected preview / retained output size. */
+export const MAX_OUTPUT_JSON_CHARS = 8_000;
 
 const BLOCKED_PATTERN =
   /\bimport\s+|require\s*\(|fetch\s*\(|XMLHttpRequest|process\.|Deno\./;
-const INFINITE_LOOP_PATTERN = /\bwhile\s*\(\s*true\s*\)|\bfor\s*\(\s*;\s*;\s*\)/;
+const INFINITE_LOOP_PATTERN =
+  /\bwhile\s*\(\s*true\s*\)|\bfor\s*\(\s*;\s*;\s*\)|\bwhile\s*\(\s*1\s*\)|\bfor\s*\(\s*;;\s*\)/;
 
 type ConsoleCapture = {
   stdout: string[];
@@ -50,17 +64,49 @@ type ConsoleCapture = {
   restore: () => void;
 };
 
+function truncateChars(text: string, max: number): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, Math.max(0, max - 1))}…`;
+}
+
+/** Cap serialized solve() output; oversized results fail closed as runtime errors. */
+export function limitSolveOutput(value: unknown): { ok: true; value: unknown } | { ok: false; error: string } {
+  try {
+    const text = JSON.stringify(value);
+    if (typeof text !== "string") {
+      return { ok: false, error: "Output is not JSON-serializable." };
+    }
+    if (text.length > MAX_OUTPUT_JSON_CHARS) {
+      return {
+        ok: false,
+        error: `Output exceeded max size (${MAX_OUTPUT_JSON_CHARS} chars).`,
+      };
+    }
+    return { ok: true, value };
+  } catch {
+    return { ok: false, error: "Output is not JSON-serializable." };
+  }
+}
+
 /** Temporarily capture console.log / console.error during a case run. */
 export function captureConsole(): ConsoleCapture {
   const stdout: string[] = [];
   const stderr: string[] = [];
+  let stdoutLen = 0;
+  let stderrLen = 0;
   const prevLog = console.log;
   const prevError = console.error;
   console.log = (...args: unknown[]) => {
-    stdout.push(args.map((a) => formatConsoleArg(a)).join(" "));
+    if (stdoutLen >= MAX_STDOUT_CHARS) return;
+    const line = args.map((a) => formatConsoleArg(a)).join(" ");
+    stdoutLen += line.length + 1;
+    stdout.push(line);
   };
   console.error = (...args: unknown[]) => {
-    stderr.push(args.map((a) => formatConsoleArg(a)).join(" "));
+    if (stderrLen >= MAX_STDERR_CHARS) return;
+    const line = args.map((a) => formatConsoleArg(a)).join(" ");
+    stderrLen += line.length + 1;
+    stderr.push(line);
   };
   return {
     stdout,
@@ -81,8 +127,8 @@ function formatConsoleArg(value: unknown): string {
   }
 }
 
-function joinCapture(lines: string[]): string | undefined {
-  const text = lines.join("\n").trim();
+function joinCapture(lines: string[], maxChars: number): string | undefined {
+  const text = truncateChars(lines.join("\n").trim(), maxChars);
   return text || undefined;
 }
 
@@ -127,12 +173,49 @@ export function stableJsonEqual(actual: unknown, expected: unknown): boolean {
   }
 }
 
+/**
+ * Best-effort TypeScript → JS for practice scoring only.
+ * Not a real TypeScript compiler — complex generics/enums may fail closed at compile.
+ */
+export function stripTypescriptForPractice(source: string): string {
+  let s = String(source ?? "");
+  s = s.replace(/^\s*import\s+type\s+[\s\S]*?;\s*$/gm, "");
+  s = s.replace(/\bexport\s+type\s+[^=\n]+=\s*[^;]+;\s*/g, "");
+  s = s.replace(/\binterface\s+[A-Za-z_][\w]*\s*\{[\s\S]*?\}\s*/g, "");
+  s = s.replace(/\bas\s+const\b/g, "");
+  s = s.replace(/\bas\s+[A-Za-z_][\w.<>,\s|&[\]]*/g, "");
+  // Return type on function declarations / arrows: ) : Type {
+  s = s.replace(/\)\s*:\s*[A-Za-z_][\w.<>,\s|&[\]]*\s*\{/g, ") {");
+  s = s.replace(/\)\s*:\s*[A-Za-z_][\w.<>,\s|&[\]]*\s*=>/g, ") =>");
+  // Parameter / variable annotations: name: Type
+  s = s.replace(/([,(]\s*[A-Za-z_][\w]*)\s*:\s*[A-Za-z_][\w.<>,\s|&[\]]*(?=\s*[,)=])/g, "$1");
+  s = s.replace(/\b(const|let|var)\s+([A-Za-z_][\w]*)\s*:\s*[A-Za-z_][\w.<>,\s|&[\]]*/g, "$1 $2");
+  return s;
+}
+
+/** Prepare source for the practice runner (JS as-is; TS stripped best-effort). */
+export function preparePracticeSource(source: string, language = "javascript"): string {
+  const lang = String(language ?? "javascript").trim().toLowerCase();
+  if (lang === "typescript" || lang === "ts") {
+    return stripTypescriptForPractice(source);
+  }
+  return source;
+}
+
 export function compileJavascriptSolve(
   source: string,
+  language = "javascript",
 ): { ok: true; solve: (input: unknown) => unknown } | { ok: false; error: string } {
-  const trimmed = typeof source === "string" ? source.trim() : "";
+  const prepared = preparePracticeSource(source, language);
+  const trimmed = typeof prepared === "string" ? prepared.trim() : "";
   if (!trimmed) {
     return { ok: false, error: "No source to run." };
+  }
+  if (trimmed.length > MAX_SOURCE_CHARS) {
+    return {
+      ok: false,
+      error: `Source exceeds max length (${MAX_SOURCE_CHARS} chars).`,
+    };
   }
   if (INFINITE_LOOP_PATTERN.test(trimmed)) {
     return { ok: false, error: "Execution timed out." };
@@ -145,6 +228,7 @@ export function compileJavascriptSolve(
   }
 
   try {
+    // eslint-disable-next-line no-new-func
     const factory = new Function(
       `${trimmed}\n;return (typeof solve === "function" ? solve : null);`,
     );
@@ -168,6 +252,8 @@ export function compileJavascriptSolve(
 type RunCaseContext = {
   solve: (input: unknown) => unknown;
   timeoutMs: number;
+  /** Cooperative deadline — checked after solve returns (sync). Worker path can hard-interrupt. */
+  deadlineAt: number;
 };
 
 function runSingleCase(
@@ -183,6 +269,24 @@ function runSingleCase(
   let sawTimeout = false;
 
   try {
+    if (Date.now() > ctx.deadlineAt) {
+      sawTimeout = true;
+      return {
+        sawRuntime,
+        sawTimeout,
+        result: {
+          id: testCase.id,
+          name: testCase.name,
+          passed: false,
+          error: "Timed out.",
+          error_kind: "timeout",
+          input_preview: inputPreview,
+          stdout: joinCapture(capture.stdout, MAX_STDOUT_CHARS),
+          stderr: joinCapture(capture.stderr, MAX_STDERR_CHARS),
+        },
+      };
+    }
+
     const raw = ctx.solve(input);
     if (raw instanceof Promise) {
       sawRuntime = true;
@@ -198,12 +302,12 @@ function runSingleCase(
           error: message,
           error_kind: "runtime",
           input_preview: inputPreview,
-          stdout: joinCapture(capture.stdout),
-          stderr: joinCapture(capture.stderr),
+          stdout: joinCapture(capture.stdout, MAX_STDOUT_CHARS),
+          stderr: joinCapture(capture.stderr, MAX_STDERR_CHARS),
         },
       };
     }
-    if (Date.now() - started > ctx.timeoutMs) {
+    if (Date.now() - started > ctx.timeoutMs || Date.now() > ctx.deadlineAt) {
       sawTimeout = true;
       const message = "Timed out.";
       return {
@@ -216,14 +320,34 @@ function runSingleCase(
           error: message,
           error_kind: "timeout",
           input_preview: inputPreview,
-          stdout: joinCapture(capture.stdout),
-          stderr: joinCapture(capture.stderr),
+          stdout: joinCapture(capture.stdout, MAX_STDOUT_CHARS),
+          stderr: joinCapture(capture.stderr, MAX_STDERR_CHARS),
         },
       };
     }
+
+    const limited = limitSolveOutput(raw);
+    if (!limited.ok) {
+      sawRuntime = true;
+      return {
+        sawRuntime,
+        sawTimeout,
+        result: {
+          id: testCase.id,
+          name: testCase.name,
+          passed: false,
+          error: limited.error,
+          error_kind: "runtime",
+          input_preview: inputPreview,
+          stdout: joinCapture(capture.stdout, MAX_STDOUT_CHARS),
+          stderr: joinCapture(capture.stderr, MAX_STDERR_CHARS),
+        },
+      };
+    }
+
     let passed = false;
     try {
-      passed = stableJsonEqual(raw, expected);
+      passed = stableJsonEqual(limited.value, expected);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Could not compare outputs.";
@@ -235,12 +359,12 @@ function runSingleCase(
           id: testCase.id,
           name: testCase.name,
           passed: false,
-          actual: raw,
+          actual: limited.value,
           error: message,
           error_kind: "compare",
           input_preview: inputPreview,
-          stdout: joinCapture(capture.stdout),
-          stderr: joinCapture(capture.stderr),
+          stdout: joinCapture(capture.stdout, MAX_STDOUT_CHARS),
+          stderr: joinCapture(capture.stderr, MAX_STDERR_CHARS),
         },
       };
     }
@@ -251,14 +375,14 @@ function runSingleCase(
         id: testCase.id,
         name: testCase.name,
         passed,
-        actual: raw,
+        actual: limited.value,
         input_preview: inputPreview,
-        stdout: joinCapture(capture.stdout),
-        stderr: joinCapture(capture.stderr),
+        stdout: joinCapture(capture.stdout, MAX_STDOUT_CHARS),
+        stderr: joinCapture(capture.stderr, MAX_STDERR_CHARS),
         ...(passed
           ? {}
           : {
-              error: `Expected ${previewSolveValue(expected)}, got ${previewSolveValue(raw)}`,
+              error: `Expected ${previewSolveValue(expected)}, got ${previewSolveValue(limited.value)}`,
               error_kind: "wrong_answer" as const,
             }),
       },
@@ -276,8 +400,8 @@ function runSingleCase(
         error: message,
         error_kind: "runtime",
         input_preview: inputPreview,
-        stdout: joinCapture(capture.stdout),
-        stderr: joinCapture(capture.stderr),
+        stdout: joinCapture(capture.stdout, MAX_STDOUT_CHARS),
+        stderr: joinCapture(capture.stderr, MAX_STDERR_CHARS),
       },
     };
   } finally {
@@ -289,6 +413,7 @@ export function runJavascriptSolveTests(
   source: string,
   cases: SolveTestCase[],
   timeoutMs = DEFAULT_TIMEOUT_MS,
+  language = "javascript",
 ): SolveRunOutcome {
   if (!Array.isArray(cases) || cases.length === 0) {
     return {
@@ -300,22 +425,30 @@ export function runJavascriptSolveTests(
     };
   }
 
-  const compiled = compileJavascriptSolve(source);
+  const compiled = compileJavascriptSolve(source, language);
   if (!compiled.ok) {
-    const isBlocked = compiled.error.includes("not allowed");
+    const compileError = (compiled as { error: string }).error;
+    const isBlocked = compileError.includes("not allowed");
+    const isTimeout = /timed out/i.test(compileError);
     return {
       ok: false,
       results: [],
-      execution_status: isBlocked ? "blocked" : "compile_error",
-      blockedReason: compiled.error,
-      primary_error: compiled.error,
+      execution_status: isBlocked ? "blocked" : isTimeout ? "compile_error" : "compile_error",
+      blockedReason: compileError,
+      primary_error: compileError,
     };
   }
 
   let sawRuntime = false;
   let sawTimeout = false;
   let primaryError: string | undefined;
-  const ctx: RunCaseContext = { solve: compiled.solve, timeoutMs };
+  const perCaseMs = Math.max(1, timeoutMs);
+  const runDeadline = Date.now() + perCaseMs * cases.length + 50;
+  const ctx: RunCaseContext = {
+    solve: (compiled as { solve: (input: unknown) => unknown }).solve,
+    timeoutMs: perCaseMs,
+    deadlineAt: runDeadline,
+  };
 
   const results: SolveCaseResult[] = cases.map((testCase) => {
     const outcome = runSingleCase(testCase, ctx);

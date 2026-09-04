@@ -235,7 +235,7 @@ export async function activateSession(sessionId: string): Promise<void> {
   const { data: existing, error: lookupError } = await withDbTimeout(
     supabase
       .from("sessions")
-      .select("id, created_at, status, expires_at, lifecycle_status, terminal_reason")
+      .select("id, created_at, started_at, status, expires_at, lifecycle_status, terminal_reason")
       .eq("id", sessionId)
       .maybeSingle(),
     "Session activate",
@@ -258,10 +258,15 @@ export async function activateSession(sessionId: string): Promise<void> {
     throw new Error("This practice session is no longer active.");
   }
 
+  const startedAt =
+    existing.status === "active" && (existing as { started_at?: string | null }).started_at
+      ? String((existing as { started_at?: string | null }).started_at)
+      : new Date().toISOString();
+
   const update: TablesUpdate<"sessions"> & { lifecycle_status?: string } = {
     status: "active",
     lifecycle_status: "IN_PROGRESS",
-    ...(existing.status === "active" ? {} : { started_at: new Date().toISOString() }),
+    ...(existing.status === "active" ? {} : { started_at: startedAt }),
   };
 
   const { error } = await withDbTimeout(
@@ -277,6 +282,18 @@ export async function activateSession(sessionId: string): Promise<void> {
     console.error("[sessionLifecycle] activate failed:", error);
     throw new Error(error.message);
   }
+
+  // Mirror server lease onto the client store for wall-clock auto-end.
+  try {
+    const { useSessionStore } = await import("@/store/sessionStore");
+    useSessionStore.getState().applyServerLease({
+      expires_at: (existing as { expires_at?: string | null }).expires_at ?? null,
+      started_at:
+        (existing as { started_at?: string | null }).started_at ?? startedAt,
+    });
+  } catch {
+    /* store optional during non-UI paths */
+  }
 }
 
 export async function persistSessionLifecycle(
@@ -285,11 +302,13 @@ export async function persistSessionLifecycle(
   next: {
     status?: SessionRow["status"];
     lifecycle_status: string;
+    expires_at?: string | null;
   },
 ): Promise<void> {
   const update: TablesUpdate<"sessions"> & { lifecycle_status?: string } = {
     lifecycle_status: next.lifecycle_status,
     ...(next.status ? { status: next.status } : {}),
+    ...(next.expires_at !== undefined ? { expires_at: next.expires_at } : {}),
     updated_at: new Date().toISOString(),
   };
   const { error } = await withDbTimeout(
@@ -303,17 +322,27 @@ export async function persistSessionLifecycle(
   if (error) throw new Error(error.message);
 }
 
-export async function pauseOwnedSession(sessionId: string, userId: string): Promise<void> {
+export async function pauseOwnedSession(
+  sessionId: string,
+  userId: string,
+  opts?: { expires_at?: string | null },
+): Promise<void> {
   await persistSessionLifecycle(sessionId, userId, {
     status: "paused",
     lifecycle_status: "PAUSED",
+    ...(opts?.expires_at !== undefined ? { expires_at: opts.expires_at } : {}),
   });
 }
 
-export async function resumeOwnedSession(sessionId: string, userId: string): Promise<void> {
+export async function resumeOwnedSession(
+  sessionId: string,
+  userId: string,
+  opts?: { expires_at?: string | null },
+): Promise<void> {
   await persistSessionLifecycle(sessionId, userId, {
     status: "active",
     lifecycle_status: "IN_PROGRESS",
+    ...(opts?.expires_at !== undefined ? { expires_at: opts.expires_at } : {}),
   });
 }
 

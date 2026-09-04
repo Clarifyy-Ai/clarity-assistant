@@ -44,6 +44,12 @@ export function detectIndiaFromBrowser(): boolean {
   return (navigator.languages ?? []).some((lang) => isIndiaLocale(lang));
 }
 
+/**
+ * Gov exam prep is available worldwide — Indian government exams attract diaspora
+ * and remote aspirants. `VITE_FORCE_INDIA_REGION` still overrides in non-prod for QA.
+ *
+ * Heuristics below remain exported for analytics / soft hints; they no longer gate access.
+ */
 export function resolveIsIndiaUser(profile?: {
   timezone?: string | null;
   locale?: string | null;
@@ -56,17 +62,6 @@ export function resolveIsIndiaUser(profile?: {
   const forced = honorIndiaForceFlag(envForceIndia(), isProd);
   if (forced !== null) return forced;
 
-  const storedRegion =
-    profile?.region ??
-    profile?.notification_prefs?.region ??
-    null;
-  if (typeof storedRegion === "string") {
-    const normalized = storedRegion.trim().toUpperCase();
-    if (normalized === "IN" || normalized === "INDIA") return true;
-    if (normalized.length > 0) return false;
-  }
-
-  if (isIndiaTimezone(profile?.timezone)) return true;
-  if (isIndiaLocale(profile?.locale)) return true;
-  return detectIndiaFromBrowser();
+  void profile;
+  return true;
 }

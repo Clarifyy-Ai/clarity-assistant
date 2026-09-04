@@ -32,16 +32,49 @@ import { isElectronApp } from "@/lib/platform/isElectron";
 export const STEALTH_ATTR = "stealthActive" as const;
 export const CAPTURE_ATTR = "captureActive" as const;
 
-/** Protection tier reported to the UI */
-export type SupportLevel = "full" | "partial" | "none";
+/**
+ * Honest capture-exclusion product states (P0 overlay honesty).
+ * Never claim Supported while enableContentProtection returns false.
+ */
+export type CaptureExclusionStatus =
+  | "supported"
+  | "unsupported"
+  | "not_verified"
+  | "not_guaranteed";
+
+/** @deprecated Prefer CaptureExclusionStatus — same honesty vocabulary. */
+export type SupportLevel = CaptureExclusionStatus;
+
+export const CAPTURE_EXCLUSION_STATUS_LABEL: Record<CaptureExclusionStatus, string> = {
+  supported: "Supported",
+  unsupported: "Unsupported",
+  not_verified: "Not Verified",
+  not_guaranteed: "Not Guaranteed",
+};
+
+/**
+ * Required before any capture-exclusion claim. Shown whenever UI discusses exclusion.
+ */
+export const CAPTURE_EXCLUSION_DISCLAIMER =
+  "Overlay visibility during screen sharing depends on the operating system, conferencing application, capture method, and whether a window, tab, monitor, or complete desktop is shared. Career Pilot cannot guarantee that the overlay will remain hidden. Test the configuration before a real session, follow applicable policies, obtain required consent, and use assistance only where permitted.";
 
 export interface SupportInfo {
-  level:   SupportLevel;
-  reason:  string;
-  /** Specific capture methods that ARE defeated at this tier */
+  /** Honest product status for capture exclusion */
+  status: CaptureExclusionStatus;
+  /** Alias of status (legacy field name) */
+  level: CaptureExclusionStatus;
+  /** User-facing label: Supported / Unsupported / Not Verified / Not Guaranteed */
+  label: string;
+  reason: string;
+  /** Always false while product disables setContentProtection */
+  exclusionEnabled: boolean;
+  /** Disclaimer must be shown before any exclusion claim */
+  disclaimerRequired: true;
+  disclaimer: string;
+  /** Specific capture methods that ARE defeated at this tier (empty when disabled) */
   defeats: string[];
   /** Methods that are NOT defeated */
-  misses:  string[];
+  misses: string[];
 }
 
 /** Electron preload API shape — exposed via contextBridge in preload.ts */
@@ -95,31 +128,68 @@ export function isChromiumBrowser(): boolean {
   ) && !/Firefox\/\d/.test(ua) && !/Safari\/\d/.test(ua.replace(/Chrome\/\d[^S]+/, ""));
 }
 
-/** Returns the three-tier support level for the current environment. */
+/**
+ * Honest capture-exclusion status for the current environment.
+ * Product policy: enableContentProtection() always returns false — never claim Supported.
+ */
+export function getCaptureExclusionStatus(): CaptureExclusionStatus {
+  if (!isElectron()) return "unsupported";
+  const api = typeof window !== "undefined" ? window.electronAPI : undefined;
+  // API may exist on desktop, but Career Pilot does not enable or certify exclusion.
+  if (typeof api?.setContentProtection === "function") {
+    return contentProtectionEnabled ? "not_verified" : "not_guaranteed";
+  }
+  return "unsupported";
+}
+
+/** Returns honest capture-exclusion support info for the current environment. */
 export function getSupportInfo(): SupportInfo {
-  if (isElectron()) {
+  const status = getCaptureExclusionStatus();
+  const base = {
+    status,
+    level: status,
+    label: CAPTURE_EXCLUSION_STATUS_LABEL[status],
+    exclusionEnabled: contentProtectionEnabled,
+    disclaimerRequired: true as const,
+    disclaimer: CAPTURE_EXCLUSION_DISCLAIMER,
+    defeats: [] as string[],
+  };
+
+  if (status === "unsupported") {
     return {
-      level:   "full",
-      reason:  "Electron desktop app — OS-level content protection available",
-      defeats: ["OBS", "Zoom native capture", "Loom", "macOS screenshot", "Windows Snipping Tool", "ShareX"],
-      misses:  ["Physical camera pointed at screen"],
+      ...base,
+      reason:
+        "Capture exclusion is not available in the browser. The overlay stays visible on screen share and recordings.",
+      misses: ["All capture tools"],
     };
   }
 
-  if (isChromiumBrowser()) {
+  if (status === "not_verified") {
     return {
-      level:   "partial",
-      reason:  "Chromium browser — tab-level interception only",
-      defeats: ["Loom browser extension", "Chrome tab recorder", "some screen-sharing extensions"],
-      misses:  ["Zoom native capture", "OBS", "macOS screenshot", "Windows Snipping Tool", "GPU-level capture"],
+      ...base,
+      reason:
+        "Desktop content-protection API is present but exclusion has not been verified for your share setup.",
+      misses: [
+        "Zoom / Meet / Teams native capture",
+        "OBS",
+        "OS screenshots",
+        "Entire-desktop share",
+      ],
     };
   }
 
+  // not_guaranteed (default for Electron while product keeps protection off)
   return {
-    level:   "none",
-    reason:  "Firefox / Safari / unknown browser — no reliable evasion available",
-    defeats: [],
-    misses:  ["All capture tools"],
+    ...base,
+    reason:
+      "Career Pilot does not enable OS content protection. Overlay visibility on screen share is Not Guaranteed.",
+    misses: [
+      "Zoom / Meet / Teams native capture",
+      "OBS",
+      "OS screenshots",
+      "Entire-desktop share",
+      "Physical camera pointed at screen",
+    ],
   };
 }
 
@@ -144,7 +214,8 @@ let contentProtectionEnabled = false;
  *   });
  */
 export async function enableContentProtection(): Promise<boolean> {
-  // Capture exclusion is not offered. Overlay stays visible on screen share.
+  // Capture exclusion is intentionally not offered. Overlay stays visible on screen share.
+  // Callers must treat false as Unsupported / Not Guaranteed — never claim Supported.
   contentProtectionEnabled = false;
   return false;
 }

@@ -7,6 +7,7 @@ import {
   rateLimitResponse,
 } from "../_shared/rateLimit.ts";
 import { isFeatureKilled, killSwitchResponse } from "../_shared/featureKillSwitch.ts";
+import { analyticsScoreStatusFromEvaluation } from "../_shared/scorecardEligibility.ts";
 
 function localDayKey(iso: string, timeZone: string): string {
   const ms = Date.parse(iso);
@@ -117,7 +118,7 @@ Deno.serve(async (req: Request) => {
     let sessionsQuery = db
       .from("sessions")
       .select(
-        "id,user_id,title,type,status,lifecycle_status,deleted_at,started_at,ended_at,created_at,questions_asked,answers_generated,avg_wpm,filler_words,tags",
+        "id,user_id,title,type,interview_type,status,lifecycle_status,deleted_at,started_at,ended_at,created_at,questions_asked,answers_generated,avg_wpm,filler_words,tags",
       )
       .eq("user_id", user.id)
       .is("deleted_at", null)
@@ -126,8 +127,9 @@ Deno.serve(async (req: Request) => {
     if (filter.period !== "all") {
       sessionsQuery = sessionsQuery.gte("started_at", since.toISOString());
     }
+    // interview_type is category (behavioural/technical/…); sessions.type is mode (mock/live/…).
     if (filter.interview_type && filter.interview_type !== "all") {
-      sessionsQuery = sessionsQuery.eq("type", filter.interview_type);
+      sessionsQuery = sessionsQuery.eq("interview_type", filter.interview_type);
     }
     const { data: sessions, error: sessErr } =
       await sessionsQuery;
@@ -224,6 +226,50 @@ Deno.serve(async (req: Request) => {
       return seconds >= 0 ? seconds : null;
     };
 
+    const sessionFillerRatePerMinute = (session: {
+      filler_words?: number | null;
+      started_at?: string | null;
+      ended_at?: string | null;
+    }): number | null => {
+      const fillers = session.filler_words;
+      const duration = sessionDurationSeconds(session);
+      if (typeof fillers !== "number" || !Number.isFinite(fillers) || fillers < 0) {
+        return null;
+      }
+      if (duration == null || duration <= 0) return null;
+      const minutes = duration / 60;
+      if (minutes <= 0) return null;
+      return Math.round((fillers / minutes) * 100) / 100;
+    };
+
+    const resolveWpm = (
+      sc: Record<string, unknown> | undefined,
+      session: { avg_wpm?: number | null },
+    ): number | null => {
+      const fromCard = sc ? scorecardMetric(sc, "wpm_avg") : null;
+      if (typeof fromCard === "number") return fromCard;
+      return typeof session.avg_wpm === "number" ? session.avg_wpm : null;
+    };
+
+    const resolveFillerRate = (
+      sc: Record<string, unknown> | undefined,
+      session: {
+        filler_words?: number | null;
+        started_at?: string | null;
+        ended_at?: string | null;
+      },
+    ): number | null => {
+      const fromCard = sc ? scorecardMetric(sc, "filler_rate") : null;
+      if (typeof fromCard === "number") return fromCard;
+      return sessionFillerRatePerMinute(session);
+    };
+
+    const averageFinite = (vals: Array<number | null>): number | null => {
+      const nums = vals.filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+      if (nums.length === 0) return null;
+      return nums.reduce((a, b) => a + b, 0) / nums.length;
+    };
+
     const companyFromTitle = (title: string | null | undefined): string | null => {
       if (!title) return null;
       const parts = title.split(/\s+[—–-]\s+/);
@@ -266,18 +312,34 @@ Deno.serve(async (req: Request) => {
         ? Math.round(recentScoreAvg - olderScoreAvg)
         : null;
 
-    const recentFillerAvg = avgOf(recentSc, "filler_rate");
-    const olderFillerAvg = avgOf(olderSc, "filler_rate");
-    const fillerDelta30d =
-      recentFillerAvg !== null && olderFillerAvg !== null
-        ? Math.round((recentFillerAvg - olderFillerAvg) * 100) / 100
-        : null;
-
-    const recentWpmAvg = avgOf(recentSc, "wpm_avg");
-    const olderWpmAvg = avgOf(olderSc, "wpm_avg");
+    const recentWpmAvg = averageFinite(
+      sessionList
+        .filter((s) => new Date(String(s.started_at ?? s.created_at)) >= mid)
+        .map((s) => resolveWpm(scorecardList.find((x) => x.session_id === s.id), s)),
+    );
+    const olderWpmAvg = averageFinite(
+      sessionList
+        .filter((s) => new Date(String(s.started_at ?? s.created_at)) < mid)
+        .map((s) => resolveWpm(scorecardList.find((x) => x.session_id === s.id), s)),
+    );
     const wpmDelta30d =
       recentWpmAvg !== null && olderWpmAvg !== null
         ? Math.round(recentWpmAvg - olderWpmAvg)
+        : null;
+
+    const recentFillerAvg = averageFinite(
+      sessionList
+        .filter((s) => new Date(String(s.started_at ?? s.created_at)) >= mid)
+        .map((s) => resolveFillerRate(scorecardList.find((x) => x.session_id === s.id), s)),
+    );
+    const olderFillerAvg = averageFinite(
+      sessionList
+        .filter((s) => new Date(String(s.started_at ?? s.created_at)) < mid)
+        .map((s) => resolveFillerRate(scorecardList.find((x) => x.session_id === s.id), s)),
+    );
+    const fillerDelta30d =
+      recentFillerAvg !== null && olderFillerAvg !== null
+        ? Math.round((recentFillerAvg - olderFillerAvg) * 100) / 100
         : null;
 
     const avgDimension = (
@@ -359,6 +421,14 @@ Deno.serve(async (req: Request) => {
         ? answerStats.answered
         : (typeof s.answers_generated === "number" ? s.answers_generated : null);
 
+      const score_status = analyticsScoreStatusFromEvaluation({
+        evaluationStatus: sc
+          ? String((sc as { evaluation_status?: string | null }).evaluation_status ?? "")
+          : null,
+        overallScore: hasScore ? (sc!.overall_score as number) : null,
+        answeredCount: answered_count,
+      });
+
       return {
         session_id: s.id,
         date: s.started_at ?? s.created_at,
@@ -366,18 +436,19 @@ Deno.serve(async (req: Request) => {
         ended_at: s.ended_at ?? null,
         title: s.title ?? null,
         mode: s.type ?? "mock",
+        interview_type: (s as { interview_type?: string | null }).interview_type ?? null,
         company: companyFromTitle(s.title),
         status,
         completion_state,
-        overall_score: hasScore ? sc!.overall_score : null,
-        score_status: hasScore ? "scored" : "not_scored",
-        comparable: completion_state === "completed" && hasScore,
-        filler_rate: sc && typeof scorecardMetric(sc, "filler_rate") === "number"
-          ? scorecardMetric(sc, "filler_rate") as number
-          : null,
-        wpm_avg: sc && typeof scorecardMetric(sc, "wpm_avg") === "number"
-          ? scorecardMetric(sc, "wpm_avg") as number
-          : (typeof s.avg_wpm === "number" ? s.avg_wpm : null),
+        overall_score: score_status === "scored" && hasScore ? sc!.overall_score : null,
+        // pending | failed | excluded | not_scored | scored (from durable evaluation_status when present)
+        score_status,
+        comparable: completion_state === "completed" && score_status === "scored",
+        filler_rate: (() => {
+          const rate = resolveFillerRate(sc, s);
+          return rate;
+        })(),
+        wpm_avg: resolveWpm(sc, s),
         duration_seconds: duration,
         duration_minutes: duration === null ? null : Math.round(duration / 60),
         question_count,
@@ -471,13 +542,21 @@ Deno.serve(async (req: Request) => {
       current_streak: typeof profile?.streak_days === "number" ? profile.streak_days : null,
       longest_streak: typeof profile?.longest_streak === "number" ? profile.longest_streak : null,
 
-      avg_filler_rate: avgOf(scorecardList, "filler_rate"),
+      avg_filler_rate: (() => {
+        const avg = averageFinite(
+          sessionList.map((s) => resolveFillerRate(scorecardList.find((x) => x.session_id === s.id), s)),
+        );
+        return avg == null ? null : Math.round(avg * 100) / 100;
+      })(),
 
       avg_filler_delta_30d: fillerDelta30d,
 
-      avg_wpm: avgOf(scorecardList, "wpm_avg") === null
-        ? null
-        : Math.round(avgOf(scorecardList, "wpm_avg") as number),
+      avg_wpm: (() => {
+        const avg = averageFinite(
+          sessionList.map((s) => resolveWpm(scorecardList.find((x) => x.session_id === s.id), s)),
+        );
+        return avg == null ? null : Math.round(avg);
+      })(),
 
       avg_wpm_delta_30d: wpmDelta30d,
 

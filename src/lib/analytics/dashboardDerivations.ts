@@ -4,6 +4,7 @@ import type {
   DimensionAverages,
   SessionAnalyticsSummary,
 } from "@/types/analytics.types";
+import { normalizeScoreStatus } from "@/lib/analytics/scoreStatus";
 
 /** Default analytics period when filters are cleared. */
 export const DEFAULT_ANALYTICS_PERIOD: AnalyticsPeriod = "30d";
@@ -172,23 +173,27 @@ export function buildUnifiedScoreTrend(input: {
 
   return input.recentSessions
     .filter((session) => session.date)
-    .map((session) => ({
-      date: session.date,
-      session_id: session.session_id,
-      score: isFiniteAnalyticsScore(session.overall_score)
-        ? session.overall_score
-        : null,
-    }));
+    .map((session) => {
+      const status = normalizeScoreStatus(session.score_status, session.overall_score);
+      return {
+        date: session.date,
+        session_id: session.session_id,
+        // Exclude processing / placeholder / failed rows from the chart series.
+        score:
+          status === "scored" && isFiniteAnalyticsScore(session.overall_score)
+            ? session.overall_score
+            : null,
+      };
+    });
 }
 
 export function countScoredSessions(
   sessions: ReadonlyArray<Pick<SessionAnalyticsSummary, "overall_score" | "score_status">>,
 ): number {
-  return sessions.filter(
-    (session) =>
-      session.score_status === "scored" ||
-      isFiniteAnalyticsScore(session.overall_score),
-  ).length;
+  return sessions.filter((session) => {
+    const status = normalizeScoreStatus(session.score_status, session.overall_score);
+    return status === "scored" && isFiniteAnalyticsScore(session.overall_score);
+  }).length;
 }
 
 export function isAnalyticsPayloadEmpty(input: {

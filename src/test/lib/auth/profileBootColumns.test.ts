@@ -16,6 +16,7 @@ describe("PROFILE_BOOT_COLUMNS", () => {
         "is_banned",
         "onboarding_completed",
         "mfa_reenrollment_required",
+        "ui_preferences",
       ]),
     );
   });

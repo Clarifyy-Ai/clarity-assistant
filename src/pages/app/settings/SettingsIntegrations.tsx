@@ -1,18 +1,32 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Card }   from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge }  from "@/components/ui/Badge";
+import { Switch } from "@/components/ui/switch";
 import {
+  AlertTriangle,
   Calendar, Linkedin, Github,
   Slack, Chrome, ExternalLink,
-  Zap, RefreshCw,
+  Zap, RefreshCw, CheckCircle,
 } from "lucide-react";
 import { cn }          from "@/lib/utils";
 import { useCalendarSync } from "@/hooks/useCalendarSync";
+import { CALENDAR_VERIFICATION_PENDING_MSG } from "@/lib/interviews/calendarProbe";
 import { toast }       from "sonner";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
+import { SettingsSaveBar } from "@/components/settings/SettingsSaveBar";
 import { FeatureKillGate } from "@/components/layout/PlanGate";
+import { useAuthStore } from "@/store/userStore";
+import {
+  mergeNotificationPrefs,
+  readCalendarIntegrationPrefs,
+  type CalendarIntegrationPrefs,
+} from "@/lib/interviews/calendarIntegrationPrefs";
+
+/** Shown when Google returns access_denied (cancel or unverified Testing app). */
+export const CALENDAR_OAUTH_DENIED_MESSAGE =
+  "Google Calendar was not connected. If Google showed “Access blocked” or verification required, your Google account must be added as an OAuth Test user while Career Pilot is in Testing — ask an admin. Otherwise you cancelled permission.";
 
 // ─────────────────────────────────────────────────────────────────
 // Integration definitions
@@ -146,7 +160,13 @@ function isCalendarNotConfiguredMessage(message: string): boolean {
   );
 }
 
-function GoogleCalendarCard({ integration }: { integration: Integration }) {
+function GoogleCalendarCard({
+  integration,
+  autoImport,
+}: {
+  integration: Integration;
+  autoImport: boolean;
+}) {
   const {
     connectGoogle,
     syncNow,
@@ -158,17 +178,23 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
     isProbingSync,
     isConnected,
     reauthRequired,
+    verificationPending,
     connectionStatus,
     googleEmail,
     syncAvailable,
+    connectAllowed,
     lastSynced,
     importedCount,
     error,
   } = useCalendarSync();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [oauthDeniedBanner, setOauthDeniedBanner] = useState(false);
 
   const showSyncError =
-    Boolean(error) && !isSyncing && !isCalendarNotConfiguredMessage(error ?? "");
+    Boolean(error) &&
+    !isSyncing &&
+    !isCalendarNotConfiguredMessage(error ?? "") &&
+    error !== CALENDAR_VERIFICATION_PENDING_MSG;
 
   useEffect(() => {
     if (!integration.live) return;
@@ -179,6 +205,7 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
       if (isProbingSync || isCheckingConnection) return;
       if (isConnected) {
         toast.success("Google Calendar connected.");
+        setOauthDeniedBanner(false);
       } else {
         toast.error("Google Calendar was not connected. Please try again.");
       }
@@ -187,7 +214,8 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
     }
 
     if (flag === "denied") {
-      toast.info("Google Calendar permission was not granted.");
+      setOauthDeniedBanner(true);
+      toast.message(CALENDAR_OAUTH_DENIED_MESSAGE);
       setSearchParams({}, { replace: true });
       return;
     }
@@ -213,6 +241,11 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
   async function handleConnect() {
     if (isProbingSync || isCheckingConnection) return;
     if (!syncAvailable) return;
+    if (!connectAllowed || verificationPending) {
+      toast.info(CALENDAR_VERIFICATION_PENDING_MSG);
+      return;
+    }
+    setOauthDeniedBanner(false);
     const result = await connectGoogle();
     if (result.error) {
       toast.error(result.error);
@@ -247,6 +280,37 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
   }
 
   return (
+    <div className="space-y-3">
+      {oauthDeniedBanner && (
+        <Card
+          className="border-amber-500/40 bg-amber-500/5"
+          data-testid="calendar-oauth-denied-banner"
+          role="alert"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-start gap-3 p-1">
+            <div className="flex items-start gap-3 flex-1 min-w-0">
+              <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+              <div className="min-w-0 space-y-1">
+                <p className="text-sm font-semibold text-amber-200">
+                  Google Calendar connection blocked or cancelled
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {CALENDAR_OAUTH_DENIED_MESSAGE}
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="shrink-0 self-start"
+              onClick={() => setOauthDeniedBanner(false)}
+            >
+              Dismiss
+            </Button>
+          </div>
+        </Card>
+      )}
+
     <Card>
       <div className="flex items-center gap-4">
         <div className={cn(
@@ -268,12 +332,19 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
             {connectionStatus === "not_configured" && (
               <Badge variant="amber" size="sm">Not configured</Badge>
             )}
+            {connectionStatus === "verification_pending" && (
+              <Badge variant="amber" size="sm" data-testid="calendar-verification-pending-badge">
+                Verification pending
+              </Badge>
+            )}
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
             {connectionStatus === "connected"
               ? `Calendar is connected${googleEmail ? ` (${googleEmail})` : ""}. Interview events can be created, updated, and cancelled.`
               : connectionStatus === "reauth_required"
                 ? "Google Calendar access was revoked or expired. Reconnect to continue syncing events."
+                : connectionStatus === "verification_pending"
+                  ? CALENDAR_VERIFICATION_PENDING_MSG
                 : syncAvailable
                   ? integration.desc
                   : "Google Calendar is not configured. Connect is available only when GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are set on the server."}
@@ -290,7 +361,7 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {isConnected && syncAvailable && (
+          {isConnected && syncAvailable && autoImport && (
             <Button
               variant="secondary"
               size="sm"
@@ -318,6 +389,16 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
             >
               Disconnect
             </Button>
+          ) : connectionStatus === "verification_pending" || !connectAllowed ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled
+              data-testid="calendar-connect-gated"
+              title={CALENDAR_VERIFICATION_PENDING_MSG}
+            >
+              Coming soon
+            </Button>
           ) : syncAvailable ? (
             <Button
               variant="secondary"
@@ -325,6 +406,7 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
               loading={isConnecting || isCheckingConnection}
               onClick={handleConnect}
               leftIcon={<ExternalLink className="w-3.5 h-3.5" />}
+              data-testid="calendar-connect-cta"
             >
               {reauthRequired ? "Reconnect" : "Connect"}
             </Button>
@@ -350,13 +432,26 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
               <Badge variant="blue" size="sm">Cancel interview events</Badge>
             </div>
           </>
+        ) : connectionStatus === "verification_pending" || !connectAllowed ? (
+          <p
+            className="text-[10px] text-muted-foreground leading-relaxed"
+            data-testid="calendar-verification-pending-copy"
+          >
+            {CALENDAR_VERIFICATION_PENDING_MSG} Manual scheduling in Career Pilot is unchanged.
+          </p>
         ) : (
           <p className="text-[10px] text-muted-foreground leading-relaxed">
-            Connect from Settings. Google Sign-In does not grant Calendar access. Career Pilot will request permission to create, update, and cancel interview events only.
+            Connect from Settings. Google Sign-In does not grant Calendar access. Career Pilot
+            requests Google’s sensitive <span className="font-mono">calendar.events</span>{" "}
+            permission to create, update, and cancel interview events only. While the app is in
+            Google OAuth <strong className="font-medium text-foreground">Testing</strong> (or
+            pending verification), only <strong className="font-medium text-foreground">approved
+            Test users</strong> can Connect — ask an admin to add your Google account.
           </p>
         )}
       </div>
     </Card>
+    </div>
   );
 }
 
@@ -365,16 +460,97 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
 // ─────────────────────────────────────────────────────────────────
 
 export default function SettingsIntegrations() {
+  const { profile, user, updateProfile } = useAuthStore();
+  const [prefs, setPrefs] = useState<CalendarIntegrationPrefs>(() =>
+    readCalendarIntegrationPrefs(profile),
+  );
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
+
+  useEffect(() => {
+    setPrefs(readCalendarIntegrationPrefs(profile));
+  }, [profile]);
+
+  async function handleSave() {
+    if (!user) {
+      toast.error("Sign in to save integration preferences.");
+      return;
+    }
+    setSaving(true);
+    setSaved(false);
+    setSaveFailed(false);
+    try {
+      const existing = (profile as { notification_prefs?: unknown } | null)?.notification_prefs;
+      await updateProfile({
+        notification_prefs: mergeNotificationPrefs(existing, {
+          integrations: {
+            calendar_auto_create: prefs.calendar_auto_create,
+            calendar_auto_import: prefs.calendar_auto_import,
+          },
+        }) as never,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      toast.success("Integration preferences saved");
+    } catch (err) {
+      setSaveFailed(true);
+      toast.error(err instanceof Error ? err.message : "Failed to save integration preferences.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <SettingsPageShell title="Integrations">
 
       <div className="space-y-3">
         {INTEGRATIONS.filter(isConnectableIntegration).map((integration) => (
           <FeatureKillGate key={integration.id} flag="calendar_sync" compact>
-            <GoogleCalendarCard integration={integration} />
+            <GoogleCalendarCard
+              integration={integration}
+              autoImport={prefs.calendar_auto_import}
+            />
           </FeatureKillGate>
         ))}
       </div>
+
+      <Card className="mt-6" data-testid="calendar-preferences-card">
+        <h3 className="text-sm font-semibold text-foreground mb-1">Calendar preferences</h3>
+        <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+          These apply once Google Calendar is connected. You can save them now — they persist after refresh.
+        </p>
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm text-foreground">Add new interviews to Google Calendar</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                When connected, create a calendar event for each interview you schedule.
+              </p>
+            </div>
+            <Switch
+              checked={prefs.calendar_auto_create}
+              onCheckedChange={(v) => setPrefs((p) => ({ ...p, calendar_auto_create: v }))}
+              aria-label="Add new interviews to Google Calendar"
+              data-testid="calendar-pref-auto-create"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-sm text-foreground">Import events when I tap Sync now</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Pull matching Google Calendar events into Career Pilot from the Integrations card.
+              </p>
+            </div>
+            <Switch
+              checked={prefs.calendar_auto_import}
+              onCheckedChange={(v) => setPrefs((p) => ({ ...p, calendar_auto_import: v }))}
+              aria-label="Import events when I tap Sync now"
+              data-testid="calendar-pref-auto-import"
+            />
+          </div>
+        </div>
+      </Card>
 
       <div className="mt-8 space-y-3">
         <h3 className="text-sm font-semibold text-foreground">Coming later</h3>
@@ -385,6 +561,19 @@ export default function SettingsIntegrations() {
           <ComingSoonCard key={integration.id} integration={integration} />
         ))}
       </div>
+
+      <SettingsSaveBar>
+        <Button
+          variant={saved ? "success" : saveFailed ? "danger" : "primary"}
+          size="md"
+          loading={saving}
+          onClick={() => void handleSave()}
+          leftIcon={saved ? <CheckCircle className="w-4 h-4" /> : undefined}
+          data-testid="integrations-save"
+        >
+          {saving ? "Saving…" : saved ? "Saved!" : saveFailed ? "Failed — retry" : "Save changes"}
+        </Button>
+      </SettingsSaveBar>
     </SettingsPageShell>
   );
 }

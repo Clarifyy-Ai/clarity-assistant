@@ -32,6 +32,51 @@ export function sanitizeReturnTo(
   return trimmed;
 }
 
+/**
+ * Prefer `?returnTo=` then React Router `location.state.from` (Location or path string).
+ */
+export function preferredReturnToFromNavigation(input: {
+  searchParams?: URLSearchParams | null;
+  locationState?: unknown;
+}): string | null {
+  const fromQuery = sanitizeReturnTo(input.searchParams?.get("returnTo") ?? null);
+  if (fromQuery) return fromQuery;
+
+  const state = input.locationState as
+    | { from?: { pathname?: string; search?: string; hash?: string } | string }
+    | null
+    | undefined;
+  const from = state?.from;
+  if (typeof from === "string") {
+    return sanitizeReturnTo(from);
+  }
+  if (from && typeof from === "object" && typeof from.pathname === "string") {
+    return sanitizeReturnTo(
+      `${from.pathname}${from.search ?? ""}${from.hash ?? ""}`,
+    );
+  }
+  return null;
+}
+
+/**
+ * Append a sanitized `returnTo` query so deep-links survive full-page refresh
+ * (React Router `location.state` does not).
+ */
+export function pathWithReturnTo(
+  pathname: string,
+  returnTo?: string | null,
+): string {
+  const safe = sanitizeReturnTo(returnTo ?? null);
+  if (!safe) return pathname;
+
+  const qIndex = pathname.indexOf("?");
+  const path = qIndex >= 0 ? pathname.slice(0, qIndex) : pathname;
+  const existing = qIndex >= 0 ? pathname.slice(qIndex + 1) : "";
+  const params = new URLSearchParams(existing);
+  params.set("returnTo", safe);
+  return `${path}?${params.toString()}`;
+}
+
 /** Build a login URL with optional reason + sanitized returnTo. */
 export function buildLoginUrl(options?: {
   loginPath?: string;

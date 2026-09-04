@@ -16,7 +16,10 @@ import type { SolveCaseResult } from "@/lib/coding/javascriptSolveRunner";
 import { resolveJavascriptSolveStarter } from "@/lib/coding/starterCode";
 import {
   APPROVED_CODING_LANGUAGES,
+  CODING_SANDBOX_STATUS,
+  codingLanguageStorageKey,
   isAutoExecutedLanguage,
+  isPracticeLanguageFamilyMatch,
   languageLabel,
   languageOptionLabel,
 } from "@/lib/coding/languages";
@@ -38,9 +41,35 @@ type Question = {
 };
 
 type SampleCase = { id: string; name: string; input: unknown; expected: unknown };
-type HistoryRow = { id: string; submitted_at: string; status: string; score: number | null };
+type HistoryRow = { id: string; submitted_at: string | null; status: string; score: number | null };
 
-/** Immutable starter contract for javascript_solve assessments (TC-COD-004). */
+function readStoredLanguage(questionId: string): string | null {
+  try {
+    const raw = sessionStorage.getItem(codingLanguageStorageKey(questionId));
+    if (!raw) return null;
+    const normalized = raw.trim().toLowerCase();
+    return (APPROVED_CODING_LANGUAGES as readonly string[]).includes(normalized)
+      ? normalized
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistLanguage(questionId: string, lang: string) {
+  try {
+    sessionStorage.setItem(codingLanguageStorageKey(questionId), lang);
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+function formatSubmissionAt(submittedAt: string | null | undefined): string {
+  if (!submittedAt) return "—";
+  const d = new Date(submittedAt);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString();
+}
 
 export default function CodingAssessmentPage() {
   const { questionId } = useParams<{ questionId: string }>();
@@ -60,6 +89,7 @@ export default function CodingAssessmentPage() {
   const [busy, setBusy] = useState(false);
   const [sampleBusy, setSampleBusy] = useState(false);
   const loadedQuestionRef = useRef<string | null>(null);
+  const starterSnapshotRef = useRef<string>("");
 
   const load = useCallback(async () => {
     if (!questionId || !user?.id) return;
@@ -69,16 +99,24 @@ export default function CodingAssessmentPage() {
       .eq("id", questionId)
       .maybeSingle();
     setQuestion(data as Question | null);
+    const qLang = String(data?.language ?? "javascript").toLowerCase();
+    const stored = readStoredLanguage(questionId);
+    const initialLang =
+      stored && isPracticeLanguageFamilyMatch(stored, qLang)
+        ? stored
+        : (APPROVED_CODING_LANGUAGES as readonly string[]).includes(qLang)
+          ? qLang
+          : "javascript";
+
     // Refreshing history after a submit must not wipe the user's draft.
-    // Only initialize the editor when the question itself changes.
     if (loadedQuestionRef.current !== questionId) {
-      setCode(resolveJavascriptSolveStarter(data?.starter_code as string | undefined));
+      const starter = resolveJavascriptSolveStarter(data?.starter_code as string | undefined);
+      setCode(starter);
+      starterSnapshotRef.current = starter;
       loadedQuestionRef.current = questionId;
     }
-    const qLang = String(data?.language ?? "javascript").toLowerCase();
-    setLanguage(
-      (APPROVED_CODING_LANGUAGES as readonly string[]).includes(qLang) ? qLang : "javascript",
-    );
+    setLanguage(initialLang);
+
     const { data: cases } = await supabase
       .from("coding_test_cases")
       .select("id,name,input_json,expected_json,is_hidden")
@@ -112,14 +150,35 @@ export default function CodingAssessmentPage() {
     return () => window.clearInterval(id);
   }, []);
 
-
   const left = useMemo(
     () => remainingSubmissions(history.length, question?.max_submissions ?? 20),
     [history.length, question?.max_submissions],
   );
 
+  const questionLang = String(question?.language ?? "javascript").toLowerCase();
+  const languageSelectable = isAutoExecutedLanguage(questionLang);
   const autoScore =
-    isAutoExecutedLanguage(language) && question?.evaluation_mode === "javascript_solve";
+    isAutoExecutedLanguage(language) &&
+    (question?.evaluation_mode === "javascript_solve" ||
+      question?.evaluation_mode === "typescript_solve");
+
+  function applyLanguage(next: string) {
+    const normalized = next.trim().toLowerCase();
+    if (!(APPROVED_CODING_LANGUAGES as readonly string[]).includes(normalized)) return;
+    if (!questionId || !isPracticeLanguageFamilyMatch(normalized, questionLang)) {
+      toast.error(`This problem requires ${questionLang}.`);
+      return;
+    }
+    const previousStarter = starterSnapshotRef.current;
+    setLanguage(normalized);
+    persistLanguage(questionId, normalized);
+    // Refresh starter when the editor still matches the last starter snapshot.
+    if (!code.trim() || code === previousStarter) {
+      const starter = resolveJavascriptSolveStarter(question?.starter_code);
+      setCode(starter);
+      starterSnapshotRef.current = starter;
+    }
+  }
 
   async function ensureSession(): Promise<boolean> {
     const { data } = await supabase.auth.getSession();
@@ -131,12 +190,12 @@ export default function CodingAssessmentPage() {
   async function runSample() {
     if (!user?.id || !questionId) return;
     if (!(await ensureSession())) return;
-    if (language !== String(question?.language ?? "javascript").toLowerCase()) {
+    if (!isPracticeLanguageFamilyMatch(language, questionLang)) {
       toast.error(`This problem requires ${question?.language ?? "javascript"}.`);
       return;
     }
     if (!autoScore) {
-      setSampleOut("Sample runs are only available for JavaScript solve() assessments. This language is not executed.");
+      setSampleOut("Sample runs are only available for JavaScript/TypeScript solve() practice. This language is not executed.");
       return;
     }
     setSampleBusy(true);
@@ -196,7 +255,7 @@ export default function CodingAssessmentPage() {
       return;
     }
     if (!(await ensureSession())) return;
-    if (language !== String(question?.language ?? "javascript").toLowerCase()) {
+    if (!isPracticeLanguageFamilyMatch(language, questionLang)) {
       toast.error(`This problem requires ${question?.language ?? "javascript"}.`);
       return;
     }
@@ -235,7 +294,6 @@ export default function CodingAssessmentPage() {
       );
       setSubmitCases(result.case_results ?? []);
       setSubmitInfraError(isCodingInfrastructureFailure(result.execution_status));
-      // compile_error responses may not persist a submission — still refresh history when scored
       if (result.status !== "compile_error") {
         void load();
       }
@@ -259,7 +317,9 @@ export default function CodingAssessmentPage() {
   }
 
   function resetCode() {
-    setCode(resolveJavascriptSolveStarter(question?.starter_code));
+    const starter = resolveJavascriptSolveStarter(question?.starter_code);
+    setCode(starter);
+    starterSnapshotRef.current = starter;
     setSampleOut("");
     setSampleCases([]);
     setServerResult("");
@@ -275,13 +335,17 @@ export default function CodingAssessmentPage() {
     >
       <PageHeader
         title={question?.title ?? "Coding assessment"}
-        description="Interview preparation only. JavaScript may be scored on the server; other languages are not executed and are stored for pending review. The browser never evaluates your solution. There is no multi-language sandbox."
+        description={`Practice JS/TS solve(input) — ${CODING_SANDBOX_STATUS} sandbox (not Docker isolation).`}
         breadcrumbs={[{ label: "Coding", href: "/app/coding" }, { label: question?.title ?? "Problem" }]}
         actions={<span className="text-sm tabular-nums">Timer {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}</span>}
         className="mb-0 shrink-0"
       />
-      <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:items-stretch">
-        <div data-testid="coding-problem-panel" className="min-w-0 flex-1 flex">
+
+      <div
+        data-testid="coding-workspace"
+        className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)] lg:items-stretch"
+      >
+        <div data-testid="coding-problem-panel" className="min-w-0 flex">
           <Card className="min-w-0 w-full flex-1 overflow-y-auto">
             <h2 className="font-semibold">Problem</h2>
             <p className="mt-2 whitespace-pre-wrap text-sm">{question?.description}</p>
@@ -297,35 +361,47 @@ export default function CodingAssessmentPage() {
             )}
           </Card>
         </div>
-        <div data-testid="coding-editor-panel" className="min-w-0 flex-1 flex">
-          <Card className="min-w-0 w-full flex-1 flex flex-col">
+
+        <div data-testid="coding-editor-panel" className="min-w-0 flex min-h-0">
+          <Card className="min-w-0 w-full flex-1 flex flex-col min-h-0">
             <div className="flex flex-wrap items-end justify-between gap-3 shrink-0">
               <label className="text-sm font-semibold" htmlFor="code-editor">Code editor</label>
               <div className="flex flex-col items-end gap-1">
-                <label className="text-xs text-muted-foreground" htmlFor="coding-language">
+                <span className="text-xs text-muted-foreground" id="coding-language-label">
                   Language
-                </label>
-                <select
-                  id="coding-language"
-                  value={language}
-                  disabled
-                  aria-disabled="true"
-                  title="Language is set by the problem. Only JavaScript is auto-scored."
-                  onChange={(e) => setLanguage(e.target.value)}
-                  className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs disabled:opacity-80"
-                >
-                  {APPROVED_CODING_LANGUAGES.map((lang) => (
-                    <option key={lang} value={lang}>
-                      {languageOptionLabel(lang)}
-                    </option>
-                  ))}
-                </select>
+                </span>
+                {languageSelectable ? (
+                  <select
+                    id="coding-language"
+                    aria-labelledby="coding-language-label"
+                    value={language}
+                    onChange={(e) => applyLanguage(e.target.value)}
+                    title="Switch between JavaScript and TypeScript practice (same solve(input) runner)."
+                    className="rounded-lg border border-border bg-background px-2 py-1.5 text-xs"
+                    data-testid="coding-language-select"
+                  >
+                    {APPROVED_CODING_LANGUAGES.map((lang) => (
+                      <option key={lang} value={lang}>
+                        {languageOptionLabel(lang)}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span
+                    id="coding-language"
+                    data-testid="coding-language-locked"
+                    className="rounded-lg border border-border bg-muted/40 px-2 py-1.5 text-xs"
+                    title="This problem language is not auto-scored."
+                  >
+                    {languageOptionLabel(questionLang)}
+                  </span>
+                )}
               </div>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground shrink-0">
+            <p className="mt-1 text-xs text-muted-foreground shrink-0" data-testid="coding-sandbox-honesty">
               {autoScore
-                ? "Automated scoring runs JavaScript solve(input) on the server. Your solution must define function solve(input) { ... }. Use Reset code to restore the starter template."
-                : `${languageLabel(language)} is not executed — submission is stored for pending review. Only JavaScript is auto-scored.`}
+                ? "Practice scoring runs JavaScript/TypeScript solve(input) on the server with soft timeouts and output limits — PARTIAL sandbox, not Docker isolation. Define function solve(input) { ... }. Use Reset code to restore the starter template."
+                : `${languageLabel(questionLang)} is not executed — submission is stored for pending review. Only JS/TS practice execution is auto-scored (${CODING_SANDBOX_STATUS}: not a secure multi-language sandbox).`}
             </p>
             <textarea
               id="code-editor"
@@ -343,50 +419,56 @@ export default function CodingAssessmentPage() {
               <Button onClick={() => void submit()} loading={busy} disabled={busy || sampleBusy || left <= 0 || !question}>Submit assessment</Button>
             </div>
             <p className="mt-2 text-xs text-muted-foreground shrink-0">{left} submissions remaining</p>
-            {sampleOut && (
-              <div className="mt-3 shrink-0 space-y-2">
-                {sampleInfraError ? (
-                  <InlineErrorRetry
-                    message={sampleOut}
-                    onRetry={() => void runSample()}
-                    compact
-                  />
-                ) : (
-                  <pre className="whitespace-pre-wrap rounded-lg bg-secondary/50 p-3 text-xs">
-                    Sample results{"\n"}
-                    {sampleOut}
-                  </pre>
-                )}
-                <CodingCaseResultsTable cases={sampleCases} data-testid="coding-sample-case-results" />
-              </div>
-            )}
-            {serverResult && (
-              <div className="mt-3 shrink-0 space-y-2">
-                {submitInfraError ? (
-                  <InlineErrorRetry
-                    message={serverResult}
-                    onRetry={() => void submit()}
-                    compact
-                  />
-                ) : (
-                  <pre className="whitespace-pre-wrap rounded-lg bg-secondary/50 p-3 text-xs">
-                    Test results{"\n"}
-                    {serverResult}
-                  </pre>
-                )}
-                <CodingCaseResultsTable cases={submitCases} data-testid="coding-submit-case-results" />
-              </div>
-            )}
-            <h3 className="mt-4 text-sm font-semibold shrink-0">Submission history</h3>
-            <ul className="mt-2 space-y-1 text-xs text-muted-foreground shrink-0">
-              {history.map((row) => (
-                <li key={row.id}>
-                  {new Date(row.submitted_at).toLocaleString()} · {row.status} · {row.score ?? "unscored"}
-                </li>
-              ))}
-            </ul>
           </Card>
         </div>
+      </div>
+
+      <div data-testid="coding-results-panel" className="shrink-0 space-y-4">
+        {sampleOut && (
+          <Card className="space-y-2">
+            {sampleInfraError ? (
+              <InlineErrorRetry
+                message={sampleOut}
+                onRetry={() => void runSample()}
+                compact
+              />
+            ) : (
+              <pre className="whitespace-pre-wrap rounded-lg bg-secondary/50 p-3 text-xs">
+                Sample results{"\n"}
+                {sampleOut}
+              </pre>
+            )}
+            <CodingCaseResultsTable cases={sampleCases} data-testid="coding-sample-case-results" />
+          </Card>
+        )}
+        {serverResult && (
+          <Card className="space-y-2">
+            {submitInfraError ? (
+              <InlineErrorRetry
+                message={serverResult}
+                onRetry={() => void submit()}
+                compact
+              />
+            ) : (
+              <pre className="whitespace-pre-wrap rounded-lg bg-secondary/50 p-3 text-xs">
+                Test results{"\n"}
+                {serverResult}
+              </pre>
+            )}
+            <CodingCaseResultsTable cases={submitCases} data-testid="coding-submit-case-results" />
+          </Card>
+        )}
+        <Card>
+          <h3 className="text-sm font-semibold">Submission history</h3>
+          <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+            {history.map((row) => (
+              <li key={row.id}>
+                {formatSubmissionAt(row.submitted_at)} · {row.status} · {row.score ?? "unscored"}
+              </li>
+            ))}
+            {history.length === 0 && <li>No submissions yet.</li>}
+          </ul>
+        </Card>
       </div>
     </div>
   );

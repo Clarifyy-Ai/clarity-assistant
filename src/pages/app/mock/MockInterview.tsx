@@ -13,9 +13,22 @@ import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { handleSessionStartError } from "@/lib/billing/sessionStartErrors";
 import { SessionTrustBanner } from "@/components/session/SessionTrustBanner";
 import { PreSessionSetupWizard } from "@/components/session/PreSessionSetupWizard";
+import { MockReviewScreen } from "@/components/mock/MockReviewScreen";
 import type { QuestionDifficulty } from "@/lib/api/ai";
 import type { LiveSessionConfig } from "@/types/session.types";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
+import {
+  buildInterviewContextSnapshot,
+  freezeResumeTextForInterview,
+  validateInterviewContextForStart,
+  type InterviewContextSnapshot,
+} from "@/lib/mock/interviewContext";
+import {
+  buildInterviewBlueprint,
+  validateInterviewBlueprint,
+} from "@/lib/mock/interviewBlueprint";
+import { encodeMockProgressNotes } from "@/lib/mock/mockSessionProgress";
+import { sessionsDB, resumesDB, jobDescriptionsDB } from "@/lib/supabase/database";
 
 const DIFFICULTY_LEVELS = [
   { value: "easy",   label: "Easy",   desc: "Warm-up, foundational" },
@@ -26,6 +39,33 @@ const DIFFICULTY_LEVELS = [
 
 const QUESTION_COUNTS = [3, 5, 8, 10, 15];
 
+async function loadFrozenDocs(config: LiveSessionConfig): Promise<{ resume: string; jd: string }> {
+  let resume = "";
+  let jd = "";
+  if (config.resume_id) {
+    try {
+      const row = await resumesDB.getByIdMaybe(config.resume_id);
+      resume = freezeResumeTextForInterview(row?.content, {
+        role: config.role,
+        company: config.company,
+      });
+    } catch {
+      /* ignore */
+    }
+  }
+  if (config.jd_id) {
+    try {
+      const row = await jobDescriptionsDB.getByIdMaybe(config.jd_id);
+      const r = row as Record<string, unknown> | null;
+      jd =
+        String(r?.description ?? r?.content ?? r?.raw_text ?? r?.jd_text ?? "").trim();
+    } catch {
+      /* ignore */
+    }
+  }
+  return { resume, jd };
+}
+
 export default function MockInterview() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
@@ -34,6 +74,8 @@ export default function MockInterview() {
   const [difficulty, setDifficulty] = useState<QuestionDifficulty>("medium");
   const [warmup, setWarmup] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [reviewSnapshot, setReviewSnapshot] = useState<InterviewContextSnapshot | null>(null);
+  const [pendingConfig, setPendingConfig] = useState<LiveSessionConfig | null>(null);
   const startingRef = useRef(false);
 
   async function handleWizardStart(config: LiveSessionConfig) {
@@ -42,20 +84,70 @@ export default function MockInterview() {
       toast.error("Please sign in to start a mock session.");
       return;
     }
-    if (!config.role?.trim()) {
-      toast.message("Choose or type a target role so questions match the job.");
-      return;
+
+    setLoading(true);
+    try {
+      const docs = await loadFrozenDocs(config);
+      const mergedDifficulty = config.difficulty ?? difficulty;
+      const snapshot = buildInterviewContextSnapshot({
+        config: { ...config, difficulty: mergedDifficulty },
+        plannedQuestionCount: numQ,
+        durationMinutes: config.duration_minutes ?? 5,
+        resumeText: docs.resume,
+        jdText: docs.jd,
+      });
+
+      const micOk =
+        typeof navigator === "undefined" ||
+        snapshot.input_mode === "text" ||
+        !navigator.mediaDevices
+          ? true
+          : await navigator.mediaDevices
+              .getUserMedia({ audio: true })
+              .then((s) => {
+                s.getTracks().forEach((t) => t.stop());
+                return true;
+              })
+              .catch(() => false);
+
+      const err = validateInterviewContextForStart(snapshot, {
+        requireResume: false,
+        requireMicForVoice: true,
+        micGranted: micOk,
+      });
+      if (err) {
+        toast.message(err);
+        return;
+      }
+
+      setPendingConfig({ ...config, difficulty: mergedDifficulty, question_count: numQ });
+      setReviewSnapshot(snapshot);
+    } finally {
+      setLoading(false);
     }
+  }
+
+  async function confirmStart() {
+    if (startingRef.current || loading || !reviewSnapshot || !pendingConfig || !user?.id) return;
     startingRef.current = true;
     setLoading(true);
 
     try {
+      const blueprint = buildInterviewBlueprint(reviewSnapshot);
+      const bpErr = validateInterviewBlueprint(blueprint, reviewSnapshot);
+      if (bpErr) {
+        toast.error(bpErr);
+        return;
+      }
+
       const merged = {
-        ...config,
-        type: config.interview_type,
+        ...pendingConfig,
+        type: pendingConfig.interview_type,
         count: numQ,
         question_count: numQ,
-        difficulty: config.difficulty ?? difficulty,
+        difficulty: pendingConfig.difficulty ?? difficulty,
+        interview_context: reviewSnapshot,
+        interview_blueprint: blueprint,
       };
 
       const { session, reused } = await getOrCreateSession({
@@ -70,6 +162,27 @@ export default function MockInterview() {
       });
 
       if (reused) toast.message("Resuming your in-progress session");
+
+      const progressNotes = encodeMockProgressNotes({
+        current_question_index: 0,
+        elapsed_seconds: 0,
+        target_question_count: reviewSnapshot.planned_question_count,
+        started_at: new Date().toISOString(),
+        questions: [],
+        answers: [],
+        interview_context: reviewSnapshot,
+        interview_blueprint: blueprint,
+        follow_ups_used_for_parent: 0,
+        current_parent_question_id: null,
+        tts_playback: null,
+        blueprint_slot_index: 0,
+      });
+
+      try {
+        await sessionsDB.update(session.id, { notes: progressNotes });
+      } catch {
+        /* session still usable; progress will be written from MockSession */
+      }
 
       try {
         sessionStorage.setItem(`clarify:mock-config:${session.id}`, JSON.stringify(merged));
@@ -89,6 +202,34 @@ export default function MockInterview() {
       setLoading(false);
       startingRef.current = false;
     }
+  }
+
+  if (reviewSnapshot) {
+    return (
+      <div
+        data-testid="page-width-root"
+        className={cn(PAGE_SHELL, "space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-200")}
+      >
+        <PageHeader
+          title={PRODUCT_NAMES.mockInterview}
+          description="Review and start"
+          breadcrumbs={[
+            { label: PRODUCT_NAMES.dashboard, href: "/app/dashboard" },
+            { label: PRODUCT_NAMES.mockInterview },
+          ]}
+        />
+        <MockReviewScreen
+          snapshot={reviewSnapshot}
+          warmup={warmup}
+          loading={loading}
+          onBack={() => {
+            setReviewSnapshot(null);
+            setPendingConfig(null);
+          }}
+          onConfirm={() => void confirmStart()}
+        />
+      </div>
+    );
   }
 
   return (
@@ -114,6 +255,7 @@ export default function MockInterview() {
         <ClipboardList className="w-4 h-4 text-emerald-800 dark:text-emerald-300 shrink-0 mt-0.5" />
         <p className="text-sm text-emerald-950 dark:text-emerald-100 min-w-0 break-words leading-relaxed">
           Mock sessions are <strong>free</strong> within your daily plan allowance. Each session runs for 5 minutes.
+          Adaptive follow-ups use your frozen Resume/JD context.
         </p>
       </div>
 
@@ -214,7 +356,7 @@ export default function MockInterview() {
       </Card>
       </div>
 
-      <PreSessionSetupWizard sessionType="mock" onStart={handleWizardStart} />
+      <PreSessionSetupWizard sessionType="mock" onStart={(cfg) => void handleWizardStart(cfg)} />
     </div>
   );
 }

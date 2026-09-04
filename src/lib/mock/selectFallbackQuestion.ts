@@ -26,6 +26,9 @@ export function selectFallbackQuestion(
     company: input.company,
     role: input.role,
     difficulty: input.difficulty,
+    skills: input.skills,
+    focusAreas: input.focusAreas,
+    rotateSeed: exclude.length,
   });
 
   for (const candidate of pool) {

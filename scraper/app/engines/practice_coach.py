@@ -242,30 +242,6 @@ def run_practice_coach(
             has_resume_context=has_resume,
         )
 
-    # coach_chat
-    focus = question or "the current interview topic"
-    user_ask = message or "How should I approach this?"
-    reply_parts = [
-        f"You asked: {user_ask}",
-        f"Focus on: {focus}.",
-        "1. Answer the question directly in one sentence.",
-        "2. Give brief context from your real experience only.",
-        "3. Explain 2–3 actions you took (I-statements).",
-        "4. Close with a measurable result you can substantiate — or say the qualitative outcome.",
-    ]
-    if transcript:
-        reply_parts.append(
-            "From your recent answer: keep what is specific; cut filler; map every sentence back to the question."
-        )
-    if keywords:
-        reply_parts.append("Themes to cover: " + ", ".join(keywords[:5]) + ".")
-    reply_parts.append("I will not invent facts — only coach structure and clarity.")
-    reply = "\n".join(reply_parts)
-    result = _envelope(
-        operation_type,
-        reply,
-        question=question or None,
-        message=message or None,
-    )
-    log.info("[PRACTICE_COACH] completed", operation_id=operation_id, correlation_id=correlation_id)
-    return result
+    # coach_chat — offline scaffold must never impersonate conversational AI.
+    # Edge ai-coach-chat fail-closes when Gemini is unavailable.
+    raise EngineError("COACH_AI_UNAVAILABLE", retryable=True)

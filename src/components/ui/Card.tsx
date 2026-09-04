@@ -1,18 +1,15 @@
 import { cn } from "@/lib/utils";
-import type { ReactNode } from "react";
+import type { HTMLAttributes, ReactNode } from "react";
 
 // ─────────────────────────────────────────────────────────────────
 // Card
 // Standard dark glass panel used throughout the app.
 // ─────────────────────────────────────────────────────────────────
 
-interface CardProps {
-  id?: string;
+interface CardProps extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
   children?: ReactNode;
-  className?: string;
   padding?: "none" | "sm" | "md" | "lg";
   hover?: boolean;
-  onClick?: () => void;
 }
 
 interface CardSectionProps {
@@ -34,6 +31,7 @@ export function Card({
   padding = "md",
   hover = false,
   onClick,
+  ...rest
 }: CardProps) {
   return (
     <div
@@ -51,6 +49,7 @@ export function Card({
         onClick && "cursor-pointer",
         className
       )}
+      {...rest}
     >
       {children}
     </div>

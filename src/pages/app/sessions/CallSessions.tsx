@@ -1,170 +1,253 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { sessionsDB, scorecardsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/userStore";
+import { sessionsDB } from "@/lib/supabase/database";
 import { toast } from "sonner";
-import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { usePageMeta } from "@/hooks/usePageMeta";
-import { debugLog161d95 } from "@/lib/debug/debugLog161d95";
 import { cn } from "@/lib/utils";
 import {
   Mic,
   Search,
   Plus,
   Clock,
-  Sparkles,
-  Phone,
-  Video,
-  Trash2,
   Eye,
+  Trash2,
+  BookOpen,
+  Code2,
+  GraduationCap,
+  Video,
+  Sparkles,
+  FileText,
 } from "lucide-react";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
-import { agentDebugIngest } from "@/lib/debug/agentIngest";
 import { formatDistanceToNow } from "date-fns";
-import type { Tables } from "@/integrations/supabase";
-import { useSwipeAction } from "@/hooks/useSwipeAction";
 import {
-  sessionMatchesTypeFilter,
-  sessionTypeLabel,
-  type SessionHistoryTypeFilter,
-} from "@/lib/session/sessionHistoryFilters";
-import { SESSIONS_CHANGED_EVENT } from "@/lib/session/sessionReuse";
+  SESSIONS_CHANGED_EVENT,
+  LEGACY_SESSIONS_CHANGED_EVENT,
+  notifySessionsChanged,
+} from "@/lib/session/sessionReuse";
 import { subscribeFocusRecovery } from "@/lib/focusRecovery";
-import { formatSessionDuration, resolveOverallScore } from "@/lib/session/sessionDisplay";
+import { formatSessionDuration } from "@/lib/session/sessionDisplay";
+import {
+  fetchSessionHistory,
+  SessionHistoryApiError,
+} from "@/lib/session/sessionHistoryApi";
+import type { SessionHistoryItem } from "@/lib/session/sessionHistoryTypes";
+import {
+  sessionHistoryScoreDisplay,
+  sessionHistoryTypeLabel,
+  sessionHistoryContextLine,
+  sessionHistoryItemIsDeletable,
+} from "@/lib/session/sessionHistoryTypes";
+import {
+  HISTORY_SORT_OPTIONS,
+  HISTORY_STATUS_CHIPS,
+  HISTORY_TYPE_CHIPS,
+  parseHistorySearchParams,
+  writeHistorySearchParams,
+} from "@/lib/session/sessionHistoryFilters";
 
-const SESSION_TYPES: SessionHistoryTypeFilter[] = ["all", "live", "mock", "practice"];
-
-type SessionRow = Pick<
-  Tables<"sessions">,
-  | "id"
-  | "type"
-  | "title"
-  | "overall_score"
-  | "created_at"
-  | "started_at"
-  | "ended_at"
-  | "questions_asked"
-  | "status"
-  | "tags"
-> & { source_type?: string | null; duration_seconds?: number | null; lifecycle_status?: string | null };
-
-const SESSION_TABS = ["recent", "all"] as const;
-type SessionTab = (typeof SESSION_TABS)[number];
+function typeIcon(item: SessionHistoryItem) {
+  const t = item.sessionSubtype === "live_copilot" ? "live_copilot" : item.sessionType;
+  switch (t) {
+    case "live_copilot":
+      return Video;
+    case "practice_coach":
+      return Mic;
+    case "mock_interview":
+      return Sparkles;
+    case "government_exam":
+      return GraduationCap;
+    case "assessment":
+      return FileText;
+    case "practice_workspace":
+      return BookOpen;
+    case "coding_assessment":
+      return Code2;
+    default:
+      return Mic;
+  }
+}
 
 export default function CallSessions() {
-  usePageMeta({
-    title: "Session History | Career Pilot",
-    description: "Review all your practice sessions — live coaching, mock interviews, and rehearsals.",
-  });
-
-  const navigate = useNavigate();
-
-  const [searchParams, setSearchParams] = useSearchParams();
-  const tab = (searchParams.get("tab") === "all" ? "all" : "recent") as SessionTab;
-
+  usePageMeta({ title: PRODUCT_NAMES.sessionHistory });
   const { user } = useAuthStore();
-  const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const parsed = useMemo(() => parseHistorySearchParams(searchParams), [searchParams]);
+
+  const [items, setItems] = useState<SessionHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [filter, setFilter] = useState<SessionHistoryTypeFilter>("all");
-  const [search, setSearch] = useState("");
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [searchDraft, setSearchDraft] = useState(parsed.search ?? "");
+  const [pendingDelete, setPendingDelete] = useState<SessionHistoryItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const fetchGen = useRef(0);
 
-  const hasSessionsRef = useRef(false);
-  hasSessionsRef.current = sessions.length > 0;
+  const filtersActive = Boolean(
+    (parsed.typeChip && parsed.typeChip !== "all") ||
+      (parsed.statusChip && parsed.statusChip !== "all") ||
+      parsed.search ||
+      (parsed.scoreState && parsed.scoreState !== "all") ||
+      (parsed.debriefState && parsed.debriefState !== "all") ||
+      parsed.dateFrom ||
+      parsed.dateTo,
+  );
 
-  const fetchSessions = useCallback(async (mode: "initial" | "background" = "initial") => {
-    if (!user?.id) return;
-
-    if (mode === "initial") {
-      setLoading(true);
-    }
-    setError(false);
-    try {
-      const limit = tab === "all" ? 500 : 20;
-      const data = await sessionsDB.listSummariesByUserId(user.id, limit);
-      let scoreBySession = new Map<string, number>();
+  const load = useCallback(
+    async (mode: "replace" | "append") => {
+      if (!user?.id) return;
+      const gen = ++fetchGen.current;
+      if (mode === "replace") {
+        setLoading(true);
+        setError(null);
+        setErrorCode(null);
+        setLoadMoreError(null);
+      } else {
+        setLoadingMore(true);
+        setLoadMoreError(null);
+      }
       try {
-        scoreBySession = await scorecardsDB.listScoresByUserId(
-          user.id,
-          data.map((row) => row.id),
-        );
-      } catch {
-        scoreBySession = new Map();
+        const res = await fetchSessionHistory({
+          types: parsed.types,
+          statuses: parsed.statuses,
+          search: parsed.search,
+          dateFrom: parsed.dateFrom,
+          dateTo: parsed.dateTo,
+          scoreState: parsed.scoreState,
+          debriefState: parsed.debriefState,
+          sort: parsed.sort,
+          cursor: mode === "append" ? nextCursor : null,
+          pageSize: 20,
+        });
+        if (gen !== fetchGen.current) return;
+        setItems((prev) => (mode === "append" ? [...prev, ...res.items] : res.items));
+        setNextCursor(res.nextCursor);
+        setHasMore(res.hasMore);
+        setLoadMoreError(null);
+      } catch (err) {
+        if (gen !== fetchGen.current) return;
+        const message =
+          err instanceof SessionHistoryApiError
+            ? err.message
+            : "We couldn’t load your session history.";
+        const code = err instanceof SessionHistoryApiError ? err.code : "UNKNOWN";
+        if (mode === "append") {
+          setLoadMoreError(message);
+          toast.error(message);
+        } else {
+          setError(message);
+          setErrorCode(code);
+          setItems([]);
+          setHasMore(false);
+          toast.error(message);
+        }
+      } finally {
+        if (gen === fetchGen.current) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
-      setSessions(
-        data.map((row) => ({
-          ...row,
-          overall_score: resolveOverallScore(row, {
-            overall_score: scoreBySession.get(row.id) ?? null,
-          }),
-        })),
-      );
-    } catch (err) {
-      console.error("[CallSessions] fetch error:", err);
-      setError(true);
-      toast.error("Couldn't load sessions. Please retry.");
-    } finally {
-      if (mode === "initial") {
-        setLoading(false);
-      }
-    }
-  }, [user?.id, tab]);
+    },
+    [user?.id, parsed, nextCursor],
+  );
 
   useEffect(() => {
-    void fetchSessions(hasSessionsRef.current ? "background" : "initial");
-  }, [fetchSessions]);
+    void load("replace");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    user?.id,
+    parsed.typeChip,
+    parsed.statusChip,
+    parsed.search,
+    parsed.sort,
+    parsed.scoreState,
+    parsed.debriefState,
+    parsed.dateFrom,
+    parsed.dateTo,
+  ]);
 
   useEffect(() => {
-    const refetch = () => void fetchSessions("background");
+    const refetch = () => void load("replace");
     window.addEventListener(SESSIONS_CHANGED_EVENT, refetch);
+    window.addEventListener(LEGACY_SESSIONS_CHANGED_EVENT, refetch);
     const unsub = subscribeFocusRecovery((plan) => {
-      if (plan.revalidate.includes("sessionsList")) {
-        void fetchSessions("background");
-      }
+      if (plan.revalidate.includes("sessionsList")) refetch();
     });
     return () => {
       window.removeEventListener(SESSIONS_CHANGED_EVENT, refetch);
+      window.removeEventListener(LEGACY_SESSIONS_CHANGED_EVENT, refetch);
       unsub();
     };
-  }, [fetchSessions]);
+  }, [load]);
 
-  async function deleteSession(id: string) {
-    try {
-      await sessionsDB.delete(id);
-      setSessions((prev) => prev.filter((s) => s.id !== id));
-      toast.success("Session deleted");
-    } catch {
-      toast.error("Failed to delete session");
-    }
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      if ((parsed.search ?? "") === searchDraft) return;
+      setSearchParams(
+        writeHistorySearchParams(searchParams, { q: searchDraft, cursor: null }),
+        { replace: true },
+      );
+    }, 300);
+    return () => window.clearTimeout(t);
+  }, [searchDraft, parsed.search, searchParams, setSearchParams]);
+
+  function patchParams(patch: Parameters<typeof writeHistorySearchParams>[1]) {
+    setSearchParams(writeHistorySearchParams(searchParams, { ...patch, cursor: null }), {
+      replace: true,
+    });
   }
 
-  const filtered = sessions.filter((s) => {
-    if (filter !== "all" && !sessionMatchesTypeFilter(s.type, filter)) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      return (
-        s.title?.toLowerCase().includes(q) ||
-        s.type?.toLowerCase().includes(q) ||
-        (s.tags ?? []).some((t: string) => t.toLowerCase().includes(q))
+  function clearFilters() {
+    setSearchDraft("");
+    setSearchParams(new URLSearchParams(), { replace: true });
+  }
+
+  async function confirmDeleteSession() {
+    if (!pendingDelete || !sessionHistoryItemIsDeletable(pendingDelete)) return;
+    const id = (pendingDelete.sessionId || pendingDelete.sourceId).trim();
+    setDeleting(true);
+    try {
+      await sessionsDB.delete(id);
+      setItems((prev) =>
+        prev.filter(
+          (row) =>
+            !(
+              row.sourceKind === pendingDelete.sourceKind &&
+              row.sourceId === pendingDelete.sourceId
+            ),
+        ),
       );
+      setPendingDelete(null);
+      notifySessionsChanged();
+      toast.success("Session deleted");
+    } catch (err) {
+      console.error("[CallSessions] delete failed:", err);
+      toast.error("Failed to delete session");
+    } finally {
+      setDeleting(false);
     }
-    return true;
-  });
+  }
 
   return (
     <div className="space-y-5 max-w-5xl animate-in fade-in slide-in-from-bottom-2 duration-200">
       <PageHeader
         title={PRODUCT_NAMES.sessionHistory}
-        description={`${sessions.length} total sessions`}
+        description="All practice and assessment activity in one timeline"
         breadcrumbs={[
           { label: "Dashboard", href: "/app/dashboard" },
           { label: "Sessions" },
@@ -179,50 +262,69 @@ export default function CallSessions() {
         }
       />
 
-      <div className="flex gap-2">
-        {SESSION_TABS.map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setSearchParams(t === "recent" ? {} : { tab: t })}
-            className={cn(
-              "px-3 py-1.5 rounded-xl text-xs font-medium border transition-all capitalize",
-              tab === t
-                ? "bg-primary/10 border-primary/30 text-primary/80"
-                : "bg-card border-border text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {t === "recent" ? "Recent" : "All history"}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col gap-3">
         <Input
-          placeholder="Search sessions…"
-          aria-label="Search sessions"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search title, role, exam, assessment…"
+          aria-label="Search session history"
+          value={searchDraft}
+          onChange={(e) => setSearchDraft(e.target.value)}
           leftIcon={<Search className="w-4 h-4" />}
           fullWidth={false}
-          className="sm:w-64"
+          className="sm:w-80"
         />
-        <div className="flex gap-1.5">
-          {SESSION_TYPES.map((t) => (
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Session type filters">
+          {HISTORY_TYPE_CHIPS.map((t) => (
             <button
-              key={t}
+              key={t.id}
               type="button"
-              onClick={() => setFilter(t)}
+              onClick={() => patchParams({ typeChip: t.id })}
               className={cn(
-                "px-3 py-1.5 rounded-xl text-xs font-medium border transition-all capitalize",
-                filter === t
+                "px-3 py-1.5 rounded-xl text-xs font-medium border transition-all",
+                parsed.typeChip === t.id
                   ? "bg-primary/10 border-primary/30 text-primary"
                   : "bg-card border-border text-muted-foreground hover:text-foreground",
               )}
             >
-              {t}
+              {t.label}
             </button>
           ))}
+        </div>
+        <div className="flex flex-wrap gap-2 items-center">
+          <label className="text-xs text-muted-foreground" htmlFor="history-status">
+            Status
+          </label>
+          <select
+            id="history-status"
+            className="text-xs rounded-lg border border-border bg-background px-2 py-1.5"
+            value={parsed.statusChip}
+            onChange={(e) => patchParams({ statusChip: e.target.value })}
+          >
+            {HISTORY_STATUS_CHIPS.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+          <label className="text-xs text-muted-foreground" htmlFor="history-sort">
+            Sort
+          </label>
+          <select
+            id="history-sort"
+            className="text-xs rounded-lg border border-border bg-background px-2 py-1.5"
+            value={parsed.sort}
+            onChange={(e) => patchParams({ sort: e.target.value })}
+          >
+            {HISTORY_SORT_OPTIONS.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+          {filtersActive && (
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          )}
         </div>
       </div>
 
@@ -234,240 +336,154 @@ export default function CallSessions() {
         </div>
       ) : error ? (
         <InlineErrorRetry
-          message="Unable to load sessions. There was a problem connecting to the database."
-          onRetry={() => void fetchSessions()}
+          message={`${error}${errorCode ? ` (${errorCode})` : ""}`}
+          onRetry={() => void load("replace")}
         />
-      ) : filtered.length === 0 ? (
-        <Card>
-          <EmptyState
-            icon={Phone}
-            title="No sessions yet"
-            description={
-              sessions.length === 0
-                ? "Start your first live session to see your history here."
-                : "No sessions match your filter."
-            }
-            actionLabel={sessions.length === 0 ? "Start Session" : undefined}
-            onAction={sessions.length === 0 ? () => navigate("/app/live") : undefined}
-          />
-        </Card>
+      ) : items.length === 0 && filtersActive ? (
+        <EmptyState
+          icon={Search}
+          title="No sessions match these filters."
+          description="Try clearing filters or widening the date range."
+          actionLabel="Clear filters"
+          onAction={clearFilters}
+        />
+      ) : items.length === 0 ? (
+        <EmptyState
+          icon={Mic}
+          title="You have not completed any practice sessions yet."
+          description="Start a Practice Coach, Mock Interview, exam, or coding assessment."
+          actionLabel="Start Practice Coach"
+          onAction={() => navigate("/app/live")}
+        />
       ) : (
-        <div className="border border-border rounded-xl overflow-hidden">
-          <div className="hidden sm:grid grid-cols-[2fr_1fr_1fr_1fr_1fr_80px] gap-4 px-4 py-2.5 bg-muted/30 border-b border-border text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
-            <span>Session</span>
-            <span>Type</span>
-            <span>Duration</span>
-            <span>AI Usage</span>
-            <span>Created</span>
-            <span>Actions</span>
-          </div>
-
-          {filtered.map((s) => {
-            const duration = formatSessionDuration(s);
-
-            const typeLabel = sessionTypeLabel(s);
-            const typeColor =
-              s.type === "live"
-                ? "bg-red-500/10 text-red-400 border-red-500/20"
-                : s.type === "mock"
-                  ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
-                  : "bg-primary/10 text-primary border-primary/20";
-
+        <div className="space-y-3" data-testid="session-history-list">
+          {items.map((item) => {
+            const Icon = typeIcon(item);
+            const canDelete = sessionHistoryItemIsDeletable(item);
             return (
-              <SwipeSessionRow
-                key={s.id}
-                session={s}
-                duration={duration}
-                typeColor={typeColor}
-                typeLabel={typeLabel}
-                onDelete={() => setPendingDeleteId(s.id)}
-              />
+              <Card
+                key={`${item.sourceKind}:${item.sourceId}`}
+                padding="none"
+                className="p-4 hover:border-primary/30 transition-colors cursor-pointer"
+                onClick={() => navigate(item.detailRoute)}
+                data-testid="session-history-row"
+                data-source-kind={item.sourceKind}
+              >
+                <div className="flex gap-3 items-start">
+                  <div className="rounded-xl bg-secondary p-2 shrink-0">
+                    <Icon className="w-4 h-4 text-muted-foreground" aria-hidden />
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="secondary">{sessionHistoryTypeLabel(item)}</Badge>
+                      <Badge variant="outline" className="capitalize">
+                        {item.status.replace(/_/g, " ")}
+                      </Badge>
+                      {item.debriefStatus && item.debriefStatus !== "not_eligible" && (
+                        <Badge variant="outline">Debrief: {item.debriefStatus.replace(/_/g, " ")}</Badge>
+                      )}
+                    </div>
+                    <p className="font-medium text-sm text-foreground truncate">{item.title}</p>
+                    <p className="text-xs text-muted-foreground truncate" data-testid="session-history-context">
+                      {sessionHistoryContextLine(item)}
+                    </p>
+                    <div className="flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+                      <span className="inline-flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {formatDistanceToNow(new Date(item.lastActivityAt), { addSuffix: true })}
+                      </span>
+                      <span>{formatSessionDuration(item.durationSeconds ?? null)}</span>
+                      <span>
+                        {item.answeredCount != null || item.totalQuestionCount != null
+                          ? `${item.answeredCount ?? "—"}/${item.totalQuestionCount ?? "—"} answered`
+                          : "—"}
+                      </span>
+                      <span>{sessionHistoryScoreDisplay(item)}</span>
+                    </div>
+                  </div>
+                  {/* Actions: shrink-0 + wrap — never clipped by overflow-hidden / 80px grid */}
+                  <div
+                    className="shrink-0 flex flex-wrap items-center justify-end gap-1"
+                    data-testid="session-history-actions"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(item.detailRoute);
+                      }}
+                      leftIcon={<Eye className="w-3.5 h-3.5" />}
+                    >
+                      View Details
+                    </Button>
+                    {canDelete && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0 min-h-11 min-w-11 px-2"
+                        aria-label="Delete session"
+                        title="Delete session"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPendingDelete(item);
+                        }}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-red-400" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </Card>
             );
           })}
+          {hasMore ? (
+            <div className="flex flex-col items-center gap-2 pt-2">
+              {loadMoreError && (
+                <InlineErrorRetry
+                  message={loadMoreError}
+                  onRetry={() => void load("append")}
+                />
+              )}
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={loadingMore}
+                onClick={() => void load("append")}
+              >
+                Load more
+              </Button>
+            </div>
+          ) : loadMoreError ? (
+            <div className="pt-2">
+              <InlineErrorRetry
+                message={loadMoreError}
+                onRetry={() => void load("append")}
+              />
+            </div>
+          ) : (
+            <p className="text-center text-xs text-muted-foreground py-2">
+              You’ve reached the end of your session history.
+            </p>
+          )}
         </div>
       )}
 
       <ConfirmDialog
-        open={pendingDeleteId !== null}
+        open={pendingDelete !== null}
         onOpenChange={(open) => {
-          if (!open) setPendingDeleteId(null);
+          if (!open && !deleting) setPendingDelete(null);
         }}
         title="Delete this session?"
-        description="This permanently removes the session record, transcript, and scores. This cannot be undone."
+        description="This permanently removes the session from your history. This cannot be undone."
         confirmLabel="Delete session"
         variant="destructive"
-        onConfirm={async () => {
-          if (!pendingDeleteId) return;
-          await deleteSession(pendingDeleteId);
-          setPendingDeleteId(null);
-        }}
+        isLoading={deleting}
+        onConfirm={() => void confirmDeleteSession()}
       />
-    </div>
-  );
-}
-
-function SwipeSessionRow({
-  session: s,
-  duration,
-  typeColor,
-  typeLabel,
-  onDelete,
-}: {
-  session: SessionRow;
-  duration: string | null;
-  typeColor: string;
-  typeLabel: string;
-  onDelete: () => void;
-}) {
-  const swipe = useSwipeAction({ maxReveal: 72, threshold: 48 });
-  const navigate = useNavigate();
-
-  return (
-    <div className="relative overflow-hidden border-b border-border last:border-b-0">
-      <div
-        className="absolute inset-y-0 right-0 flex items-stretch sm:hidden"
-        aria-hidden={!swipe.revealed}
-      >
-        <button
-          type="button"
-          onClick={() => {
-            swipe.reset();
-            onDelete();
-          }}
-          aria-label="Delete session"
-          className={cn(
-            "w-[72px] flex items-center justify-center bg-red-500/90 text-white min-h-11",
-            swipe.revealed ? "pointer-events-auto" : "pointer-events-none opacity-0",
-          )}
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
-      </div>
-
-      <div
-        {...swipe.bind}
-        role="link"
-        tabIndex={0}
-        onClick={(e) => {
-          if ((e.target as HTMLElement | null)?.closest("button, a, input, select, textarea")) {
-            return;
-          }
-          agentDebugIngest({
-            sessionId: "fcd48a",
-            runId: "post-fix",
-            hypothesisId: "SES-ROW",
-            location: "CallSessions.tsx:rowClick",
-            message: "session row navigate",
-            data: { sessionId: s.id },
-          });
-          navigate(`/app/sessions/${s.id}`);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            navigate(`/app/sessions/${s.id}`);
-          }
-        }}
-        className="relative grid grid-cols-1 sm:grid-cols-[2fr_1fr_1fr_1fr_1fr_80px] gap-2 sm:gap-4 px-4 py-3 hover:bg-muted/10 transition-colors items-start bg-background sm:bg-transparent cursor-pointer"
-        aria-label={`View session details: ${s.title ?? s.type ?? "session"}`}
-      >
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-foreground truncate">
-            {s.title ?? `${s.type ?? "practice"} session`}
-          </p>
-          {(() => {
-            const ageMs = Date.now() - new Date(s.created_at).getTime();
-            const isExpired =
-              s.status === "abandoned" ||
-              (s.status !== "completed" && ageMs > 24 * 60 * 60 * 1000);
-            if (isExpired) {
-              return (
-                <Badge variant="secondary" className="text-[9px] mt-0.5">
-                  Expired
-                </Badge>
-              );
-            }
-            if (s.status && s.status !== "completed") {
-              return (
-                <Badge variant="secondary" className="text-[9px] mt-0.5">
-                  {s.status}
-                </Badge>
-              );
-            }
-            if (s.status === "completed" && s.overall_score == null) {
-              return (
-                <Badge variant="secondary" className="text-[9px] mt-0.5">
-                  Feedback processing
-                </Badge>
-              );
-            }
-            return null;
-          })()}
-        </div>
-
-        <div>
-          <span
-            className={cn(
-              "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border capitalize",
-              typeColor,
-            )}
-          >
-            {s.type === "live" ? (
-              <Mic className="w-2.5 h-2.5" />
-            ) : (
-              <Video className="w-2.5 h-2.5" />
-            )}
-            {typeLabel}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Clock className="w-3 h-3" />
-          {duration ?? "—"}
-        </div>
-
-        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Sparkles className="w-3 h-3" />
-          {s.overall_score != null ? `${Math.round(s.overall_score)}` : "—"} · {s.questions_asked ?? 0} Qs
-        </div>
-
-        <div className="text-xs text-muted-foreground">
-          {formatDistanceToNow(new Date(s.created_at), { addSuffix: true })}
-        </div>
-
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              // #region agent log
-              debugLog161d95({
-                hypothesisId: "H5",
-                location: "CallSessions.tsx:eyeClick",
-                message: "session_view_details_click",
-                data: { sessionId: s.id, status: s.status ?? null },
-              });
-              // #endregion
-              navigate(`/app/sessions/${s.id}`);
-            }}
-            className="inline-flex items-center gap-1.5 px-2 py-2 hover:bg-muted/20 rounded-lg transition-colors min-h-11 text-xs text-muted-foreground hover:text-foreground"
-            title="View details"
-            aria-label="View session details"
-          >
-            <Eye className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Details</span>
-          </button>
-          <button
-            type="button"
-            onClick={onDelete}
-            className="p-2 hover:bg-red-500/10 rounded-lg transition-colors min-h-11 min-w-11 inline-flex items-center justify-center"
-            aria-label="Delete session"
-            title="Delete"
-          >
-            <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-red-400" />
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

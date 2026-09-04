@@ -18,6 +18,7 @@ export const USER_OWNED_TABLES: IsolationTable[] = [
   { table: "job_descriptions", ownerColumn: "user_id", crossUserSelect: "denied" },
   { table: "mock_tests", ownerColumn: "user_id", crossUserSelect: "denied" },
   { table: "test_responses", ownerColumn: "user_id", crossUserSelect: "denied" },
+  { table: "test_analyses", ownerColumn: "user_id", crossUserSelect: "denied" },
   { table: "session_transcripts", ownerColumn: "user_id", crossUserSelect: "denied" },
   { table: "interview_practice_plans", ownerColumn: "user_id", crossUserSelect: "denied" },
   { table: "interview_practice_plan_items", ownerColumn: "user_id", crossUserSelect: "denied" },

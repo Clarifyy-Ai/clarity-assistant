@@ -49,6 +49,67 @@ export function isCalendarConfigured(): boolean {
   return id.length > 0 && secret.length > 0;
 }
 
+/** When false (default), only emails in GOOGLE_CALENDAR_TEST_USERS may start OAuth. */
+export function isGoogleCalendarPublicOauth(): boolean {
+  const raw = (Deno.env.get("GOOGLE_CALENDAR_PUBLIC_OAUTH") ?? "")
+    .trim()
+    .toLowerCase();
+  return raw === "true" || raw === "1" || raw === "yes";
+}
+
+export function parseGoogleCalendarTestUsers(
+  raw?: string | null,
+): Set<string> {
+  const value = raw ?? Deno.env.get("GOOGLE_CALENDAR_TEST_USERS") ?? "";
+  return new Set(
+    value
+      .split(",")
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+/**
+ * Soft-gate Connect while Google OAuth is Testing/unverified.
+ * Public OAuth OR allowlisted Career Pilot account email.
+ */
+export function canStartCalendarOAuth(
+  userEmail: string | null | undefined,
+): boolean {
+  if (isGoogleCalendarPublicOauth()) return true;
+  const email = (userEmail ?? "").trim().toLowerCase();
+  if (!email) return false;
+  return parseGoogleCalendarTestUsers().has(email);
+}
+
+export type CalendarOauthAudienceReason =
+  | "not_configured"
+  | "verification_pending"
+  | "ok";
+
+export function calendarOauthAudienceStatus(
+  userEmail: string | null | undefined,
+): {
+  publicOauth: boolean;
+  connectAllowed: boolean;
+  reason: CalendarOauthAudienceReason;
+} {
+  if (!isCalendarConfigured()) {
+    return {
+      publicOauth: false,
+      connectAllowed: false,
+      reason: "not_configured",
+    };
+  }
+  const publicOauth = isGoogleCalendarPublicOauth();
+  const connectAllowed = canStartCalendarOAuth(userEmail);
+  return {
+    publicOauth,
+    connectAllowed,
+    reason: connectAllowed ? "ok" : "verification_pending",
+  };
+}
+
 export function googleClientId(): string {
   return readGoogleClientId();
 }

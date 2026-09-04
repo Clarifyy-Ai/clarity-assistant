@@ -4,7 +4,7 @@ import type {
   AudioErrorCode,
 } from "@/types/audio.types";
 import { useAudioStore } from "@/store/audioStore";
-import { captureSystemAudioViaTabShare } from "@/lib/capture/tabAudioCapture";
+import { captureSystemAudioViaTabShare, TabAudioCaptureError } from "@/lib/capture/tabAudioCapture";
 import { getCachedAudioDevices } from "@/lib/audio/audioDeviceCache";
 import {
   acquireMicrophoneStream,
@@ -90,11 +90,24 @@ export async function captureSystemAudio(): Promise<MediaStream> {
       sampleRate: 16000,
     } as MediaTrackConstraints);
   } catch (err) {
-    const name = (err as Error)?.name;
-    if (name === "NotAllowedError") {
-      throw buildAudioError("PERMISSION_DENIED", err);
+    // Preserve checkbox-miss so callers can show targeted recovery copy.
+    if (err instanceof TabAudioCaptureError) {
+      throw err;
     }
-    throw buildAudioError("SYSTEM_AUDIO_NOT_SUPPORTED", err);
+    const name = (err as Error)?.name;
+    if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+      const audioErr = buildAudioError("PERMISSION_DENIED", err);
+      throw Object.assign(new Error(audioErr.message), {
+        name: "NotAllowedError",
+        audioError: audioErr,
+      });
+    }
+    const audioErr = buildAudioError("SYSTEM_AUDIO_FAILED", err);
+    throw Object.assign(new Error(audioErr.message), {
+      name: "SystemAudioCaptureError",
+      audioError: audioErr,
+      code: "SYSTEM_AUDIO_FAILED",
+    });
   }
 }
 

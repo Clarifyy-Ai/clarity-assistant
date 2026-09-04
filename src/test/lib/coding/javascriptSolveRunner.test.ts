@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_TIMEOUT_MS,
+  MAX_OUTPUT_JSON_CHARS,
+  MAX_SOURCE_CHARS,
+  MAX_STDERR_CHARS,
+  MAX_STDOUT_CHARS,
   SUM_NUMBERS_REFERENCE_SOLVE,
+  limitSolveOutput,
   normalizeSolveValue,
   runJavascriptSolveTests,
 } from "@/lib/coding/javascriptSolveRunner";
@@ -12,6 +18,14 @@ const SUM_CASES = [
 ];
 
 describe("javascriptSolveRunner contracts", () => {
+  it("exports clear timeout and output limits", () => {
+    expect(DEFAULT_TIMEOUT_MS).toBe(800);
+    expect(MAX_SOURCE_CHARS).toBe(50_000);
+    expect(MAX_STDOUT_CHARS).toBe(4_000);
+    expect(MAX_STDERR_CHARS).toBe(4_000);
+    expect(MAX_OUTPUT_JSON_CHARS).toBe(8_000);
+  });
+
   it("passes the provided Sum the numbers reference solution", () => {
     const outcome = runJavascriptSolveTests(SUM_NUMBERS_REFERENCE_SOLVE, SUM_CASES);
     expect(outcome.execution_status).toBe("passed");
@@ -62,12 +76,30 @@ describe("javascriptSolveRunner contracts", () => {
     expect(outcome.blockedReason).toMatch(/timed out/i);
   });
 
-  it("handles large but serializable output", () => {
+  it("handles large but serializable output within the max", () => {
     const big = Array.from({ length: 500 }, (_, i) => i);
     const outcome = runJavascriptSolveTests("function solve(input) { return input; }", [
       { id: "big", name: "big", input: big, expected: big },
     ]);
     expect(outcome.execution_status).toBe("passed");
+  });
+
+  it("fail-closes when solve() output exceeds MAX_OUTPUT_JSON_CHARS", () => {
+    const oversized = "x".repeat(MAX_OUTPUT_JSON_CHARS + 10);
+    expect(limitSolveOutput(oversized).ok).toBe(false);
+    const outcome = runJavascriptSolveTests(
+      `function solve(input) { return ${JSON.stringify(oversized)}; }`,
+      [{ id: "huge", name: "huge", input: null, expected: null }],
+    );
+    expect(outcome.execution_status).toBe("runtime_error");
+    expect(outcome.primary_error).toMatch(/max size/i);
+  });
+
+  it("rejects source longer than MAX_SOURCE_CHARS", () => {
+    const huge = `function solve(input) { return ${JSON.stringify("y".repeat(MAX_SOURCE_CHARS))}; }`;
+    const outcome = runJavascriptSolveTests(huge, SUM_CASES);
+    expect(outcome.execution_status).toBe("compile_error");
+    expect(outcome.primary_error).toMatch(/max length/i);
   });
 
   it("maps empty test inventory to service_error", () => {

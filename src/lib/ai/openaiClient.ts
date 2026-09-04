@@ -1,5 +1,6 @@
 // src/lib/ai/openaiClient.ts — PRODUCTION READY
-import { fetchEdge, fetchEdgeJson, getAuthHeaders } from "@/lib/network/fetchEdge";
+import { fetchEdgeJson, getAuthHeaders } from "@/lib/network/fetchEdge";
+import { fetchLiveEdgeWithRetry } from "@/lib/session/liveSessionRetry";
 import { createIdempotencyKey } from "@/lib/api/functions";
 import { consumeSSEStream } from "@/lib/ai/geminiClient";
 import { ApiClientError } from "@/lib/api/apiClient";
@@ -48,7 +49,15 @@ export async function streamOpenAIHint(opts: OpenAIStreamOptions): Promise<void>
     interview_type: context.session_type ?? "behavioral",
     target_company: context.target_company ?? "",
     transcript: context.last_transcript ?? "",
-    resume_context: context.resume_experience_summary ?? "",
+    resume_context: [
+      context.resume_experience_summary ?? "",
+      context.preference_context ?? "",
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+    preference_context: context.preference_context ?? "",
+    skills_not_to_claim: context.skills_not_to_claim ?? [],
+    experience_level: context.experience_level ?? "",
     simple_language: simpleLanguage ?? false,
     session_id: sessionId,
     ...(mode ? { mode } : {}),
@@ -64,26 +73,12 @@ export async function streamOpenAIHint(opts: OpenAIStreamOptions): Promise<void>
       "Idempotency-Key": idempotencyKey,
       "x-idempotency-key": idempotencyKey,
     });
-    const response = await fetchEdge("generate-hint", body, {
+    const response = await fetchLiveEdgeWithRetry("generate-hint", body, {
       method: "POST",
       headers,
       signal,
       timeoutMs: 60_000,
     });
-    if (!response.ok) {
-      const errText = await response.text().catch(() => `HTTP ${response.status}`);
-      let parsed: { error?: string; code?: string } | null = null;
-      try {
-        parsed = JSON.parse(errText) as { error?: string; code?: string };
-      } catch {
-        parsed = null;
-      }
-      throw new ApiClientError({
-        message: parsed?.error || `Hint generation failed (${response.status}).`,
-        status: response.status,
-        code: parsed?.code ?? "",
-      });
-    }
     if (!response.body) {
       throw new ApiClientError({
         message: "Hint stream returned an empty body.",
@@ -164,6 +159,57 @@ export type CoachChatStreamOptions = {
 /**
  * Coach chat → ai-coach-chat EF (SSE streaming).
  */
+function normalizeCoachChatClientError(err: ApiClientError): ApiClientError {
+  const code = String(err.code ?? "").toUpperCase() || "API_ERROR";
+  const creditServiceDown =
+    code === "CREDIT_SERVICE_UNAVAILABLE" ||
+    code === "RATE_LIMIT_BACKEND_UNAVAILABLE";
+  const providerUnavailable =
+    !creditServiceDown &&
+    (err.status === 502 ||
+      err.status === 503 ||
+      code === "AI_UNAVAILABLE" ||
+      code === "AI_PROVIDER_UNAVAILABLE" ||
+      code === "PROVIDER_UNAVAILABLE" ||
+      code === "COACH_AI_UNAVAILABLE");
+  const insufficientCredits =
+    !providerUnavailable &&
+    !creditServiceDown &&
+    (code === "PAYMENT_REQUIRED" ||
+      code === "INSUFFICIENT_CREDITS" ||
+      err.status === 402);
+  const invalidOutput = code === "AI_INVALID_OUTPUT" || err.status === 422;
+
+  if (code === "REQUEST_ABORTED") return err;
+
+  const message = insufficientCredits
+    ? "Insufficient credits. Please top up to continue chatting with your coach."
+    : creditServiceDown
+      ? code === "RATE_LIMIT_BACKEND_UNAVAILABLE"
+        ? "The service is temporarily unavailable. Please try again in a moment."
+        : "Credits couldn't be verified right now. Please try again."
+      : invalidOutput
+        ? "Coach returned an incomplete reply. Please try again."
+        : providerUnavailable
+          ? "Coach AI is temporarily unavailable. Try again in a moment."
+          : err.message || `Coach chat failed (${err.status}).`;
+
+  return new ApiClientError({
+    message,
+    status: err.status,
+    code: insufficientCredits
+      ? "INSUFFICIENT_CREDITS"
+      : creditServiceDown
+        ? code
+        : invalidOutput
+          ? "AI_INVALID_OUTPUT"
+          : providerUnavailable
+            ? "AI_PROVIDER_UNAVAILABLE"
+            : code,
+    details: err.details,
+  });
+}
+
 export async function streamCoachChat(opts: CoachChatStreamOptions): Promise<void> {
   const {
     message,
@@ -206,53 +252,13 @@ export async function streamCoachChat(opts: CoachChatStreamOptions): Promise<voi
       "x-idempotency-key": idempotencyKey,
     });
 
-    const res = await fetchEdge("ai-coach-chat", body, {
+    const res = await fetchLiveEdgeWithRetry("ai-coach-chat", body, {
       method: "POST",
       headers,
       signal,
-      timeoutMs: opts.timeoutMs ?? 45_000,
+      // Keep in sync with Edge geminiChat timeoutMs 45_000 × maxAttempts 2.
+      timeoutMs: opts.timeoutMs ?? 90_000,
     });
-
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      let parsed: { error?: string; code?: string; message?: string } | null = null;
-      try {
-        parsed = JSON.parse(errText) as {
-          error?: string;
-          code?: string;
-          message?: string;
-        };
-      } catch {
-        parsed = null;
-      }
-      const code = String(parsed?.code ?? "").toUpperCase() || "API_ERROR";
-      const providerUnavailable =
-        res.status === 502 ||
-        res.status === 503 ||
-        code === "AI_UNAVAILABLE" ||
-        code === "PROVIDER_UNAVAILABLE";
-      const insufficientCredits =
-        !providerUnavailable &&
-        (code === "PAYMENT_REQUIRED" ||
-          code === "INSUFFICIENT_CREDITS" ||
-          res.status === 402);
-      throw new ApiClientError({
-        message:
-          parsed?.error ||
-          parsed?.message ||
-          (insufficientCredits
-            ? "Insufficient credits. Please top up to continue chatting with your coach."
-            : providerUnavailable
-              ? "Your coach is temporarily unavailable. Please retry."
-              : `Coach chat failed (${res.status}).`),
-        status: res.status,
-        code: insufficientCredits
-          ? "INSUFFICIENT_CREDITS"
-          : providerUnavailable
-            ? "AI_PROVIDER_UNAVAILABLE"
-            : code,
-      });
-    }
 
     if (!res.body) {
       throw new ApiClientError({
@@ -277,7 +283,11 @@ export async function streamCoachChat(opts: CoachChatStreamOptions): Promise<voi
         } catch {
           /* ignore */
         }
-        return;
+        throw new ApiClientError({
+          message: "Coach reply timed out (CP-10245). Your message was not accepted — retry the same turn.",
+          status: 408,
+          code: "REQUEST_ABORTED",
+        });
       }
 
       const { done, value } = await reader.read();
@@ -313,13 +323,15 @@ export async function streamCoachChat(opts: CoachChatStreamOptions): Promise<voi
         }
 
         if (eventType === "error") {
-          throw new ApiClientError({
-            message:
-              String(parsed.error ?? "") ||
-              "Your coach is temporarily unavailable. Please retry.",
-            status: 502,
-            code: String(parsed.code ?? "AI_UNAVAILABLE"),
-          });
+          throw normalizeCoachChatClientError(
+            new ApiClientError({
+              message:
+                String(parsed.error ?? "") ||
+                "Your coach is temporarily unavailable. Please retry.",
+              status: 502,
+              code: String(parsed.code ?? "AI_UNAVAILABLE"),
+            }),
+          );
         }
 
         if (eventType === "done") {
@@ -352,7 +364,30 @@ export async function streamCoachChat(opts: CoachChatStreamOptions): Promise<voi
       source,
     });
   } catch (err) {
-    if ((err as Error).name === "AbortError") return;
+    // Never silent-succeed on abort/timeout — caller must surface error UX.
+    if (err instanceof ApiClientError) {
+      onError(
+        err.code === "REQUEST_ABORTED" ? err : normalizeCoachChatClientError(err),
+      );
+      return;
+    }
+    const name = err instanceof Error ? err.name : "";
+    const message = err instanceof Error ? err.message : String(err ?? "");
+    const aborted =
+      name === "AbortError" ||
+      name === "TimeoutError" ||
+      /timed?\s*out|aborted|cancelled/i.test(message);
+    if (aborted) {
+      onError(
+        new ApiClientError({
+          message:
+            "Coach reply timed out (CP-10245). Your message was not accepted — retry the same turn.",
+          status: 408,
+          code: "REQUEST_ABORTED",
+        }),
+      );
+      return;
+    }
     onError(err instanceof Error ? err : new Error(String(err)));
   }
 }

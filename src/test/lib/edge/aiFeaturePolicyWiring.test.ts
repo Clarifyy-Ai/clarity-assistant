@@ -49,6 +49,7 @@ describe("AI feature policy wiring", () => {
       "generate_answer",
       "extract_question_paper",
       "parse_question_pdf",
+      "ai_coach_chat",
     ]) {
       expect(src).toContain(`${feature}:`);
     }
@@ -66,10 +67,11 @@ describe("AI feature policy wiring", () => {
 
   it("generate-scorecard returns persisted scorecard before AI", () => {
     const source = readFunction("generate-scorecard");
-    const existingIdx = source.indexOf("if (existing && !recalculate)");
+    const existingIdx = source.indexOf("hasCompletedScore");
     const aiIdx = source.indexOf("runAi:");
     expect(existingIdx).toBeGreaterThan(0);
     expect(aiIdx).toBeGreaterThan(existingIdx);
+    expect(source).toContain("!recalculate");
     expect(source).toContain('operation: "session_scorecard"');
   });
 });

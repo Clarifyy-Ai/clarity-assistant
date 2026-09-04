@@ -33,6 +33,13 @@ _asar-extract/
 !.env.production
 .env.*.local
 
+# Host-local installer upstream overrides (optional)
+public/download-windows.config.php
+
+# Staged Windows installer binary (copied by publish:desktop-installer; do not commit ~85MB)
+public/download/*.exe
+!public/download/.gitkeep
+
 # =========================
 # 🚨 Secrets / Sensitive Files
 # =========================
@@ -104,3 +111,9 @@ supabase/.temp/
 *.sln
 *.sw?
 
+
+# Local deploy / audit artifacts (may contain tokens)
+deploy-ship-log.txt
+deploy-edge-log.txt
+qa-audit-results/
+node_modules_mcp/

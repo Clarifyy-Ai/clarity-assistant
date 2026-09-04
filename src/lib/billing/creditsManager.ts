@@ -9,6 +9,8 @@ import { isPaidPlan as isPaidPlanId } from "@/lib/billing/planIds";
 export const SERVER_AI_CREDIT_COSTS = {
   hint: AI_CREDIT_COSTS.live_hint,
   fullAnswer: AI_CREDIT_COSTS.live_answer,
+  /** resolveActionCost("liveanswerlong") = live_answer + 4 */
+  longAnswer: AI_CREDIT_COSTS.live_answer + 4,
   screenshotAnswer: AI_CREDIT_COSTS.screenshot_answer,
   coachMessage: AI_CREDIT_COSTS.ai_coach_message,
 } as const;

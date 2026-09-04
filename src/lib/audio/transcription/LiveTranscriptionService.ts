@@ -7,7 +7,9 @@
  */
 
 import { DeepgramStreamClient } from "@/lib/audio/deepgramStream";
+import type { DeepgramClientHealthSnapshot } from "@/lib/audio/deepgramStream";
 import { resetDeepgramTokenClient } from "@/lib/audio/deepgramToken";
+import { useAudioStore } from "@/store/audioStore";
 import { generateId } from "@/lib/utils";
 import type { DeepgramConnectionStatus, TranscriptUtterance } from "@/types/audio.types";
 import { loadLiveTranscriptionConfig } from "./config";
@@ -20,12 +22,21 @@ import type {
   TranscriptionProviderStatus,
 } from "./types";
 
+export type ChannelHealthProbe = {
+  stream: MediaStream | null;
+  lastTranscriptEventAt: number | null;
+  sttStatus: TranscriptionProviderStatus;
+  frames: DeepgramClientHealthSnapshot | null;
+};
+
 type ChannelState = {
   client: DeepgramStreamClient | null;
   stream: MediaStream | null;
   sequence: number;
   seenFinalKeys: Set<string>;
   connectInFlight: Promise<void> | null;
+  lastTranscriptEventAt: number | null;
+  sttStatus: TranscriptionProviderStatus;
 };
 
 function mapDeepgramStatus(status: DeepgramConnectionStatus): TranscriptionProviderStatus {
@@ -55,6 +66,10 @@ export class LiveTranscriptionService {
   private paused = false;
   private globalSequence = 0;
 
+  /** Bounded rolling window of recent interviewer finals (for AI Help freeze). */
+  private readonly interviewerRing: string[] = [];
+  private static readonly INTERVIEWER_RING_MAX = 12;
+
   private readonly channels: Record<TranscriptionChannel, ChannelState> = {
     candidate: {
       client: null,
@@ -62,6 +77,8 @@ export class LiveTranscriptionService {
       sequence: 0,
       seenFinalKeys: new Set(),
       connectInFlight: null,
+      lastTranscriptEventAt: null,
+      sttStatus: "idle",
     },
     interviewer: {
       client: null,
@@ -69,6 +86,8 @@ export class LiveTranscriptionService {
       sequence: 0,
       seenFinalKeys: new Set(),
       connectInFlight: null,
+      lastTranscriptEventAt: null,
+      sttStatus: "idle",
     },
   };
 
@@ -88,6 +107,16 @@ export class LiveTranscriptionService {
 
   isProviderEnabled(): boolean {
     return this.config.enabled;
+  }
+
+  getChannelHealthProbe(channel: TranscriptionChannel): ChannelHealthProbe {
+    const state = this.channels[channel];
+    return {
+      stream: state.stream,
+      lastTranscriptEventAt: state.lastTranscriptEventAt,
+      sttStatus: state.sttStatus,
+      frames: state.client?.getHealthSnapshot() ?? null,
+    };
   }
 
   async connectChannel(stream: MediaStream, channel: TranscriptionChannel): Promise<void> {
@@ -116,6 +145,8 @@ export class LiveTranscriptionService {
       state.stream = stream;
       state.sequence = 0;
       state.seenFinalKeys.clear();
+      state.lastTranscriptEventAt = null;
+      state.sttStatus = "connecting";
       this.callbacks.onStatusChange("connecting", channel);
 
       const client = new DeepgramStreamClient({
@@ -135,13 +166,28 @@ export class LiveTranscriptionService {
         onInterim: (text) => this.handlePartial(text, channel),
         onError: (error) => {
           if (this.destroyed || this.paused) return;
+          state.sttStatus = "error";
           this.callbacks.onError(error, true, channel);
         },
         onStatusChange: (status) => {
           if (this.destroyed) return;
           if (this.paused && status !== "disconnected") return;
-          this.callbacks.onStatusChange(mapDeepgramStatus(status), channel);
+          const mapped = mapDeepgramStatus(status);
+          state.sttStatus = mapped;
+          this.callbacks.onStatusChange(mapped, channel);
         },
+        onAudioFrame:
+          channel === "interviewer"
+            ? (sent) => {
+                useAudioStore.getState().noteInterviewerCaptureFrame(sent);
+              }
+            : undefined,
+        onHeartbeat:
+          channel === "interviewer"
+            ? () => {
+                useAudioStore.getState().noteInterviewerCaptureHeartbeat();
+              }
+            : undefined,
       });
 
       state.client = client;
@@ -213,6 +259,25 @@ export class LiveTranscriptionService {
     this.disconnectChannelInternal(channel, { preserveStream: false });
   }
 
+  /**
+   * Snapshot recent interviewer transcript text from the bounded ring buffer.
+   * Call on AI Help click to freeze the window used for question confirmation.
+   */
+  snapshotRecentInterviewerTranscript(maxChars = 2_000): string {
+    const joined = this.interviewerRing.join(" ").replace(/\s+/g, " ").trim();
+    if (joined.length <= maxChars) return joined;
+    return joined.slice(-maxChars).trim();
+  }
+
+  private pushInterviewerRing(text: string): void {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    this.interviewerRing.push(trimmed);
+    while (this.interviewerRing.length > LiveTranscriptionService.INTERVIEWER_RING_MAX) {
+      this.interviewerRing.shift();
+    }
+  }
+
   private disconnectChannelInternal(
     channel: TranscriptionChannel,
     opts: { preserveStream: boolean },
@@ -234,6 +299,7 @@ export class LiveTranscriptionService {
 
   private handlePartial(text: string, channel: TranscriptionChannel): void {
     if (this.destroyed || this.paused || !text.trim()) return;
+    this.channels[channel].lastTranscriptEventAt = Date.now();
     const seq = this.nextSequence(channel);
     this.callbacks.onPartial(partialTextToSegment(this.sessionId, text, channel, seq), channel);
   }
@@ -251,7 +317,11 @@ export class LiveTranscriptionService {
       utterance.end_ms,
     );
     if (!rememberFinalKey(this.channels[channel].seenFinalKeys, fingerprint)) return;
+    this.channels[channel].lastTranscriptEventAt = Date.now();
     const seq = this.nextSequence(channel);
+    if (channel === "interviewer") {
+      this.pushInterviewerRing(utterance.text);
+    }
     this.callbacks.onFinal(utteranceToSegment(utterance, this.sessionId, seq), channel);
   }
 }

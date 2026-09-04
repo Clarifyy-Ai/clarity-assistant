@@ -100,9 +100,18 @@ export function userFacingSessionDebriefError(err: unknown): string {
     DATABASE_FAILURE: "Debrief was generated, but we couldn't save it. Please retry.",
     DATABASE_UNAVAILABLE: "Debrief was generated, but we couldn't save it. Please retry.",
     NOT_SCORED: "No answers or transcript were recorded for this session, so a debrief cannot be generated.",
+    NOT_ELIGIBLE_NO_ANSWERS:
+      "No answers or transcript were recorded for this session, so a debrief cannot be generated.",
+    NOT_ELIGIBLE_NO_QUESTIONS:
+      "No questions were recorded for this session, so a debrief cannot be generated.",
+    SESSION_INCOMPLETE: "This session is not complete yet, so a debrief cannot be generated.",
+    DEBRIEF_AI_REQUIRED:
+      "Debrief generation requires AI evaluation. Your credits were not charged. Please retry.",
     CANCELLED: "Debrief generation was cancelled. Credits were not charged.",
     DUPLICATE_REQUEST: "A debrief is already being generated for this session.",
-    CAPABILITY_REQUIRED: "Detailed debriefs require a Pro plan or higher.",
+    DEBRIEF_ALREADY_PROCESSING: "A debrief is already being generated for this session.",
+    CAPABILITY_REQUIRED:
+      "Debrief generation is not available for your account right now. Check your credits or try again later.",
   };
   if (mapped[code]) {
     const msg = err instanceof Error ? err.message : "";
@@ -168,6 +177,88 @@ export async function startSessionDebriefJob(input: {
     { headers, signal: input.signal, timeoutMs: START_TIMEOUT_MS },
   );
   return asJob(result);
+}
+
+export async function listActiveDebriefJobsForUser(
+  userId: string,
+): Promise<
+  Array<{
+    jobId: string;
+    sessionId: string;
+    status: "queued" | "processing";
+    updatedAt: string;
+    createdAt: string | null;
+    progressStage: string | null;
+  }>
+> {
+  const { data, error } = await supabase
+    .from("session_debrief_jobs")
+    .select("id, session_id, status, progress_stage, created_at, updated_at")
+    .eq("user_id", userId)
+    .in("status", ["queued", "processing"])
+    .order("updated_at", { ascending: false })
+    .limit(50);
+
+  if (error) {
+    throw new Error(error.message || "Failed to load debrief jobs");
+  }
+
+  return (data ?? [])
+    .map((row) => {
+      const status = String(row.status ?? "");
+      if (status !== "queued" && status !== "processing") return null;
+      const sessionId = String(row.session_id ?? "");
+      if (!sessionId) return null;
+      return {
+        jobId: String(row.id),
+        sessionId,
+        status: status as "queued" | "processing",
+        updatedAt: String(row.updated_at ?? row.created_at ?? new Date().toISOString()),
+        createdAt: row.created_at ? String(row.created_at) : null,
+        progressStage:
+          typeof row.progress_stage === "string" ? row.progress_stage : null,
+      };
+    })
+    .filter((j): j is NonNullable<typeof j> => Boolean(j));
+}
+
+export async function listRetryableFailedDebriefJobsForUser(
+  userId: string,
+): Promise<
+  Array<{
+    jobId: string;
+    sessionId: string;
+    errorCode: string | null;
+    errorMessage: string | null;
+    updatedAt: string;
+  }>
+> {
+  const { data, error } = await supabase
+    .from("session_debrief_jobs")
+    .select("id, session_id, status, error_code, error_message, retryable, updated_at")
+    .eq("user_id", userId)
+    .eq("status", "failed")
+    .eq("retryable", true)
+    .order("updated_at", { ascending: false })
+    .limit(20);
+
+  if (error) {
+    throw new Error(error.message || "Failed to load failed debrief jobs");
+  }
+
+  return (data ?? [])
+    .map((row) => {
+      const sessionId = String(row.session_id ?? "");
+      if (!sessionId) return null;
+      return {
+        jobId: String(row.id),
+        sessionId,
+        errorCode: typeof row.error_code === "string" ? row.error_code : null,
+        errorMessage: typeof row.error_message === "string" ? row.error_message : null,
+        updatedAt: String(row.updated_at ?? new Date().toISOString()),
+      };
+    })
+    .filter((j): j is NonNullable<typeof j> => Boolean(j));
 }
 
 export async function getSessionDebriefJob(jobId: string): Promise<SessionDebriefJob> {

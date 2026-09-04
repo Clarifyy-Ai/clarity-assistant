@@ -694,7 +694,7 @@ export default function GovExamDetail(): React.ReactElement {
       : null;
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-6 pb-24" data-testid="gov-exam-detail">
       <PageHeader
         title={exam?.name ?? "Government exam"}
         description={
@@ -718,7 +718,17 @@ export default function GovExamDetail(): React.ReactElement {
       )}
 
       {error && !loading && (
-        <InlineErrorRetry message={error} onRetry={() => void load()} />
+        <div data-testid="gov-exam-detail-not-found">
+          <InlineErrorRetry message={error} onRetry={() => void load()} />
+          <p className="mt-3">
+            <Link
+              to="/app/mock-test"
+              className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+            >
+              Back to exam hub
+            </Link>
+          </p>
+        </div>
       )}
 
       {details && !loading && (

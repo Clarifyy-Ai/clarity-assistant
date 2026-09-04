@@ -15,15 +15,22 @@ export type WizardFieldOpts = {
   model?: string | null;
   smartRouting?: boolean;
   resumeId?: string | null;
+  seniority?: string | null;
 };
 
-/** Interview mode needs a role and a resume. Regular call does not. Company stays optional. */
+/** Interview mode needs a role, resume, and seniority. Regular call does not. */
 export function wizardRequiredFieldsBlocker(opts: WizardFieldOpts): string | null {
   if (setupFieldRequirement(opts.sessionCallType, "role") === "REQUIRED" && !opts.role.trim()) {
     return "Choose a target role before continuing.";
   }
   if (setupFieldRequirement(opts.sessionCallType, "resume") === "REQUIRED" && !opts.resumeId) {
     return "Select a resume so the coach can use your experience.";
+  }
+  if (
+    setupFieldRequirement(opts.sessionCallType, "seniority") === "REQUIRED" &&
+    !String(opts.seniority ?? "").trim()
+  ) {
+    return "Select experience level / seniority before continuing.";
   }
   if (setupFieldRequirement(opts.sessionCallType, "hint_style") === "REQUIRED" && !opts.hintStyle) {
     return "Select a hint style before continuing.";
@@ -51,6 +58,12 @@ export function wizardStepBlocker(
   if (step === PRACTICE_COACH_WIZARD_STEPS.goal) {
     if (setupFieldRequirement(sessionCallType, "role") === "REQUIRED" && !opts.role.trim()) {
       return "Choose a target role before continuing.";
+    }
+    if (
+      setupFieldRequirement(sessionCallType, "seniority") === "REQUIRED" &&
+      !String(opts.seniority ?? "").trim()
+    ) {
+      return "Select experience level / seniority before continuing.";
     }
   }
 
@@ -84,6 +97,12 @@ export function wizardMissingFieldMessages(opts: WizardFieldOpts): string[] {
   }
   if (setupFieldRequirement(opts.sessionCallType, "resume") === "REQUIRED" && !opts.resumeId) {
     missing.push("Resume is required");
+  }
+  if (
+    setupFieldRequirement(opts.sessionCallType, "seniority") === "REQUIRED" &&
+    !String(opts.seniority ?? "").trim()
+  ) {
+    missing.push("Experience level / seniority is required");
   }
   if (setupFieldRequirement(opts.sessionCallType, "hint_style") === "REQUIRED" && !opts.hintStyle) {
     missing.push("Hint style is required");

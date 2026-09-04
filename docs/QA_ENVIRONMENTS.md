@@ -66,9 +66,11 @@ There is no separate staging project yet — treat closed beta as the QA target.
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Not present — calendar stays blocked |
 | Code signing cert | CI / desktop release — not Edge |
 
-## Stripe test card
+## Razorpay sandbox checkout
 
-`4242 4242 4242 4242` — any future expiry, any CVC (test mode only).
+Use **Razorpay India test mode** (test Key ID `rzp_test_…` + matching secret on Edge). Complete checkout with Razorpay dashboard **India test cards / UPI** — never Stripe `4242` cards (those are rejected as international / unsupported).
+
+Create-order fails closed with `503 PAYMENTS_NOT_CONFIGURED` when Razorpay secrets are missing.
 
 ## Lovable deploy checklist (closed beta — BUG-LIVE-STAGING-ENV)
 

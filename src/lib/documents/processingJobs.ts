@@ -1,9 +1,13 @@
 import { ApiClientError } from "@/lib/api/apiClient";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import {
+  DOCUMENT_ERROR_CODES,
   isKnownDocumentErrorCode,
   userFacingDocumentFailureMessage,
 } from "@/lib/documents/documentFailure";
+
+/** Soft client wait covers one worker lease (~180s) plus buffer. */
+export const DOCUMENT_JOB_SOFT_WAIT_MS = 240_000;
 
 export type DocumentJobState =
   | "queued"
@@ -83,10 +87,30 @@ export function isFailedJobStatus(status: string | undefined): boolean {
     normalized === "error" || normalized === "failed";
 }
 
+/**
+ * True when the client soft-wait ended while the durable job is still running.
+ * This is informational — never treat as a terminal parse failure or trigger retry/recharge.
+ */
+export function isClientWaitElapsed(
+  job: Pick<DocumentJob, "status" | "error_code"> | null | undefined,
+): boolean {
+  if (!job) return false;
+  const code = String(job.error_code ?? "").trim().toUpperCase();
+  if (code === DOCUMENT_ERROR_CODES.CLIENT_WAIT_ELAPSED) return true;
+  // Legacy soft-poll synthesized PARSER_TIMEOUT while still in-flight.
+  if (code === DOCUMENT_ERROR_CODES.PARSER_TIMEOUT && isInFlightJobStatus(job.status)) {
+    return true;
+  }
+  return false;
+}
+
 export function userFacingJobError(job: Pick<DocumentJob, "error_code" | "error_message"> | null | undefined): string {
   const code = String(job?.error_code ?? "");
   if (code === "INSUFFICIENT_CREDITS") {
     return "Not enough credits to process this document.";
+  }
+  if (isClientWaitElapsed(job)) {
+    return userFacingDocumentFailureMessage(DOCUMENT_ERROR_CODES.CLIENT_WAIT_ELAPSED);
   }
   if (isKnownDocumentErrorCode(code)) {
     return userFacingDocumentFailureMessage(code, job?.error_message);
@@ -173,6 +197,10 @@ export async function parseDocumentFallback(opts: {
 export function shouldFallbackToSyncParse(err: unknown, created?: CreateJobResult | null): boolean {
   if (created && created.pythonConfigured === false) return true;
   if (!err) return false;
+  // Soft client wait is never a reason to sync-parse (would double-charge).
+  if (err instanceof Error && /still processing|CLIENT_WAIT_ELAPSED/i.test(err.message)) {
+    return false;
+  }
   if (err instanceof ApiClientError) {
     const code = String(err.code ?? "");
     return (
@@ -199,7 +227,7 @@ export async function pollDocumentJobUntilDone(
   if (existing) return existing;
 
   const intervalMs = opts?.intervalMs ?? 2500;
-  const timeoutMs = opts?.timeoutMs ?? 90_000;
+  const timeoutMs = opts?.timeoutMs ?? DOCUMENT_JOB_SOFT_WAIT_MS;
   const run = (async () => {
     const started = Date.now();
     let last: DocumentJob | null = null;
@@ -211,9 +239,10 @@ export async function pollDocumentJobUntilDone(
     if (last && isInFlightJobStatus(last.status)) {
       return {
         ...last,
-        error_code: "PARSER_TIMEOUT",
-        error_message: userFacingDocumentFailureMessage("PARSER_TIMEOUT"),
-        retryable: true,
+        error_code: DOCUMENT_ERROR_CODES.CLIENT_WAIT_ELAPSED,
+        error_message: userFacingDocumentFailureMessage(DOCUMENT_ERROR_CODES.CLIENT_WAIT_ELAPSED),
+        // Soft wait is not a failure — job remains in flight; do not nudge Retry.
+        retryable: false,
       };
     }
     return last;

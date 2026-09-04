@@ -1,4 +1,5 @@
 import type { SessionQuestion, InterviewType } from "@/types/session.types";
+import { isDuplicateQuestion } from "@/lib/mock/questionDuplicate";
 
 export type QuestionValidationResult =
   | { ok: true; question: SessionQuestion }
@@ -67,6 +68,17 @@ export function validateGeneratedQuestion(
 
   if (isDuplicateQuestionText(text, options.usedTexts)) {
     return { ok: false, reason: "Question was already used in this session." };
+  }
+
+  const semantic = isDuplicateQuestion(text, [...options.usedTexts]);
+  if (semantic.duplicate) {
+    return {
+      ok: false,
+      reason:
+        semantic.reason === "semantic"
+          ? "Question is too similar to one already asked."
+          : "Question was already used in this session.",
+    };
   }
 
   const claimedSession =

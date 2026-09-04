@@ -329,6 +329,7 @@ export default function SystemDesign() {
         description="Generate a breakdown, then save exactly once to Answer Bank."
         isGenerating={generating}
         generationLabel="Generating system design sections…"
+        generationStage="system_design"
         error={error}
         onRetry={() => void getAIBreakdown()}
       >
@@ -352,7 +353,15 @@ export default function SystemDesign() {
               key={preset.id}
               type="button"
               onClick={() => {
-                whiteboardRef.current?.loadPreset(preset.id);
+                if (useNotesOnly || !whiteboardRef.current) {
+                  toast.message(
+                    useNotesOnly
+                      ? "Show the whiteboard first to load a template."
+                      : "Select a topic and show the whiteboard to load a template.",
+                  );
+                  return;
+                }
+                whiteboardRef.current.loadPreset(preset.id);
                 setActivePreset(preset.id);
                 toast.success(`${preset.label} template loaded on whiteboard`);
               }}
@@ -370,8 +379,11 @@ export default function SystemDesign() {
         </div>
       </Card>
 
-      <div data-testid="system-design-split" className="flex flex-col lg:flex-row gap-5">
-        <div className="w-full lg:w-80 lg:max-w-full space-y-2 flex-shrink-0 max-h-[600px] overflow-y-auto pr-1">
+      <div
+        data-testid="system-design-split"
+        className="grid grid-cols-1 gap-5 xl:grid-cols-[20rem_minmax(0,1fr)_18rem] min-w-0"
+      >
+        <aside className="w-full min-w-0 space-y-2 max-h-[600px] overflow-y-auto pr-1 xl:max-h-[calc(100vh-12rem)]">
           {topics === null && (
             <div className="space-y-2">
               {[0, 1, 2, 3, 4].map((i) => (
@@ -400,11 +412,11 @@ export default function SystemDesign() {
               )}
             >
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">{CATEGORY_ICONS[topic.category] ?? <Server className="w-3.5 h-3.5" />}</span>
-                  <span className="text-sm font-medium text-foreground">{topic.title}</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-muted-foreground shrink-0">{CATEGORY_ICONS[topic.category] ?? <Server className="w-3.5 h-3.5" />}</span>
+                  <span className="text-sm font-medium text-foreground truncate">{topic.title}</span>
                 </div>
-                <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+                <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               </div>
               <div className="flex items-center gap-2 mt-1.5 ml-6">
                 <Badge variant="default" size="sm">{topic.category}</Badge>
@@ -414,19 +426,14 @@ export default function SystemDesign() {
               </div>
             </button>
           ))}
-        </div>
+        </aside>
 
-        <div className="flex-1 space-y-4">
+        <div className="min-w-0 space-y-4">
           {activeTopic ? (
             <>
               <Card>
                 <h2 className="text-lg font-semibold text-foreground mb-2">{activeTopic.title}</h2>
                 <p className="text-sm text-foreground leading-relaxed mb-4">{activeTopic.prompt}</p>
-                <div className="flex flex-wrap gap-2">
-                  {activeTopic.keyAreas.map((area) => (
-                    <Badge key={area} variant="default" size="sm">{area}</Badge>
-                  ))}
-                </div>
               </Card>
 
               <Card>
@@ -547,7 +554,9 @@ export default function SystemDesign() {
                       : "Notes-only mode — capture your design outline in the notes field above."}
                   </p>
                 ) : (
-                  <Whiteboard ref={whiteboardRef} height={380} />
+                  <div className="min-w-0 w-full">
+                    <Whiteboard ref={whiteboardRef} height={380} />
+                  </div>
                 )}
               </div>
             </>
@@ -561,6 +570,81 @@ export default function SystemDesign() {
             </div>
           )}
         </div>
+
+        <aside
+          data-testid="system-design-stats"
+          className="w-full min-w-0 xl:w-auto xl:max-w-[18rem] space-y-3"
+        >
+          {activeTopic ? (
+            <Card className="space-y-4">
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-2">
+                  Session metrics
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="default" size="sm">{activeTopic.category}</Badge>
+                  <Badge
+                    variant={
+                      activeTopic.difficulty === "easy"
+                        ? "emerald"
+                        : activeTopic.difficulty === "medium"
+                          ? "amber"
+                          : "red"
+                    }
+                    size="sm"
+                  >
+                    {activeTopic.difficulty}
+                  </Badge>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-2">
+                  Key areas
+                </p>
+                {activeTopic.keyAreas.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No key areas listed.</p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {activeTopic.keyAreas.map((area) => (
+                      <li
+                        key={area}
+                        className="text-xs text-foreground flex items-start gap-2"
+                      >
+                        <span className="mt-1 h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                        <span>{area}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-border bg-secondary/40 px-3 py-2">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
+                  AI breakdown
+                </p>
+                <p className="text-sm text-foreground">
+                  {credits.costs.system_design} credits per generate
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-dashed border-border px-3 py-2">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
+                  Sketchboard
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Use Pen to draw, Eraser to remove strokes, Clear to reset. Drawings are kept when the panel resizes.
+                </p>
+              </div>
+            </Card>
+          ) : (
+            <Card className="text-center py-6">
+              <p className="text-sm text-muted-foreground">
+                Select a topic to see key areas, credit cost, and sketch tips.
+              </p>
+            </Card>
+          )}
+        </aside>
       </div>
       </PrepToolShell>
     </div>

@@ -11,6 +11,7 @@ type FakeDeepgramClient = {
   disconnect: ReturnType<typeof vi.fn>;
   emitInterim: (text: string) => void;
   emitFinal: (utterance: TranscriptUtterance) => void;
+  noteFrame: (sent: boolean) => void;
 };
 
 const mockClients: FakeDeepgramClient[] = [];
@@ -19,6 +20,9 @@ let mockNextConnectError: Error | null = null;
 vi.mock("@/lib/audio/deepgramStream", () => {
   class DeepgramStreamClient {
     opts: DeepgramStreamOptions;
+    private received = 0;
+    private transmitted = 0;
+    private queued = 0;
     connect = vi.fn(async () => {
       if (mockNextConnectError) {
         const error = mockNextConnectError;
@@ -31,6 +35,14 @@ vi.mock("@/lib/audio/deepgramStream", () => {
     disconnect = vi.fn(() => {
       this.opts.onStatusChange("disconnected");
     });
+    getHealthSnapshot = vi.fn(() => ({
+      receivedFrameCount: this.received,
+      transmittedFrameCount: this.transmitted,
+      queuedFrameCount: this.queued,
+      sttSocketOpen: true,
+      lastKeepAliveAt: null,
+      lastSttMessageAt: null,
+    }));
     constructor(opts: DeepgramStreamOptions) {
       this.opts = opts;
       const self = this;
@@ -42,6 +54,12 @@ vi.mock("@/lib/audio/deepgramStream", () => {
         disconnect: self.disconnect,
         emitInterim: (text: string) => self.opts.onInterim(text),
         emitFinal: (utterance: TranscriptUtterance) => self.opts.onUtterance(utterance),
+        noteFrame: (sent: boolean) => {
+          self.received += 1;
+          if (sent) self.transmitted += 1;
+          else self.queued += 1;
+          self.opts.onAudioFrame?.(sent);
+        },
       });
     }
   }
@@ -187,6 +205,22 @@ describe("Live transcription pipeline (Deepgram adapter)", () => {
     expect(partials[0]?.isFinal).toBe(false);
     expect(finals).toHaveLength(1);
     expect(finals[0]?.text).toBe("Hello world");
+    service.destroy();
+  });
+
+  it("tracks frame health snapshots and transcript timestamps on interviewer channel", async () => {
+    const { service } = createHarness();
+    await service.connectChannel(liveStream(), "interviewer");
+    const client = mockClients[0]!;
+    client.noteFrame(true);
+    client.noteFrame(false);
+    client.emitInterim("What is");
+    const probe = service.getChannelHealthProbe("interviewer");
+    expect(probe.frames?.receivedFrameCount).toBe(2);
+    expect(probe.frames?.transmittedFrameCount).toBe(1);
+    expect(probe.frames?.queuedFrameCount).toBe(1);
+    expect(probe.lastTranscriptEventAt).toBeTypeOf("number");
+    expect(probe.sttStatus).toBe("connected");
     service.destroy();
   });
 

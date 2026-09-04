@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -57,6 +57,12 @@ import { shouldRevealAnswerKeys } from "@/lib/gov-exam/playableQuestions";
 import {
   clampMockTestDisplayScore,
 } from "@/lib/gov-exam/mockTestScoring";
+import {
+  finiteOrNull,
+  formatMarksOrUnavailable,
+  formatPercentOrUnavailable,
+  RESULT_UNAVAILABLE,
+} from "@/lib/results/resultDisplay";
 
 type QuestionFilter = "all" | "wrong" | "marked";
 
@@ -163,6 +169,7 @@ function questionIdsFromUnknown(payload: unknown): string[] {
 export default function TestResults() {
   const { testId } = useParams<{ testId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const user = useAuthStore((s) => s.user);
   const profile = useAuthStore((s) => s.profile);
   const openUpgradeModal = useUIStore((s) => s.openUpgradeModal);
@@ -174,6 +181,10 @@ export default function TestResults() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [responses, setResponses] = useState<Record<string, TestResponse>>({});
   const [loading, setLoading] = useState(true);
+  const [loadFailure, setLoadFailure] = useState<null | {
+    kind: "not_found" | "processing" | "temporary";
+    message: string;
+  }>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [showAI, setShowAI] = useState(false);
   const [questionFilter, setQuestionFilter] = useState<QuestionFilter>("all");
@@ -207,6 +218,7 @@ export default function TestResults() {
 
   async function loadResults() {
     setLoading(true);
+    setLoadFailure(null);
 
     try {
       const { data: testData, error: testError } = await supabase
@@ -216,9 +228,18 @@ export default function TestResults() {
         .eq("user_id", user!.id)
         .maybeSingle();
 
-      if (testError || !testData) {
-        toast.error("Test not found.");
-        navigate("/app/mock-test");
+      if (testError) {
+        setLoadFailure({
+          kind: "temporary",
+          message: testError.message || "Failed to load results. Please retry.",
+        });
+        return;
+      }
+      if (!testData) {
+        setLoadFailure({
+          kind: "not_found",
+          message: "This result was not found or you do not have access.",
+        });
         return;
       }
 
@@ -240,8 +261,13 @@ export default function TestResults() {
 
       const analysisData = await fetchAnalysisWithRetry();
       if (!analysisData) {
-        toast.error("Analysis is still processing. Refresh the page in a few seconds.");
-        navigate("/app/mock-test");
+        const completed = shouldRevealAnswerKeys(loadedTest.status);
+        setLoadFailure({
+          kind: completed ? "temporary" : "processing",
+          message: completed
+            ? "Score analysis is missing for this completed attempt. Retry to reload, or contact support if it persists. Scores are never invented."
+            : "Analysis is still processing. Stay on this page and retry in a few seconds.",
+        });
         return;
       }
 
@@ -353,7 +379,10 @@ export default function TestResults() {
       }
     } catch (error) {
       console.error("[TestResults] load error:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to load results.");
+      const message =
+        error instanceof Error ? error.message : "Failed to load results.";
+      toast.error(message);
+      setLoadFailure({ kind: "temporary", message });
     } finally {
       setLoading(false);
     }
@@ -554,35 +583,87 @@ export default function TestResults() {
     );
   }
 
+  if (loadFailure) {
+    const hubPath =
+      test?.config?.source === "exam_template" || location.pathname.startsWith("/app/assessments")
+        ? "/app/assessments"
+        : "/app/mock-test";
+    const hubLabel = hubPath === "/app/assessments" ? "Back to assessments" : "Back to Hub";
+    return (
+      <div className="py-20 px-4 text-center space-y-4 max-w-md mx-auto">
+        <p className="text-foreground font-semibold">
+          {loadFailure.kind === "not_found"
+            ? "Results not found"
+            : loadFailure.kind === "processing"
+              ? "Results still processing"
+              : "Couldn’t load results"}
+        </p>
+        <p className="text-sm text-muted-foreground">{loadFailure.message}</p>
+        <div className="flex flex-wrap justify-center gap-2">
+          {(loadFailure.kind === "temporary" || loadFailure.kind === "processing") && (
+            <Button
+              onClick={() => {
+                void loadResults();
+              }}
+            >
+              Retry
+            </Button>
+          )}
+          <Button variant="secondary" onClick={() => navigate(hubPath)}>
+            {hubLabel}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   if (!test || !analysis) {
+    const hubPath = location.pathname.startsWith("/app/assessments")
+      ? "/app/assessments"
+      : "/app/mock-test";
     return (
       <div className="py-20 text-center">
         <p className="text-muted-foreground">Results not found.</p>
         <Link
-          to="/app/mock-test"
+          to={hubPath}
           className="mt-2 inline-block text-primary hover:underline"
         >
-          Back to Hub
+          {hubPath === "/app/assessments" ? "Back to assessments" : "Back to Hub"}
         </Link>
       </div>
     );
   }
 
   const rankPublication = getRankPublication(analysis, test);
-  // Submitted analysis is immutable and authoritative; never re-score mutable question rows.
-  const rawTotalScore = analysis.total_score ?? 0;
-  const displayTotalScore = clampMockTestDisplayScore(rawTotalScore);
-  const displayMaxScore = analysis.max_score ?? 0;
-  const displayAccuracy = analysis.accuracy ?? 0;
-  const displayAttemptPercentage = analysis.attempt_percentage ?? 0;
+  // Submitted analysis is immutable and authoritative; never invent missing as 0.
+  const rawTotalScore = finiteOrNull(analysis.total_score);
+  const hasScoreEvidence = rawTotalScore != null;
+  const displayTotalScore = hasScoreEvidence
+    ? clampMockTestDisplayScore(rawTotalScore)
+    : null;
+  const displayMaxScore = finiteOrNull(analysis.max_score);
+  const displayAccuracy = finiteOrNull(analysis.accuracy);
+  const displayAttemptPercentage = finiteOrNull(analysis.attempt_percentage);
+  const scorePercentFromSummary = finiteOrNull(
+    analysis.time_analysis?.score_summary?.score_percentage,
+  );
   const scorePercent =
-    Number.isFinite(Number(analysis.time_analysis?.score_summary?.score_percentage))
-      ? Math.max(0, Number(analysis.time_analysis.score_summary?.score_percentage))
-      : displayMaxScore > 0
-      ? Math.round((displayTotalScore / displayMaxScore) * 100)
-      : 0;
+    scorePercentFromSummary != null
+      ? Math.max(0, scorePercentFromSummary)
+      : displayTotalScore != null && displayMaxScore != null && displayMaxScore > 0
+        ? Math.round((displayTotalScore / displayMaxScore) * 100)
+        : null;
   const isPractice = test.config?.practice_mode === true;
   const paperMeta = resolvePaperClassPresentation(test.config);
+  const isCareerAssessment = test.config?.source === "exam_template";
+  const assessmentWhy =
+    typeof test.config?.why_selected === "string" ? test.config.why_selected : null;
+  const assessmentRole =
+    typeof test.config?.role_slug === "string" ? test.config.role_slug : test.config?.template_slug;
+  const assessmentObjective =
+    typeof test.config?.assessment_objective === "string"
+      ? String(test.config.assessment_objective).replace(/_/g, " ")
+      : null;
   const actionInsight = primaryActionInsight({
     weak_topics: analysis.weak_topics,
     strong_topics: analysis.strong_topics,
@@ -593,15 +674,43 @@ export default function TestResults() {
   return (
     <div className="max-w-4xl space-y-6 pb-16">
       <PageHeader
-        title={isPractice ? "Practice Session Results" : "Test Results"}
+        title={isPractice ? "Practice Session Results" : isCareerAssessment ? "Assessment Results" : "Test Results"}
         description={test.test_name}
         actions={
-          <Button variant="outline" size="sm" onClick={() => navigate("/app/mock-test")}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(isCareerAssessment ? "/app/assessments" : "/app/mock-test")}
+          >
             <ArrowLeft className="mr-1.5 h-4 w-4" />
-            Hub
+            {isCareerAssessment ? "Assessments" : "Hub"}
           </Button>
         }
       />
+
+      {isCareerAssessment && (
+        <Card className="border-border/60 bg-muted/20" data-testid="assessment-personalization-summary">
+          <CardContent className="p-4 space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {test.config?.force_general ? "General assessment" : "Personalized assessment"}
+            </p>
+            {assessmentRole && (
+              <p className="text-sm text-foreground">
+                Target role: <span className="font-medium">{String(assessmentRole)}</span>
+                {assessmentObjective ? ` · Objective: ${assessmentObjective}` : ""}
+              </p>
+            )}
+            {assessmentWhy && (
+              <p className="text-sm text-muted-foreground leading-relaxed">{assessmentWhy}</p>
+            )}
+            {Array.isArray(analysis.weak_topics) && analysis.weak_topics.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Weak areas to review: {analysis.weak_topics.slice(0, 6).join(", ")}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {(paperMeta.shortLabel || paperMeta.disclaimer) && (
         <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 space-y-1">
@@ -632,9 +741,13 @@ export default function TestResults() {
         {[
           {
             label: "Score",
-            value: `${displayTotalScore}/${displayMaxScore}`,
+            value: formatMarksOrUnavailable(
+              displayTotalScore,
+              displayMaxScore,
+              hasScoreEvidence,
+            ),
             footnote:
-              rawTotalScore < 0
+              hasScoreEvidence && rawTotalScore != null && rawTotalScore < 0
                 ? `Raw score: ${rawTotalScore} (displayed as 0)`
                 : undefined,
             icon: <Trophy className="h-5 w-5 text-amber-400" />,
@@ -642,13 +755,16 @@ export default function TestResults() {
           },
           {
             label: "Accuracy",
-            value: `${displayAccuracy}%`,
+            value: formatPercentOrUnavailable(displayAccuracy, displayAccuracy != null),
             icon: <Target className="h-5 w-5 text-green-400" />,
             color: "text-green-400",
           },
           {
             label: "Attempted",
-            value: `${displayAttemptPercentage}%`,
+            value: formatPercentOrUnavailable(
+              displayAttemptPercentage,
+              displayAttemptPercentage != null,
+            ),
             icon: <CheckCircle className="h-5 w-5 text-blue-400" />,
             color: "text-blue-400",
           },
@@ -700,7 +816,9 @@ export default function TestResults() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Score band</p>
-              <p className="font-bold text-foreground">{scoreBandLabel(scorePercent)}</p>
+              <p className="font-bold text-foreground">
+                {scorePercent == null ? RESULT_UNAVAILABLE : scoreBandLabel(scorePercent)}
+              </p>
               <p className="text-[10px] text-muted-foreground">{RANK_UNAVAILABLE_COPY}</p>
             </div>
           </CardContent>
@@ -748,7 +866,10 @@ export default function TestResults() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {Object.entries(subjectBreakdown).map(([subject, data]) => (
+                  {Object.entries(subjectBreakdown).map(([subject, data]) => {
+                    const accuracy = finiteOrNull(data.accuracy);
+                    const marks = finiteOrNull(data.marks);
+                    return (
                     <tr key={subject}>
                       <td className="py-2 font-medium text-foreground">{subject}</td>
                       <td className="py-2 text-right text-green-400">{data.correct}</td>
@@ -757,26 +878,34 @@ export default function TestResults() {
                       <td
                         className={cn(
                           "py-2 text-right font-semibold",
-                          data.accuracy >= 70
+                          (accuracy ?? -1) >= 70
                             ? "text-green-400"
-                            : data.accuracy >= 40
+                            : (accuracy ?? -1) >= 40
                             ? "text-amber-400"
+                            : accuracy == null
+                              ? "text-muted-foreground"
                             : "text-red-400"
                         )}
                       >
-                        {data.accuracy}%
+                        {formatPercentOrUnavailable(accuracy, accuracy != null)}
                       </td>
                       <td
                         className={cn(
                           "py-2 text-right font-semibold",
-                          Number(data.marks ?? 0) >= 0 ? "text-green-400" : "text-red-400"
+                          marks == null
+                            ? "text-muted-foreground"
+                            : marks >= 0
+                              ? "text-green-400"
+                              : "text-red-400"
                         )}
                       >
-                        {Number(data.marks ?? 0) >= 0 ? "+" : ""}
-                        {Number(data.marks ?? 0).toFixed(0)}
+                        {marks == null
+                          ? RESULT_UNAVAILABLE
+                          : `${marks >= 0 ? "+" : ""}${marks.toFixed(0)}`}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table></div>
             </div>
@@ -1052,10 +1181,10 @@ export default function TestResults() {
       <div className="flex gap-3">
         <Button
           variant="outline"
-          onClick={() => navigate("/app/mock-test")}
+          onClick={() => navigate(isCareerAssessment ? "/app/assessments" : "/app/mock-test")}
           className="flex-1"
         >
-          Back to Hub
+          {isCareerAssessment ? "Back to assessments" : "Back to Hub"}
         </Button>
 
         <Button

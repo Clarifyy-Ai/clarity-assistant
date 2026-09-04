@@ -25,10 +25,30 @@ export type OwnedSessionDetail = {
   code: OwnedSessionDetailCode;
   session: Tables<"sessions"> | null;
   answers: Tables<"session_answers">[];
-  scorecard: { overall_score?: number | null } | null;
+  scorecard: {
+    overall_score?: number | null;
+    score_status?: string | null;
+    evaluation_status?: string | null;
+    eligibility_reason?: string | null;
+  } | null;
   transcript: OwnedSessionTranscript;
   debrief: Record<string, unknown> | null;
 };
+
+function scoreStatusFromRow(row: {
+  overall_score?: number | null;
+  evaluation_status?: string | null;
+}): string {
+  const evalStatus = String(row.evaluation_status ?? "").toLowerCase();
+  if (evalStatus === "completed" && typeof row.overall_score === "number") return "scored";
+  if (evalStatus === "processing" || evalStatus === "queued") return "pending";
+  if (evalStatus.startsWith("failed")) return "failed";
+  if (evalStatus === "not_eligible") return "not_scored";
+  if (typeof row.overall_score === "number" && Number.isFinite(row.overall_score) && evalStatus === "completed") {
+    return "scored";
+  }
+  return "not_scored";
+}
 
 function emptyDetail(code: OwnedSessionDetailCode): OwnedSessionDetail {
   return {
@@ -61,7 +81,17 @@ async function fallbackDetail(
     code: "OK",
     session,
     answers,
-    scorecard: scorecard ? { overall_score: scorecard.overall_score ?? null } : null,
+    scorecard: scorecard
+      ? {
+          overall_score:
+            scorecard.evaluation_status === "completed"
+              ? scorecard.overall_score ?? null
+              : null,
+          score_status: scoreStatusFromRow(scorecard),
+          evaluation_status: scorecard.evaluation_status ?? null,
+          eligibility_reason: scorecard.eligibility_reason ?? null,
+        }
+      : null,
     transcript: null,
     debrief: null,
   };
@@ -109,7 +139,45 @@ export async function loadOwnedSessionDetail(
     code: "OK",
     session: payload.session,
     answers: Array.isArray(payload.answers) ? payload.answers : [],
-    scorecard: payload.scorecard ?? null,
+    scorecard: payload.scorecard
+      ? {
+          overall_score: (() => {
+            const evalStatus = String(
+              (payload.scorecard as { evaluation_status?: string }).evaluation_status ?? "",
+            ).toLowerCase();
+            const overall = payload.scorecard.overall_score ?? null;
+            if (evalStatus === "completed" && typeof overall === "number") return overall;
+            if (
+              typeof (payload.scorecard as { score_status?: string }).score_status === "string" &&
+              (payload.scorecard as { score_status?: string }).score_status === "scored" &&
+              typeof overall === "number"
+            ) {
+              return overall;
+            }
+            return null;
+          })(),
+          score_status: (() => {
+            const raw = payload.scorecard as {
+              score_status?: string;
+              evaluation_status?: string;
+              overall_score?: number | null;
+              eligibility_reason?: string | null;
+            };
+            if (typeof raw.score_status === "string") return raw.score_status;
+            return scoreStatusFromRow(raw);
+          })(),
+          evaluation_status:
+            typeof (payload.scorecard as { evaluation_status?: string }).evaluation_status ===
+            "string"
+              ? (payload.scorecard as { evaluation_status?: string }).evaluation_status ?? null
+              : null,
+          eligibility_reason:
+            typeof (payload.scorecard as { eligibility_reason?: string }).eligibility_reason ===
+            "string"
+              ? (payload.scorecard as { eligibility_reason?: string }).eligibility_reason ?? null
+              : null,
+        }
+      : null,
     transcript: payload.transcript ?? null,
     debrief: payload.debrief ?? null,
   };

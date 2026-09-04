@@ -125,6 +125,21 @@ describe("Live Practice Coach — AI edge session enforcement", () => {
       expect(source).toContain("creditCost:");
     }
   });
+
+  it("generate-hint and generate-answer SYSTEM prompts forbid fabrication", () => {
+    for (const fn of ["generate-hint", "generate-answer"] as const) {
+      const source = readFunction(fn);
+      expect(source).toContain("FACTUAL_INTEGRITY_SYSTEM_RULE");
+      expect(source).toMatch(/never invent|Never invent/i);
+      expect(source).toMatch(/information is still needed/i);
+    }
+    const integrity = fs.readFileSync(
+      path.join(functionsDir, "_shared/factualIntegrity.ts"),
+      "utf8",
+    );
+    expect(integrity).toContain("Never invent employers");
+    expect(integrity).toContain("information is still needed");
+  });
 });
 
 describe("Live Practice Coach — useLiveCopilot client contracts", () => {
@@ -146,5 +161,72 @@ describe("Live Practice Coach — useLiveCopilot client contracts", () => {
     expect(source).toContain('terminal_reason: "CANCELLED"');
     expect(source).toContain("finalizeSessionApi");
     expect(source).toContain("restoreOwnedSession");
+  });
+
+  it("reuses existingSessionId even when practice_context_id is set", () => {
+    const source = readSrc("src/hooks/useLiveCopilot.ts");
+    expect(source).toContain(
+      "Prefer an existing open session id even when practice_context_id is set",
+    );
+    expect(source).toContain(
+      "const reusableSessionId = existingSessionIdRef.current;",
+    );
+    // Must not null out reuse solely because practice_context_id is present
+    expect(source).not.toMatch(
+      /practice_context_id[\s\S]{0,120}reusableSessionId\s*=\s*null/,
+    );
+  });
+
+  it("restores on SESSION_STATE_CONFLICT only — not every 409", () => {
+    const source = readSrc("src/hooks/useLiveCopilot.ts");
+    expect(source).toContain('if (code !== "SESSION_STATE_CONFLICT")');
+    expect(source).toContain("PRACTICE_CONTEXT_CONSUMED");
+    expect(source).toContain("Only SESSION_STATE_CONFLICT is restoreable");
+  });
+
+  it("surfaces session-start conflicts with handleSessionStartError toast path", () => {
+    const source = readSrc("src/hooks/useLiveCopilot.ts");
+    expect(source).toContain("handleSessionStartError");
+    expect(source).toContain('from "@/lib/billing/sessionStartErrors"');
+    expect(source).toContain("Surface conflicts/failures to the user");
+  });
+});
+
+describe("Live Practice Coach — LiveOverlay restore must not re-start when LIVE", () => {
+  it("skips phase flip to starting when already active on the restored session", () => {
+    const source = readSrc("src/pages/app/live/LiveOverlay.tsx");
+    expect(source).toContain(
+      "Already LIVE on this session — do not flip back to starting / re-POST start-session.",
+    );
+    expect(source).toContain(
+      'if (phase === "active" && boundId && boundId === restored.session_id)',
+    );
+  });
+});
+
+describe("Live Practice Coach — coach_chat fail-closed (no STAR scaffold)", () => {
+  it("Edge deterministicCoachChatReply is honest unavailable, not STAR boilerplate", () => {
+    const contract = readSrc("supabase/functions/_shared/practiceCoachContract.ts");
+    expect(contract).toContain("Coach AI is temporarily unavailable");
+    expect(contract).not.toContain("Themes to cover:");
+    expect(contract).not.toContain("I will not invent facts");
+    expect(contract).not.toMatch(/You asked:/);
+  });
+
+  it("Python coach_chat raises COACH_AI_UNAVAILABLE (no STAR boilerplate)", () => {
+    const py = readSrc("scraper/app/engines/practice_coach.py");
+    expect(py).toContain('raise EngineError("COACH_AI_UNAVAILABLE"');
+    expect(py).not.toContain("Themes to cover:");
+    expect(py).not.toContain("I will not invent facts");
+    expect(py).not.toMatch(/You asked:/);
+  });
+
+  it("overlay chat UI surfaces degraded/unavailable sources", () => {
+    const panel = readSrc("src/components/overlay/OverlayChatPanel.tsx");
+    expect(panel).toContain("isDegradedCoachSource");
+    expect(panel).toContain("Offline / degraded coach");
+    const session = readSrc("src/lib/ai/coachChatSession.ts");
+    expect(session).toContain('source === "python"');
+    expect(session).toContain("Coach AI is temporarily unavailable");
   });
 });

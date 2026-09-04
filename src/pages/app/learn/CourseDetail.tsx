@@ -13,8 +13,13 @@ import {
   type ModuleRef,
 } from "@/lib/learning/progress";
 import { certificateKindLabel, verificationPath } from "@/lib/learning/certificates";
+import {
+  downloadCertificatePdf,
+  type CertificatePdfInput,
+} from "@/lib/learning/certificatePdf";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { Download } from "lucide-react";
 
 type Course = {
   id: string;
@@ -39,6 +44,7 @@ export default function CourseDetailPage() {
   const [lessons, setLessons] = useState<LessonRow[]>([]);
   const [completed, setCompleted] = useState<Set<string>>(new Set());
   const [certCode, setCertCode] = useState<string | null>(null);
+  const [certRecord, setCertRecord] = useState<CertificatePdfInput | null>(null);
   const [quizzes, setQuizzes] = useState<Array<{ id: string; title: string; question_ids: string[]; passing_percentage: number; is_final: boolean }>>([]);
   const [quizProgress, setQuizProgress] = useState<Map<string, { score: number | null; completed_at: string | null }>>(new Map());
   const [error, setError] = useState<string | null>(null);
@@ -84,11 +90,27 @@ export default function CourseDetailPage() {
     setCompleted(new Set((progress ?? []).filter((p) => p.completed_at && lessonIds.has(p.lesson_id as string)).map((p) => p.lesson_id as string)));
     const { data: cert } = await supabase
       .from("course_certificates")
-      .select("certificate_code")
+      .select(
+        "certificate_code,student_name,course_name,issued_at,course_duration_hours,completion_percentage",
+      )
       .eq("user_id", user.id)
       .eq("course_id", courseId)
       .maybeSingle();
-    setCertCode((cert?.certificate_code as string | undefined) ?? null);
+    const code = (cert?.certificate_code as string | undefined) ?? null;
+    setCertCode(code);
+    if (cert && code) {
+      setCertRecord({
+        certificate_code: code,
+        student_name: String(cert.student_name ?? profile?.full_name ?? "Learner"),
+        course_name: String(cert.course_name ?? courseRow.title ?? "Course"),
+        issued_at: String(cert.issued_at ?? new Date().toISOString()),
+        course_duration_hours:
+          cert.course_duration_hours == null ? null : Number(cert.course_duration_hours),
+        completion_percentage: Number(cert.completion_percentage ?? 100),
+      });
+    } else {
+      setCertRecord(null);
+    }
     const { data: quizRows } = await supabase
       .from("learning_quizzes")
       .select("id,title,question_ids,passing_percentage,is_final")
@@ -126,7 +148,7 @@ export default function CourseDetailPage() {
     } else {
       setQuizProgress(new Map());
     }
-  }, [courseId, user?.id, isAdmin]);
+  }, [courseId, user?.id, isAdmin, profile?.full_name]);
 
   useEffect(() => {
     void load();
@@ -201,12 +223,33 @@ export default function CourseDetailPage() {
       const code = data?.certificate_code;
       if (code) {
         setCertCode(code);
+        setCertRecord({
+          certificate_code: code,
+          student_name: profile?.full_name || "Learner",
+          course_name: course?.title ?? "Course",
+          issued_at: new Date().toISOString(),
+          course_duration_hours: course?.duration_hours ?? null,
+          completion_percentage: percent,
+        });
         toast.success(`${certificateKindLabel()} issued.`);
       } else {
         toast.error("Certificate could not be issued.");
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Certificate could not be issued.");
+    }
+  }
+
+  function downloadIssuedCertificate() {
+    if (!certRecord) {
+      toast.error("Certificate details are not ready yet. Refresh and try again.");
+      return;
+    }
+    try {
+      downloadCertificatePdf(certRecord);
+      toast.success("Certificate PDF downloaded.");
+    } catch {
+      toast.error("Could not create the PDF. Please try again.");
     }
   }
 
@@ -236,9 +279,21 @@ export default function CourseDetailPage() {
           <Button className="mt-3" onClick={() => void issueCert()}>Issue course completion certificate</Button>
         )}
         {certCode && (
-          <Link className="mt-3 inline-block text-sm text-primary underline" to={verificationPath(certCode)}>
-            Verify {certCode}
-          </Link>
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <Link className="text-sm text-primary underline" to={verificationPath(certCode)}>
+              Verify {certCode}
+            </Link>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              leftIcon={<Download className="h-3.5 w-3.5" aria-hidden />}
+              onClick={downloadIssuedCertificate}
+              data-testid="course-certificate-download-pdf"
+            >
+              Download PDF
+            </Button>
+          </div>
         )}
         <div className="mt-3 flex flex-col sm:flex-row flex-wrap gap-2">
         {quizzes.map((quiz) => {

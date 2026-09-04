@@ -45,4 +45,34 @@ describe("sessionAiContext cache", () => {
     expect(lastTranscriptSlice(long).length).toBe(2500);
     expect(lastTranscriptSlice("short")).toBe("short");
   });
+
+  it("uses frozen resume/jd text and skips live loaders when checksum is set", async () => {
+    const buildResumeBlock = vi.fn(async () => "SHOULD_NOT_RUN");
+    const loadJdKeywords = vi.fn(async () => ["SHOULD_NOT_RUN"]);
+    const loadStarStories = vi.fn(async () => "SHOULD_NOT_RUN");
+    const loaders: SessionAiContextLoaders = {
+      buildResumeBlock,
+      loadJdKeywords,
+      loadStarStories,
+    };
+
+    const built = await getOrBuildSessionAiContext(
+      {
+        userId: "user-1",
+        resumeId: "r1",
+        jdId: "j1",
+        contextChecksum: "abc12345",
+        frozenResumeText: "FROZEN_RESUME",
+        frozenJdText: "FROZEN_JD",
+      },
+      loaders,
+    );
+
+    expect(built.resumeBlock).toContain("FROZEN_RESUME");
+    expect(built.resumeBlock).toContain("FROZEN_JD");
+    expect(built.fingerprint).toContain("abc12345");
+    expect(buildResumeBlock).not.toHaveBeenCalled();
+    expect(loadJdKeywords).not.toHaveBeenCalled();
+    expect(loadStarStories).not.toHaveBeenCalled();
+  });
 });

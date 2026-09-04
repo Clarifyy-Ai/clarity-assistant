@@ -21,13 +21,20 @@ import {
   TRANSCRIPTION_STATUS_COPY,
   providerStatusToTranscription,
 } from "@/lib/audio/transcriptionStates";
+import {
+  SYSTEM_AUDIO_AUDIT_COPY,
+  isChannelUiActive,
+} from "@/lib/audio/audioChannelHealth";
 
 export function OverlayAuditPanel() {
   const providerStatus = useAudioStore((s) => s.transcription_provider_status);
   const pipelineStatus = useAudioStore((s) => s.pipeline_status);
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
   const isMuted = useAudioStore((s) => s.is_muted);
-  const hasSystemAudio = useAudioStore((s) => !!s.streams?.system_stream);
+  const interviewerHealth = useAudioStore((s) => s.channel_health?.interviewer);
+  const interviewerStatus = interviewerHealth?.status ?? "disconnected";
+  const framesTx = interviewerHealth?.metrics?.transmittedFrameCount ?? 0;
+  const lastTranscriptAt = interviewerHealth?.metrics?.lastTranscriptEventAt ?? null;
   const streamError = useAudioStore((s) => s.streams?.error ?? null);
 
   const elapsed = useSessionStore((s) => s.elapsed_seconds ?? 0);
@@ -118,9 +125,39 @@ export function OverlayAuditPanel() {
       <AuditRow
         icon={Volume2}
         label="System Audio"
-        value={hasSystemAudio ? "Active" : "Off"}
-        valueClass={hasSystemAudio ? "text-emerald-400" : "text-white/30"}
+        value={SYSTEM_AUDIO_AUDIT_COPY[interviewerStatus]}
+        valueClass={
+          isChannelUiActive(interviewerStatus)
+            ? "text-emerald-400"
+            : interviewerStatus === "connecting" || interviewerStatus === "silent_source"
+              ? "text-amber-400"
+              : interviewerStatus === "unavailable"
+                ? "text-red-400"
+                : "text-white/30"
+        }
       />
+      {(interviewerStatus === "active" ||
+        interviewerStatus === "silent_source" ||
+        interviewerStatus === "connecting") && (
+        <AuditRow
+          icon={Volume2}
+          label="Tab frames TX"
+          value={String(framesTx)}
+          valueClass="text-white/60 font-mono"
+        />
+      )}
+      {(interviewerStatus === "active" || interviewerStatus === "silent_source") && (
+        <AuditRow
+          icon={Volume2}
+          label="Last tab transcript"
+          value={
+            lastTranscriptAt
+              ? `${Math.max(0, Math.round((Date.now() - lastTranscriptAt) / 1000))}s ago`
+              : "none"
+          }
+          valueClass="text-white/60 font-mono"
+        />
+      )}
       <AuditRow
         icon={Brain}
         label="AI Model"

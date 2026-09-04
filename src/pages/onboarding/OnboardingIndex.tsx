@@ -4,15 +4,16 @@
 // On complete: persist profile, seed lastPracticeSetup, navigate to Dashboard.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useCallback, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useState, useCallback, useEffect, useMemo } from "react";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store";
 import { recordReferral, getStoredRefCode, normalizeRefCode } from "@/lib/referrals";
-import { ONBOARDING_COMPLETION_PATH } from "@/lib/routes/canonical";
+import { getPostOnboardingPath } from "@/lib/auth/postAuthRedirect";
+import { preferredReturnToFromNavigation } from "@/lib/auth/safeReturnTo";
 import { saveLastPracticeSetup } from "@/lib/session/lastPracticeSetup";
 import { markOnboardingComplete } from "@/lib/analytics/uxMetrics";
 import {
@@ -107,6 +108,7 @@ function buildLiveSetupFromOnboarding(
 
 export default function OnboardingIndex() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const user = useAuthStore((s) => s.user);
   const profile = useAuthStore((s) => s.profile);
@@ -115,6 +117,16 @@ export default function OnboardingIndex() {
 
   const isRerun = searchParams.get("rerun") === "1";
   const refCode = normalizeRefCode(searchParams.get("ref")) ?? getStoredRefCode();
+  const completionPath = useMemo(
+    () =>
+      getPostOnboardingPath(
+        preferredReturnToFromNavigation({
+          searchParams,
+          locationState: location.state,
+        }),
+      ),
+    [searchParams, location.state],
+  );
 
   const restored = !isRerun ? loadOnboardingDraft() : null;
   const [currentStep, setCurrentStep] = useState(restored?.step ?? 1);
@@ -127,9 +139,9 @@ export default function OnboardingIndex() {
 
   useEffect(() => {
     if (isProfileLoaded && profile?.onboarding_completed === true && !isRerun) {
-      navigate(ONBOARDING_COMPLETION_PATH, { replace: true });
+      navigate(completionPath, { replace: true });
     }
-  }, [isProfileLoaded, profile?.onboarding_completed, isRerun, navigate]);
+  }, [isProfileLoaded, profile?.onboarding_completed, isRerun, navigate, completionPath]);
 
   // Restore step + known profile fields when localStorage draft is missing
   // (new device / cleared storage) so users do not drop back to empty step 1.
@@ -358,7 +370,7 @@ export default function OnboardingIndex() {
       markOnboardingComplete();
       clearOnboardingDraft();
 
-      navigate(ONBOARDING_COMPLETION_PATH, { replace: true });
+      navigate(completionPath, { replace: true });
     } catch (err) {
       console.error("[OnboardingIndex] Failed to save onboarding:", err);
       const message =
@@ -367,7 +379,7 @@ export default function OnboardingIndex() {
     } finally {
       setIsSaving(false);
     }
-  }, [data, loadProfile, user, profile, refCode, navigate]);
+  }, [data, loadProfile, user, profile, refCode, navigate, completionPath]);
 
   const handleNext = useCallback((stepData?: Partial<OnboardingData>) => {
     if (stepData) mergeData(stepData);
@@ -386,8 +398,8 @@ export default function OnboardingIndex() {
   }, [currentStep]);
 
   const handleSkipRerun = useCallback(() => {
-    navigate(ONBOARDING_COMPLETION_PATH, { replace: true });
-  }, [navigate]);
+    navigate(completionPath, { replace: true });
+  }, [navigate, completionPath]);
 
   const stepProps = {
     data,

@@ -89,4 +89,14 @@ describe("claimJobCredits refund on permanent failure", () => {
     expect(release).toContain("credits_released_at");
     expect(release).toContain("COALESCE((v_refund->>'success')::boolean, false) IS NOT TRUE");
   });
+
+  it("cancel-paper-generation-job refunds via refundClaimedPaperCredits including already-terminal jobs", () => {
+    const cancel = read("supabase/functions/cancel-paper-generation-job/index.ts");
+    expect(cancel).toContain("refundClaimedPaperCredits");
+    expect(cancel).toContain("refund_cancel_paper_generation_job");
+    expect(cancel).toContain("refund_cancel_already_");
+    expect(cancel).toContain("failed_permanent");
+    // Soft still-running jobs remain cancelable; completed stays non-refund.
+    expect(cancel).toContain('job.status === "completed"');
+  });
 });

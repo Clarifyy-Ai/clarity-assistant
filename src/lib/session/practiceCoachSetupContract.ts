@@ -18,7 +18,8 @@ export type PracticeCoachSetupField =
   | "hint_style"
   | "model"
   | "input_mode"
-  | "device_readiness";
+  | "device_readiness"
+  | "seniority";
 
 /** Wizard UI steps (1-based). */
 export const PRACTICE_COACH_WIZARD_STEPS = {
@@ -42,6 +43,8 @@ export function setupFieldRequirement(
       return callType === "interview" ? "REQUIRED" : "OPTIONAL";
     case "job_description":
       return "OPTIONAL";
+    case "seniority":
+      return callType === "interview" ? "REQUIRED" : "OPTIONAL";
     case "hint_style":
       return "REQUIRED";
     case "model":

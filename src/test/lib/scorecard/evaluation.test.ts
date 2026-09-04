@@ -6,6 +6,11 @@ import {
   isScorableAnswerText,
   shouldRetryEvaluation,
 } from "@/lib/scorecard/evaluation";
+import {
+  analyticsScoreStatusFromEvaluation,
+  resolveScorecardEligibility,
+  scorecardEligibilityMessage,
+} from "@/lib/scorecard/eligibility";
 import { SKIPPED_ANSWER_SENTINEL } from "@/lib/mock/mockSessionProgress";
 import { mapRowToScorecard, type ScorecardRow } from "@/types/scorecard.types";
 
@@ -49,16 +54,105 @@ describe("scorecard answer association", () => {
       }),
     ).toBe("failed");
     expect(shouldRetryEvaluation("failed")).toBe(true);
-    expect(describeEvaluation({ status: "failed", scorableAnswers: 5, persistedQuestionScores: 0 })).toMatch(
-      /Scoring failed/,
-    );
+    expect(
+      describeEvaluation({ status: "failed", scorableAnswers: 5, persistedQuestionScores: 0 }),
+    ).toMatch(/Failed|Scoring failed/);
     expect(
       describeEvaluation({
         status: "processing",
         scorableAnswers: 5,
         persistedQuestionScores: 0,
       }),
-    ).toMatch(/still running/);
+    ).toMatch(/Processing|still running/);
+  });
+});
+
+describe("scorecard eligibility codes", () => {
+  it("returns SCORECARD_ELIGIBLE for completed sessions with answers", () => {
+    const result = resolveScorecardEligibility({
+      sessionCompleted: true,
+      scorableAnswerCount: 3,
+    });
+    expect(result.code).toBe("SCORECARD_ELIGIBLE");
+    expect(result.eligible).toBe(true);
+  });
+
+  it("returns typed not-eligible codes", () => {
+    expect(
+      resolveScorecardEligibility({
+        sessionCompleted: false,
+        scorableAnswerCount: 2,
+      }).code,
+    ).toBe("NOT_ELIGIBLE_INCOMPLETE_SESSION");
+    expect(
+      resolveScorecardEligibility({
+        sessionCompleted: true,
+        scorableAnswerCount: 0,
+      }).code,
+    ).toBe("NOT_ELIGIBLE_NO_ANSWERS");
+    expect(
+      resolveScorecardEligibility({
+        sessionCompleted: true,
+        scorableAnswerCount: 2,
+        planAllowed: false,
+      }).code,
+    ).toBe("FEATURE_NOT_AVAILABLE_FOR_PLAN");
+  });
+
+  it("surfaces processing and failed from durable evaluation_status", () => {
+    expect(
+      resolveScorecardEligibility({
+        sessionCompleted: true,
+        scorableAnswerCount: 2,
+        evaluationStatus: "processing",
+      }).code,
+    ).toBe("EVALUATION_PROCESSING");
+    expect(
+      resolveScorecardEligibility({
+        sessionCompleted: true,
+        scorableAnswerCount: 2,
+        evaluationStatus: "failed_retryable",
+      }).code,
+    ).toBe("EVALUATION_FAILED");
+    expect(scorecardEligibilityMessage("NOT_ELIGIBLE_NO_ANSWERS")).toMatch(/No answers/);
+  });
+
+  it("maps durable status to analytics score_status buckets", () => {
+    expect(
+      analyticsScoreStatusFromEvaluation({
+        evaluationStatus: "completed",
+        overallScore: 80,
+        answeredCount: 3,
+      }),
+    ).toBe("scored");
+    expect(
+      analyticsScoreStatusFromEvaluation({
+        evaluationStatus: "processing",
+        overallScore: null,
+        answeredCount: 3,
+      }),
+    ).toBe("pending");
+    expect(
+      analyticsScoreStatusFromEvaluation({
+        evaluationStatus: "failed_permanent",
+        overallScore: null,
+        answeredCount: 3,
+      }),
+    ).toBe("failed");
+    expect(
+      analyticsScoreStatusFromEvaluation({
+        evaluationStatus: "not_eligible",
+        overallScore: null,
+        answeredCount: 0,
+      }),
+    ).toBe("excluded");
+    expect(
+      analyticsScoreStatusFromEvaluation({
+        evaluationStatus: null,
+        overallScore: null,
+        answeredCount: 2,
+      }),
+    ).toBe("not_scored");
   });
 });
 

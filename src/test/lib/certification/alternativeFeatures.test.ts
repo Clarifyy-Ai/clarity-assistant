@@ -27,7 +27,7 @@ import {
   scoreJavascriptSolve,
   stripHiddenTestCases,
 } from "@/lib/coding/assessment";
-import { canAccessDocument, canCreatePracticeSet } from "@/lib/library/documentRights";
+import { canAccessDocument, canCreatePracticeSet, canCreatePracticeSetFromParsedDoc } from "@/lib/library/documentRights";
 import { scorePracticeAnswers } from "@/lib/practice/workspaceScoring";
 import { resolvePracticeQuestions } from "@/lib/practice/playablePracticeQuestions";
 import { getLocalMockQuestions } from "@/lib/mock/localQuestionBank";
@@ -181,6 +181,44 @@ describe("document library", () => {
     expect(
       canCreatePracticeSet({ ownerId: "a", viewerId: "a", rightsConfirmed: true, contentRights: "USER_OWNED" }),
     ).toBe(true);
+  });
+
+  it("gates Create Practice Set on completed parse with content", () => {
+    const base = {
+      ownerId: "a",
+      viewerId: "a",
+      rightsConfirmed: true,
+      contentRights: "USER_OWNED" as const,
+    };
+    expect(
+      canCreatePracticeSetFromParsedDoc({
+        ...base,
+        processingStatus: "extracting",
+        hasParsedContent: false,
+      }),
+    ).toBe(false);
+    expect(
+      canCreatePracticeSetFromParsedDoc({
+        ...base,
+        processingStatus: "completed",
+        hasParsedContent: false,
+      }),
+    ).toBe(false);
+    expect(
+      canCreatePracticeSetFromParsedDoc({
+        ...base,
+        processingStatus: "completed",
+        hasParsedContent: true,
+      }),
+    ).toBe(true);
+    expect(
+      canCreatePracticeSetFromParsedDoc({
+        ...base,
+        rightsConfirmed: false,
+        processingStatus: "completed",
+        hasParsedContent: true,
+      }),
+    ).toBe(false);
   });
 });
 

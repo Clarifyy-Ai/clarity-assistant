@@ -48,6 +48,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -521,6 +522,9 @@ function ReviewModal({
       <DialogContent className="max-h-[80vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Review Parsed Questions — {visible.length} ready to save</DialogTitle>
+          <DialogDescription>
+            Review and edit parsed questions before saving them to your question bank.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">

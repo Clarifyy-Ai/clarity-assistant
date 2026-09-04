@@ -253,8 +253,9 @@ export function overlayStateRecovery(state: OverlaySessionState): string {
     permission_denied: "Allow microphone access in system settings, then retry.",
     audio_unavailable: "Check your audio device and try again.",
     backend_unavailable:
-      "The AI request did not go through. Check your connection, then retry.",
-    ai_provider_unavailable: "This AI model is unavailable. Switch to Gemini Flash or retry.",
+      "The AI request did not go through. Check your connection, then retry — your session stays open.",
+    ai_provider_unavailable:
+      "AI is temporarily unavailable. Retry guidance without ending the session, or switch model.",
     rate_limited: "Wait briefly, then request guidance again.",
     insufficient_credits: "Add credits or choose a plan, then continue practice.",
     reconnecting: "Stay on this screen; capture will resume when connected.",
@@ -297,9 +298,18 @@ export function pipelineStateFromErrorMessage(
     msg.includes("couldn't reach") ||
     msg.includes("could not reach") ||
     msg.includes("connection") ||
-    msg.includes("cors")
+    msg.includes("cors") ||
+    msg.includes("temporarily unavailable") ||
+    msg.includes("503") ||
+    msg.includes("502")
   ) {
     return "backend_unavailable";
+  }
+  if (
+    msg.includes("practice session has expired") ||
+    (msg.includes("session expired") && !msg.includes("sign in"))
+  ) {
+    return "session_ending";
   }
   return "ai_provider_unavailable";
 }

@@ -653,44 +653,10 @@ def gap_analysis(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def session_debrief(payload: dict[str, Any]) -> dict[str, Any]:
-    duration = payload.get("duration_seconds") or payload.get("durationSeconds") or 0
-    try:
-        duration = int(duration)
-    except (TypeError, ValueError):
-        duration = 0
-    questions = payload.get("questions_asked") or payload.get("questionsAsked") or 0
-    try:
-        questions = int(questions)
-    except (TypeError, ValueError):
-        questions = 0
-    highlights = _list(payload, "highlights", "strengths")
-    improvements = _list(payload, "improvements", "weaknesses")
+    """Coaching debriefs require Gemini — never invent strengths/improvements offline."""
+    from app.engines.schemas import EngineError
 
-    strengths = highlights or [
-        "Stayed engaged through the practice session",
-        "Attempted questions under timed conditions",
-    ]
-    weak = improvements or [
-        "Add more measurable outcomes in answers",
-        "Tighten openings — lead with the situation in one sentence",
-    ]
-    mins = max(1, duration // 60) if duration else 0
-    return {
-        "title": "Practice session debrief",
-        "summary": (
-            f"You practiced for about {mins} minute(s) across {questions or 'several'} question(s). "
-            "This debrief is based on session metrics (AI polish optional)."
-        ),
-        "strengths": strengths[:5],
-        "improvements": weak[:5],
-        "next_steps": [
-            "Re-run one weak question with a STAR outline",
-            "Record a 60-second answer and compare clarity",
-        ],
-        "source": "python_deterministic",
-        "needs_ai_polish": True,
-        "invented_facts": False,
-    }
+    raise EngineError("DEBRIEF_AI_REQUIRED", retryable=True)
 
 
 def session_scorecard(payload: dict[str, Any]) -> dict[str, Any]:

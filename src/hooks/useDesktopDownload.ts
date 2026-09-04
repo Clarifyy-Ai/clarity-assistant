@@ -5,19 +5,23 @@ import {
   DESKTOP_INSTALL_GUIDE_PATH,
   DESKTOP_INSTALLER_WIN_OBJECT,
   getPlatformDownloadUrlFromEnv,
+  resolveAvailableWindowsInstallerHref,
   resolveDesktopDownloadUrl,
-  sameOriginInstallerHref,
   startSameOriginInstallerDownload,
 } from "@/lib/constants/desktopDownload";
 
 export interface DesktopDownloadState {
   os: DetectedOs;
   osLabel: string;
+  /** Probed, available installer URL — null when unpublished / unreachable. */
   url: string | null;
   loading: boolean;
   hasEnvUrl: boolean;
   installGuidePath: string;
+  unavailableReason: string | null;
 }
+
+const UNAVAILABLE_COPY = "Desktop app not available yet.";
 
 export function useDesktopDownload(): DesktopDownloadState & {
   download: () => Promise<void>;
@@ -27,56 +31,79 @@ export function useDesktopDownload(): DesktopDownloadState & {
   const osLabel = osInstallLabel(os);
   const hasEnvUrl = Boolean(getPlatformDownloadUrlFromEnv(os));
 
-  const [url, setUrl] = useState<string | null>(() =>
-    hasEnvUrl ? getPlatformDownloadUrlFromEnv(os) : null,
-  );
-  const [loading, setLoading] = useState(!hasEnvUrl);
+  const [url, setUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [unavailableReason, setUnavailableReason] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (hasEnvUrl) {
-      setUrl(getPlatformDownloadUrlFromEnv(os));
-      return;
-    }
-
     setLoading(true);
+    setUnavailableReason(null);
     try {
       const resolved = await resolveDesktopDownloadUrl(os);
+      if (os === "windows") {
+        const available = await resolveAvailableWindowsInstallerHref(resolved);
+        if (available) {
+          setUrl(available);
+          setUnavailableReason(null);
+        } else {
+          setUrl(null);
+          setUnavailableReason("unavailable");
+        }
+        return;
+      }
+
+      if (!resolved) {
+        setUrl(null);
+        setUnavailableReason("not_configured");
+        return;
+      }
+      // Non-Windows: keep prior resolve without hard probe (DMG/AppImage paths vary).
       setUrl(resolved);
+      setUnavailableReason(null);
     } catch {
       setUrl(null);
+      setUnavailableReason("network_error");
     } finally {
       setLoading(false);
     }
-  }, [hasEnvUrl, os]);
+  }, [os]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   const download = useCallback(async () => {
-    let target = url;
-    if (!target) {
-      setLoading(true);
-      try {
-        target = await resolveDesktopDownloadUrl(os);
-        setUrl(target);
-      } finally {
-        setLoading(false);
+    setLoading(true);
+    try {
+      if (os === "windows") {
+        const available =
+          (url && (await resolveAvailableWindowsInstallerHref(url))) ||
+          (await resolveAvailableWindowsInstallerHref(await resolveDesktopDownloadUrl(os)));
+        if (!available) {
+          setUrl(null);
+          setUnavailableReason("unavailable");
+          toast.error(UNAVAILABLE_COPY, { duration: 6000 });
+          return;
+        }
+        setUrl(available);
+        startSameOriginInstallerDownload(available, DESKTOP_INSTALLER_WIN_OBJECT);
+        toast.success(`Download starting — open ${DESKTOP_INSTALLER_WIN_OBJECT} when it finishes.`);
+        return;
       }
-    }
 
-    if (target) {
-      const href = sameOriginInstallerHref(target, os);
-      startSameOriginInstallerDownload(href, DESKTOP_INSTALLER_WIN_OBJECT);
-      toast.success(`Download started — open ${DESKTOP_INSTALLER_WIN_OBJECT} when it finishes.`);
-      return;
+      let target = url ?? (await resolveDesktopDownloadUrl(os));
+      if (!target) {
+        toast.error(UNAVAILABLE_COPY, { duration: 6000 });
+        setUrl(null);
+        return;
+      }
+      setUrl(target);
+      startSameOriginInstallerDownload(target, DESKTOP_INSTALLER_WIN_OBJECT);
+      toast.success(`Download starting — open ${DESKTOP_INSTALLER_WIN_OBJECT} when it finishes.`);
+    } finally {
+      setLoading(false);
     }
-
-    toast.error(
-      "Installer not published yet. Ask your admin to set VITE_DESKTOP_DOWNLOAD_URL_WIN or publish a GitHub Release.",
-      { duration: 6000 },
-    );
-  }, [os, osLabel, url]);
+  }, [os, url]);
 
   return {
     os,
@@ -85,6 +112,7 @@ export function useDesktopDownload(): DesktopDownloadState & {
     loading,
     hasEnvUrl,
     installGuidePath: DESKTOP_INSTALL_GUIDE_PATH,
+    unavailableReason,
     download,
     refresh,
   };

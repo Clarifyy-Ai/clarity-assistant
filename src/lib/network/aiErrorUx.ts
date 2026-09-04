@@ -71,6 +71,7 @@ export function isInsufficientCreditsError(err: unknown): boolean {
   if (
     code === "INSUFFICIENT_CREDITS" ||
     code === "NO_CREDITS" ||
+    code === "CREDITS_EXHAUSTED" ||
     code === "BILLING_001" ||
     code === "BILL_001"
   ) {
@@ -103,10 +104,18 @@ export function isInsufficientCreditsError(err: unknown): boolean {
 }
 
 function isAiTemporarilyUnavailableError(err: unknown): boolean {
+  const code = errorCode(err).toUpperCase();
+  // Credit / rate-limit backend 503s are not AI provider outages.
+  if (
+    code === "CREDIT_SERVICE_UNAVAILABLE" ||
+    code === "RATE_LIMIT_BACKEND_UNAVAILABLE"
+  ) {
+    return false;
+  }
+
   const status = errorStatus(err);
   if (status === 502 || status === 503) return true;
 
-  const code = errorCode(err).toUpperCase();
   // AUTH failures must never be treated as provider outages.
   if (
     code === "AUTH_EXPIRED" ||
@@ -120,6 +129,7 @@ function isAiTemporarilyUnavailableError(err: unknown): boolean {
     code === "AI_ERROR" ||
     code === "PROVIDER_UNAVAILABLE" ||
     code === "AI_PROVIDER_UNAVAILABLE" ||
+    code === "COACH_AI_UNAVAILABLE" ||
     code === "BAD_GATEWAY"
   ) {
     return true;
@@ -135,10 +145,12 @@ function isAiTemporarilyUnavailableError(err: unknown): boolean {
   }
   return (
     msg.includes("temporarily unavailable") ||
+    msg.includes("coach ai is temporarily unavailable") ||
     msg.includes("credits refunded") ||
     msg.includes("ai_error") ||
     msg.includes("provider_unavailable") ||
     msg.includes("ai_provider_unavailable") ||
+    msg.includes("coach_ai_unavailable") ||
     msg.includes("service unavailable")
   );
 }
@@ -185,6 +197,11 @@ export function getAiUserFacingError(err: unknown): string {
     return "Your session expired. Sign in again to continue.";
   }
 
+  // Practice lease end — not an auth failure; do not ask the user to sign in.
+  if (code === "SESSION_EXPIRED") {
+    return "This practice session has expired. Start a new session to continue.";
+  }
+
   if (code === "RATE_LIMITED") {
     return "Too many AI requests right now. Please wait a moment and try again.";
   }
@@ -227,6 +244,10 @@ export function getAiUserFacingError(err: unknown): string {
     return "Credits couldn't be verified right now. Please try again.";
   }
 
+  if (code === "RATE_LIMIT_BACKEND_UNAVAILABLE") {
+    return "The service is temporarily unavailable. Please try again in a moment.";
+  }
+
   const quotaMsg = errorText(err).toLowerCase();
   if (
     quotaMsg.includes("insufficient_quota") ||
@@ -256,6 +277,7 @@ export function getAiUserFacingError(err: unknown): string {
 
   if (
     code === "CAPABILITY_REQUIRED" ||
+    code === "FEATURE_NOT_AVAILABLE_FOR_PLAN" ||
     code === "PLAN_UPGRADE_REQUIRED" ||
     rawLower.includes("requires a higher plan") ||
     (rawLower.includes("requires the") && rawLower.includes("plan"))
@@ -312,7 +334,7 @@ export function getAiUserFacingError(err: unknown): string {
 export function isCapabilityRequiredError(err: unknown): boolean {
   const status = errorStatus(err);
   const code = errorCode(err).toUpperCase();
-  if (code === "CAPABILITY_REQUIRED" || code === "PLAN_REQUIRED" || code === "PLAN_UPGRADE_REQUIRED" || code === "BILLING_PLAN_GATE_BLOCKED") {
+  if (code === "CAPABILITY_REQUIRED" || code === "FEATURE_NOT_AVAILABLE_FOR_PLAN" || code === "PLAN_REQUIRED" || code === "PLAN_UPGRADE_REQUIRED" || code === "BILLING_PLAN_GATE_BLOCKED") {
     return true;
   }
   if (status === 403) {

@@ -47,6 +47,80 @@ export function normalizeSkillList(value: unknown, maxItems = MAX_SKILLS): strin
   return out;
 }
 
+const SKILL_SECTION_ALIASES = new Set([
+  "skills",
+  "technical skills",
+  "key skills",
+  "core skills",
+  "tech stack",
+  "technologies",
+  "competencies",
+  "tools",
+  "technical competencies",
+  "technical skill set",
+  "skill set",
+  "technical proficiency",
+]);
+
+const OTHER_RESUME_SECTIONS = new Set([
+  "experience",
+  "work experience",
+  "employment history",
+  "professional experience",
+  "education",
+  "projects",
+  "summary",
+  "profile",
+  "objective",
+  "professional summary",
+  "certifications",
+  "achievements",
+  "languages",
+  "about me",
+]);
+
+/**
+ * Recover skill chips from resume prose when structured `skills[]` is empty
+ * (common for deterministic parse stubs that only store summary text).
+ */
+export function extractSkillsFromResumeText(text: string, maxItems = 40): string[] {
+  const clipped = (text ?? "").replace(/\u0000/g, "").trim();
+  if (!clipped) return [];
+
+  const collected: string[] = [];
+  let inSkills = false;
+
+  for (const raw of clipped.split(/\r?\n/)) {
+    const line = raw.replace(/^[\s•*\-\d.]+/, "").trim();
+    if (!line) continue;
+
+    const inline = line.match(/^(.{1,60}?)\s*[:\-–]\s*(.+)$/);
+    if (inline) {
+      const label = inline[1].replace(/:$/, "").trim().toLowerCase();
+      if (SKILL_SECTION_ALIASES.has(label)) {
+        collected.push(...normalizeSkillList(inline[2], maxItems));
+        inSkills = true;
+        continue;
+      }
+    }
+
+    const heading = line.replace(/:$/, "").trim().toLowerCase();
+    if (SKILL_SECTION_ALIASES.has(heading)) {
+      inSkills = true;
+      continue;
+    }
+    if (OTHER_RESUME_SECTIONS.has(heading)) {
+      inSkills = false;
+      continue;
+    }
+    if (inSkills) {
+      collected.push(...normalizeSkillList(line, maxItems));
+    }
+  }
+
+  return normalizeSkillList(collected, maxItems);
+}
+
 export function looksLikeBinaryDump(text: string): boolean {
   const sample = text.slice(0, 4_000);
   if (!sample.trim()) return false;
@@ -175,6 +249,7 @@ export type ExtractedJdFields = {
   role: string | null;
   company: string | null;
   location: string | null;
+  salary_range: string | null;
   required_skills: string[];
   summary: string;
 };
@@ -190,11 +265,20 @@ function firstMatch(text: string, patterns: RegExp[]): string | null {
   return null;
 }
 
+const EMPTY_JD_FIELDS: ExtractedJdFields = {
+  role: null,
+  company: null,
+  location: null,
+  salary_range: null,
+  required_skills: [],
+  summary: "",
+};
+
 export function extractJdFieldsFromText(text: string): ExtractedJdFields {
   const clipped = text.replace(/\u0000/g, "").trim().slice(0, 50_000);
   const quality = assessExtractedDocumentQuality(clipped, "job_description");
   if (quality.kind === "binary" || quality.kind === "filename_stub" || !clipped) {
-    return { role: null, company: null, location: null, required_skills: [], summary: "" };
+    return { ...EMPTY_JD_FIELDS };
   }
 
   const role = firstMatch(clipped, [
@@ -206,7 +290,11 @@ export function extractJdFieldsFromText(text: string): ExtractedJdFields {
     /about\s+([A-Z][A-Za-z0-9&.\- ]{1,60})\b/,
   ]);
   const location = firstMatch(clipped, [
-    /(?:location|based in|office)\s*[:\-–]\s*([^\n]{2,80})/i,
+    /(?:work\s*location|locations?|based in|office)\s*[:\-–]\s*([^\n]{2,80})/i,
+    /based in\s+([^\n,]{2,80})/i,
+  ]);
+  const salary_range = firstMatch(clipped, [
+    /(?:salary|compensation|ctc|package|pay\s*range)\s*[:\-–]\s*([^\n]{2,80})/i,
   ]);
 
   const skillsBlock = clipped.match(
@@ -224,7 +312,79 @@ export function extractJdFieldsFromText(text: string): ExtractedJdFields {
     role,
     company,
     location,
+    salary_range,
     required_skills,
     summary: clipped.slice(0, 400),
   };
+}
+
+/** True when JD body is real extracted text (not stub/binary garbage). */
+export function isJdContentReadyForDisplay(content: string | null | undefined): boolean {
+  const text = (content ?? "").trim();
+  if (!text) return false;
+  if (looksLikeUploadedFilenameStub(text)) return false;
+  if (looksLikeBinaryDump(text)) return false;
+  return true;
+}
+
+/**
+ * After a client timeout/error on parse-document, keep the row when the edge
+ * already wrote ready content — do not clobber with parse_status=error.
+ */
+export function shouldKeepJdParseSuccess(row: {
+  parse_status?: string | null;
+  content?: string | null;
+} | null | undefined): boolean {
+  if (!row) return false;
+  return row.parse_status === "ready" && isJdContentReadyForDisplay(row.content);
+}
+
+export type JdParsedDataShape = {
+  required_skills?: string[];
+  key_phrases?: string[];
+  location?: string | null;
+  role?: string | null;
+  company?: string | null;
+  salary_range?: string | null;
+};
+
+/** Merge heuristic fields into existing parsed_data without wiping populated values. */
+export function buildHealedJdParsedData(
+  content: string,
+  existing: JdParsedDataShape | null | undefined,
+): { parsed_data: JdParsedDataShape; shouldWrite: boolean } {
+  const fields = extractJdFieldsFromText(content);
+  const existingSkills = normalizeSkillList(existing?.required_skills);
+  const parsed_data: JdParsedDataShape = {
+    ...existing,
+    required_skills: existingSkills.length > 0 ? existingSkills : fields.required_skills,
+    location: existing?.location || fields.location,
+    role: existing?.role || fields.role,
+    company: existing?.company || fields.company,
+    salary_range: existing?.salary_range || fields.salary_range,
+  };
+  if (existing?.key_phrases) {
+    parsed_data.key_phrases = normalizeSkillList(existing.key_phrases);
+  }
+
+  const shouldWrite =
+    Boolean(fields.location && !existing?.location) ||
+    Boolean(fields.salary_range && !existing?.salary_range) ||
+    Boolean(fields.required_skills.length > 0 && existingSkills.length === 0) ||
+    Boolean(fields.role && !existing?.role) ||
+    Boolean(fields.company && !existing?.company);
+
+  return { parsed_data, shouldWrite };
+}
+
+/** JDDetail display flags: never hide real body solely because parse_status is error. */
+export function getJdDetailParseUi(jd: {
+  content?: string | null;
+  parse_status?: string | null;
+}): { contentReady: boolean; showParseRecovery: boolean } {
+  const contentReady = isJdContentReadyForDisplay(jd.content);
+  const status = jd.parse_status ?? "";
+  const showParseRecovery =
+    !contentReady || status === "error" || status === "parsing";
+  return { contentReady, showParseRecovery };
 }

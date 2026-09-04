@@ -47,7 +47,9 @@ import {
   sessionAnswersDB,
   resumesDB,
   jobDescriptionsDB,
+  scorecardsDB,
 } from "@/lib/supabase/database";
+import { isCompletedScorecard } from "@/hooks/useScorecard";
 import { useDocumentStore } from "@/store/documentStore";
 import { buildResumeContextForAI } from "@/lib/documents/interviewContext";
 import { getOrCreateSession, activateSession, isServerExpired } from "@/lib/session/sessionLifecycle";
@@ -78,12 +80,13 @@ import {
   reduceMockSessionLifecycle,
   type MockSessionLifecycle,
 } from "@/lib/mock/mockSessionLifecycle";
-import { speakQuestionText, stopBrowserTts, unlockBrowserTts, questionTtsIdentity } from "@/lib/mock/mockTts";
+import { speakInterviewerWithFallback, stopBrowserTts, unlockBrowserTts, questionTtsIdentity } from "@/lib/mock/mockTts";
 import type { TtsOutcomeStatus } from "@/lib/mock/mockTts";
 import {
   isDuplicateQuestionText,
   normalizeQuestionText,
 } from "@/lib/mock/validateGeneratedQuestion";
+import { isDuplicateQuestion } from "@/lib/mock/questionDuplicate";
 import { getAiUserFacingError } from "@/lib/network/aiErrorUx";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { microphoneSetupHint } from "@/lib/audio/micPermission";
@@ -97,13 +100,50 @@ import {
   type AnswerNextState,
   type MockAnswerStatus,
 } from "@/lib/mock/answerNextFsm";
-import { finalizeMockAnswer } from "@/lib/mock/mockAnswerCapture";
+import {
+  collectCandidateAnswerText,
+  draftMockAnswerStatus,
+  finalizeMockAnswer,
+  streamListeningWatermarkMs,
+} from "@/lib/mock/mockAnswerCapture";
+import {
+  isInterviewContextSnapshot,
+  type InterviewContextSnapshot,
+} from "@/lib/mock/interviewContext";
+import {
+  buildInterviewBlueprint,
+  getBlueprintSlot,
+  isInterviewBlueprint,
+  type InterviewBlueprint,
+} from "@/lib/mock/interviewBlueprint";
+import {
+  decideSilenceAdvance,
+  DEFAULT_SILENCE_POLICY,
+  transcriptLooksComplete,
+} from "@/lib/mock/silencePolicy";
+import { shouldRequestFollowUp } from "@/lib/mock/followUpPolicy";
+import {
+  buildTtsPlaybackId,
+  reduceTtsPlayback,
+  shouldAutoPlayQuestionTts,
+  type TtsPlaybackRecord,
+} from "@/lib/mock/ttsPlayback";
+import { resolveFrozenDocuments } from "@/lib/mock/liveContextShare";
+import { getInterviewerVoiceTextFallback } from "@/lib/mock/interviewerVoiceCatalog";
+import {
+  buildDurableTurnsFromProgress,
+  countScorableMockAnswers,
+} from "@/lib/mock/durableMockTurns";
+import { VADDetector } from "@/lib/audio/vadDetector";
 import { toDbModel } from "@/lib/ai/modelMapping";
 import { finalizeSession as finalizeSessionApi } from "@/lib/api/sessions";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { Skeleton } from "@/components/ui/SkeletonLoader";
+import { FullPageProcessingState } from "@/components/async/FullPageProcessingState";
+import { ProcessingStatus } from "@/components/async/ProcessingStatus";
+import { AI_OP_STAGES } from "@/lib/async/aiOpStages";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { ErrorBoundary } from "@/components/layout/ErrorBoundary";
 import { PANIC_RESPONSE } from "@/types/session.types";
@@ -144,6 +184,8 @@ type MockConfig = LiveSessionConfig & {
   role?: string | null;
   question_count?: number;
   difficulty?: "easy" | "medium" | "hard" | "mixed";
+  interview_context?: InterviewContextSnapshot;
+  interview_blueprint?: InterviewBlueprint;
 };
 
 /* ─── TYPES ─────────────────────────────────────────────────────────────── */
@@ -275,6 +317,7 @@ export default function MockSession() {
 
   const orchestrator = useSessionOrchestrator();
   const interimText = useAudioStore((s) => s.transcript?.interim_text ?? "");
+  const transcriptUtterances = useAudioStore((s) => s.transcript?.utterances ?? []);
   const candidateTranscript = useAudioStore((s) =>
     (s.transcript?.utterances ?? [])
       .filter((u) => u.speaker === "candidate" && u.is_final)
@@ -298,11 +341,16 @@ export default function MockSession() {
   /** Synchronous lock so rapid Next clicks cannot start two next-ops. */
   const nextOpLockRef = useRef(false);
   const autoHintInflightFingerprintsRef = useRef<Set<string>>(new Set());
-  const listeningStartedAtRef = useRef<number | null>(null);
+  /** Stream-relative watermark for STT filter (same domain as utterance start_ms/end_ms). */
+  const listeningStreamWatermarkRef = useRef<number | null>(null);
+  /** Wall-clock when listening opened — silence duration only (not for STT filter). */
+  const listeningOpenedAtWallRef = useRef<number | null>(null);
   const interviewerAudioActiveRef = useRef(false);
   const [typedAnswer, setTypedAnswer] = useState("");
   const typedAnswerRef = useRef("");
   typedAnswerRef.current = typedAnswer;
+  /** Once the user types for this question, voice sync must not overwrite. */
+  const userTypedOverrideRef = useRef(false);
   const [currentAnswerStatus, setCurrentAnswerStatus] =
     useState<MockAnswerStatus>("unanswered");
 
@@ -312,8 +360,8 @@ export default function MockSession() {
     micDeviceId,
     noiseSuppression,
     onQuestionDetected: () => {
-      // Silence may finalize a *detected* response — never auto-advance,
-      // and never treat pure silence as an answer.
+      // End-of-speech signal from Live-style detector — mark answer detected;
+      // silence policy decides when to auto-finalize (not pure empty silence).
       if (interviewerAudioActiveRef.current) return;
       if (!isMockSessionMutable(lifecycleRef.current)) return;
       const session = useSessionStore.getState();
@@ -323,12 +371,18 @@ export default function MockSession() {
       const draft = finalizeMockAnswer({
         utterances: store.transcript?.utterances ?? [],
         interimText: store.transcript?.interim_text ?? "",
-        listeningStartedAtMs: listeningStartedAtRef.current,
+        listeningStartedAtMs: listeningStreamWatermarkRef.current,
         questionText: qText,
         typedAnswer: typedAnswerRef.current,
         interviewerAudioActive: false,
       });
       if (draft.answer_text || draft.status === "answered") {
+        hasSpokenRef.current = true;
+        lastSpeechAtRef.current = Date.now();
+        if (!userTypedOverrideRef.current && draft.answer_text) {
+          setTypedAnswer(draft.answer_text);
+          typedAnswerRef.current = draft.answer_text;
+        }
         setCurrentAnswerStatus("draft");
         setAnswerNextState((s) => reduceAnswerNext(s, { type: "ANSWER_DETECTED" }));
       }
@@ -363,6 +417,7 @@ export default function MockSession() {
   const [nextQuestionError, setNextQuestionError] = useState<string | null>(null);
   const [overlayInitState, setOverlayInitState] = useState<OverlayInitState>("waiting_session");
   const [ttsState, setTtsState] = useState<TtsOutcomeStatus | "idle">("idle");
+  const [canReplayTts, setCanReplayTts] = useState(false);
   const [pendingTtsQuestion, setPendingTtsQuestion] = useState<{ qId: string; qText: string } | null>(
     null,
   );
@@ -377,6 +432,17 @@ export default function MockSession() {
   const activeOperationIdRef = useRef<string | null>(null);
   const prefetchRef = useRef(createMockPrefetchController());
   const mockDocCacheRef = useRef<{ key: string; resume: string; jd: string } | null>(null);
+  const interviewContextRef = useRef<InterviewContextSnapshot | null>(null);
+  const interviewBlueprintRef = useRef<InterviewBlueprint | null>(null);
+  const followUpsUsedRef = useRef(0);
+  const parentQuestionIdRef = useRef<string | null>(null);
+  const ttsPlaybackRef = useRef<TtsPlaybackRecord | null>(null);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSpeechAtRef = useRef<number | null>(null);
+  const hasSpokenRef = useRef(false);
+  const vadRef = useRef<VADDetector | null>(null);
+  const [noAnswerPrompt, setNoAnswerPrompt] = useState(false);
+  const [silenceHint, setSilenceHint] = useState<string | null>(null);
   const speakingQuestionIdRef = useRef<string | null>(null);
   const overlayMountedSessionRef = useRef<string | null>(null);
   const overlayGenerationRef = useRef<number>(0);
@@ -422,6 +488,12 @@ export default function MockSession() {
   }, []);
 
   const getCachedMockDocuments = useCallback(async (config: MockConfig) => {
+    const frozen = resolveFrozenDocuments({
+      snapshot: interviewContextRef.current,
+    });
+    if (frozen.fromSnapshot && (frozen.resume || frozen.jd)) {
+      return { resume: frozen.resume, jd: frozen.jd };
+    }
     const key = `${config.resume_id ?? ""}|${config.jd_id ?? ""}`;
     if (mockDocCacheRef.current?.key === key) {
       return { resume: mockDocCacheRef.current.resume, jd: mockDocCacheRef.current.jd };
@@ -517,13 +589,46 @@ export default function MockSession() {
     fillerHook.reset();
     wpmHook.reset();
     questionStartRef.current = Date.now();
-    listeningStartedAtRef.current = null;
+    listeningStreamWatermarkRef.current = null;
+    listeningOpenedAtWallRef.current = null;
+    userTypedOverrideRef.current = false;
     setTypedAnswer("");
     typedAnswerRef.current = "";
     setCurrentAnswerStatus("unanswered");
     useAudioStore.getState().updateInterimText("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orchestrator.currentQuestionIndex]);
+
+  // Live-bind candidate STT + interim into Your Answer while listening (typing wins).
+  useEffect(() => {
+    if (phase !== "active") return;
+    if (!isMockSessionMutable(lifecycleRef.current)) return;
+    if (interviewerAudioActiveRef.current) return;
+    if (listeningStreamWatermarkRef.current == null) return;
+    if (userTypedOverrideRef.current) return;
+
+    const qText =
+      typeof currentQuestion === "string"
+        ? currentQuestion
+        : currentQuestion?.question_text ?? "";
+    const voice = collectCandidateAnswerText({
+      utterances: transcriptUtterances,
+      interimText,
+      listeningStartedAtMs: listeningStreamWatermarkRef.current,
+      questionText: qText,
+      preferTyped: false,
+    });
+    if (voice === typedAnswerRef.current) return;
+    setTypedAnswer(voice);
+    typedAnswerRef.current = voice;
+    if (voice.trim()) {
+      hasSpokenRef.current = true;
+      lastSpeechAtRef.current = Date.now();
+      setNoAnswerPrompt(false);
+      setCurrentAnswerStatus(draftMockAnswerStatus(voice));
+      setAnswerNextState((s) => reduceAnswerNext(s, { type: "ANSWER_DETECTED" }));
+    }
+  }, [phase, interimText, transcriptUtterances, currentQuestion, currentQuestionIndex]);
 
   // Keep elapsed + question list durable across refresh while answering.
   useEffect(() => {
@@ -569,13 +674,21 @@ export default function MockSession() {
       if (!isMockSessionMutable(lifecycleRef.current)) return;
       if (speakingQuestionIdRef.current !== qId) return;
       // Idempotent: do not reset the listening window if already open for this Q.
-      if (!interviewerAudioActiveRef.current && listeningStartedAtRef.current != null) {
+      if (!interviewerAudioActiveRef.current && listeningStreamWatermarkRef.current != null) {
         return;
       }
       interviewerAudioActiveRef.current = false;
       setTtsState("idle");
+      hasSpokenRef.current = false;
+      lastSpeechAtRef.current = null;
+      setNoAnswerPrompt(false);
+      setSilenceHint(null);
       audioRef.current.resumeCandidateCapture();
-      listeningStartedAtRef.current = Date.now();
+      const existingUtterances = useAudioStore.getState().transcript?.utterances ?? [];
+      // Stream-relative watermark — must match Deepgram utterance start_ms/end_ms.
+      listeningStreamWatermarkRef.current = streamListeningWatermarkMs(existingUtterances);
+      listeningOpenedAtWallRef.current = Date.now();
+      userTypedOverrideRef.current = false;
       if (getOverlaySessionAuthority().canAcceptSessionMutations()) {
         useOverlayStore.getState().setSessionPipelineState("candidate_answering");
       }
@@ -614,6 +727,26 @@ export default function MockSession() {
           usedTexts,
           signal,
           idempotencyKey: operationId,
+          follow_up_depth: interviewContextRef.current?.follow_up_depth ?? "light",
+          previous_answers: answersRef.current.slice(-6).map((a) => ({
+            question_text: a.question_text,
+            answer_text: a.answer_text,
+            skipped: a.skipped,
+          })),
+          blueprint_slot: getBlueprintSlot(
+            interviewBlueprintRef.current ??
+              ({
+                version: "interview_blueprint_v1",
+                created_at: "",
+                total_questions: totalQ,
+                max_follow_ups_per_topic: 1,
+                follow_up_depth: "light",
+                slots: [],
+                time_budget_minutes: 5,
+              } as InterviewBlueprint),
+            nextNumber,
+          ),
+          interview_context: interviewContextRef.current,
         });
         return result.question;
       })();
@@ -648,18 +781,56 @@ export default function MockSession() {
   const playInterviewerVoice = useCallback(
     (qText: string, qId: string, fromGesture = false) => {
       if (!isMockSessionMutable(lifecycleRef.current)) return;
+      const sessionId = useSessionStore.getState().session_id ?? "";
+      const voiceId =
+        interviewContextRef.current?.voice_id ??
+        (sessionConfigRef.current as MockConfig | null)?.tts_voice ??
+        null;
+      const playbackId = buildTtsPlaybackId({
+        sessionId,
+        questionId: qId,
+        voiceId,
+        textVersion: qText,
+      });
+
+      // Guard duplicate auto-play for the same playback_id (Strict Mode / remount).
+      if (
+        !fromGesture &&
+        ttsPlaybackRef.current?.playback_id === playbackId &&
+        (ttsPlaybackRef.current.status === "playing" ||
+          ttsPlaybackRef.current.status === "generating" ||
+          ttsPlaybackRef.current.status === "ready")
+      ) {
+        return;
+      }
+
       const generation = ++ttsGenerationRef.current;
       if (fromGesture) unlockBrowserTts();
+      if (fromGesture) {
+        ttsPlaybackRef.current = reduceTtsPlayback(ttsPlaybackRef.current, {
+          type: "MANUAL_REPLAY",
+        });
+      }
+      ttsPlaybackRef.current = reduceTtsPlayback(ttsPlaybackRef.current, {
+        type: "REQUEST",
+        playback_id: playbackId,
+        question_id: qId,
+        voice_id: voiceId,
+      });
+      ttsPlaybackRef.current = reduceTtsPlayback(ttsPlaybackRef.current, { type: "READY" });
       pendingTtsQuestionRef.current = { qId, qText };
       setPendingTtsQuestion({ qId, qText });
+      setCanReplayTts(false);
       setTtsState("playing");
       speakingQuestionIdRef.current = qId;
       interviewerAudioActiveRef.current = true;
       audioRef.current.suspendCandidateCapture();
+      ttsPlaybackRef.current = reduceTtsPlayback(ttsPlaybackRef.current, { type: "START" });
 
-      void speakQuestionText(qText, {
+      void speakInterviewerWithFallback(qText, {
         questionId: qId,
-        voice: (sessionConfigRef.current as MockConfig | null)?.tts_voice ?? null,
+        playbackId,
+        catalogueVoiceId: voiceId,
         isCurrent: (id) =>
           ttsGenerationRef.current === generation &&
           speakingQuestionIdRef.current === id &&
@@ -680,22 +851,43 @@ export default function MockSession() {
       }).then((outcome) => {
         if (ttsGenerationRef.current !== generation) return;
         if (speakingQuestionIdRef.current !== qId) return;
-        if (outcome.status === "cancelled") return;
+        if (outcome.status === "cancelled") {
+          ttsPlaybackRef.current = reduceTtsPlayback(ttsPlaybackRef.current, {
+            type: "CANCEL",
+          });
+          return;
+        }
         if (outcome.status === "blocked") {
           setTtsState("blocked");
           interviewerAudioActiveRef.current = false;
+          ttsPlaybackRef.current = reduceTtsPlayback(ttsPlaybackRef.current, {
+            type: "FAIL",
+          });
           return;
         }
         if (outcome.status === "unavailable" || outcome.status === "error") {
           setTtsState("unavailable");
-          toast.message("Interviewer voice unavailable — read the question on screen.");
+          setCanReplayTts(true);
+          ttsPlaybackRef.current = reduceTtsPlayback(ttsPlaybackRef.current, {
+            type: "FAIL",
+          });
+          const caption = getInterviewerVoiceTextFallback(voiceId);
+          toast.message(
+            caption
+              ? "Interviewer voice unavailable — read the question on screen."
+              : "Interviewer voice unavailable — continue with text.",
+          );
           beginCandidateListening(qId);
           return;
         }
         if (outcome.status === "ended") {
           setTtsState("idle");
+          setCanReplayTts(true);
           setPendingTtsQuestion(null);
           pendingTtsQuestionRef.current = null;
+          ttsPlaybackRef.current = reduceTtsPlayback(ttsPlaybackRef.current, {
+            type: "COMPLETE",
+          });
           beginCandidateListening(qId);
         }
       });
@@ -705,6 +897,9 @@ export default function MockSession() {
 
   const playInterviewerVoiceRef = useRef(playInterviewerVoice);
   playInterviewerVoiceRef.current = playInterviewerVoice;
+
+  const beginCandidateListeningRef = useRef(beginCandidateListening);
+  beginCandidateListeningRef.current = beginCandidateListening;
 
   useEffect(() => {
     if (phase !== "active") return;
@@ -725,6 +920,38 @@ export default function MockSession() {
     }
 
     speakingQuestionIdRef.current = ttsIdentity.id;
+    const sessionId = useSessionStore.getState().session_id ?? "";
+    const voiceId =
+      interviewContextRef.current?.voice_id ??
+      (sessionConfigRef.current as MockConfig | null)?.tts_voice ??
+      null;
+    const playbackId = buildTtsPlaybackId({
+      sessionId,
+      questionId: ttsIdentity.id,
+      voiceId,
+      textVersion: ttsIdentity.text,
+    });
+
+    if (!shouldAutoPlayQuestionTts(ttsPlaybackRef.current, playbackId)) {
+      const status = ttsPlaybackRef.current?.status;
+      // In-flight playback: do not restart and do not force listening yet.
+      if (status === "playing" || status === "generating" || status === "ready") {
+        return () => {
+          ttsGenerationRef.current += 1;
+          stopBrowserTts();
+        };
+      }
+      // Already completed for this playback_id — no auto-replay on restore/focus.
+      setTtsState("idle");
+      setCanReplayTts(true);
+      beginCandidateListeningRef.current(ttsIdentity.id);
+      return () => {
+        ttsGenerationRef.current += 1;
+        stopBrowserTts();
+      };
+    }
+
+    setCanReplayTts(false);
     setAnswerNextState((s) => reduceAnswerNext(s, { type: "START_SPEAKING" }));
     playInterviewerVoiceRef.current(ttsIdentity.text, ttsIdentity.id);
 
@@ -752,7 +979,13 @@ export default function MockSession() {
         ? "Saving..."
         : `${Math.floor(sessionTimeLeft / 60)}:${String(sessionTimeLeft % 60).padStart(2, "0")}`;
 
-  function captureAnswer(skipped = false): QuestionAnswer {
+  function captureAnswer(
+    skipped = false,
+    snapshot?: {
+      utterances: typeof transcriptUtterances;
+      interimText: string;
+    },
+  ): QuestionAnswer {
     const qText = typeof question === "string" ? question : question?.question_text ?? "";
     const qId =
       typeof question === "string"
@@ -763,9 +996,9 @@ export default function MockSession() {
     const audioState = useAudioStore.getState();
     const captured = finalizeMockAnswer({
       skipped,
-      utterances: audioState.transcript?.utterances ?? [],
-      interimText: audioState.transcript?.interim_text ?? "",
-      listeningStartedAtMs: listeningStartedAtRef.current,
+      utterances: snapshot?.utterances ?? audioState.transcript?.utterances ?? [],
+      interimText: snapshot?.interimText ?? audioState.transcript?.interim_text ?? "",
+      listeningStartedAtMs: listeningStreamWatermarkRef.current,
       questionText: qText,
       interviewerAudioActive: interviewerAudioActiveRef.current,
       typedAnswer: typedAnswerRef.current,
@@ -844,8 +1077,36 @@ export default function MockSession() {
           wpm: a.wpm,
           duration_seconds: a.duration_seconds,
           timestamp: a.timestamp,
+          parent_question_id: parentQuestionIdRef.current,
+          is_follow_up: Boolean(
+            (a as { is_follow_up?: boolean }).is_follow_up,
+          ),
         }),
       ),
+      interview_context: interviewContextRef.current,
+      interview_blueprint: interviewBlueprintRef.current,
+      follow_ups_used_for_parent: followUpsUsedRef.current,
+      current_parent_question_id: parentQuestionIdRef.current,
+      tts_playback: ttsPlaybackRef.current,
+      blueprint_slot_index: useSessionStore.getState().current_question_index ?? 0,
+      durable_turns: buildDurableTurnsFromProgress({
+        sessionId,
+        questions: questions.map((q) => ({
+          id: q.id,
+          question_text: q.question_text,
+          tags: q.tags,
+        })),
+        answers: answersRef.current.map((a) => ({
+          question_id: a.question_id,
+          question_text: a.question_text,
+          answer_text: a.answer_text,
+          skipped: a.skipped,
+          question_index: a.question_index,
+          is_follow_up: Boolean((a as { is_follow_up?: boolean }).is_follow_up),
+          parent_question_id: parentQuestionIdRef.current,
+          timestamp: a.timestamp,
+        })),
+      }),
     });
 
     try {
@@ -1021,6 +1282,20 @@ export default function MockSession() {
     setSessionTimeLeft(Math.max(0, SESSION_DURATION - elapsed));
 
     rebuildMockTranscriptFromProgress(restoredQuestions, restoredAnswers);
+
+    if (progress?.interview_context && isInterviewContextSnapshot(progress.interview_context)) {
+      interviewContextRef.current = progress.interview_context;
+    }
+    if (progress?.interview_blueprint && isInterviewBlueprint(progress.interview_blueprint)) {
+      interviewBlueprintRef.current = progress.interview_blueprint;
+    }
+    followUpsUsedRef.current = progress?.follow_ups_used_for_parent ?? 0;
+    parentQuestionIdRef.current = progress?.current_parent_question_id ?? null;
+    ttsPlaybackRef.current = progress?.tts_playback ?? null;
+    if (progress?.tts_playback?.status === "completed") {
+      setCanReplayTts(true);
+    }
+
     toast.message("Resuming your in-progress mock interview");
     return true;
   }
@@ -1030,7 +1305,8 @@ export default function MockSession() {
     speakingQuestionIdRef.current = null;
     interviewerAudioActiveRef.current = false;
     if (!options?.preserveListeningWindow) {
-      listeningStartedAtRef.current = null;
+      listeningStreamWatermarkRef.current = null;
+      listeningOpenedAtWallRef.current = null;
     }
     stopBrowserTts();
     audioRef.current.resumeCandidateCapture();
@@ -1057,6 +1333,7 @@ export default function MockSession() {
     questionNumber: number;
     usedTexts: string[];
     forceFallback?: boolean;
+    isFollowUp?: boolean;
   }): Promise<SessionQuestion> {
     const { interviewType, role, company, difficulty } = resolveMockConfigFields(
       options.config,
@@ -1115,6 +1392,32 @@ export default function MockSession() {
         signal: controller.signal,
         idempotencyKey: operationId,
         forceFallback: options.forceFallback,
+        follow_up_depth: interviewContextRef.current?.follow_up_depth ?? "light",
+        parent_question_id: options.isFollowUp
+          ? parentQuestionIdRef.current
+          : null,
+        is_follow_up: Boolean(options.isFollowUp),
+        previous_answers: answersRef.current.slice(-6).map((a) => ({
+          question_text: a.question_text,
+          answer_text: a.answer_text,
+          skipped: a.skipped,
+        })),
+        blueprint_slot: getBlueprintSlot(
+          interviewBlueprintRef.current ??
+            ({
+              version: "interview_blueprint_v1",
+              created_at: "",
+              total_questions: targetQuestionCount,
+              max_follow_ups_per_topic: 1,
+              follow_up_depth: "light",
+              slots: [],
+              time_budget_minutes: 5,
+            } as InterviewBlueprint),
+          options.isFollowUp
+            ? Math.max(1, options.questionNumber - 1)
+            : options.questionNumber,
+        ),
+        interview_context: interviewContextRef.current,
       });
 
       if (controller.signal.aborted) {
@@ -1234,8 +1537,26 @@ export default function MockSession() {
     restoredElapsedRef.current = 0;
     sessionElapsedRef.current = 0;
     answersRef.current = [];
+    interviewContextRef.current = null;
+    interviewBlueprintRef.current = null;
+    followUpsUsedRef.current = 0;
+    parentQuestionIdRef.current = null;
+    ttsPlaybackRef.current = null;
+    hasSpokenRef.current = false;
+    lastSpeechAtRef.current = null;
+    setNoAnswerPrompt(false);
+    setSilenceHint(null);
 
     sessionConfigRef.current = config;
+    const mockConfigEarly = config as MockConfig;
+    if (isInterviewContextSnapshot(mockConfigEarly.interview_context)) {
+      interviewContextRef.current = mockConfigEarly.interview_context;
+    }
+    if (isInterviewBlueprint(mockConfigEarly.interview_blueprint)) {
+      interviewBlueprintRef.current = mockConfigEarly.interview_blueprint;
+    } else if (interviewContextRef.current) {
+      interviewBlueprintRef.current = buildInterviewBlueprint(interviewContextRef.current);
+    }
     setMicDeviceId(config.mic_device_id ?? null);
     setNoiseSuppression(config.noise_suppression ?? true);
     startTimeRef.current = new Date().toISOString();
@@ -1504,7 +1825,14 @@ export default function MockSession() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state, phase, profile?.id, sessionIdParam]);
 
-  async function finalizeSession(skipCapture = false, skipped = false) {
+  async function finalizeSession(
+    skipCapture = false,
+    skipped = false,
+    captureSnapshot?: {
+      utterances: typeof transcriptUtterances;
+      interimText: string;
+    },
+  ) {
     if (endCalledRef.current) return;
     endCalledRef.current = true;
 
@@ -1522,7 +1850,7 @@ export default function MockSession() {
     // Snapshot before freeze + media stop — capture last answer first.
     if (!skipCapture) {
       try {
-        captureAnswer(skipped);
+        captureAnswer(skipped, captureSnapshot);
       } catch {
         /* ignore */
       }
@@ -1536,15 +1864,11 @@ export default function MockSession() {
       ? new Date(startTimeRef.current).getTime()
       : Date.now();
     const timeTakenSeconds = Math.max(0, Math.round((Date.now() - startedMs) / 1000));
-    const questionsAnswered = answersRef.current.filter(
-      (a) =>
-        !a.skipped &&
-        a.status === "answered" &&
-        (a.answer_text ?? "").trim().length > 0,
-    ).length;
+    const questionsAnswered = countScorableMockAnswers(answersRef.current, SKIPPED_ANSWER_SENTINEL);
     const creditsUsed = useSessionStore.getState().credits_consumed;
     const sessionId = useSessionStore.getState().session_id;
     const hintsUsed = useOverlayStore.getState().hint_history.length;
+    // Evidence-aligned: non-empty answers unlock scorecard (never fake 0/0 when answers exist).
     const incompleteNoAnswers = questionsAnswered === 0;
 
     useOverlayStore.getState().setSessionPipelineState("session_ending");
@@ -1595,11 +1919,30 @@ export default function MockSession() {
             { session_id: sessionId },
             { timeoutMs: 90_000 },
           );
-          setScorecardEval("ready");
+          const userId = profile?.id;
+          const row =
+            userId != null
+              ? await scorecardsDB.getBySessionIdForUser(sessionId, userId)
+              : null;
+          if (isCompletedScorecard(row)) {
+            setScorecardEval("ready");
+          } else if (
+            row?.evaluation_status === "queued" ||
+            row?.evaluation_status === "processing"
+          ) {
+            // Edge still evaluating — summary stays in processing; scorecard page will poll.
+            setScorecardEval("processing");
+          } else {
+            setScorecardEval("failed");
+          }
         } catch (scoreErr) {
           scorecardRequestedRef.current = false;
           console.warn("[MockSession] generate-scorecard failed:", scoreErr);
           setScorecardEval("failed");
+          toast.error(
+            getAiUserFacingError(scoreErr) ||
+              "Scorecard analysis failed. You can retry from the summary or Scorecard page.",
+          );
         }
       }
       await orchestrator.completeSession();
@@ -1624,30 +1967,39 @@ export default function MockSession() {
 
   async function handleNextQuestion(options?: { skipCapture?: boolean; skipped?: boolean }) {
     if (!isMockSessionMutable(lifecycleRef.current)) return;
+    // Idempotent Next: take the lock before any async work / double-click race.
     if (nextOpLockRef.current) return;
-    if (generationInFlight || isAnswerNextBusy(answerNextState)) return;
+    nextOpLockRef.current = true;
+    if (generationInFlight || isAnswerNextBusy(answerNextState)) {
+      nextOpLockRef.current = false;
+      return;
+    }
     // Do not silently ignore intentional chrome clicks during overlay ghost suppress.
     // Ghost guard excludes [data-mock-chrome]; keep a soft warn only.
     if (isOverlayGhostClickSuppressed()) {
       console.debug("[MockSession] next while ghost-suppress active — proceeding (chrome)");
     }
 
-    nextOpLockRef.current = true;
     const opId = ++answerNextOpRef.current;
 
     try {
-      // Stop interviewer TTS first; keep listening window until answer is captured.
+      // Snapshot STT before suspend clears interim — then capture, then stop mic.
       speakingQuestionIdRef.current = null;
       interviewerAudioActiveRef.current = false;
       stopBrowserTts();
-      audio.suspendCandidateCapture();
+      const audioSnap = useAudioStore.getState();
+      const captureSnapshot = {
+        utterances: audioSnap.transcript?.utterances ?? [],
+        interimText: audioSnap.transcript?.interim_text ?? "",
+      };
 
       setAnswerNextState((s) =>
         reduceAnswerNext(s, { type: options?.skipped ? "SKIP" : "FINALIZE" }),
       );
 
       if (isLastQ) {
-        await finalizeSession(options?.skipCapture, options?.skipped);
+        await finalizeSession(options?.skipCapture, options?.skipped, captureSnapshot);
+        audio.suspendCandidateCapture();
         if (opId === answerNextOpRef.current) {
           setAnswerNextState((s) => reduceAnswerNext(s, { type: "COMPLETE" }));
         }
@@ -1655,8 +2007,9 @@ export default function MockSession() {
       }
 
       if (!options?.skipCapture) {
-        captureAnswer(Boolean(options?.skipped));
+        captureAnswer(Boolean(options?.skipped), captureSnapshot);
       }
+      audio.suspendCandidateCapture();
       try {
         await persistCurrentAnswers();
         await writeMockProgress();
@@ -1668,8 +2021,50 @@ export default function MockSession() {
       // Product rule: empty Next → unanswered (not auto-answered). Skip is explicit.
 
       cleanupQuestionAudio();
+      userTypedOverrideRef.current = false;
       setTypedAnswer("");
       typedAnswerRef.current = "";
+      setNoAnswerPrompt(false);
+      setSilenceHint(null);
+
+      const lastAnswer = answersRef.current.find((a) => a.question_index === qIndex);
+      const currentQ = useSessionStore.getState().questions[qIndex];
+      const blueprintSlot = getBlueprintSlot(
+        interviewBlueprintRef.current ??
+          ({
+            version: "interview_blueprint_v1",
+            created_at: "",
+            total_questions: targetQuestionCount,
+            max_follow_ups_per_topic: 1,
+            follow_up_depth: "light",
+            slots: [],
+            time_budget_minutes: 5,
+          } as InterviewBlueprint),
+        qIndex + 1,
+      );
+      const wantFollowUp =
+        !isLastQ &&
+        !options?.skipped &&
+        shouldRequestFollowUp({
+          depth: interviewContextRef.current?.follow_up_depth ?? "light",
+          followUpsUsed: followUpsUsedRef.current,
+          maxFollowUps:
+            blueprintSlot?.max_follow_ups ??
+            interviewBlueprintRef.current?.max_follow_ups_per_topic ??
+            1,
+          answerText: lastAnswer?.answer_text ?? "",
+          skipped: Boolean(options?.skipped || lastAnswer?.skipped),
+        });
+
+      if (wantFollowUp) {
+        parentQuestionIdRef.current =
+          currentQ?.id ?? lastAnswer?.question_id ?? parentQuestionIdRef.current;
+        followUpsUsedRef.current += 1;
+        setAnswerNextState((s) => reduceAnswerNext(s, { type: "FOLLOW_UP" }));
+      } else {
+        followUpsUsedRef.current = 0;
+        parentQuestionIdRef.current = null;
+      }
 
       setNextQuestionError(null);
       setAnswerNextState((s) => reduceAnswerNext(s, { type: "REQUEST_NEXT" }));
@@ -1688,7 +2083,7 @@ export default function MockSession() {
       const usedIds = new Set(usedQuestions.map((q) => q.id).filter(Boolean));
       const nextNumber = qIndex + 2;
 
-      const slot = prefetchRef.current.consume(nextNumber);
+      const slot = wantFollowUp ? null : prefetchRef.current.consume(nextNumber);
       let nextQ: SessionQuestion;
       if (slot) {
         try {
@@ -1699,6 +2094,7 @@ export default function MockSession() {
             config: cfg,
             questionNumber: nextNumber,
             usedTexts,
+            isFollowUp: wantFollowUp,
           });
         }
       } else {
@@ -1707,6 +2103,7 @@ export default function MockSession() {
           config: cfg,
           questionNumber: nextNumber,
           usedTexts,
+          isFollowUp: wantFollowUp,
         });
       }
 
@@ -1718,9 +2115,16 @@ export default function MockSession() {
       if (nextQ.id && usedIds.has(nextQ.id)) {
         throw new Error("Duplicate question id returned for next question.");
       }
-      if (isDuplicateQuestionText(nextQ.question_text, usedTexts)) {
+      if (
+        isDuplicateQuestionText(nextQ.question_text, usedTexts) ||
+        isDuplicateQuestion(nextQ.question_text, usedTexts).duplicate
+      ) {
         throw new Error("Duplicate question text returned for next question.");
       }
+
+      // New question gets a fresh TTS playback identity.
+      ttsPlaybackRef.current = null;
+      setCanReplayTts(false);
 
       setGenerationSnap(createQuestionGenerationSnapshot());
       orchestrator.appendAndActivateQuestion(nextQ);
@@ -1771,6 +2175,118 @@ export default function MockSession() {
     await handleNextQuestion({ skipCapture: true });
   }
 
+  const answerNextStateRef = useRef(answerNextState);
+  answerNextStateRef.current = answerNextState;
+  const isPausedRef = useRef(isPaused);
+  isPausedRef.current = isPaused;
+  const generationInFlightRef = useRef(generationInFlight);
+  generationInFlightRef.current = generationInFlight;
+  const handleNextQuestionRef = useRef(handleNextQuestion);
+  handleNextQuestionRef.current = handleNextQuestion;
+
+  // Silence finalize → same idempotent Next path as the button.
+  useEffect(() => {
+    if (phase !== "active") return;
+
+    const vad = new VADDetector({
+      config: {
+        silence_threshold_ms: DEFAULT_SILENCE_POLICY.silenceConfirmMs,
+        min_speech_duration_ms: 250,
+        noise_floor: 0.04,
+      },
+      onSpeechStart: () => {
+        if (interviewerAudioActiveRef.current) return;
+        hasSpokenRef.current = true;
+        lastSpeechAtRef.current = Date.now();
+        setNoAnswerPrompt(false);
+        setCurrentAnswerStatus("draft");
+        setAnswerNextState((s) => reduceAnswerNext(s, { type: "ANSWER_DETECTED" }));
+      },
+      onSpeechEnd: () => {
+        lastSpeechAtRef.current = Date.now();
+      },
+    });
+    vadRef.current = vad;
+    vad.start(() => {
+      const streams = useAudioStore.getState().streams;
+      const level =
+        typeof (streams as { mic_level?: number } | null | undefined)?.mic_level === "number"
+          ? (streams as { mic_level: number }).mic_level
+          : typeof (streams as { input_level?: number } | null | undefined)?.input_level ===
+              "number"
+            ? (streams as { input_level: number }).input_level
+            : 0;
+      return Math.min(1, Math.max(0, level > 1 ? level / 100 : level));
+    });
+
+    const timer = window.setInterval(() => {
+      if (!isMockSessionMutable(lifecycleRef.current)) return;
+      if (isPausedRef.current) return;
+      if (interviewerAudioActiveRef.current) return;
+      if (nextOpLockRef.current) return;
+      if (generationInFlightRef.current) return;
+      if (isAnswerNextBusy(answerNextStateRef.current)) return;
+      if (listeningStreamWatermarkRef.current == null || listeningOpenedAtWallRef.current == null) {
+        return;
+      }
+
+      const now = Date.now();
+      const answerDurationMs = now - listeningOpenedAtWallRef.current;
+      const lastActivity = lastSpeechAtRef.current ?? listeningOpenedAtWallRef.current;
+      const silenceMs = now - lastActivity;
+      const typed = typedAnswerRef.current.trim();
+      const audioState = useAudioStore.getState();
+      const qText =
+        useSessionStore.getState().questions[
+          useSessionStore.getState().current_question_index ?? 0
+        ]?.question_text ?? "";
+      const spoken = collectCandidateAnswerText({
+        utterances: audioState.transcript?.utterances ?? [],
+        interimText: audioState.transcript?.interim_text ?? "",
+        listeningStartedAtMs: listeningStreamWatermarkRef.current,
+        questionText: qText,
+        preferTyped: false,
+      });
+      const answerText = typed || spoken;
+      if (answerText) {
+        hasSpokenRef.current = true;
+      }
+
+      const decision = decideSilenceAdvance({
+        silenceMs,
+        hasSpoken: hasSpokenRef.current,
+        answerDurationMs,
+        transcriptLooksComplete: transcriptLooksComplete(answerText),
+        interviewerSpeaking: interviewerAudioActiveRef.current,
+        paused: isPausedRef.current,
+      });
+
+      if (decision === "confirm_incomplete") {
+        setSilenceHint("Still listening — finish your thought or press Next.");
+        return;
+      }
+      if (decision === "no_answer_prompt") {
+        setNoAnswerPrompt(true);
+        setSilenceHint("No answer yet — speak, type, Skip, or press Next.");
+        return;
+      }
+      if (decision === "finalize") {
+        setSilenceHint("Silence confirmed — saving and continuing…");
+        void handleNextQuestionRef.current();
+        return;
+      }
+      if (decision === "wait" || decision === "ignore") {
+        /* keep current hint until finalize / clear on next Q */
+      }
+    }, 400);
+
+    return () => {
+      window.clearInterval(timer);
+      vad.stop();
+      if (vadRef.current === vad) vadRef.current = null;
+    };
+  }, [phase]);
+
   async function persistMockSession(opts?: { incompleteNoAnswers?: boolean }) {
     const session = useSessionStore.getState();
     const overlay = useOverlayStore.getState();
@@ -1785,13 +2301,12 @@ export default function MockSession() {
       const audioState = useAudioStore.getState();
       const transcript = audioState.transcript?.full_transcript ?? candidateTranscript;
       const utterances = audioState.transcript?.utterances ?? [];
-      const answeredCount = answersRef.current.filter(
-        (a) =>
-          !a.skipped &&
-          a.status === "answered" &&
-          (a.answer_text ?? "").trim().length > 0,
-      ).length;
-      const incompleteNoAnswers = opts?.incompleteNoAnswers ?? answeredCount === 0;
+      const answeredCount = countScorableMockAnswers(
+        answersRef.current,
+        SKIPPED_ANSWER_SENTINEL,
+      );
+      // Durable count wins — never CANCELLED when answers exist (opts can race last answer).
+      const incompleteNoAnswers = answeredCount === 0;
 
       const existingNotes = sessionNotes.trim();
       const persistTranscripts = parsePrivacyPrefs(profile?.privacy_prefs).store_transcripts;
@@ -1804,8 +2319,14 @@ export default function MockSession() {
       const scoredAnswers = answersRef.current.filter(
         (a) =>
           !a.skipped &&
-          a.status === "answered" &&
-          (a.answer_text ?? "").trim().length > 0,
+          (a.answer_text ?? "").trim().length > 0 &&
+          (a.answer_text ?? "").trim() !== SKIPPED_ANSWER_SENTINEL,
+      );
+      const questionsAsked = Math.max(
+        targetQuestionCount,
+        questionsCacheRef.current?.length ?? 0,
+        answersRef.current.length,
+        scoredAnswers.length,
       );
       let endedByRpc = false;
       await finalizeSessionApi({
@@ -1830,7 +2351,7 @@ export default function MockSession() {
           avg_wpm: wpmHook.wpm,
           hints_used: overlay.hint_history.length,
           answers_generated: answeredCount,
-          questions_asked: targetQuestionCount,
+          questions_asked: questionsAsked,
           notes: notesParts.length > 0 ? notesParts.join("\n") : null,
           ...(endedByRpc
           ? {}
@@ -1849,7 +2370,11 @@ export default function MockSession() {
 
   async function handleEndSession() {
     if (isOverlayGhostClickSuppressed()) return;
-    await finalizeSession();
+    const audioSnap = useAudioStore.getState();
+    await finalizeSession(false, false, {
+      utterances: audioSnap.transcript?.utterances ?? [],
+      interimText: audioSnap.transcript?.interim_text ?? "",
+    });
   }
 
   useEffect(() => {
@@ -1874,58 +2399,57 @@ export default function MockSession() {
         : setupStep === "questions"
           ? usedLocalQuestions
             ? "Loading practice questions…"
-            : "Generating questions…"
+            : AI_OP_STAGES.mockQuestion.preparing
           : "Starting microphone…";
 
     return (
       <div className="flex items-center justify-center min-h-screen px-4">
         <div className="w-full max-w-md space-y-4">
-          <div className="text-center space-y-2">
-            <RefreshCw className="h-8 w-8 animate-spin text-primary mx-auto" />
-            <p className="text-sm font-medium text-foreground">{setupLabel}</p>
+          <FullPageProcessingState
+            title="Starting mock interview"
+            message={setupLabel}
+            stage={setupStep}
+          >
             <p className="text-xs text-muted-foreground">
               {setupStep === "audio"
                 ? audioSetupHint
                 : "Preparing your mock interview session"}
             </p>
-          </div>
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-5/6" />
-          <Skeleton className="h-24 w-full rounded-xl" />
-          {questionsError && (
-            <InlineErrorRetry
-              message={questionsError}
-              onRetry={() => {
-                const cfg = sessionConfigRef.current as MockConfig | null;
-                const sid = useSessionStore.getState().session_id;
-                if (!cfg || !sid) {
-                  setPhase("idle");
-                  autoStartedRef.current = false;
-                  return;
-                }
-                setQuestionsError(null);
-                isStartingRef.current = true;
-                setSetupStep("questions");
-                void loadQuestions(sid, cfg, { forceLocal: true })
-                  .then(async () => {
-                    const permission = await getMicPermissionState();
-                    setAudioSetupHint(microphoneSetupHint(permission));
-                    setSetupStep("audio");
-                    return audio.start();
-                  })
-                  .then(() => {
-                    setPhase("active");
-                    useOverlayStore.getState().showOverlay();
-                  })
-                  .catch((err: unknown) => {
-                    setQuestionsError(getAiUserFacingError(err));
-                  })
-                  .finally(() => {
-                    isStartingRef.current = false;
-                  });
-              }}
-            />
-          )}
+            {questionsError && (
+              <InlineErrorRetry
+                message={questionsError}
+                onRetry={() => {
+                  const cfg = sessionConfigRef.current as MockConfig | null;
+                  const sid = useSessionStore.getState().session_id;
+                  if (!cfg || !sid) {
+                    setPhase("idle");
+                    autoStartedRef.current = false;
+                    return;
+                  }
+                  setQuestionsError(null);
+                  isStartingRef.current = true;
+                  setSetupStep("questions");
+                  void loadQuestions(sid, cfg, { forceLocal: true })
+                    .then(async () => {
+                      const permission = await getMicPermissionState();
+                      setAudioSetupHint(microphoneSetupHint(permission));
+                      setSetupStep("audio");
+                      return audio.start();
+                    })
+                    .then(() => {
+                      setPhase("active");
+                      useOverlayStore.getState().showOverlay();
+                    })
+                    .catch((err: unknown) => {
+                      setQuestionsError(getAiUserFacingError(err));
+                    })
+                    .finally(() => {
+                      isStartingRef.current = false;
+                    });
+                }}
+              />
+            )}
+          </FullPageProcessingState>
         </div>
       </div>
     );
@@ -1984,13 +2508,33 @@ export default function MockSession() {
           scorecardRetryUsedRef.current = true;
           setScorecardEval("processing");
           void fetchEdgeJson("generate-scorecard", { session_id: sid }, { timeoutMs: 90_000 })
-            .then(() => {
-              setScorecardEval("ready");
+            .then(async () => {
+              const userId = useAuthStore.getState().user?.id ?? profile?.id;
+              const row =
+                userId != null
+                  ? await scorecardsDB.getBySessionIdForUser(sid, userId)
+                  : null;
+              if (isCompletedScorecard(row)) {
+                setScorecardEval("ready");
+              } else if (
+                row?.evaluation_status === "queued" ||
+                row?.evaluation_status === "processing"
+              ) {
+                setScorecardEval("processing");
+                scorecardRetryUsedRef.current = false;
+              } else {
+                setScorecardEval("failed");
+                scorecardRetryUsedRef.current = false;
+              }
             })
             .catch((scoreErr) => {
               scorecardRetryUsedRef.current = false;
               console.warn("[MockSession] generate-scorecard failed:", scoreErr);
               setScorecardEval("failed");
+              toast.error(
+                getAiUserFacingError(scoreErr) ||
+                  "Scorecard analysis failed. Retry analysis to unlock Analytics scores.",
+              );
             });
         }}
       />
@@ -2299,17 +2843,17 @@ export default function MockSession() {
               {questionText || "Waiting for question…"}
             </p>
             {generationInFlight && (
-              <p
-                className="mt-2 text-xs text-muted-foreground flex items-center gap-1.5"
-                data-testid="mock-generating-next"
-              >
-                <RefreshCw className="w-3 h-3 animate-spin" />
-                Generating next question…
-              </p>
+              <div className="mt-2" data-testid="mock-generating-next">
+                <ProcessingStatus
+                  message={AI_OP_STAGES.mockQuestion.preparing}
+                  stage="next_question"
+                  compact
+                />
+              </div>
             )}
             {ttsState === "playing" && (
               <p className="mt-2 text-xs text-muted-foreground" data-testid="mock-tts-playing">
-                Playing interviewer voice…
+                {AI_OP_STAGES.mockQuestion.tts}
               </p>
             )}
             {ttsState === "blocked" && pendingTtsQuestion && (
@@ -2334,6 +2878,36 @@ export default function MockSession() {
             {ttsState === "unavailable" && (
               <p className="mt-2 text-[10px] text-muted-foreground" data-testid="mock-tts-unavailable">
                 Interviewer voice unavailable — read the question above.
+              </p>
+            )}
+            {canReplayTts && questionText && phase === "active" && (
+              <div className="mt-3" data-testid="mock-tts-replay">
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => {
+                    const qId =
+                      typeof question === "string"
+                        ? ttsIdentity.id
+                        : question?.id ?? ttsIdentity.id;
+                    playInterviewerVoice(questionText, qId, true);
+                  }}
+                >
+                  Replay question
+                </Button>
+              </div>
+            )}
+            {silenceHint && (
+              <p className="mt-2 text-xs text-muted-foreground" data-testid="mock-silence-hint">
+                {silenceHint}
+              </p>
+            )}
+            {noAnswerPrompt && (
+              <p
+                className="mt-2 text-xs text-amber-600 dark:text-amber-400"
+                data-testid="mock-no-answer-prompt"
+              >
+                No answer detected yet. Speak, type a response, Skip, or press Next.
               </p>
             )}
             {nextQuestionError && (
@@ -2375,13 +2949,19 @@ export default function MockSession() {
               value={typedAnswer}
               onChange={(e) => {
                 const v = e.target.value;
+                userTypedOverrideRef.current = true;
                 setTypedAnswer(v);
                 typedAnswerRef.current = v;
                 if (v.trim()) {
+                  hasSpokenRef.current = true;
+                  lastSpeechAtRef.current = Date.now();
+                  setNoAnswerPrompt(false);
                   setCurrentAnswerStatus("draft");
                   setAnswerNextState((s) =>
                     reduceAnswerNext(s, { type: "ANSWER_DETECTED" }),
                   );
+                } else {
+                  setCurrentAnswerStatus("unanswered");
                 }
               }}
               placeholder="Type your answer here, or speak into the mic…"
@@ -2396,7 +2976,8 @@ export default function MockSession() {
                 {currentAnswerStatus}
               </span>
               {" · "}
-              Silence alone does not count as an answer — use Skip or Next.
+              After you speak, a short pause is fine; ~3–5s of silence saves and continues. You can
+              still press Next anytime.
             </p>
           </div>
 
@@ -2486,7 +3067,6 @@ export default function MockSession() {
               onEndSession={handleEndSession}
               onManualQuestion={async (q: string) => {
                 if (!isMockSessionMutable(lifecycleRef.current)) return false;
-                useOverlayStore.getState().setCurrentQuestion(q);
                 const sessionId = sessionIdFromStore;
                 if (
                   !sessionId ||
@@ -2496,17 +3076,35 @@ export default function MockSession() {
                 ) {
                   return false;
                 }
+                const overlay = useOverlayStore.getState();
+                const interviewerQuestion =
+                  overlay.current_question?.trim() ||
+                  (typeof question === "string"
+                    ? question
+                    : question?.question_text?.trim()) ||
+                  "";
+                const ctx = interviewContextRef.current;
+                const resumeContext =
+                  typeof overlay.resume_context === "object"
+                    ? overlay.resume_context?.summary ?? ""
+                    : String(overlay.resume_context ?? "");
+                const jobDescription =
+                  (ctx?.jd_text ?? "").trim() ||
+                  (ctx?.skills_to_emphasize ?? []).join(", ");
+                const recentAnswers = answersRef.current
+                  .slice(-3)
+                  .map((a) => a.answer_text?.trim())
+                  .filter((t): t is string => Boolean(t));
+                const recentTranscript = recentAnswers.slice(-1)[0] ?? "";
                 const { submitCoachChatMessage } = await import("@/lib/ai/coachChatSession");
                 return submitCoachChatMessage({
                   message: q,
                   sessionId,
-                  currentQuestion:
-                    useOverlayStore.getState().current_question?.trim() || q,
-                  recentTranscript: "",
-                  resumeContext:
-                    typeof useOverlayStore.getState().resume_context === "object"
-                      ? useOverlayStore.getState().resume_context?.summary ?? ""
-                      : String(useOverlayStore.getState().resume_context ?? ""),
+                  currentQuestion: interviewerQuestion || q,
+                  recentTranscript,
+                  resumeContext,
+                  jobDescription,
+                  recentAnswers,
                 });
               }}
               isPreparingSession={false}

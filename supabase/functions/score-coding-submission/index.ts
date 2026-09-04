@@ -7,6 +7,22 @@ import {
   type SolveTestCase,
 } from "../_shared/javascriptSolveRunner.ts";
 
+/** Server-side coding judge provenance — bump when runner semantics change. */
+export const CODING_JUDGE_VERSION = "javascript_solve_v1";
+
+function caseSetChecksum(cases: Array<{ id: string; input: unknown; expected: unknown }>): string {
+  const material = cases
+    .map((c) => `${c.id}:${JSON.stringify(c.input)}:${JSON.stringify(c.expected)}`)
+    .join("|");
+  // FNV-1a 32-bit — stable, dependency-free checksum for provenance (not crypto).
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < material.length; i++) {
+    hash ^= material.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `fnv1a32_${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
+
 function json(req: Request, payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -14,8 +30,23 @@ function json(req: Request, payload: unknown, status = 200) {
   });
 }
 
-/** Languages the product executes. Only javascript is auto-executed. */
-export const APPROVED_CODING_LANGUAGES = ["javascript"] as const;
+/** Languages the product executes for practice scoring. Secure multi-language sandbox: PARTIAL. */
+export const APPROVED_CODING_LANGUAGES = ["javascript", "typescript"] as const;
+
+function isApprovedPracticeLanguage(lang: string): boolean {
+  return (APPROVED_CODING_LANGUAGES as readonly string[]).includes(lang);
+}
+
+/** JS/TS share the practice solve(input) runner — allow either when the question is JS/TS. */
+function isPracticeLanguageFamilyMatch(
+  selectedLanguage: string,
+  questionLanguage: string,
+): boolean {
+  const selected = String(selectedLanguage ?? "").trim().toLowerCase();
+  const question = String(questionLanguage ?? "").trim().toLowerCase();
+  if (selected === question) return true;
+  return isApprovedPracticeLanguage(selected) && isApprovedPracticeLanguage(question);
+}
 
 type VisibleTestCase = SolveTestCase;
 
@@ -80,6 +111,9 @@ Deno.serve(async (req) => {
       code: "NOT_CONFIGURED",
       execution_status: "unsupported",
       approved_languages: APPROVED_CODING_LANGUAGES,
+      sandbox_status: "PARTIAL",
+      message:
+        "Only JavaScript/TypeScript practice execution is available. Secure multi-language sandbox status: PARTIAL (no Docker isolation).",
     }, 501);
   }
   const language = languageRaw;
@@ -114,7 +148,9 @@ Deno.serve(async (req) => {
     }
   }
 
-  if (language !== String(question.language ?? "").toLowerCase()) {
+  if (
+    !isPracticeLanguageFamilyMatch(language, String(question.language ?? ""))
+  ) {
     return json(req, {
       error: "Selected language is not supported for this problem.",
       execution_status: "unsupported",
@@ -123,14 +159,18 @@ Deno.serve(async (req) => {
     }, 400);
   }
 
-  if (question.evaluation_mode !== "javascript_solve" || language !== "javascript") {
+  if (
+    question.evaluation_mode !== "javascript_solve" &&
+    question.evaluation_mode !== "typescript_solve"
+  ) {
     if (sampleOnly) {
       return json(req, {
         status: "pending_review",
         score: null,
         execution_status: "unsupported",
-        message: "Sample runs are only available for JavaScript solve() assessments.",
+        message: "Sample runs are only available for JavaScript/TypeScript solve() practice assessments.",
         approved_languages: APPROVED_CODING_LANGUAGES,
+        sandbox_status: "PARTIAL",
       });
     }
     const { data: row } = await db.from("coding_submissions").insert({
@@ -142,7 +182,8 @@ Deno.serve(async (req) => {
       score: null,
       execution_status: "unsupported",
       result_payload: {
-        message: "Automated scoring is only enabled for JavaScript solve() assessments.",
+        message: "Automated scoring is only enabled for JavaScript/TypeScript solve() practice assessments.",
+        sandbox_status: "PARTIAL",
       },
     }).select("id").maybeSingle();
     return json(req, {
@@ -150,9 +191,20 @@ Deno.serve(async (req) => {
       status: "pending_review",
       score: null,
       execution_status: "unsupported",
-      message: "Stored for review. This language is not executed in the cloud.",
+      message: "Stored for review. This language is not executed — secure multi-language sandbox is PARTIAL.",
       approved_languages: APPROVED_CODING_LANGUAGES,
+      sandbox_status: "PARTIAL",
     });
+  }
+
+  if (language !== "javascript" && language !== "typescript") {
+    return json(req, {
+      error: "This language is not configured for practice execution.",
+      code: "NOT_CONFIGURED",
+      execution_status: "unsupported",
+      approved_languages: APPROVED_CODING_LANGUAGES,
+      sandbox_status: "PARTIAL",
+    }, 501);
   }
 
   let mapped: VisibleTestCase[] = [];
@@ -205,11 +257,17 @@ Deno.serve(async (req) => {
     }));
   }
 
-  const outcome = runJavascriptSolveTests(code, mapped, Number(question.time_limit_ms ?? 800));
+  const outcome = runJavascriptSolveTests(
+    code,
+    mapped,
+    Number(question.time_limit_ms ?? 800),
+    language,
+  );
   const passed = outcome.results.filter((r) => r.passed).length;
   const failed = outcome.results.length - passed;
   const score = mapped.length === 0 ? 0 : Math.round((passed / mapped.length) * 100);
   const execution_status = outcome.execution_status;
+  const caseChecksum = caseSetChecksum(mapped);
 
   if (sampleOnly) {
     return json(req, {
@@ -273,12 +331,16 @@ Deno.serve(async (req) => {
     passed_tests: passed,
     failed_tests: failed,
     execution_status,
+    judge_version: CODING_JUDGE_VERSION,
+    case_set_checksum: caseChecksum,
     result_payload: {
       passed_tests: passed,
       failed_tests: failed,
       execution_status,
       blocked_reason: outcome.blockedReason ?? null,
       primary_error: outcome.primary_error ?? null,
+      judge_version: CODING_JUDGE_VERSION,
+      case_set_checksum: caseChecksum,
     },
   }).select("id").maybeSingle();
   if (insErr) return json(req, { error: insErr.message }, 500);
@@ -290,6 +352,8 @@ Deno.serve(async (req) => {
     passed_tests: passed,
     failed_tests: failed,
     execution_status,
+    judge_version: CODING_JUDGE_VERSION,
+    case_set_checksum: caseChecksum,
     blocked_reason: outcome.blockedReason ?? undefined,
     primary_error: outcome.primary_error ?? undefined,
     case_results: outcome.results.map((r) => ({

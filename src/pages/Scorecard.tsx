@@ -3,8 +3,13 @@ import { useScorecard } from "@/hooks/useScorecard";
 import { EmptyState } from "@/components/common/EmptyState";
 import { HybridSourceLine } from "@/components/hybrid/HybridSourceLine";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
-import { SkeletonCard } from "@/components/ui/SkeletonLoader";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { Button } from "@/components/ui/Button";
 import { scorecardStatusLabel } from "@/lib/analytics/scoreStatus";
+import {
+  scorecardEligibilityMessage,
+  type ScorecardEligibilityCode,
+} from "@/lib/scorecard/eligibility";
 import {
   Trophy, TrendingUp, TrendingDown, Share2,
   Download, BarChart2, MessageSquare,
@@ -16,6 +21,11 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/userStore";
 import { canShareScorecard } from "@/lib/privacy/privacyPrefs";
+import { FullPageProcessingState } from "@/components/async/FullPageProcessingState";
+import { InsufficientCreditsAction } from "@/components/billing/InsufficientCreditsAction";
+import { AI_OP_STAGES } from "@/lib/async/aiOpStages";
+import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
+import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 
 // ─────────────────────────────────────────────────────────────────
 // Scorecard
@@ -23,13 +33,75 @@ import { canShareScorecard } from "@/lib/privacy/privacyPrefs";
 // filler words, WPM, strengths, improvements, share + export.
 // ─────────────────────────────────────────────────────────────────
 
+function emptyStateForEligibility(code: ScorecardEligibilityCode | null): {
+  title: string;
+  description: string;
+  showGenerate: boolean;
+  showRetry: boolean;
+} {
+  switch (code) {
+    case "NOT_ELIGIBLE_NO_ANSWERS":
+      return {
+        title: "Session incomplete — no scorecard",
+        description: scorecardEligibilityMessage(code),
+        showGenerate: false,
+        showRetry: false,
+      };
+    case "NOT_ELIGIBLE_INCOMPLETE_SESSION":
+      return {
+        title: "Session not completed",
+        description: scorecardEligibilityMessage(code),
+        showGenerate: false,
+        showRetry: false,
+      };
+    case "FEATURE_NOT_AVAILABLE_FOR_PLAN":
+      return {
+        title: "Not available on this plan",
+        description: scorecardEligibilityMessage(code),
+        showGenerate: false,
+        showRetry: false,
+      };
+    case "INSUFFICIENT_CREDITS":
+      return {
+        title: "Not enough credits",
+        description: scorecardEligibilityMessage(code),
+        showGenerate: false,
+        showRetry: false,
+      };
+    case "EVALUATION_PROCESSING":
+      return {
+        title: scorecardStatusLabel("pending"),
+        description: scorecardEligibilityMessage(code),
+        showGenerate: false,
+        showRetry: false,
+      };
+    case "EVALUATION_FAILED":
+      return {
+        title: scorecardStatusLabel("failed"),
+        description: scorecardEligibilityMessage(code),
+        showGenerate: false,
+        showRetry: true,
+      };
+    default:
+      return {
+        title: scorecardStatusLabel("not_scored"),
+        description:
+          code
+            ? scorecardEligibilityMessage(code)
+            : "No server scorecard exists for this session yet. Career Pilot does not invent a numeric score in the browser.",
+        showGenerate: true,
+        showRetry: false,
+      };
+  }
+}
+
 export default function Scorecard() {
   const { sessionId }   = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
   const {
-    scorecard, status, isLoading, isGenerating, error,
+    scorecard, status, eligibilityCode, isLoading, isGenerating, error,
     isShared, shareScorecard, shareBlockedReason, exportPDF,
-    generateScorecard,
+    generateScorecard, creditRequired, creditBalance,
   } = useScorecard({ sessionId: sessionId! });
   const shareAllowed = canShareScorecard(
     useAuthStore((s) => s.profile?.privacy_prefs),
@@ -55,61 +127,189 @@ export default function Scorecard() {
   // ── Loading / pending ─────────────────────────────────────────
 
   if (isLoading || isGenerating || status === "loading" || status === "pending") {
+    const scoreMsg =
+      status === "pending" || isGenerating
+        ? AI_OP_STAGES.scorecard.evaluating
+        : AI_OP_STAGES.scorecard.processing;
     return (
-      <div className="min-h-screen bg-background text-foreground">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-4">
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-          <p className="text-sm text-muted-foreground text-center">
-            {status === "pending" || isGenerating
-              ? "Preparing your scorecard on the server… Scores are not generated in the browser."
-              : `${scorecardStatusLabel("loading")}…`}
+      <div data-testid="scorecard-page" className={cn(PAGE_SHELL, "space-y-4")}>
+        <PageHeader
+          title="Session Scorecard"
+          breadcrumbs={[
+            { label: "Dashboard", href: "/app/dashboard" },
+            { label: "Sessions", href: "/app/sessions" },
+            { label: "Scorecard" },
+          ]}
+        />
+        <FullPageProcessingState
+          title="Building your scorecard"
+          message={scoreMsg}
+          stage={status === "pending" || isGenerating ? "evaluating" : "processing"}
+        >
+          <ol className="text-left text-xs text-muted-foreground space-y-1.5 max-w-sm mx-auto">
+            <li>1. {AI_OP_STAGES.scorecard.processing}</li>
+            <li>2. {AI_OP_STAGES.scorecard.evaluating}</li>
+            <li>3. {AI_OP_STAGES.scorecard.building}</li>
+          </ol>
+          <p className="text-[11px] text-muted-foreground">
+            {scorecardEligibilityMessage("EVALUATION_PROCESSING")}
           </p>
-        </div>
+        </FullPageProcessingState>
       </div>
     );
   }
 
-  if (status === "failed" || (error && status !== "not_scored")) {
-    return (
-      <div className="min-h-screen bg-background text-foreground">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-4">
-          <InlineErrorRetry
-            message={error ?? "Scoring failed. Retry when you are ready."}
-            onRetry={() => void generateScorecard()}
+  if (status === "failed" || (error && status !== "not_scored" && status !== "scored")) {
+    if (eligibilityCode === "INSUFFICIENT_CREDITS") {
+      return (
+        <div data-testid="scorecard-page" className={cn(PAGE_SHELL, "space-y-4")}>
+          <PageHeader
+            title="Session Scorecard"
+            breadcrumbs={[
+              { label: "Dashboard", href: "/app/dashboard" },
+              { label: "Sessions", href: "/app/sessions" },
+              { label: "Scorecard" },
+            ]}
+          />
+          <InsufficientCreditsAction
+            operationKey="generate_scorecard"
+            required={creditRequired ?? AI_CREDIT_COSTS.generate_scorecard}
+            balance={creditBalance}
+            mode="credits"
+            returnTo={sessionId ? `/app/scorecard/${sessionId}` : "/app/sessions"}
           />
         </div>
+      );
+    }
+    return (
+      <div data-testid="scorecard-page" className={cn(PAGE_SHELL, "space-y-4")}>
+        <PageHeader
+          title="Session Scorecard"
+          breadcrumbs={[
+            { label: "Dashboard", href: "/app/dashboard" },
+            { label: "Sessions", href: "/app/sessions" },
+            { label: "Scorecard" },
+          ]}
+        />
+        {eligibilityCode === "FEATURE_NOT_AVAILABLE_FOR_PLAN" ? (
+          <InsufficientCreditsAction
+            operationKey="generate_scorecard"
+            required={AI_CREDIT_COSTS.generate_scorecard}
+            balance={creditBalance}
+            mode="plan"
+            returnTo={sessionId ? `/app/scorecard/${sessionId}` : "/app/sessions"}
+          />
+        ) : (
+          <InlineErrorRetry
+            message={
+              error ??
+              scorecardEligibilityMessage(eligibilityCode ?? "EVALUATION_FAILED")
+            }
+            onRetry={() => void generateScorecard()}
+          />
+        )}
       </div>
     );
   }
 
   if (status === "not_scored" || !scorecard) {
-    const isNoAnswersError =
-      typeof error === "string" &&
-      (/no answers were recorded/i.test(error) || /incomplete_no_answers/i.test(error));
-
-    return (
-      <div className="min-h-screen bg-background text-foreground">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-4">
-          <EmptyState
-            icon={isNoAnswersError ? AlertTriangle : BarChart2}
-            title={isNoAnswersError ? "Session incomplete — no scorecard" : "Not scored"}
-            description={
-              error ??
-              "No server scorecard exists for this session yet. Career Pilot does not invent a numeric score in the browser."
-            }
-            actionLabel={isNoAnswersError ? "Back to mock interviews" : "Generate scorecard"}
-            onAction={
-              isNoAnswersError
-                ? () => navigate("/app/mock")
-                : () => void generateScorecard()
-            }
-            secondaryActionLabel={isNoAnswersError ? undefined : "Back to mock interviews"}
-            onSecondaryAction={isNoAnswersError ? undefined : () => navigate("/app/mock")}
-            compact
+    const empty = emptyStateForEligibility(eligibilityCode);
+    if (eligibilityCode === "INSUFFICIENT_CREDITS") {
+      return (
+        <div data-testid="scorecard-page" className={cn(PAGE_SHELL, "space-y-4")}>
+          <PageHeader
+            title="Session Scorecard"
+            breadcrumbs={[
+              { label: "Dashboard", href: "/app/dashboard" },
+              { label: "Sessions", href: "/app/sessions" },
+              { label: "Scorecard" },
+            ]}
+          />
+          <InsufficientCreditsAction
+            operationKey="generate_scorecard"
+            required={creditRequired ?? AI_CREDIT_COSTS.generate_scorecard}
+            balance={creditBalance}
+            mode="credits"
+            returnTo={sessionId ? `/app/scorecard/${sessionId}` : "/app/sessions"}
           />
         </div>
+      );
+    }
+    const counts =
+      scorecard &&
+      (scorecard.question_count != null || scorecard.answer_count != null)
+        ? ` Questions: ${scorecard.question_count ?? "—"} · Answers: ${scorecard.answer_count ?? "—"} · Evaluated: ${scorecard.evaluated_answer_count ?? "—"}.`
+        : "";
+
+    return (
+      <div data-testid="scorecard-page" className={cn(PAGE_SHELL, "space-y-4")}>
+        <PageHeader
+          title="Session Scorecard"
+          breadcrumbs={[
+            { label: "Dashboard", href: "/app/dashboard" },
+            { label: "Sessions", href: "/app/sessions" },
+            { label: "Scorecard" },
+          ]}
+        />
+        <EmptyState
+          icon={
+            eligibilityCode === "NOT_ELIGIBLE_NO_ANSWERS" ||
+            eligibilityCode === "NOT_ELIGIBLE_INCOMPLETE_SESSION"
+              ? AlertTriangle
+              : BarChart2
+          }
+          title={empty.title}
+          description={`${error ?? empty.description}${counts}`}
+          actionLabel={
+            empty.showRetry
+              ? "Retry evaluation"
+              : empty.showGenerate
+                ? "Generate scorecard"
+                : "Back to mock interviews"
+          }
+          onAction={
+            empty.showRetry || empty.showGenerate
+              ? () => void generateScorecard()
+              : () => navigate("/app/mock")
+          }
+          secondaryActionLabel={
+            empty.showGenerate || empty.showRetry
+              ? "Back to mock interviews"
+              : undefined
+          }
+          onSecondaryAction={
+            empty.showGenerate || empty.showRetry
+              ? () => navigate("/app/mock")
+              : undefined
+          }
+          compact
+        />
+      </div>
+    );
+  }
+
+  // Defense in depth: never render the scored layout without a finite overall score.
+  const hasFiniteOverall =
+    typeof scorecard.overall_score === "number" &&
+    Number.isFinite(scorecard.overall_score);
+  if (status !== "scored" || !hasFiniteOverall) {
+    return (
+      <div data-testid="scorecard-page" className={cn(PAGE_SHELL, "space-y-4")}>
+        <PageHeader
+          title="Session Scorecard"
+          breadcrumbs={[
+            { label: "Dashboard", href: "/app/dashboard" },
+            { label: "Sessions", href: "/app/sessions" },
+            { label: "Scorecard" },
+          ]}
+        />
+        <InlineErrorRetry
+          message={
+            error ??
+            "Scorecard is incomplete. Retry evaluation — overall score is required before showing results."
+          }
+          onRetry={() => void generateScorecard()}
+        />
       </div>
     );
   }
@@ -129,30 +329,34 @@ export default function Scorecard() {
     scorecard.overall_score,
     allPoor ? dominantQuality ?? "IRRELEVANT" : undefined,
   );
-  const looksEmpty =
-    scorecard.overall_score == null &&
-    (scorecard.question_scores?.length ?? 0) === 0 &&
-    scorecard.clarity_score == null &&
-    scorecard.structure_score == null &&
-    scorecard.relevance_score == null &&
+  const missingDimensions =
+    scorecard.clarity_score == null ||
+    scorecard.structure_score == null ||
+    scorecard.relevance_score == null ||
     scorecard.confidence_score == null;
+  const looksEmpty =
+    (scorecard.question_scores?.length ?? 0) === 0 && missingDimensions;
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-8">
-
+    <div data-testid="scorecard-page" className={cn(PAGE_SHELL, "space-y-6 min-w-0")}>
         {looksEmpty && (
           <div
             role="alert"
             className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:text-amber-100"
           >
             <p className="leading-relaxed whitespace-normal">
-              This scorecard was not fully scored — dimension scores show as “—” when missing.
-              Incomplete sessions are saved without inventing zeros. Start a new mock and answer
-              at least one question to generate a real scorecard. Retry is only available when AI
-              scoring fails after answers exist.
+              Overall score is available, but question ratings or dimension breakdowns are
+              incomplete. Retry evaluation to fill missing sections — scores are never invented
+              in the browser.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void generateScorecard()}
+                className="inline-flex items-center rounded-lg bg-secondary px-3 py-1.5 text-xs font-medium hover:bg-secondary/80"
+              >
+                Retry evaluation
+              </button>
               <Link
                 to="/app/mock"
                 className="inline-flex items-center rounded-lg bg-secondary px-3 py-1.5 text-xs font-medium hover:bg-secondary/80"
@@ -163,48 +367,52 @@ export default function Scorecard() {
           </div>
         )}
 
-        {/* ── Header ─────────────────────────────────── */}
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Session Scorecard</h1>
-            <p className="text-muted-foreground mt-1 text-sm">
-              {new Date(scorecard.generated_at).toLocaleDateString("en-GB", {
-                weekday: "long", year: "numeric", month: "long", day: "numeric",
-              })}
-            </p>
-            <HybridSourceLine source={scorecard.scoring_source} className="mt-1" />
-          </div>
-          <div className="flex items-center gap-2">
+      <PageHeader
+        title="Session Scorecard"
+        description={new Date(scorecard.generated_at).toLocaleDateString("en-GB", {
+          weekday: "long", year: "numeric", month: "long", day: "numeric",
+        })}
+        breadcrumbs={[
+          { label: "Dashboard", href: "/app/dashboard" },
+          { label: "Sessions", href: "/app/sessions" },
+          { label: "Scorecard" },
+        ]}
+        actions={
+          <div className="flex items-center gap-2 flex-wrap">
             {shareAllowed ? (
-            <button
-              type="button"
-              aria-label={isShared ? "Share scorecard link again" : "Share scorecard link"}
-              onClick={() => void handleShare()}
-              className="flex items-center gap-1.5 px-3 py-2 bg-secondary hover:bg-secondary border border-border text-muted-foreground text-sm rounded-xl transition-all"
-            >
-              <Share2 className="w-3.5 h-3.5" />
-              {copyFeedback ? "Copied!" : isShared ? "Share again" : "Share"}
-            </button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                aria-label={isShared ? "Share scorecard link again" : "Share scorecard link"}
+                onClick={() => void handleShare()}
+                leftIcon={<Share2 className="w-3.5 h-3.5" />}
+              >
+                {copyFeedback ? "Copied!" : isShared ? "Share again" : "Share"}
+              </Button>
             ) : null}
-            <button
+            <Button
               type="button"
-              aria-label="Export scorecard as JSON"
+              variant="secondary"
+              size="sm"
+              aria-label="Export scorecard as PDF"
               onClick={() => void exportPDF()}
-              className="flex items-center gap-1.5 px-3 py-2 bg-secondary hover:bg-secondary border border-border text-muted-foreground text-sm rounded-xl transition-all"
+              leftIcon={<Download className="w-3.5 h-3.5" />}
             >
-              <Download className="w-3.5 h-3.5" />
-              Export JSON
-            </button>
+              Export PDF
+            </Button>
           </div>
-        </div>
+        }
+      />
+      <HybridSourceLine source={scorecard.scoring_source} />
 
         {/* ── Overall score ──────────────────────────── */}
         <div className={cn(
-          "rounded-2xl p-6 border text-center",
+          "rounded-2xl p-6 border text-center min-w-0",
           scoreGrade.bg, scoreGrade.border
         )}>
           <div className={cn("text-7xl font-black mb-2", scoreGrade.color)}>
-            {scorecard.overall_score ?? "—"}
+            {scorecard.overall_score}
           </div>
           <div className="text-lg font-semibold text-foreground">{scoreGrade.label}</div>
           <p className="text-muted-foreground text-sm mt-1">Overall performance score</p>
@@ -232,29 +440,60 @@ export default function Scorecard() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <MetricCard
             label="Avg WPM"
-            value={scorecard.wpm_avg}
+            value={scorecard.wpm_avg == null ? "Not available" : scorecard.wpm_avg}
             icon={Mic}
-            sub={scorecard.wpm_trend}
-            good={scorecard.wpm_avg >= 110 && scorecard.wpm_avg <= 160}
+            sub={scorecard.wpm_trend ?? undefined}
+            good={
+              scorecard.wpm_avg == null
+                ? undefined
+                : scorecard.wpm_avg >= 110 && scorecard.wpm_avg <= 160
+            }
           />
           <MetricCard
             label="Filler Words"
-            value={scorecard.filler_count}
+            value={scorecard.filler_count == null ? "Not available" : scorecard.filler_count}
             icon={MessageSquare}
-            sub={`${scorecard.filler_rate.toFixed(1)}/min`}
-            good={scorecard.filler_rate < 2}
+            sub={
+              scorecard.filler_rate == null
+                ? "Not available"
+                : `${scorecard.filler_rate.toFixed(1)}/min`
+            }
+            good={
+              scorecard.filler_rate == null ? undefined : scorecard.filler_rate < 2
+            }
             lowerIsBetter
           />
           <MetricCard
             label="STAR Use"
-            value={`${scorecard.star_adherence}%`}
+            value={
+              scorecard.star_adherence == null
+                ? "Not available"
+                : `${scorecard.star_adherence}%`
+            }
             icon={BarChart2}
-            good={scorecard.star_adherence >= 70}
+            good={
+              scorecard.star_adherence == null
+                ? undefined
+                : scorecard.star_adherence >= 70
+            }
           />
           <MetricCard
-            label="Questions"
-            value={scorecard.question_scores.length}
+            label="Answers evaluated"
+            value={
+              scorecard.evaluated_answer_count != null
+                ? scorecard.evaluated_answer_count
+                : scorecard.question_scores.length > 0
+                  ? scorecard.question_scores.length
+                  : "Not available"
+            }
             icon={CheckCircle}
+            sub={
+              scorecard.answer_count != null || scorecard.question_count != null
+                ? `${scorecard.evaluated_answer_count ?? scorecard.question_scores.length ?? 0} evaluated · ${scorecard.answer_count ?? "—"} answers · ${scorecard.question_count ?? "—"} questions`
+                : scorecard.question_scores.length > 0
+                  ? `${scorecard.question_scores.length} scored`
+                  : "No question-level scores"
+            }
           />
         </div>
 
@@ -301,7 +540,7 @@ export default function Scorecard() {
             <p className="text-xs text-primary font-medium uppercase tracking-wider mb-2">
               Coach's Note
             </p>
-            <p className="text-gray-200 text-sm leading-relaxed italic">
+            <p className="text-foreground text-sm leading-relaxed italic">
               "{scorecard.coach_note}"
             </p>
           </div>
@@ -332,25 +571,24 @@ export default function Scorecard() {
           {sessionId && (
             <Link
               to={`/app/sessions/${sessionId}`}
-              className="flex-1 text-center py-3 bg-secondary hover:bg-secondary border border-border text-muted-foreground font-medium rounded-xl transition-all"
+              className="flex-1 text-center py-3 bg-secondary hover:bg-secondary/80 border border-border text-muted-foreground font-medium rounded-xl transition-all"
             >
               View session
             </Link>
           )}
           <Link
             to="/app/mock"
-            className="flex-1 text-center py-3 bg-gradient-to-r from-primary to-purple-600 hover:from-primary hover:to-purple-500 text-foreground font-semibold rounded-xl transition-all"
+            className="flex-1 text-center py-3 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-xl transition-all"
           >
             Practice Again
           </Link>
           <Link
             to="/app/analytics"
-            className="flex-1 text-center py-3 bg-secondary hover:bg-secondary border border-border text-muted-foreground font-medium rounded-xl transition-all"
+            className="flex-1 text-center py-3 bg-secondary hover:bg-secondary/80 border border-border text-muted-foreground font-medium rounded-xl transition-all"
           >
             View Analytics
           </Link>
         </div>
-      </div>
     </div>
   );
 }
@@ -494,7 +732,7 @@ function MiniScoreBar({ value }: { value: number | null }) {
 function getScoreGrade(score: number | null, qualityClass?: string) {
   if (score == null) {
     return {
-      label: "Not scored",
+      label: "Not eligible",
       color: "text-muted-foreground",
       bg: "bg-secondary",
       border: "border-border",

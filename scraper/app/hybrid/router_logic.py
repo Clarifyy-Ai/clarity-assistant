@@ -63,8 +63,8 @@ _CAPABILITIES: dict[str, dict[str, Any]] = {
         "inputs": ["resume_text", "jd_text", "resume_skills", "jd_skills"],
     },
     "session_debrief": {
-        "engine": "python_template",
-        "requires_ai": False,
+        "engine": "ai_required",
+        "requires_ai": True,
         "category": "analytics",
         "inputs": ["duration_seconds", "questions_asked", "highlights", "improvements"],
     },

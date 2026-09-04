@@ -18,7 +18,7 @@
       "id": "DEF-GOV-CREDITS",
       "title": "Failed generation consumes credits",
       "status": "fixed_in_source",
-      "fix": "Refund+cancel on enqueue dispatch failure; cancel job on poll timeout"
+      "fix": "Refund+cancel on durable enqueue/dispatch failure; client poll soft-timeout (GENERATION_STILL_RUNNING) must not cancel/refund"
     },
     {
       "id": "DEF-GOV-409",

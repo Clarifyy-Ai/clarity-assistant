@@ -1,6 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   MFA_ENFORCEMENT_PAUSED,
+  isMfaEnforcementPaused,
   resolveMfaGateDecision,
   resolveMfaGateFromAal,
 } from "@/lib/auth/mfaGate";
@@ -28,6 +32,24 @@ describe("mfaGate enforcement", () => {
 
   it("keeps fail-closed MFA enabled", () => {
     expect(MFA_ENFORCEMENT_PAUSED).toBe(false);
+    expect(isMfaEnforcementPaused()).toBe(false);
+  });
+
+  it("hard-fails closed for production builds (no easy pause kill-switch)", () => {
+    const src = fs.readFileSync(
+      path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "../../../lib/auth/mfaGate.ts",
+      ),
+      "utf8",
+    );
+    expect(src).toContain("import.meta.env.PROD");
+    expect(src).toContain("export function isMfaEnforcementPaused");
+    expect(src).toMatch(
+      /function isMfaEnforcementPaused[\s\S]*?if \(import\.meta\.env\.PROD\) return false/,
+    );
+    expect(src).toContain("isMfaEnforcementPaused()");
+    expect(src).not.toMatch(/VITE_.*MFA.*PAUSE/);
   });
 
   it("challenges AAL1→AAL2 when a verified TOTP exists", async () => {

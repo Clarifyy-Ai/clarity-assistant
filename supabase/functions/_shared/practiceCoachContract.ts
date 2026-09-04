@@ -161,19 +161,11 @@ export function buildToneStyleSystemAddon(
   return `${toneLine[coachTone]}\n${styleLine[hintStyle]}`;
 }
 
+/** Offline notice only — never use as a successful conversational coach reply. */
 export function deterministicCoachChatReply(opts: {
   question?: string;
   message?: string;
 }): string {
-  const question = (opts.question || "the current interview question").trim();
-  const message = (opts.message || "").trim();
-  const lines = [
-    message ? `You asked: ${message}` : null,
-    `Focus on: ${question}.`,
-    "1. Answer directly in one sentence.",
-    "2. Give brief context from your real experience only.",
-    "3. Explain 2–3 actions you took (I-statements).",
-    "4. Close with a result you can substantiate — never invent metrics.",
-  ].filter(Boolean);
-  return lines.join("\n");
+  void opts;
+  return "Coach AI is temporarily unavailable. Try again in a moment.";
 }

@@ -39,6 +39,34 @@ describe("Google Calendar OAuth source contracts", () => {
     expect(hook).not.toContain("session?.provider_token");
   });
 
+  it("keeps OAuth scopes to calendar.events + email only", () => {
+    expect(shared).toContain("GOOGLE_CALENDAR_EVENTS_SCOPE");
+    expect(shared).toContain("GOOGLE_EMAIL_SCOPE");
+    expect(shared).toContain("GOOGLE_CALENDAR_OAUTH_SCOPES");
+    expect(shared).toMatch(
+      /GOOGLE_CALENDAR_OAUTH_SCOPES\s*=\s*\[[\s\S]*?GOOGLE_CALENDAR_EVENTS_SCOPE[\s\S]*?GOOGLE_EMAIL_SCOPE/,
+    );
+    expect(shared).not.toContain("calendar.readonly");
+    expect(shared).not.toContain("auth/calendar\"");
+    expect(shared).not.toContain("auth/calendar'");
+  });
+
+  it("soft-gates oauth_start for non-public / non-allowlisted users", () => {
+    expect(shared).toContain("canStartCalendarOAuth");
+    expect(shared).toContain("GOOGLE_CALENDAR_PUBLIC_OAUTH");
+    expect(shared).toContain("GOOGLE_CALENDAR_TEST_USERS");
+    expect(shared).toContain("calendarOauthAudienceStatus");
+    expect(shared).toContain("verification_pending");
+    expect(sync).toContain("connectAllowed");
+    expect(sync).toContain("publicOauth");
+    expect(sync).toContain("OAUTH_NOT_PUBLIC");
+    expect(sync).toContain("canStartCalendarOAuth(auth.email)");
+    expect(hook).toContain("connectAllowed");
+    expect(hook).toContain("verification_pending");
+    expect(hook).toContain("CALENDAR_VERIFICATION_PENDING_MSG");
+    expect(hook).not.toMatch(/if \(!connectAllowed\)[\s\S]{0,200}window\.location\.assign/);
+  });
+
   it("never accepts Calendar tokens from the browser", () => {
     expect(sync).toContain("Rejected client-supplied Google token fields");
     expect(sync).not.toMatch(/accessToken = typeof body\?\.provider_token/);
@@ -102,6 +130,14 @@ describe("scheduler UI contracts", () => {
     path.join(root, "src/pages/app/interviews/InterviewDetail.tsx"),
     "utf8",
   );
+  const newInterview = fs.readFileSync(
+    path.join(root, "src/pages/app/interviews/NewInterview.tsx"),
+    "utf8",
+  );
+  const calendarHook = fs.readFileSync(
+    path.join(root, "src/hooks/useCalendarSync.ts"),
+    "utf8",
+  );
   const scheduleInterview = readFunction("schedule-interview");
   const reminderWorker = readFunction("send-interview-reminders");
 
@@ -109,6 +145,17 @@ describe("scheduler UI contracts", () => {
     expect(detail).toContain("calendar_sync_status");
     expect(detail).toContain("Retry calendar sync");
     expect(detail).toContain("teardownInterviewSideEffects");
+  });
+
+  it("TC-MOD-008: NewInterview only writes calendar when Google is connected", () => {
+    expect(newInterview).toContain("shouldWriteCalendarEvent");
+    expect(newInterview).toContain("calendarPrefs.calendar_auto_create");
+    expect(calendarHook).toContain('connectionStatus === "disconnected"');
+    expect(calendarHook).toContain("CALENDAR_NOT_CONNECTED");
+  });
+
+  it("TC-MOD-008: InterviewDetail header actions wrap to avoid title collision", () => {
+    expect(detail).toMatch(/flex max-w-full flex-wrap items-center gap-2/);
   });
 
   it("schedule-interview queues reminders without requiring Resend", () => {

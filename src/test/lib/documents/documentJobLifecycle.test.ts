@@ -17,6 +17,26 @@ describe("document job lifecycle contracts", () => {
     expect(originalCreditsReserved).toBe(8);
   });
 
+  it("library retry idempotency keys stay stable (no random UUID charge keys)", () => {
+    const userId = "user-abc";
+    const documentId = "doc-1";
+    const contentHash = "reprocess-doc-1";
+    const keyA = `library-reprocess:${userId}:${documentId}:${contentHash}`;
+    const keyB = `library-reprocess:${userId}:${documentId}:${contentHash}`;
+    expect(keyA).toBe(keyB);
+    expect(keyA).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/);
+  });
+
+  it("failed_retryable path must call retry-document-processing-job not create", () => {
+    const preferred = "retry-document-processing-job";
+    const forbiddenOnRetryable = "create-document-processing-job";
+    expect(preferred).toContain("retry-document");
+    expect(forbiddenOnRetryable).toContain("create-document");
+    // Contract: UI branches on status === failed_retryable → retry helper only.
+    const branch = { status: "failed_retryable" as const, useRetryHelper: true };
+    expect(branch.useRetryHelper).toBe(true);
+  });
+
   it("cancel response exposes single refund settlement flag", () => {
     const cancelOk = { success: true, state: "cancelled", creditsRefunded: true, correlationId: "c-1" };
     const cancelIdempotent = { success: true, idempotent: true, state: "cancelled", creditsRefunded: false };

@@ -38,10 +38,10 @@ export const OVERLAY_SYSTEM_CHECKLIST: SetupChecklistItem[] = [
   },
   {
     id: "system-audio",
-    title: "Enable system / tab audio (optional)",
+    title: "Enable interviewer audio (optional)",
     detail:
-      "Open your meeting in a browser tab. When Career Pilot asks to share, select that tab and tick Share tab audio (Chrome/Edge). Without it, only your microphone is captured.",
-    platforms: ["web"],
+      "Browser: open the meeting in a tab; when prompted, share that tab and tick Share tab audio (Chrome/Edge) — this is limited tab audio, not full system audio. Desktop app: full interviewer/system audio is available. Without either, only your microphone is captured.",
+    platforms: ["web", "desktop"],
   },
   {
     id: "desktop-install",

@@ -265,6 +265,16 @@ export async function fulfillCapturedRazorpayOrder(
     if (paidErr) throw new Error(`mark_paid_failed: ${paidErr.message}`);
     if (!marked?.id) return { duplicate: true };
 
+    // Referral conversion tracking only — never grants a second credit (v1 policy).
+    try {
+      await db.rpc("mark_referral_converted", { p_referred_user_id: userId });
+    } catch (convErr) {
+      console.warn(
+        "[razorpay-fulfill] mark_referral_converted:",
+        convErr instanceof Error ? convErr.message.slice(0, 160) : "unknown",
+      );
+    }
+
     return { duplicate: false };
   } catch (error) {
     const { data: ledgerRow } = await db

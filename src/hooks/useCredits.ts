@@ -17,6 +17,8 @@ import { useAuthStore } from "@/store/authStore";
 /** UI-facing action keys — costs mirror creditEconomics.ts / edge functions. */
 export const CREDIT_COSTS = {
   live_answer: AI_CREDIT_COSTS.live_answer,
+  /** Matches Edge resolveActionCost("liveanswerlong") / live_answer_long. */
+  live_answer_long: AI_CREDIT_COSTS.live_answer + 4,
   live_hint: AI_CREDIT_COSTS.live_hint,
   live_feedback: AI_CREDIT_COSTS.live_feedback,
   generate_questions: AI_CREDIT_COSTS.generate_questions,
@@ -26,8 +28,8 @@ export const CREDIT_COSTS = {
   mock_question: AI_CREDIT_COSTS.generate_questions,
   mock_full_answer: AI_CREDIT_COSTS.live_answer,
   mock_session: AI_CREDIT_COSTS.mock_session,
-  scorecard_generate: AI_CREDIT_COSTS.session_debrief,
-  gap_analysis: AI_CREDIT_COSTS.analyze_test_performance,
+  scorecard_generate: AI_CREDIT_COSTS.generate_scorecard,
+  gap_analysis: AI_CREDIT_COSTS.gap_analysis,
   star_generate: AI_CREDIT_COSTS.star_builder,
   star_analyse: AI_CREDIT_COSTS.polish_star,
   company_brief: AI_CREDIT_COSTS.company_research,

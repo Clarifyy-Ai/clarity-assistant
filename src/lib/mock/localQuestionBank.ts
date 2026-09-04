@@ -9,6 +9,10 @@ export interface LocalQuestionInput {
   company?: string | null;
   role?: string | null;
   difficulty?: "easy" | "medium" | "hard" | "mixed";
+  skills?: string[];
+  focusAreas?: string[];
+  /** Deterministic seed for ranking rotation (e.g. exclude count). */
+  rotateSeed?: number;
 }
 
 export interface LocalQuestion {
@@ -72,7 +76,7 @@ const TECHNICAL: Omit<LocalQuestion, "id" | "order">[] = [
     question: "How would you design an API rate limiter?",
     difficulty: "hard",
     type: "technical",
-    tags: ["system-design", "backend"],
+    tags: ["system-design", "backend", "api"],
   },
   {
     question_text: "What is the time complexity of binary search and why?",
@@ -86,14 +90,14 @@ const TECHNICAL: Omit<LocalQuestion, "id" | "order">[] = [
     question: "Explain how you would debug a slow database query in production.",
     difficulty: "medium",
     type: "technical",
-    tags: ["database", "debugging"],
+    tags: ["database", "debugging", "sql", "backend", "data", "analytics"],
   },
   {
     question_text: "Describe how HTTP caching works and which headers matter.",
     question: "Describe how HTTP caching works and which headers matter.",
     difficulty: "medium",
     type: "technical",
-    tags: ["web", "networking"],
+    tags: ["web", "networking", "frontend", "react"],
   },
 ];
 
@@ -184,7 +188,45 @@ function personalize(
   return text;
 }
 
-/** Return `count` shuffled local questions for the given interview type. */
+function tokenizeContext(...parts: Array<string | null | undefined>): string[] {
+  const raw = parts
+    .filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+    .join(" ")
+    .toLowerCase();
+  const tokens = raw
+    .split(/[^a-z0-9+#.]/g)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2);
+  return [...new Set(tokens)];
+}
+
+function scoreLocalRelevance(
+  question: Omit<LocalQuestion, "id" | "order">,
+  contextTokens: string[],
+): number {
+  if (contextTokens.length === 0) return 0;
+  const hay = `${question.question_text} ${(question.tags ?? []).join(" ")}`.toLowerCase();
+  let score = 0;
+  for (const token of contextTokens) {
+    if (hay.includes(token)) score += 2;
+    if ((question.tags ?? []).some((t) => t.toLowerCase().includes(token))) score += 3;
+  }
+  const eng = contextTokens.some((t) =>
+    ["backend", "frontend", "engineer", "developer", "api", "react", "python", "java", "sql", "data", "analytics"].includes(t),
+  );
+  if (eng && (question.type === "technical" || question.type === "system_design")) {
+    score += 4;
+  }
+  if (
+    contextTokens.some((t) => ["hr", "recruiter", "people"].includes(t)) &&
+    question.type === "hr"
+  ) {
+    score += 4;
+  }
+  return score;
+}
+
+/** Return `count` questions ranked by role/domain/skills, then diversified. */
 export function getLocalMockQuestions(input: LocalQuestionInput): LocalQuestion[] {
   const type = normalizeType(input.type);
   const count = Math.min(Math.max(input.count ?? 5, 1), 15);
@@ -199,11 +241,22 @@ export function getLocalMockQuestions(input: LocalQuestionInput): LocalQuestion[
     }
   }
 
-  // Fisher–Yates shuffle
-  for (let i = pool.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [pool[i], pool[j]] = [pool[j], pool[i]];
-  }
+  const contextTokens = tokenizeContext(
+    input.role,
+    input.company,
+    ...(input.skills ?? []),
+    ...(input.focusAreas ?? []),
+  );
+  const rotate = (input.rotateSeed ?? 0) % Math.max(pool.length, 1);
+
+  pool = pool
+    .map((q, index) => ({
+      q,
+      score: scoreLocalRelevance(q, contextTokens),
+      order: (index + rotate) % Math.max(pool.length, 1),
+    }))
+    .sort((a, b) => b.score - a.score || a.order - b.order)
+    .map((row) => row.q);
 
   const selected = pool.slice(0, count);
   return selected.map((q, index) => {

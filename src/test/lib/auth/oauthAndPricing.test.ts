@@ -8,10 +8,10 @@ describe("oauthProviders allowlist", () => {
     vi.unstubAllEnvs();
   });
 
-  it("hides all OAuth CTAs when env is unset", async () => {
+  it("defaults to Google when env is unset", async () => {
     vi.stubEnv("VITE_OAUTH_PROVIDERS", undefined as unknown as string);
     const { getEnabledOAuthProviders } = await import("@/lib/auth/oauthProviders");
-    expect(getEnabledOAuthProviders()).toEqual([]);
+    expect(getEnabledOAuthProviders()).toEqual(["google"]);
   });
 
   it("hides all OAuth CTAs when env is empty or none", async () => {
@@ -31,6 +31,18 @@ describe("oauthProviders allowlist", () => {
       "@/lib/auth/oauthProviders"
     );
     expect(getEnabledOAuthProviders()).toEqual(["google", "github"]);
+    expect(isOAuthProviderEnabled("azure")).toBe(false);
+  });
+
+  it("treats disabled providers as not enabled for UI gating", async () => {
+    vi.stubEnv("VITE_OAUTH_PROVIDERS", "google");
+    const { isOAuthProviderEnabled, getEnabledOAuthProviders } = await import(
+      "@/lib/auth/oauthProviders"
+    );
+    expect(getEnabledOAuthProviders()).toEqual(["google"]);
+    expect(isOAuthProviderEnabled("google")).toBe(true);
+    expect(isOAuthProviderEnabled("github")).toBe(false);
+    expect(isOAuthProviderEnabled("linkedin_oidc")).toBe(false);
     expect(isOAuthProviderEnabled("azure")).toBe(false);
   });
 

@@ -133,7 +133,8 @@ export async function submitCoachChatMessage(
       coachTone,
       hintStyle,
       model: overlay.active_model,
-      timeoutMs: 45_000,
+      // Keep in sync with Edge geminiChat timeoutMs 45_000 × maxAttempts 2.
+      timeoutMs: 90_000,
       idempotencyKey,
       signal: opts.signal,
       onMeta: (meta) => {
@@ -150,11 +151,23 @@ export async function submitCoachChatMessage(
       },
       onDone: async (result) => {
         chatBuffer = result.fullText || chatBuffer;
+        const source = result.source || undefined;
+        // Never present offline STAR scaffolds as successful coach answers.
+        if (source === "python" || source === "deterministic" || source === "fallback") {
+          useOverlayStore.getState().updateChatMessage(assistantId, {
+            text:
+              "Coach AI is temporarily unavailable. Try again in a moment.",
+            pending: false,
+            id: result.message_id || assistantId,
+            source,
+          });
+          return;
+        }
         useOverlayStore.getState().updateChatMessage(assistantId, {
           text: chatBuffer || "No response received. Please try again.",
           pending: false,
           id: result.message_id || assistantId,
-          source: result.source || undefined,
+          source,
         });
         if (result.conversation_id) {
           useOverlayStore
@@ -173,14 +186,19 @@ export async function submitCoachChatMessage(
     pendingChatIdempotency.delete(turnKey);
     return true;
   } catch (err) {
+    // Drop idempotency key on terminal failure so a retry can re-reserve after Edge refund.
+    pendingChatIdempotency.delete(turnKey);
     openUpgradeIfInsufficientCredits(err);
     const timedOut =
       err instanceof ApiClientError &&
-      (err.code === "REQUEST_ABORTED" || err.status === 408 || /timed? ?out/i.test(err.message));
+      (err.code === "REQUEST_ABORTED" ||
+        err.status === 408 ||
+        /timed? ?out|CP-10245/i.test(err.message));
     const msg = timedOut
       ? "Coach reply timed out (CP-10245). Your message was not accepted — retry the same turn."
       : getAiUserFacingError(err) ||
-        "Your coach is temporarily unavailable. Please retry.";
+        "Coach AI is temporarily unavailable. Try again in a moment.";
+    // Clear pending Generating… row and the optimistic user bubble on failure.
     useOverlayStore.getState().removeChatMessage(assistantId);
     useOverlayStore.getState().removeChatMessage(userMsgId);
     useOverlayStore.getState().setError(msg);

@@ -89,8 +89,9 @@ function computeReadinessScore(params: {
 }
 
 const READINESS_TOOLTIP =
-  "Combines practice sessions (up to 40 pts), your current streak (up to 30 pts), " +
-  "and setup completion — resume, job description, first session, and audio test (up to 30 pts).";
+  "Activity readiness (not an interview score). Combines practice sessions (up to 40 pts), " +
+  "your current streak (up to 30 pts), and setup completion — resume, job description, " +
+  "first session, and audio test (up to 30 pts). Interview scores come only from scored scorecards.";
 
 /* ─── QUICK ACTIONS ──────────────────────────────────────────────────────── */
 
@@ -772,12 +773,12 @@ function RecentActivityFeed({
       ) : (
         <div className="space-y-2">
           {sessions.map((s) => {
-            const isMock = s.type === "mock";
+            const isMock = /mock/i.test(String(s.type ?? ""));
             const score  = s.overall_score;
             return (
               <Link
                 key={s.id}
-                to={`/app/sessions/${s.id}`}
+                to={s.detailRoute || `/app/sessions/${s.id}`}
                 className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-accent/5 transition-all group"
               >
                 <div className={cn(
@@ -795,6 +796,7 @@ function RecentActivityFeed({
                     {s.type ?? "Session"}{s.title ? ` — ${s.title}` : ""}
                   </p>
                   <p className="text-xs text-muted-foreground">
+                    {s.contextLine ? `${s.contextLine} · ` : ""}
                     {format(new Date(s.created_at), "MMM d, h:mm a")}
                   </p>
                 </div>
@@ -933,7 +935,7 @@ function ReadinessScoreCard({
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-emerald-400" />
-          <h3 className="text-xs font-semibold text-foreground">Readiness Score</h3>
+          <h3 className="text-xs font-semibold text-foreground">Activity readiness</h3>
           <Tooltip
             content={READINESS_TOOLTIP}
             side="bottom"
@@ -942,7 +944,7 @@ function ReadinessScoreCard({
             <button
               type="button"
               className="text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="How readiness score is calculated"
+              aria-label="How activity readiness is calculated"
             >
               <Info className="w-3.5 h-3.5" />
             </button>
@@ -963,7 +965,7 @@ function ReadinessScoreCard({
         color={color}
         size="sm"
         showLabel
-        label={`${score}/100 interview readiness`}
+        label={`${score}/100 activity readiness`}
       />
     </Card>
   );

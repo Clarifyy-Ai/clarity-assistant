@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
 import {
   setPendingPlan,
 } from "@/lib/billing/pendingPlan";
-import { normalizeRefCode, storeRefCode } from "@/lib/referrals";
+import { getStoredRefCode, normalizeRefCode, storeRefCode } from "@/lib/referrals";
 import { formatSupabaseAuthError } from "@/lib/errors";
 import { trackGoogleAdsSignup } from "@/lib/ads/googleAds";
 
@@ -235,7 +235,12 @@ export default function Signup(): JSX.Element {
     }
 
     try {
-      await signUpWithEmail(data.email, data.password, data.fullName);
+      await signUpWithEmail(
+        data.email,
+        data.password,
+        data.fullName,
+        refCode ?? getStoredRefCode(),
+      );
 
       trackGoogleAdsSignup();
 

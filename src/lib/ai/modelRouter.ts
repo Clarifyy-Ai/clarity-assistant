@@ -15,8 +15,10 @@ import { streamOpenAIHint } from "./openaiClient";
 import { streamClaudeHint } from "./anthropicClient";
 import { toDbModel } from "./modelMapping";
 
-import { getOfflineTemplate } from "./offlineTemplates";
-import { formatTalkingPointsAsHint } from "./resumeFallback";
+import {
+  buildOfflineCategoryHint,
+  normalizeInterviewType,
+} from "./coachQuestionClassify";
 
 export interface RouteHintOptions {
   question: string;
@@ -54,19 +56,25 @@ export interface RouteAnswerGenerationOptions {
   signal?: AbortSignal;
 }
 
-function normalizeInterviewType(input: InterviewType | string | undefined): InterviewType {
-  const raw = String(input ?? "").toLowerCase();
-  if (raw === "behavioral" || raw === "behavioural") return "behavioural" as InterviewType;
-  if (raw === "coding") return "coding" as InterviewType;
-  if (raw === "government_exam") return "government_exam" as InterviewType;
-  return (input as InterviewType) ?? ("behavioural" as InterviewType);
-}
-
-function getResumeFallbackOrTemplate(interviewType: InterviewType, hintStyle: HintStyle): string {
+function applyCategoryFallback(
+  question: string,
+  sessionType: InterviewType | string | undefined,
+  hintStyle: HintStyle,
+  reason: "offline" | "ai_unavailable",
+  errorMessage?: string | null,
+): void {
   const overlayStore = useOverlayStore.getState();
-  const tp = overlayStore.resume_talking_points;
-  if (tp) return formatTalkingPointsAsHint(tp);
-  return getOfflineTemplate(interviewType, hintStyle);
+  const built = buildOfflineCategoryHint({
+    question,
+    sessionType,
+    hintStyle,
+    resumeTalkingPoints: overlayStore.resume_talking_points,
+  });
+  overlayStore.setOfflineFallback(built.text, {
+    categoryLabel: built.categoryLabel,
+    reason,
+    errorMessage: errorMessage ?? null,
+  });
 }
 
 function isGeminiModel(model: PreferredAIModel): boolean {
@@ -152,8 +160,12 @@ export async function routeAnswerGeneration(opts: RouteAnswerGenerationOptions):
   const interviewType = normalizeInterviewType(opts.questionTypeHint);
 
   if (isOffline) {
-    const fallback = getResumeFallbackOrTemplate(interviewType, opts.context.hint_style);
-    overlayStore.setOfflineFallback(fallback);
+    applyCategoryFallback(
+      opts.questionText,
+      interviewType,
+      opts.context.hint_style,
+      "offline",
+    );
     networkStore.setQueuedHintRequest(true);
     return;
   }
@@ -186,11 +198,28 @@ export async function routeAnswerGeneration(opts: RouteAnswerGenerationOptions):
         useNetworkStore.getState().recordAIResponseTime(Date.now() - start);
         opts.onDone(fullText);
       },
-      onError: (err) => opts.onError?.(err),
+      onError: (err) => {
+        applyCategoryFallback(
+          opts.questionText,
+          interviewType,
+          opts.context.hint_style,
+          "ai_unavailable",
+          err instanceof Error ? err.message : String(err),
+        );
+        opts.onError?.(err);
+      },
       signal: opts.signal,
     });
   } catch (err) {
-    opts.onError?.(err instanceof Error ? err : new Error(String(err)));
+    const error = err instanceof Error ? err : new Error(String(err));
+    applyCategoryFallback(
+      opts.questionText,
+      interviewType,
+      opts.context.hint_style,
+      "ai_unavailable",
+      error.message,
+    );
+    opts.onError?.(error);
   }
 }
 
@@ -223,8 +252,12 @@ export async function routeHint(opts: RouteHintOptions): Promise<void> {
   }
 
   if (networkStore.mode === "offline") {
-    const fallback = getResumeFallbackOrTemplate(interviewType, opts.context.hint_style);
-    overlayStore.setOfflineFallback(fallback);
+    applyCategoryFallback(
+      opts.question,
+      interviewType,
+      opts.context.hint_style,
+      "offline",
+    );
     networkStore.setQueuedHintRequest(true);
     return;
   }
@@ -245,16 +278,28 @@ export async function routeHint(opts: RouteHintOptions): Promise<void> {
       try {
         await callModel(fallbackModel, { ...opts, interviewType });
       } catch (fallbackErr) {
-        overlayStore.setOfflineFallback(
-          getResumeFallbackOrTemplate(interviewType, opts.context.hint_style),
+        const error =
+          fallbackErr instanceof Error ? fallbackErr : new Error(String(fallbackErr));
+        applyCategoryFallback(
+          opts.question,
+          interviewType,
+          opts.context.hint_style,
+          "ai_unavailable",
+          error.message,
         );
-        opts.onError(fallbackErr instanceof Error ? fallbackErr : new Error(String(fallbackErr)));
+        opts.onError(error);
       }
     } else {
-      overlayStore.setOfflineFallback(
-        getResumeFallbackOrTemplate(interviewType, opts.context.hint_style),
+      const error =
+        primaryErr instanceof Error ? primaryErr : new Error(String(primaryErr));
+      applyCategoryFallback(
+        opts.question,
+        interviewType,
+        opts.context.hint_style,
+        "ai_unavailable",
+        error.message,
       );
-      opts.onError(primaryErr instanceof Error ? primaryErr : new Error(String(primaryErr)));
+      opts.onError(error);
     }
   }
 }

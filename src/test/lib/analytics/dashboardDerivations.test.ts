@@ -33,14 +33,14 @@ describe("localDayKey + buildActivityByDay", () => {
     expect(activity["2026-01-01"]).toBeUndefined();
   });
 
-  it("matches heatmap grid keys for the same timezone", () => {
-    const iso = new Date().toISOString();
-    const dayKey = localDayKey(iso, "UTC");
-    const activity = buildActivityByDay([{ date: iso }], "UTC");
-    const weeks = buildHeatmapWeekDayKeys("UTC", 7);
-    const gridKeys = new Set(weeks.flat());
-    expect(gridKeys.has(dayKey)).toBe(true);
-    expect(activity[dayKey]).toBe(1);
+  it("rebuilds activity when server sends empty map but sessions exist", () => {
+    const iso = "2026-03-15T12:00:00.000Z";
+    const rebuilt = buildActivityByDay(
+      [{ date: iso, started_at: iso }, { date: iso }],
+      "UTC",
+    );
+    expect(Object.keys(rebuilt).length).toBeGreaterThan(0);
+    expect(rebuilt["2026-03-15"]).toBe(2);
   });
 });
 
@@ -150,10 +150,40 @@ describe("analytics load status", () => {
         { overall_score: 70, score_status: "scored" },
       ]),
     ).toBe(1);
+    // Processing / placeholder numeric scores must not inflate sessions_scored KPI.
+    expect(
+      countScoredSessions([
+        { overall_score: 0, score_status: "processing" },
+        { overall_score: 55, score_status: "pending" },
+        { overall_score: 80, score_status: "scored" },
+      ]),
+    ).toBe(1);
     expect(isAnalyticsPayloadEmpty({ total_sessions: 0, recent_sessions: [] })).toBe(true);
     expect(isAnalyticsPayloadEmpty({ total_sessions: 3, recent_sessions: [] })).toBe(false);
     expect(resolvePeriodSessionCount({ total_sessions: 3, recent_sessions: [] })).toBe(3);
     expect(resolvePeriodSessionCount({ total_sessions: 2, recent_sessions: [{}, {}, {}] })).toBe(3);
+  });
+
+  it("excludes processing placeholder scores from unified trend series", () => {
+    const trend = buildUnifiedScoreTrend({
+      recentSessions: [
+        {
+          session_id: "p",
+          date: "2026-02-01T10:00:00.000Z",
+          overall_score: 0,
+          score_status: "processing",
+        },
+        {
+          session_id: "s",
+          date: "2026-02-02T10:00:00.000Z",
+          overall_score: 88,
+          score_status: "scored",
+        },
+      ],
+      confidenceTrend: [],
+    });
+    expect(trend[0].score).toBeNull();
+    expect(trend[1].score).toBe(88);
   });
 
   it("normalizes partial edge payloads without treating them as errors", () => {

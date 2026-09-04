@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useState, useEffect, useMemo } from "react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   MailCheck,
   AlertCircle,
@@ -16,7 +16,10 @@ import { BrandLogo } from "@/components/marketing";
 import { AuthShell } from "@/components/layout/AuthShell";
 import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
 import { getAuthenticatedEntryPath } from "@/lib/auth/postAuthRedirect";
-import { assignLoginWithReturnTo } from "@/lib/auth/safeReturnTo";
+import {
+  assignLoginWithReturnTo,
+  preferredReturnToFromNavigation,
+} from "@/lib/auth/safeReturnTo";
 import { authAbsoluteUrl } from "@/lib/auth/appOrigin";
 import { formatSupabaseAuthError } from "@/lib/errors";
 import {
@@ -26,18 +29,21 @@ import {
   type EmailOtpStatus,
 } from "@/lib/auth/emailOtp";
 import { emailOtpSatisfiesMfa } from "@/lib/auth/securityModel";
+import { classifyAuthEmailResend } from "@/lib/auth/signupOutcome";
 
 /**
  * Verify Email gate — shown when an authenticated user has not yet
  * confirmed their email address. Provides:
  *   • clear "verification required" banner (was previously silent)
  *   • resend confirmation link (60s cooldown)
+ *   • honest sent / failed / rate-limited states (never fake success)
  *   • sign-out / use-different-account
  *   • automatic redirect once verification completes
  */
 export default function VerifyEmail() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const user = useAuthStore((s) => s.user);
   const isOnboarded = useAuthStore((s) => s.isOnboarded);
   const isAdmin = useAuthStore((s) => s.isAdmin);
@@ -46,11 +52,19 @@ export default function VerifyEmail() {
   // the address passed through router state.
   const stateEmail = (location.state as { email?: string } | null)?.email ?? "";
   const email = user?.email ?? stateEmail;
-
+  const preferredReturnTo = useMemo(
+    () =>
+      preferredReturnToFromNavigation({
+        searchParams,
+        locationState: location.state,
+      }),
+    [searchParams, location.state],
+  );
 
   const [resending, setResending] = useState(false);
   const [resendOk, setResendOk] = useState(false);
   const [resendError, setResendError] = useState<string | null>(null);
+  const [resendRateLimited, setResendRateLimited] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [otp, setOtp] = useState("");
   const [otpStatus, setOtpStatus] = useState<EmailOtpStatus>("idle");
@@ -60,11 +74,18 @@ export default function VerifyEmail() {
   useEffect(() => {
     if (!isUserEmailConfirmed(user)) return;
     if (otpStatus !== "verified" && otpStatus !== "idle") return;
-    navigate(
-      getAuthenticatedEntryPath({ isAdmin, isOnboarded }),
-      { replace: true },
-    );
-  }, [user, isAdmin, isOnboarded, navigate, otpStatus]);
+    const target = getAuthenticatedEntryPath({
+      isAdmin,
+      isOnboarded,
+      preferredReturnTo,
+    });
+    // returnTo is embedded in the onboarding URL by getAuthenticatedEntryPath
+    // so a refresh during onboarding still restores the deep-link.
+    navigate(target, {
+      replace: true,
+      state: preferredReturnTo ? { from: preferredReturnTo } : undefined,
+    });
+  }, [user, isAdmin, isOnboarded, navigate, otpStatus, preferredReturnTo]);
 
   // Refresh auth user after the confirmation link is opened in another tab.
   useEffect(() => {
@@ -90,6 +111,7 @@ export default function VerifyEmail() {
     setResending(true);
     setResendError(null);
     setResendOk(false);
+    setResendRateLimited(false);
 
     const { error } = await supabase.auth.resend({
       type: "signup",
@@ -101,10 +123,21 @@ export default function VerifyEmail() {
 
     setResending(false);
     if (error) {
-      setResendError(formatSupabaseAuthError(error));
+      const classified = classifyAuthEmailResend(error);
+      setResendOk(false);
+      setResendRateLimited(classified.kind === "rate_limited");
+      setResendError(
+        classified.kind === "rate_limited"
+          ? classified.message
+          : formatSupabaseAuthError(error) || classified.message,
+      );
       setOtpStatus("idle");
+      if (classified.kind === "rate_limited") {
+        setCooldown(60);
+      }
     } else {
       setResendOk(true);
+      setResendRateLimited(false);
       setOtpStatus("sent");
       setCooldown(60);
     }
@@ -197,13 +230,30 @@ export default function VerifyEmail() {
           </div>
 
           {resendOk && (
-            <div className="flex items-center gap-2 text-sm text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3 py-2.5">
+            <div
+              data-testid="verify-email-resend-sent"
+              className="flex items-center gap-2 text-sm text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-3 py-2.5"
+            >
               <CheckCircle2 className="w-4 h-4 shrink-0" />
               Confirmation email sent. Check your inbox (and spam folder).
             </div>
           )}
-          {resendError && (
-            <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-3 py-2.5">
+          {resendRateLimited && resendError && (
+            <div
+              data-testid="verify-email-resend-rate-limited"
+              role="alert"
+              className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2.5"
+            >
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              {resendError}
+            </div>
+          )}
+          {!resendRateLimited && resendError && (
+            <div
+              data-testid="verify-email-resend-failed"
+              role="alert"
+              className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-3 py-2.5"
+            >
               <AlertCircle className="w-4 h-4 shrink-0" />
               {resendError}
             </div>

@@ -146,6 +146,125 @@ test.describe("Razorpay billing checkout [BILLING-CHECKOUT]", () => {
     }
   });
 
+  test("billing-catalog open sends JSON body and create-order uses product_type enum", async ({
+    page,
+  }) => {
+    const pageErrors: string[] = [];
+    page.on("pageerror", (err) => pageErrors.push(err.message));
+
+    let catalogBody: string | null = null;
+    let createProductType: string | null = null;
+
+    await installRazorpaySandboxMock(page, "success");
+    await loginAsTestUser(page, { credits: 40, planId: "free" });
+    await dismissCookieBanner(page);
+    await installBalanceMocks(page, () => 40);
+
+    await page.route("**/functions/v1/billing-catalog**", async (route) => {
+      catalogBody = route.request().postData();
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          source: "billing_settings",
+          payments_configured: true,
+          paise: {
+            pro_monthly: 249_900,
+            enterprise_monthly: 679_900,
+            credits_50: 69_900,
+            credits_150: 189_900,
+            credits_500: 599_900,
+          },
+        }),
+      });
+    });
+
+    await page.route("**/functions/v1/razorpay-create-order**", async (route) => {
+      const body = route.request().postDataJSON() as {
+        product_type?: string;
+        action?: string;
+      };
+      if (body.action === "cancel" || body.action === "fail") {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ ok: true, status: body.action }),
+        });
+      }
+      createProductType = String(body.product_type ?? "");
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          key_id: RAZORPAY_TEST_KEY,
+          order_id: "order_e2e_payload",
+          amount: CATALOG_PAISE.credits_50,
+          currency: "INR",
+          payment_order_id: PAYMENT_ORDER_ID,
+          promo_applied: null,
+          product_type: body.product_type ?? "credits_50",
+        }),
+      });
+    });
+
+    await page.route("**/functions/v1/razorpay-verify-payment**", async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true, status: "paid" }),
+      });
+    });
+
+    await page.goto("/app/settings/billing", { waitUntil: "domcontentloaded" });
+    await expect.poll(() => catalogBody).not.toBeNull();
+    expect(catalogBody).toBe("{}");
+
+    await page.getByRole("button", { name: /50 credits \(one-time\)/i }).first().click();
+    await expect.poll(() => createProductType).toBe("credits_50");
+
+    const appStartTimeErrors = pageErrors.filter((m) => {
+      if (
+        !/Cannot read properties of undefined \(reading ['"]startTime['"]\)|Cannot read property 'startTime' of undefined/i.test(
+          m,
+        )
+      ) {
+        return false;
+      }
+      return /UpgradeModal|SettingsBilling|razorpayCheckout|liveCatalog/i.test(m);
+    });
+    expect(appStartTimeErrors).toEqual([]);
+  });
+
+  test("payments_configured false shows banner and disables buy", async ({ page }) => {
+    await loginAsTestUser(page, { credits: 40, planId: "free" });
+    await dismissCookieBanner(page);
+
+    await page.route("**/functions/v1/billing-catalog**", async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          source: "billing_settings",
+          payments_configured: false,
+          paise: {
+            pro_monthly: 249_900,
+            enterprise_monthly: 679_900,
+            credits_50: 69_900,
+            credits_150: 189_900,
+            credits_500: 599_900,
+          },
+        }),
+      });
+    });
+
+    await page.goto("/app/settings/billing", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("payments-not-configured-banner")).toBeVisible({
+      timeout: 20_000,
+    });
+    const buy50 = page.getByRole("button", { name: /50 credits \(one-time\)/i }).first();
+    await expect(buy50).toBeDisabled();
+  });
+
   test("successful checkout grants catalog credits exactly once", async ({ page }) => {
     const productType = "credits_150" as const;
     const startingBalance = 100;

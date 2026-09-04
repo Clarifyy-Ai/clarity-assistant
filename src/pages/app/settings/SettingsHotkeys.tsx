@@ -12,21 +12,25 @@ import { cn } from "@/lib/utils";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useAuthStore } from "@/store/authStore";
-
-const STORAGE_KEY = "clarify_custom_hotkeys";
+import {
+  hasHotkeyOverrides,
+  mergeUiPreferences,
+  readHotkeysFromUiPreferences,
+} from "@/lib/settings/uiPreferences";
+import { HOTKEY_STORAGE_KEY } from "@/lib/overlay/hotkeyOverrides";
 
 type Overrides = Partial<Record<HotkeyId, string>>;
 
 function loadOverrides(): Overrides {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
+    return JSON.parse(localStorage.getItem(HOTKEY_STORAGE_KEY) ?? "{}");
   } catch {
     return {};
   }
 }
 
 function saveLocal(o: Overrides) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(o));
+  localStorage.setItem(HOTKEY_STORAGE_KEY, JSON.stringify(o));
   window.dispatchEvent(new CustomEvent("clarify:hotkeys-changed", { detail: o }));
 }
 
@@ -58,27 +62,21 @@ export default function SettingsHotkeys() {
   const [recordingId, setRecordingId] = useState<HotkeyId | null>(null);
 
   useEffect(() => {
-    const prefs = profile?.ui_preferences;
-    if (!prefs || typeof prefs !== "object" || Array.isArray(prefs)) return;
-    const stored = (prefs as Record<string, unknown>).hotkeys;
-    if (stored && typeof stored === "object" && !Array.isArray(stored)) {
-      const next = stored as Overrides;
-      setOverrides(next);
-      saveLocal(next);
-    }
+    const fromAccount = readHotkeysFromUiPreferences(profile?.ui_preferences);
+    // Only apply account bindings when non-empty — never clobber device LS with {}.
+    if (!hasHotkeyOverrides(fromAccount)) return;
+    const next = fromAccount as Overrides;
+    setOverrides(next);
+    saveLocal(next);
   }, [profile?.id, profile?.ui_preferences]);
 
   const persistOverrides = useCallback(async (next: Overrides) => {
     setOverrides(next);
     saveLocal(next);
     if (!profile?.id) return;
-    const existing =
-      profile.ui_preferences && typeof profile.ui_preferences === "object"
-        ? (profile.ui_preferences as Record<string, unknown>)
-        : {};
     try {
       await updateProfile({
-        ui_preferences: { ...existing, hotkeys: next },
+        ui_preferences: mergeUiPreferences(profile.ui_preferences, { hotkeys: next }),
       });
     } catch {
       toast.error("Saved on this device, but we couldn't sync shortcuts to your account.");

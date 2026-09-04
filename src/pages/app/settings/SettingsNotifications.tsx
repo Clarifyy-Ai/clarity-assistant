@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 import { SettingsSaveBar } from "@/components/settings/SettingsSaveBar";
 import { notificationsDB } from "@/lib/supabase/database";
+import { mergeNotificationPrefs } from "@/lib/interviews/calendarIntegrationPrefs";
 
 type NotificationPrefs = {
   session_complete?: boolean;
@@ -99,7 +100,10 @@ export default function SettingsNotifications() {
         email_notifications: emailNotifications,
         session_reminders: sessionReminders,
         marketing_emails: marketingEmails,
-        notification_prefs: prefs,
+        notification_prefs: mergeNotificationPrefs(
+          (profile as { notification_prefs?: unknown } | null)?.notification_prefs,
+          prefs,
+        ),
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);

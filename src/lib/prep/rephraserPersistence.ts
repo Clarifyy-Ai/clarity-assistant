@@ -12,10 +12,15 @@ export type PersistedRephraserState = {
   idempotencyKey: string | null;
 };
 
-const STORAGE_KEY = "clarify-prep-rephrase-state";
+const STORAGE_KEY = "career-pilot-prep-rephrase-state";
+const LEGACY_STORAGE_KEY = "clarify-prep-rephrase-state";
 
 export function rephraserStorageKey(userId: string): string {
   return `${STORAGE_KEY}:${userId}`;
+}
+
+function legacyRephraserStorageKey(userId: string): string {
+  return `${LEGACY_STORAGE_KEY}:${userId}`;
 }
 
 function isAlternatives(value: unknown): value is RephraserAlternatives {
@@ -45,11 +50,24 @@ export function readPersistedRephraserState(
     // Prefer localStorage (survives refresh). Migrate legacy sessionStorage once.
     let raw = store.getItem(rephraserStorageKey(userId));
     if (!raw) {
+      raw = store.getItem(legacyRephraserStorageKey(userId));
+      if (raw) {
+        try {
+          store.setItem(rephraserStorageKey(userId), raw);
+          store.removeItem(legacyRephraserStorageKey(userId));
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    if (!raw) {
       try {
         raw = sessionStorage.getItem(rephraserStorageKey(userId));
+        if (!raw) raw = sessionStorage.getItem(legacyRephraserStorageKey(userId));
         if (raw) {
           store.setItem(rephraserStorageKey(userId), raw);
           sessionStorage.removeItem(rephraserStorageKey(userId));
+          sessionStorage.removeItem(legacyRephraserStorageKey(userId));
         }
       } catch {
         /* ignore */

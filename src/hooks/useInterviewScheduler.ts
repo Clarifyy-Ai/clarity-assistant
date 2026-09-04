@@ -290,7 +290,8 @@ export function useInterviewScheduler() {
           error: timezone.error.issues[0]?.message ?? "Invalid timezone",
         };
       }
-      timezoneValue = timezone.data === "local" ? null : timezone.data;
+      // Same as addRound: accept "local"/aliases, persist canonical IANA (never "local").
+      timezoneValue = persistableIanaTimezone(timezone.data);
     }
 
     const { timezone: _tz, ...rest } = values;

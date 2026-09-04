@@ -20,7 +20,6 @@ import { Spinner } from "@/components/ui/Spinner";
 import { useAuthStore } from "@/store/authStore";
 import { cn } from "@/lib/utils";
 import {
-  getEnabledOAuthProviders,
   isOAuthProviderEnabled,
   type OAuthProviderId,
 } from "@/lib/auth/oauthProviders";
@@ -49,10 +48,6 @@ interface OAuthButtonProps {
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
-
-const ALLOWED_OAUTH_PROVIDERS = new Set<OAuthProviderName>(
-  getEnabledOAuthProviders()
-);
 
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   provider_disabled:
@@ -112,7 +107,7 @@ function extractErrorDescription(error: unknown): string {
 }
 
 function assertAllowedProvider(provider: OAuthProviderName): boolean {
-  return isOAuthProviderEnabled(provider) && ALLOWED_OAUTH_PROVIDERS.has(provider);
+  return isOAuthProviderEnabled(provider);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -125,7 +120,7 @@ export const OAuthButton = ({
   disabledReason,
   onSuccess,
   className,
-}: OAuthButtonProps): JSX.Element => {
+}: OAuthButtonProps): JSX.Element | null => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -133,6 +128,11 @@ export const OAuthButton = ({
 
   const [isLoading, setIsLoading] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
+
+  // Hide providers that are not in VITE_OAUTH_PROVIDERS (fail closed).
+  if (!assertAllowedProvider(provider.name)) {
+    return null;
+  }
 
   if (!enabled) {
     return (
@@ -247,7 +247,7 @@ export const OAuthButton = ({
 
 export const GoogleOAuthButton = (
   props: Omit<OAuthButtonProps, "provider">
-): JSX.Element => (
+): JSX.Element | null => (
   <OAuthButton
     provider={{
       name: "google",
@@ -284,7 +284,7 @@ export const GoogleOAuthButton = (
 
 export const GithubOAuthButton = (
   props: Omit<OAuthButtonProps, "provider">
-): JSX.Element => (
+): JSX.Element | null => (
   <OAuthButton
     provider={{
       name: "github",
@@ -297,7 +297,7 @@ export const GithubOAuthButton = (
 
 export const LinkedInOAuthButton = (
   props: Omit<OAuthButtonProps, "provider">
-): JSX.Element => (
+): JSX.Element | null => (
   <OAuthButton
     provider={{
       name: "linkedin_oidc",
@@ -322,7 +322,7 @@ export const LinkedInOAuthButton = (
 
 export const AzureOAuthButton = (
   props: Omit<OAuthButtonProps, "provider">
-): JSX.Element => (
+): JSX.Element | null => (
   <OAuthButton
     provider={{
       name: "azure",

@@ -28,6 +28,11 @@ import { AlertCircle, GripVertical, Loader2, Mic, MicOff, Pause, Play, RefreshCw
 
 import type { LiveSessionConfig } from "@/types/session.types";
 import { OverlayComplianceBanner } from "./OverlayComplianceBanner";
+import { AsyncOperationBanner } from "@/components/async/AsyncOperationBanner";
+import {
+  overlayStateRecovery,
+  type OverlaySessionState,
+} from "@/lib/overlay/overlaySessionStates";
 
 import { OverlayHintPanel } from "./OverlayHintPanel";
 import { OverlayQuestionBar } from "./OverlayQuestionBar";
@@ -47,6 +52,7 @@ import { OverlayHotkeyHelp } from "./OverlayHotkeyHelp";
 import { OverlayAnswerTimer } from "./OverlayAnswerTimer";
 import { OverlayAudioStatusBar } from "./OverlayAudioStatusBar";
 import { OverlaySystemAudioBanner } from "./OverlaySystemAudioBanner";
+import { OverlaySpeakerSeparationBanner } from "./OverlaySpeakerSeparationBanner";
 import { OverlaySessionPreparing } from "./OverlaySessionPreparing";
 import { ScreenCaptureBlocker } from "./ScreenCaptureBlocker";
 import { OverlayListeningIndicator } from "./OverlayListeningIndicator";
@@ -264,6 +270,11 @@ interface OverlayWindowProps {
   onToggleMic?: () => void;
   onToggleSystemAudio?: () => void;
   onGenerate?: () => void;
+  onConfirmGenerateAnswer?: () => void;
+  onConfirmEditQuestion?: () => void;
+  onConfirmRetryListening?: () => void;
+  onConfirmTypeManually?: () => void;
+  onConfirmCancel?: () => void;
   onRegenerate?: () => void;
   onShorten?: () => void;
   onExpand?: () => void;
@@ -288,6 +299,11 @@ export function OverlayWindow({
   onToggleMic,
   onToggleSystemAudio,
   onGenerate,
+  onConfirmGenerateAnswer,
+  onConfirmEditQuestion,
+  onConfirmRetryListening,
+  onConfirmTypeManually,
+  onConfirmCancel,
   onRegenerate,
   onShorten,
   onExpand,
@@ -377,8 +393,29 @@ export function OverlayWindow({
   const { avgRTT, qualityLabel } = useNetworkMonitor();
 
   const errorMessage = useOverlayStore((s) => s.error_message);
+  const sessionPipelineState = useOverlayStore((s) => s.session_pipeline_state);
   const screenshotHint = useOverlayStore((s) => s.screenshot_hint);
   const isScreenshotLoading = useOverlayStore((s) => s.is_screenshot_loading);
+
+  const showTransientRecovery =
+    isSessionLive &&
+    (sessionPipelineState === "backend_unavailable" ||
+      sessionPipelineState === "ai_provider_unavailable" ||
+      sessionPipelineState === "reconnecting");
+
+  const transientRecoveryTitle =
+    sessionPipelineState === "reconnecting"
+      ? "Reconnecting"
+      : sessionPipelineState === "ai_provider_unavailable"
+        ? "AI temporarily unavailable"
+        : "Backend temporarily unavailable";
+
+  const handleTransientRetry = useCallback(() => {
+    useOverlayStore.getState().setError(null);
+    useOverlayStore.getState().setSessionPipelineState("listening" as OverlaySessionState);
+    onGenerate?.();
+    onReconnectAudio?.();
+  }, [onGenerate, onReconnectAudio]);
 
   const activeTab = useOverlayStore((s) => s.active_tab);
 
@@ -722,6 +759,21 @@ export function OverlayWindow({
         </div>
       )}
 
+      {showTransientRecovery && !isMinimalMode && (
+        <div className="px-3 py-2 shrink-0 border-b border-white/[0.05]" data-no-drag data-testid="live-session-recovery-banner">
+          <AsyncOperationBanner
+            title={transientRecoveryTitle}
+            message={
+              errorMessage ||
+              overlayStateRecovery(sessionPipelineState) ||
+              "Your practice session is still open. Retry when the service recovers."
+            }
+            retryable
+            onRetry={handleTransientRetry}
+          />
+        </div>
+      )}
+
       {/* Compact pill body */}
       {isMinimalMode && isVisible && (
         <div className="px-3 py-2 space-y-2 shrink-0" data-no-drag>
@@ -837,6 +889,7 @@ export function OverlayWindow({
                 enabled={!!onToggleSystemAudio}
                 onRetry={onToggleSystemAudio}
               />
+              <OverlaySpeakerSeparationBanner />
               <ScreenCaptureBanner />
 
               {isPanicVisible && panicContent ? (
@@ -951,6 +1004,11 @@ export function OverlayWindow({
                               onRegenerate={onRegenerate}
                               onShorten={onShorten}
                               onExpand={onExpand}
+                              onConfirmGenerateAnswer={onConfirmGenerateAnswer}
+                              onConfirmEditQuestion={onConfirmEditQuestion}
+                              onConfirmRetryListening={onConfirmRetryListening}
+                              onConfirmTypeManually={onConfirmTypeManually}
+                              onConfirmCancel={onConfirmCancel}
                             />
                           </div>
                         )}

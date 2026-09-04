@@ -3,7 +3,8 @@
 // encryption flag, and event-driven cross-tab sync.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const NAMESPACE  = "clarify:";
+const NAMESPACE = "career-pilot:";
+const LEGACY_NAMESPACE = "clarify:";
 const META_SUFFIX = ":__meta__";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -29,6 +30,27 @@ export interface SetOptions {
 
 const ns  = (key: string)      => `${NAMESPACE}${key}`;
 const nsm = (key: string)      => `${NAMESPACE}${key}${META_SUFFIX}`;
+const legacyNs = (key: string) => `${LEGACY_NAMESPACE}${key}`;
+const legacyNsm = (key: string) => `${LEGACY_NAMESPACE}${key}${META_SUFFIX}`;
+
+function migrateLegacyKey(primary: string, legacy: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const existing = window.localStorage.getItem(primary);
+    if (existing != null) return existing;
+    const old = window.localStorage.getItem(legacy);
+    if (old == null) return null;
+    try {
+      window.localStorage.setItem(primary, old);
+      window.localStorage.removeItem(legacy);
+    } catch {
+      /* keep reading legacy if migrate fails */
+    }
+    return old;
+  } catch {
+    return null;
+  }
+}
 
 // ─── Core Helpers ─────────────────────────────────────────────────────────────
 
@@ -86,6 +108,9 @@ export const ls = {
   get<T>(key: string): T | null {
     if (typeof window === "undefined") return null;
     try {
+      migrateLegacyKey(ns(key), legacyNs(key));
+      migrateLegacyKey(nsm(key), legacyNsm(key));
+
       const rawMeta = window.localStorage.getItem(nsm(key));
       if (rawMeta) {
         const meta = safeDeserialize<StorageMeta>(rawMeta);
@@ -125,6 +150,8 @@ export const ls = {
     try {
       window.localStorage.removeItem(ns(key));
       window.localStorage.removeItem(nsm(key));
+      window.localStorage.removeItem(legacyNs(key));
+      window.localStorage.removeItem(legacyNsm(key));
     } catch {}
   },
 

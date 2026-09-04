@@ -66,7 +66,7 @@ test.describe("TC-PUB-013 OAuth CTA visibility + honest errors", () => {
     await expect(page.getByText(/validation_failed/i)).toHaveCount(0);
   });
 
-  test("login hides broken Google CTA when OAuth probe fails", async ({ page }) => {
+  test("login keeps Continue with Google when OAuth probe fails", async ({ page }) => {
     await setupSupabaseMocks(page);
     await mockOAuthProbeMisconfigured(page);
     await clearBrowserAuthState(page);
@@ -76,39 +76,21 @@ test.describe("TC-PUB-013 OAuth CTA visibility + honest errors", () => {
       timeout: 15_000,
     });
 
-    const notConfigured = page.getByTestId("oauth-not-configured");
     const googleBtn = page.getByRole("button", { name: /continue with google/i });
-
-    await page.waitForTimeout(2_000);
-
-    if (await notConfigured.count()) {
-      await expect(notConfigured).toBeVisible();
-      await expect(notConfigured).toContainText(/not configured/i);
-      await expect(googleBtn).toHaveCount(0);
-    } else {
-      // Fail-closed build (VITE_OAUTH_PROVIDERS=none): no broken OAuth CTA advertised.
-      await expect(googleBtn).toHaveCount(0);
-    }
+    await expect(googleBtn).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("oauth-provider-section")).toBeVisible();
     await expect(page.getByText(/validation_failed/i)).toHaveCount(0);
     await expect(page.getByText(/provider is not enabled/i)).toHaveCount(0);
   });
 
-  test("signup shows honest OAuth status when probe fails", async ({ page }) => {
+  test("signup keeps Continue with Google when OAuth probe fails", async ({ page }) => {
     await setupSupabaseMocks(page);
     await mockOAuthProbeMisconfigured(page);
     await page.goto("/signup", { waitUntil: "domcontentloaded" });
     await dismissCookieBanner(page);
 
-    const notConfigured = page.getByTestId("oauth-not-configured");
     const googleBtn = page.getByRole("button", { name: /continue with google/i });
-    await page.waitForTimeout(2_000);
-
-    if (await notConfigured.count()) {
-      await expect(notConfigured).toContainText(/not configured/i);
-      await expect(googleBtn).toHaveCount(0);
-    } else {
-      await expect(googleBtn).toHaveCount(0);
-    }
+    await expect(googleBtn).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/validation_failed/i)).toHaveCount(0);
   });
 });

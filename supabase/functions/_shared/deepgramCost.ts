@@ -90,6 +90,25 @@ export async function logDeepgramUsage(
       was_fallback: params.wasFallback ?? false,
       cost_microcents: costMicrocents,
     });
+    await supabaseAdmin.from("provider_usage").insert({
+      provider: "deepgram",
+      service: "stt",
+      operation: params.action,
+      user_id: params.userId,
+      feature: params.action,
+      usage_quantity: params.audioSeconds,
+      usage_unit: "seconds",
+      duration_ms: params.latencyMs,
+      estimated_cost_microcents: costMicrocents,
+      currency: "USD",
+      cost_type: "estimated",
+      status: "success",
+      billing_mode: "charged",
+      metadata: {
+        model: params.model,
+        note: "TTL reserve may overestimate actual stream duration",
+      },
+    });
   } catch (err) {
     console.error(
       "[deepgramCost] Failed to log usage:",

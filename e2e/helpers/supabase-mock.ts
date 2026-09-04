@@ -60,6 +60,18 @@ export type MockAuthOptions = {
   subscriptionStatus?: "active" | "past_due" | "canceled" | "trialing";
   /** Grant admin role via user_roles for /app/admin e2e. */
   isAdmin?: boolean;
+  /**
+   * Debriefs list Edge payload for BUG-21 coverage.
+   * Default keeps backward-compatible empty-ish Edge access with saved debrief via REST fallback.
+   */
+  debriefListMode?:
+    | "default"
+    | "empty"
+    | "pending-rehearsal"
+    | "processing"
+    | "failed"
+    | "completed"
+    | "plan-restricted";
 };
 
 type ResumeRow = Record<string, unknown>;
@@ -331,7 +343,75 @@ export async function setupSupabaseMocks(
   const calendarConfigured = options.calendarConfigured === true;
   const subscriptionStatus = options.subscriptionStatus ?? "active";
   const isAdmin = options.isAdmin === true;
+  const debriefListMode = options.debriefListMode ?? "default";
   let spendableCredits = credits;
+  let profileOverrides: Record<string, unknown> = {};
+
+  /** Mutable Session History fixture for Delete reachability / confirm e2e. */
+  let sessionHistoryItems: Record<string, unknown>[] = [
+    {
+      sessionId: E2E_COMPLETED_SESSION_ID,
+      sourceId: E2E_COMPLETED_SESSION_ID,
+      sourceKind: "interview",
+      userId: sessionOwnerId,
+      sessionType: "mock_interview",
+      sessionSubtype: null,
+      title: "Completed mock interview",
+      role: "Software Engineer",
+      company: "Acme",
+      examName: null,
+      assessmentName: null,
+      status: "completed",
+      sourceStatus: "completed",
+      startedAt: "2026-08-30T10:00:00.000Z",
+      lastActivityAt: "2026-08-30T10:18:00.000Z",
+      endedAt: "2026-08-30T10:18:00.000Z",
+      durationSeconds: 1080,
+      answeredCount: 3,
+      totalQuestionCount: 3,
+      score: 81,
+      scoreMaximum: null,
+      scoreUnit: "percent",
+      resultLabel: null,
+      debriefStatus: "available",
+      debriefId: E2E_OWNER_DEBRIEF_ID,
+      detailRoute: `/app/sessions/${E2E_COMPLETED_SESSION_ID}`,
+      sourceRoute: null,
+      createdAt: "2026-08-30T10:00:00.000Z",
+      updatedAt: "2026-08-30T10:18:00.000Z",
+    },
+    {
+      sessionId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      sourceId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      sourceKind: "mock_test",
+      userId: sessionOwnerId,
+      sessionType: "government_exam",
+      sessionSubtype: null,
+      title: "SSC CGL Practice",
+      role: null,
+      company: null,
+      examName: "SSC CGL",
+      assessmentName: null,
+      status: "completed",
+      sourceStatus: "COMPLETED",
+      startedAt: "2026-08-29T09:00:00.000Z",
+      lastActivityAt: "2026-08-29T10:00:00.000Z",
+      endedAt: "2026-08-29T10:00:00.000Z",
+      durationSeconds: 3600,
+      answeredCount: 50,
+      totalQuestionCount: 100,
+      score: 62,
+      scoreMaximum: 100,
+      scoreUnit: "marks",
+      resultLabel: null,
+      debriefStatus: "not_eligible",
+      debriefId: null,
+      detailRoute: "/app/govt-exams/results/cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      sourceRoute: null,
+      createdAt: "2026-08-29T09:00:00.000Z",
+      updatedAt: "2026-08-29T10:00:00.000Z",
+    },
+  ];
 
   await page.route("**/*supabase.co/**", async (route) => {
     const url = route.request().url();
@@ -494,27 +574,41 @@ export async function setupSupabaseMocks(
 
     // ── Profiles & roles ──────────────────────────────────────────────────
     if (url.includes("/rest/v1/profiles") && method === "GET") {
-      const profile = makeProfile(
-        userId,
-        E2E_TEST_USER.email,
-        onboarded,
-        planId,
-        credits,
-        subscriptionStatus,
-      );
+      const profile = {
+        ...makeProfile(
+          userId,
+          E2E_TEST_USER.email,
+          onboarded,
+          planId,
+          credits,
+          subscriptionStatus,
+        ),
+        ...profileOverrides,
+      };
       return fulfillJson(route, 200, [profile]);
     }
 
     if (url.includes("/rest/v1/profiles") && (method === "PATCH" || method === "POST")) {
-      const profile = makeProfile(
-        userId,
-        E2E_TEST_USER.email,
-        onboarded,
-        planId,
-        credits,
-        subscriptionStatus,
-      );
-      return fulfillJson(route, 200, [profile]);
+      let patch: Record<string, unknown> = {};
+      try {
+        const body = route.request().postDataJSON();
+        patch = (Array.isArray(body) ? body[0] : body) as Record<string, unknown>;
+      } catch {
+        patch = {};
+      }
+      profileOverrides = { ...profileOverrides, ...patch };
+      const profile = {
+        ...makeProfile(
+          userId,
+          E2E_TEST_USER.email,
+          onboarded,
+          planId,
+          credits,
+          subscriptionStatus,
+        ),
+        ...profileOverrides,
+      };
+      return fulfillJson(route, 200, profile);
     }
 
     if (url.includes("/rest/v1/user_roles")) {
@@ -602,6 +696,17 @@ export async function setupSupabaseMocks(
       }
       const row = pToken === E2E_VALID_SHARE_TOKEN ? E2E_SHARED_SCORECARD : null;
       return fulfillJson(route, 200, row ? [row] : []);
+    }
+
+    if (url.includes("/rest/v1/rpc/get_session_history")) {
+      const owned = userId === sessionOwnerId;
+      const items = owned ? sessionHistoryItems : [];
+      return fulfillJson(route, 200, {
+        ok: true,
+        items,
+        nextCursor: null,
+        hasMore: false,
+      });
     }
 
     if (url.includes("/rest/v1/rpc/get_owned_session_detail")) {
@@ -733,9 +838,10 @@ export async function setupSupabaseMocks(
     }
 
     if (url.includes("/rest/v1/answer_bank") && (method === "POST" || method === "PATCH")) {
-      const body = route.request().postDataJSON() as Record<string, unknown>;
-      const row = {
-        id: "e2e-answer-1",
+      const body = route.request().postDataJSON() as unknown;
+      const rows = Array.isArray(body) ? body : [body as Record<string, unknown>];
+      const saved = rows.map((row, index) => ({
+        id: `e2e-answer-${index + 1}`,
         user_id: E2E_TEST_USER.id,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -744,9 +850,9 @@ export async function setupSupabaseMocks(
         last_used_at: null,
         deleted_at: null,
         tags: [],
-        ...body,
-      };
-      return fulfillJson(route, 201, row);
+        ...(row as Record<string, unknown>),
+      }));
+      return fulfillJson(route, 201, saved);
     }
 
     if (url.includes("/rest/v1/system_design_topics") && method === "GET") {
@@ -849,6 +955,17 @@ export async function setupSupabaseMocks(
         user_id: E2E_TEST_USER.id,
         sessions: [],
         type: "sessions",
+      });
+    }
+
+    if (url.includes("/functions/v1/get-user-storage-usage")) {
+      return fulfillJson(route, 200, {
+        success: true,
+        sessions: { count: 0, bytes: 0, status: "ok" },
+        transcripts: { count: 0, bytes: 0, status: "ok" },
+        documents: { count: 0, bytes: 0, status: "ok" },
+        total: { count: 0, bytes: 0, status: "ok" },
+        measured_at: new Date().toISOString(),
       });
     }
 
@@ -1058,6 +1175,17 @@ Result: Checkout failures dropped using the metrics already in my draft.`,
       const wantObject = accept.includes("object");
       const asksForCompleted = url.includes(E2E_COMPLETED_SESSION_ID);
       const owned = userId === sessionOwnerId;
+      if (method === "DELETE") {
+        const deletedId =
+          url.match(/\/rest\/v1\/sessions\?.*id=eq\.([0-9a-f-]+)/i)?.[1] ??
+          (asksForCompleted ? E2E_COMPLETED_SESSION_ID : null);
+        if (deletedId) {
+          sessionHistoryItems = sessionHistoryItems.filter(
+            (row) => String(row.sessionId) !== deletedId && String(row.sourceId) !== deletedId,
+          );
+        }
+        return fulfillJson(route, 200, []);
+      }
       if (method === "GET") {
         if (asksForCompleted) {
           if (!owned) return fulfillJson(route, 200, wantObject ? null : []);
@@ -1156,6 +1284,170 @@ Result: Checkout failures dropped using the metrics already in my draft.`,
       return fulfillJson(route, 200, []);
     }
 
+    if (url.includes("/functions/v1/list-session-debriefs")) {
+      const rehearsalSession = {
+        id: "rehearsal-e2e-session-1",
+        type: "rehearsal",
+        title: "Practice Coach — Backend",
+        overall_score: 78,
+        created_at: "2026-09-03T10:00:00.000Z",
+        questions_asked: 4,
+        status: "completed",
+        hasAnswers: true,
+        hasTranscript: true,
+      };
+      const baseAccess = {
+        canViewDebrief: true,
+        canGenerateDebrief: true,
+        canRetryDebrief: true,
+        plan: planId,
+        reasonCode: null as string | null,
+      };
+      if (debriefListMode === "plan-restricted") {
+        return fulfillJson(route, 200, {
+          correlationId: "e2e-debrief-plan",
+          access: {
+            ...baseAccess,
+            canViewDebrief: false,
+            canGenerateDebrief: false,
+            canRetryDebrief: false,
+            reasonCode: "FEATURE_NOT_AVAILABLE_FOR_PLAN",
+          },
+          sessionEligibility: {
+            totalCompletedSessions: 0,
+            eligibleSessions: 0,
+            ineligibleSessions: 0,
+          },
+          debriefs: [],
+          processingJobs: [],
+          failedJobs: [],
+          pendingEligible: [],
+        });
+      }
+      if (debriefListMode === "empty") {
+        return fulfillJson(route, 200, {
+          correlationId: "e2e-debrief-empty",
+          access: baseAccess,
+          sessionEligibility: {
+            totalCompletedSessions: 0,
+            eligibleSessions: 0,
+            ineligibleSessions: 0,
+          },
+          debriefs: [],
+          processingJobs: [],
+          failedJobs: [],
+          pendingEligible: [],
+        });
+      }
+      if (debriefListMode === "pending-rehearsal") {
+        return fulfillJson(route, 200, {
+          correlationId: "e2e-debrief-pending",
+          access: baseAccess,
+          sessionEligibility: {
+            totalCompletedSessions: 1,
+            eligibleSessions: 1,
+            ineligibleSessions: 0,
+          },
+          debriefs: [],
+          processingJobs: [],
+          failedJobs: [],
+          pendingEligible: [rehearsalSession],
+        });
+      }
+      if (debriefListMode === "processing") {
+        return fulfillJson(route, 200, {
+          correlationId: "e2e-debrief-processing",
+          access: baseAccess,
+          sessionEligibility: {
+            totalCompletedSessions: 1,
+            eligibleSessions: 1,
+            ineligibleSessions: 0,
+          },
+          debriefs: [],
+          processingJobs: [
+            {
+              jobId: "job-proc-1",
+              sessionId: rehearsalSession.id,
+              status: "processing",
+              updatedAt: "2026-09-03T11:00:00.000Z",
+              createdAt: "2026-09-03T10:55:00.000Z",
+              progressStage: "scoring",
+            },
+          ],
+          failedJobs: [],
+          pendingEligible: [],
+        });
+      }
+      if (debriefListMode === "failed") {
+        return fulfillJson(route, 200, {
+          correlationId: "e2e-debrief-failed",
+          access: baseAccess,
+          sessionEligibility: {
+            totalCompletedSessions: 1,
+            eligibleSessions: 1,
+            ineligibleSessions: 0,
+          },
+          debriefs: [],
+          processingJobs: [],
+          failedJobs: [
+            {
+              jobId: "job-fail-1",
+              sessionId: rehearsalSession.id,
+              updatedAt: "2026-09-03T11:05:00.000Z",
+              errorCode: "AI_TIMEOUT",
+              errorMessage: "Debrief generation timed out. Please retry.",
+            },
+          ],
+          pendingEligible: [],
+        });
+      }
+      if (debriefListMode === "completed") {
+        return fulfillJson(route, 200, {
+          correlationId: "e2e-debrief-completed",
+          access: baseAccess,
+          sessionEligibility: {
+            totalCompletedSessions: 1,
+            eligibleSessions: 1,
+            ineligibleSessions: 0,
+          },
+          debriefs: [
+            {
+              id: E2E_OWNER_DEBRIEF_ID,
+              created_at: "2026-08-30T10:25:00.000Z",
+              overall_grade: "B+",
+              priority_focus: "Structure",
+              session_id: E2E_COMPLETED_SESSION_ID,
+            },
+          ],
+          processingJobs: [],
+          failedJobs: [],
+          pendingEligible: [],
+        });
+      }
+      // default: allow Edge access; client may still merge REST debriefs
+      return fulfillJson(route, 200, {
+        correlationId: "e2e-debrief-default",
+        access: baseAccess,
+        sessionEligibility: {
+          totalCompletedSessions: 1,
+          eligibleSessions: 1,
+          ineligibleSessions: 0,
+        },
+        debriefs: [
+          {
+            id: E2E_OWNER_DEBRIEF_ID,
+            created_at: "2026-08-30T10:25:00.000Z",
+            overall_grade: "B+",
+            priority_focus: "Structure",
+            session_id: E2E_COMPLETED_SESSION_ID,
+          },
+        ],
+        processingJobs: [],
+        failedJobs: [],
+        pendingEligible: [],
+      });
+    }
+
     if (url.includes("/functions/v1/generate-questions")) {
       const cost = 12;
       if (spendableCredits < cost) {
@@ -1167,7 +1459,28 @@ Result: Checkout failures dropped using the metrics already in my draft.`,
       spendableCredits -= cost;
       return fulfillJson(route, 200, {
         success: true,
-        questions: [{ id: "q1", question: "Tell me about a hard problem you solved." }],
+        request_id: "e2e-generate-questions",
+        questions: [
+          {
+            id: "q1",
+            question: "Tell me about a hard problem you solved.",
+            question_text: "Tell me about a hard problem you solved.",
+            difficulty: "medium",
+            type: "Resume Based",
+            tags: [],
+            order: 1,
+          },
+          {
+            id: "q2",
+            question: "Walk me through a migration you led.",
+            question_text: "Walk me through a migration you led.",
+            difficulty: "hard",
+            type: "Resume Based",
+            tags: ["leadership"],
+            order: 2,
+          },
+        ],
+        count: 2,
         meta: { creditsCharged: cost },
       });
     }
@@ -1175,6 +1488,7 @@ Result: Checkout failures dropped using the metrics already in my draft.`,
     if (url.includes("/functions/v1/billing-catalog")) {
       return fulfillJson(route, 200, {
         source: "billing_settings",
+        payments_configured: true,
         paise: {
           pro_monthly: 249_900,
           enterprise_monthly: 679_900,

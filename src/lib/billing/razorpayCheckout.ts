@@ -3,12 +3,34 @@ import { createIdempotencyKey } from "@/lib/network/idempotency";
 import { ApiClientError } from "@/lib/api/apiClient";
 import { trackGoogleAdsPurchase } from "@/lib/ads/googleAds";
 
-export type RazorpayProductType =
-  | "pro_monthly"
-  | "enterprise_monthly"
-  | "credits_50"
-  | "credits_150"
-  | "credits_500";
+/** Must match supabase/functions/razorpay-create-order PRODUCT_TYPES. */
+export const RAZORPAY_PRODUCT_TYPES = [
+  "pro_monthly",
+  "enterprise_monthly",
+  "credits_50",
+  "credits_150",
+  "credits_500",
+] as const;
+
+export type RazorpayProductType = (typeof RAZORPAY_PRODUCT_TYPES)[number];
+
+const PRODUCT_TYPE_SET = new Set<string>(RAZORPAY_PRODUCT_TYPES);
+
+export function isRazorpayProductType(value: unknown): value is RazorpayProductType {
+  return typeof value === "string" && PRODUCT_TYPE_SET.has(value);
+}
+
+/** Reject unknown product ids before POST (edge keeps z.enum strict). */
+export function assertRazorpayProductType(value: unknown): RazorpayProductType {
+  if (!isRazorpayProductType(value)) {
+    throw new ApiClientError({
+      message: "That plan or credit pack is not available for checkout.",
+      status: 400,
+      code: "VALIDATION_ERROR",
+    });
+  }
+  return value;
+}
 
 export type RazorpayOrderResponse = {
   key_id: string;
@@ -175,6 +197,26 @@ function errorMeta(err: unknown): { code: string; status: number; msg: string } 
   return { code, status, msg };
 }
 
+/** True when checkout failed because Razorpay Edge secrets/config are missing. */
+export function isPaymentsNotConfiguredError(err: unknown): boolean {
+  const { code, status, msg } = errorMeta(err);
+  if (code === "PAYMENTS_NOT_CONFIGURED" || code === "BILLING_CONFIG_INVALID") {
+    return true;
+  }
+  if (
+    /payments are not configured|integration not configured|razorpay not configured|billing configuration invalid/i.test(
+      msg,
+    )
+  ) {
+    return true;
+  }
+  // Only treat 503 as config when the message also looks like payments config.
+  return (
+    status === 503 &&
+    /payment|razorpay|billing|configured/i.test(msg)
+  );
+}
+
 export function toPaymentUserFacingError(err: unknown): string {
   const { code, status, msg } = errorMeta(err);
 
@@ -206,14 +248,7 @@ export function toPaymentUserFacingError(err: unknown): string {
   ) {
     return "Checkout could not be prepared. Please try again.";
   }
-  if (
-    status === 503 ||
-    code === "PAYMENTS_NOT_CONFIGURED" ||
-    code === "BILLING_CONFIG_INVALID" ||
-    /payments are not configured|integration not configured|razorpay not configured|billing configuration invalid/i.test(
-      msg,
-    )
-  ) {
+  if (isPaymentsNotConfiguredError(err) || status === 503) {
     return PAYMENTS_NOT_CONFIGURED;
   }
   if (code === "PROVIDER_UNAVAILABLE" || status === 502) {
@@ -285,11 +320,12 @@ export async function createRazorpayOrder(
   promoCode?: string,
   idempotencyKey?: string,
 ): Promise<RazorpayOrderResponse> {
+  const safeProduct = assertRazorpayProductType(productType);
   const key = idempotencyKey ?? createIdempotencyKey("razorpay-create-order");
   return fetchEdgeJson<RazorpayOrderResponse>(
     "razorpay-create-order",
     {
-      product_type: productType,
+      product_type: safeProduct,
       promo_code: promoCode,
     },
     {
@@ -313,13 +349,14 @@ export async function openRazorpayCheckout(options: {
   if (checkoutInFlight) {
     throw new Error("A checkout is already in progress.");
   }
+  const safeProduct = assertRazorpayProductType(options.productType);
   checkoutInFlight = true;
-  const orderKey = checkoutOrderKey(options.productType, options.promoCode);
+  const orderKey = checkoutOrderKey(safeProduct, options.promoCode);
 
   try {
     // Order first — never load checkout.js / open modal without a valid order.
     const order = await createRazorpayOrder(
-      options.productType,
+      safeProduct,
       options.promoCode,
       orderKey,
     );
@@ -338,7 +375,7 @@ export async function openRazorpayCheckout(options: {
         amount: order.amount,
         currency: order.currency,
         name: "Career Pilot",
-        description: razorpayDescription(options.productType),
+        description: razorpayDescription(safeProduct),
         order_id: order.order_id,
         prefill: {
           email: options.userEmail,

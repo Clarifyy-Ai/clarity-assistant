@@ -162,6 +162,10 @@ export default function AdminGovIngest() {
         toast.error("PDF parsing failed. Try pasted text or a smaller PDF.");
         return;
       }
+      if (/Couldn't reach the extract service/i.test(msg)) {
+        toast.error(msg);
+        return;
+      }
       toast.error(msg);
       return;
     }

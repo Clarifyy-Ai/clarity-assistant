@@ -32,6 +32,9 @@ import {
   isCompanyBriefInFlight,
   type CompanyBriefJob,
 } from "@/lib/company/companyResearchJob";
+import { mapCompanyBriefJobToProgress } from "@/lib/async/jobAdapters";
+import { JobProgressCard } from "@/components/async/JobProgressCard";
+import { ProcessingStatus } from "@/components/async/ProcessingStatus";
 import {
   saveActiveCompanyJob,
   clearActiveCompanyJob,
@@ -39,6 +42,14 @@ import {
   findInFlightCompanyJob,
 } from "@/lib/company/companyResearchSession";
 import { ApiClientError } from "@/lib/api/apiClient";
+import {
+  isInsufficientCreditsError,
+  openUpgradeIfInsufficientCredits,
+  openUpgradeIfCapabilityRequired,
+} from "@/lib/network/aiErrorUx";
+import { InsufficientCreditsAction } from "@/components/billing/InsufficientCreditsAction";
+import { useCreditBalance } from "@/components/billing/useCreditState";
+import { evaluateActionCreditGate } from "@/lib/billing/actionCreditGate";
 
 /**
  * The Edge Function is the only writer of `company_research`. Long-running
@@ -47,11 +58,8 @@ import { ApiClientError } from "@/lib/api/apiClient";
  * the row is committed.
  */
 function progressLabel(job: CompanyBriefJob | null): string {
-  const stage = String(job?.progressStage ?? job?.status ?? "").toLowerCase();
-  if (stage === "saving") return "Saving your brief…";
-  if (stage === "generating" || stage === "processing") return "Generating AI brief…";
-  if (stage === "queued") return "Queued — starting generation…";
-  return "Generating AI brief…";
+  if (!job) return "Loading saved brief…";
+  return mapCompanyBriefJobToProgress(job).message ?? "Generating AI brief…";
 }
 
 export default function CompanyProfile() {
@@ -69,6 +77,8 @@ export default function CompanyProfile() {
   const [needsGenerateConfirm, setNeedsGenerateConfirm] = useState(false);
   const [confirmGenerate, setConfirmGenerate] = useState(false);
   const [job, setJob] = useState<CompanyBriefJob | null>(null);
+  const [creditGateDenied, setCreditGateDenied] = useState(false);
+  const { balance: creditBalance, known: creditKnown } = useCreditBalance();
   const inFlightRef = useRef(false);
   const abortRef = useRef(false);
   const jobIdRef = useRef<string | null>(null);
@@ -82,11 +92,34 @@ export default function CompanyProfile() {
     }
     // Guards double-click: a second submit would spend credits again.
     if (inFlightRef.current) return;
+
+    if (force) {
+      const gate = evaluateActionCreditGate({
+        operationKey: "company_research",
+        balance: creditKnown ? creditBalance : null,
+        balanceKnown: creditKnown,
+      });
+      if (gate.status === "insufficient" || gate.status === "unknown_balance") {
+        setCreditGateDenied(true);
+        setLoading(false);
+        setNeedsGenerateConfirm(true);
+        openUpgradeIfInsufficientCredits(
+          new ApiClientError({
+            message: "Not enough credits for company research.",
+            status: 402,
+            code: "INSUFFICIENT_CREDITS",
+          }),
+        );
+        return;
+      }
+    }
+
     inFlightRef.current = true;
     abortRef.current = false;
 
     setLoading(true);
     setError(null);
+    setCreditGateDenied(false);
 
     try {
       if (!force) {
@@ -209,6 +242,13 @@ export default function CompanyProfile() {
         setNeedsGenerateConfirm(true);
         return;
       }
+      if (isInsufficientCreditsError(err)) {
+        setCreditGateDenied(true);
+        openUpgradeIfInsufficientCredits(err);
+        setNeedsGenerateConfirm(true);
+        return;
+      }
+      openUpgradeIfCapabilityRequired(err);
       const msg = userFacingCompanyBriefError(err);
       console.error("[CompanyProfile] generateBrief error:", err);
       setError(msg);
@@ -217,7 +257,7 @@ export default function CompanyProfile() {
       inFlightRef.current = false;
       setLoading(false);
     }
-  }, [companyName, user?.id, params]);
+  }, [companyName, user?.id, params, creditBalance, creditKnown]);
 
   const cancelInFlight = useCallback(async () => {
     abortRef.current = true;
@@ -355,6 +395,15 @@ export default function CompanyProfile() {
         {error ? (
           <InlineErrorRetry message={error} onRetry={() => void resumeOrRetry()} />
         ) : null}
+        {creditGateDenied ? (
+          <InsufficientCreditsAction
+            operationKey="company_research"
+            required={AI_CREDIT_COSTS.company_research}
+            balance={creditKnown ? creditBalance : null}
+            mode="credits"
+            returnTo={`/app/companies/${encodeURIComponent(companyName)}`}
+          />
+        ) : null}
         <Card className="p-6 space-y-4 text-center">
           <Building2 className="w-10 h-10 text-primary mx-auto" />
           <p className="text-sm text-muted-foreground">
@@ -368,6 +417,7 @@ export default function CompanyProfile() {
             <Button
               variant="primary"
               leftIcon={<Sparkles className="w-4 h-4" />}
+              disabled={creditGateDenied}
               onClick={() => setConfirmGenerate(true)}
             >
               Generate brief ({AI_CREDIT_COSTS.company_research} credits)
@@ -405,14 +455,21 @@ export default function CompanyProfile() {
             { label: companyName || "Loading" },
           ]}
         />
-        {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
-        {job && (job.status === "queued" || job.status === "processing") ? (
-          <div className="flex justify-center">
-            <Button variant="secondary" size="sm" onClick={() => void cancelInFlight()}>
-              Cancel generation
-            </Button>
-          </div>
-        ) : null}
+        {job && isCompanyBriefInFlight(job.status) ? (
+          <JobProgressCard
+            title="Company research"
+            progress={mapCompanyBriefJobToProgress(job)}
+            onCancel={() => void cancelInFlight()}
+          />
+        ) : job ? (
+          <JobProgressCard
+            title="Company research"
+            progress={mapCompanyBriefJobToProgress(job)}
+            onRetry={() => void resumeOrRetry()}
+          />
+        ) : (
+          <ProcessingStatus message="Loading saved brief…" stage="load" />
+        )}
       </PageContent>
     );
   }

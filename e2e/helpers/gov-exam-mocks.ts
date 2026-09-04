@@ -297,12 +297,21 @@ export async function navigateToGovExamReview(
   await page.goto(
     `/app/mock-test/generate?examId=${GOV_EXAM_ID}&stageId=${GOV_STAGE_ID}&basis=${basis}`,
   );
-  await expect(page.getByRole("heading", { name: /Generate practice paper/i })).toBeVisible({
+  await expect(page.getByTestId("gov-generate-wizard")).toBeVisible({
     timeout: 30_000,
   });
-  await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByTestId("gov-generate-wizard")).toHaveAttribute("data-hydrating", "0", {
+    timeout: 20_000,
+  });
+  await expect(page.getByTestId("gov-generate-wizard")).toHaveAttribute("data-exam-ready", "1");
+  const continueBtn = page.getByTestId("gov-generate-continue");
+  await expect(continueBtn).toBeEnabled({ timeout: 15_000 });
+  await page.locator("[data-testid=gov-generate-wizard]").evaluate((el) => {
+    (document.activeElement as HTMLElement | null)?.blur?.();
+  });
+  await continueBtn.click({ force: true });
+  await continueBtn.click({ force: true });
+  await continueBtn.click({ force: true });
   const reviewAction = options?.reviewAction ?? "Generate Practice Paper";
   const reviewButton = page.getByRole("button", { name: reviewAction });
   await expect(reviewButton).toBeVisible({ timeout: 15_000 });

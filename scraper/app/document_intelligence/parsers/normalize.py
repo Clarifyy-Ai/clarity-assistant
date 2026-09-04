@@ -35,10 +35,23 @@ def section_lines(text: str, aliases: dict[str, set[str]]) -> dict[str, list[str
     reverse = {alias.casefold(): name for name, values in aliases.items() for alias in values}
     for raw_line in text.splitlines():
         line = clean_item(raw_line)
+        if not line:
+            continue
         key = line.rstrip(":").casefold()
         if key in reverse:
             current = reverse[key]
             sections.setdefault(current, [])
-        elif current and line:
+            continue
+        # Inline "Technical Skills: React, TypeScript"
+        if ":" in line:
+            label, value = line.split(":", 1)
+            label_key = clean_item(label).rstrip(":").casefold()
+            if label_key in reverse and value.strip():
+                section_name = reverse[label_key]
+                sections.setdefault(section_name, [])
+                sections[section_name].append(clean_item(value))
+                current = section_name
+                continue
+        if current:
             sections[current].append(line)
     return sections

@@ -1,5 +1,6 @@
 // src/lib/ai/anthropicClient.ts — PRODUCTION READY
-import { fetchEdge, fetchEdgeJson, getAuthHeaders } from "@/lib/network/fetchEdge";
+import { fetchEdgeJson, getAuthHeaders } from "@/lib/network/fetchEdge";
+import { fetchLiveEdgeWithRetry } from "@/lib/session/liveSessionRetry";
 import { createIdempotencyKey } from "@/lib/api/functions";
 import { consumeSSEStream } from "@/lib/ai/geminiClient";
 import { ApiClientError } from "@/lib/api/apiClient";
@@ -44,7 +45,15 @@ export async function streamClaudeHint(opts: ClaudeStreamOptions): Promise<void>
     interview_type: context.session_type ?? "behavioral",
     target_company: context.target_company ?? "",
     transcript: context.last_transcript ?? "",
-    resume_context: context.resume_experience_summary ?? "",
+    resume_context: [
+      context.resume_experience_summary ?? "",
+      context.preference_context ?? "",
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+    preference_context: context.preference_context ?? "",
+    skills_not_to_claim: context.skills_not_to_claim ?? [],
+    experience_level: context.experience_level ?? "",
     simple_language: simpleLanguage ?? false,
     session_id: sessionId,
     ...(mode ? { mode } : {}),
@@ -60,26 +69,12 @@ export async function streamClaudeHint(opts: ClaudeStreamOptions): Promise<void>
       "Idempotency-Key": idempotencyKey,
       "x-idempotency-key": idempotencyKey,
     });
-    const response = await fetchEdge("generate-hint", body, {
+    const response = await fetchLiveEdgeWithRetry("generate-hint", body, {
       method: "POST",
       headers,
       signal,
       timeoutMs: 60_000,
     });
-    if (!response.ok) {
-      const errText = await response.text().catch(() => `HTTP ${response.status}`);
-      let parsed: { error?: string; code?: string } | null = null;
-      try {
-        parsed = JSON.parse(errText) as { error?: string; code?: string };
-      } catch {
-        parsed = null;
-      }
-      throw new ApiClientError({
-        message: parsed?.error || `Hint generation failed (${response.status}).`,
-        status: response.status,
-        code: parsed?.code ?? "",
-      });
-    }
     if (!response.body) {
       throw new ApiClientError({
         message: "Hint stream returned an empty body.",

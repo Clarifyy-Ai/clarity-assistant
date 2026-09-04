@@ -10,24 +10,42 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
+const canInstallListeners = new Set<(ready: boolean) => void>();
+
+/**
+ * Capture beforeinstallprompt as early as this module loads so Chrome never
+ * warns that preventDefault was missing (useEffect listeners attach too late).
+ */
+function captureBeforeInstallPrompt(event: Event) {
+  event.preventDefault();
+  deferredPrompt = event as BeforeInstallPromptEvent;
+  for (const listener of canInstallListeners) listener(true);
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeinstallprompt", captureBeforeInstallPrompt);
+}
+
+/** Test/helper: whether a deferred install prompt is currently held. */
+export function hasDeferredInstallPrompt(): boolean {
+  return deferredPrompt != null;
+}
 
 export function usePwaInstallPrompt() {
   const [canInstall, setCanInstall] = useState(Boolean(deferredPrompt));
   const [readyAfterPractice, setReadyAfterPractice] = useState(hasCompletedFirstPractice);
 
   useEffect(() => {
-    const handler = (event: Event) => {
-      event.preventDefault();
-      deferredPrompt = event as BeforeInstallPromptEvent;
-      setCanInstall(true);
-    };
+    const onCanInstall = (ready: boolean) => setCanInstall(ready);
+    canInstallListeners.add(onCanInstall);
+    // Sync in case the module-level listener already captured the event.
+    setCanInstall(Boolean(deferredPrompt));
 
     const onFirstPractice = () => setReadyAfterPractice(true);
-
-    window.addEventListener("beforeinstallprompt", handler);
     window.addEventListener(FIRST_PRACTICE_EVENT, onFirstPractice);
+
     return () => {
-      window.removeEventListener("beforeinstallprompt", handler);
+      canInstallListeners.delete(onCanInstall);
       window.removeEventListener(FIRST_PRACTICE_EVENT, onFirstPractice);
     };
   }, []);
@@ -39,6 +57,7 @@ export function usePwaInstallPrompt() {
     const { outcome } = await deferredPrompt.userChoice;
     deferredPrompt = null;
     setCanInstall(false);
+    for (const listener of canInstallListeners) listener(false);
     return outcome === "accepted";
   }, []);
 

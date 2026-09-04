@@ -4,19 +4,25 @@ import { cn } from "@/lib/utils";
 
 function computeStrength(
   isAnswering: boolean,
-  wpm: number,
-  fillerCount: number,
-  elapsedSeconds: number
+  wpm: number | null,
+  fillerCount: number | null,
+  elapsedSeconds: number,
 ): "off" | "weak" | "ok" | "strong" {
   if (!isAnswering && elapsedSeconds < 5) return "off";
+  // Without measured speech metrics, do not invent a "strong" path.
+  if (wpm == null && fillerCount == null) return "off";
 
   let score = 0;
 
-  if (wpm >= 90 && wpm <= 160) score += 2;
-  else if (wpm > 0) score += 1;
+  if (wpm != null) {
+    if (wpm >= 90 && wpm <= 160) score += 2;
+    else if (wpm > 0) score += 1;
+  }
 
-  if (fillerCount === 0) score += 2;
-  else if (fillerCount <= 2) score += 1;
+  if (fillerCount != null) {
+    if (fillerCount === 0) score += 2;
+    else if (fillerCount <= 2) score += 1;
+  }
 
   if (elapsedSeconds >= 30 && elapsedSeconds <= 130) score += 2;
   else if (elapsedSeconds > 10) score += 1;
@@ -43,9 +49,13 @@ const CONFIG = {
 
 export function OverlayAnswerStrength() {
   const isAnswering = useSessionStore((s) => s.is_answering ?? false);
-  const wpm = useSessionStore((s) => s.current_wpm ?? 0);
-  const fillerCount = useSessionStore((s) => s.filler_count ?? 0);
+  const wpmRaw = useSessionStore((s) => s.current_wpm);
+  const fillerRaw = useSessionStore((s) => s.filler_count);
   const elapsed = useSessionStore((s) => s.question_elapsed_seconds ?? 0);
+  const wpm =
+    typeof wpmRaw === "number" && Number.isFinite(wpmRaw) ? wpmRaw : null;
+  const fillerCount =
+    typeof fillerRaw === "number" && Number.isFinite(fillerRaw) ? fillerRaw : null;
 
   const strength = computeStrength(isAnswering, wpm, fillerCount, elapsed);
   const { bars, color, text } = CONFIG[strength];

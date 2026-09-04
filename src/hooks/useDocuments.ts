@@ -14,6 +14,10 @@ import { getMimeType } from "@/lib/utils/fileUtils";
 import { sha256, sha256Buffer } from "@/lib/utils/hashUtils";
 import { inspectDocumentFile } from "@/lib/documents/uploadValidation";
 import { userFacingDocumentError } from "@/lib/documents/processingJobs";
+import {
+  extractJdFieldsFromText,
+  shouldKeepJdParseSuccess,
+} from "@/lib/documents/parseNormalize";
 import { clearSessionAiContext } from "@/lib/ai/sessionAiContext";
 import { toast } from "sonner";
 import type {
@@ -23,7 +27,7 @@ import type {
   SavedAnswer,
   AnswerCategory,
 } from "@/types/document.types";
-import type { Tables } from "@/integrations/supabase";
+import type { Tables, TablesUpdate } from "@/integrations/supabase";
 
 // ─────────────────────────────────────────────────────────────────
 // answer_bank row → SavedAnswer adapter
@@ -637,6 +641,11 @@ export function useDocuments(options?: UseDocumentsOptions) {
         clearSessionAiContext();
       } catch (parseErr) {
         const message = userFacingDocumentError(parseErr);
+        const existing = await jobDescriptionsDB.getByIdMaybe(jdId).catch(() => null);
+        if (shouldKeepJdParseSuccess(existing)) {
+          await loadDocuments();
+          return { jdId, error: null };
+        }
         await jobDescriptionsDB.update(jdId, {
           parse_status: "error",
           parse_error: message,
@@ -660,14 +669,44 @@ export function useDocuments(options?: UseDocumentsOptions) {
     }
   }, [user]);
 
-  // Persist pasted JD text as ready — structured skills come from gap-analysis.
+  // Persist pasted/TXT JD text as ready and extract KPI fields into parsed_data.
   async function parseJobDescription(jdId: string, rawText: string): Promise<void> {
     try {
-      await jobDescriptionsDB.update(jdId, {
+      const fields = extractJdFieldsFromText(rawText);
+      const existing = await jobDescriptionsDB.getByIdMaybe(jdId).catch(() => null);
+      const patch: TablesUpdate<"job_descriptions"> = {
         content: rawText,
         parse_status: "ready",
         parse_error: null,
-      });
+        parsed_data: {
+          required_skills: fields.required_skills,
+          location: fields.location,
+          role: fields.role,
+          company: fields.company,
+          salary_range: fields.salary_range,
+        },
+      };
+
+      const companyEmpty = !existing?.company?.trim();
+      if (companyEmpty && fields.company) {
+        patch.company = fields.company;
+      }
+
+      const roleEmpty =
+        !existing?.target_role?.trim() ||
+        existing.target_role === "Unknown Role" ||
+        !existing?.title?.trim() ||
+        existing.title === "Unknown Role";
+      if (roleEmpty && fields.role) {
+        if (!existing?.target_role?.trim() || existing.target_role === "Unknown Role") {
+          patch.target_role = fields.role;
+        }
+        if (!existing?.title?.trim() || existing.title === "Unknown Role") {
+          patch.title = fields.role;
+        }
+      }
+
+      await jobDescriptionsDB.update(jdId, patch);
       clearSessionAiContext();
       if (mountedRef.current) await loadDocuments();
     } catch (err) {
@@ -719,6 +758,11 @@ export function useDocuments(options?: UseDocumentsOptions) {
           return { error: null };
         } catch (err) {
           const message = userFacingDocumentError(err);
+          const existing = await jobDescriptionsDB.getByIdMaybe(jdId).catch(() => null);
+          if (shouldKeepJdParseSuccess(existing)) {
+            await loadDocuments();
+            return { error: null };
+          }
           await jobDescriptionsDB.update(jdId, {
             parse_status: "error",
             parse_error: message,

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { featureFlagsDB } from "@/lib/supabase/database";
 import { useGlobalStore }       from "@/store";
-import { FEATURE_PLAN_GATES, isKillOnlyFlag } from "@/lib/constants/features";
+import { FEATURE_FLAGS, FEATURE_PLAN_GATES, isKillOnlyFlag } from "@/lib/constants/features";
 import { getPlanDisplayName, type DisplayTier } from "@/lib/constants/pricing";
 import { toAdminUserMessage } from "@/lib/admin/adminErrors";
 
@@ -56,7 +56,8 @@ const CATEGORIES: Record<string, FeatureFlagId[]> = {
   "Audio":       ["audio_analysis", "filler_detection", "wpm_tracking", "diarization"],
   "Overlay":     ["overlay", "screenshot_capture"],
   "Data":        ["answer_bank", "analytics", "calendar_sync"],
-  "Access":      ["byok", "priority_support", "coach_sessions"],
+  // BYOK is retired — omit from Access so admins cannot advertise it as a product toggle.
+  "Access":      ["priority_support", "coach_sessions"],
   "Dev":         ["experimental_ui", "debug_panel"],
 };
 
@@ -108,15 +109,15 @@ export default function AdminFeatureFlags() {
   }, [setFeatureKillSwitches]);
 
   useEffect(() => {
-    const built: FlagRow[] = Object.entries(FEATURE_PLAN_GATES ?? {}).map(
-      ([id, minPlan]) => ({
+    const built: FlagRow[] = Object.entries(FEATURE_PLAN_GATES ?? {})
+      .filter(([id]) => id !== FEATURE_FLAGS.BYOK)
+      .map(([id, minPlan]) => ({
         id:       id as FeatureFlagId,
         minPlan:  minPlan as PlanId,
         category: getCategoryForFlag(id as FeatureFlagId),
         isBeta:   id.includes("beta") || id.includes("experimental"),
         enabled: dbFlags[id] !== false,
-      })
-    );
+      }));
     setRows(built);
   }, [dbFlags]);
 

@@ -241,6 +241,16 @@ describe("attempt limits and error mapping", () => {
     expect(mapped.details?.available_count).toBe(2);
     expect(userMessageForAssessmentError(mapped.code, mapped.details)).toMatch(/6/);
   });
+
+  it("maps CONTENT_INSUFFICIENT to a personalization-safe user message", () => {
+    const mapped = mapAssessmentRpcError({
+      message: "Not enough approved content for personalized blueprint",
+      details: "CONTENT_INSUFFICIENT",
+    });
+    expect(mapped.code).toBe("CONTENT_INSUFFICIENT");
+    expect(userMessageForAssessmentError(mapped.code)).toMatch(/personalized blueprint|approved question-bank/i);
+    expect(userMessageForAssessmentError(mapped.code)).not.toMatch(/pay|credit|upgrade/i);
+  });
 });
 
 describe("start idempotency key", () => {

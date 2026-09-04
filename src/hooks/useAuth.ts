@@ -22,6 +22,11 @@ import { authAbsoluteUrl } from "@/lib/auth/appOrigin";
 import type { AuthProvider, ProfileRow } from "@/types";
 import type { UserProfile } from "@/types/user.types";
 import { getEnabledOAuthProviders } from "@/lib/auth/oauthProviders";
+import { getPostOnboardingPath } from "@/lib/auth/postAuthRedirect";
+import {
+  preferredReturnToFromNavigation,
+  sanitizeReturnTo,
+} from "@/lib/auth/safeReturnTo";
 import { omitPinnedProfileColumns } from "@/lib/profile/clientUpdateGuard";
 import { normalizePlanId } from "@/lib/billing/planIds";
 import { FEATURE_PLAN_GATE, type FeatureFlag } from "@/lib/constants/features";
@@ -486,7 +491,16 @@ export function useAuth() {
       }
 
       await useAuthStore.getState().loadProfile();
-      navigate("/app/dashboard", { replace: true });
+      const search = typeof window !== "undefined" ? window.location.search : "";
+      const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+      const preferred =
+        preferredReturnToFromNavigation({ searchParams: params }) ??
+        sanitizeReturnTo(
+          typeof window !== "undefined"
+            ? (window.history.state as { from?: string } | null)?.from ?? null
+            : null,
+        );
+      navigate(getPostOnboardingPath(preferred), { replace: true });
     },
     [navigate],
   );

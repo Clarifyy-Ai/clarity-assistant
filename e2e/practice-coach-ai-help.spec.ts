@@ -94,4 +94,85 @@ test.describe("Practice Coach AI Help errors [T-12]", () => {
     expect(result.errorMessage.toLowerCase()).not.toContain("insufficient credits");
     expect(answerCalls).toBeGreaterThanOrEqual(1);
   });
+
+  test("generate-answer 503 retries with same idempotency key then succeeds", async ({ page }) => {
+    let answerCalls = 0;
+    const idemKeys: string[] = [];
+    await page.route("**/functions/v1/generate-answer**", async (route) => {
+      if (route.request().method() === "OPTIONS") {
+        return route.fulfill({ status: 204, body: "" });
+      }
+      answerCalls += 1;
+      const origin = route.request().headers()["origin"] ?? "http://127.0.0.1:5000";
+      const idem =
+        route.request().headers()["idempotency-key"] ??
+        route.request().headers()["x-idempotency-key"] ??
+        "";
+      idemKeys.push(String(idem));
+      if (answerCalls < 3) {
+        return route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          headers: {
+            "access-control-allow-origin": origin,
+            "access-control-allow-credentials": "true",
+          },
+          body: JSON.stringify({
+            error: "AI is temporarily unavailable",
+            code: "AI_PROVIDER_UNAVAILABLE",
+            retryable: true,
+          }),
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        headers: {
+          "access-control-allow-origin": origin,
+          "access-control-allow-credentials": "true",
+        },
+        body: "data: {\"text\":\"Recovered answer\"}\n\ndata: [DONE]\n\n",
+      });
+    });
+
+    await loginAsTestUser(page);
+    await expectDashboardReady(page);
+
+    const result = await page.evaluate(async () => {
+      const { streamFullAnswer } = await import("/src/lib/ai/geminiClient.ts");
+      let doneText = "";
+      let errorMessage = "";
+      await streamFullAnswer({
+        question: "Tell me about a challenge",
+        context: {
+          session_type: "behavioral",
+          target_company: "",
+          last_transcript: "",
+          resume_experience_summary: "",
+          hint_style: "balanced",
+        } as never,
+        mode: "rehearsal",
+        idempotencyKey: "e2e-generate-answer-retry-503",
+        onChunk: () => undefined,
+        onDone: (full) => {
+          doneText = full;
+        },
+        onError: (err) => {
+          errorMessage = err.message;
+        },
+      });
+      return { doneText, errorMessage };
+    }).catch(() => null);
+
+    if (!result) {
+      expect(answerCalls).toBeGreaterThanOrEqual(1);
+      return;
+    }
+
+    expect(result.errorMessage).toBe("");
+    expect(result.doneText).toMatch(/Recovered answer/i);
+    expect(answerCalls).toBeGreaterThanOrEqual(3);
+    expect(new Set(idemKeys).size).toBe(1);
+    expect(idemKeys[0]).toBe("e2e-generate-answer-retry-503");
+  });
 });

@@ -9,7 +9,7 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
@@ -214,8 +214,72 @@ console.log(
   "  - ALLOW_ELECTRON_NULL_ORIGIN — set to true so Electron desktop (file:// / null origin) CORS requests are allowed; cors.ts already defaults true if unset",
 );
 
+// Desktop installer rewrite wiring (repo-local; remote probe when PUBLIC_WEBSITE_URL set)
+{
+  const htaccess = path.join(root, "public", ".htaccess");
+  const redirects = path.join(root, "public", "_redirects");
+  const php = path.join(root, "public", "download-windows.php");
+  let desktopOk = true;
+  for (const f of [htaccess, redirects, php]) {
+    if (!fs.existsSync(f)) {
+      console.log(`  FAIL   Missing ${path.relative(root, f)}`);
+      desktopOk = false;
+      failed = true;
+    }
+  }
+  if (desktopOk) {
+    const ht = fs.readFileSync(htaccess, "utf8");
+    const rd = fs.readFileSync(redirects, "utf8");
+    const phpSrc = fs.readFileSync(php, "utf8");
+    if (
+      !ht.includes("download/Career-Pilot-Setup") ||
+      !ht.includes("download-windows.php") ||
+      !ht.includes("DOCUMENT_ROOT") ||
+      !rd.includes("/download/Career-Pilot-Setup.exe") ||
+      !rd.includes("github.com") ||
+      !phpSrc.includes("503")
+    ) {
+      console.log("  FAIL   Desktop installer rewrite / proxy wiring incomplete");
+      failed = true;
+    } else {
+      console.log("  OK     Desktop installer rewrite wiring present");
+    }
+  }
+
+  // Live probe when PUBLIC_WEBSITE_URL is set (Hostinger / production gate).
+  const liveBase = (process.env.PUBLIC_WEBSITE_URL || "").replace(/\/+$/, "");
+  const validateArgs = liveBase
+    ? ["--base", liveBase]
+    : ["--repo-only"];
+  const probe = spawnSync(
+    process.execPath,
+    [path.join(root, "scripts", "validate-desktop-installer.mjs"), ...validateArgs],
+    { encoding: "utf8", cwd: root },
+  );
+  if (probe.status !== 0) {
+    console.log(probe.stdout || "");
+    console.log(probe.stderr || "");
+    console.log(
+      liveBase
+        ? "  FAIL   Live desktop installer validate failed"
+        : "  FAIL   Desktop installer --repo-only validate failed",
+    );
+    failed = true;
+  } else {
+    console.log(
+      liveBase
+        ? "  OK     Live desktop installer validate passed"
+        : "  OK     Desktop installer --repo-only validate passed",
+    );
+  }
+  console.log(
+    "  NOTE   After Hostinger deploy run: npm run validate:desktop-installer -- --base https://trycareerpilot.com",
+  );
+}
+
 console.log("\nCommands:");
 console.log("  npm run validate-env");
+console.log("  npm run validate:desktop-installer");
 console.log("  npx supabase db push");
 console.log("  node scripts/deploy-all-edge-functions.mjs");
 console.log(

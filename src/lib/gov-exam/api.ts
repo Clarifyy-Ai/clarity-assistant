@@ -281,6 +281,8 @@ export type CreateExamPaperRequest = {
   idempotencyKey: string;
   /** auto (default) | edge | python — server picks runtime when auto. */
   generator?: "auto" | "edge" | "python";
+  /** Snapshot id from check-exam-paper-availability (correlation id). */
+  availabilitySnapshotId?: string;
   generationConfig?: {
     examId: string;
     stageId: string;
@@ -313,6 +315,8 @@ export type PaperJobResult = {
   requested?: number;
   balance?: number;
   idempotentReplay?: boolean;
+  /** Present when the client poll window ended while the durable job is still running. */
+  progressPercent?: number | null;
 };
 
 export async function createExamPaper(
@@ -400,6 +404,58 @@ export async function saveTestAnswers(
   nextVersions: Record<string, number>;
 }> {
   return fetchEdgeJson("save-test-answer", { testId, answers });
+}
+
+export type PauseResumeResult = {
+  success: boolean;
+  attemptPhase?: string;
+  pausedAt?: string | null;
+  expiresAt?: string | null;
+  totalPausedMs?: number;
+  startedAt?: string | null;
+  alreadyPaused?: boolean;
+  alreadyActive?: boolean;
+};
+
+export async function pauseTest(testId: string): Promise<PauseResumeResult> {
+  return fetchEdgeJson("pause-test", { testId });
+}
+
+export async function resumeTest(testId: string): Promise<PauseResumeResult> {
+  return fetchEdgeJson("resume-test", { testId });
+}
+
+export type AssessmentAvailabilityItem = {
+  success?: boolean;
+  template_id?: string;
+  template_slug?: string;
+  template_title?: string;
+  requested?: number;
+  available?: number;
+  requested_count?: number;
+  available_count?: number;
+  shortage?: number;
+  attempts_used?: number;
+  max_attempts?: number | null;
+  resumable_test_id?: string | null;
+  startable?: boolean;
+  code?: string | null;
+};
+
+export async function checkAssessmentAvailability(
+  templateIds: string[],
+): Promise<AssessmentAvailabilityItem[]> {
+  if (templateIds.length === 0) return [];
+  const result = await fetchEdgeJson<{
+    items?: AssessmentAvailabilityItem[];
+    template_id?: string;
+    startable?: boolean;
+  } & AssessmentAvailabilityItem>("check-assessment-availability", {
+    template_ids: templateIds,
+  });
+  if (Array.isArray(result.items)) return result.items;
+  if (result.template_id) return [result];
+  return [];
 }
 
 export type TopicMasterySummary = {
@@ -677,6 +733,9 @@ export type ExamPaperAvailability = {
   durationMinutes?: number | null;
   inventoryClass?: "official_pyq" | "approved_practice";
   inventorySource?: "canonical_rpc" | "python_authoritative";
+  /** Shared with create-exam-paper so Review and Generate cite the same preflight. */
+  availabilitySnapshotId?: string;
+  correlationId?: string;
   /** Availability is a read-only preflight and never charges credits. */
   billable?: false;
   creditCost?: 0;

@@ -60,6 +60,7 @@ const BROWSER_FUNCTIONS = [
   "prep-tool",
   "company-research",
   "export-user-data",
+  "get-user-storage-usage",
   "parse-resume",
   "parse-document",
   "parse-question-pdf",

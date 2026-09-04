@@ -131,3 +131,30 @@ def test_resume_and_jd_structured_parsers_leave_missing_values_empty() -> None:
     assert jd_result.job_title == "Backend Engineer"
     assert jd_result.company is None
     assert jd_result.responsibilities == ["Build APIs"]
+
+
+def test_resume_parses_inline_and_key_skills_aliases() -> None:
+    text = (
+        "Shabeena Sultana Shaik\n"
+        "shabeena@example.com\n\n"
+        "Technical Skills: Selenium, Java, API Testing\n\n"
+        "Key Skills\nPostman\nCypress\n\n"
+        "Experience\nSDET Trainee at QSpiders"
+    )
+    resume = ParsedDocument(
+        parser_version="test",
+        filename="resume.txt",
+        media_type="text/plain",
+        pages=[PageResult(page_number=1, text=text, extraction_method="text")],
+        text=text,
+        confidence=1.0,
+        review_required=False,
+    )
+    result = parse_resume(resume)
+    assert result is not None
+    joined = " ".join(result.skills).casefold()
+    assert "selenium" in joined
+    assert "java" in joined
+    assert "api testing" in joined
+    assert "postman" in joined
+    assert "cypress" in joined

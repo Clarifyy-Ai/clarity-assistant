@@ -36,7 +36,10 @@ describe("DD layout density contracts", () => {
     const coding = src("pages/app/coding/CodingAssessment.tsx");
     expect(coding).toMatch(/min-h-\[calc\(100vh/);
     expect(coding).toMatch(/min-h-\[min\(52vh/);
+    expect(coding).toMatch(/lg:grid-cols-\[minmax\(0,1fr\)_minmax\(0,1\.25fr\)\]/);
+    expect(coding).toMatch(/data-testid="coding-results-panel"/);
     expect(coding).not.toMatch(/className="mt-2 h-64 /);
+    expect(coding).not.toMatch(/\bstartTime\b/);
   });
 
   it("AI Hub does not double-pad or nest max-w-6xl", () => {
@@ -58,7 +61,7 @@ describe("DD layout density contracts", () => {
     const verify = src("pages/public/VerifyCertificate.tsx");
     expect(verify).toMatch(/MarketingLayout/);
     expect(verify).toMatch(/MARKETING_SHELL/);
-    expect(verify).toMatch(/max-w-3xl/);
+    expect(verify).toMatch(/max-w-4xl/);
     expect(verify).not.toMatch(/PAGE_SHELL_STANDARD/);
   });
 
@@ -71,5 +74,14 @@ describe("DD layout density contracts", () => {
     expect(layout).toMatch(/min-w-0 min-h-0/);
     expect(hub).not.toMatch(/className="space-y-4 p-4"/);
     expect(hub).not.toMatch(/className="p-4"/);
+  });
+
+  it("System Design uses min-w-0 grid split and a stats rail", () => {
+    const design = src("pages/app/prep/SystemDesign.tsx");
+    expect(design).toMatch(/data-testid="system-design-split"/);
+    expect(design).toMatch(/minmax\(0,1fr\)/);
+    expect(design).toMatch(/data-testid="system-design-stats"/);
+    expect(design).toMatch(/min-w-0/);
+    expect(design).not.toMatch(/flex-1 space-y-4(?![\s\S]*min-w-0)/);
   });
 });

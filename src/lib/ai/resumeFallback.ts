@@ -1,5 +1,6 @@
 import type { ParsedResume, ParsedExperience } from "@/types/ai.types";
 import type { InterviewType } from "@/types/session.types";
+import { extractSkillsFromResumeText } from "@/lib/documents/parseNormalize";
 
 export interface ResumeTalkingPoints {
   intro: string;
@@ -21,7 +22,7 @@ export interface ResumeContext {
 export function buildResumeContext(parsed: ParsedResume | null): ResumeContext | null {
   if (!parsed) return null;
 
-  const allSkills = [...new Set([...(parsed.skills ?? []), ...(parsed.tech_stack ?? [])])];
+  const allSkills = collectResumeSkills(parsed);
 
   return {
     skills_count: allSkills.length,
@@ -32,13 +33,22 @@ export function buildResumeContext(parsed: ParsedResume | null): ResumeContext |
   };
 }
 
+function collectResumeSkills(parsed: ParsedResume): string[] {
+  const fromArrays = [...new Set([...(parsed.skills ?? []), ...(parsed.tech_stack ?? [])])];
+  if (fromArrays.length > 0) return fromArrays;
+  if (parsed.summary?.trim()) {
+    return extractSkillsFromResumeText(parsed.summary);
+  }
+  return [];
+}
+
 export function generateResumeTalkingPoints(
   parsed: ParsedResume | null,
   sessionConfig?: { company?: string | null; role?: string | null; interview_type?: InterviewType }
 ): ResumeTalkingPoints | null {
   if (!parsed) return null;
 
-  const allSkills = [...new Set([...(parsed.skills ?? []), ...(parsed.tech_stack ?? [])])];
+  const allSkills = collectResumeSkills(parsed);
   const company = sessionConfig?.company;
   const role = sessionConfig?.role;
   const interviewType = sessionConfig?.interview_type ?? "mixed";

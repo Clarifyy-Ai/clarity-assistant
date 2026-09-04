@@ -40,4 +40,19 @@ describe("GovPaperReviewGenerationTimer", () => {
     const { container } = render(<GovPaperReviewGenerationTimer session={failed} />);
     expect(container).toBeEmptyDOMElement();
   });
+
+  it("returns null for null session and malformed active without startTime", () => {
+    const { container: c1 } = render(<GovPaperReviewGenerationTimer session={null} />);
+    expect(c1).toBeEmptyDOMElement();
+
+    const malformed = {
+      phase: "active" as const,
+      jobId: "11111111-1111-1111-1111-111111111111",
+    };
+    const { container: c2 } = render(
+      // @ts-expect-error intentional malformed session without startTime
+      <GovPaperReviewGenerationTimer session={malformed} />,
+    );
+    expect(c2).toBeEmptyDOMElement();
+  });
 });

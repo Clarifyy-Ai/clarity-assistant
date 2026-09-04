@@ -96,11 +96,22 @@ Deno.serve(withBrowserCors("cancel-paper-generation-job", async (req) => {
     }
 
     if (TERMINAL.has(String(job.status))) {
+      // Already terminal: still attempt idempotent release_* so FE best-effort
+      // cancel on failed_permanent / expired does not leave reserved credits stuck.
+      const creditsRefunded =
+        job.status === "completed"
+          ? 0
+          : await refundClaimedPaperCredits(
+            db,
+            jobId,
+            user.id,
+            `refund_cancel_already_${job.status}`,
+          );
       return json(req, {
         jobId: job.id,
         status: job.status,
         cancelled: job.status === "cancelled",
-        creditsRefunded: 0,
+        creditsRefunded,
         message: `Job already ${job.status}`,
       });
     }

@@ -67,15 +67,15 @@ export type SessionEvent = {
 };
 
 export type DetailedReport = {
-  wpm_series?: { t: number; wpm: number }[];
+  wpm_series?: { t: number; wpm?: number; v?: number }[];
   filler_series?: { t: number; count: number }[];
-  pause_series?: { bucket: string; count: number }[];
-  confidence_series?: { t: number; score: number }[];
+  pause_series?: { bucket?: string; count?: number; t?: number; v?: number }[];
+  confidence_series?: { t: number; score?: number; v?: number }[];
   charts_available?: {
-    wpm: boolean;
-    fillers: boolean;
-    pauses: boolean;
-    confidence: boolean;
+    wpm?: boolean;
+    fillers?: boolean;
+    pauses?: boolean;
+    confidence?: boolean;
   };
   missed_keywords?: string[];
   keyword_coverage?: KeywordCoverageItem[];
@@ -84,8 +84,13 @@ export type DetailedReport = {
   speakers?: { id: string; label: string }[];
   share_token?: string;
   is_shared?: boolean;
-  category_scores?: Record<string, number>;
+  category_scores?: Record<string, number | null>;
   rating?: 1 | -1 | null;
+  evaluation_input_snapshot?: {
+    question_count?: number | null;
+    answer_count?: number | null;
+    [key: string]: unknown;
+  } | null;
 };
 
 type AnswerRow = {
@@ -255,7 +260,7 @@ export function DebriefSessionMeta({
           {
             icon: <Activity className="w-4 h-4 text-amber-400" />,
             label: "Avg WPM",
-            value: session?.avg_wpm ? String(session.avg_wpm) : "—",
+            value: session?.avg_wpm != null ? String(session.avg_wpm) : "Not available",
           },
         ].map((stat) => (
           <Card key={stat.label} padding="sm" className="flex items-center gap-3">
@@ -267,6 +272,30 @@ export function DebriefSessionMeta({
           </Card>
         ))}
       </div>
+
+      {session?.avg_wpm == null &&
+        session?.filler_words == null &&
+        session?.total_filler_words == null && (
+        <p className="text-xs text-muted-foreground">
+          Communication audio metrics were not available for this session.
+        </p>
+      )}
+
+      {(debrief.detailed_report as DetailedReport | undefined)?.evaluation_input_snapshot && (
+        <p className="text-xs text-muted-foreground">
+          Generated from{" "}
+          {String(
+            (debrief.detailed_report as DetailedReport).evaluation_input_snapshot
+              ?.question_count ?? "—",
+          )}{" "}
+          questions and{" "}
+          {String(
+            (debrief.detailed_report as DetailedReport).evaluation_input_snapshot
+              ?.answer_count ?? "—",
+          )}{" "}
+          answers
+        </p>
+      )}
 
       {company && (
         <p className="text-xs text-muted-foreground">
@@ -286,9 +315,11 @@ export function DebriefSessionMeta({
             scoreColor === "red" ? "text-red-400" :
             "text-muted-foreground",
           )}>
-            {overallScore ?? "—"}
+            {overallScore != null ? overallScore : "—"}
           </div>
-          <p className="text-xs text-muted-foreground">Overall score</p>
+          <p className="text-xs text-muted-foreground">
+            {overallScore != null ? "Overall score" : "Not evaluated"}
+          </p>
           {debrief.overall_grade && (
             <Badge variant="primary" size="sm" className="mt-2">
               Grade {String(debrief.overall_grade)}
@@ -614,7 +645,16 @@ export function DebriefVocalCharts({ report }: { report: DetailedReport | null |
 
   const [hover, setHover] = useState<{ chart: string; i: number; x: number; y: number } | null>(null);
 
-  if (!showWpm && !showFillers && !showPauses && !showConfidence) return null;
+  if (!showWpm && !showFillers && !showPauses && !showConfidence) {
+    if (!report) return null;
+    return (
+      <Card>
+        <p className="text-sm text-muted-foreground">
+          Communication audio metrics were not available for this session.
+        </p>
+      </Card>
+    );
+  }
 
   const renderLineChart = (
     chartId: string,
@@ -689,9 +729,13 @@ export function DebriefVocalCharts({ report }: { report: DetailedReport | null |
     );
   };
 
-  const wpmSeries = wpm.map((p) => ({ t: p.t, v: p.wpm }));
+  const wpmSeries = wpm
+    .map((p) => ({ t: p.t, v: p.wpm ?? p.v }))
+    .filter((p): p is { t: number; v: number } => typeof p.v === "number" && Number.isFinite(p.v));
   const fillerSeries = fillers.map((p) => ({ t: p.t, v: p.count }));
-  const confSeries = confidence.map((p) => ({ t: p.t, v: p.score }));
+  const confidenceSeries = confidence
+    .map((p) => ({ t: p.t, v: p.score ?? p.v }))
+    .filter((p): p is { t: number; v: number } => typeof p.v === "number" && Number.isFinite(p.v));
 
   return (
     <Card>
@@ -748,7 +792,7 @@ export function DebriefVocalCharts({ report }: { report: DetailedReport | null |
             <p className="text-xs font-medium text-muted-foreground mb-2">Confidence trend</p>
             {renderLineChart(
               "conf",
-              confSeries,
+              confidenceSeries,
               "#10b981",
               70,
               (v, t) => `${Math.round(v)}% confidence @ ${formatMs(t * 1000)}`,
@@ -783,6 +827,8 @@ export function DebriefConfidenceBreakdown({
   const avg = scoredValues.length
     ? Math.round(scoredValues.reduce((s, v) => s + v, 0) / scoredValues.length)
     : null;
+  const scoredDims = CONFIDENCE_DIMS.filter((d) => scores[d.key] != null);
+  const canShowRadar = scoredDims.length >= 3;
 
   return (
     <Card>
@@ -847,30 +893,36 @@ export function DebriefConfidenceBreakdown({
         })}
       </div>
 
-      {/* Simple radar-style polygon */}
+      {/* Radar only for scored dimensions — never plot missing as zero */}
       <div className="flex justify-center">
-        <svg viewBox="0 0 120 120" className="w-32 h-32">
-          {[25, 50, 75, 100].map((r) => (
+        {canShowRadar ? (
+          <svg viewBox="0 0 120 120" className="w-32 h-32" aria-label="Confidence radar">
+            {[25, 50, 75, 100].map((r) => (
+              <polygon
+                key={r}
+                points={radarPoints(scoredDims.length, (r / 100) * 50, 60, 60)}
+                fill="none"
+                stroke="hsl(var(--border))"
+                strokeWidth={0.5}
+              />
+            ))}
             <polygon
-              key={r}
-              points={radarPoints(4, (r / 100) * 50, 60, 60)}
-              fill="none"
-              stroke="hsl(var(--border))"
-              strokeWidth={0.5}
+              points={radarPoints(
+                scoredDims.length,
+                scoredDims.map((d) => ((scores[d.key] as number) / 100) * 50),
+                60,
+                60,
+              )}
+              fill="hsl(var(--primary) / 0.2)"
+              stroke="hsl(var(--primary))"
+              strokeWidth={2}
             />
-          ))}
-          <polygon
-            points={radarPoints(
-              4,
-              CONFIDENCE_DIMS.map((d) => ((scores[d.key] ?? 0) / 100) * 50),
-              60,
-              60,
-            )}
-            fill="hsl(var(--primary) / 0.2)"
-            stroke="hsl(var(--primary))"
-            strokeWidth={2}
-          />
-        </svg>
+          </svg>
+        ) : (
+          <p className="text-xs text-muted-foreground py-6 text-center">
+            Not available — fewer than 3 scored dimensions for a radar chart.
+          </p>
+        )}
       </div>
     </Card>
   );

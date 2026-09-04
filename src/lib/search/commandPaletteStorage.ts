@@ -1,9 +1,15 @@
-const STORAGE_KEY = "Clarify AI-command-palette-recent-v1";
+import {
+  localStorageGetWithLegacy,
+  localStorageSetBrand,
+} from "@/lib/constants/brandStorage";
+
+const STORAGE_KEY = "career-pilot-command-palette-recent-v1";
+const LEGACY_KEYS = ["Clarify AI-command-palette-recent-v1"] as const;
 const MAX_RECENT = 5;
 
 function readRecent(): string[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorageGetWithLegacy(STORAGE_KEY, LEGACY_KEYS);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
@@ -15,7 +21,11 @@ function readRecent(): string[] {
 
 function writeRecent(searches: string[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(searches.slice(0, MAX_RECENT)));
+    localStorageSetBrand(
+      STORAGE_KEY,
+      JSON.stringify(searches.slice(0, MAX_RECENT)),
+      LEGACY_KEYS,
+    );
   } catch {
     /* best-effort */
   }
@@ -35,6 +45,7 @@ export function addRecentSearch(query: string): void {
 export function clearRecentSearches(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
+    for (const legacy of LEGACY_KEYS) localStorage.removeItem(legacy);
   } catch {
     /* best-effort */
   }

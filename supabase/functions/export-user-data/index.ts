@@ -46,7 +46,7 @@ function exportAttachment(
     headers: {
       ...getCorsHeaders(req),
       "Content-Type": "application/json",
-      "Content-Disposition": `attachment; filename="clarify-ai-export-${type}.json"`,
+      "Content-Disposition": `attachment; filename="career-pilot-export-${type}.json"`,
     },
   });
 }

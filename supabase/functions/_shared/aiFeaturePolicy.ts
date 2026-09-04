@@ -182,6 +182,16 @@ export const AI_FEATURE_POLICIES: Record<string, AiFeaturePolicy> = {
     maxRetries: 1,
     skipSecondaryOnQuota: true,
   },
+  ai_coach_chat: {
+    feature: "ai_coach_chat",
+    promptId: "practice_coach_chat",
+    promptVersion: "v1",
+    aiAllowed: true,
+    maxInputTokens: 4000,
+    maxOutputTokens: 800,
+    maxRetries: 1,
+    skipSecondaryOnQuota: false,
+  },
 };
 
 /** Named policy, or a conservative default (1024 out tokens, skip OpenAI on Gemini 429). */

@@ -18,6 +18,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { mergeUiPreferences } from "@/lib/settings/uiPreferences";
 
 // ─────────────────────────────────────────────────────────────────
 // SettingsAudio — mic, language, filler config
@@ -310,13 +311,10 @@ export default function SettingsAudio() {
     setSaveFailed(false);
     const noiseFloor = vadSensitivityToNoiseFloor(vadSensitivity);
     const confidenceMin = Math.max(0.15, Math.min(0.9, confidenceMinPct / 100));
-    const mergedUiPrefs = {
-      ...(typeof profile?.ui_preferences === "object" && profile?.ui_preferences
-        ? profile.ui_preferences
-        : {}),
+    const mergedUiPrefs = mergeUiPreferences(profile?.ui_preferences, {
       vad_noise_floor: noiseFloor,
       stt_question_confidence: confidenceMin,
-    };
+    });
     try {
       await updateProfile({
           stt_language:        language,

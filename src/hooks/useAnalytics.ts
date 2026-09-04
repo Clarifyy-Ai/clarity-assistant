@@ -20,6 +20,8 @@ import {
   type SessionComparisonPayload,
   type SessionComparisonSide,
 } from "@/lib/analytics/sessionComparison";
+import { brandExportBasename } from "@/lib/constants/brandStorage";
+import { buildAnalyticsCsv } from "@/lib/analytics/analyticsCsv";
 import {
   buildActivityByDay,
   buildUnifiedScoreTrend,
@@ -189,36 +191,15 @@ export function useAnalytics() {
   const downloadCSV = useCallback(async (): Promise<void> => {
     if (!data?.recent_sessions.length) return;
 
-    const headers = [
-      "Date", "Mode", "Interview Type", "Company",
-      "Overall Score", "Filler Rate", "WPM", "Duration (min)", "Questions",
-    ];
-
-    const escapeCsv = (value: unknown) => {
-      const text = value === null || value === undefined ? "" : String(value);
-      return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-    };
-    const rows = data.recent_sessions.map((s) => [
-      new Date(s.date).toLocaleDateString(),
-      s.mode ?? "",
-      s.interview_type ?? "",
-      s.company ?? "",
-      s.overall_score ?? "",
-      typeof s.filler_rate === "number" ? s.filler_rate.toFixed(2) : "",
-      s.wpm_avg ?? "",
-      s.duration_minutes ?? "",
-      s.question_count ?? "",
-    ]);
-
-    const csv = [headers, ...rows]
-      .map((row) => row.map(escapeCsv).join(","))
-      .join("\n");
-
-    const blob = new Blob([csv], { type: "text/csv" });
+    const timeZone = resolveDisplayTimeZone(
+      useAuthStore.getState().profile?.timezone,
+    );
+    const csv = buildAnalyticsCsv(data.recent_sessions, { timeZone });
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
     a.href     = url;
-    a.download = `clarify-ai-analytics-${filter.period}.csv`;
+    a.download = `${brandExportBasename("analytics", filter.period)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }, [data, filter.period]);
@@ -261,9 +242,11 @@ export function useAnalytics() {
     confidenceTrend: data?.confidence_trend ?? [],
   });
 
-  const activityByDay =
-    data?.activity_by_day ??
-    buildActivityByDay(data?.recent_sessions ?? [], displayTimeZone);
+  const activityByDay = (() => {
+    const fromServer = data?.activity_by_day;
+    if (fromServer && Object.keys(fromServer).length > 0) return fromServer;
+    return buildActivityByDay(data?.recent_sessions ?? [], displayTimeZone);
+  })();
 
   const loadStatus = resolveAnalyticsLoadStatus({
     isLoading,

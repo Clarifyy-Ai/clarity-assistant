@@ -11,6 +11,10 @@ import {
   mergeBillingHistoryTransactions,
   type BillingHistoryTransaction,
 } from '@/lib/billing/billingHistoryMerge';
+import {
+  billingRefundRequestMailto,
+  canRequestRefundSupport,
+} from '@/lib/billing/billingRefundRequest';
 import type { Tables } from '@/integrations/supabase/types';
 
 /**
@@ -361,15 +365,10 @@ export function BillingHistory({
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      {transaction.invoice_url && (
-                        <button
-                          onClick={() => handleDownloadInvoice(transaction)}
-                          className="p-1.5 rounded hover:bg-secondary transition-colors"
-                          title="Download invoice"
-                        >
-                          <Download className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
-                        </button>
-                      )}
+                      <BillingHistoryActionCell
+                        transaction={transaction}
+                        onDownloadInvoice={handleDownloadInvoice}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -409,7 +408,7 @@ export function BillingHistory({
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center justify-between gap-2 text-xs">
                   <span
                     className={cn(
                       'inline-flex items-center gap-1 px-2 py-1 rounded',
@@ -437,14 +436,11 @@ export function BillingHistory({
                     {transaction.status}
                   </span>
 
-                  {transaction.invoice_url && (
-                    <button
-                      onClick={() => handleDownloadInvoice(transaction)}
-                      className="p-1.5 rounded hover:bg-secondary"
-                    >
-                      <Download className="h-4 w-4 text-muted-foreground" />
-                    </button>
-                  )}
+                  <BillingHistoryActionCell
+                    transaction={transaction}
+                    onDownloadInvoice={handleDownloadInvoice}
+                    compact
+                  />
                 </div>
               </div>
             ))}
@@ -488,6 +484,70 @@ export function BillingHistory({
         </div>
       )}
     </div>
+  );
+}
+
+function BillingHistoryActionCell({
+  transaction,
+  onDownloadInvoice,
+  compact = false,
+}: {
+  transaction: Transaction;
+  onDownloadInvoice: (transaction: Transaction) => void;
+  compact?: boolean;
+}) {
+  const showRefundRequest = canRequestRefundSupport(transaction);
+
+  if (transaction.invoice_url || showRefundRequest) {
+    return (
+      <div
+        className={cn(
+          "flex items-center justify-center gap-2",
+          compact && "justify-end",
+        )}
+        data-testid="billing-history-action"
+      >
+        {transaction.invoice_url ? (
+          <button
+            type="button"
+            onClick={() => onDownloadInvoice(transaction)}
+            className="p-1.5 rounded hover:bg-secondary transition-colors"
+            title="Download invoice"
+            data-testid="billing-download-invoice"
+          >
+            <Download
+              className={cn(
+                "text-muted-foreground hover:text-foreground",
+                compact ? "h-4 w-4" : "h-3.5 w-3.5",
+              )}
+            />
+          </button>
+        ) : null}
+        {showRefundRequest ? (
+          <a
+            href={billingRefundRequestMailto({
+              description: transaction.description,
+              transactionId: transaction.id,
+            })}
+            className="text-[11px] font-medium text-primary underline-offset-2 hover:underline whitespace-nowrap"
+            title="Opens email to support. Refunds are reviewed per the Terms — not processed instantly in-app."
+            data-testid="billing-request-refund"
+          >
+            Request refund
+          </a>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <span
+      className="text-xs text-muted-foreground"
+      data-testid="billing-history-action-empty"
+      aria-label="No action available"
+    >
+      —
+    </span>
   );
 }
 

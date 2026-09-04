@@ -34,6 +34,40 @@ describe("getAuthenticatedEntryPath", () => {
       "/app/admin",
     );
   });
+
+  it("prefers sanitized returnTo for onboarded users", () => {
+    expect(
+      getAuthenticatedEntryPath({
+        isAdmin: false,
+        isOnboarded: true,
+        preferredReturnTo: "/app/mock-test/generate?examId=x",
+      }),
+    ).toBe("/app/mock-test/generate?examId=x");
+    expect(
+      getAuthenticatedEntryPath({
+        isAdmin: false,
+        isOnboarded: false,
+        preferredReturnTo: "/app/mock-test",
+      }),
+    ).toBe("/onboarding?returnTo=%2Fapp%2Fmock-test");
+    expect(
+      getAuthenticatedEntryPath({
+        isAdmin: false,
+        isOnboarded: true,
+        preferredReturnTo: "https://evil.example/phish",
+      }),
+    ).toBe("/app/dashboard");
+  });
+});
+
+describe("getPostOnboardingPath", () => {
+  it("honors returnTo after onboarding completes", async () => {
+    const { getPostOnboardingPath } = await import("@/lib/auth/postAuthRedirect");
+    expect(getPostOnboardingPath("/app/mock-test/session/abc")).toBe(
+      "/app/mock-test/session/abc",
+    );
+    expect(getPostOnboardingPath(null)).toBe("/app/dashboard");
+  });
 });
 
 describe("signup verification gate contracts (BUG-017)", () => {
@@ -66,6 +100,8 @@ describe("signup verification gate contracts (BUG-017)", () => {
     expect(protectedRoute).not.toMatch(
       /requireEmailVerification && !isUserEmailConfirmed/,
     );
+    expect(protectedRoute).not.toContain("requireEmailVerification");
+    expect(protectedRoute).toContain("pathWithReturnTo(\"/verify-email\"");
   });
 
   it("enforces email verification in edge requireAuth helpers", () => {

@@ -7055,17 +7055,25 @@ export type Database = {
       }
       scorecards: {
         Row: {
+          answer_count: number | null
+          attempt_count: number
           communication: number | null
           confidence: number | null
           created_at: string
           details: Json
+          eligibility_reason: string | null
+          evaluated_answer_count: number | null
+          evaluation_status: string
           feedback: string | null
           generated_at: string | null
           id: string
           improvements: string[] | null
           is_shared: boolean
+          last_error_code: string | null
           overall_score: number | null
           problem_solving: number | null
+          question_count: number | null
+          rubric_version: string | null
           session_id: string | null
           share_token: string | null
           strengths: string[] | null
@@ -7073,17 +7081,25 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          answer_count?: number | null
+          attempt_count?: number
           communication?: number | null
           confidence?: number | null
           created_at?: string
           details?: Json
+          eligibility_reason?: string | null
+          evaluated_answer_count?: number | null
+          evaluation_status?: string
           feedback?: string | null
           generated_at?: string | null
           id?: string
           improvements?: string[] | null
           is_shared?: boolean
+          last_error_code?: string | null
           overall_score?: number | null
           problem_solving?: number | null
+          question_count?: number | null
+          rubric_version?: string | null
           session_id?: string | null
           share_token?: string | null
           strengths?: string[] | null
@@ -7091,17 +7107,25 @@ export type Database = {
           user_id: string
         }
         Update: {
+          answer_count?: number | null
+          attempt_count?: number
           communication?: number | null
           confidence?: number | null
           created_at?: string
           details?: Json
+          eligibility_reason?: string | null
+          evaluated_answer_count?: number | null
+          evaluation_status?: string
           feedback?: string | null
           generated_at?: string | null
           id?: string
           improvements?: string[] | null
           is_shared?: boolean
+          last_error_code?: string | null
           overall_score?: number | null
           problem_solving?: number | null
+          question_count?: number | null
+          rubric_version?: string | null
           session_id?: string | null
           share_token?: string | null
           strengths?: string[] | null
@@ -9145,6 +9169,21 @@ export type Database = {
       get_onboarding_state: { Args: never; Returns: string }
       get_owned_session_detail: {
         Args: { p_session_id: string }
+        Returns: Json
+      }
+      get_session_history: {
+        Args: {
+          p_types?: string[] | null
+          p_statuses?: string[] | null
+          p_search?: string | null
+          p_date_from?: string | null
+          p_date_to?: string | null
+          p_score_state?: string | null
+          p_debrief_state?: string | null
+          p_sort?: string | null
+          p_cursor?: string | null
+          p_page_size?: number | null
+        }
         Returns: Json
       }
       get_public_feature_flags: {

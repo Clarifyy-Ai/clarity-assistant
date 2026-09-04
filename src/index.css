@@ -795,6 +795,23 @@ body.cookie-banner-visible #main-content {
   .no-print { display: none !important; }
   .print-page-break { page-break-before: always; }
   .overlay-panel, #overlay-root { display: none !important; }
+
+  /* Course completion certificate — print the framed surface only */
+  .certificate-verify-page {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  .certificate-print-surface,
+  [data-certificate-surface] {
+    box-shadow: none !important;
+    border-color: #1e4078 !important;
+    background: white !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  main#main-content {
+    padding-top: 0 !important;
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────

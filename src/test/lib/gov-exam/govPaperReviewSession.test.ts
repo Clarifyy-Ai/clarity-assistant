@@ -99,6 +99,20 @@ describe("govPaperReviewSession availability", () => {
   it("resets to idle for empty inventory re-checks", () => {
     expect(resetAvailabilitySession()).toEqual({ phase: "idle" });
   });
+  it("never throws and returns null when startTime is missing or non-finite on checking", () => {
+    const malformed = {
+      phase: "checking" as const,
+      requestKey: "k",
+      startTime: Number.NaN,
+    };
+    expect(availabilityCheckingElapsedMs(malformed, 5_000)).toBeNull();
+    expect(availabilityCheckingElapsedMs(null, 5_000)).toBeNull();
+    expect(availabilityCheckingElapsedMs(undefined, 5_000)).toBeNull();
+    const missing = { phase: "checking" as const, requestKey: "k" } as Parameters<
+      typeof availabilityCheckingElapsedMs
+    >[0];
+    expect(availabilityCheckingElapsedMs(missing, 5_000)).toBeNull();
+  });
 });
 
 describe("govPaperReviewSession generation", () => {
@@ -149,6 +163,26 @@ describe("govPaperReviewSession generation", () => {
       expect(retry.startTime).toBe(200);
     }
     expect(resetGenerationSession().phase).toBe("idle");
+  });
+
+  it("never throws and returns null for malformed active sessions without finite startTime", () => {
+    const missing = { phase: "active" as const, jobId } as Parameters<
+      typeof generationElapsedSeconds
+    >[0];
+    expect(generationElapsedSeconds(missing, 9_000)).toBeNull();
+    expect(isGenerationTimerActive(missing)).toBe(false);
+
+    const nanStart = {
+      phase: "active" as const,
+      jobId,
+      startTime: Number.NaN,
+    };
+    expect(generationElapsedSeconds(nanStart, 9_000)).toBeNull();
+    expect(isGenerationTimerActive(nanStart)).toBe(false);
+
+    expect(generationElapsedSeconds(null, 9_000)).toBeNull();
+    expect(generationElapsedSeconds(undefined, 9_000)).toBeNull();
+    expect(isGenerationTimerActive(null)).toBe(false);
   });
 
   it("never reads startTime when job id does not match active session", () => {

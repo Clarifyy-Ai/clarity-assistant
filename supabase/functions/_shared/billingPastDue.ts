@@ -19,6 +19,7 @@ const PAST_DUE_ALLOWED_FUNCTIONS = new Set([
   "mfa-recovery",
   "delete-account",
   "export-user-data",
+  "get-user-storage-usage",
   "billing-status",
 ]);
 

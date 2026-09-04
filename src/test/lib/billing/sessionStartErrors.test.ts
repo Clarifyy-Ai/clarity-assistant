@@ -56,4 +56,27 @@ describe("session start errors", () => {
       code: "CREDITS_EXHAUSTED",
     }))).toBe(false);
   });
+
+  it("surfaces SESSION_STATE_CONFLICT with actionable copy", () => {
+    const handled = handleSessionStartError(
+      new ApiClientError({
+        message: "conflict",
+        status: 409,
+        code: "SESSION_STATE_CONFLICT",
+      }),
+    );
+    expect(handled).toBe(true);
+  });
+
+  it("surfaces PRACTICE_CONTEXT_CONSUMED", () => {
+    expect(
+      handleSessionStartError(
+        new ApiClientError({
+          message: "consumed",
+          status: 409,
+          code: "PRACTICE_CONTEXT_CONSUMED",
+        }),
+      ),
+    ).toBe(true);
+  });
 });

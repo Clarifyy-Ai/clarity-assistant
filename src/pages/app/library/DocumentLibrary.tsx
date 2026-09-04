@@ -8,7 +8,11 @@ import { UploadZone } from "@/components/common/UploadZone";
 import { supabase, STORAGE_BUCKETS } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
-import { isAllowedLibraryMime } from "@/lib/library/documentRights";
+import {
+  canCreatePracticeSetFromParsedDoc,
+  isAllowedLibraryMime,
+} from "@/lib/library/documentRights";
+import { createDocumentPracticeSet } from "@/lib/library/createDocumentPracticeSet";
 import {
   LIBRARY_ACCEPT,
   LIBRARY_ACCEPT_LABEL,
@@ -21,6 +25,7 @@ import {
   cancelDocumentProcessingJob,
   createDocumentProcessingJob,
   getDocumentProcessingJob,
+  isClientWaitElapsed,
   isFailedJobStatus,
   isInFlightJobStatus,
   libraryStatusFromJob,
@@ -31,6 +36,11 @@ import {
   userFacingJobError,
   userFacingDocumentError,
 } from "@/lib/documents/processingJobs";
+import {
+  documentJobChecklist,
+  mapDocumentJobToProgress,
+} from "@/lib/async/jobAdapters";
+import { JobProgressCard } from "@/components/async/JobProgressCard";
 import {
   Select,
   SelectContent,
@@ -50,6 +60,9 @@ type Doc = {
   rights_confirmed: boolean;
   processing_status?: string;
   processing_error?: string | null;
+  parsed_content?: string | null;
+  content_hash?: string | null;
+  parser_version?: string | null;
   created_at: string;
 };
 
@@ -79,40 +92,12 @@ function statusTone(status: string | undefined): StatusTone {
 }
 
 function statusLabel(status: string | undefined): string {
-  switch (String(status ?? "").trim()) {
-    case "":
-    case "uploaded":
-      return "Uploaded";
-    case "queued":
-      return "Queued";
-    case "leased":
-    case "downloading":
-    case "extracting":
-    case "OCR":
-    case "ocr_required":
-    case "ocr_processing":
-    case "segmenting":
-    case "structuring":
-    case "processing":
-    case "validating":
-    case "awaiting_review":
-      return "Processing";
-    case "failed_retryable":
-    case "error":
-    case "failed":
-      return "Failed — Retry";
-    case "failed_permanent":
-      return "Failed";
-    case "cancelled":
-      return "Cancelled";
-    case "ready":
-    case "completed":
-      return "Completed";
-    case "rejected":
-      return "Rejected";
-    default:
-      return status ?? "Uploaded";
-  }
+  const mapped = mapDocumentJobToProgress({
+    id: "tmp",
+    status: status ?? "uploaded",
+  });
+  if (status === "uploaded" || !status) return "Uploaded";
+  return mapped.message?.replace(/…$/, "") || status || "Uploaded";
 }
 
 const TONE_CLASS: Record<StatusTone, string> = {
@@ -231,10 +216,13 @@ export default function DocumentLibraryPage() {
         .eq("owner_id", user!.id);
     }
 
-    async function resumeOnce(): Promise<void> {
+    async function syncInFlightOnce(opts?: { markResumed?: boolean }): Promise<void> {
       for (const documentId of inflightIds) {
-        if (cancelled || resumedDocsRef.current.has(documentId)) continue;
-        resumedDocsRef.current.add(documentId);
+        if (cancelled) continue;
+        if (opts?.markResumed) {
+          if (resumedDocsRef.current.has(documentId)) continue;
+          resumedDocsRef.current.add(documentId);
+        }
         try {
           const job = await findExistingJob(documentId);
           if (!job?.id) continue;
@@ -243,22 +231,22 @@ export default function DocumentLibraryPage() {
             await syncDocFromJob(documentId, job);
             continue;
           }
-          // Soft edge poll — confirms ownership and refreshes status without create.
+          // Soft edge poll — confirms ownership and refreshes stage without create.
           const live = await getDocumentProcessingJob(job.id);
-          if (live && !isInFlightJobStatus(live.status)) {
+          if (live) {
             await syncDocFromJob(documentId, live);
           }
         } catch {
-          resumedDocsRef.current.delete(documentId);
+          if (opts?.markResumed) resumedDocsRef.current.delete(documentId);
         }
       }
       if (!cancelled) void load();
     }
 
-    void resumeOnce();
+    void syncInFlightOnce({ markResumed: true });
 
     const timer = window.setInterval(() => {
-      if (!cancelled) void load();
+      if (!cancelled) void syncInFlightOnce();
     }, 8_000);
 
     return () => {
@@ -273,8 +261,10 @@ export default function DocumentLibraryPage() {
     contentHash: string;
     isRetry?: boolean;
   }) {
+    // Stable idempotency — never mint a random key on retry (that double-charges).
+    // Retries of failed_retryable jobs must use retryDocumentProcessingJob instead.
     const idempotencyKey = opts.isRetry
-      ? `library-retry:${opts.documentId}:${crypto.randomUUID()}`
+      ? `library-reprocess:${user?.id}:${opts.documentId}:${opts.contentHash}`
       : `library-parse:${user?.id}:${opts.contentHash}`;
     let created: Awaited<ReturnType<typeof createDocumentProcessingJob>> | null = null;
     try {
@@ -297,26 +287,37 @@ export default function DocumentLibraryPage() {
         });
         return;
       }
-      const job = await pollDocumentJobUntilDone(created.jobId);
-      if (job?.error_code === "PARSER_TIMEOUT") {
-        await supabase.from("personal_library_documents").update({
-          processing_error: userFacingJobError(job),
-        }).eq("id", opts.documentId).eq("owner_id", user?.id);
-        throw new Error(userFacingJobError(job));
-      }
-      if (job && isFailedJobStatus(job.status)) {
-        await supabase.from("personal_library_documents").update({
-          processing_status: job.status,
-          processing_error: userFacingJobError(job),
-        }).eq("id", opts.documentId).eq("owner_id", user?.id);
-        throw new Error(userFacingJobError(job));
-      }
-      if (job && ["completed", "ready"].includes(job.status)) {
-        await supabase.from("personal_library_documents").update({
-          processing_status: "completed",
-          processing_error: null,
-        }).eq("id", opts.documentId).eq("owner_id", user?.id);
-      }
+      // Enqueue-and-observe: durable job owns credits; UI progress + refresh sync status.
+      // Soft-wait in background so upload is not blocked for the full lease window.
+      void (async () => {
+        try {
+          const job = await pollDocumentJobUntilDone(created.jobId!);
+          if (job && isClientWaitElapsed(job)) {
+            await supabase.from("personal_library_documents").update({
+              processing_status: libraryStatusFromJob(job.status),
+              processing_error: null,
+            }).eq("id", opts.documentId).eq("owner_id", user?.id);
+            return;
+          }
+          if (job && isFailedJobStatus(job.status)) {
+            await supabase.from("personal_library_documents").update({
+              processing_status: job.status,
+              processing_error: userFacingJobError(job),
+            }).eq("id", opts.documentId).eq("owner_id", user?.id);
+            return;
+          }
+          if (job && ["completed", "ready"].includes(job.status)) {
+            await supabase.from("personal_library_documents").update({
+              processing_status: "completed",
+              processing_error: null,
+            }).eq("id", opts.documentId).eq("owner_id", user?.id);
+          }
+        } catch {
+          /* progress card + interval refresh remain source of truth */
+        } finally {
+          void load();
+        }
+      })();
     } catch (err) {
       // Never fall back after a durable job was created: that job owns the
       // credit reservation and remains the single source of truth.
@@ -507,19 +508,49 @@ export default function DocumentLibraryPage() {
 
   async function createPracticeSet(doc: Doc) {
     if (!user?.id) return;
-    if (!doc.rights_confirmed) {
-      toast.error("Confirm content rights before creating a practice set.");
+    const hasParsed = Boolean(String(doc.parsed_content ?? "").trim());
+    if (
+      !canCreatePracticeSetFromParsedDoc({
+        ownerId: user.id,
+        viewerId: user.id,
+        rightsConfirmed: doc.rights_confirmed,
+        contentRights: doc.content_rights as LicenseType,
+        processingStatus: doc.processing_status,
+        hasParsedContent: hasParsed,
+      })
+    ) {
+      toast.error(
+        hasParsed
+          ? "Confirm content rights before creating a practice set."
+          : "Wait until document parsing completes before creating a practice set.",
+      );
       return;
     }
 
-    const { error } = await supabase.from("document_practice_sets").insert({
-      document_id: doc.id,
-      owner_id: user.id,
-      title: `Practice from ${doc.document_name}`,
-      question_ids: [],
-    });
-    if (error) toast.error(error.message);
-    else toast.success("Practice set created. Add original questions in Question Bank, then attach them here.");
+    try {
+      const result = await createDocumentPracticeSet({
+        userId: user.id,
+        documentId: doc.id,
+        documentName: doc.document_name,
+        contentRights: doc.content_rights as LicenseType,
+        rightsConfirmed: doc.rights_confirmed,
+        processingStatus: doc.processing_status,
+        parsedContent: doc.parsed_content,
+        contentHash: doc.content_hash,
+        parserVersion: doc.parser_version,
+      });
+      if (result.reused) {
+        toast.message(
+          `Practice set already exists (${result.questionIds.length} questions).`,
+        );
+      } else {
+        toast.success(
+          `Practice set created with ${result.questionIds.length} questions in your Question Bank.`,
+        );
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not create practice set.");
+    }
   }
 
   async function retryProcessing(doc: Doc) {
@@ -533,6 +564,7 @@ export default function DocumentLibraryPage() {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+      // Prefer the durable retry helper so reserved credits are reused, not recharged.
       if (job?.id && job.status === "failed_retryable") {
         await retryDocumentProcessingJob(job.id);
         rememberJobId(doc.id, job.id);
@@ -542,14 +574,17 @@ export default function DocumentLibraryPage() {
           processing_error: null,
         }).eq("id", doc.id).eq("owner_id", user?.id);
         toast.success("Retry queued.");
+      } else if (job?.id && isInFlightJobStatus(job.status)) {
+        toast.message("Processing already in progress for this document.");
       } else {
+        // New job only after terminal cancel/permanent fail — stable key, one charge.
         await processLibraryDocument({
           documentId: doc.id,
           mimeType: mimeForDoc(doc.document_name, doc.mime_type),
-          contentHash: `retry-${doc.id}`,
+          contentHash: `reprocess-${doc.id}`,
           isRetry: true,
         });
-        toast.success("Document processing completed.");
+        toast.success("Document processing queued.");
       }
       void load();
     } catch (error) {
@@ -642,6 +677,16 @@ export default function DocumentLibraryPage() {
       <ul className="space-y-2">
         {docs.map((doc) => {
           const tone = statusTone(doc.processing_status);
+          const canPractice =
+            Boolean(user?.id) &&
+            canCreatePracticeSetFromParsedDoc({
+              ownerId: user!.id,
+              viewerId: user!.id,
+              rightsConfirmed: doc.rights_confirmed,
+              contentRights: doc.content_rights as LicenseType,
+              processingStatus: doc.processing_status,
+              hasParsedContent: Boolean(String(doc.parsed_content ?? "").trim()),
+            });
           return (
             <li key={doc.id}>
               <Card className="min-w-0">
@@ -659,6 +704,19 @@ export default function DocumentLibraryPage() {
                     {doc.processing_error}
                   </p>
                 )}
+                {isInFlightJobStatus(doc.processing_status) && (
+                  <JobProgressCard
+                    className="mt-3"
+                    title="Document processing"
+                    progress={mapDocumentJobToProgress({
+                      id: doc.id,
+                      status: doc.processing_status ?? "queued",
+                      error_message: doc.processing_error,
+                    })}
+                    steps={documentJobChecklist(doc.processing_status)}
+                    onCancel={() => void cancelProcessing(doc)}
+                  />
+                )}
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button size="sm" variant="outline" onClick={() => void download(doc)}>Download</Button>
                   {(doc.processing_status === "error" || isFailedJobStatus(doc.processing_status)) && (
@@ -667,7 +725,19 @@ export default function DocumentLibraryPage() {
                   {isInFlightJobStatus(doc.processing_status) && (
                     <Button size="sm" variant="outline" onClick={() => void cancelProcessing(doc)}>Cancel processing</Button>
                   )}
-                  <Button size="sm" variant="outline" onClick={() => void createPracticeSet(doc)}>Create practice set</Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!canPractice}
+                    title={
+                      canPractice
+                        ? "Generate practice questions from parsed content"
+                        : "Available after parsing completes"
+                    }
+                    onClick={() => void createPracticeSet(doc)}
+                  >
+                    Create practice set
+                  </Button>
                   <Button size="sm" variant="danger" onClick={() => void remove(doc)}>Delete</Button>
                 </div>
               </Card>

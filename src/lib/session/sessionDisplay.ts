@@ -26,12 +26,37 @@ export function formatSessionDuration(session: SessionDurationSource): string {
 
 export function resolveOverallScore(
   session: { overall_score?: number | null } | null | undefined,
-  scorecard: { overall_score?: number | null } | null | undefined,
+  scorecard: {
+    overall_score?: number | null;
+    evaluation_status?: string | null;
+    score_status?: string | null;
+  } | null | undefined,
 ): number | null {
+  const evalStatus = String(scorecard?.evaluation_status ?? "").toLowerCase().trim();
+  const scoreStatus = String(scorecard?.score_status ?? "").toLowerCase().trim();
+
+  // Authoritative path: completed scorecard only (never invent from session).
+  if (evalStatus === "completed" || scoreStatus === "scored") {
+    const fromCard = scorecard?.overall_score;
+    if (typeof fromCard === "number" && Number.isFinite(fromCard)) return fromCard;
+    return null;
+  }
+
+  // Scorecard present but not completed → unscored (do not fall back to session).
+  if (
+    scorecard &&
+    (evalStatus ||
+      scoreStatus === "not_scored" ||
+      scoreStatus === "failed" ||
+      scoreStatus === "pending" ||
+      scoreStatus === "processing")
+  ) {
+    return null;
+  }
+
+  // Legacy sessions with no scorecard row may still carry overall_score.
   const fromSession = session?.overall_score;
   if (typeof fromSession === "number" && Number.isFinite(fromSession)) return fromSession;
-  const fromCard = scorecard?.overall_score;
-  if (typeof fromCard === "number" && Number.isFinite(fromCard)) return fromCard;
   return null;
 }
 

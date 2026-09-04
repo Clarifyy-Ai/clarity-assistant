@@ -5,6 +5,7 @@ import {
   LinkedInOAuthButton,
 } from "@/components/auth/OAuthButton";
 import {
+  getEnabledOAuthProviders,
   OAUTH_NOT_CONFIGURED_MESSAGE,
   type OAuthProviderId,
 } from "@/lib/auth/oauthProviders";
@@ -17,7 +18,7 @@ interface OAuthProviderSectionProps {
 
 const PROVIDER_BUTTONS: Record<
   OAuthProviderId,
-  () => JSX.Element
+  () => JSX.Element | null
 > = {
   google: () => <GoogleOAuthButton />,
   github: () => <GithubOAuthButton />,
@@ -25,49 +26,45 @@ const PROVIDER_BUTTONS: Record<
   azure: () => <AzureOAuthButton />,
 };
 
+/**
+ * Always renders allowlisted OAuth CTAs (Google by default).
+ * Preflight may warn when a provider looks misconfigured, but does not hide
+ * Continue with Google — click still surfaces a clear error if Auth is unset.
+ */
 export function OAuthProviderSection({
   dividerLabel,
 }: OAuthProviderSectionProps): JSX.Element | null {
-  const {
-    availableProviders,
-    misconfiguredProviders,
-    checking,
-    hasConfiguredProviders,
-  } = useOAuthReadiness();
+  const configuredProviders = getEnabledOAuthProviders();
+  const { misconfiguredProviders, checking } = useOAuthReadiness();
 
-  if (!hasConfiguredProviders) {
+  if (configuredProviders.length === 0) {
     return null;
   }
 
-  if (checking && availableProviders.length === 0) {
-    return null;
-  }
-
-  if (availableProviders.length === 0) {
-    return (
-      <div
-        className="mb-5 rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5 text-center text-xs text-muted-foreground"
-        role="status"
-        data-testid="oauth-not-configured"
-      >
-        {OAUTH_NOT_CONFIGURED_MESSAGE}
-      </div>
-    );
-  }
+  const showMisconfiguredHint =
+    !checking && misconfiguredProviders.length > 0;
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-2">
-        {availableProviders.map((provider) => {
+      <div
+        className={
+          configuredProviders.length === 1
+            ? "grid grid-cols-1 gap-2"
+            : "grid grid-cols-2 gap-2"
+        }
+        data-testid="oauth-provider-section"
+      >
+        {configuredProviders.map((provider) => {
           const Button = PROVIDER_BUTTONS[provider];
           return <Button key={provider} />;
         })}
       </div>
 
-      {misconfiguredProviders.length > 0 ? (
+      {showMisconfiguredHint ? (
         <p
           className="mt-2 text-center text-[11px] text-muted-foreground px-2"
           role="status"
+          data-testid="oauth-not-configured"
         >
           {OAUTH_NOT_CONFIGURED_MESSAGE}
         </p>

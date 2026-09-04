@@ -3,7 +3,7 @@
  * Keep values in sync when changing plan credits or feature costs.
  */
 
-export const CREDIT_CATALOG_VERSION = "credit_catalog_v2";
+export const CREDIT_CATALOG_VERSION = "credit_catalog_v3";
 
 export const PLAN_STATUS = {
   free: "active",
@@ -43,6 +43,7 @@ export const AI_CREDIT_COSTS = {
   live_feedback: 3,
   screenshot_answer: 10,
   session_debrief: 15,
+  generate_scorecard: 15,
   ai_coach_message: 2,
   generate_questions: 12,
   star_builder: 10,
@@ -91,7 +92,7 @@ const ACTION_TO_CANONICAL: Record<string, AICreditCostKey> = {
   generate_feedback: "live_feedback",
   debrief_generation: "session_debrief",
   generate_debrief: "session_debrief",
-  generate_scorecard: "session_debrief",
+  generate_scorecard: "generate_scorecard",
   generate_rephrase: "rephraser",
   generate_questions: "generate_questions",
   coach_message: "ai_coach_message",
@@ -102,6 +103,7 @@ const ACTION_TO_CANONICAL: Record<string, AICreditCostKey> = {
   generate_answer: "live_answer",
   generate_star: "star_builder",
   polish_star: "polish_star",
+  polish_star_section: "polish_star",
   analyze_test_performance: "analyze_test_performance",
   generate_practice_questions: "generate_practice_questions",
   mock_test_ai_gap_fill: "mock_test_ai_gap_fill",
@@ -125,7 +127,7 @@ const ACTION_TO_CANONICAL: Record<string, AICreditCostKey> = {
   // Client useCredits() CREDIT_COSTS keys
   mock_question: "generate_questions",
   mock_full_answer: "live_answer",
-  scorecard_generate: "session_debrief",
+  scorecard_generate: "generate_scorecard",
   star_generate: "star_builder",
   star_analyse: "polish_star",
   company_brief: "company_research",

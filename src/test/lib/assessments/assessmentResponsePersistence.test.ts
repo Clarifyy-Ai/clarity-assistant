@@ -38,14 +38,37 @@ describe("assessment response persistence contracts", () => {
     expect(sql).toContain("v_available < v_total");
   });
 
-  it("assemble-assessment surfaces inventory counts on 409 shortages", () => {
+  it("Wave 7 reaffirm migration keeps select+insert+update triad without ALL policy", () => {
+    const sql = fs.readFileSync(
+      path.join(root, "supabase/migrations/20260904180000_assessment_response_rls_reaffirm.sql"),
+      "utf8",
+    );
+    expect(sql).toContain("test_responses_own_select");
+    expect(sql).toContain("test_responses_own_insert");
+    expect(sql).toContain("test_responses_own_update");
+    expect(sql).toContain("DROP POLICY IF EXISTS test_responses_all");
+    expect(sql).toContain("status = 'IN_PROGRESS'");
+  });
+
+  it("assemble-assessment fail-closes PROFILE_CONTEXT_INSUFFICIENT with missingFields", () => {
     const src = fs.readFileSync(
       path.join(root, "supabase/functions/assemble-assessment/index.ts"),
       "utf8",
     );
+    expect(src).toContain("PROFILE_CONTEXT_INSUFFICIENT");
+    expect(src).toContain("missingFields");
+    expect(src).toContain("ROLE_NOT_SUPPORTED");
     expect(src).toContain("INSUFFICIENT_QUESTION_INVENTORY");
     expect(src).toContain("available_count");
     expect(src).toContain("requested_count");
+  });
+
+  it("maps PROFILE_CONTEXT_INSUFFICIENT with missingFields list", () => {
+    expect(
+      userMessageForAssessmentError("PROFILE_CONTEXT_INSUFFICIENT", {
+        missingFields: ["target_role", "experience_level"],
+      }),
+    ).toMatch(/Missing: target_role, experience_level/);
   });
 });
 

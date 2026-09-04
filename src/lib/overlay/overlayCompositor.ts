@@ -18,6 +18,69 @@ export interface ComposedLine {
   content: string;
   indent:  number;
   bold:    boolean;
+  /** Optional rich segments (no HTML). Prefer over raw content for rendering. */
+  parts?:  InlinePart[];
+}
+
+export interface InlinePart {
+  text: string;
+  isCode?: boolean;
+  bold?: boolean;
+  italic?: boolean;
+}
+
+/**
+ * Strip Markdown emphasis markers while preserving inner text.
+ * Handles **bold**, __bold__, *italic*, _italic_. Protects `inline code`.
+ */
+export function stripMarkdownEmphasis(text: string): string {
+  if (!text) return "";
+
+  const codes: string[] = [];
+  let out = text.replace(/`([^`]+)`/g, (_m, code: string) => {
+    codes.push(code);
+    return `\u0000CODE${codes.length - 1}\u0000`;
+  });
+
+  out = out
+    .replace(/\*\*([^*]+?)\*\*/g, "$1")
+    .replace(/__([^_]+?)__/g, "$1")
+    .replace(/(^|[\s([{])\*([^*\n]+?)\*(?=[\s)\]}.,!?:;]|$)/g, "$1$2")
+    .replace(/(^|[\s([{])_([^_\n]+?)_(?=[\s)\]}.,!?:;]|$)/g, "$1$2");
+
+  // Drop any leftover emphasis delimiters (malformed ** / _)
+  out = out.replace(/\*\*/g, "").replace(/__/g, "");
+
+  return out.replace(/\u0000CODE(\d+)\u0000/g, (_m, idx: string) => {
+    const code = codes[Number(idx)] ?? "";
+    return `\`${code}\``;
+  });
+}
+
+function normalizeLineContent(content: string): {
+  content: string;
+  whollyBold: boolean;
+  parts: InlinePart[];
+} {
+  const trimmed = content.trim();
+  const whollyBold =
+    /^\*\*.+\*\*$/.test(trimmed) ||
+    /^__.+__$/.test(trimmed);
+  const parts = splitInlineRich(content).map((part) =>
+    part.isCode
+      ? part
+      : {
+          ...part,
+          text: stripMarkdownEmphasis(part.text),
+        },
+  );
+  return {
+    content: parts
+      .map((p) => (p.isCode ? `\`${p.text}\`` : p.text))
+      .join(""),
+    whollyBold,
+    parts,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -66,11 +129,13 @@ export function composeHint(
     // ── Markdown headers ──────────────────────────────────────
     const headerMatch = trimmed.match(/^(#{1,3})\s+(.+)$/);
     if (headerMatch) {
+      const normalized = normalizeLineContent(headerMatch[2] ?? "");
       lines.push({
         type:    "header",
-        content: headerMatch[2] ?? "",
+        content: normalized.content,
         indent:  0,
         bold:    true,
+        parts:   normalized.parts,
       });
       continue;
     }
@@ -78,13 +143,14 @@ export function composeHint(
     // ── Bullet points ─────────────────────────────────────────
     const bulletMatch = raw.match(/^(\s*)[•\-*]\s+(.+)$/);
     if (bulletMatch) {
-      // FIX: guard against undefined/empty capture group before doing length math
       const indentStr = bulletMatch[1] ?? "";
+      const normalized = normalizeLineContent(bulletMatch[2] ?? "");
       lines.push({
         type:    "bullet",
-        content: bulletMatch[2] ?? "",
+        content: normalized.content,
         indent:  Math.floor(indentStr.length / 2),
-        bold:    false,
+        bold:    normalized.whollyBold,
+        parts:   normalized.parts,
       });
       continue;
     }
@@ -93,35 +159,38 @@ export function composeHint(
     const numberedMatch = raw.match(/^(\s*)\d+[.)]\s+(.+)$/);
     if (numberedMatch) {
       const indentStr = numberedMatch[1] ?? "";
+      const normalized = normalizeLineContent(numberedMatch[2] ?? "");
       lines.push({
         type:    "bullet",
-        content: numberedMatch[2] ?? "",
+        content: normalized.content,
         indent:  Math.floor(indentStr.length / 2),
-        bold:    false,
+        bold:    normalized.whollyBold,
+        parts:   normalized.parts,
       });
       continue;
     }
 
     // ── Keywords-only style ───────────────────────────────────
     if (hintStyle === "keywords_only") {
+      const normalized = normalizeLineContent(trimmed.replace(/^\*+|\*+$/g, ""));
       lines.push({
         type:    "keyword",
-        content: trimmed.replace(/^\*+|\*+$/g, ""),
+        content: normalized.content,
         indent:  0,
         bold:    false,
+        parts:   normalized.parts,
       });
       continue;
     }
 
-    // ── Bold inline (entire line wrapped in ** **) ────────────
-    const isBold = /^\*\*.+\*\*$/.test(trimmed);
-
     // ── Regular text ──────────────────────────────────────────
+    const normalized = normalizeLineContent(trimmed);
     lines.push({
       type:    "text",
-      content: trimmed.replace(/\*\*(.+?)\*\*/g, "$1"),
+      content: normalized.content,
       indent:  0,
-      bold:    isBold,
+      bold:    normalized.whollyBold,
+      parts:   normalized.parts,
     });
   }
 
@@ -166,6 +235,57 @@ export function splitInlineCode(text: string): Array<{
   }
 
   return parts.length > 0 ? parts : [{ text, isCode: false }];
+}
+
+/**
+ * Split text into code / bold / italic / plain segments for React text children.
+ * Does not emit HTML — callers render spans with font-semibold / italic.
+ */
+export function splitInlineRich(text: string): InlinePart[] {
+  if (!text) return [{ text: "" }];
+
+  const codeParts = splitInlineCode(text);
+  const out: InlinePart[] = [];
+
+  for (const part of codeParts) {
+    if (part.isCode) {
+      out.push({ text: part.text, isCode: true });
+      continue;
+    }
+    out.push(...splitEmphasisSegments(part.text));
+  }
+
+  return out.length > 0 ? out : [{ text }];
+}
+
+function splitEmphasisSegments(text: string): InlinePart[] {
+  if (!text) return [];
+  const parts: InlinePart[] = [];
+  const re = /\*\*([^*]+?)\*\*|__([^_]+?)__|\*([^*\n]+?)\*|_([^_\n]+?)_/g;
+  let last = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > last) {
+      parts.push({ text: text.slice(last, match.index) });
+    }
+    if (match[1] != null) {
+      parts.push({ text: match[1], bold: true });
+    } else if (match[2] != null) {
+      parts.push({ text: match[2], bold: true });
+    } else if (match[3] != null) {
+      parts.push({ text: match[3], italic: true });
+    } else if (match[4] != null) {
+      parts.push({ text: match[4], italic: true });
+    }
+    last = re.lastIndex;
+  }
+
+  if (last < text.length) {
+    parts.push({ text: text.slice(last) });
+  }
+
+  return parts.length > 0 ? parts : [{ text }];
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -242,8 +362,6 @@ export function calculateOverlaySize(
 // ─────────────────────────────────────────────────────────────────
 // Streaming text assembler
 // Handles partial chunk display without layout thrash.
-// FIX: removed the dead `committed` field (was assigned but never read).
-//      Added `getCommitted()` method for callers that need the last finalised result.
 // ─────────────────────────────────────────────────────────────────
 
 export class StreamingTextAssembler {

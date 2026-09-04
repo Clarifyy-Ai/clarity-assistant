@@ -14,6 +14,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { UploadZone } from "@/components/common/UploadZone";
+import { ProcessingStatus } from "@/components/async/ProcessingStatus";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -63,6 +64,10 @@ import {
   getResumeParseStatus,
   parseResumeContentString,
 } from "@/lib/documents/resumeParse";
+import {
+  looksLikeBinaryDump,
+  looksLikeUploadedFilenameStub,
+} from "@/lib/documents/parseNormalize";
 import type { ParsedResume } from "@/types/ai.types";
 
 // ─── File validation (category caps ≤ DOCUMENT_MAX_BYTES / Edge) ─────────────
@@ -242,22 +247,13 @@ function ResumeManager() {
   const processUploadQueue = useCallback(async (item: UploadQueueItem) => {
     setUploadQueue((queue) =>
       queue.map((entry) =>
-        entry.id === item.id ? { ...entry, status: "uploading", progress: 15 } : entry,
+        entry.id === item.id
+          ? { ...entry, status: "uploading", progress: 0 }
+          : entry,
       ),
     );
 
-    const progressTimer = window.setInterval(() => {
-      setUploadQueue((queue) =>
-        queue.map((entry) =>
-          entry.id === item.id && entry.status === "uploading" && entry.progress < 90
-            ? { ...entry, progress: Math.min(entry.progress + 8, 90) }
-            : entry,
-        ),
-      );
-    }, 300);
-
     const { resumeId, error } = await docMgr.uploadResume(item.file);
-    window.clearInterval(progressTimer);
 
     if (cancelledUploadsRef.current.has(item.id)) {
       setUploadQueue((queue) =>
@@ -274,7 +270,7 @@ function ResumeManager() {
           ? {
               ...entry,
               status: error ? "error" : "done",
-              progress: error ? entry.progress : 100,
+              progress: error ? 0 : 100,
               error: error ?? undefined,
             }
           : entry,
@@ -475,17 +471,15 @@ function ResumeManager() {
         multiple
         loading={uploading}
         loadingContent={
-          <div className="flex flex-col items-center gap-2">
-            <RefreshCw className="w-8 h-8 text-primary animate-spin" aria-hidden="true" />
-            <p className="text-sm text-muted-foreground">Uploading and parsing…</p>
-            {docStore.upload_progress > 0 && (
-              <div className="w-40 h-1.5 bg-secondary rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-primary transition-all"
-                  style={{ width: `${docStore.upload_progress}%` }}
-                />
-              </div>
-            )}
+          <div className="flex flex-col items-center gap-2 px-2">
+            <ProcessingStatus
+              message="Uploading document…"
+              stage="upload"
+              className="justify-center"
+            />
+            <p className="text-[10px] text-muted-foreground text-center">
+              Progress percent appears only when the browser reports real upload bytes.
+            </p>
           </div>
         }
         onFileSelect={(files) => {
@@ -501,17 +495,23 @@ function ResumeManager() {
               <FileText className="w-4 h-4 text-primary shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-foreground truncate">{item.file.name}</p>
-                <div className="w-full h-1.5 bg-secondary rounded-full overflow-hidden mt-1">
-                  <div
-                    className={cn(
-                      "h-full transition-all",
-                      item.status === "error" ? "bg-red-500" :
-                      item.status === "cancelled" ? "bg-muted-foreground/40" :
-                      item.status === "done" ? "bg-emerald-500" : "bg-primary",
-                    )}
-                    style={{ width: `${item.progress}%` }}
+                {item.status === "uploading" || item.status === "pending" ? (
+                  <ProcessingStatus
+                    message={
+                      item.status === "pending"
+                        ? "Waiting in queue…"
+                        : "Uploading…"
+                    }
+                    compact
+                    className="mt-1"
                   />
-                </div>
+                ) : item.status === "done" ? (
+                  <p className="text-[10px] text-emerald-600 mt-1">Upload complete</p>
+                ) : item.status === "error" ? (
+                  <p className="text-[10px] text-destructive mt-1">{item.error ?? "Failed"}</p>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground mt-1 capitalize">{item.status}</p>
+                )}
               </div>
               <span className="text-[10px] text-muted-foreground capitalize shrink-0">
                 {item.status}
@@ -1403,7 +1403,14 @@ function CoverLetterManager() {
 
   const parsedPreview = (coverDoc?.content ?? "").trim();
   const summaryPreview = (coverDoc?.parsed_summary ?? "").trim();
-  const parseFailed = Boolean(coverDoc && !parsedPreview);
+  const previewLooksBad =
+    looksLikeBinaryDump(parsedPreview) ||
+    looksLikeUploadedFilenameStub(parsedPreview) ||
+    looksLikeBinaryDump(summaryPreview);
+  const parseFailed = Boolean(coverDoc && (!parsedPreview || previewLooksBad));
+  const displayPreview = previewLooksBad
+    ? ""
+    : summaryPreview || parsedPreview.slice(0, 400);
 
   return (
     <div className="space-y-4">
@@ -1434,8 +1441,10 @@ function CoverLetterManager() {
           </div>
           <p className="text-xs text-muted-foreground line-clamp-4">
             {parseFailed
-              ? (summaryPreview || "Parsing failed. Retry or upload another file.")
-              : (summaryPreview || parsedPreview.slice(0, 400))}
+              ? (summaryPreview && !previewLooksBad
+                  ? summaryPreview
+                  : "Parsing failed. Retry or upload another file — raw binary is not shown.")
+              : displayPreview}
           </p>
           <p className="text-[10px] text-muted-foreground">
             Used in Practice Coach and mock interviews with your resume.
@@ -1701,11 +1710,21 @@ function PortfolioManager() {
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
-              {(item.parsed_summary || item.content) && (
-                <p className="text-xs text-muted-foreground line-clamp-3">
-                  {item.parsed_summary ?? item.content?.slice(0, 280)}
-                </p>
-              )}
+              {(item.parsed_summary || item.content) && (() => {
+                const preview = (item.parsed_summary ?? item.content?.slice(0, 280) ?? "").trim();
+                if (!preview || looksLikeBinaryDump(preview) || looksLikeUploadedFilenameStub(preview)) {
+                  return (
+                    <p className="text-xs text-muted-foreground line-clamp-3">
+                      Extracted text is not available for this file yet.
+                    </p>
+                  );
+                }
+                return (
+                  <p className="text-xs text-muted-foreground line-clamp-3">
+                    {preview}
+                  </p>
+                );
+              })()}
             </Card>
           ))}
         </div>

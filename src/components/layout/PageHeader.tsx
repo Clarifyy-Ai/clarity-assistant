@@ -132,8 +132,14 @@ export function PageHeader({
         </nav>
       )}
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-        <div className="flex items-start gap-3 flex-1 min-w-0">
+      <div
+        data-testid="page-header-main"
+        className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between md:gap-4"
+      >
+        <div
+          data-testid="page-header-info"
+          className="flex items-start gap-3 flex-1 min-w-0"
+        >
           {icon && (
             <div className={cn(
               "mt-1 p-2 rounded-lg shrink-0",
@@ -143,18 +149,22 @@ export function PageHeader({
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground break-words">
+            <div className="flex items-start gap-2 min-w-0">
+              <h1
+                data-testid="page-header-title"
+                title={displayTitle}
+                className="min-w-0 max-w-full flex-1 text-2xl sm:text-3xl md:text-4xl font-bold text-foreground leading-tight break-words [overflow-wrap:anywhere] line-clamp-2"
+              >
                 {displayTitle}
               </h1>
               {badge && !stealth && (
-                <span className="px-2 py-1 text-xs font-semibold bg-primary/15 text-primary rounded-full">
+                <span className="mt-1 px-2 py-1 text-xs font-semibold bg-primary/15 text-primary rounded-full shrink-0">
                   {badge}
                 </span>
               )}
             </div>
             {resolvedDescription && (
-              <p className="text-muted-foreground text-sm sm:text-base mt-1 break-words leading-relaxed">
+              <p className="text-muted-foreground text-sm sm:text-base mt-1 break-words [overflow-wrap:anywhere] leading-relaxed">
                 {resolvedDescription}
               </p>
             )}
@@ -164,7 +174,7 @@ export function PageHeader({
         {resolvedActions && (
           <div
             data-testid="page-header-actions"
-            className="flex w-full sm:w-auto gap-2 flex-shrink-0 flex-wrap justify-start sm:justify-end"
+            className="flex w-full md:w-auto gap-2 shrink-0 flex-wrap justify-start md:justify-end"
           >
             {resolvedActions}
           </div>

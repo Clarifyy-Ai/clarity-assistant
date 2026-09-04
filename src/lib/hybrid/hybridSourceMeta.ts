@@ -52,9 +52,9 @@ export function hybridSourceLabel(
     case "ai":
       return "AI";
     case "python":
-      return "Python";
+      return "AI unavailable";
     case "deterministic":
-      return "Deterministic";
+      return "AI unavailable";
     case "database":
       return "Database";
     case "fallback":
@@ -62,4 +62,11 @@ export function hybridSourceLabel(
     default:
       return String(source);
   }
+}
+
+/** True when coach chat came from a non-AI hybrid path (degraded). */
+export function isDegradedCoachSource(
+  source: HybridResponseSource | string | undefined | null,
+): boolean {
+  return source === "python" || source === "deterministic" || source === "fallback";
 }

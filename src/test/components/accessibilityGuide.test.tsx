@@ -127,8 +127,13 @@ describe("Guide banner source contracts (BUG-010)", () => {
 describe("Question Bank filter alignment", () => {
   it("vertically aligns the filter icon with the filter selects", () => {
     const bank = read("src/pages/app/question-bank/QuestionBank.tsx");
-    expect(bank).toContain("sm:items-center");
+    expect(bank).toContain("flex flex-wrap items-center gap-2");
     expect(bank).toContain("leftIcon={<Search");
+    expect(bank).toContain("sm:min-w-[8.5rem] shrink-0");
     expect(bank).not.toMatch(/<Filter className="hidden h-4 w-4 sm:block" \/>/);
+    // Nested non-wrapping cluster caused squish under PAGE_SHELL overflow-x-hidden
+    expect(bank).not.toContain(
+      'className="flex w-full items-center gap-2 sm:w-auto"',
+    );
   });
 });

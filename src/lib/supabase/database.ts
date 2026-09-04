@@ -25,6 +25,11 @@ import {
   type Scorecard,
   type ScorecardRow,
 } from "@/types/scorecard.types";
+import {
+  annotateSessionsWithContentFlags,
+  countDebriefEligibility,
+  filterPendingDebriefSessions,
+} from "@/lib/debrief/debriefList";
 
 /** Client must never PATCH these — server/RLS owns entitlement + gamification. */
 const PROFILE_CLIENT_UPDATE_BLOCKLIST = new Set([
@@ -136,6 +141,8 @@ export const PROFILE_BOOT_COLUMNS = [
   "overlay_opacity",
   "overlay_position",
   "privacy_prefs",
+  // Needed so settings writers can merge hotkeys/theme/polish without wiping siblings.
+  "ui_preferences",
 ].join(", ");
 
 export const profilesDB = {
@@ -668,6 +675,130 @@ export const sessionsDB = {
       Tables<"sessions">,
       "id" | "overall_score" | "type" | "title" | "created_at"
     >[];
+  },
+
+  /**
+   * Completed interview sessions that do not yet have a session_debriefs row.
+   * Eligibility matches Edge generate-debrief (answers/transcripts/questions/score).
+   */
+  async listCompletedWithoutDebrief(
+    userId: string,
+    limit = 50,
+  ): Promise<
+    Array<
+      Pick<
+        Tables<"sessions">,
+        | "id"
+        | "type"
+        | "title"
+        | "overall_score"
+        | "created_at"
+        | "questions_asked"
+        | "status"
+      > & { hasAnswers: boolean; hasTranscript: boolean }
+    >
+  > {
+    const result = await sessionsDB.listDebriefPendingWithEligibility(userId, limit);
+    return result.pending;
+  },
+
+  /**
+   * Pending debrief sessions + eligibility counts for the Debrief page state machine.
+   */
+  async listDebriefPendingWithEligibility(
+    userId: string,
+    limit = 50,
+  ): Promise<{
+    pending: Array<
+      Pick<
+        Tables<"sessions">,
+        | "id"
+        | "type"
+        | "title"
+        | "overall_score"
+        | "created_at"
+        | "questions_asked"
+        | "status"
+      > & { hasAnswers: boolean; hasTranscript: boolean }
+    >;
+    eligibility: {
+      totalCompletedSessions: number;
+      eligibleSessions: number;
+      ineligibleSessions: number;
+    };
+  }> {
+    const [{ data: debriefRows, error: debriefErr }, { data: sessionRows, error: sessionErr }] =
+      await Promise.all([
+        supabase.from("session_debriefs").select("session_id").eq("user_id", userId),
+        supabase
+          .from("sessions")
+          .select("id, type, title, overall_score, created_at, questions_asked, status")
+          .eq("user_id", userId)
+          .eq("status", "completed")
+          .in("type", ["mock", "live", "practice", "rehearsal"])
+          .order("created_at", { ascending: false })
+          .limit(Math.max(limit * 3, 50)),
+      ]);
+
+    if (debriefErr) {
+      throw new DatabaseError(debriefErr.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "session_debriefs",
+        operation: "listDebriefPendingWithEligibility",
+      });
+    }
+    if (sessionErr) {
+      throw new DatabaseError(sessionErr.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "sessions",
+        operation: "listDebriefPendingWithEligibility",
+      });
+    }
+
+    const rows = (sessionRows ?? []) as Pick<
+      Tables<"sessions">,
+      | "id"
+      | "type"
+      | "title"
+      | "overall_score"
+      | "created_at"
+      | "questions_asked"
+      | "status"
+    >[];
+
+    const ids = rows.map((r) => r.id);
+    let answerIds: string[] = [];
+    let transcriptIds: string[] = [];
+    if (ids.length > 0) {
+      const [{ data: answerRows }, { data: transcriptRows }] = await Promise.all([
+        supabase.from("session_answers").select("session_id").in("session_id", ids),
+        supabase.from("session_transcripts").select("session_id").in("session_id", ids),
+      ]);
+      answerIds = [
+        ...new Set(
+          (answerRows ?? [])
+            .map((r) => r.session_id)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ];
+      transcriptIds = [
+        ...new Set(
+          (transcriptRows ?? [])
+            .map((r) => r.session_id)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ];
+    }
+
+    const annotated = annotateSessionsWithContentFlags(rows, answerIds, transcriptIds);
+    const eligibility = countDebriefEligibility(annotated);
+    const pending = filterPendingDebriefSessions(
+      annotated,
+      (debriefRows ?? []).map((r) => r.session_id),
+    );
+
+    return {
+      pending: pending.slice(0, limit),
+      eligibility,
+    };
   },
 };
 
@@ -1570,15 +1701,27 @@ export const interviewRoundsDB = {
     id: string,
     patch: TablesUpdate<"interview_rounds">,
   ): Promise<void> {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("interview_rounds")
       .update(patch)
-      .eq("id", id);
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
     if (error) {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
         table: "interview_rounds",
         operation: "update",
       });
+    }
+    if (!data?.id) {
+      throw new DatabaseError(
+        "Interview round update affected no rows.",
+        ErrorCode.DB_QUERY_FAILED,
+        {
+          table: "interview_rounds",
+          operation: "update",
+        },
+      );
     }
   },
 };
@@ -2299,7 +2442,104 @@ export type ReferralInviteRow = {
   rewarded_at: string | null;
 };
 
+export type ReferralDashboardProgramme = {
+  id: string;
+  name: string;
+  version: string;
+  status: string;
+  qualifyingEvent: string;
+  referrerCreditReward: number;
+  refereeCreditReward: number;
+  referralDiscountPercent: number;
+  maximumRewards: number | null;
+  termsUrl: string | null;
+  startAt: string;
+  endAt: string | null;
+};
+
+export type ReferralDashboardAccount = {
+  eligible: boolean;
+  referralCode: string | null;
+  referralLink: string | null;
+  referralLinkBase: string;
+  eligibilityReason: string | null;
+};
+
+export type ReferralDashboardSummary = {
+  attributed: number;
+  pending: number;
+  qualified: number;
+  rewarded: number;
+  creditsEarned: number;
+};
+
+export type ReferralDashboardHistoryItem = {
+  id: string;
+  referredEmailMasked: string | null;
+  referredId: string | null;
+  status: string;
+  creditsAwarded: number;
+  signedUpAt: string | null;
+  convertedAt: string | null;
+  rewardedAt: string | null;
+  createdAt: string;
+};
+
+export type ReferralDashboard = {
+  programme: ReferralDashboardProgramme | null;
+  account: ReferralDashboardAccount;
+  summary: ReferralDashboardSummary;
+  history: ReferralDashboardHistoryItem[];
+};
+
 export const referralsDB = {
+  async getReferralDashboard(): Promise<ReferralDashboard> {
+    const { data, error } = await supabase.rpc("get_referral_dashboard");
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "referrals",
+        operation: "getReferralDashboard",
+      });
+    }
+    const payload = (data ?? {}) as Record<string, unknown>;
+    const programme = (payload.programme ?? null) as ReferralDashboardProgramme | null;
+    const accountRaw = (payload.account ?? {}) as Partial<ReferralDashboardAccount>;
+    const summaryRaw = (payload.summary ?? {}) as Partial<ReferralDashboardSummary>;
+    const historyRaw = Array.isArray(payload.history) ? payload.history : [];
+
+    return {
+      programme,
+      account: {
+        eligible: Boolean(accountRaw.eligible),
+        referralCode: accountRaw.referralCode ?? null,
+        referralLink: accountRaw.referralLink ?? null,
+        referralLinkBase: accountRaw.referralLinkBase ?? "https://trycareerpilot.com/signup?ref=",
+        eligibilityReason: accountRaw.eligibilityReason ?? null,
+      },
+      summary: {
+        attributed: Number(summaryRaw.attributed ?? 0),
+        pending: Number(summaryRaw.pending ?? 0),
+        qualified: Number(summaryRaw.qualified ?? 0),
+        rewarded: Number(summaryRaw.rewarded ?? 0),
+        creditsEarned: Number(summaryRaw.creditsEarned ?? 0),
+      },
+      history: historyRaw.map((row) => {
+        const r = row as Record<string, unknown>;
+        return {
+          id: String(r.id),
+          referredEmailMasked: (r.referredEmailMasked as string | null) ?? null,
+          referredId: (r.referredId as string | null) ?? null,
+          status: String(r.status ?? "pending"),
+          creditsAwarded: Number(r.creditsAwarded ?? 0),
+          signedUpAt: (r.signedUpAt as string | null) ?? null,
+          convertedAt: (r.convertedAt as string | null) ?? null,
+          rewardedAt: (r.rewardedAt as string | null) ?? null,
+          createdAt: String(r.createdAt ?? ""),
+        };
+      }),
+    };
+  },
+
   async getStats(userId: string): Promise<{ invitedCount: number; creditsEarned: number }> {
     const { count, error: countErr } = await supabase
       .from("referrals")
@@ -2371,10 +2611,17 @@ export const referralsDB = {
       });
     }
 
+    if (!data) {
+      throw new DatabaseError("Billing settings missing", ErrorCode.DB_QUERY_FAILED, {
+        table: "billing_settings",
+        operation: "getProgramCopy",
+      });
+    }
+
     return {
-      refereeCredits: data?.referee_credit_reward ?? 25,
-      referrerCredits: data?.referrer_credit_reward ?? 25,
-      discountPercent: data?.referral_discount_percent ?? 50,
+      refereeCredits: data.referee_credit_reward,
+      referrerCredits: data.referrer_credit_reward,
+      discountPercent: data.referral_discount_percent,
     };
   },
 
@@ -3328,11 +3575,6 @@ export const supportDB = {
 
 // ─── Scorecards ───────────────────────────────────────────────────────────────
 
-type ScorecardShareUpdate = {
-  is_shared: boolean;
-  share_token: string;
-};
-
 export const scorecardsDB = {
   async getBySessionId(sessionId: string): Promise<Scorecard | null> {
     const { data, error } = await supabase
@@ -3429,21 +3671,50 @@ export const scorecardsDB = {
   },
 
   async markShared(sessionId: string, userId: string, token: string): Promise<void> {
-    const patch: ScorecardShareUpdate = {
-      is_shared: true,
-      share_token: token,
-    };
-    const { error } = await supabase
-      .from("scorecards")
-      .update(patch as TablesUpdate<"scorecards">)
-      .eq("session_id", sessionId)
-      .eq("user_id", userId);
+    // Client UPDATE on scorecards is blocked by server-authority RLS.
+    // Prefer createShare(); this remains for legacy call-site detection only.
+    void userId;
+    void token;
+    await scorecardsDB.createShare(sessionId);
+  },
+
+  /**
+   * Mint or reuse a public share token via SECURITY DEFINER RPC
+   * (bypasses SELECT-only RLS while keeping scoring fields server-owned).
+   */
+  async createShare(sessionId: string): Promise<{ share_token: string; share_url_path: string }> {
+    const { data, error } = await (supabase.rpc as (
+      name: string,
+      args: Record<string, unknown>,
+    ) => ReturnType<typeof supabase.rpc>)("create_scorecard_share", {
+      p_session_id: sessionId,
+    });
+
     if (error) {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
         table: "scorecards",
-        operation: "markShared",
+        operation: "createShare",
       });
     }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    const token =
+      row && typeof row === "object"
+        ? String((row as { share_token?: unknown }).share_token ?? "")
+        : "";
+    if (!token || token.length < 16) {
+      throw new DatabaseError("Share token was not returned", ErrorCode.DB_QUERY_FAILED, {
+        table: "scorecards",
+        operation: "createShare",
+      });
+    }
+
+    const path =
+      row && typeof row === "object" && typeof (row as { share_url_path?: unknown }).share_url_path === "string"
+        ? String((row as { share_url_path: string }).share_url_path)
+        : `/share/${token}`;
+
+    return { share_token: token, share_url_path: path };
   },
 
   async getByShareToken(token: string): Promise<Scorecard | null> {

@@ -17,6 +17,11 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useInterviewScheduler } from "@/hooks/useInterviewScheduler";
 import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
 import { useCalendarSync } from "@/hooks/useCalendarSync";
+import { useAuthStore } from "@/store/userStore";
+import {
+  readCalendarIntegrationPrefs,
+  shouldWriteCalendarEvent,
+} from "@/lib/interviews/calendarIntegrationPrefs";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useDocumentStore } from "@/store/documentStore";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -183,6 +188,8 @@ export default function NewInterview() {
   const scheduler = useInterviewScheduler();
   const interviewStore = useInterviewSchedulerStore();
   const calendar  = useCalendarSync();
+  const { profile } = useAuthStore();
+  const calendarPrefs = readCalendarIntegrationPrefs(profile);
 
   async function upsertRemindersAndCalendar(input: {
     interviewId: string;
@@ -229,7 +236,16 @@ export default function NewInterview() {
       toast.message(reminderOutcomeMessage(reminderOutcome));
     }
 
-    if (calendar.syncAvailable && calendar.writeEvent) {
+    // syncAvailable = Edge is configured; isConnected = user linked Google.
+    // Skip write_event when disconnected or auto-create is off.
+    if (
+      shouldWriteCalendarEvent({
+        syncAvailable: calendar.syncAvailable,
+        isConnected: calendar.isConnected,
+        autoCreate: calendarPrefs.calendar_auto_create,
+      }) &&
+      calendar.writeEvent
+    ) {
       try {
         const start = new Date(input.scheduledAt);
         const end = new Date(start.getTime() + input.durationMinutes * 60_000);
@@ -503,10 +519,15 @@ export default function NewInterview() {
       );
 
       if (roundErr) {
-        toast.warning(`Interview updated, but round details failed: ${roundErr}`);
-      } else {
-        toast.success("Interview updated!");
+        if (mountedRef.current) {
+          setError(roundErr);
+          setLoading(false);
+        }
+        toast.error(`Could not update interview time: ${roundErr}`);
+        return;
       }
+
+      toast.success("Interview updated!");
 
       await upsertRemindersAndCalendar({
         interviewId: editId,
@@ -650,10 +671,19 @@ export default function NewInterview() {
     !calendar.syncAvailable &&
     !calendarBannerDismissed;
 
+  const showCalendarVerificationPending =
+    !calendar.isCheckingConnection &&
+    !calendar.isProbingSync &&
+    calendar.syncAvailable &&
+    !calendar.isConnected &&
+    !calendar.connectAllowed &&
+    !calendarBannerDismissed;
+
   const showCalendarBanner =
     !calendar.isCheckingConnection &&
     !calendar.isProbingSync &&
     calendar.syncAvailable &&
+    calendar.connectAllowed &&
     !calendar.isConnected &&
     !calendarBannerDismissed;
 
@@ -722,6 +752,36 @@ export default function NewInterview() {
         </Card>
       )}
 
+      {/* Google OAuth Testing — Connect gated until verification or allowlist */}
+      {showCalendarVerificationPending && (
+        <Card
+          className="border-border bg-secondary/40"
+          data-testid="calendar-verification-pending-banner"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" aria-hidden="true" />
+              <div>
+                <p className="text-xs font-semibold text-foreground">
+                  Google Calendar — Verification pending
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Calendar sync not available yet (Google verification pending). You can still schedule interviews.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setCalendarBannerDismissed(true)}
+              className="p-1 rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Dismiss calendar banner"
+            >
+              <X className="w-3.5 h-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        </Card>
+      )}
+
       {/* ✅ FIX: Calendar not-connected banner — more visible than a ghost button */}
       {showCalendarBanner && (
         <Card className="border-blue-500/20 bg-blue-500/5">
@@ -743,6 +803,7 @@ export default function NewInterview() {
                 variant="outline"
                 size="sm"
                 onClick={() => calendar.connectGoogle()}
+                data-testid="new-interview-calendar-connect"
               >
                 Connect
               </Button>

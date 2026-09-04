@@ -5,7 +5,10 @@ import { useAuthStore } from "@/store/userStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { cn } from "@/lib/utils";
 
-const DISMISS_STORAGE_KEY = "clarify-setup-banner-dismissed";
+import { localStorageGetWithLegacy, localStorageSetBrand } from "@/lib/constants/brandStorage";
+
+const DISMISS_STORAGE_KEY = "career-pilot-setup-banner-dismissed";
+const LEGACY_DISMISS_KEYS = ["clarify-setup-banner-dismissed"] as const;
 
 // ─────────────────────────────────────────────────────────────────
 // SetupChecklist
@@ -25,7 +28,9 @@ export function SetupChecklist({ prominent = false, dismissible = false }: Setup
   const docStore = useDocumentStore();
   const [expanded, setExpanded] = useState(false);
   const [dismissed, setDismissed] = useState(
-    () => dismissible && localStorage.getItem(DISMISS_STORAGE_KEY) === "1",
+    () =>
+      dismissible &&
+      localStorageGetWithLegacy(DISMISS_STORAGE_KEY, LEGACY_DISMISS_KEYS) === "1",
   );
 
   const onboardingIncomplete = !profile?.onboarding_completed;
@@ -73,7 +78,7 @@ export function SetupChecklist({ prominent = false, dismissible = false }: Setup
   const pct = Math.max(0, Math.min(100, pctRaw));
 
   function handleDismiss() {
-    localStorage.setItem(DISMISS_STORAGE_KEY, "1");
+    localStorageSetBrand(DISMISS_STORAGE_KEY, "1", LEGACY_DISMISS_KEYS);
     setDismissed(true);
   }
 

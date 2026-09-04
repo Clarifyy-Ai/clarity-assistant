@@ -137,7 +137,7 @@ export default defineConfig(({ mode }) => {
                   return;
                 }
                 res.setHeader("Content-Type", "application/octet-stream");
-                res.setHeader("Content-Disposition", 'attachment; filename="Clarify-AI-Setup.exe"');
+                res.setHeader("Content-Disposition", 'attachment; filename="Career-Pilot-Setup.exe"');
                 fs.createReadStream(file).pipe(res);
               });
             },
@@ -236,7 +236,7 @@ export default defineConfig(({ mode }) => {
         "X-Frame-Options": "DENY",
         "X-XSS-Protection": "1; mode=block",
         "Referrer-Policy": "strict-origin-when-cross-origin",
-        "Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
+        "Permissions-Policy": "camera=(), microphone=(self), geolocation=(), payment=(self), usb=(), fullscreen=(self)",
       },
 
       proxy: {

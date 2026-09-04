@@ -1,5 +1,6 @@
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
+import { getRazorpayProviderConfig } from "../_shared/razorpayProvider.ts";
 
 const FALLBACK = {
   pro_monthly: 249_900,
@@ -9,11 +10,16 @@ const FALLBACK = {
   credits_500: 599_900,
 };
 
+function paymentsConfiguredFlag(): boolean {
+  return getRazorpayProviderConfig().checkoutConfigured;
+}
+
 Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
   const headers = { ...getCorsHeaders(req), "Content-Type": "application/json" };
+  const payments_configured = paymentsConfiguredFlag();
 
   try {
     const db = createServiceClient();
@@ -29,6 +35,7 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({
           source: error ? "fallback" : "fallback",
+          payments_configured,
           paise: FALLBACK,
           packs: [
             { id: "credits_50", credits: 50, paise: FALLBACK.credits_50 },
@@ -52,6 +59,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         source: "billing_settings",
+        payments_configured,
         paise,
         packs: [
           { id: "credits_50", credits: 50, paise: paise.credits_50 },
@@ -64,7 +72,11 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error("[billing-catalog]", err);
     return new Response(
-      JSON.stringify({ source: "fallback", paise: FALLBACK }),
+      JSON.stringify({
+        source: "fallback",
+        payments_configured,
+        paise: FALLBACK,
+      }),
       { headers },
     );
   }

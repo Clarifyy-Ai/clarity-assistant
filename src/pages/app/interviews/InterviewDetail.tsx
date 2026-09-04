@@ -295,7 +295,7 @@ export default function InterviewDetail() {
           { label: iv.company_name },
         ]}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex max-w-full flex-wrap items-center gap-2">
             {!isPassed && ivStatus === "scheduled" && (
               <Button
                 variant="secondary"

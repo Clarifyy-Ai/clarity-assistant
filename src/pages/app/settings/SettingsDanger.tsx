@@ -26,6 +26,7 @@ import {
   messageFromExportCaught,
   messageFromExportResponse,
 } from "@/lib/export/exportUserFacingError";
+import { brandExportBasename } from "@/lib/constants/brandStorage";
 
 // ─────────────────────────────────────────────────────────────────
 // SettingsDanger — delete account, export data, reset
@@ -73,7 +74,7 @@ export default function SettingsDanger() {
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement("a");
       a.href     = url;
-      a.download = `clarify-ai-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `${brandExportBasename("export", new Date().toISOString().slice(0, 10))}.json`;
       a.click();
       URL.revokeObjectURL(url);
       exportIdempotencyKey.current = null;
@@ -173,6 +174,7 @@ export default function SettingsDanger() {
         return;
       }
       setDeleteOpen(false);
+      deleteIdempotencyKey.current = null;
       if (payload?.status && !isTerminalDeletionStatus(String(payload.status))) {
         toast.success(
           `Account deletion is ${String(payload.status).replaceAll("_", " ")}. We'll finish this in the background.`,

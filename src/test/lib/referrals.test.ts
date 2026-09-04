@@ -1,13 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   clearStoredRefCode,
+  getPendingReferralFromUserMetadata,
   getStoredRefCode,
   normalizeRefCode,
   REFERRAL_STORAGE_KEY,
+  resolveReferralCodeForClaim,
   shouldClearStoredReferral,
   storeRefCode,
 } from "@/lib/referrals";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
 describe("normalizeRefCode", () => {
   it("accepts 6–16 alphanumeric codes", () => {
@@ -42,6 +49,48 @@ describe("referral storage", () => {
   });
 });
 
+describe("pending referral metadata", () => {
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  it("reads pending_referral_code from user_metadata", () => {
+    expect(
+      getPendingReferralFromUserMetadata({
+        user_metadata: { pending_referral_code: "friend01" },
+      }),
+    ).toBe("FRIEND01");
+    expect(getPendingReferralFromUserMetadata({ user_metadata: {} })).toBeNull();
+    expect(getPendingReferralFromUserMetadata(null)).toBeNull();
+  });
+
+  it("prefers explicit then metadata then localStorage", () => {
+    localStorage.setItem(REFERRAL_STORAGE_KEY, "LOCAL01");
+    expect(resolveReferralCodeForClaim("EXPLIC1")).toBe("EXPLIC1");
+    expect(
+      resolveReferralCodeForClaim(null, {
+        user_metadata: { pending_referral_code: "META001" },
+      }),
+    ).toBe("META001");
+    expect(resolveReferralCodeForClaim(null, { user_metadata: {} })).toBe("LOCAL01");
+    clearStoredRefCode();
+    expect(
+      resolveReferralCodeForClaim(null, {
+        user_metadata: { pending_referral_code: "META002" },
+      }),
+    ).toBe("META002");
+  });
+});
+
+describe("buildReferralLink", () => {
+  it("uses the canonical public website origin", async () => {
+    const { buildReferralLink } = await import("@/lib/referrals");
+    expect(buildReferralLink("FRIEND01")).toBe(
+      "https://trycareerpilot.com/signup?ref=FRIEND01",
+    );
+  });
+});
+
 describe("shouldClearStoredReferral", () => {
   it("clears after a successful award", () => {
     expect(
@@ -63,6 +112,18 @@ describe("shouldClearStoredReferral", () => {
       shouldClearStoredReferral({
         success: true,
         result: { ok: true, reason: "already_recorded" },
+      }),
+    ).toBe(true);
+    expect(
+      shouldClearStoredReferral({
+        success: true,
+        result: { ok: false, reason: "programme_disabled" },
+      }),
+    ).toBe(true);
+    expect(
+      shouldClearStoredReferral({
+        success: true,
+        result: { ok: false, reason: "self_referral" },
       }),
     ).toBe(true);
   });
@@ -105,5 +166,68 @@ describe("recordReferral", () => {
     expect(outcome.applied).toBe(true);
     expect(outcome.refereeCredits).toBe(25);
     expect(stored()).toBeNull();
+  });
+
+  it("clears storage on self_referral without treating as applied", async () => {
+    localStorage.setItem(REFERRAL_STORAGE_KEY, "MYCODE1");
+    vi.resetModules();
+    vi.doMock("@/lib/api/payments", () => ({
+      recordReferralViaEdge: vi.fn().mockResolvedValue({
+        success: true,
+        result: { ok: false, reason: "self_referral" },
+      }),
+    }));
+    const { recordReferral, getStoredRefCode: stored } = await import("@/lib/referrals");
+    const outcome = await recordReferral("user-1", null);
+    expect(outcome.applied).toBe(false);
+    expect(stored()).toBeNull();
+  });
+
+  it("claims from user_metadata when localStorage is empty", async () => {
+    clearStoredRefCode();
+    vi.resetModules();
+    const edge = vi.fn().mockResolvedValue({
+      success: true,
+      result: { ok: true, referee_credits: 25 },
+    });
+    vi.doMock("@/lib/api/payments", () => ({
+      recordReferralViaEdge: edge,
+    }));
+    const { recordReferral } = await import("@/lib/referrals");
+    const outcome = await recordReferral("user-1", null, {
+      user_metadata: { pending_referral_code: "META99X" },
+    });
+    expect(outcome.applied).toBe(true);
+    expect(edge).toHaveBeenCalledWith("META99X");
+  });
+});
+
+describe("referral qualification is server-side only", () => {
+  it("record-referral Edge maps self_referral and calls record_referral_reward RPC", () => {
+    const src = fs.readFileSync(
+      path.join(root, "supabase/functions/record-referral/index.ts"),
+      "utf8",
+    );
+    expect(src).toContain('rpc("record_referral_reward"');
+    expect(src).toContain("self_referral");
+    expect(src).toContain("REFERRAL_SELF_REFERRAL");
+    expect(src).not.toContain("add_credits");
+  });
+
+  it("client creditsDB.add is disabled (no FE credit grants)", () => {
+    const src = fs.readFileSync(
+      path.join(root, "src/lib/supabase/database.ts"),
+      "utf8",
+    );
+    expect(src).toContain("Client add_credits is disabled");
+    expect(src).toContain('operation: "add"');
+  });
+
+  it("FE referrals helper only invokes Edge, never profiles.credits writes", () => {
+    const src = fs.readFileSync(path.join(root, "src/lib/referrals.ts"), "utf8");
+    expect(src).toContain("recordReferralViaEdge");
+    expect(src).not.toMatch(/\.from\(["']profiles["']\)/);
+    expect(src).not.toContain("add_credits");
+    expect(src).not.toContain("increment_profile_credits");
   });
 });

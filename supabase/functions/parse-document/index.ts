@@ -668,6 +668,7 @@ Deno.serve(async (req) => {
           location: jdFields.location,
           role: jdFields.role,
           company: jdFields.company,
+          salary_range: jdFields.salary_range,
         },
         updated_at: new Date().toISOString(),
       };

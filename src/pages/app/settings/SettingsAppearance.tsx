@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 import { SettingsSaveBar } from "@/components/settings/SettingsSaveBar";
+import { mergeUiPreferences } from "@/lib/settings/uiPreferences";
 
 const THEMES = [
   { id: "light"  as const, label: "Light",  icon: Sun,     preview: "bg-[#fafafa]" },
@@ -77,13 +78,14 @@ export default function SettingsAppearance() {
   async function handleSave() {
     if (!profile?.id) return;
     setSaving(true);
-    const existing =
-      profile.ui_preferences && typeof profile.ui_preferences === "object"
-        ? profile.ui_preferences
-        : {};
     try {
       await updateProfile({
-        ui_preferences: { ...existing, theme: currentTheme, accentColor: accent, fontSize, density },
+        ui_preferences: mergeUiPreferences(profile.ui_preferences, {
+          theme: currentTheme,
+          accentColor: accent,
+          fontSize,
+          density,
+        }),
       });
       extras.setAccentColor(accent);
       extras.setFontSize(fontSize);

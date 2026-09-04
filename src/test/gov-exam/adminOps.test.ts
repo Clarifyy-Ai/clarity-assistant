@@ -5,6 +5,7 @@ import {
   canSetRegistryReviewState,
   canSetSourceReviewState,
   deriveQuestionQueueStatus,
+  mapExtractQuestionPaperInvokeError,
   questionPatchForStatus,
   questionPatchForVerifyAction,
   summarizeBlueprint,
@@ -12,6 +13,23 @@ import {
 } from "@/lib/gov-exam/adminOps";
 
 describe("gov exam adminOps helpers", () => {
+  it("maps FunctionsFetchError / Failed to send to actionable extract copy", () => {
+    expect(
+      mapExtractQuestionPaperInvokeError({
+        name: "FunctionsFetchError",
+        message: "Failed to send a request to the Edge Function",
+      }),
+    ).toMatch(/Couldn't reach the extract service/i);
+    expect(
+      mapExtractQuestionPaperInvokeError(
+        new Error("Failed to send a request to the Edge Function"),
+      ),
+    ).toMatch(/Edge Function may be unreachable/i);
+    expect(mapExtractQuestionPaperInvokeError(new Error("PARSER_FAILED"))).toBe(
+      "PARSER_FAILED",
+    );
+  });
+
   it("validates review state enums", () => {
     expect(canSetSourceReviewState("approved")).toBe(true);
     expect(canSetSourceReviewState("bogus")).toBe(false);

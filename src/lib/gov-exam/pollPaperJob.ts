@@ -10,15 +10,15 @@ const BACKOFF_START_MS = 2_000;
 const BACKOFF_CAP_MS = 15_000;
 const TRANSIENT_FAIL_LIMIT = 8;
 
-const POLL_TIMEOUT_MESSAGE =
-  "Paper generation timed out. The generator may be unavailable. Tap Retry to try again.";
+const POLL_STILL_WORKING_MESSAGE =
+  "Still generating on the server. You can keep waiting or return later — this job is durable and a client poll timeout does not mean credits were lost.";
 
-function pollTimedOutResult(current: PaperJobResult): PaperJobResult {
+/** Soft exit: do not invent a durable failure; keep last known non-terminal status. */
+function softPollExhaustedResult(current: PaperJobResult): PaperJobResult {
   return {
     ...current,
-    status: "failed_retryable",
-    errorCode: "GENERATION_POLL_TIMEOUT",
-    errorMessage: POLL_TIMEOUT_MESSAGE,
+    errorCode: "GENERATION_STILL_RUNNING",
+    errorMessage: POLL_STILL_WORKING_MESSAGE,
   };
 }
 
@@ -101,7 +101,7 @@ export async function pollPaperJobUntilTerminal(
 
   while (!isPaperJobTerminal(current.status) && !options.shouldAbort() && polls < maxPolls) {
     if (isWallClockExceeded()) {
-      current = pollTimedOutResult(current);
+      current = softPollExhaustedResult(current);
       options.setJob(current);
       break;
     }
@@ -154,7 +154,7 @@ export async function pollPaperJobUntilTerminal(
   }
 
   if (!isPaperJobTerminal(current.status) && polls >= maxPolls) {
-    current = pollTimedOutResult(current);
+    current = softPollExhaustedResult(current);
     options.setJob(current);
   }
 
@@ -164,4 +164,5 @@ export async function pollPaperJobUntilTerminal(
 export const PAPER_JOB_POLL_MAX = DEFAULT_MAX_POLLS;
 export const PAPER_JOB_POLL_WALL_CLOCK_MS = DEFAULT_MAX_WALL_CLOCK_MS;
 export const PAPER_JOB_POLL_BACKOFF = { startMs: BACKOFF_START_MS, capMs: BACKOFF_CAP_MS };
-export const PAPER_JOB_POLL_TIMEOUT_MESSAGE = POLL_TIMEOUT_MESSAGE;
+export const PAPER_JOB_POLL_TIMEOUT_MESSAGE = POLL_STILL_WORKING_MESSAGE;
+export const PAPER_JOB_POLL_STILL_RUNNING_CODE = "GENERATION_STILL_RUNNING";

@@ -8,6 +8,13 @@ import {
   LIVE_TRANSCRIPTION_BAR_COPY,
   MIC_STATUS_COPY,
 } from "@/lib/audio/transcriptionStates";
+import {
+  TAB_AUDIO_STATUS_COPY,
+  isChannelUiActive,
+  tabAudioTitle,
+  worstTranscriptionHealth,
+  type AudioChannelHealthStatus,
+} from "@/lib/audio/audioChannelHealth";
 import { cn } from "@/lib/utils";
 
 function isLiveSessionStatus(status: string | undefined): boolean {
@@ -41,22 +48,114 @@ function micBarCopy(input: {
   return { key: "active", label: MIC_STATUS_COPY.active };
 }
 
-function transcriptionBarCopy(providerStatus: string): {
-  key: keyof typeof LIVE_TRANSCRIPTION_BAR_COPY;
-  label: string;
-} {
+function transcriptionBarFromHealth(
+  providerStatus: string,
+  micHealth: AudioChannelHealthStatus,
+  interviewerHealth: AudioChannelHealthStatus,
+  systemExpected: boolean,
+): { key: keyof typeof LIVE_TRANSCRIPTION_BAR_COPY; label: string; dataState: string } {
   if (providerStatus === "connecting" || providerStatus === "reconnecting") {
-    return { key: "connecting", label: LIVE_TRANSCRIPTION_BAR_COPY.connecting };
+    return {
+      key: "connecting",
+      label: LIVE_TRANSCRIPTION_BAR_COPY.connecting,
+      dataState: "connecting",
+    };
+  }
+
+  const worst = worstTranscriptionHealth(micHealth, interviewerHealth, systemExpected);
+
+  if (worst === "connecting") {
+    return {
+      key: "connecting",
+      label: LIVE_TRANSCRIPTION_BAR_COPY.connecting,
+      dataState: "connecting",
+    };
+  }
+  if (worst === "silent_source") {
+    return {
+      key: "unavailable",
+      label: "Transcription silent source",
+      dataState: "silent_source",
+    };
+  }
+  if (worst === "unavailable" || worst === "disconnected") {
+    if (!systemExpected && providerStatus === "connected" && isChannelUiActive(micHealth)) {
+      return {
+        key: "connected",
+        label: LIVE_TRANSCRIPTION_BAR_COPY.connected,
+        dataState: "connected",
+      };
+    }
+    if (providerStatus === "connected" && isChannelUiActive(micHealth) && !systemExpected) {
+      return {
+        key: "connected",
+        label: LIVE_TRANSCRIPTION_BAR_COPY.connected,
+        dataState: "connected",
+      };
+    }
+    return {
+      key: "unavailable",
+      label: LIVE_TRANSCRIPTION_BAR_COPY.unavailable,
+      dataState: worst,
+    };
+  }
+  if (providerStatus === "connected" && worst === "active") {
+    return {
+      key: "connected",
+      label: LIVE_TRANSCRIPTION_BAR_COPY.connected,
+      dataState: "connected",
+    };
   }
   if (providerStatus === "connected") {
-    return { key: "connected", label: LIVE_TRANSCRIPTION_BAR_COPY.connected };
+    // Mic socket open but interviewer not yet active — don't claim full dual health
+    if (systemExpected && interviewerHealth !== "active") {
+      return {
+        key: "connecting",
+        label: LIVE_TRANSCRIPTION_BAR_COPY.connecting,
+        dataState: interviewerHealth,
+      };
+    }
+    return {
+      key: "connected",
+      label: LIVE_TRANSCRIPTION_BAR_COPY.connected,
+      dataState: "connected",
+    };
   }
-  return { key: "unavailable", label: LIVE_TRANSCRIPTION_BAR_COPY.unavailable };
+  return {
+    key: "unavailable",
+    label: LIVE_TRANSCRIPTION_BAR_COPY.unavailable,
+    dataState: "unavailable",
+  };
+}
+
+function tabBadgeClass(status: AudioChannelHealthStatus): string {
+  if (status === "active") {
+    return "text-emerald-300/90 bg-emerald-500/10 border-emerald-500/25";
+  }
+  if (status === "connecting" || status === "silent_source") {
+    return "text-amber-300/80 bg-amber-500/10 border-amber-500/20";
+  }
+  if (status === "unavailable") {
+    return "text-red-300/80 bg-red-500/10 border-red-500/20";
+  }
+  return "text-amber-300/80 bg-amber-500/10 border-amber-500/20";
 }
 
 export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
-  const hasSystem = useAudioStore((s) => !!s.streams?.system_stream);
+  const interviewerStatus = useAudioStore(
+    (s) => s.channel_health?.interviewer?.status ?? "disconnected",
+  );
+  const micHealthStatus = useAudioStore(
+    (s) => s.channel_health?.mic?.status ?? "disconnected",
+  );
+  const systemAudioExpected = useAudioStore(
+    (s) =>
+      Boolean(s.setup?.system_audio_available) ||
+      Boolean(s.interviewer_channel_active) ||
+      Boolean(s.streams?.system_stream) ||
+      interviewerStatus !== "disconnected",
+  );
   const isMuted = useAudioStore((s) => s.is_muted ?? false);
   const currentLevel = useAudioStore((s) => s.levels?.current_level ?? 0);
   const providerStatus = useAudioStore((s) => s.transcription_provider_status ?? "idle");
@@ -74,7 +173,17 @@ export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
     isCapturing,
     isMuted,
   });
-  const transcription = transcriptionBarCopy(providerStatus);
+  const dualExpected =
+    systemAudioExpected ||
+    interviewerStatus === "connecting" ||
+    interviewerStatus === "active" ||
+    interviewerStatus === "silent_source";
+  const transcription = transcriptionBarFromHealth(
+    providerStatus,
+    micHealthStatus,
+    interviewerStatus,
+    dualExpected,
+  );
   const providerOk = transcription.key === "connected";
   const micActive = mic.key === "active";
 
@@ -124,18 +233,13 @@ export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
       <span
         className={cn(
           "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[10px] font-bold border",
-          hasSystem
-            ? "text-emerald-300/90 bg-emerald-500/10 border-emerald-500/25"
-            : "text-amber-300/80 bg-amber-500/10 border-amber-500/20",
+          tabBadgeClass(interviewerStatus),
         )}
-        title={
-          hasSystem
-            ? "Interviewer tab audio captured"
-            : "Mic only — share tab audio to capture interviewer"
-        }
+        title={tabAudioTitle(interviewerStatus)}
+        data-tab-audio-state={interviewerStatus}
       >
         <Volume2 className="w-2.5 h-2.5" />
-        {hasSystem ? "Tab audio" : "Mic only"}
+        {TAB_AUDIO_STATUS_COPY[interviewerStatus]}
       </span>
 
       <span
@@ -148,7 +252,7 @@ export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
               : "text-amber-300/80 bg-amber-500/10 border-amber-500/20",
         )}
         title={transcription.label}
-        data-transcription-state={transcription.key}
+        data-transcription-state={transcription.dataState}
       >
         {providerOk ? <Wifi className="w-2.5 h-2.5" /> : <WifiOff className="w-2.5 h-2.5" />}
         {transcription.label}

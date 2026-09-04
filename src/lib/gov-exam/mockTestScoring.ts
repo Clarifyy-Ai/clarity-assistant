@@ -4,6 +4,7 @@
  */
 
 export {
+  MOCK_TEST_SCORE_ALGORITHM_VERSION,
   computeMockTestAccuracy,
   computeMockTestAttemptPercentage,
   clampMockTestDisplayScore,

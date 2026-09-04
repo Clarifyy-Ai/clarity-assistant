@@ -1,7 +1,7 @@
 import { test, expect, loginAsTestUser } from "../playwright-fixture";
 
 test.describe("Export sessions & scores (WS21)", () => {
-  test("exports sessions JSON successfully", async ({ page }) => {
+  test("exports sessions CSV successfully", async ({ page }) => {
     await loginAsTestUser(page);
 
     await page.goto("/app/settings/data", { waitUntil: "domcontentloaded" });
@@ -12,9 +12,16 @@ test.describe("Export sessions & scores (WS21)", () => {
     const downloadPromise = page.waitForEvent("download", { timeout: 15_000 });
     await page.getByTestId("export-sessions").click();
     const download = await downloadPromise;
-    expect(download.suggestedFilename()).toMatch(/clarify-ai-sessions-.*\.json$/);
+    expect(download.suggestedFilename()).toMatch(/career-pilot-sessions-.*\.csv$/);
 
-    await expect(page.getByText(/Export downloaded successfully/i).first()).toBeVisible({
+    const path = await download.path();
+    if (path) {
+      const fs = await import("node:fs/promises");
+      const body = await fs.readFile(path, "utf8");
+      expect(body.split("\n")[0]).toMatch(/^id,session_type,title,/);
+    }
+
+    await expect(page.getByText(/CSV export downloaded/i).first()).toBeVisible({
       timeout: 10_000,
     });
   });
@@ -99,7 +106,7 @@ test.describe("Export sessions & scores (WS21)", () => {
         headers: {
           "access-control-allow-origin": origin,
           "access-control-allow-credentials": "true",
-          "Content-Disposition": 'attachment; filename="clarify-ai-export-sessions.json"',
+          "Content-Disposition": 'attachment; filename="career-pilot-export-sessions.json"',
         },
         body: JSON.stringify({
           exported_at: new Date().toISOString(),
@@ -118,7 +125,7 @@ test.describe("Export sessions & scores (WS21)", () => {
     await btn.click();
     await btn.click({ force: true }).catch(() => undefined);
 
-    await expect(page.getByText(/Export downloaded successfully/i).first()).toBeVisible({
+    await expect(page.getByText(/CSV export downloaded/i).first()).toBeVisible({
       timeout: 15_000,
     });
     expect(postCount).toBe(1);

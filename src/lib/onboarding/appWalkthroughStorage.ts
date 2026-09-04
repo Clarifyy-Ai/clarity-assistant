@@ -1,8 +1,14 @@
-const STORAGE_KEY = "Clarify AI-app-walkthrough-v1";
+import {
+  localStorageGetWithLegacy,
+  localStorageSetBrand,
+} from "@/lib/constants/brandStorage";
+
+const STORAGE_KEY = "career-pilot-app-walkthrough-v1";
+const LEGACY_KEYS = ["Clarify AI-app-walkthrough-v1"] as const;
 
 function readMap(): Record<string, boolean> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorageGetWithLegacy(STORAGE_KEY, LEGACY_KEYS);
     if (!raw) return {};
     const parsed = JSON.parse(raw) as unknown;
     return parsed && typeof parsed === "object" ? (parsed as Record<string, boolean>) : {};
@@ -20,7 +26,7 @@ export function markAppWalkthroughCompleted(userId: string): void {
   try {
     const map = readMap();
     map[userId] = true;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+    localStorageSetBrand(STORAGE_KEY, JSON.stringify(map), LEGACY_KEYS);
   } catch {
     /* best-effort */
   }

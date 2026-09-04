@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   indiaUserAfterProfileLookup,
   PROFILE_LOOKUP_TIMEOUT_MS,
+  resolveIsIndiaProfile,
 } from "../../../../supabase/functions/_shared/indiaRegion";
 
 describe("search profile lookup fallback", () => {
@@ -20,13 +21,20 @@ describe("search profile lookup fallback", () => {
     expect(indiaUserAfterProfileLookup(null, "failed")).toBe(true);
   });
 
-  it("still honours a successful non-India profile", () => {
+  it("allows gov exam access worldwide for any successful profile", () => {
+    expect(
+      resolveIsIndiaProfile({
+        region: "US",
+        timezone: "America/New_York",
+        locale: "en-US",
+      }),
+    ).toBe(true);
     expect(
       indiaUserAfterProfileLookup(
         { region: "US", timezone: "America/New_York", locale: "en-US" },
         "ok",
       ),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       indiaUserAfterProfileLookup(
         { region: "IN", timezone: "Asia/Kolkata", locale: "en-IN" },

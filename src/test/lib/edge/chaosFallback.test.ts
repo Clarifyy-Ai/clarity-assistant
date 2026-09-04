@@ -18,10 +18,10 @@ function readShared(name: string): string {
 /** MATRIX route snapshots for Wave 2 chaos targets. */
 const ROUTES = {
   practice_coach_help: {
-    preferredOrder: ["ai", "python", "deterministic"],
-    pythonFallbackOnAiFailure: true,
+    preferredOrder: ["ai"],
+    pythonFallbackOnAiFailure: false,
     aiFallbackOnPythonFailure: false,
-    canCompleteDeterministically: true,
+    canCompleteDeterministically: false,
     canCompleteWithDatabase: false,
     canUseAI: true,
     canUsePython: true,
@@ -132,7 +132,7 @@ describe("domain envelopes — hybrid failure paths", () => {
 });
 
 describe("HYBRID_FORCE_AI_UNAVAILABLE — skip AI, single charge + fallback", () => {
-  it("practice_coach_help: AI skipped → python succeeds", async () => {
+  it("practice_coach_help: AI skipped → fail closed (no python scaffold)", async () => {
     const route = applyChaosFlags(ROUTES.practice_coach_help, {
       forceAiUnavailable: true,
     });
@@ -146,11 +146,10 @@ describe("HYBRID_FORCE_AI_UNAVAILABLE — skip AI, single charge + fallback", ()
         python: async () => ({ reply: "coach hint", hints: ["STAR"] }),
       },
     });
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.source).toBe("python");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
       expect(result.deductCount).toBe(1);
-      expect(result.refundCount).toBe(0);
+      expect(result.refundCount).toBe(1);
     }
   });
 
@@ -247,12 +246,12 @@ describe("HYBRID_FORCE_AI_UNAVAILABLE — skip AI, single charge + fallback", ()
 });
 
 describe("HYBRID_FORCE_PYTHON_UNAVAILABLE — skip python, single charge + fallback", () => {
-  it("practice_coach_help: python skipped → deterministic template", async () => {
+  it("practice_coach_help: AI fail with python blocked → fail closed (no deterministic)", async () => {
     const route = applyChaosFlags(ROUTES.practice_coach_help, {
       forcePythonUnavailable: true,
     });
     const result = await simulateHybridExecution({
-      route: { ...route, preferredOrder: ["ai"] },
+      route,
       creditCost: 2,
       runners: {
         ai: async () => {
@@ -264,12 +263,10 @@ describe("HYBRID_FORCE_PYTHON_UNAVAILABLE — skip python, single charge + fallb
         deterministic: async () => ({ reply: "template hint" }),
       },
     });
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.source).toBe("fallback");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
       expect(result.deductCount).toBe(1);
-      expect(result.refundCount).toBe(0);
-      expect(result.fallbackReason).toMatch(/ai_failed/);
+      expect(result.refundCount).toBe(1);
     }
   });
 
@@ -364,9 +361,9 @@ describe("HYBRID_FORCE_PYTHON_UNAVAILABLE — skip python, single charge + fallb
 });
 
 describe("runtime failure chaos — compensated fail or fallback", () => {
-  it("practice_coach_help: AI runtime fail → python fallback, single deduct", async () => {
+  it("practice_coach_help: AI runtime fail → refund, no python fallback", async () => {
     const result = await simulateHybridExecution({
-      route: { ...ROUTES.practice_coach_help, preferredOrder: ["ai"] },
+      route: ROUTES.practice_coach_help,
       creditCost: 2,
       runners: {
         ai: async () => {
@@ -375,12 +372,10 @@ describe("runtime failure chaos — compensated fail or fallback", () => {
         python: async () => ({ reply: "fallback coach" }),
       },
     });
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.source).toBe("fallback");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
       expect(result.deductCount).toBe(1);
-      expect(result.refundCount).toBe(0);
-    } else {
+      expect(result.refundCount).toBe(1);
       assertNoRawGateway(httpStatusForDomainCode(result.code), result.code);
     }
   });

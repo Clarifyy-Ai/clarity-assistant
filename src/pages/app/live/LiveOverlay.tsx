@@ -37,19 +37,25 @@ import {
   saveLastPracticeSetup,
 } from "@/lib/session/lastPracticeSetup";
 import { saveLastSessionSummary } from "@/lib/session/lastSessionSummary";
-import { resolveQuestionFromTranscript } from "@/lib/session/liveQuestionFromTranscript";
+import {
+  assessAiHelpQuestion,
+  confidenceTierLabel,
+} from "@/lib/session/aiHelpConfirm";
 import { restoreOwnedSession, heartbeatOwnedSession } from "@/lib/api/sessions";
 import { handleSessionStartError } from "@/lib/billing/sessionStartErrors";
 import {
   terminalExplanation,
   terminalTitle,
 } from "@/lib/session/sessionStartEligibility";
+import { classifyPracticeLeaseResult } from "@/lib/session/practiceSessionLease";
+import { isTransientLiveFailure } from "@/lib/session/liveSessionRetry";
 import { useAuthStore } from "@/store/authStore";
-import { ApiClientError } from "@/lib/api/apiClient";
 import { syncOverlayAuthReady } from "@/lib/session/overlayProductSession";
 import { resetTransientOverlaySessionStores } from "@/lib/session/resetOverlaySessionStores";
 import { useOverlaySessionAuthorityStore } from "@/store/overlaySessionAuthorityStore";
 import { OverlaySessionPreparing } from "@/components/overlay/OverlaySessionPreparing";
+
+const HEARTBEAT_INTERVAL_MS = 50_000;
 
 const PREP_LABELS = [
   "Analysing your profile…",
@@ -159,6 +165,16 @@ function LiveOverlaySession() {
   const endSessionRef = useRef(copilot.endLiveSession);
   endSessionRef.current = copilot.endLiveSession;
 
+  // If AI/enforcement marks the practice lease abandoned mid-run, flip to terminal UI.
+  useEffect(() => {
+    if (sessionStatus === "abandoned" && phase === "active") {
+      setTerminalReason((prev) => prev ?? "SESSION_TIMEOUT");
+      setPhase("expired");
+      useOverlayStore.getState().setSessionPipelineState("session_ending");
+      void endSessionRef.current?.().catch(() => undefined);
+    }
+  }, [sessionStatus, phase]);
+
   // Normalize stream error to a message
   const streamError = copilot.streamError;
   const streamErrorMessage: string | null = streamError
@@ -266,14 +282,26 @@ function LiveOverlaySession() {
     void restoreOwnedSession({ session_type: "rehearsal" })
       .then((restored) => {
         if (cancelled || didEndRef.current) return;
-        if (restored.reason === "SESSION_EXPIRED" || restored.lifecycle_status === "EXPIRED") {
+        const outcome = classifyPracticeLeaseResult(restored);
+        if (outcome.kind === "expired") {
           setLastSessionId(restored.session_id ?? null);
-          setTerminalReason(restored.terminal_reason ?? "SESSION_TIMEOUT");
+          setTerminalReason(outcome.terminalReason);
           setPhase("expired");
           useSessionStore.getState().setStatus("abandoned");
           return;
         }
         if (restored.found && restored.session_id && restored.reason === "ACTIVE") {
+          useSessionStore.getState().applyServerLease({
+            expires_at: restored.expires_at ?? null,
+            started_at: restored.started_at ?? null,
+          });
+          const boundId = useSessionStore.getState().session_id;
+          // Already LIVE on this session — do not flip back to starting / re-POST start-session.
+          if (phase === "active" && boundId && boundId === restored.session_id) {
+            setRestoreSessionId(restored.session_id);
+            setLastSessionId(restored.session_id);
+            return;
+          }
           // Refresh: re-bind existing session — do not create a new server session.
           setRestoreSessionId(restored.session_id);
           setLastSessionId(restored.session_id);
@@ -284,41 +312,106 @@ function LiveOverlaySession() {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        if (err instanceof ApiClientError && err.code === "SESSION_EXPIRED") {
-          setTerminalReason("SESSION_TIMEOUT");
+        const outcome = classifyPracticeLeaseResult(null, err);
+        if (outcome.kind === "expired") {
+          setTerminalReason(outcome.terminalReason);
           setPhase("expired");
           useSessionStore.getState().setStatus("abandoned");
         }
+        // Transient restore failures: leave setup/active alone; user can retry.
       });
     return () => {
       cancelled = true;
     };
   }, [authUserId, phase]);
 
+  const markLeaseExpired = useCallback(
+    (terminalReason: string, sessionIdForSummary: string | null) => {
+      setTerminalReason(terminalReason);
+      setLastSessionId(sessionIdForSummary);
+      setPhase("expired");
+      useSessionStore.getState().setStatus("abandoned");
+      useOverlayStore.getState().setSessionPipelineState("session_ending");
+      // Stop audio/polling without navigating away — expired UI stays on this page.
+      void copilot.endLiveSession?.().catch(() => undefined);
+    },
+    [copilot],
+  );
+
+  const markBackendDegraded = useCallback((message: string) => {
+    useOverlayStore.getState().setError(
+      message || "AI is temporarily unavailable. Your session is still active — retry when ready.",
+    );
+    useOverlayStore.getState().setSessionPipelineState("backend_unavailable");
+  }, []);
+
+  const clearBackendDegraded = useCallback(() => {
+    const overlay = useOverlayStore.getState();
+    if (
+      overlay.session_pipeline_state === "backend_unavailable" ||
+      overlay.session_pipeline_state === "reconnecting"
+    ) {
+      overlay.setError(null);
+      overlay.setSessionPipelineState("listening");
+    }
+  }, []);
+
   useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState !== "visible") return;
+    if (phase !== "active") return;
+
+    let cancelled = false;
+    const runHeartbeat = () => {
       const sessionId = useSessionStore.getState().session_id;
       const auth = useOverlaySessionAuthorityStore.getState();
-      if (!sessionId || phase !== "active") return;
+      if (!sessionId || cancelled) return;
       if (auth.mode !== "live" || auth.lifecycle === "terminal") return;
-      void heartbeatOwnedSession(sessionId).then((result) => {
-        if (result.reason === "SESSION_EXPIRED") {
-          setTerminalReason(result.terminal_reason ?? "SESSION_TIMEOUT");
-          setPhase("expired");
-          useSessionStore.getState().setStatus("abandoned");
-        }
-      }).catch((err: unknown) => {
-        if (err instanceof ApiClientError && err.code === "SESSION_EXPIRED") {
-          setTerminalReason("SESSION_TIMEOUT");
-          setPhase("expired");
-          useSessionStore.getState().setStatus("abandoned");
-        }
-      });
+
+      void heartbeatOwnedSession(sessionId)
+        .then((result) => {
+          if (cancelled) return;
+          const outcome = classifyPracticeLeaseResult(result);
+          if (outcome.kind === "expired") {
+            markLeaseExpired(outcome.terminalReason, sessionId);
+            return;
+          }
+          if (outcome.kind === "ok") {
+            useSessionStore.getState().applyServerLease({
+              expires_at: outcome.expiresAt,
+              started_at: result.started_at ?? undefined,
+            });
+            clearBackendDegraded();
+          }
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          const outcome = classifyPracticeLeaseResult(null, err);
+          if (outcome.kind === "expired") {
+            markLeaseExpired(outcome.terminalReason, sessionId);
+            return;
+          }
+          if (isTransientLiveFailure(err) || outcome.kind === "transient") {
+            markBackendDegraded(
+              outcome.kind === "transient"
+                ? outcome.message
+                : "Backend temporarily unavailable. Your practice session is still open.",
+            );
+          }
+        });
     };
+
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      runHeartbeat();
+    };
+
     document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [phase]);
+    const intervalId = window.setInterval(runHeartbeat, HEARTBEAT_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearInterval(intervalId);
+    };
+  }, [phase, markLeaseExpired, markBackendDegraded, clearBackendDegraded]);
 
   // ── Stop session ─────────────────────────────────────────────────────────
   const handleStop = useCallback(async () => {
@@ -358,43 +451,92 @@ function LiveOverlaySession() {
     }
   }, [copilot, navigate]);
 
-  // ── Generate hint ─────────────────────────────────────────────────────────
+  // ── Generate hint (Manual AI Help confirm — never auto-generate on low confidence)
   const handleGenerate = useCallback(() => {
     const store = useOverlayStore.getState();
     store.setActiveTab("answer");
     store.setMinimalMode(false);
     store.showOverlay();
 
+    const frozen =
+      copilot.snapshotRecentInterviewerTranscript?.({ maxChars: 2_000 }) ?? "";
     const utterances = useAudioStore.getState().transcript?.utterances ?? [];
     const micOnly = !config.enable_system_audio;
-    let question = resolveQuestionFromTranscript(
+    const minMedium = useAudioStore.getState().question_confidence_min ?? 0.45;
+
+    const assessment = assessAiHelpQuestion({
       utterances,
-      store.current_question,
-      { allowMicOnlyFallback: micOnly },
-    );
-    // Explicit AI Help: re-evaluate transcript with recovery (low-confidence / mislabel).
-    if (!question) {
-      question = resolveQuestionFromTranscript(utterances, null, {
-        allowMicOnlyFallback: true,
-        aiHelpRecovery: true,
-      });
-    }
-    if (!question) {
-      question = (store.chat_prefill ?? "").trim();
-    }
-    if (question) {
-      store.setCurrentQuestion(question);
-      store.clearChatAttention();
-      void copilot.requestLiveHint(question);
+      currentQuestion: store.current_question,
+      chatPrefill: store.chat_prefill,
+      allowMicOnlyFallback: micOnly,
+      frozenInterviewerText: frozen,
+      minMedium,
+    });
+
+    if (!assessment.question) {
+      store.clearAiHelpConfirm();
+      store.setSessionPipelineState("listening");
+      store.setChatAttention(true, "manual_needed");
+      toast.info(
+        "Listening for the interviewer. Share tab audio, or open Chat to type the question.",
+      );
       return;
     }
 
-    store.setSessionPipelineState("listening");
-    store.setChatAttention(true, "manual_needed");
-    toast.info(
-      "Listening for the interviewer. Share tab audio, or open Chat to type the question.",
-    );
+    // Always confirm before spending credits — do not auto-generate (esp. low confidence).
+    store.openAiHelpConfirm({
+      question: assessment.question,
+      confidence: assessment.confidence,
+      confidenceScore: assessment.confidenceScore,
+      frozenInterviewerText: frozen,
+      editing: assessment.confidence === "low",
+    });
+    if (assessment.confidence === "low") {
+      toast.message(
+        `Detected question confidence: ${confidenceTierLabel(assessment.confidence)}. Edit or confirm before generating.`,
+      );
+    }
   }, [copilot, config.enable_system_audio]);
+
+  const handleConfirmGenerateAnswer = useCallback(() => {
+    const store = useOverlayStore.getState();
+    const confirm = store.ai_help_confirm;
+    const question = (confirm?.question ?? "").trim();
+    if (!question) {
+      toast.info("Enter or detect a question before generating.");
+      return;
+    }
+    store.clearAiHelpConfirm();
+    store.setCurrentQuestion(question);
+    store.clearChatAttention();
+    void copilot.requestLiveHint(question);
+  }, [copilot]);
+
+  const handleConfirmEditQuestion = useCallback(() => {
+    useOverlayStore.getState().setAiHelpConfirmEditing(true);
+  }, []);
+
+  const handleConfirmRetryListening = useCallback(() => {
+    const store = useOverlayStore.getState();
+    store.clearAiHelpConfirm();
+    store.setCurrentQuestion("");
+    store.clearHint();
+    store.setSessionPipelineState("listening");
+    store.setHintState("listening");
+    toast.info("Listening again — wait for the interviewer, then tap AI Help.");
+  }, []);
+
+  const handleConfirmTypeManually = useCallback(() => {
+    const store = useOverlayStore.getState();
+    const prefill = (store.ai_help_confirm?.question ?? "").trim();
+    store.clearAiHelpConfirm();
+    store.setChatAttention(true, "manual_needed", prefill || null);
+    store.setActiveTab("chat");
+  }, []);
+
+  const handleConfirmCancel = useCallback(() => {
+    useOverlayStore.getState().clearAiHelpConfirm();
+  }, []);
 
   const handleManualQuestion = useCallback(
     async (question: string) => {
@@ -412,6 +554,7 @@ function LiveOverlaySession() {
         reason === "stt_reconnect_failed"
       ) {
         store.clearChatAttention();
+        store.clearAiHelpConfirm();
         store.setCurrentQuestion(trimmed);
         store.setActiveTab("answer");
         store.setMinimalMode(false);
@@ -562,6 +705,11 @@ function LiveOverlaySession() {
           onToggleMic={copilot.toggleMute}
           onToggleSystemAudio={copilot.toggleSystemAudio}
           onGenerate={handleGenerate}
+          onConfirmGenerateAnswer={handleConfirmGenerateAnswer}
+          onConfirmEditQuestion={handleConfirmEditQuestion}
+          onConfirmRetryListening={handleConfirmRetryListening}
+          onConfirmTypeManually={handleConfirmTypeManually}
+          onConfirmCancel={handleConfirmCancel}
           onRegenerate={() => copilot.requestAnswerModification("regenerate")}
           onShorten={() => copilot.requestAnswerModification("shorten")}
           onExpand={() => copilot.requestAnswerModification("expand")}

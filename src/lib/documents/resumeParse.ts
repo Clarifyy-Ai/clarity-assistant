@@ -1,6 +1,7 @@
 import type { ParsedResume } from "@/types/ai.types";
 import {
   assessExtractedDocumentQuality,
+  extractSkillsFromResumeText,
   looksLikeBinaryDump,
   looksLikeUploadedFilenameStub,
   normalizeSkillList,
@@ -24,15 +25,30 @@ function textList(value: unknown, maxItems = MAX_RESUME_LIST_ITEMS): string[] {
 export function normalizeParsedResume(raw: Record<string, unknown> | null): ParsedResume | null {
   if (!raw || typeof raw !== "object") return null;
 
-  const skills = textList(raw.skills ?? raw.parsed_skills);
-  const tech_stack = textList(raw.tech_stack);
+  let skills = textList(raw.skills ?? raw.parsed_skills);
+  let tech_stack = textList(raw.tech_stack);
+  const roleKeywords = textList(raw.role_keywords);
+  if (roleKeywords.length) {
+    skills = textList([...skills, ...roleKeywords]);
+  }
+  const summaryRaw =
+    typeof raw.summary === "string"
+      ? raw.summary
+      : typeof raw.profile === "string"
+        ? raw.profile
+        : "";
+  const summary = text(raw.summary) ?? text(raw.profile);
+  if (skills.length === 0 && tech_stack.length === 0 && summaryRaw.trim()) {
+    const recovered = extractSkillsFromResumeText(summaryRaw);
+    if (recovered.length) skills = recovered;
+  }
 
   return {
     full_name: text(raw.full_name) ?? text(raw.name, 200),
     email: text(raw.email, 320),
     phone: text(raw.phone, 80),
     location: text(raw.location, 200),
-    summary: text(raw.summary) ?? text(raw.profile),
+    summary,
     skills,
     tech_stack,
     // AI output is untrusted: only retain object entries. Consumers can safely

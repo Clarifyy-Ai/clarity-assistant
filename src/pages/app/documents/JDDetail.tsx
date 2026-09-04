@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
@@ -13,7 +13,7 @@ import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
   FileText, Trash2, Building2, MapPin, DollarSign,
-  CheckCircle, Clock, Edit, Save, X, Loader2, GitCompare,
+  CheckCircle, Clock, Edit, Save, X, Loader2, GitCompare, RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { jobDescriptionsDB, gapAnalysesDB } from "@/lib/supabase/database";
@@ -25,14 +25,31 @@ import {
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { companyProfilePath } from "@/lib/company/slug";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
+import { formatMatchScore } from "@/lib/results/resultDisplay";
 import { cn } from "@/lib/utils";
 import {
   getAiUserFacingError,
+  isInsufficientCreditsError,
   openUpgradeIfCapabilityRequired,
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
+import { InsufficientCreditsAction } from "@/components/billing/InsufficientCreditsAction";
+import { useCredits } from "@/hooks/useCredits";
+import { evaluateActionCreditGate } from "@/lib/billing/actionCreditGate";
+import { ApiClientError } from "@/lib/api/apiClient";
 import { HybridSourceLine } from "@/components/hybrid/HybridSourceLine";
-import { looksLikeUploadedFilenameStub } from "@/lib/documents/parseNormalize";
+import {
+  assessExtractedDocumentQuality,
+  buildHealedJdParsedData,
+  getJdDetailParseUi,
+  isJdContentReadyForDisplay,
+  normalizeSkillList,
+} from "@/lib/documents/parseNormalize";
+import { useDocuments } from "@/hooks/useDocuments";
+import { userFacingDocumentFailureMessage } from "@/lib/documents/documentFailure";
+
+const JD_PARSE_POLL_MS = 2_500;
+const JD_PARSE_POLL_MAX_MS = 90_000;
 
 interface ResumeOption {
   id: string;
@@ -69,6 +86,8 @@ export default function JDDetail() {
   const { id }      = useParams<{ id: string }>();
   const navigate    = useNavigate();
   const { user }    = useAuthStore();
+  const credits = useCredits();
+  const { retryJobDescriptionParse } = useDocuments({ skipInitialLoad: true });
 
   const [jd,          setJd]          = useState<JobDescription | null>(null);
   const [loading,     setLoading]     = useState(true);
@@ -79,6 +98,7 @@ export default function JDDetail() {
   const [savingEdit,  setSavingEdit]  = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [reparsing, setReparsing] = useState(false);
   const [resumes, setResumes] = useState<ResumeOption[]>([]);
   const [selectedResumeId, setSelectedResumeId] = useState("");
   const [gapRunning, setGapRunning] = useState(false);
@@ -86,11 +106,15 @@ export default function JDDetail() {
   const [gapStale, setGapStale] = useState(false);
   const [gapUpdatedAt, setGapUpdatedAt] = useState<string | null>(null);
   const [gapError, setGapError] = useState<string | null>(null);
+  const [gapCreditDenied, setGapCreditDenied] = useState(false);
+  const healedForIdRef = useRef<string | null>(null);
 
-  const loadJd = useCallback(async () => {
+  const loadJd = useCallback(async (opts?: { quiet?: boolean }) => {
     if (!id || !user?.id) return;
-    setLoading(true);
-    setFetchError(null);
+    if (!opts?.quiet) {
+      setLoading(true);
+      setFetchError(null);
+    }
     const { data, error } = await supabase
       .from("job_descriptions")
       .select("*")
@@ -100,17 +124,69 @@ export default function JDDetail() {
     if (error) {
       setFetchError(error.message);
       setJd(null);
+    } else if (data) {
+      let next = data as JobDescription;
+      if (
+        isJdContentReadyForDisplay(next.content) &&
+        healedForIdRef.current !== next.id
+      ) {
+        const { parsed_data, shouldWrite } = buildHealedJdParsedData(
+          next.content,
+          next.parsed_data,
+        );
+        if (shouldWrite) {
+          healedForIdRef.current = next.id;
+          try {
+            await jobDescriptionsDB.update(next.id, { parsed_data });
+            next = { ...next, parsed_data: parsed_data as JobDescription["parsed_data"] };
+          } catch {
+            /* best-effort heal; still show loaded row */
+          }
+        }
+      }
+      setJd(next);
+      setEditRole(next.target_role ?? next.title ?? "");
+      setEditCompany(next.company ?? "");
     } else {
-      setJd(data as JobDescription | null);
-      setEditRole(data?.target_role ?? data?.title ?? "");
-      setEditCompany(data?.company ?? "");
+      setJd(null);
     }
-    setLoading(false);
+    if (!opts?.quiet) setLoading(false);
   }, [id, user?.id]);
 
   useEffect(() => {
     void loadJd();
   }, [loadJd]);
+
+  useEffect(() => {
+    if (!jd || jd.parse_status !== "parsing") return;
+    let ticks = 0;
+    const maxTicks = Math.ceil(JD_PARSE_POLL_MAX_MS / JD_PARSE_POLL_MS);
+    const timer = window.setInterval(() => {
+      ticks += 1;
+      void loadJd({ quiet: true });
+      if (ticks >= maxTicks) {
+        window.clearInterval(timer);
+      }
+    }, JD_PARSE_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [jd?.id, jd?.parse_status, loadJd]);
+
+  async function handleReparse() {
+    if (!jd?.id) return;
+    setReparsing(true);
+    healedForIdRef.current = null;
+    try {
+      const { error } = await retryJobDescriptionParse(jd.id);
+      if (error) {
+        toast.error(error);
+      } else {
+        toast.success("Job description re-parsed");
+      }
+      await loadJd({ quiet: true });
+    } finally {
+      setReparsing(false);
+    }
+  }
 
   useEffect(() => {
     if (!user?.id) return;
@@ -168,8 +244,25 @@ export default function JDDetail() {
       toast.error("Select a resume to compare against this JD.");
       return;
     }
+    const gate = evaluateActionCreditGate({
+      operationKey: "gap_analysis",
+      balance: credits.balance,
+      balanceKnown: true,
+    });
+    if (gate.status === "insufficient" || gate.status === "unknown_balance") {
+      setGapCreditDenied(true);
+      openUpgradeIfInsufficientCredits(
+        new ApiClientError({
+          message: "Not enough credits for gap analysis.",
+          status: 402,
+          code: "INSUFFICIENT_CREDITS",
+        }),
+      );
+      return;
+    }
     setGapRunning(true);
     setGapError(null);
+    setGapCreditDenied(false);
     try {
       const result = await fetchEdgeJson<GapAnalysisResult>(
         "gap-analysis",
@@ -191,6 +284,7 @@ export default function JDDetail() {
       setGapUpdatedAt(new Date().toISOString());
       toast.success("Gap analysis saved");
     } catch (err: unknown) {
+      if (isInsufficientCreditsError(err)) setGapCreditDenied(true);
       openUpgradeIfInsufficientCredits(err);
       openUpgradeIfCapabilityRequired(err);
       const message = getAiUserFacingError(err);
@@ -273,10 +367,12 @@ export default function JDDetail() {
     );
   }
 
-  const requirements = jd.parsed_data?.required_skills ?? [];
-  const keywords     = jd.parsed_data?.key_phrases ?? [];
+  const requirements = normalizeSkillList(jd.parsed_data?.required_skills);
+  const keywords     = normalizeSkillList(jd.parsed_data?.key_phrases);
   const location     = jd.parsed_data?.location;
   const salary       = jd.parsed_data?.salary_range;
+  const { contentReady, showParseRecovery } = getJdDetailParseUi(jd);
+  const contentQuality = assessExtractedDocumentQuality(jd.content, "job_description");
 
   return (
     <div>
@@ -298,6 +394,21 @@ export default function JDDetail() {
                 leftIcon={<Edit className="w-4 h-4" />}
               >
                 Edit
+              </Button>
+            )}
+            {showParseRecovery && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void handleReparse()}
+                disabled={reparsing}
+                leftIcon={
+                  reparsing
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <RefreshCw className="w-4 h-4" />
+                }
+              >
+                Re-parse
               </Button>
             )}
             <Link to={jd.company ? companyProfilePath(jd.company) : "/app/companies"}>
@@ -436,9 +547,7 @@ export default function JDDetail() {
           </Card>
         )}
 
-        {jd.content &&
-          !looksLikeUploadedFilenameStub(jd.content) &&
-          jd.parse_status !== "error" && (
+        {contentReady && (
           <Card>
             <h3 className="text-sm font-semibold text-foreground mb-2">Full Description</h3>
             <div className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto">
@@ -446,12 +555,58 @@ export default function JDDetail() {
             </div>
           </Card>
         )}
-        {(looksLikeUploadedFilenameStub(jd.content ?? "") || jd.parse_status === "error") && (
+        {showParseRecovery && (
           <Card>
-            <h3 className="text-sm font-semibold text-foreground mb-2">Full Description</h3>
-            <p className="text-sm text-muted-foreground">
-              Extracted job description is not available yet. Re-parse this file or paste the description.
-            </p>
+            <h3 className="text-sm font-semibold text-foreground mb-2">
+              {contentReady ? "Parse status" : "Full Description"}
+            </h3>
+            {jd.parse_status === "parsing" && (
+              <p className="text-sm text-muted-foreground mb-3">
+                Still extracting this job description. This page will refresh automatically.
+              </p>
+            )}
+            {jd.parse_status === "error" && contentReady && (
+              <p className="text-sm text-muted-foreground mb-3">
+                A previous parse reported an error, but extracted text is available above.
+                You can re-parse if details look incomplete.
+              </p>
+            )}
+            {jd.parse_status === "error" && !contentReady && (
+              <p className="text-sm text-muted-foreground mb-3">
+                {contentQuality.kind === "binary"
+                  ? "This file looks like raw PDF binary, not readable text. Re-upload a text-based PDF or paste the description."
+                  : contentQuality.kind === "filename_stub"
+                    ? "Only the file name was stored; the job description body was not extracted. Re-parse or paste the description."
+                    : jd.parse_error ||
+                      userFacingDocumentFailureMessage(
+                        null,
+                        "Extracted job description is not available yet. Re-parse this file or paste the description.",
+                      )}
+              </p>
+            )}
+            {!contentReady && jd.parse_status !== "error" && jd.parse_status !== "parsing" && (
+              <p className="text-sm text-muted-foreground mb-3">
+                {contentQuality.kind === "binary"
+                  ? "This file looks like raw PDF binary, not readable text. Re-upload a text-based PDF or paste the description."
+                  : contentQuality.kind === "filename_stub"
+                    ? "Only the file name was stored; the job description body was not extracted. Re-parse or paste the description."
+                    : "Extracted job description is not available yet. Re-parse this file or paste the description."}
+              </p>
+            )}
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={() => void handleReparse()}
+              disabled={reparsing}
+              leftIcon={
+                reparsing
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <RefreshCw className="w-4 h-4" />
+              }
+            >
+              Re-parse
+            </Button>
           </Card>
         )}
 
@@ -523,6 +678,16 @@ export default function JDDetail() {
             </div>
           )}
 
+          {gapCreditDenied && (
+            <InsufficientCreditsAction
+              operationKey="gap_analysis"
+              required={AI_CREDIT_COSTS.gap_analysis}
+              balance={credits.balance}
+              mode="credits"
+              returnTo={id ? `/app/documents/jd/${id}` : "/app/documents"}
+              compact
+            />
+          )}
           {gapError && (
             <div className="mt-3">
               <InlineErrorRetry
@@ -562,7 +727,7 @@ export default function JDDetail() {
               <div className="flex items-center gap-3">
                 <div className="rounded-xl bg-primary/10 px-3 py-2 text-center min-w-[72px]">
                   <p className="text-lg font-bold text-primary tabular-nums">
-                    {Math.round(Number(gapResult.match_score) || 0)}
+                    {formatMatchScore(gapResult.match_score)}
                   </p>
                   <p className="text-[10px] text-muted-foreground uppercase">Match</p>
                 </div>

@@ -13,6 +13,8 @@ export type RouteFallbackFlags = {
   canCompleteWithDatabase: boolean;
   canUseAI: boolean;
   canUsePython: boolean;
+  /** When true, empty-queue failure is AI_PROVIDER_UNAVAILABLE (not PYTHON_*). */
+  isAiRequired?: boolean;
 };
 
 /** Mirrors `decideRoute` chaos flags (HYBRID_FORCE_* env). */
@@ -112,7 +114,9 @@ export async function simulateHybridExecution<T>(opts: {
   const queue = buildTriedOrder(opts.route);
   const queued = new Set<HybridRouteSource>(queue);
   let fallbackReason: string | undefined;
-  let lastFailCode = "PYTHON_SERVICE_UNAVAILABLE";
+  let lastFailCode = opts.route.isAiRequired
+    ? "AI_PROVIDER_UNAVAILABLE"
+    : "PYTHON_SERVICE_UNAVAILABLE";
   let attempts = 0;
   const maxAttempts = 8;
 
@@ -181,6 +185,14 @@ export async function simulateHybridExecution<T>(opts: {
 
   if (creditsReserved && !creditFinalized) {
     refundCount += 1;
+  }
+
+  if (
+    opts.route.isAiRequired &&
+    (lastFailCode === "PYTHON_SERVICE_UNAVAILABLE" ||
+      lastFailCode === "PYTHON_PROCESSING_FAILED")
+  ) {
+    lastFailCode = "AI_PROVIDER_UNAVAILABLE";
   }
 
   return {

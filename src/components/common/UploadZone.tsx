@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
-import { Upload, RefreshCw, type LucideIcon } from "lucide-react";
+import { Upload, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ProcessingStatus } from "@/components/async/ProcessingStatus";
 
 interface UploadZoneProps {
   icon?: LucideIcon;
@@ -84,9 +85,11 @@ export function UploadZone({
       >
         {loading ? (
           loadingContent ?? (
-            <div className="flex flex-col items-center gap-2">
-              <RefreshCw className="w-8 h-8 text-primary animate-spin" aria-hidden="true" />
-              <p className="text-sm text-muted-foreground">Uploading…</p>
+            <div className="flex flex-col items-center gap-2 px-2">
+              <ProcessingStatus message="Uploading…" stage="upload" className="justify-center" />
+              <p className="text-[10px] text-muted-foreground text-center max-w-xs">
+                Percent shown only when the browser reports real upload progress.
+              </p>
             </div>
           )
         ) : (

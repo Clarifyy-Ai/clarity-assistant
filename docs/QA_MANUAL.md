@@ -56,21 +56,21 @@ Each script is tagged with its catalog T-ID where possible.
 
 ---
 
-## Billing — Stripe (real checkout)
+## Billing — Razorpay (sandbox checkout)
 
-### T-Billing Stripe Pro upgrade
-**Pre:** Logged in, free plan.
+### T-Billing Razorpay Pro upgrade
+**Pre:** Logged in, free plan. Edge secrets: `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` (test keys) + `RAZORPAY_ALLOW_TEST_KEYS=true` when needed.
 **Steps:**
-1. Click "Upgrade" → "Pro".
-2. In Stripe Checkout, use test card `4242 4242 4242 4242`, any future expiry, any CVC.
+1. Click "Upgrade" → "Pro" (Razorpay INR checkout).
+2. In Razorpay Checkout, use an **India sandbox** card/UPI from the Razorpay dashboard — **not** Stripe `4242`.
 3. Complete payment.
 
-**Expected:** Redirect to `/app/settings/billing?success=1` within 5s; `profile.plan_id` = `pro`; `subscription_status` = `active`; credits reset to plan allowance.
+**Expected:** Credits/plan update after verify or webhook; `profile.plan_id` = `pro` (or Max when purchasing enterprise); history shows the order. Missing secrets → `503 PAYMENTS_NOT_CONFIGURED` (fail closed).
 
-### T-Billing Stripe customer portal
-**Pre:** Logged in, paid plan.
-**Steps:** Settings → Billing → "Manage subscription".
-**Expected:** Stripe customer portal opens in new tab; cancel/update card works; webhook reflects changes within 10s.
+### T-Billing manage subscription note
+**Pre:** Logged in, paid plan via Razorpay one-time.
+**Steps:** Settings → Billing.
+**Expected:** Plan/credits visible; re-purchase via Razorpay when access expires (no Stripe customer portal).
 
 ---
 

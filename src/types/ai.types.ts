@@ -194,6 +194,14 @@ export interface CoachingContext {
 
   // Live transcript context for hint generation
   last_transcript?: string | null;
+
+  /** Wizard preference block (focus, avoid, emphasize, Answer Bank). */
+  preference_context?: string | null;
+  skills_to_emphasize?: string[];
+  skills_not_to_claim?: string[];
+  focus_competencies?: string[];
+  topics_to_avoid?: string[];
+  answer_bank_context_ids?: string[];
 }
 
 export interface ResumeProject {

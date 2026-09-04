@@ -49,10 +49,10 @@ describe("hybridExecute / operationRouter source contracts", () => {
     expect(hybrid).toContain('failed === "ai" && route.pythonFallbackOnAiFailure');
     expect(hybrid).toContain('push("python")');
     expect(hybrid).toContain('push("deterministic")');
-    // practice_coach_help prefers AI then python with fallback enabled
+    // Overlay coach chat fail-closes: AI only — no STAR scaffold as a fake answer
     expect(router).toContain("practice_coach_help");
     expect(router).toMatch(
-      /practice_coach_help:[\s\S]*?preferredOrder:\s*\["ai",\s*"python",\s*"deterministic"\][\s\S]*?pythonFallbackOnAiFailure:\s*true/,
+      /practice_coach_help:[\s\S]*?preferredOrder:\s*\["ai"\][\s\S]*?pythonFallbackOnAiFailure:\s*false[\s\S]*?canCompleteDeterministically:\s*false/,
     );
   });
 
@@ -91,7 +91,7 @@ describe("hybridExecute / operationRouter source contracts", () => {
       expect(router).toMatch(new RegExp(`\\|\\s*"${op}"`));
     }
 
-    // live_answer mirrors practice_coach_help: AI → python → deterministic
+    // live_answer keeps AI → python → deterministic (hints/answers); coach chat does not
     expect(router).toMatch(
       /live_answer:[\s\S]*?preferredOrder:\s*\["ai",\s*"python",\s*"deterministic"\][\s\S]*?pythonFallbackOnAiFailure:\s*true/,
     );
@@ -107,8 +107,8 @@ describe("hybridExecute / operationRouter source contracts", () => {
     expect(router).toMatch(
       /system_design:[\s\S]*?preferredOrder:\s*\["ai",\s*"python",\s*"deterministic"\][\s\S]*?pythonFallbackOnAiFailure:\s*true/,
     );
-    // gap / debrief / scorecard: deterministic → python → ai
-    for (const op of ["gap_analysis", "session_debrief", "session_scorecard"] as const) {
+    // gap / scorecard: deterministic → python → ai; session_debrief is AI-only fail-closed
+    for (const op of ["gap_analysis", "session_scorecard"] as const) {
       expect(router).toMatch(
         new RegExp(
           `${op}:[\\s\\S]*?preferredOrder:\\s*\\["deterministic",\\s*"python",\\s*"ai"\\][\\s\\S]*?pythonFallbackOnAiFailure:\\s*true`,
@@ -116,11 +116,26 @@ describe("hybridExecute / operationRouter source contracts", () => {
       );
     }
     expect(router).toMatch(
+      /session_debrief:[\s\S]*?canCompleteDeterministically:\s*false[\s\S]*?isAiRequired:\s*true[\s\S]*?preferredOrder:\s*\["ai"\][\s\S]*?pythonFallbackOnAiFailure:\s*false/,
+    );
+    expect(router).toMatch(
       /analyze_test:[\s\S]*?preferredOrder:\s*\["database",\s*"deterministic",\s*"python",\s*"ai"\]/,
     );
     expect(router).toMatch(
       /sprint_review_transcript:[\s\S]*?preferredOrder:\s*\["deterministic",\s*"python",\s*"ai"\]/,
     );
     expect(router).toContain("export function listHybridOperations()");
+  });
+
+  it("unknown operations fail closed (UNKNOWN_OPERATION) — no SAFE_DEFAULT", () => {
+    expect(router).toContain("UNKNOWN_OPERATION");
+    expect(router).toContain("isKnownHybridOperation");
+    expect(router).not.toMatch(/Safe default/i);
+    expect(hybrid).toContain("isKnownHybridOperation(operation)");
+    expect(hybrid).toContain("UNKNOWN_OPERATION");
+    const knownIdx = hybrid.indexOf("isKnownHybridOperation(operation)");
+    const deductIdx = hybrid.indexOf("deductCreditsAtomic(");
+    expect(knownIdx).toBeGreaterThan(0);
+    expect(deductIdx).toBeGreaterThan(knownIdx);
   });
 });

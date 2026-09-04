@@ -101,20 +101,35 @@ function normalizeResumeParsed(obj: any): Record<string, unknown> | null {
     if (typeof item === "string") return cleanText(item, 200);
     if (item && typeof item === "object" && !Array.isArray(item)) {
       const row = item as Record<string, unknown>;
-      for (const key of ["name", "skill", "label", "text", "title"]) {
+      for (const key of ["name", "skill", "label", "text", "title", "value"]) {
         const inner = cleanText(row[key], 200);
         if (inner) return inner;
       }
     }
     return null;
   };
-  const cleanList = (value: unknown, max = 100): string[] =>
-    Array.isArray(value)
-      ? value
-          .map(skillFromUnknown)
-          .filter((item): item is string => Boolean(item))
-          .slice(0, max)
-      : [];
+  const cleanList = (value: unknown, max = 100): string[] => {
+    if (typeof value === "string") {
+      return value
+        .split(/[,;|/\n]+/)
+        .map((part) => skillFromUnknown(part))
+        .filter((item): item is string => Boolean(item))
+        .slice(0, max);
+    }
+    if (!Array.isArray(value)) return [];
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const item of value) {
+      const s = skillFromUnknown(item);
+      if (!s) continue;
+      const key = s.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(s);
+      if (out.length >= max) break;
+    }
+    return out;
+  };
   const cleanObjects = (value: unknown, max = 100): Record<string, unknown>[] =>
     Array.isArray(value)
       ? value
@@ -166,11 +181,12 @@ function isThinResumeStructured(parsed: Record<string, unknown> | null): boolean
   const skills = Array.isArray(parsed.skills) ? parsed.skills : [];
   const experience = Array.isArray(parsed.experience) ? parsed.experience : [];
   const summary = typeof parsed.summary === "string" ? parsed.summary.trim() : "";
-  const name = typeof parsed.name === "string" ? parsed.name.trim() : "";
-  // Long extracted text is usable for coach context even without structured fields.
-  if (summary.length >= 120) return false;
-  if (name && summary.length >= 40) return false;
+  // Empty structured fields stay thin even when summary dumps the full resume text.
+  // Otherwise deterministic stubs short-circuit Python/AI and Practice Coach shows no skills.
+  if (skills.length === 0 && experience.length === 0) return true;
   if (skills.length >= 2 && experience.length >= 1 && summary.length >= 40) return false;
+  if (skills.length >= 3 && summary.length >= 40) return false;
+  if (experience.length >= 1 && skills.length >= 1 && summary.length >= 40) return false;
   return true;
 }
 
@@ -185,14 +201,101 @@ function isUsableResumeParsed(parsed: Record<string, unknown> | null): boolean {
   return !isThinResumeStructured(parsed);
 }
 
+const SKILL_SECTION_ALIASES = new Set([
+  "skills",
+  "technical skills",
+  "key skills",
+  "core skills",
+  "tech stack",
+  "technologies",
+  "competencies",
+  "tools",
+  "technical competencies",
+  "technical skill set",
+  "skill set",
+]);
+
+/** Recover flat skills from resume prose when structured arrays are empty. */
+function extractSkillsFromResumeText(text: string, max = 40): string[] {
+  const clipped = text.replace(/\u0000/g, "").trim();
+  if (!clipped) return [];
+  const collected: string[] = [];
+  const lines = clipped.split(/\r?\n/);
+  let inSkills = false;
+  const otherSections = new Set([
+    "experience",
+    "work experience",
+    "employment history",
+    "education",
+    "projects",
+    "summary",
+    "profile",
+    "objective",
+    "professional summary",
+    "certifications",
+    "achievements",
+    "languages",
+  ]);
+
+  for (const raw of lines) {
+    const line = raw.replace(/^[\s•*\-\d.]+/, "").trim();
+    if (!line) continue;
+
+    const inline = line.match(/^(.{1,60}?)\s*[:\-–]\s*(.+)$/);
+    if (inline) {
+      const label = inline[1].replace(/:$/, "").trim().toLowerCase();
+      if (SKILL_SECTION_ALIASES.has(label)) {
+        collected.push(
+          ...inline[2]
+            .split(/[,;|]+/)
+            .map((part) => part.replace(/\s+/g, " ").trim())
+            .filter(Boolean),
+        );
+        inSkills = true;
+        continue;
+      }
+    }
+
+    const heading = line.replace(/:$/, "").trim().toLowerCase();
+    if (SKILL_SECTION_ALIASES.has(heading)) {
+      inSkills = true;
+      continue;
+    }
+    if (otherSections.has(heading)) {
+      inSkills = false;
+      continue;
+    }
+    if (inSkills) {
+      collected.push(
+        ...line
+          .split(/[,;|]+/)
+          .map((part) => part.replace(/\s+/g, " ").trim())
+          .filter(Boolean),
+      );
+    }
+  }
+
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const skill of collected) {
+    const key = skill.toLowerCase();
+    if (!skill || skill.length > 80 || seen.has(key)) continue;
+    seen.add(key);
+    out.push(skill.slice(0, 200));
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
 function buildTextFallbackResume(text: string): Record<string, unknown> | null {
   const clipped = text.trim();
   if (clipped.length < 40) return null;
   const firstLine = clipped.split(/\n+/).map((l) => l.trim()).find(Boolean) ?? "";
+  const skills = extractSkillsFromResumeText(clipped);
   return normalizeResumeParsed({
     name: firstLine.slice(0, 200),
     summary: clipped.slice(0, 4000),
-    skills: [],
+    skills,
     experience: [],
     education: [],
     projects: [],
@@ -227,10 +330,17 @@ function mapPythonStructuredResume(structured: Record<string, unknown>): Record<
       ? (structured.contact_details as Record<string, unknown>)
       : {};
 
+  const mergedSkills = [
+    ...(Array.isArray(structured.skills) ? structured.skills : typeof structured.skills === "string" ? [structured.skills] : []),
+    ...(Array.isArray(structured.role_keywords) ? structured.role_keywords : []),
+    ...(Array.isArray(structured.languages) ? structured.languages : []),
+    ...(Array.isArray(structured.tech_stack) ? structured.tech_stack : typeof structured.tech_stack === "string" ? [structured.tech_stack] : []),
+  ];
+
   return normalizeResumeParsed({
     name: structured.name,
     summary: structured.summary,
-    skills: structured.skills,
+    skills: mergedSkills,
     experience,
     education,
     projects: structured.projects,
@@ -265,14 +375,7 @@ function extractPythonResume(data: unknown): Record<string, unknown> | null {
     (typeof obj.content === "string" && obj.content) ||
     "";
   if (text.trim().length >= 40) {
-    return normalizeResumeParsed({
-      name: "",
-      summary: text.slice(0, 2000),
-      skills: [],
-      experience: [],
-      education: [],
-      projects: [],
-    });
+    return buildTextFallbackResume(text);
   }
   return null;
 }
@@ -436,20 +539,9 @@ async function parseResumeHybrid(opts: {
       has_text: Boolean(clippedText),
     },
     runDeterministic: async () => {
-      if (!clippedText || clippedText.trim().length < 20) return null;
-      const firstLine = clippedText.split(/\n+/).map((l) => l.trim()).find(Boolean) ?? "";
-      const normalized = normalizeResumeParsed({
-        name: firstLine.slice(0, 200),
-        summary: clippedText.slice(0, 2000),
-        skills: [],
-        experience: [],
-        education: [],
-        projects: [],
-      });
-      if (!normalized || !isUsableResumeParsed(normalized)) return null;
-      // Prefer richer python/AI when deterministic output is thin but still usable.
-      if (isThinResumeStructured(normalized) && clippedText.trim().length < 200) return null;
-      return normalized;
+      // Never short-circuit with an empty-skills stub. Python/AI must enrich first;
+      // buildTextFallbackResume remains the final hybrid-failure path.
+      return null;
     },
     runPython: async (ctx) => {
       let pythonParsed: Record<string, unknown> | null = null;

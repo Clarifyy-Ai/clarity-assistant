@@ -210,6 +210,12 @@ export function isPaperJobPollTimedOut(jobId: string): boolean {
   }
 }
 
+export function isPaperJobStillRunningAdvisory(job: {
+  errorCode?: string | null;
+}): boolean {
+  return String(job.errorCode ?? "").trim() === "GENERATION_STILL_RUNNING";
+}
+
 export function isPaperJobPollTimeoutError(job: {
   errorCode?: string | null;
   errorMessage?: string | null;

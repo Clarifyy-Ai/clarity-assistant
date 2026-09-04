@@ -8,7 +8,7 @@ import { isBillingSuspended } from "@/lib/billing/subscriptionAccess";
 import { isElectronApp } from "@/lib/platform/isElectron";
 import { openInBrowser } from "@/lib/platform/openInBrowser";
 import { Button } from "@/components/ui/Button";
-import { buildLoginUrl } from "@/lib/auth/safeReturnTo";
+import { buildLoginUrl, pathWithReturnTo } from "@/lib/auth/safeReturnTo";
 import { peekAuthEndReason } from "@/lib/auth/sessionErrors";
 import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
 import { logger, LogEvents } from "@/lib/logger";
@@ -22,7 +22,7 @@ import { SUPPORT_EMAIL } from "@/lib/constants/contact";
 import { useClaimStoredReferral } from "@/hooks/useClaimStoredReferral";
 import { MFA_REQUIRED_REASON } from "@/hooks/useAuth";
 import { AUTH_PATHS } from "@/lib/auth/appOrigin";
-import { MFA_ENFORCEMENT_PAUSED, resolveMfaGateDecision } from "@/lib/auth/mfaGate";
+import { isMfaEnforcementPaused, resolveMfaGateDecision } from "@/lib/auth/mfaGate";
 import {
   canBrowseGovExamsBeforeProfileReady,
   canBrowseGovExamsDuringAccountRecovery,
@@ -33,7 +33,6 @@ interface ProtectedRouteProps {
   requireOnboarded?: boolean;
   requireAdmin?: boolean;
   requireStaff?: boolean;
-  requireEmailVerification?: boolean;
   loginPath?: string;
   children?: React.ReactNode;
 }
@@ -111,7 +110,6 @@ export const ProtectedRoute = memo(function ProtectedRoute({
   requireOnboarded = false,
   requireAdmin = false,
   requireStaff = false,
-  requireEmailVerification = false,
   loginPath = "/login",
   children,
 }: ProtectedRouteProps) {
@@ -158,7 +156,7 @@ export const ProtectedRoute = memo(function ProtectedRoute({
       return;
     }
 
-    if (MFA_ENFORCEMENT_PAUSED) {
+    if (isMfaEnforcementPaused()) {
       setMfaVerifiedUserId(userId);
       setMfaAal("ok");
       return;
@@ -289,8 +287,16 @@ export const ProtectedRoute = memo(function ProtectedRoute({
   }
 
   // Email verification — always enforced for authenticated protected routes.
+  // Embed returnTo in the URL so the deep-link survives verify-page refresh.
   if (!isUserEmailConfirmed(user)) {
-    return <Navigate to="/verify-email" state={{ from: location }} replace />;
+    const returnTo = `${location.pathname}${location.search}${location.hash}`;
+    return (
+      <Navigate
+        to={pathWithReturnTo("/verify-email", returnTo)}
+        state={{ from: location }}
+        replace
+      />
+    );
   }
 
   if (
@@ -304,7 +310,7 @@ export const ProtectedRoute = memo(function ProtectedRoute({
       outcome: "succeeded",
       recoveryAction: "redirect_mfa_enroll",
     });
-    return <Navigate to={AUTH_PATHS.mfaEnroll} replace />;
+    return <Navigate to={AUTH_PATHS.mfaEnroll} state={{ from: location }} replace />;
   }
 
   // 3b) Billing suspension — past_due beyond 3-day grace (stripe-webhook sets payment_failed_at)

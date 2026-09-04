@@ -4,16 +4,30 @@
 // Used for live session state, temp drafts, and in-progress interview data.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const NAMESPACE = "clarify:session:";
+const NAMESPACE = "career-pilot:session:";
+const LEGACY_NAMESPACE = "clarify:session:";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const ns = (key: string) => `${NAMESPACE}${key}`;
+const legacyNs = (key: string) => `${LEGACY_NAMESPACE}${key}`;
 
 function safeGet<T>(key: string): T | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.sessionStorage.getItem(ns(key));
+    let raw = window.sessionStorage.getItem(ns(key));
+    if (raw === null) {
+      const legacy = window.sessionStorage.getItem(legacyNs(key));
+      if (legacy !== null) {
+        try {
+          window.sessionStorage.setItem(ns(key), legacy);
+          window.sessionStorage.removeItem(legacyNs(key));
+        } catch {
+          /* keep reading legacy */
+        }
+        raw = legacy;
+      }
+    }
     return raw !== null ? (JSON.parse(raw) as T) : null;
   } catch {
     return null;
@@ -39,7 +53,10 @@ export const ss = {
 
   remove(key: string): void {
     if (typeof window === "undefined") return;
-    try { window.sessionStorage.removeItem(ns(key)); } catch {}
+    try {
+      window.sessionStorage.removeItem(ns(key));
+      window.sessionStorage.removeItem(legacyNs(key));
+    } catch {}
   },
 
   patch<T extends object>(key: string, partial: Partial<T>): void {
@@ -53,7 +70,9 @@ export const ss = {
       const toRemove: string[] = [];
       for (let i = 0; i < window.sessionStorage.length; i++) {
         const k = window.sessionStorage.key(i);
-        if (k?.startsWith(NAMESPACE)) toRemove.push(k);
+        if (k?.startsWith(NAMESPACE) || k?.startsWith(LEGACY_NAMESPACE)) {
+          toRemove.push(k);
+        }
       }
       toRemove.forEach((k) => window.sessionStorage.removeItem(k));
     } catch {}

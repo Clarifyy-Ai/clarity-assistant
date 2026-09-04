@@ -148,8 +148,8 @@ export async function uploadFile(
 
     const safePath = normalizeStoragePath(path);
 
-    onProgress?.(10);
-
+    // No mid-upload percentages — storage client does not expose byte progress.
+    // Callers should show indeterminate UI until completion.
     const contentType =
       (!file.type || file.type === "application/octet-stream"
         ? getMimeType(file.name)
@@ -166,8 +166,6 @@ export async function uploadFile(
     if (error) {
       throw error;
     }
-
-    onProgress?.(90);
 
     const { data: publicData } = supabase.storage
       .from(bucketName)

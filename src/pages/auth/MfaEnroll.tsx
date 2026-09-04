@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { AlertCircle, Shield } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { AuthShell } from "@/components/layout/AuthShell";
@@ -14,6 +14,7 @@ import {
 } from "@/lib/auth/mfaFactors";
 import { completeMfaReenrollment, recoveryErrorMessage } from "@/lib/auth/mfaRecoveryClient";
 import { getAuthenticatedEntryPath } from "@/lib/auth/postAuthRedirect";
+import { preferredReturnToFromNavigation } from "@/lib/auth/safeReturnTo";
 import { AUTH_PATHS } from "@/lib/auth/appOrigin";
 import { usePageMeta } from "@/hooks/usePageMeta";
 
@@ -24,7 +25,11 @@ import { usePageMeta } from "@/hooks/usePageMeta";
 export default function MfaEnroll(): JSX.Element {
   usePageMeta({ title: "Set up authenticator | Career Pilot", noIndex: true });
   const navigate = useNavigate();
+  const location = useLocation();
   const authStatus = useAuthStore((s) => s.status);
+  const preferredReturnTo = preferredReturnToFromNavigation({
+    locationState: location.state,
+  });
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [factorId, setFactorId] = useState<string | null>(null);
   const [code, setCode] = useState("");
@@ -102,8 +107,14 @@ export default function MfaEnroll(): JSX.Element {
         return;
       }
       navigate(
-        getAuthenticatedEntryPath({ isAdmin: latest.isAdmin, isOnboarded: latest.isOnboarded }),
-        { replace: true },
+        getAuthenticatedEntryPath({
+          isAdmin: latest.isAdmin,
+          isOnboarded: latest.isOnboarded,
+          preferredReturnTo,
+        }),
+        preferredReturnTo
+          ? { replace: true, state: { from: preferredReturnTo } }
+          : { replace: true },
       );
     } finally {
       setBusy(false);

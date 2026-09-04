@@ -1,7 +1,9 @@
 import { recordReferralViaEdge } from "@/lib/api/payments";
+import { PUBLIC_WEBSITE_URL } from "@/lib/constants/contact";
 import { logger } from "@/lib/logger";
 
 export const REFERRAL_STORAGE_KEY = "clarify_ref";
+export const PENDING_REFERRAL_METADATA_KEY = "pending_referral_code";
 export const REF_CODE_PATTERN = /^[A-Z0-9]{6,16}$/;
 
 const TERMINAL_REFERRAL_REASONS = new Set([
@@ -9,6 +11,7 @@ const TERMINAL_REFERRAL_REASONS = new Set([
   "self_referral",
   "code_not_found",
   "invalid_code",
+  "programme_disabled",
 ]);
 
 export type RecordReferralOutcome = {
@@ -21,6 +24,34 @@ export type RecordReferralOutcome = {
 export function normalizeRefCode(raw: string | null | undefined): string | null {
   const upper = (raw ?? "").toUpperCase().trim();
   return REF_CODE_PATTERN.test(upper) ? upper : null;
+}
+
+/** Read pending referral from Auth user_metadata (set at signup before verify). */
+export function getPendingReferralFromUserMetadata(
+  user: { user_metadata?: Record<string, unknown> | null } | null | undefined,
+): string | null {
+  const meta = user?.user_metadata;
+  if (!meta || typeof meta !== "object") return null;
+  return normalizeRefCode(
+    typeof meta[PENDING_REFERRAL_METADATA_KEY] === "string"
+      ? (meta[PENDING_REFERRAL_METADATA_KEY] as string)
+      : null,
+  );
+}
+
+/**
+ * Resolve referral code for claim: explicit arg → Auth metadata → localStorage.
+ * Metadata survives verify/logout of assistive storage.
+ */
+export function resolveReferralCodeForClaim(
+  explicit: string | null | undefined,
+  user?: { user_metadata?: Record<string, unknown> | null } | null,
+): string | null {
+  return (
+    normalizeRefCode(explicit) ??
+    getPendingReferralFromUserMetadata(user) ??
+    getStoredRefCode()
+  );
 }
 
 export function getStoredRefCode(): string | null {
@@ -50,6 +81,11 @@ export function clearStoredRefCode(): void {
   }
 }
 
+/** Public signup URL with attribution query for sharing. */
+export function buildReferralLink(code: string): string {
+  return `${PUBLIC_WEBSITE_URL}/signup?ref=${code}`;
+}
+
 /** Clear stored code after a successful HTTP response that will not succeed on retry. */
 export function shouldClearStoredReferral(result: {
   success: boolean;
@@ -64,16 +100,18 @@ export function shouldClearStoredReferral(result: {
 /**
  * Record a stored or explicit referral code via the edge function (service-role RPC).
  * Does not write `profiles.referred_by` or `referrals` from the client (RLS-pinned / fraud-prone).
+ * Prefers Auth user_metadata.pending_referral_code (set at signup) over localStorage.
  * Keeps localStorage on network failure so the next authenticated load can retry.
  */
 export async function recordReferral(
   userId: string,
   codeRaw: string | null | undefined,
+  user?: { user_metadata?: Record<string, unknown> | null } | null,
 ): Promise<RecordReferralOutcome> {
   const empty: RecordReferralOutcome = { applied: false, alreadyRecorded: false };
   if (!userId) return empty;
 
-  const code = normalizeRefCode(codeRaw) ?? getStoredRefCode();
+  const code = resolveReferralCodeForClaim(codeRaw, user);
   if (!code) return empty;
 
   try {

@@ -1,4 +1,19 @@
 import { SKIPPED_ANSWER_SENTINEL } from "@/lib/mock/mockSessionProgress";
+export {
+  SCORECARD_ELIGIBILITY_CODES,
+  SCORECARD_ELIGIBILITY_MESSAGES,
+  SCORECARD_EVALUATION_STATUSES,
+  analyticsScoreStatusFromEvaluation,
+  eligibilityFromEvaluationStatus,
+  httpStatusForScorecardEligibility,
+  isScorecardEligibilityCode,
+  resolveScorecardEligibility,
+  scorecardEligibilityMessage,
+  type AnalyticsScorecardStatus,
+  type ScorecardEligibilityCode,
+  type ScorecardEligibilityResult,
+  type ScorecardEvaluationStatus,
+} from "@/lib/scorecard/eligibility";
 
 export type ScorecardEvalStatus = "processing" | "failed" | "not_scored" | "scored";
 
@@ -76,13 +91,13 @@ export function describeEvaluation(opts: {
   error?: string | null;
 }): string {
   if (opts.status === "processing") {
-    return "Scoring is still running on the server. This page will refresh when it finishes.";
+    return "Processing… Scoring is still running on the server. This page will refresh when it finishes.";
   }
   if (opts.status === "failed") {
-    return opts.error?.trim() || "Scoring failed. Retry when you are ready. Scores are not invented in the browser.";
+    return opts.error?.trim() || "Failed. Retry when you are ready. Scores are not invented in the browser.";
   }
   if (opts.status === "not_scored" && opts.scorableAnswers === 0) {
-    return "No answers were recorded for this session, so a scorecard cannot be generated.";
+    return "Not eligible — no answers were recorded for this session, so a scorecard cannot be generated.";
   }
   if (opts.status === "not_scored") {
     return `${opts.scorableAnswers} answer(s) are saved, but no scorecard dimensions were persisted yet.`;

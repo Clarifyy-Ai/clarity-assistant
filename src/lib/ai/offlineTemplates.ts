@@ -35,21 +35,45 @@ Lesson learned`,
     full_answer: `Structure your technical answer in three layers:
 1. Clarify the problem — restate it in your own words, ask one clarifying question
 2. Think aloud — name the pattern or approach before diving in
-3. Walk through your solution — time/space complexity, edge cases, optimisation
+3. Walk through your solution — trade-offs, edge cases, and when you'd choose alternatives
 
-For coding: talk through your reasoning before writing. Interviewers want to see how you think, not just what you produce.`,
+For concepts (SQL, APIs, systems): define → how it works → trade-offs → practical example. Do not invent personal metrics.`,
 
-    short_hints: `• Restate the problem first
-• Name the algorithm/pattern
+    short_hints: `• Restate or define the concept first
+• Explain how it works in plain language
+• Call out trade-offs and alternatives
+• Give a practical or industry example (label if generic)
+• Note risks or common pitfalls`,
+
+    keywords_only: `Clear definition
+Core reasoning
+Trade-offs
+Practical example
+Risks / pitfalls`,
+  },
+
+  coding: {
+    full_answer: `Structure a coding answer before typing:
+1. Restate inputs, outputs, and constraints
+2. Ask clarifying questions (edge cases, scale, mutability)
+3. Outline brute force → optimize; name data structures
+4. Walk pseudocode, then implement
+5. State time and space complexity
+6. Cover edge cases and a couple of tests
+
+Talk through reasoning first — interviewers care how you think.`,
+
+    short_hints: `• Restate inputs / outputs / constraints
+• Clarify edge cases before coding
+• Name approach and data structures
 • State time and space complexity
-• Handle edge cases explicitly
-• Offer to optimise if time allows`,
+• Cover empty / duplicate / overflow cases`,
 
-    keywords_only: `Problem restatement
-Algorithm pattern
+    keywords_only: `Restate problem
+Clarifying questions
+Approach + structures
 Time/space complexity
-Edge cases
-Optimisation offer`,
+Edge cases & tests`,
   },
 
   system_design: {

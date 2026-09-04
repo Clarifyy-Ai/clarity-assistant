@@ -345,6 +345,7 @@ function sanitizeAIOutput(text: string): string {
 /*                         PER-TOOL CREDIT COSTS                              */
 /* -------------------------------------------------------------------------- */
 
+/** Only tools with an explicit TOOL_COSTS entry are chargeable. */
 type PrepToolId =
   | "coding_hint"
   | "coding_solution"
@@ -352,31 +353,9 @@ type PrepToolId =
   | "project_build"
   | "star_method"
   | "raw_prompt"
-  | "system_design"
-  | "jd_fit"
-  | "question_predict"
-  | "cover_letter"
-  | "salary_coach"
-  | "linkedin_headline"
-  | "culture_fit";
+  | "system_design";
 
-const PREP_TOOL_IDS = new Set<string>([
-  "coding_hint",
-  "coding_solution",
-  "rephrase",
-  "project_build",
-  "star_method",
-  "raw_prompt",
-  "system_design",
-  "jd_fit",
-  "question_predict",
-  "cover_letter",
-  "salary_coach",
-  "linkedin_headline",
-  "culture_fit",
-]);
-
-const TOOL_COSTS: Partial<Record<PrepToolId, number>> = {
+const TOOL_COSTS: Record<PrepToolId, number> = {
   coding_hint:     creditCost("coding_hint"),
   coding_solution: creditCost("live_answer"),
   rephrase:        creditCost("rephraser"),
@@ -386,12 +365,16 @@ const TOOL_COSTS: Partial<Record<PrepToolId, number>> = {
   system_design:   creditCost("system_design"),
 };
 
+const PREP_TOOL_IDS = new Set<string>(Object.keys(TOOL_COSTS));
+
 function isPrepToolId(value: string): value is PrepToolId {
   return PREP_TOOL_IDS.has(value);
 }
 
-function getToolCost(tool_id: PrepToolId): number {
-  return TOOL_COSTS[tool_id] ?? creditCost("rephraser");
+/** Fail-closed: never invent a default price for an unlisted tool. */
+function getToolCost(tool_id: PrepToolId): number | null {
+  const cost = TOOL_COSTS[tool_id];
+  return typeof cost === "number" && Number.isFinite(cost) && cost > 0 ? cost : null;
 }
 
 function cleanupInterviewText(text: string): string {
@@ -513,62 +496,7 @@ function extractPythonPayload(json: unknown): unknown {
 /*                              TOOL PROMPTS                                  */
 /* -------------------------------------------------------------------------- */
 
-const TOOL_PROMPTS: Record<string, (input: string) => string> = {
-  jd_fit: (input) => `
-Analyse this resume/profile against the job description below.
-Rate the fit (0-100) and provide a detailed gap analysis.
-
-${input}
-
-Return plain text ONLY with:
-Fit Score: X/100
-Strong matches: (list)
-Gaps to address: (list)
-Recommendation: (2-3 sentences)
-`,
-
-  question_predict: (input) => `
-Based on this job description/company info, predict the 10 most
-likely interview questions. Include behavioural, technical, and culture fit.
-
-${input}
-
-Format:
-1. Question — why it's likely
-2. ...
-`,
-
-  cover_letter: (input) => `
-Write a tailored, concise 3-paragraph cover letter (<300 words).
-Professional tone. Do NOT start with "I am writing to apply...".
-
-${input}
-`,
-
-  salary_coach: (input) => `
-Create a personalised salary negotiation script. Include:
-- opening line
-- counter-offer language
-- handling pushback
-- closing
-
-${input}
-`,
-
-  linkedin_headline: (input) => `
-Write 5 LinkedIn headline options (<120 characters each).
-Keyword-rich and role specific.
-
-${input}
-`,
-
-  culture_fit: (input) => `
-Analyse how well this candidate aligns with the company's values.
-Score (0-100) and explanation.
-
-${input}
-`,
-
+const TOOL_PROMPTS: Record<PrepToolId, (input: string) => string> = {
   coding_hint: (input) => `
 You are a coding interview coach. Give a progressive hint for this problem based on the requested depth level embedded in the input.
 - "surface": general direction, data structure to consider, do NOT reveal the algorithm
@@ -726,6 +654,9 @@ Deno.serve(async (req: Request) => {
 
     /* ------------------- CREDIT DEDUCTION ------------------- */
     const toolCost = getToolCost(tool_id);
+    if (toolCost == null) {
+      return errorResponse("Unknown tool.", "INVALID_TOOL", 400, req);
+    }
     // Prefer x-idempotency-key / Idempotency-Key; never invent a random key
     // (that defeats client retries and can double-charge). When omitted, use a
     // stable request-hash key so retries share one reservation.

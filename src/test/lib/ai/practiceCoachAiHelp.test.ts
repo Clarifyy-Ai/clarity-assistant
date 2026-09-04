@@ -21,15 +21,16 @@ function readFunction(name: string): string {
   return fs.readFileSync(path.join(functionsDir, name, "index.ts"), "utf8");
 }
 
-/** Mirrors MATRIX practice_coach_help. */
+/** Mirrors MATRIX practice_coach_help (AI-only fail-closed). */
 const practiceCoachRoute: RouteFallbackFlags = {
-  preferredOrder: ["ai", "python", "deterministic"],
-  pythonFallbackOnAiFailure: true,
+  preferredOrder: ["ai"],
+  pythonFallbackOnAiFailure: false,
   aiFallbackOnPythonFailure: false,
-  canCompleteDeterministically: true,
+  canCompleteDeterministically: false,
   canCompleteWithDatabase: false,
   canUseAI: true,
   canUsePython: true,
+  isAiRequired: true,
 };
 
 describe("Practice Coach AI Help error separation [T-12]", () => {
@@ -55,6 +56,25 @@ describe("Practice Coach AI Help error separation [T-12]", () => {
     expect(getAiUserFacingError(err)).toMatch(/temporarily unavailable/i);
   });
 
+  it("maps practice SESSION_EXPIRED to start-new-session copy, not sign-in", () => {
+    const err = new ApiClientError({
+      message: "Session expired",
+      status: 409,
+      code: "SESSION_EXPIRED",
+    });
+    expect(getAiUserFacingError(err)).toMatch(/practice session has expired/i);
+    expect(getAiUserFacingError(err)).not.toMatch(/sign in/i);
+  });
+
+  it("maps AUTH_EXPIRED to sign-in copy", () => {
+    const err = new ApiClientError({
+      message: "JWT expired",
+      status: 401,
+      code: "AUTH_EXPIRED",
+    });
+    expect(getAiUserFacingError(err)).toMatch(/sign in again/i);
+  });
+
   it("keeps true 402 as insufficient credits", () => {
     const err = new ApiClientError({
       message: "Need credits",
@@ -72,6 +92,34 @@ describe("Practice Coach AI Help error separation [T-12]", () => {
       code: "CREDIT_SERVICE_UNAVAILABLE",
     });
     expect(isInsufficientCreditsError(err)).toBe(false);
+  });
+
+  it("differentiates credit-service 503 from AI provider 503", () => {
+    const credit = new ApiClientError({
+      message: "Credits couldn't be verified right now. Please try again.",
+      status: 503,
+      code: "CREDIT_SERVICE_UNAVAILABLE",
+    });
+    const ai = new ApiClientError({
+      message: "Coach AI is temporarily unavailable. Try again in a moment.",
+      status: 503,
+      code: "AI_PROVIDER_UNAVAILABLE",
+    });
+    expect(isAiProviderUnavailableError(credit)).toBe(false);
+    expect(getAiUserFacingError(credit)).toMatch(/credits couldn't be verified/i);
+    expect(isAiProviderUnavailableError(ai)).toBe(true);
+    expect(getAiUserFacingError(ai)).toMatch(/temporarily unavailable/i);
+  });
+
+  it("maps empty coach output to AI_INVALID_OUTPUT UX contract (422)", () => {
+    const err = new ApiClientError({
+      message: "Coach returned an incomplete reply. Please try again.",
+      status: 422,
+      code: "AI_INVALID_OUTPUT",
+    });
+    expect(isInsufficientCreditsError(err)).toBe(false);
+    expect(isAiProviderUnavailableError(err)).toBe(false);
+    expect(err.code).toBe("AI_INVALID_OUTPUT");
   });
 
   it("creates stable-length idempotency keys for generate-answer", () => {
@@ -93,14 +141,44 @@ describe("Practice Coach hybrid fallback contracts (Wave 1 coach-prep)", () => {
     expect(source).toContain("hybridResult.response");
   });
 
-  it("ai-coach-chat uses practice_coach via callPythonProcess (not scaffold)", () => {
+  it("ai-coach-chat requires Gemini AI and refuses python/deterministic scaffolds", () => {
     const source = readFunction("ai-coach-chat");
     expect(source).toContain('operation: "practice_coach_help"');
-    expect(source).toContain('operation: "practice_coach"');
-    expect(source).toContain("callPythonProcess");
-    expect(source).toContain("normalizePythonCoachData");
     expect(source).toContain("AI returned empty coach reply");
-    expect(source).not.toContain("practice_coach_hint");
+    expect(source).toContain('runPython: async () => null');
+    expect(source).toContain('runDeterministic: async () => null');
+    expect(source).toContain('data.source !== "ai"');
+    expect(source).toContain("AI_PROVIDER_UNAVAILABLE");
+    expect(source).toContain("COACH_AI_UNAVAILABLE_MESSAGE");
+    expect(source).toContain("generateWithFallback");
+    expect(source).not.toContain("deterministicCoachChatReply");
+    expect(source).not.toContain("normalizePythonCoachData");
+    expect(source).not.toContain("You asked:");
+  });
+
+  it("ai-coach-chat maps app model slugs via resolveModel (BUG 09)", () => {
+    const source = readFunction("ai-coach-chat");
+    expect(source).toContain('from "../_shared/resolveModel.ts"');
+    expect(source).toContain("resolveModel");
+    expect(source).toContain("isGeminiModel");
+    expect(source).toContain("await resolveModel(db, user.id, body.model)");
+    // Must not pass gemini-flash app slug straight to Gemini API.
+    expect(source).not.toMatch(
+      /function sanitizeModel\([\s\S]*?return model;\s*\}/,
+    );
+    const hint = readFunction("generate-hint");
+    expect(hint).toContain("resolveModel");
+  });
+
+  it("deterministicCoachChatReply is not a You-asked STAR scaffold", () => {
+    const contract = fs.readFileSync(
+      path.join(functionsDir, "_shared/practiceCoachContract.ts"),
+      "utf8",
+    );
+    expect(contract).toContain("deterministicCoachChatReply");
+    expect(contract).not.toMatch(/You asked:/);
+    expect(contract).not.toMatch(/I will not invent facts/);
+    expect(contract).toMatch(/temporarily unavailable/i);
   });
 
   it("generate-answer throws on empty AI before python fallback", () => {
@@ -110,9 +188,26 @@ describe("Practice Coach hybrid fallback contracts (Wave 1 coach-prep)", () => {
     expect(source).toContain("AI returned empty answer");
   });
 
-  it("practice_coach_help: AI failure → python succeeds with single credit deduct", async () => {
+  it("hybrid AI-required empty queue fails as AI_PROVIDER_UNAVAILABLE with refund", async () => {
     const result = await simulateHybridExecution({
-      route: { ...practiceCoachRoute, preferredOrder: ["ai"] },
+      route: {
+        ...practiceCoachRoute,
+        canUseAI: false,
+      },
+      creditCost: 2,
+      runners: {},
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe("AI_PROVIDER_UNAVAILABLE");
+      expect(result.deductCount).toBe(1);
+      expect(result.refundCount).toBe(1);
+    }
+  });
+
+  it("practice_coach_help: AI failure fails closed with credit refund (no python scaffold)", async () => {
+    const result = await simulateHybridExecution({
+      route: practiceCoachRoute,
       creditCost: 2,
       runners: {
         ai: async () => {
@@ -124,15 +219,15 @@ describe("Practice Coach hybrid fallback contracts (Wave 1 coach-prep)", () => {
         }),
       },
     });
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.source).toBe("fallback");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe("AI_PROVIDER_UNAVAILABLE");
       expect(result.deductCount).toBe(1);
-      expect(result.refundCount).toBe(0);
+      expect(result.refundCount).toBe(1);
     }
   });
 
-  it("practice_coach_help: empty AI output fails validation and falls back", async () => {
+  it("practice_coach_help: empty AI output fails closed (no deterministic/python answer)", async () => {
     const result = await simulateHybridExecution({
       route: practiceCoachRoute,
       creditCost: 1,
@@ -147,10 +242,10 @@ describe("Practice Coach hybrid fallback contracts (Wave 1 coach-prep)", () => {
         return data;
       },
     });
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.data).toEqual({ hints: "• Structured hint from python" });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
       expect(result.deductCount).toBe(1);
+      expect(result.refundCount).toBe(1);
     }
   });
 });

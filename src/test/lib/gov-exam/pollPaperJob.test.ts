@@ -226,7 +226,7 @@ describe("pollPaperJobUntilTerminal", () => {
     expect(getPaperGenerationJob).toHaveBeenCalledTimes(1);
   });
 
-  it("stops after wall-clock timeout with GENERATION_POLL_TIMEOUT", async () => {
+  it("soft-exits wall-clock with GENERATION_STILL_RUNNING without inventing failed_retryable", async () => {
     getPaperGenerationJob.mockResolvedValue({
       jobId: "11111111-1111-1111-1111-111111111111",
       status: "generating",
@@ -245,11 +245,11 @@ describe("pollPaperJobUntilTerminal", () => {
 
     await vi.runAllTimersAsync();
     const result = await pending;
-    expect(result.status).toBe("failed_retryable");
-    expect(result.errorCode).toBe("GENERATION_POLL_TIMEOUT");
+    expect(result.status).toBe("generating");
+    expect(result.errorCode).toBe("GENERATION_STILL_RUNNING");
   });
 
-  it("stops after max polls with GENERATION_POLL_TIMEOUT", async () => {
+  it("soft-exits max polls with GENERATION_STILL_RUNNING", async () => {
     getPaperGenerationJob.mockResolvedValue({
       jobId: "11111111-1111-1111-1111-111111111111",
       status: "generating",
@@ -268,7 +268,7 @@ describe("pollPaperJobUntilTerminal", () => {
 
     await vi.runAllTimersAsync();
     const result = await pending;
-    expect(result.status).toBe("failed_retryable");
-    expect(result.errorCode).toBe("GENERATION_POLL_TIMEOUT");
+    expect(result.status).toBe("generating");
+    expect(result.errorCode).toBe("GENERATION_STILL_RUNNING");
   });
 });

@@ -9,6 +9,11 @@ import { AuthError, ErrorCode, formatSupabaseAuthError, tryCatch } from "@/lib/e
 import { classifyLoginFailure } from "@/lib/auth/loginFailure";
 import { authAbsoluteUrl } from "@/lib/auth/appOrigin";
 import { buildOAuthCallbackUrl } from "@/lib/auth/oauthCallbackUrl";
+import {
+  isSignupAlreadyRegisteredResponse,
+  signupAlreadyRegisteredError,
+} from "@/lib/auth/signupOutcome";
+import { normalizeRefCode } from "@/lib/referrals";
 import type { User, Session, AuthChangeEvent } from "@supabase/supabase-js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -18,6 +23,8 @@ export interface SignUpCredentials {
   password:  string;
   fullName?: string;
   avatarUrl?: string;
+  /** Normalized referral code persisted in Auth user_metadata before verify. */
+  referralCode?: string | null;
 }
 
 export interface SignInCredentials {
@@ -89,7 +96,8 @@ export async function isAuthenticated(): Promise<boolean> {
  * Sends a verification email automatically via Supabase.
  */
 export async function signUp(credentials: SignUpCredentials): Promise<AuthResult> {
-  const { email, password, fullName, avatarUrl } = credentials;
+  const { email, password, fullName, avatarUrl, referralCode } = credentials;
+  const pendingReferral = normalizeRefCode(referralCode);
 
   const [data, err] = await tryCatch(async () => {
     const { data, error } = await supabase.auth.signUp({
@@ -99,12 +107,18 @@ export async function signUp(credentials: SignUpCredentials): Promise<AuthResult
         data: {
           full_name:  fullName  ?? "",
           avatar_url: avatarUrl ?? "",
+          ...(pendingReferral
+            ? { pending_referral_code: pendingReferral }
+            : {}),
         },
         emailRedirectTo: authAbsoluteUrl("/auth/callback"),
       },
     });
 
     if (error) throw error;
+    if (isSignupAlreadyRegisteredResponse(data.user)) {
+      throw signupAlreadyRegisteredError();
+    }
     return data;
   });
 

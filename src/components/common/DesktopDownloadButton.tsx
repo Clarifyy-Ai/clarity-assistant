@@ -28,7 +28,12 @@ export function DesktopDownloadButton({
   const { osLabel, url, loading, download, installGuidePath } = useDesktopDownload();
 
   return (
-    <div className={cn("flex flex-col gap-2 min-w-0", fullWidth && "w-full", className)}>
+    <div
+      className={cn("flex flex-col gap-2 min-w-0", fullWidth && "w-full", className)}
+      data-testid="desktop-download-button"
+      data-installer-available={url ? "true" : "false"}
+      data-installer-loading={loading ? "true" : "false"}
+    >
       {url ? (
         <>
           <Button
@@ -37,14 +42,15 @@ export function DesktopDownloadButton({
             size={size}
             fullWidth={fullWidth}
             disabled={loading}
+            data-testid="desktop-download-cta"
             onClick={() => void download()}
-              leftIcon={
-                loading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Download className="w-4 h-4" />
-                )
-              }
+            leftIcon={
+              loading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )
+            }
           >
             {loading ? "Finding installer…" : `Download for ${osLabel}`}
           </Button>
@@ -71,8 +77,11 @@ export function DesktopDownloadButton({
             Continue in web Practice Coach
           </Link>
           {!loading && !compact && (
-            <div className="rounded-lg border border-border bg-muted/40 p-3 space-y-2 max-w-md">
-              <p className="text-xs text-foreground font-medium">Desktop installer</p>
+            <div
+              className="rounded-lg border border-border bg-muted/40 p-3 space-y-2 max-w-md"
+              data-testid="desktop-installer-unavailable"
+            >
+              <p className="text-xs text-foreground font-medium">Desktop app not available yet</p>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
                 The {osLabel} installer isn&apos;t published for this environment yet. This is not a
                 temporary outage — use web Practice Coach above. Download appears only when a real
@@ -88,11 +97,20 @@ export function DesktopDownloadButton({
                 variant="outline"
                 size="sm"
                 disabled
+                data-testid="desktop-download-unavailable-cta"
                 leftIcon={<Download className="w-3.5 h-3.5" />}
               >
                 Get {osLabel} installer (unavailable)
               </Button>
             </div>
+          )}
+          {!loading && compact && (
+            <p
+              className="text-[11px] text-muted-foreground"
+              data-testid="desktop-installer-unavailable"
+            >
+              Desktop app not available yet
+            </p>
           )}
           {loading && (
             <p className="text-xs text-muted-foreground inline-flex items-center gap-2">

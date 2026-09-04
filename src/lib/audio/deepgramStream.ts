@@ -60,7 +60,19 @@ export interface DeepgramStreamOptions {
   onInterim: (text: string) => void;
   onError: (error: Error) => void;
   onStatusChange: (status: DeepgramConnectionStatus) => void;
+  /** QA instrumentation — frame counters only, never raw audio bytes. */
+  onAudioFrame?: (sentToStt: boolean) => void;
+  onHeartbeat?: () => void;
 }
+
+export type DeepgramClientHealthSnapshot = {
+  receivedFrameCount: number;
+  transmittedFrameCount: number;
+  queuedFrameCount: number;
+  sttSocketOpen: boolean;
+  lastKeepAliveAt: number | null;
+  lastSttMessageAt: number | null;
+};
 
 interface DeepgramWord {
   word: string;
@@ -98,6 +110,12 @@ export class DeepgramStreamClient {
   private config: DeepgramConfig;
   private callbacks: Omit<DeepgramStreamOptions, "stream" | "config">;
 
+  private receivedFrameCount = 0;
+  private transmittedFrameCount = 0;
+  private queuedFrameCount = 0;
+  private lastKeepAliveAt: number | null = null;
+  private lastSttMessageAt: number | null = null;
+
   constructor(opts: DeepgramStreamOptions) {
     this.stream = opts.stream;
     this.callbacks = {
@@ -105,6 +123,8 @@ export class DeepgramStreamClient {
       onInterim: opts.onInterim,
       onError: opts.onError,
       onStatusChange: opts.onStatusChange,
+      onAudioFrame: opts.onAudioFrame,
+      onHeartbeat: opts.onHeartbeat,
     };
 
     this.config = {
@@ -118,6 +138,17 @@ export class DeepgramStreamClient {
       punctuate: true,
       filler_words: true,
       ...opts.config,
+    };
+  }
+
+  getHealthSnapshot(): DeepgramClientHealthSnapshot {
+    return {
+      receivedFrameCount: this.receivedFrameCount,
+      transmittedFrameCount: this.transmittedFrameCount,
+      queuedFrameCount: this.queuedFrameCount,
+      sttSocketOpen: this.ws?.readyState === WebSocket.OPEN,
+      lastKeepAliveAt: this.lastKeepAliveAt,
+      lastSttMessageAt: this.lastSttMessageAt,
     };
   }
 
@@ -381,6 +412,7 @@ export class DeepgramStreamClient {
 
   private handleMessage(event: MessageEvent): void {
     try {
+      this.lastSttMessageAt = Date.now();
       const data = JSON.parse(event.data as string) as Record<string, any>;
 
       if (data.type === "Results" && !data.is_final) {
@@ -475,9 +507,16 @@ export class DeepgramStreamClient {
     });
 
     this.mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0 && this.ws?.readyState === WebSocket.OPEN) {
-        this.ws.send(e.data);
+      if (e.data.size === 0) return;
+      this.receivedFrameCount += 1;
+      const open = this.ws?.readyState === WebSocket.OPEN;
+      if (open) {
+        this.ws!.send(e.data);
+        this.transmittedFrameCount += 1;
+      } else {
+        this.queuedFrameCount += 1;
       }
+      this.callbacks.onAudioFrame?.(open);
     };
 
     // Send chunks every 250ms — prevents Deepgram timing out from silence gaps
@@ -501,6 +540,8 @@ export class DeepgramStreamClient {
     this.pingInterval = setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({ type: "KeepAlive" }));
+        this.lastKeepAliveAt = Date.now();
+        this.callbacks.onHeartbeat?.();
       }
     }, 10_000);
   }

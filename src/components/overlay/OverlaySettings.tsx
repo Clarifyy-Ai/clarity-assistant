@@ -27,6 +27,10 @@ import { toast } from "sonner";
 import { OVERLAY_HOTKEYS } from "@/components/overlay/OverlayHotkeyHelp";
 import { formatHotkeyLabel } from "@/lib/overlay/hotkeys";
 import { OVERLAY_MOBILE_TOAST_BODY } from "@/lib/constants/overlaySetupGuide";
+import {
+  CAPTURE_EXCLUSION_DISCLAIMER,
+  getSupportInfo,
+} from "@/lib/overlay/screenCaptureEvasion";
 
 interface OverlaySettingsProps {
   isOpen?: boolean;
@@ -78,6 +82,7 @@ export function OverlaySettings({
     useState<LocalOnlySettings>(DEFAULT_LOCAL_SETTINGS);
   const [showWarnings, setShowWarnings] = useState(true);
   const [pipConsentOpen, setPipConsentOpen] = useState(false);
+  const captureExclusionInfo = useMemo(() => getSupportInfo(), []);
 
   const currentSettings = useMemo(
     () => ({
@@ -232,10 +237,14 @@ export function OverlaySettings({
         <div className="flex gap-2 p-3 bg-amber-500/8 border-b border-amber-500/12">
           <AlertCircle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
           <div className="text-[12px] text-amber-400/80 flex-1">
-            <p className="font-bold mb-0.5">Safety Reminder</p>
-            <p className="text-amber-400/60 leading-snug">
-              Use for authorized practice and productivity only. The overlay stays visible on
-              screen share and proctoring tools.
+            <p className="font-bold mb-0.5">
+              Capture exclusion: {captureExclusionInfo.label}
+            </p>
+            <p className="text-amber-400/60 leading-snug mb-1.5">
+              {captureExclusionInfo.reason}
+            </p>
+            <p className="text-amber-400/55 leading-snug text-[11px]">
+              {CAPTURE_EXCLUSION_DISCLAIMER}
             </p>
           </div>
           <button

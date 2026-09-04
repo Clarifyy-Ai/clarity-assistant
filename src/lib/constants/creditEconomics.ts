@@ -8,7 +8,7 @@
  */
 
 /** Bump when plan prices, allotments, or action costs change. */
-export const CREDIT_CATALOG_VERSION = "credit_catalog_v2";
+export const CREDIT_CATALOG_VERSION = "credit_catalog_v3";
 
 export const PLAN_STATUS = {
   free: "active",
@@ -64,6 +64,7 @@ export const AI_CREDIT_COSTS = {
   live_feedback: 3,
   screenshot_answer: 10,
   session_debrief: 15,
+  generate_scorecard: 15,
   ai_coach_message: 2,
   generate_questions: 12,
   star_builder: 10,

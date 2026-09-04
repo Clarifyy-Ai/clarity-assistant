@@ -6,7 +6,20 @@ import {
   type RouteFallbackFlags,
 } from "./hybridEnqueueFallbacks";
 
+/** Mirrors MATRIX practice_coach_help — AI-only fail-closed for Overlay Chat. */
 const practiceCoachRoute: RouteFallbackFlags = {
+  preferredOrder: ["ai"],
+  pythonFallbackOnAiFailure: false,
+  aiFallbackOnPythonFailure: false,
+  canCompleteDeterministically: false,
+  canCompleteWithDatabase: false,
+  canUseAI: true,
+  canUsePython: true,
+  isAiRequired: true,
+};
+
+/** Mirrors MATRIX live_answer — AI → python → deterministic. */
+const liveAnswerRoute: RouteFallbackFlags = {
   preferredOrder: ["ai", "python", "deterministic"],
   pythonFallbackOnAiFailure: true,
   aiFallbackOnPythonFailure: false,
@@ -15,9 +28,6 @@ const practiceCoachRoute: RouteFallbackFlags = {
   canUseAI: true,
   canUsePython: true,
 };
-
-/** Mirrors MATRIX live_answer — same chain as practice_coach_help. */
-const liveAnswerRoute: RouteFallbackFlags = { ...practiceCoachRoute };
 
 /** Mirrors MATRIX prep_rephrase — AI preferred, deterministic fallback. */
 const prepRephraseRoute: RouteFallbackFlags = {
@@ -45,7 +55,7 @@ describe("enqueueFallbacks (hybrid pure mirror)", () => {
   it("on AI failure with pythonFallbackOnAiFailure enqueues python then deterministic", () => {
     const remaining: HybridRouteSource[] = [];
     const queued = new Set<HybridRouteSource>(["ai"]);
-    enqueueFallbacks("ai", practiceCoachRoute, remaining, queued);
+    enqueueFallbacks("ai", liveAnswerRoute, remaining, queued);
     expect(remaining).toEqual(["python", "deterministic"]);
     expect(queued.has("python")).toBe(true);
     expect(queued.has("deterministic")).toBe(true);
@@ -54,7 +64,7 @@ describe("enqueueFallbacks (hybrid pure mirror)", () => {
   it("does not duplicate sources already queued", () => {
     const remaining: HybridRouteSource[] = ["python"];
     const queued = new Set<HybridRouteSource>(["ai", "python"]);
-    enqueueFallbacks("ai", practiceCoachRoute, remaining, queued);
+    enqueueFallbacks("ai", liveAnswerRoute, remaining, queued);
     expect(remaining).toEqual(["python", "deterministic"]);
   });
 
@@ -63,7 +73,7 @@ describe("enqueueFallbacks (hybrid pure mirror)", () => {
     const queued = new Set<HybridRouteSource>(["ai"]);
     enqueueFallbacks(
       "ai",
-      { ...practiceCoachRoute, pythonFallbackOnAiFailure: false },
+      practiceCoachRoute,
       remaining,
       queued,
     );
@@ -74,7 +84,7 @@ describe("enqueueFallbacks (hybrid pure mirror)", () => {
 describe("simulateHybridExecution credit + fallback", () => {
   it("AI unavailable → python/deterministic succeeds without a second credit charge", async () => {
     const result = await simulateHybridExecution({
-      route: { ...practiceCoachRoute, canUseAI: false },
+      route: { ...liveAnswerRoute, canUseAI: false },
       creditCost: 2,
       runners: {
         ai: async () => {
@@ -96,7 +106,7 @@ describe("simulateHybridExecution credit + fallback", () => {
     // preferredOrder is AI-only; python arrives only via enqueueFallbacks.
     const result = await simulateHybridExecution({
       route: {
-        ...practiceCoachRoute,
+        ...liveAnswerRoute,
         preferredOrder: ["ai"],
       },
       creditCost: 3,
@@ -165,7 +175,7 @@ describe("simulateHybridExecution credit + fallback", () => {
 
   it("validation fail on AI then successful deterministic fallback still charges once", async () => {
     const result = await simulateHybridExecution({
-      route: practiceCoachRoute,
+      route: liveAnswerRoute,
       creditCost: 1,
       runners: {
         ai: async () => ({ text: "bad" }),
@@ -205,9 +215,9 @@ describe("simulateHybridExecution credit + fallback", () => {
     }
   });
 
-  it("practice_coach_help: AI failure → python fallback (same chain as live_answer)", async () => {
+  it("practice_coach_help: AI failure fails closed (no python/deterministic scaffold)", async () => {
     const result = await simulateHybridExecution({
-      route: { ...practiceCoachRoute, preferredOrder: ["ai"] },
+      route: practiceCoachRoute,
       creditCost: 2,
       runners: {
         ai: async () => {
@@ -216,11 +226,10 @@ describe("simulateHybridExecution credit + fallback", () => {
         python: async () => ({ reply: "coach hint", hints: ["use STAR"] }),
       },
     });
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.source).toBe("fallback");
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
       expect(result.deductCount).toBe(1);
-      expect(result.refundCount).toBe(0);
+      expect(result.refundCount).toBe(1);
     }
   });
 

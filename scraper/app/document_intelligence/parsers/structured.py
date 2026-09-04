@@ -17,12 +17,25 @@ URL = re.compile(r"https?://\S+", re.I)
 SENIORITY = re.compile(r"\b(intern|junior|mid[- ]level|senior|lead|principal|staff|director|manager|head|executive)\b", re.I)
 
 RESUME_ALIASES = {
-    "summary": {"summary", "profile", "objective", "professional summary"},
-    "skills": {"skills", "technical skills", "core skills", "technologies"},
-    "experience": {"experience", "work experience", "employment history"},
-    "projects": {"projects", "personal projects", "key projects"},
-    "education": {"education", "academic background"},
-    "certifications": {"certifications", "licenses"},
+    "summary": {"summary", "profile", "objective", "professional summary", "about me"},
+    "skills": {
+        "skills",
+        "technical skills",
+        "key skills",
+        "core skills",
+        "technologies",
+        "tech stack",
+        "competencies",
+        "tools",
+        "technical competencies",
+        "technical skill set",
+        "skill set",
+        "technical proficiency",
+    },
+    "experience": {"experience", "work experience", "employment history", "professional experience"},
+    "projects": {"projects", "personal projects", "key projects", "academic projects"},
+    "education": {"education", "academic background", "academics"},
+    "certifications": {"certifications", "licenses", "licence"},
     "achievements": {"achievements", "awards", "honors"},
     "languages": {"languages", "language skills"},
 }
@@ -45,6 +58,20 @@ def _source_pages(document: ParsedDocument, value: str) -> list[int]:
 
 def _items(lines: list[str]) -> list[str]:
     return unique_items([clean_item(line) for line in lines])
+
+
+def _skill_atoms(lines: list[str]) -> list[str]:
+    """Split section lines on commas/pipes so 'Java, Selenium' becomes two skills."""
+    atoms: list[str] = []
+    for line in lines:
+        cleaned = clean_item(line)
+        if not cleaned:
+            continue
+        if re.search(r"[,;|]", cleaned):
+            atoms.extend(part for part in re.split(r"[,;|]+", cleaned) if clean_item(part))
+        else:
+            atoms.append(cleaned)
+    return unique_items(atoms)
 
 
 def _entries(lines: list[str], document: ParsedDocument) -> list[ExperienceEntry]:
@@ -71,17 +98,18 @@ def parse_resume(document: ParsedDocument) -> ResumeResult:
     if not contact:
         warnings.append(ParseWarning("CONTACT_NOT_FOUND", "No email, phone, or URL was identified."))
     role_keywords = unique_items(re.findall(
-        r"\b(?:python|java|javascript|typescript|react|sql|aws|docker|kubernetes|fastapi|node\.js|machine learning|data analysis)\b",
+        r"\b(?:python|java|javascript|typescript|react|sql|aws|docker|kubernetes|fastapi|node\.js|machine learning|data analysis|selenium|cypress|playwright|jest|pytest|manual testing|api testing|sdet|qa|testng|cucumber|postman|rest|jira|git|ci/?cd)\b",
         document.text,
         re.I,
     ))
     found = sum(bool(value) for value in [first_line, contact, sections.get("skills"), sections.get("experience")])
     confidence = round(min(1.0, (found / 4) * document.confidence), 3)
+    skills = unique_items(_skill_atoms(sections.get("skills", [])) + role_keywords)
     return ResumeResult(
         name=first_line,
         contact_details=contact,
         summary="\n".join(sections.get("summary", [])) or None,
-        skills=_items(sections.get("skills", [])),
+        skills=skills,
         experience=_entries(sections.get("experience", []), document),
         projects=_entries(sections.get("projects", []), document),
         education=_entries(sections.get("education", []), document),

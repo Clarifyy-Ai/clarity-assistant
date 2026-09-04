@@ -7,6 +7,9 @@ export const ASSESSMENT_START_ERROR_CODES = [
   "ASSESSMENT_NOT_ELIGIBLE",
   "INVALID_ASSESSMENT_TEMPLATE",
   "INSUFFICIENT_QUESTION_INVENTORY",
+  "CONTENT_INSUFFICIENT",
+  "PROFILE_CONTEXT_INSUFFICIENT",
+  "ROLE_NOT_SUPPORTED",
   "MAX_ATTEMPTS_REACHED",
   "CAPABILITY_REQUIRED",
   "ASSESSMENT_START_FAILED",
@@ -26,7 +29,10 @@ export const ASSESSMENT_START_HTTP: Record<AssessmentStartErrorCode, number> = {
   ASSESSMENT_NOT_FOUND: 404,
   ASSESSMENT_NOT_AVAILABLE: 404,
   INVALID_ASSESSMENT_TEMPLATE: 422,
+  PROFILE_CONTEXT_INSUFFICIENT: 422,
+  ROLE_NOT_SUPPORTED: 422,
   INSUFFICIENT_QUESTION_INVENTORY: 409,
+  CONTENT_INSUFFICIENT: 409,
   ASSESSMENT_START_FAILED: 500,
 };
 
@@ -34,7 +40,10 @@ export const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type AssessmentStartRequest = {
-  template_id: string;
+  template_id?: string;
+  role_slug?: string;
+  force_general?: boolean;
+  setup?: Record<string, unknown>;
   idempotency_key?: string;
 };
 
@@ -44,6 +53,10 @@ export type AssessmentStartSuccess = {
   duration_minutes: number;
   reused?: boolean;
   template_slug?: string;
+  context_snapshot_id?: string;
+  blueprint_id?: string;
+  personalized?: boolean;
+  why_selected?: string;
 };
 
 export type AssessmentStartErrorBody = {
@@ -55,6 +68,7 @@ export type AssessmentStartErrorBody = {
     template_id?: string;
     template_slug?: string;
     template_title?: string;
+    missingFields?: string[];
   };
 };
 
@@ -66,22 +80,30 @@ export function parseAssessmentStartRequest(body: unknown):
   | { ok: true; value: AssessmentStartRequest }
   | { ok: false; code: "INVALID_PAYLOAD"; error: string } {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return { ok: false, code: "INVALID_PAYLOAD", error: "A JSON object with template_id is required." };
+    return { ok: false, code: "INVALID_PAYLOAD", error: "A JSON object with template_id or setup is required." };
   }
   const record = body as Record<string, unknown>;
   const templateId = String(record.template_id ?? "").trim();
-  if (!templateId) {
-    return { ok: false, code: "INVALID_PAYLOAD", error: "template_id is required." };
-  }
-  if (!UUID_RE.test(templateId)) {
+  const roleSlug = String(record.role_slug ?? "").trim();
+  const setup =
+    record.setup && typeof record.setup === "object" && !Array.isArray(record.setup)
+      ? (record.setup as Record<string, unknown>)
+      : undefined;
+  if (templateId && !UUID_RE.test(templateId)) {
     return { ok: false, code: "INVALID_PAYLOAD", error: "template_id must be a valid UUID." };
+  }
+  if (!templateId && !roleSlug && !setup) {
+    return { ok: false, code: "INVALID_PAYLOAD", error: "template_id or role_slug/setup is required." };
   }
   const idempotencyKey =
     typeof record.idempotency_key === "string" ? record.idempotency_key.trim().slice(0, 150) : undefined;
   return {
     ok: true,
     value: {
-      template_id: templateId,
+      template_id: templateId || undefined,
+      role_slug: roleSlug || undefined,
+      force_general: record.force_general === true,
+      setup,
       idempotency_key: idempotencyKey || undefined,
     },
   };
@@ -114,6 +136,19 @@ export function userMessageForAssessmentError(
       }
       return "There are not enough eligible questions to start this assessment.";
     }
+    case "CONTENT_INSUFFICIENT":
+      return "There is not enough approved question-bank content for this personalized blueprint. Try a different focus or a general assessment.";
+    case "PROFILE_CONTEXT_INSUFFICIENT": {
+      const missing = Array.isArray((details as { missingFields?: unknown } | undefined)?.missingFields)
+        ? ((details as { missingFields: unknown[] }).missingFields).map(String).filter(Boolean)
+        : [];
+      if (missing.length) {
+        return `We need a little more information to personalize your assessment. Missing: ${missing.join(", ")}.`;
+      }
+      return "We need a little more information to personalize your assessment.";
+    }
+    case "ROLE_NOT_SUPPORTED":
+      return "That target role is not supported for assessments yet.";
     case "MAX_ATTEMPTS_REACHED":
       return "You have reached the maximum number of attempts for this assessment.";
     case "CAPABILITY_REQUIRED":
@@ -169,6 +204,13 @@ export function mapAssessmentRpcError(error: RpcLikeError | null | undefined): {
     return { code: "MAX_ATTEMPTS_REACHED", error: userMessageForAssessmentError("MAX_ATTEMPTS_REACHED") };
   }
   if (lower.includes("not enough") || lower.includes("insufficient")) {
+    if (lower.includes("content") || lower.includes("blueprint") || lower.includes("personalized")) {
+      return {
+        code: "CONTENT_INSUFFICIENT",
+        error: userMessageForAssessmentError("CONTENT_INSUFFICIENT", hintDetails),
+        details: hintDetails,
+      };
+    }
     return {
       code: "INSUFFICIENT_QUESTION_INVENTORY",
       error: userMessageForAssessmentError("INSUFFICIENT_QUESTION_INVENTORY", hintDetails),
@@ -353,8 +395,20 @@ export function messageFromAssessmentStartError(err: unknown): {
   if (err instanceof ApiClientError) {
     const code = isAssessmentStartErrorCode(err.code) ? err.code : "ASSESSMENT_START_FAILED";
     const details = extractAssessmentInventoryDetails(err.details);
+    const payload =
+      err.details && typeof err.details === "object"
+        ? (err.details as Record<string, unknown>)
+        : undefined;
+    const missingFields = Array.isArray(payload?.missingFields)
+      ? (payload!.missingFields as unknown[]).map(String)
+      : Array.isArray((payload?.details as { missingFields?: unknown } | undefined)?.missingFields)
+        ? ((payload!.details as { missingFields: unknown[] }).missingFields).map(String)
+        : undefined;
     return {
-      text: userMessageForAssessmentError(code as AssessmentStartErrorCode, details),
+      text: userMessageForAssessmentError(code as AssessmentStartErrorCode, {
+        ...details,
+        ...(missingFields ? { missingFields } : {}),
+      }),
       retryable: isRetryableAssessmentStartCode(code),
     };
   }

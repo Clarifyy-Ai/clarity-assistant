@@ -879,6 +879,33 @@ export type ExtractQuestionPaperResult = {
   error?: string;
 };
 
+/** Map SDK invoke failures to actionable admin copy (not opaque FunctionsFetchError). */
+export function mapExtractQuestionPaperInvokeError(error: unknown): string {
+  const name =
+    error && typeof error === "object" && "name" in error
+      ? String((error as { name?: string }).name ?? "")
+      : "";
+  const msg =
+    error instanceof Error
+      ? error.message
+      : error && typeof error === "object" && "message" in error
+        ? String((error as { message?: string }).message ?? "")
+        : String(error ?? "");
+
+  if (
+    name === "FunctionsFetchError" ||
+    /Failed to send a request to the Edge Function/i.test(msg) ||
+    /Failed to fetch/i.test(msg) ||
+    /NetworkError|network request failed|ERR_NETWORK/i.test(msg)
+  ) {
+    return "Couldn't reach the extract service. Check your connection and try again. If this keeps happening, the Edge Function may be unreachable or not deployed.";
+  }
+  if (/FunctionsHttpError/i.test(name) && /non-2xx/i.test(msg)) {
+    return "Extract service returned an error. Confirm you are signed in as admin and try again.";
+  }
+  return msg.trim() || "Extract failed";
+}
+
 export async function triggerExtractQuestionPaper(body: Record<string, unknown>): Promise<{
   data: ExtractQuestionPaperResult | null;
   error: string | null;
@@ -887,7 +914,7 @@ export async function triggerExtractQuestionPaper(body: Record<string, unknown>)
     body,
   });
   if (error) {
-    return { data: null, error: error.message };
+    return { data: null, error: mapExtractQuestionPaperInvokeError(error) };
   }
   const envelope = data as {
     success?: boolean;

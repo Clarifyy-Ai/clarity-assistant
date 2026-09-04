@@ -30,6 +30,16 @@ import {
   resolveOverallScore,
   sessionStatusLabel,
 } from "@/lib/session/sessionDisplay";
+import { buildSessionTranscriptView } from "@/lib/session/sessionTranscriptTurns";
+import { formatSessionScore } from "@/lib/analytics/scoreStatus";
+import { unscoredReasonLabel } from "@/lib/results/resultDisplay";
+import { issueShareToken } from "@/lib/session/issueShareToken";
+import {
+  SESSION_SHAREABILITY_MESSAGES,
+  type SessionShareabilityCode,
+} from "@/lib/session/sessionShareability";
+import { ApiClientError } from "@/lib/api/apiClient";
+import { buildShareUrl } from "@/lib/utils";
 
 export default function SessionDetail() {
   const { id }   = useParams<{ id: string }>();
@@ -38,14 +48,32 @@ export default function SessionDetail() {
 
   const [session,     setSession]     = useState<any>(null);
   const [answers,     setAnswers]     = useState<any[]>([]);
-  const [scorecard,   setScorecard]   = useState<{ overall_score?: number | null } | null>(null);
-  const [transcript,  setTranscript]  = useState<string | null>(null);
+  const [scorecard,   setScorecard]   = useState<{
+    overall_score?: number | null;
+    score_status?: string | null;
+    evaluation_status?: string | null;
+    eligibility_reason?: string | null;
+    is_shared?: boolean | null;
+    share_token?: string | null;
+  } | null>(null);
+  const [transcript,  setTranscript]  = useState<{
+    content?: string | null;
+    utterances?: unknown;
+  } | null>(null);
   const [debriefSummary, setDebriefSummary] = useState<string | null>(null);
+  const [debriefId, setDebriefId] = useState<string | null>(null);
   const [loading,     setLoading]     = useState(true);
   const [fetchError,  setFetchError]  = useState<string | null>(null);
   const [expanded,    setExpanded]    = useState<Record<string, boolean>>({});
   const [chatOpen,    setChatOpen]    = useState(false);
   const [shareOpen,   setShareOpen]   = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareStatus, setShareStatus] = useState<{
+    code: SessionShareabilityCode | string;
+    message: string;
+    shareUrl: string | null;
+    isShared: boolean;
+  } | null>(null);
   const [userIdWhenMounted] = useState(user?.id); // Capture user.id at mount for stable comparison
   const fetchRequestRef = useRef(0);
 
@@ -96,9 +124,7 @@ export default function SessionDetail() {
 
       setSession(detail.session);
       setScorecard(detail.scorecard);
-      const transcriptText =
-        typeof detail.transcript?.content === "string" ? detail.transcript.content.trim() : "";
-      setTranscript(transcriptText || null);
+      setTranscript(detail.transcript ?? null);
       const debrief = detail.debrief;
       const summary =
         typeof debrief?.summary === "string"
@@ -107,6 +133,9 @@ export default function SessionDetail() {
             ? debrief.insight
             : null;
       setDebriefSummary(summary);
+      setDebriefId(
+        typeof debrief?.id === "string" && debrief.id.trim() ? debrief.id : null,
+      );
       setAnswers(
         [...detail.answers]
           .sort((a, b) => {
@@ -158,23 +187,169 @@ export default function SessionDetail() {
     void fetchSession();
   }, [fetchSession]);
 
+  const refreshShareStatus = useCallback(async () => {
+    if (!session?.id) return;
+    setShareBusy(true);
+    try {
+      const status = await issueShareToken(session.id, "status");
+      const token =
+        typeof status.share_token === "string" && status.share_token.trim().length >= 16
+          ? status.share_token.trim()
+          : null;
+      setShareStatus({
+        code: (status.code as SessionShareabilityCode) || "SCORECARD_REQUIRED",
+        message:
+          status.message ||
+          status.error ||
+          SESSION_SHAREABILITY_MESSAGES[
+            (status.code as SessionShareabilityCode) || "SCORECARD_REQUIRED"
+          ] ||
+          "Checking share eligibility…",
+        shareUrl: token ? buildShareUrl(token) : null,
+        isShared: Boolean(status.is_shared || token),
+      });
+    } catch (err) {
+      const code =
+        err instanceof ApiClientError && typeof err.code === "string"
+          ? err.code
+          : "SCORECARD_REQUIRED";
+      const message =
+        err instanceof ApiClientError
+          ? err.message
+          : SESSION_SHAREABILITY_MESSAGES.SCORECARD_REQUIRED;
+      setShareStatus({
+        code,
+        message,
+        shareUrl: null,
+        isShared: false,
+      });
+    } finally {
+      setShareBusy(false);
+    }
+  }, [session?.id]);
+
+  async function openShareModal() {
+    setShareOpen(true);
+    setShareStatus(null);
+    await refreshShareStatus();
+  }
+
+  async function handleIssueShare() {
+    if (!session?.id || shareBusy) return;
+    setShareBusy(true);
+    try {
+      const issued = await issueShareToken(session.id, "issue");
+      const token =
+        typeof issued.share_token === "string" && issued.share_token.trim().length >= 16
+          ? issued.share_token.trim()
+          : null;
+      const url = token ? buildShareUrl(token) : issued.share_url ?? null;
+      if (url) {
+        await navigator.clipboard.writeText(url);
+        setShareStatus({
+          code: "SHARE_READY",
+          message: issued.idempotent
+            ? "Share link copied (same link as before)."
+            : "Share link created and copied.",
+          shareUrl: url,
+          isShared: true,
+        });
+        toast.success("Share link copied");
+        return;
+      }
+      setShareStatus({
+        code: (issued.code as SessionShareabilityCode) || "SCORECARD_REQUIRED",
+        message:
+          issued.error ||
+          issued.message ||
+          SESSION_SHAREABILITY_MESSAGES.SCORECARD_REQUIRED,
+        shareUrl: null,
+        isShared: false,
+      });
+    } catch (err) {
+      const code =
+        err instanceof ApiClientError && typeof err.code === "string"
+          ? err.code
+          : "SCORECARD_REQUIRED";
+      const message =
+        err instanceof ApiClientError
+          ? err.message
+          : "Could not create a share link. Please try again.";
+      setShareStatus({
+        code,
+        message,
+        shareUrl: null,
+        isShared: false,
+      });
+      if (code !== "SESSION_INCOMPLETE" && code !== "SCORECARD_REQUIRED") {
+        toast.error(message);
+      }
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
+  async function handleRevokeShare() {
+    if (!session?.id || shareBusy) return;
+    setShareBusy(true);
+    try {
+      await issueShareToken(session.id, "revoke");
+      setShareStatus({
+        code: "SCORECARD_REQUIRED",
+        message: "Share link revoked. Public access is disabled.",
+        shareUrl: null,
+        isShared: false,
+      });
+      toast.success("Share link revoked");
+    } catch (err) {
+      toast.error(
+        err instanceof ApiClientError
+          ? err.message
+          : "Could not revoke the share link.",
+      );
+    } finally {
+      setShareBusy(false);
+    }
+  }
+
   // ── Derived values ────────────────────────────────────────────
 
   const score = resolveOverallScore(session, scorecard);
-  const hasOverallScore = score !== null;
+  const scoreStatus = scorecard?.score_status ?? (score !== null ? "scored" : "not_scored");
+  const scoreLabel = formatSessionScore(score, scoreStatus);
+  const hasOverallScore = score !== null && scoreStatus === "scored";
+  const unscoredReason = !hasOverallScore
+    ? unscoredReasonLabel({
+        evaluationStatus: scorecard?.evaluation_status,
+        eligibilityReason: scorecard?.eligibility_reason,
+        fallback: "Not evaluated — generate a scorecard when this session is eligible.",
+      })
+    : null;
   const scoreColor =
-    score === null ? "gray" :
-    score >= 80 ? "emerald" :
-    score >= 60 ? "amber"   : "red";
+    !hasOverallScore ? "gray" :
+    score! >= 80 ? "emerald" :
+    score! >= 60 ? "amber"   : "red";
 
   const scoreTier =
-    score === null ? "Not scored" :
-    score >= 85 ? "Excellent" :
-    score >= 70 ? "Good" :
-    score >= 55 ? "Fair" : "Needs work";
+    !hasOverallScore ? scoreLabel :
+    score! >= 85 ? "Excellent" :
+    score! >= 70 ? "Good" :
+    score! >= 55 ? "Fair" : "Needs work";
 
   const duration = formatSessionDuration(session ?? {});
   const statusLabel = sessionStatusLabel(session ?? {});
+  const transcriptView = buildSessionTranscriptView({
+    utterances: transcript?.utterances,
+    content: transcript?.content ?? null,
+    answers: answers.map((a) => ({
+      question: a.question_text,
+      answer: a.transcript,
+      ai_feedback: a.ai_feedback,
+      question_index: a.question_index,
+    })),
+  });
+  const hasTranscriptPanel =
+    transcriptView.mode !== "empty" || Boolean(debriefSummary);
 
   // ── Loading state ─────────────────────────────────────────────
 
@@ -258,7 +433,9 @@ export default function SessionDetail() {
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => navigate(`/app/debriefs/${session.id}`)}
+            onClick={() =>
+              navigate(`/app/debriefs/${debriefId ?? session.id}`)
+            }
             leftIcon={<Brain className="w-3.5 h-3.5" />}
           >
             Debrief
@@ -266,7 +443,7 @@ export default function SessionDetail() {
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => setShareOpen(true)}
+            onClick={() => void openShareModal()}
             leftIcon={<Share2 className="w-3.5 h-3.5" />}
           >
             Share
@@ -309,10 +486,15 @@ export default function SessionDetail() {
             scoreColor === "amber"   ? "text-amber-400"   :
             scoreColor === "gray"    ? "text-muted-foreground" : "text-red-400"
           )}>
-            {hasOverallScore && score !== null ? score : "—"}
+            {hasOverallScore && score !== null ? score : scoreLabel}
           </div>
           <p className="text-foreground text-sm font-medium">{scoreTier}</p>
           <p className="text-muted-foreground text-xs mt-1">Overall score</p>
+          {unscoredReason && (
+            <p className="text-muted-foreground text-[11px] mt-2 max-w-[14rem] leading-snug px-2">
+              {unscoredReason}
+            </p>
+          )}
           {hasOverallScore && score !== null && (
             <ProgressBar value={score} max={100} color={scoreColor === "gray" ? "violet" : scoreColor} size="sm" className="mt-4 w-32" />
           )}
@@ -338,7 +520,12 @@ export default function SessionDetail() {
                 <div key={dim.key} className="flex items-center gap-3">
                   <span className="text-[10px] sm:text-xs text-muted-foreground w-28 sm:w-40 shrink-0">{dim.label}</span>
                   {unscored ? (
-                    <span className="flex-1 text-xs text-muted-foreground">Not scored</span>
+                    <span className="flex-1 text-xs text-muted-foreground">
+                      Not scored
+                      {unscoredReason ? (
+                        <span className="block text-[10px] opacity-80 mt-0.5">{unscoredReason}</span>
+                      ) : null}
+                    </span>
                   ) : (
                     <ProgressBar value={val} max={100} color={c} size="sm" className="flex-1" />
                   )}
@@ -376,17 +563,69 @@ export default function SessionDetail() {
         ))}
       </div>
 
-      {(transcript || debriefSummary) && (
+      {(hasTranscriptPanel) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {transcript && (
+          {transcriptView.mode !== "empty" && (
             <Card>
               <h3 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-2">
                 <Mic className="w-4 h-4 text-primary" />
                 Transcript
               </h3>
-              <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto">
-                {transcript}
-              </p>
+              {transcriptView.mode === "turns" ? (
+                <div className="space-y-2 max-h-64 overflow-y-auto font-mono text-xs">
+                  {transcriptView.turns.map((turn) => (
+                    <div key={turn.id} className="flex gap-2 items-start">
+                      <span
+                        className={cn(
+                          "w-10 shrink-0 text-[10px] font-semibold uppercase tracking-wider pt-0.5",
+                          turn.label === "THEM" && "text-amber-500",
+                          turn.label === "YOU" && "text-blue-500",
+                          turn.label === "AI" && "text-primary",
+                          turn.label === "…" && "text-muted-foreground",
+                        )}
+                      >
+                        {turn.label}
+                      </span>
+                      <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap flex-1">
+                        {turn.text}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap max-h-64 overflow-y-auto">
+                  {transcriptView.flatContent}
+                </p>
+              )}
+              {transcriptView.groups.length > 0 && transcriptView.mode === "turns" && (
+                <div className="mt-4 pt-3 border-t border-border space-y-3">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
+                    Turn groups
+                  </p>
+                  {transcriptView.groups.map((group) => (
+                    <div key={group.id} className="space-y-1.5 rounded-lg bg-secondary/40 p-2.5">
+                      {group.interviewer && (
+                        <p className="text-xs text-foreground">
+                          <span className="font-semibold text-amber-500 mr-1.5">THEM</span>
+                          {group.interviewer}
+                        </p>
+                      )}
+                      {group.candidate && (
+                        <p className="text-xs text-foreground">
+                          <span className="font-semibold text-blue-500 mr-1.5">YOU</span>
+                          {group.candidate}
+                        </p>
+                      )}
+                      {group.aiSuggestion && (
+                        <p className="text-xs text-foreground">
+                          <span className="font-semibold text-primary mr-1.5">AI</span>
+                          {group.aiSuggestion}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </Card>
           )}
           {debriefSummary && (
@@ -651,7 +890,7 @@ export default function SessionDetail() {
           variant="primary"
           size="sm"
           className="w-full sm:w-auto shrink-0"
-          onClick={() => navigate(`/app/debriefs/${session.id}`)}
+          onClick={() => navigate(`/app/debriefs/${debriefId ?? session.id}`)}
           rightIcon={<ChevronRight className="w-3.5 h-3.5" />}
         >
           View debrief
@@ -660,33 +899,98 @@ export default function SessionDetail() {
 
       <Modal open={shareOpen} onClose={() => setShareOpen(false)} title="Share session report" size="sm">
         <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Public share links use a secure token from the scorecard or debrief page.
-            Open the report first, then use Share there.
-          </p>
+          {shareBusy && !shareStatus ? (
+            <p className="text-sm text-muted-foreground">Checking share eligibility…</p>
+          ) : null}
+          {shareStatus ? (
+            <p
+              className={cn(
+                "text-sm leading-relaxed",
+                shareStatus.code === "SESSION_INCOMPLETE" ||
+                  shareStatus.code === "SESSION_ABANDONED"
+                  ? "text-amber-700 dark:text-amber-200"
+                  : "text-muted-foreground",
+              )}
+              data-testid="session-share-status"
+            >
+              {shareStatus.message}
+            </p>
+          ) : null}
+          {shareStatus?.shareUrl ? (
+            <p className="text-xs break-all rounded-lg border border-border bg-secondary/40 px-3 py-2 font-mono">
+              {shareStatus.shareUrl}
+            </p>
+          ) : null}
           <div className="flex flex-col sm:flex-row gap-2">
-            <Button
-              variant="primary"
-              size="sm"
-              className="w-full"
-              onClick={() => {
-                setShareOpen(false);
-                navigate(`/app/scorecard/${session.id}`);
-              }}
-            >
-              Open scorecard
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="w-full"
-              onClick={() => {
-                setShareOpen(false);
-                navigate(`/app/debriefs/${session.id}`);
-              }}
-            >
-              Open debrief
-            </Button>
+            {shareStatus?.code === "SHARE_READY" || shareStatus?.shareUrl ? (
+              <Button
+                variant="primary"
+                size="sm"
+                className="w-full"
+                loading={shareBusy}
+                onClick={() => void handleIssueShare()}
+              >
+                {shareStatus.shareUrl ? "Copy share link" : "Create share link"}
+              </Button>
+            ) : shareStatus?.code === "SCORECARD_REQUIRED" ? (
+              <Button
+                variant="primary"
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  setShareOpen(false);
+                  navigate(`/app/scorecard/${session.id}`);
+                }}
+              >
+                Open scorecard
+              </Button>
+            ) : shareStatus?.code === "SHARE_DISABLED" ? (
+              <Button
+                variant="primary"
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  setShareOpen(false);
+                  navigate("/app/settings/privacy");
+                }}
+              >
+                Open privacy settings
+              </Button>
+            ) : shareStatus?.code === "SESSION_INCOMPLETE" ||
+              shareStatus?.code === "SESSION_ABANDONED" ? null : (
+              <Button
+                variant="primary"
+                size="sm"
+                className="w-full"
+                loading={shareBusy}
+                onClick={() => void handleIssueShare()}
+              >
+                Create share link
+              </Button>
+            )}
+            {shareStatus?.isShared ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full"
+                loading={shareBusy}
+                onClick={() => void handleRevokeShare()}
+              >
+                Revoke link
+              </Button>
+            ) : (
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  setShareOpen(false);
+                  navigate(`/app/debriefs/${debriefId ?? session.id}`);
+                }}
+              >
+                Open debrief
+              </Button>
+            )}
           </div>
         </div>
       </Modal>

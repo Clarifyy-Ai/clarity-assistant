@@ -226,6 +226,7 @@ export default function ExamPapers() {
       const userTests  = (testsRes.data ?? []) as MockTestRow[];
       const attempted  = new Set<string>();
       let totalScore   = 0;
+      let scoredAttempts = 0;
       let maxScore     = -1;
       let bestTestName = "--";
 
@@ -242,8 +243,13 @@ export default function ExamPapers() {
             : "";
           if (yearMin) attempted.add(yearMin);
 
-          const score = t.overall_score ?? 0;
+          const score =
+            typeof t.overall_score === "number" && Number.isFinite(t.overall_score)
+              ? t.overall_score
+              : null;
+          if (score == null) continue;
           totalScore += score;
+          scoredAttempts += 1;
           if (score > maxScore) {
             maxScore     = score;
             bestTestName = t.test_name ?? "--";
@@ -252,7 +258,7 @@ export default function ExamPapers() {
       }
 
       setAttemptedIds(attempted);
-      if (attempted.size > 0) setAverageScore(Math.round(totalScore / attempted.size));
+      if (scoredAttempts > 0) setAverageScore(Math.round(totalScore / scoredAttempts));
       if (maxScore >= 0)      setBestPerformance(`${bestTestName} (${maxScore}%)`);
     } catch (err) {
       console.error("[ExamPapers] loadData error:", err);

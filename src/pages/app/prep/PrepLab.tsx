@@ -47,19 +47,20 @@ import {
   parseStarResponse,
   buildStarAnswerText,
 } from "@/components/prep/StarBuilderForm";
-// Default prep-tool cost for tools without an explicit AI_CREDIT_COSTS entry.
-const PREP_TOOL_DEFAULT_COST = 3;
+// Only tools with an explicit catalog mapping are chargeable / runnable.
+const PREP_TOOL_COSTS: Record<string, number> = {
+  coding_hint: AI_CREDIT_COSTS.coding_hint,
+  coding_solution: AI_CREDIT_COSTS.live_answer,
+  rephrase: AI_CREDIT_COSTS.rephraser,
+  project_build: AI_CREDIT_COSTS.project_builder,
+  star_method: AI_CREDIT_COSTS.star_builder,
+  system_design: AI_CREDIT_COSTS.system_design,
+  raw_prompt: AI_CREDIT_COSTS.rephraser,
+};
 
-function getPrepToolCost(toolId: string): number {
-  const mapped: Record<string, number> = {
-    coding_hint: AI_CREDIT_COSTS.coding_hint,
-    coding_solution: AI_CREDIT_COSTS.live_answer,
-    rephrase: AI_CREDIT_COSTS.rephraser,
-    project_build: AI_CREDIT_COSTS.project_builder,
-    star_method: AI_CREDIT_COSTS.star_builder,
-    system_design: AI_CREDIT_COSTS.system_design,
-  };
-  return mapped[toolId] ?? PREP_TOOL_DEFAULT_COST;
+function getPrepToolCost(toolId: string): number | null {
+  const cost = PREP_TOOL_COSTS[toolId];
+  return typeof cost === "number" && Number.isFinite(cost) && cost > 0 ? cost : null;
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -176,32 +177,28 @@ function STARBuilder() {
     setAiLoading(key);
     originalSectionRef.current[key] = star[key];
 
-    const sectionLabel =
-      key === "situation" ? "Situation" :
-      key === "task" ? "Task" :
-      key === "action" ? "Action" : "Result";
-    const input =
-      `Polish only the ${sectionLabel} section of this STAR answer.\n` +
-      `Question: ${question || "(general behavioral)"}\n\n` +
-      `Current ${sectionLabel}:\n${star[key]}\n\n` +
-      `Return only the improved ${sectionLabel} text without labels.`;
-    const contentHash = await sha256(input);
+    const currentText = star[key];
+    const contentHash = await sha256(
+      `polish_star:${key}:${question}:${currentText}`,
+    );
     const idempotencyKey =
       polishKeysRef.current[key] ??
-      prepToolContentIdempotencyKey("raw_prompt", contentHash);
+      prepToolContentIdempotencyKey("polish_star", contentHash);
     polishKeysRef.current[key] = idempotencyKey;
 
     try {
-      const data = await fetchEdgeJson<Record<string, unknown>>("prep-tool", {
-        tool_id: "raw_prompt",
-        input,
+      // Server charges polish_star (2) via polish-star-section — not prep-tool raw_prompt/rephraser.
+      const data = await fetchEdgeJson<{ polished?: string }>("polish-star-section", {
+        section: key,
+        currentText,
+        questionText: question || undefined,
       }, {
         headers: {
           "x-idempotency-key": idempotencyKey,
         },
       });
 
-      const polished = typeof data?.result === "string" ? data.result.trim() : "";
+      const polished = typeof data?.polished === "string" ? data.polished.trim() : "";
       if (!polished) throw new Error("AI rewrite returned empty content.");
       setStar((p) => ({ ...p, [key]: polished }));
       polishKeysRef.current[key] = undefined;
@@ -562,6 +559,8 @@ const AI_TOOLS: Array<{
   label: string;
   desc: string;
   plan: "free" | "pro";
+  /** When false, Launch must not call prep-tool (unpriced / not Edge-backed). */
+  edgeReady?: boolean;
 }> = [
   {
     id:    "jd_fit",
@@ -569,6 +568,7 @@ const AI_TOOLS: Array<{
     label: "JD Fit Analyser",
     desc:  "Upload a job description — AI rates how well your resume matches and gives a gap report.",
     plan:  "free",
+    edgeReady: false,
   },
   {
     id:    "question_predict",
@@ -576,6 +576,7 @@ const AI_TOOLS: Array<{
     label: "Question Predictor",
     desc:  "AI predicts the 10 most likely questions for your target role and company.",
     plan:  "free",
+    edgeReady: false,
   },
   {
     id:    "cover_letter",
@@ -583,6 +584,7 @@ const AI_TOOLS: Array<{
     label: "Cover Letter Writer",
     desc:  "Generate a tailored cover letter from your resume + JD in one click.",
     plan:  "pro",
+    edgeReady: false,
   },
   {
     id:    "salary_coach",
@@ -590,6 +592,7 @@ const AI_TOOLS: Array<{
     label: "Salary Negotiation Script",
     desc:  "AI writes a customised negotiation script based on role, location, and experience.",
     plan:  "pro",
+    edgeReady: false,
   },
   {
     id:    "linkedin_headline",
@@ -597,6 +600,7 @@ const AI_TOOLS: Array<{
     label: "LinkedIn Headline Optimiser",
     desc:  "Rewrite your headline to attract more recruiters for your target roles.",
     plan:  "pro",
+    edgeReady: false,
   },
   {
     id:    "culture_fit",
@@ -604,6 +608,7 @@ const AI_TOOLS: Array<{
     label: "Culture Fit Scorer",
     desc:  "Analyses your answers against a company's stated values and culture.",
     plan:  "pro",
+    edgeReady: false,
   },
 ];
 
@@ -621,6 +626,7 @@ function AITools({ initialToolId }: { initialToolId?: string }) {
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       {AI_TOOLS.map((tool) => {
         const locked = tool.plan === "pro" && !isPro;
+        const edgeReady = tool.edgeReady !== false && getPrepToolCost(tool.id) != null;
         return (
           <Card
             key={tool.id}
@@ -629,6 +635,10 @@ function AITools({ initialToolId }: { initialToolId?: string }) {
               if (tool.id === "jd_fit") {
                 toast.message("Upload a resume and job description to run gap analysis.");
                 navigate("/app/documents?highlight=gap-analysis");
+                return;
+              }
+              if (!edgeReady) {
+                toast.message("This prep tool is not available yet — no credits were charged.");
                 return;
               }
               setActiveToolId(tool.id);
@@ -641,6 +651,11 @@ function AITools({ initialToolId }: { initialToolId?: string }) {
             {locked && (
               <div className="absolute top-3 right-3">
                 <Badge variant="amber" size="sm">Pro</Badge>
+              </div>
+            )}
+            {!locked && !edgeReady && tool.id !== "jd_fit" && (
+              <div className="absolute top-3 right-3">
+                <Badge variant="secondary" size="sm">Unavailable</Badge>
               </div>
             )}
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
@@ -657,7 +672,13 @@ function AITools({ initialToolId }: { initialToolId?: string }) {
               className="mt-auto w-fit"
               rightIcon={<ChevronRight className="w-3 h-3" />}
             >
-              {locked ? "Upgrade to use" : "Launch tool"}
+              {locked
+                ? "Upgrade to use"
+                : tool.id === "jd_fit"
+                  ? "Open gap analysis"
+                  : edgeReady
+                    ? "Launch tool"
+                    : "Unavailable"}
             </Button>
           </Card>
         );
@@ -681,7 +702,7 @@ function AIToolModal({
 }) {
   const credits = useCredits();
   const tool = AI_TOOLS.find((t) => t.id === toolId);
-  const toolCost = toolId ? getPrepToolCost(toolId) : PREP_TOOL_DEFAULT_COST;
+  const toolCost = toolId ? getPrepToolCost(toolId) : null;
   const [input,  setInput]  = useState("");
   const [output, setOutput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -692,7 +713,7 @@ function AIToolModal({
   }, [toolId]);
 
   async function run() {
-    if (!input.trim() || loading) return;
+    if (!input.trim() || loading || !toolId || toolCost == null) return;
     setLoading(true);
 
     try {
@@ -722,6 +743,11 @@ function AIToolModal({
     <Modal open={!!toolId} onClose={onClose} title={tool.label} size="lg">
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">{tool.desc}</p>
+        {toolCost == null ? (
+          <p className="text-sm text-amber-700 dark:text-amber-400">
+            This tool is not available yet. No credits will be charged.
+          </p>
+        ) : null}
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -734,11 +760,11 @@ function AIToolModal({
           size="md"
           fullWidth
           loading={loading}
-          disabled={!input.trim() || credits.balance < toolCost}
+          disabled={!input.trim() || toolCost == null || credits.balance < (toolCost ?? 0)}
           onClick={run}
           leftIcon={<Sparkles className="w-4 h-4" />}
         >
-          Run AI tool ({toolCost} credits)
+          {toolCost == null ? "Unavailable" : `Run AI tool (${toolCost} credits)`}
         </Button>
         {output && (
           <div className="bg-secondary border border-border rounded-xl p-4">

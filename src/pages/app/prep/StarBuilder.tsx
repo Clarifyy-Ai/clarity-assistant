@@ -1,13 +1,18 @@
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { prepToolContentIdempotencyKey } from "@/lib/network/idempotency";
 import { sha256 } from "@/lib/utils/hashUtils";
+import { refreshCredits } from "@/lib/billing/creditsManager";
+import { useCredits } from "@/hooks/useCredits";
+import { evaluateActionCreditGate } from "@/lib/billing/actionCreditGate";
+import { InsufficientCreditsAction } from "@/components/billing/InsufficientCreditsAction";
+import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
+import { ApiClientError } from "@/lib/api/apiClient";
 import {
   getAiUserFacingError,
   isAiProviderUnavailableError,
+  isInsufficientCreditsError,
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
-import { refreshCredits } from "@/lib/billing/creditsManager";
-import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -28,7 +33,11 @@ import {
   assessStarFactualIntegrity,
   starSectionsToText,
 } from "@/lib/prep/starFactualIntegrity";
-import { parsePrepToolMeta, prepDraftBadgeLabel } from "@/lib/prep/prepToolMeta";
+import {
+  isInputBasedPrepDraft,
+  parsePrepToolMeta,
+  prepDraftBadgeLabel,
+} from "@/lib/prep/prepToolMeta";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
@@ -55,6 +64,7 @@ const SAVE_FAILED_MSG =
 
 export default function StarBuilder() {
   const { user } = useAuthStore();
+  const credits = useCredits();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const returnTo = searchParams.get("returnTo");
@@ -68,6 +78,7 @@ export default function StarBuilder() {
   const [competencyTag, setCompetencyTag] = useState("");
   const [aiPhase, setAiPhase] = useState<AiPhase>("IDLE");
   const [polishError, setPolishError] = useState<string | null>(null);
+  const [creditDenied, setCreditDenied] = useState(false);
   const [draftBadge, setDraftBadge] = useState<string | null>(null);
   const [savePhase, setSavePhase] = useState<SavePhase>("IDLE");
   const polishKeyRef = useRef<string | null>(null);
@@ -168,6 +179,23 @@ export default function StarBuilder() {
     }
     if (polishing || polishInFlightRef.current) return;
 
+    const gate = evaluateActionCreditGate({
+      operationKey: "star_builder",
+      balance: credits.balance,
+      balanceKnown: true,
+    });
+    if (gate.status === "insufficient" || gate.status === "unknown_balance") {
+      setCreditDenied(true);
+      openUpgradeIfInsufficientCredits(
+        new ApiClientError({
+          message: "Not enough credits for AI rewrite.",
+          status: 402,
+          code: "INSUFFICIENT_CREDITS",
+        }),
+      );
+      return;
+    }
+
     polishInFlightRef.current = true;
     // Preserve original before any AI overwrite.
     originalStarRef.current = { ...star };
@@ -175,6 +203,7 @@ export default function StarBuilder() {
     setAiPhase("GENERATING");
     setPolishError(null);
     setDraftBadge(null);
+    setCreditDenied(false);
 
     const input = `Question: ${question || "(general behavioral)"}\n\nSituation: ${star.situation}\nTask: ${star.task}\nAction: ${star.action}\nResult: ${star.result}`;
     const contentHash = await sha256(input);
@@ -241,10 +270,17 @@ export default function StarBuilder() {
       setAiPhase("GENERATED");
       setDraftBadge(prepDraftBadgeLabel(meta));
       polishKeyRef.current = null;
-      toast.success("Answer polished. Save to keep it.");
+      if (isInputBasedPrepDraft(meta)) {
+        toast.success("Draft ready (AI polish unavailable).");
+      } else {
+        toast.success("Answer polished. Save to keep it.");
+      }
       await refreshCredits().catch(() => undefined);
     } catch (err) {
       if (originalStarRef.current) setStar(originalStarRef.current);
+      if (isInsufficientCreditsError(err)) {
+        setCreditDenied(true);
+      }
       openUpgradeIfInsufficientCredits(err);
       const message = isAiProviderUnavailableError(err)
         ? AI_REWRITE_UNAVAILABLE
@@ -355,6 +391,7 @@ export default function StarBuilder() {
             description="Fill the sections, then polish with AI when ready."
             isGenerating={polishing}
             generationLabel="Polishing STAR answer…"
+            generationStage="star_polish"
             error={polishError}
             onRetry={() => void handlePolish()}
           >
@@ -383,15 +420,27 @@ export default function StarBuilder() {
           />
 
           <div className="flex gap-2 flex-wrap items-center">
+            {creditDenied && (
+              <div className="w-full">
+                <InsufficientCreditsAction
+                  operationKey="star_builder"
+                  required={AI_CREDIT_COSTS.star_builder}
+                  balance={credits.balance}
+                  mode="credits"
+                  returnTo="/app/prep/star-builder"
+                  compact
+                />
+              </div>
+            )}
             <Button
               variant="primary"
               onClick={() => void handlePolish()}
-              disabled={polishing || !hasContent}
+              disabled={polishing || !hasContent || !credits.canAfford("star_generate")}
               leftIcon={polishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
             >
               {polishing
-                ? "Polishing..."
-                : `AI Polish (${AI_CREDIT_COSTS.star_builder} credits)`}
+                ? "Rewriting..."
+                : `AI Rewrite (${AI_CREDIT_COSTS.star_builder} credits)`}
             </Button>
             {aiPhase === "GENERATED" && hasOriginalDraft && (
               <Button variant="ghost" size="sm" onClick={rejectAiDraft}>

@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { useAuthStore } from "@/store/authStore";
+
+const authStoreSrcPath = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../store/authStore.ts",
+);
 
 const mockSignIn = vi.fn();
 const mockSignOut = vi.fn().mockResolvedValue({ error: null });
@@ -314,5 +322,63 @@ describe("authStore account bootstrap", () => {
     expect(useAuthStore.getState().status).toBe("authenticated");
     expect(useAuthStore.getState().isProfileLoaded).toBe(true);
     expect(mockGetByIdMaybe.mock.calls.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("awaits PROFILE_COLD_RETRY_DELAY_MS wiring before the second profile fetch on timeout", () => {
+    // Source contract: cold delay constant is imported and used before retry.
+    const src = fs.readFileSync(authStoreSrcPath, "utf8");
+    expect(src).toContain("PROFILE_COLD_RETRY_DELAY_MS");
+    expect(src).toMatch(
+      /if \(timedOut\)[\s\S]*?PROFILE_COLD_RETRY_DELAY_MS[\s\S]*?fetchProfile\(\)/,
+    );
+  });
+
+  it("soft-timeout keep_cached_profile schedules admin role resolve and background revalidate", () => {
+    const src = fs.readFileSync(authStoreSrcPath, "utf8");
+    expect(src).toContain('recoveryAction: "keep_cached_profile"');
+    expect(src).toMatch(
+      /keep_cached_profile[\s\S]*?if \(!get\(\)\.isAdminResolved\)[\s\S]*?scheduleAdminRoleResolve/,
+    );
+    expect(src).toMatch(
+      /softFailBackgroundRevalidateScheduled[\s\S]*?loadProfile\(\{\s*force:\s*true,\s*background:\s*true\s*\}\)/,
+    );
+  });
+
+  it("keeps cached profile on soft timeout and schedules admin role when unresolved", async () => {
+    useAuthStore.setState({
+      user: mockUser as never,
+      session: mockSession as never,
+      status: "authenticated",
+      isProfileLoaded: true,
+      profile: mockProfile as never,
+      isAdminResolved: false,
+      isAdmin: false,
+    });
+    // Seed module cache via a successful load first
+    mockGetByIdMaybe.mockResolvedValueOnce(mockProfile);
+    await useAuthStore.getState().loadProfile({ force: true });
+    await vi.waitFor(() => {
+      expect(useAuthStore.getState().isAdminResolved).toBe(true);
+    });
+
+    // Reset role so soft-fail path must re-schedule resolve
+    useAuthStore.setState({ isAdminResolved: false, isAdmin: false });
+    mockHasRole.mockClear();
+    mockHasRole.mockResolvedValue(true);
+    mockGetByIdMaybe.mockRejectedValue(
+      new Error("Profile load timed out after 15s"),
+    );
+
+    const ok = await useAuthStore.getState().loadProfile({ force: true });
+    expect(ok).toBe(true);
+    expect(useAuthStore.getState().status).toBe("authenticated");
+    expect(useAuthStore.getState().isProfileLoaded).toBe(true);
+    await vi.waitFor(() => {
+      expect(mockHasRole).toHaveBeenCalled();
+    });
+    await vi.waitFor(() => {
+      expect(useAuthStore.getState().isAdminResolved).toBe(true);
+    });
+    expect(useAuthStore.getState().isAdmin).toBe(true);
   });
 });

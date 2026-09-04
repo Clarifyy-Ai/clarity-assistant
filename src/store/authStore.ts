@@ -35,6 +35,11 @@ import { isElectronApp } from "@/lib/platform/isElectron";
 import { clearBYOKVault } from "@/lib/security/byokVault";
 import { logger, LogEvents } from "@/lib/logger";
 import { syncPrivacyPrefsFromProfile } from "@/lib/privacy/privacyPrefs";
+import { clearStoredRefCode, normalizeRefCode } from "@/lib/referrals";
+import {
+  isSignupAlreadyRegisteredResponse,
+  signupAlreadyRegisteredError,
+} from "@/lib/auth/signupOutcome";
 import { resetTransientOverlaySessionStores } from "@/lib/session/resetOverlaySessionStores";
 import {
   classifyUnexpectedSignedOut,
@@ -62,6 +67,7 @@ import {
   AUTH_ACCOUNT_FRIENDLY_ERROR,
   AUTH_SESSION_TIMEOUT_MS_ELECTRON,
   AUTH_SESSION_TIMEOUT_MS_WEB,
+  PROFILE_COLD_RETRY_DELAY_MS,
   PROFILE_FETCH_TIMEOUT_MS,
   ROLE_CHECK_TIMEOUT_MS,
   asLoginCredentials,
@@ -244,7 +250,8 @@ export interface AuthActions {
   signUpWithEmail: (
     email: string,
     password: string,
-    fullName: string
+    fullName: string,
+    referralCode?: string | null,
   ) => Promise<void>;
   signInWithOAuth: (provider: AuthProvider) => Promise<void>;
   signOut: () => Promise<void>;
@@ -354,6 +361,34 @@ let _hydratedAccessToken: string | null = null;
 const PROFILE_CACHE_TTL_MS = 30_000;
 const BACKGROUND_PROFILE_TTL_MS = 120_000;
 let profileCache: { userId: string; profile: ProfileRow; cachedAt: number } | null = null;
+
+/** One quiet background revalidate after soft-timeout keep — cleared on success. */
+let softFailBackgroundRevalidateScheduled = false;
+
+/**
+ * Budgets session-check soft-keeps per bootstrap so hung hydrates cannot
+ * soft-loop forever on private routes.
+ */
+let sessionCheckSoftKeepCount = 0;
+
+function sleepMs(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms <= 0) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason ?? new Error("aborted"));
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason ?? new Error("aborted"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
 
 function clearProfileLoadState(): void {
   inFlightProfileLoad = null;
@@ -584,6 +619,7 @@ export const useAuthStore = create<AuthStore>()(
               return;
             }
             _bootstrapping = true;
+            sessionCheckSoftKeepCount = 0;
             logger.info(LogEvents.BOOTSTRAP_STARTED, {
               operation: "initialize",
             });
@@ -875,6 +911,7 @@ export const useAuthStore = create<AuthStore>()(
                 authState: session || cached?.session ? "authenticated" : "anonymous",
                 outcome: "succeeded",
               });
+              sessionCheckSoftKeepCount = 0;
             } catch (error) {
               if (isInvalidRefreshTokenError(error)) {
                 logger.warn(LogEvents.AUTH_SESSION_RECOVERY_INVALID_TOKEN, {
@@ -895,8 +932,10 @@ export const useAuthStore = create<AuthStore>()(
                   status: get().status,
                   isProfileLoaded: get().isProfileLoaded,
                   timedOut: isTimeoutError(error),
+                  softKeepCount: sessionCheckSoftKeepCount,
                 })
               ) {
+                sessionCheckSoftKeepCount += 1;
                 logger.warn(LogEvents.BOOTSTRAP_SESSION_SLOW, {
                   outcome: "timed_out",
                   operation: "session.check",
@@ -1059,7 +1098,7 @@ export const useAuthStore = create<AuthStore>()(
             return inFlightSignIn;
           },
 
-          signUpWithEmail: async (email, password, fullName) => {
+          signUpWithEmail: async (email, password, fullName, referralCode) => {
             clearTabLocalLogout();
             dset((state) => {
               state.status = "loading";
@@ -1067,6 +1106,7 @@ export const useAuthStore = create<AuthStore>()(
             });
 
             const normalizedEmail = email.trim().toLowerCase();
+            const pendingReferral = normalizeRefCode(referralCode);
 
             const { data, error } = await supabase.auth.signUp({
               email: normalizedEmail,
@@ -1074,6 +1114,9 @@ export const useAuthStore = create<AuthStore>()(
               options: {
                 data: {
                   full_name: fullName.trim(),
+                  ...(pendingReferral
+                    ? { pending_referral_code: pendingReferral }
+                    : {}),
                 },
                 emailRedirectTo: authAbsoluteUrl("/auth/callback"),
               },
@@ -1086,6 +1129,19 @@ export const useAuthStore = create<AuthStore>()(
               });
 
               throw error;
+            }
+
+            if (isSignupAlreadyRegisteredResponse(data.user)) {
+              const taken = signupAlreadyRegisteredError();
+              dset((state) => {
+                state.status = "error";
+                state.error = taken.message;
+                state.session = null;
+                state.user = null;
+                state.profile = null;
+                state.isProfileLoaded = false;
+              });
+              throw taken;
             }
 
             if (data.session && data.user && isUserEmailConfirmed(data.user)) {
@@ -1164,6 +1220,11 @@ export const useAuthStore = create<AuthStore>()(
             clearTabLocalLogout();
             markExplicitLogoutBroadcast();
             resetPostHog();
+            try {
+              clearStoredRefCode();
+            } catch {
+              // Ignore referral storage clear failure.
+            }
             try {
               clearBYOKVault();
             } catch {
@@ -1357,6 +1418,16 @@ export const useAuthStore = create<AuthStore>()(
                   "[authStore] Profile load failed; retrying once:",
                   firstErr,
                 );
+                // Cold PostgREST often needs a pause between back-to-back 15s budgets.
+                if (timedOut) {
+                  const delayMs =
+                    import.meta.env.MODE === "test" ? 0 : PROFILE_COLD_RETRY_DELAY_MS;
+                  try {
+                    await sleepMs(delayMs, abort.signal);
+                  } catch {
+                    throw firstErr;
+                  }
+                }
                 try {
                   profile = await fetchProfile();
                 } catch (secondErr) {
@@ -1472,6 +1543,7 @@ export const useAuthStore = create<AuthStore>()(
 
               syncOverlayFromProfile(row);
               syncPrivacyPrefsFromProfile(row.privacy_prefs);
+              softFailBackgroundRevalidateScheduled = false;
               logger.info(LogEvents.AUTH_PROFILE_LOAD_SUCCEEDED, {
                 operation: "profile.load",
                 durationMs: Date.now() - profileStartedAt,
@@ -1557,6 +1629,26 @@ export const useAuthStore = create<AuthStore>()(
                   state.error = null;
                   state.isProfileLoaded = true;
                 });
+                // Soft-keep must not leave staff routes stuck without a role resolve.
+                if (!get().isAdminResolved) {
+                  scheduleAdminRoleResolve(userId, set, get);
+                }
+                // Quiet recovery — one background force refresh after soft timeout.
+                if (
+                  !options?.background &&
+                  !softFailBackgroundRevalidateScheduled
+                ) {
+                  softFailBackgroundRevalidateScheduled = true;
+                  const delayMs =
+                    import.meta.env.MODE === "test" ? 0 : PROFILE_COLD_RETRY_DELAY_MS;
+                  globalThis.setTimeout(() => {
+                    if (get().user?.id !== userId) {
+                      softFailBackgroundRevalidateScheduled = false;
+                      return;
+                    }
+                    void get().loadProfile({ force: true, background: true });
+                  }, delayMs);
+                }
                 return true;
               }
 

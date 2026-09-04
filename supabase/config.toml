@@ -124,6 +124,9 @@ verify_jwt = true
 [functions.deepgram-token]
 verify_jwt = true
 
+[functions.mock-tts]
+verify_jwt = true
+
 [functions.delete-account]
 verify_jwt = true
 
@@ -222,6 +225,9 @@ verify_jwt = true
 [functions.record-referral]
 verify_jwt = true
 
+[functions.validate-referral-code]
+verify_jwt = false
+
 [functions.generate-topic-practice]
 verify_jwt = true
 
@@ -233,6 +239,15 @@ verify_jwt = false
 [functions.assemble-assessment]
 verify_jwt = true
 
+[functions.check-assessment-availability]
+verify_jwt = true
+
+[functions.pause-test]
+verify_jwt = true
+
+[functions.resume-test]
+verify_jwt = true
+
 [functions.score-coding-submission]
 verify_jwt = true
 
@@ -240,6 +255,9 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.ai-key-check]
+verify_jwt = true
+
+[functions.admin-finance-report]
 verify_jwt = true
 
 [functions.ai-feedback]

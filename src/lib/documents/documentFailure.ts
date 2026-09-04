@@ -26,6 +26,8 @@ export const DOCUMENT_ERROR_CODES = {
   DOCUMENT_SIZE_INVALID: "DOCUMENT_SIZE_INVALID",
   PARSER_UNAVAILABLE: "PARSER_UNAVAILABLE",
   PARSER_TIMEOUT: "PARSER_TIMEOUT",
+  /** Client soft-wait ended while the durable job is still in flight — not a terminal failure. */
+  CLIENT_WAIT_ELAPSED: "CLIENT_WAIT_ELAPSED",
   MALFORMED_OUTPUT: "MALFORMED_OUTPUT",
   PARSER_FAILED: "PARSER_FAILED",
 } as const;
@@ -72,6 +74,7 @@ export const DOCUMENT_FAILURE_MESSAGES: Record<string, string> = {
   DOCUMENT_SIZE_INVALID: "This file is too large to process.",
   PARSER_UNAVAILABLE: "Document parsing is temporarily unavailable. You can retry.",
   PARSER_TIMEOUT: "Document parsing timed out. You can retry.",
+  CLIENT_WAIT_ELAPSED: "Still processing — refresh to check progress. No extra charge.",
   MALFORMED_OUTPUT: "The parser returned unusable output. You can retry.",
   PARSER_FAILED: "The document could not be parsed. Try another file or retry.",
   AI_PROVIDER_UNAVAILABLE: "Document parsing is temporarily unavailable. You can retry.",

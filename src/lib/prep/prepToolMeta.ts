@@ -6,18 +6,38 @@ export type PrepToolMeta = {
   source?: PrepResponseSource;
 };
 
+function normalizeDraftKind(value: unknown): PrepDraftKind | undefined {
+  if (value === "input_based") return "input_based";
+  // Edge star_method AI success historically emits draft_kind: "polished".
+  if (value === "ai_polished" || value === "polished") return "ai_polished";
+  return undefined;
+}
+
+function normalizeSource(value: unknown): PrepResponseSource | undefined {
+  if (value === "ai" || value === "python" || value === "deterministic") {
+    return value;
+  }
+  return undefined;
+}
+
 export function parsePrepToolMeta(data: unknown): PrepToolMeta {
   if (!data || typeof data !== "object") return {};
   const obj = data as Record<string, unknown>;
-  const draftKind = obj.draft_kind;
-  const source = obj.source;
+  const nested =
+    obj.meta && typeof obj.meta === "object" && !Array.isArray(obj.meta)
+      ? (obj.meta as Record<string, unknown>)
+      : null;
+
+  const draftKind =
+    normalizeDraftKind(obj.draft_kind) ??
+    (nested ? normalizeDraftKind(nested.draft_kind) : undefined);
+  const source =
+    normalizeSource(obj.source) ??
+    (nested ? normalizeSource(nested.source) : undefined);
+
   return {
-    draft_kind:
-      draftKind === "input_based" || draftKind === "ai_polished" ? draftKind : undefined,
-    source:
-      source === "ai" || source === "python" || source === "deterministic"
-        ? source
-        : undefined,
+    draft_kind: draftKind,
+    source,
   };
 }
 

@@ -26,9 +26,14 @@ import {
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { formatSessionScore } from "@/lib/analytics/scoreStatus";
+import { formatSessionScore, debriefJobStatusLabel } from "@/lib/analytics/scoreStatus";
 import { HybridSourceLine } from "@/components/hybrid/HybridSourceLine";
-import { getAiUserFacingError } from "@/lib/network/aiErrorUx";
+import { getAiUserFacingError, isInsufficientCreditsError, openUpgradeIfInsufficientCredits, openUpgradeIfCapabilityRequired } from "@/lib/network/aiErrorUx";
+import { InsufficientCreditsAction } from "@/components/billing/InsufficientCreditsAction";
+import { useCreditBalance } from "@/components/billing/useCreditState";
+import { evaluateActionCreditGate } from "@/lib/billing/actionCreditGate";
+import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
+import { ApiClientError } from "@/lib/api/apiClient";
 import {
   cancelSessionDebriefJob,
   generateSessionDebrief,
@@ -67,6 +72,8 @@ export default function DebriefDetail() {
   const [transcriptSegments, setTranscriptSegments] = useState<any[]>([]);
   const [debriefSource, setDebriefSource] = useState<string | null>(null);
   const [debriefJob, setDebriefJob] = useState<SessionDebriefJob | null>(null);
+  const [creditGateDenied, setCreditGateDenied] = useState(false);
+  const { balance: creditBalance, known: creditKnown } = useCreditBalance();
   const generateInFlightRef = useRef(false);
   const cancelGenerateRef = useRef(false);
 
@@ -153,8 +160,27 @@ export default function DebriefDetail() {
   // ── Generate debrief from edge function ──────────────────────
   const generateDebrief = useCallback(async (sessionId: string) => {
     if (generateInFlightRef.current || !user?.id) return;
+
+    const gate = evaluateActionCreditGate({
+      operationKey: "session_debrief",
+      balance: creditKnown ? creditBalance : null,
+      balanceKnown: creditKnown,
+    });
+    if (gate.status === "insufficient" || gate.status === "unknown_balance") {
+      setCreditGateDenied(true);
+      openUpgradeIfInsufficientCredits(
+        new ApiClientError({
+          message: "Not enough credits to generate a debrief.",
+          status: 402,
+          code: "INSUFFICIENT_CREDITS",
+        }),
+      );
+      return;
+    }
+
     generateInFlightRef.current = true;
     cancelGenerateRef.current = false;
+    setCreditGateDenied(false);
     setFetchError(null);
     setGenning(true);
     setLoadStep(2);
@@ -173,6 +199,13 @@ export default function DebriefDetail() {
       setDebriefSource(job.source ?? null);
       await fetchDebrief({ silent: true });
     } catch (err: unknown) {
+      if (isInsufficientCreditsError(err)) {
+        setCreditGateDenied(true);
+        openUpgradeIfInsufficientCredits(err);
+        setGenning(false);
+        return;
+      }
+      openUpgradeIfCapabilityRequired(err);
       const msg = userFacingSessionDebriefError(err);
       console.error("[DebriefDetail] generateDebrief error:", err);
       toast.error(msg);
@@ -181,7 +214,7 @@ export default function DebriefDetail() {
       generateInFlightRef.current = false;
       setGenning(false);
     }
-  }, [fetchDebrief, user?.id]);
+  }, [fetchDebrief, user?.id, creditBalance, creditKnown]);
 
   const cancelGenerateDebrief = useCallback(async () => {
     cancelGenerateRef.current = true;
@@ -211,9 +244,10 @@ export default function DebriefDetail() {
   // ── Derived values ────────────────────────────────────────────
 
   const gradeColor =
-    debrief?.overall_grade?.startsWith("A") ? "emerald" :
-    debrief?.overall_grade?.startsWith("B") ? "blue"    :
-    debrief?.overall_grade?.startsWith("C") ? "amber"   : "red";
+    !debrief?.overall_grade ? null :
+    debrief.overall_grade.startsWith("A") ? "emerald" :
+    debrief.overall_grade.startsWith("B") ? "blue"    :
+    debrief.overall_grade.startsWith("C") ? "amber"   : "red";
 
   const detailedReport = useMemo(() => {
     const raw = (debrief?.detailed_report ?? {}) as DetailedReport;
@@ -263,7 +297,7 @@ export default function DebriefDetail() {
           description="Loading debrief…"
           breadcrumbs={debriefBreadcrumbs.slice(0, 2).concat([{ label: "Loading…" }])}
         />
-        <DebriefLoadingSteps activeIndex={loadStep} />
+        <DebriefLoadingSteps activeIndex={loadStep} debriefJob={debriefJob} />
         <SkeletonCard />
       </div>
     );
@@ -278,18 +312,23 @@ export default function DebriefDetail() {
         </div>
         <div className="text-center space-y-2">
           <p className="text-sm font-semibold text-foreground">
-            Generating your debrief…
+            {debriefJobStatusLabel(debriefJob?.status) === "Processing"
+              ? "Evaluating recorded answers…"
+              : "Generating your debrief…"}
           </p>
           <p className="text-xs text-muted-foreground">
-            AI is analysing your session and building a personalised action plan
+            Status only — no preliminary grades until evaluation finishes.
           </p>
-          {debriefJob?.progressStage && (
-            <p className="text-[11px] text-muted-foreground">
-              Status: {debriefJob.progressStage}
-            </p>
-          )}
         </div>
-        <DebriefLoadingSteps activeIndex={loadStep} />
+        <DebriefLoadingSteps
+          activeIndex={loadStep}
+          debriefJob={debriefJob}
+          onCancel={
+            debriefJob && isSessionDebriefInFlight(debriefJob.status)
+              ? () => void cancelGenerateDebrief()
+              : undefined
+          }
+        />
         <Button
           variant="secondary"
           size="sm"
@@ -337,15 +376,25 @@ export default function DebriefDetail() {
           breadcrumbs={debriefBreadcrumbs.slice(0, 2).concat([{ label: "Not generated" }])}
         />
         <Card>
-          <EmptyState
-            icon={Brain}
-            title="No debrief yet"
-            description="This session has no saved debrief. Generate one when you are ready — it uses AI credits."
-            actionLabel="Generate debrief"
-            onAction={() => void generateDebrief(id)}
-            secondaryActionLabel="Back to debriefs"
-            onSecondaryAction={() => navigate("/app/debriefs")}
-          />
+          {creditGateDenied ? (
+            <InsufficientCreditsAction
+              operationKey="session_debrief"
+              required={AI_CREDIT_COSTS.session_debrief}
+              balance={creditKnown ? creditBalance : null}
+              mode="credits"
+              returnTo={`/app/debriefs/${id}`}
+            />
+          ) : (
+            <EmptyState
+              icon={Brain}
+              title="No debrief yet"
+              description="This session has no saved debrief. Generate one when you are ready — it uses AI credits."
+              actionLabel="Generate debrief"
+              onAction={() => void generateDebrief(id)}
+              secondaryActionLabel="Back to debriefs"
+              onSecondaryAction={() => navigate("/app/debriefs")}
+            />
+          )}
         </Card>
       </div>
     );
@@ -416,7 +465,8 @@ export default function DebriefDetail() {
             gradeColor === "emerald" ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-400" :
             gradeColor === "blue"    ? "border-blue-500/50 bg-blue-500/10 text-blue-400"          :
             gradeColor === "amber"   ? "border-amber-500/50 bg-amber-500/10 text-amber-400"       :
-                                       "border-red-500/50 bg-red-500/10 text-red-400"
+            gradeColor === "red"     ? "border-red-500/50 bg-red-500/10 text-red-400"             :
+                                       "border-border bg-secondary/40 text-muted-foreground text-sm sm:text-base px-1 text-center"
           )}>
             {debrief.overall_grade ?? "—"}
           </div>
@@ -425,14 +475,23 @@ export default function DebriefDetail() {
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
               AI Debrief
             </p>
-            {debrief.overall_grade && (
+            {debrief.overall_grade ? (
               <p className="text-xs text-muted-foreground mt-1">
                 Overall grade: {debrief.overall_grade}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-1">
+                Overall grade: Not evaluated
               </p>
             )}
             {debrief.summary && (
               <p className="text-sm text-foreground leading-relaxed mt-3">
                 {debrief.summary}
+              </p>
+            )}
+            {!debrief.summary && (
+              <p className="text-sm text-muted-foreground mt-3">
+                No debrief summary was saved for this session. Generate again if needed — we do not invent coaching feedback.
               </p>
             )}
           </div>
@@ -454,7 +513,7 @@ export default function DebriefDetail() {
             previewTitle={debriefTitle + (session?.target_company ? ` — ${session.target_company}` : "")}
             previewScore={formatSessionScore(
               scorecard?.overall_score,
-              scorecard?.score_status ?? "scored",
+              scorecard?.score_status ?? "not_scored",
             )}
             previewSummary={debrief.summary ?? null}
           />

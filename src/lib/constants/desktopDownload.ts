@@ -23,6 +23,8 @@ export const DESKTOP_RELEASES_BUCKET = "desktop-releases";
 export const DESKTOP_INSTALLER_WIN_OBJECT = "Career-Pilot-Setup.exe";
 /** Same-origin path — browser never navigates to GitHub. */
 export const SAME_ORIGIN_WINDOWS_INSTALLER_PATH = "/download/Career-Pilot-Setup.exe";
+/** Direct PHP proxy (Hostinger) — used when pretty-path rewrite is not yet live. */
+export const SAME_ORIGIN_WINDOWS_INSTALLER_PROXY = "/download-windows.php";
 export const PUBLIC_WINDOWS_INSTALLER_URL = SAME_ORIGIN_WINDOWS_INSTALLER_PATH;
 
 /** Public installer hosted on the project's Supabase Storage bucket. */
@@ -124,6 +126,162 @@ export function sameOriginInstallerHref(url: string, os: DetectedOs = "windows")
   return url;
 }
 
+/** Minimum installer size (bytes) — rejects HTML/JSON error bodies. */
+export const DESKTOP_INSTALLER_MIN_BYTES = 1_000_000;
+
+export type DesktopInstallerProbeResult = {
+  ok: boolean;
+  status: number;
+  contentType: string | null;
+  contentLength: number | null;
+  reason?: string;
+};
+
+function parseContentLength(header: string | null): number | null {
+  if (!header) return null;
+  const n = Number.parseInt(header, 10);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/** Prefer Content-Range total (bytes 0-0/85178534) over partial Content-Length. */
+function resolveInstallerByteLength(headers: Headers): number | null {
+  const range = headers.get("content-range");
+  const total = range?.match(/\/(\d+)\s*$/)?.[1];
+  if (total) {
+    const n = Number.parseInt(total, 10);
+    if (Number.isFinite(n) && n >= 0) return n;
+  }
+  return parseContentLength(headers.get("content-length"));
+}
+
+function contentTypeLooksLikeInstaller(contentType: string | null): boolean {
+  if (!contentType) return true; // some hosts omit type on HEAD
+  const t = contentType.toLowerCase();
+  if (t.includes("text/html") || t.includes("text/plain") || t.includes("application/json")) {
+    return false;
+  }
+  return (
+    t.includes("application/octet-stream") ||
+    t.includes("application/x-msdownload") ||
+    t.includes("application/vnd.microsoft.portable-executable") ||
+    t.includes("binary") ||
+    t.includes("exe")
+  );
+}
+
+/**
+ * HEAD (then Range GET fallback) to confirm the installer URL serves a real binary.
+ * Fail-closed: 404/HTML/tiny bodies are not available.
+ */
+export async function probeDesktopInstaller(
+  url: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<DesktopInstallerProbeResult> {
+  if (!url) {
+    return { ok: false, status: 0, contentType: null, contentLength: null, reason: "missing_url" };
+  }
+
+  const absolute =
+    url.startsWith("http://") || url.startsWith("https://")
+      ? url
+      : typeof window !== "undefined"
+        ? new URL(url, window.location.origin).href
+        : url;
+
+  async function inspect(res: Response): Promise<DesktopInstallerProbeResult> {
+    const contentType = res.headers.get("content-type");
+    const contentLength = resolveInstallerByteLength(res.headers);
+    if (!(res.ok || res.status === 206)) {
+      return {
+        ok: false,
+        status: res.status,
+        contentType,
+        contentLength,
+        reason: `http_${res.status}`,
+      };
+    }
+    if (!contentTypeLooksLikeInstaller(contentType)) {
+      return {
+        ok: false,
+        status: res.status,
+        contentType,
+        contentLength,
+        reason: "bad_content_type",
+      };
+    }
+    // Fail closed: missing length can be PHP source / empty proxy served as octet-stream.
+    if (contentLength == null) {
+      return {
+        ok: false,
+        status: res.status,
+        contentType,
+        contentLength,
+        reason: "missing_length",
+      };
+    }
+    if (contentLength < DESKTOP_INSTALLER_MIN_BYTES) {
+      return {
+        ok: false,
+        status: res.status,
+        contentType,
+        contentLength,
+        reason: "too_small",
+      };
+    }
+    return { ok: true, status: res.status, contentType, contentLength };
+  }
+
+  try {
+    let headResult: DesktopInstallerProbeResult | null = null;
+    try {
+      const head = await fetchImpl(absolute, {
+        method: "HEAD",
+        redirect: "follow",
+        cache: "no-store",
+      });
+      if (head.status !== 405 && head.status !== 501) {
+        headResult = await inspect(head);
+        if (headResult.ok) return headResult;
+        // Definitive failures — do not keep probing.
+        if (
+          head.status === 404 ||
+          head.status === 403 ||
+          head.status === 502 ||
+          head.status === 503 ||
+          headResult.reason === "bad_content_type" ||
+          headResult.reason === "too_small"
+        ) {
+          return headResult;
+        }
+        // missing_length / ambiguous → try Range GET for Content-Range total
+      }
+    } catch {
+      headResult = null;
+    }
+
+    const range = await fetchImpl(absolute, {
+      method: "GET",
+      headers: { Range: "bytes=0-0" },
+      redirect: "follow",
+      cache: "no-store",
+    });
+    try {
+      await range.body?.cancel();
+    } catch {
+      /* ignore */
+    }
+    return inspect(range);
+  } catch {
+    return {
+      ok: false,
+      status: 0,
+      contentType: null,
+      contentLength: null,
+      reason: "network_error",
+    };
+  }
+}
+
 /** Trigger a file download without opening an upstream tab. */
 export function startSameOriginInstallerDownload(
   href: string,
@@ -189,11 +347,14 @@ export async function fetchLatestGitHubReleaseUrl(os: DetectedOs): Promise<strin
   }
 }
 
-const CACHE_KEY = "clarify-desktop-download-url";
+const CACHE_KEY = "career-pilot-desktop-download-url";
+const LEGACY_CACHE_KEY = "clarify-desktop-download-url";
 
 export function readCachedDownloadUrl(os: DetectedOs): string | null {
   try {
-    const raw = sessionStorage.getItem(`${CACHE_KEY}:${os}`);
+    const raw =
+      sessionStorage.getItem(`${CACHE_KEY}:${os}`) ||
+      sessionStorage.getItem(`${LEGACY_CACHE_KEY}:${os}`);
     return raw || null;
   } catch {
     return null;
@@ -203,6 +364,7 @@ export function readCachedDownloadUrl(os: DetectedOs): string | null {
 export function writeCachedDownloadUrl(os: DetectedOs, url: string): void {
   try {
     sessionStorage.setItem(`${CACHE_KEY}:${os}`, url);
+    sessionStorage.removeItem(`${LEGACY_CACHE_KEY}:${os}`);
   } catch {
     /* ignore */
   }
@@ -221,6 +383,29 @@ export async function resolveDesktopDownloadUrl(os: DetectedOs): Promise<string 
     const href = sameOriginInstallerHref(githubUrl, os);
     writeCachedDownloadUrl(os, href);
     return href;
+  }
+  return null;
+}
+
+/**
+ * Probe the canonical pretty path first, then the PHP proxy path.
+ * Returns the first same-origin href that serves a real installer binary.
+ */
+export async function resolveAvailableWindowsInstallerHref(
+  preferredHref?: string | null,
+  fetchImpl: typeof fetch = fetch,
+): Promise<string | null> {
+  const candidates = [
+    preferredHref,
+    SAME_ORIGIN_WINDOWS_INSTALLER_PATH,
+    SAME_ORIGIN_WINDOWS_INSTALLER_PROXY,
+  ].filter((u, i, arr): u is string => Boolean(u) && arr.indexOf(u) === i);
+
+  for (const href of candidates) {
+    const probe = await probeDesktopInstaller(href, fetchImpl);
+    if (probe.ok) return href.startsWith("/") || href.startsWith("http")
+      ? sameOriginInstallerHref(href, "windows")
+      : href;
   }
   return null;
 }

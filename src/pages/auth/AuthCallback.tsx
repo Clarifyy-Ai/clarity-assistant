@@ -21,6 +21,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
 import { getAuthenticatedEntryPath } from "@/lib/auth/postAuthRedirect";
+import { pathWithReturnTo, preferredReturnToFromNavigation } from "@/lib/auth/safeReturnTo";
 import {
   isOAuthCancelledError,
   isOAuthNotConfiguredError,
@@ -86,6 +87,7 @@ function getCallbackError(search: string, hash: string): CallbackError | null {
 function getSafeRedirectTarget(options: {
   isAdmin: boolean;
   isOnboarded: boolean;
+  preferredReturnTo?: string | null;
 }): string {
   return getAuthenticatedEntryPath(options);
 }
@@ -170,7 +172,14 @@ export default function AuthCallback(): JSX.Element {
 
     if (status === "authenticated" && isProfileLoaded) {
       if (!isUserEmailConfirmed(user)) {
-        navigate("/verify-email", { replace: true });
+        const preferred = preferredReturnToFromNavigation({
+          searchParams: new URLSearchParams(location.search),
+          locationState: location.state,
+        });
+        navigate(pathWithReturnTo("/verify-email", preferred), {
+          replace: true,
+          state: preferred ? { from: preferred } : undefined,
+        });
         return;
       }
 
@@ -183,14 +192,29 @@ export default function AuthCallback(): JSX.Element {
           return;
         }
         if (profile?.mfa_reenrollment_required) {
-          navigate(AUTH_PATHS.mfaEnroll, { replace: true });
+          const preferred = preferredReturnToFromNavigation({
+            searchParams: new URLSearchParams(location.search),
+            locationState: location.state,
+          });
+          navigate(AUTH_PATHS.mfaEnroll, {
+            replace: true,
+            state: preferred ? { from: preferred } : undefined,
+          });
           return;
         }
+        const preferred = preferredReturnToFromNavigation({
+          searchParams: new URLSearchParams(location.search),
+          locationState: location.state,
+        });
         const target = getSafeRedirectTarget({
           isAdmin,
           isOnboarded,
+          preferredReturnTo: preferred,
         });
-        navigate(target, { replace: true });
+        navigate(target, {
+          replace: true,
+          state: preferred ? { from: preferred } : undefined,
+        });
       })();
       return () => {
         cancelled = true;

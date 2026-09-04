@@ -510,11 +510,21 @@ export function userFacingSessionDebriefError(code: string | null | undefined, f
     case "DATABASE_UNAVAILABLE":
       return "Debrief was generated, but we couldn't save it. Please retry.";
     case "NOT_SCORED":
+    case "NOT_ELIGIBLE_NO_ANSWERS":
       return "No answers or transcript were recorded for this session, so a debrief cannot be generated.";
+    case "NOT_ELIGIBLE_NO_QUESTIONS":
+      return "No questions were recorded for this session, so a debrief cannot be generated.";
+    case "SESSION_INCOMPLETE":
+      return "This session is not complete yet, so a debrief cannot be generated.";
+    case "DEBRIEF_AI_REQUIRED":
+      return "Debrief generation requires AI evaluation. Your credits were not charged. Please retry.";
     case "CANCELLED":
       return "Debrief generation was cancelled. Credits were not charged.";
+    case "DEBRIEF_ALREADY_PROCESSING":
+    case "DUPLICATE_REQUEST":
+      return "A debrief is already being generated for this session.";
     case "CAPABILITY_REQUIRED":
-      return "Detailed debriefs require a Pro plan or higher.";
+      return "Debrief generation is not available for your account right now. Check your credits or try again later.";
     default:
       return fallback || "Failed to generate debrief. Please retry.";
   }

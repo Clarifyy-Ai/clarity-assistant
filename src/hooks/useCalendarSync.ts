@@ -3,9 +3,21 @@ import { supabase } from "@/lib/supabase/client";
 import { fetchEdge, fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useAuthStore } from "@/store/userStore";
 import type { AuthChangeEvent } from "@supabase/supabase-js";
+import {
+  CALENDAR_PROBE_TIMEOUT_MS,
+  CALENDAR_UNAVAILABLE_MSG,
+  CALENDAR_VERIFICATION_PENDING_MSG,
+  SYNC_PROBE_TTL_MS,
+  clearSyncProbeCache,
+  getSyncProbeCache,
+  isCalendarOauthNotPublicError,
+  isCalendarUnavailableError,
+  probeSyncAvailabilityCached,
+} from "@/lib/interviews/calendarProbe";
 
 export type CalendarConnectionStatus =
   | "not_configured"
+  | "verification_pending"
   | "disconnected"
   | "connected"
   | "reauth_required";
@@ -23,78 +35,6 @@ async function parseEdgeJson<T>(res: Response): Promise<T> {
     throw err;
   }
   return data;
-}
-
-const CALENDAR_UNAVAILABLE_MSG =
-  "Google Calendar sync is not configured on this environment.";
-
-function isCalendarUnavailableError(err: Error & { code?: string; status?: number }): boolean {
-  if (err.status === 501 || err.code === "NOT_CONFIGURED") return true;
-  const msg = (err.message ?? "").toLowerCase();
-  return (
-    msg.includes("501") ||
-    msg.includes("not available") ||
-    msg.includes("not configured") ||
-    msg.includes("coming soon")
-  );
-}
-
-const SYNC_PROBE_TTL_MS = 5 * 60 * 1000;
-let syncProbeCache: { available: boolean; checkedAt: number; unavailable: boolean } | null = null;
-let syncProbeInflight: Promise<{ available: boolean; unavailable: boolean; inconclusive?: boolean }> | null = null;
-
-function clearSyncProbeCache(): void {
-  syncProbeCache = null;
-  syncProbeInflight = null;
-}
-
-function shouldCacheProbeFailure(err: Error & { code?: string; status?: number }): boolean {
-  // Unauthenticated / forbidden probe — session may not be ready yet; never poison cache.
-  if (err.status === 401 || err.status === 403) return false;
-  return isCalendarUnavailableError(err);
-}
-
-async function probeSyncAvailabilityCached(
-  hasUser: boolean,
-): Promise<{ available: boolean; unavailable: boolean; inconclusive?: boolean }> {
-  if (!hasUser) {
-    return { available: false, unavailable: false, inconclusive: true };
-  }
-
-  const now = Date.now();
-  if (syncProbeCache && now - syncProbeCache.checkedAt < SYNC_PROBE_TTL_MS) {
-    return {
-      available: syncProbeCache.available,
-      unavailable: syncProbeCache.unavailable,
-    };
-  }
-  if (syncProbeInflight) return syncProbeInflight;
-
-  syncProbeInflight = (async () => {
-    try {
-      await fetchEdgeJson("sync-calendar", { probe: true });
-      syncProbeCache = { available: true, checkedAt: Date.now(), unavailable: false };
-      return { available: true, unavailable: false };
-    } catch (err) {
-      const e = err as Error & { code?: string; status?: number };
-      const unavailable = isCalendarUnavailableError(e);
-      if (shouldCacheProbeFailure(e)) {
-        syncProbeCache = {
-          available: false,
-          checkedAt: Date.now(),
-          unavailable,
-        };
-      }
-      if (e.status === 401 || e.status === 403) {
-        return { available: false, unavailable: false, inconclusive: true };
-      }
-      return { available: false, unavailable };
-    } finally {
-      syncProbeInflight = null;
-    }
-  })();
-
-  return syncProbeInflight;
 }
 
 const CONNECTION_CHECK_EVENTS: AuthChangeEvent[] = [
@@ -131,20 +71,39 @@ export function useCalendarSync() {
   const [connectionStatus,     setConnectionStatus]     = useState<CalendarConnectionStatus>("disconnected");
   const [googleEmail,          setGoogleEmail]          = useState<string | null>(null);
   const [syncAvailable,        setSyncAvailable]        = useState(
-    () => syncProbeCache?.available === true,
+    () => getSyncProbeCache()?.available === true,
+  );
+  const [connectAllowed,       setConnectAllowed]       = useState(
+    () => getSyncProbeCache()?.connectAllowed === true,
   );
   const [isProbingSync,        setIsProbingSync]        = useState(
-    () => !(syncProbeCache && Date.now() - syncProbeCache.checkedAt < SYNC_PROBE_TTL_MS),
+    () => {
+      const cached = getSyncProbeCache();
+      return !(cached && Date.now() - cached.checkedAt < SYNC_PROBE_TTL_MS);
+    },
   );
   const connectingRef = useRef(false);
 
   const isConnected = connectionStatus === "connected";
   const reauthRequired = connectionStatus === "reauth_required";
+  const verificationPending = connectionStatus === "verification_pending";
 
   const applyUnavailable = useCallback(() => {
     setSyncAvailable(false);
+    setConnectAllowed(false);
     setConnectionStatus("not_configured");
     setError(CALENDAR_UNAVAILABLE_MSG);
+  }, []);
+
+  const applyVerificationPending = useCallback(() => {
+    setSyncAvailable(true);
+    setConnectAllowed(false);
+    setConnectionStatus((prev) =>
+      prev === "connected" || prev === "reauth_required"
+        ? prev
+        : "verification_pending",
+    );
+    setError(null);
   }, []);
 
   const checkConnection = useCallback(async (): Promise<void> => {
@@ -165,21 +124,20 @@ export function useCalendarSync() {
       }>(
         "disconnect-calendar",
         undefined,
-        { method: "GET" },
+        { method: "GET", timeoutMs: CALENDAR_PROBE_TIMEOUT_MS },
       );
 
       if (data?.configured === false) {
         setSyncAvailable(false);
+        setConnectAllowed(false);
         setConnectionStatus("not_configured");
         setGoogleEmail(null);
-        syncProbeCache = { available: false, checkedAt: Date.now(), unavailable: true };
         return;
       }
 
       if (data?.configured === true) {
         setSyncAvailable(true);
         setError(null);
-        syncProbeCache = { available: true, checkedAt: Date.now(), unavailable: false };
       }
 
       if (data?.reauth_required || data?.status === "reauth_required") {
@@ -194,8 +152,15 @@ export function useCalendarSync() {
         return;
       }
 
-      setConnectionStatus("disconnected");
       setGoogleEmail(null);
+      const probe = getSyncProbeCache();
+      if (probe?.available && probe.connectAllowed === false) {
+        setConnectAllowed(false);
+        setConnectionStatus("verification_pending");
+        return;
+      }
+      setConnectionStatus("disconnected");
+
     } catch (err) {
       const e = err as Error & { code?: string; status?: number };
       if (isCalendarUnavailableError(e)) {
@@ -211,25 +176,34 @@ export function useCalendarSync() {
   }, [user, applyUnavailable]);
 
   const probeSyncAvailability = useCallback(async (): Promise<void> => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setIsProbingSync(false);
+      return;
+    }
     setIsProbingSync(true);
     try {
-      const result = await probeSyncAvailabilityCached(true);
+      const result = await probeSyncAvailabilityCached(true, () =>
+        fetchEdgeJson("sync-calendar", { probe: true }, { timeoutMs: CALENDAR_PROBE_TIMEOUT_MS }),
+      );
       if (!result.inconclusive) {
         setSyncAvailable(result.available);
+        setConnectAllowed(result.connectAllowed);
         if (result.unavailable) {
           setConnectionStatus("not_configured");
           setError(CALENDAR_UNAVAILABLE_MSG);
+        } else if (result.available && !result.connectAllowed) {
+          applyVerificationPending();
         }
       }
     } finally {
       setIsProbingSync(false);
     }
-  }, [user?.id]);
+  }, [user?.id, applyVerificationPending]);
 
   useEffect(() => {
     if (!user?.id) {
       setIsCheckingConnection(false);
+      setIsProbingSync(false);
       return;
     }
     checkConnection();
@@ -240,6 +214,7 @@ export function useCalendarSync() {
         if (event === "SIGNED_OUT") {
           clearSyncProbeCache();
           setSyncAvailable(false);
+          setConnectAllowed(false);
           setConnectionStatus("disconnected");
         }
         if (CONNECTION_CHECK_EVENTS.includes(event)) {
@@ -258,6 +233,12 @@ export function useCalendarSync() {
       const msg = CALENDAR_UNAVAILABLE_MSG;
       setError(msg);
       setConnectionStatus("not_configured");
+      return { error: msg };
+    }
+    if (!connectAllowed) {
+      const msg = CALENDAR_VERIFICATION_PENDING_MSG;
+      applyVerificationPending();
+      setError(msg);
       return { error: msg };
     }
     if (connectingRef.current && connectInflight) return connectInflight;
@@ -295,6 +276,11 @@ export function useCalendarSync() {
           applyUnavailable();
           return { error: CALENDAR_UNAVAILABLE_MSG };
         }
+        if (isCalendarOauthNotPublicError(e)) {
+          applyVerificationPending();
+          setError(CALENDAR_VERIFICATION_PENDING_MSG);
+          return { error: CALENDAR_VERIFICATION_PENDING_MSG };
+        }
         const msg = err instanceof Error ? err.message : "Failed to connect Google Calendar";
         setError(msg);
         return { error: msg };
@@ -306,7 +292,7 @@ export function useCalendarSync() {
     })();
 
     return connectInflight;
-  }, [syncAvailable, applyUnavailable]);
+  }, [syncAvailable, connectAllowed, applyUnavailable, applyVerificationPending]);
 
   const completeOAuthCallback = useCallback(async (input: {
     code?: string | null;
@@ -461,6 +447,13 @@ export function useCalendarSync() {
     if (!syncAvailable) {
       return { eventId: null, error: CALENDAR_UNAVAILABLE_MSG, code: "NOT_CONFIGURED" };
     }
+    if (connectionStatus === "disconnected") {
+      return {
+        eventId: null,
+        error: "Google Calendar is not connected.",
+        code: "CALENDAR_NOT_CONNECTED",
+      };
+    }
     const key = input.interviewId;
     const existing = writeInflight.get(key);
     if (existing) return existing;
@@ -510,7 +503,7 @@ export function useCalendarSync() {
 
     writeInflight.set(key, pending);
     return pending;
-  }, [syncAvailable, applyUnavailable]);
+  }, [syncAvailable, connectionStatus, applyUnavailable]);
 
   const deleteEvent = useCallback(async (input: {
     interviewId: string;
@@ -568,9 +561,11 @@ export function useCalendarSync() {
     isProbingSync,
     isConnected,
     reauthRequired,
+    verificationPending,
     connectionStatus,
     googleEmail,
     syncAvailable,
+    connectAllowed,
     lastSynced,
     importedCount,
     error,

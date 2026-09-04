@@ -8,6 +8,7 @@ import {
   remainingFromTimerOrigin,
   sameExamTimerOrigin,
   canRenderExamTimer,
+  isTimerPaused,
 } from "@/lib/gov-exam/examTimer";
 
 describe("examTimer", () => {
@@ -19,14 +20,34 @@ describe("examTimer", () => {
     expect(computeRemainingSeconds(start, 10, startMs + 60_000)).toBe(9 * 60);
   });
 
-  it("does not extend remaining time from a later client clock pause", () => {
-    const remainingAtPause = computeRemainingSeconds(start, 10, startMs + 5 * 60_000);
-    expect(remainingAtPause).toBe(5 * 60);
-    const remainingAfterFakePause = computeRemainingSeconds(start, 10, startMs + 8 * 60_000);
-    expect(remainingAfterFakePause).toBe(2 * 60);
+  it("freezes remaining time while paused_at is set", () => {
+    const expires = new Date(startMs + 10 * 60_000).toISOString();
+    const pausedAt = new Date(startMs + 5 * 60_000).toISOString();
+    const frozen = computeRemainingSeconds(start, 10, startMs + 8 * 60_000, expires, pausedAt);
+    expect(frozen).toBe(5 * 60);
+    expect(
+      computeRemainingSeconds(start, 10, startMs + 9 * 60_000, expires, pausedAt),
+    ).toBe(5 * 60);
   });
 
-  it("marks expired after the official window plus grace", () => {
+  it("does not treat a paused attempt as expired or auto-submit", () => {
+    const expires = new Date(startMs + 10 * 60_000).toISOString();
+    const pausedAt = new Date(startMs + 5 * 60_000).toISOString();
+    expect(isExamExpired(start, 10, startMs + 12 * 60_000, 2_000, expires, pausedAt)).toBe(false);
+    expect(
+      shouldAutoSubmitAttempt(
+        "IN_PROGRESS",
+        start,
+        10,
+        startMs + 12 * 60_000,
+        expires,
+        pausedAt,
+        "PAUSED",
+      ),
+    ).toBe(false);
+  });
+
+  it("marks expired after the official window plus grace when active", () => {
     expect(isExamExpired(start, 10, startMs + 10 * 60_000)).toBe(false);
     expect(isExamExpired(start, 10, startMs + 10 * 60_000 + 3_000)).toBe(true);
   });
@@ -56,5 +77,17 @@ describe("examTimer", () => {
     });
     expect(sameExamTimerOrigin(origin, refreshed)).toBe(true);
     expect(canRenderExamTimer(null)).toBe(false);
+  });
+
+  it("tracks pause on the timer origin", () => {
+    const origin = examTimerOriginFromAttempt({
+      started_at: start,
+      expires_at: new Date(startMs + 10 * 60_000).toISOString(),
+      time_limit_minutes: 10,
+      paused_at: new Date(startMs + 4 * 60_000).toISOString(),
+      attempt_phase: "PAUSED",
+    });
+    expect(isTimerPaused(origin)).toBe(true);
+    expect(remainingFromTimerOrigin(origin, startMs + 9 * 60_000)).toBe(6 * 60);
   });
 });

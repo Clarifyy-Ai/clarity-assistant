@@ -5,7 +5,10 @@
 
 export const CREDIT_ERROR_CODES = [
   "INSUFFICIENT_CREDITS",
+  "CREDITS_EXHAUSTED",
+  "NO_CREDITS",
   "CAPABILITY_REQUIRED",
+  "PLAN_UPGRADE_REQUIRED",
   "MAX_ATTEMPTS_REACHED",
   "PAYMENT_REQUIRED",
   "CREDIT_SERVICE_UNAVAILABLE",
@@ -13,6 +16,7 @@ export const CREDIT_ERROR_CODES = [
   "INVALID_OPERATION",
   "PROVIDER_UNAVAILABLE",
   "QUESTION_INVENTORY_INSUFFICIENT",
+  "UNKNOWN_OPERATION",
 ] as const;
 
 export type CreditErrorCode = (typeof CREDIT_ERROR_CODES)[number];
@@ -42,6 +46,9 @@ export function classifyCreditFailureMessage(
   rpcCode?: string | null,
 ): CreditErrorCode {
   const code = String(rpcCode ?? "").trim().toUpperCase();
+  if (code === "CREDITS_EXHAUSTED" || code === "NO_CREDITS") {
+    return "INSUFFICIENT_CREDITS";
+  }
   if ((CREDIT_ERROR_CODES as readonly string[]).includes(code)) {
     return code as CreditErrorCode;
   }
@@ -68,9 +75,12 @@ export function classifyCreditFailureMessage(
 export function httpStatusForCreditCode(code: CreditErrorCode | string): number {
   switch (code) {
     case "INSUFFICIENT_CREDITS":
+    case "CREDITS_EXHAUSTED":
+    case "NO_CREDITS":
     case "PAYMENT_REQUIRED":
       return 402;
     case "CAPABILITY_REQUIRED":
+    case "PLAN_UPGRADE_REQUIRED":
     case "ACCOUNT_RESTRICTED":
       return 403;
     case "MAX_ATTEMPTS_REACHED":
@@ -78,6 +88,7 @@ export function httpStatusForCreditCode(code: CreditErrorCode | string): number 
     case "QUESTION_INVENTORY_INSUFFICIENT":
       return 409;
     case "INVALID_OPERATION":
+    case "UNKNOWN_OPERATION":
       return 400;
     case "PROVIDER_UNAVAILABLE":
     case "CREDIT_SERVICE_UNAVAILABLE":

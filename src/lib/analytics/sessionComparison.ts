@@ -663,7 +663,11 @@ export function sessionPickerLabel(options: {
         ? "In progress"
         : options.completionState === "invalid"
           ? "Unavailable"
-          : "Not scored";
+          : options.scoreStatus === "failed"
+            ? "Failed"
+            : options.scoreStatus === "pending" || options.scoreStatus === "processing"
+              ? "Processing"
+              : "Not eligible";
   return [date, type, company, scored].filter(Boolean).join(" · ");
 }
 

@@ -10,6 +10,7 @@ import {
   type OverlaySessionState,
 } from "@/lib/overlay/overlaySessionStates";
 import { clampPreferredModel } from "@/lib/ai/modelOptions";
+import { sanitizeMarkdownText } from "@/lib/security/sanitizer";
 import { useAuthStore } from "@/store/authStore";
 import { getOverlaySessionAuthority } from "@/store/overlaySessionAuthorityStore";
 
@@ -75,6 +76,17 @@ export type HintState =
   | "error"
   | "offline_fallback";
 
+export type AiHelpConfidenceTier = "high" | "medium" | "low";
+
+/** Manual AI Help confirm panel — shown before generation; never auto-fires on low confidence. */
+export type AiHelpConfirmState = {
+  question: string;
+  confidence: AiHelpConfidenceTier;
+  confidenceScore: number | null;
+  frozenInterviewerText: string;
+  editing: boolean;
+};
+
 // ─────────────────────────────────────────────────────────────────
 // Overlay Store
 // ─────────────────────────────────────────────────────────────────
@@ -125,6 +137,10 @@ interface OverlayStore {
   current_question: string;
   current_hint: string;
   hint_state: HintState;
+  /** Category label shown with offline / AI-unavailable category frameworks. */
+  offline_fallback_category: string | null;
+  /** Distinguishes true offline from provider failure while online. */
+  offline_fallback_reason: "offline" | "ai_unavailable" | null;
   streaming_buffer: string;
   /** Active Live hint generation — stale chunks must not commit. */
   active_hint_operation_id: string | null;
@@ -199,6 +215,9 @@ interface OverlayStore {
   /** Prefill composer when opening Chat from a low-confidence nudge. */
   chat_prefill: string | null;
 
+  /** Manual AI Help: confirm detected question before spending credits. */
+  ai_help_confirm: AiHelpConfirmState | null;
+
   resume_context: ResumeContext | null;
   resume_talking_points: ResumeTalkingPoints | null;
 
@@ -235,7 +254,14 @@ interface OverlayStore {
   clearHint: () => void;
   clearPendingHintOperation: () => void;
   setError: (message: string | null) => void;
-  setOfflineFallback: (hint: string) => void;
+  setOfflineFallback: (
+    hint: string,
+    meta?: {
+      categoryLabel?: string | null;
+      reason?: "offline" | "ai_unavailable";
+      errorMessage?: string | null;
+    },
+  ) => void;
 
   setHintStyle: (style: HintStyle) => void;
   cycleHintStyle: () => void;
@@ -280,6 +306,13 @@ interface OverlayStore {
   ) => void;
   clearChatAttention: () => void;
   consumeChatPrefill: () => string | null;
+
+  openAiHelpConfirm: (
+    state: Omit<AiHelpConfirmState, "editing"> & { editing?: boolean },
+  ) => void;
+  updateAiHelpConfirmQuestion: (question: string) => void;
+  setAiHelpConfirmEditing: (editing: boolean) => void;
+  clearAiHelpConfirm: () => void;
 
   setResumeContext: (ctx: ResumeContext | null) => void;
   setResumeTalkingPoints: (points: ResumeTalkingPoints | null) => void;
@@ -352,6 +385,8 @@ export const useOverlayStore = create<OverlayStore>()(
       current_question: "",
       current_hint: "",
       hint_state: "idle",
+      offline_fallback_category: null,
+      offline_fallback_reason: null,
       streaming_buffer: "",
       active_hint_operation_id: null,
       active_hint_session_id: null,
@@ -415,6 +450,7 @@ export const useOverlayStore = create<OverlayStore>()(
       chat_attention: false,
       chat_attention_reason: null,
       chat_prefill: null,
+      ai_help_confirm: null,
 
       resume_context: null,
       resume_talking_points: null,
@@ -642,6 +678,8 @@ export const useOverlayStore = create<OverlayStore>()(
           streaming_buffer: "",
           hint_state: "generating" as HintState,
           error_message: null,
+          offline_fallback_category: null,
+          offline_fallback_reason: null,
           active_hint_operation_id: operationId,
           active_hint_session_id: sessionId,
           active_hint_question_id: questionId,
@@ -761,6 +799,8 @@ export const useOverlayStore = create<OverlayStore>()(
           streaming_buffer: "",
           hint_state: "idle" as HintState,
           error_message: null,
+          offline_fallback_category: null,
+          offline_fallback_reason: null,
           screenshot_hint: null,
           active_hint_operation_id: null,
           active_hint_session_id: null,
@@ -786,6 +826,16 @@ export const useOverlayStore = create<OverlayStore>()(
       setError: (error_message) => {
         if (!guardSessionMutation()) return;
         set((s) => {
+          if (!error_message) {
+            return {
+              error_message: null,
+              hint_state: "idle" as HintState,
+              session_pipeline_state: transitionWithMode(
+                s.session_pipeline_state,
+                "listening",
+              ),
+            };
+          }
           const next = pipelineStateFromErrorMessage(error_message);
           return {
             error_message,
@@ -798,17 +848,33 @@ export const useOverlayStore = create<OverlayStore>()(
         });
       },
 
-      setOfflineFallback: (hint) => {
+      setOfflineFallback: (hint, meta) => {
         if (!guardSessionMutation()) return;
-        set((s) => ({
-          current_hint: hint,
-          streaming_buffer: "",
-          hint_state: "offline_fallback" as HintState,
-          session_pipeline_state: transitionWithMode(
-            s.session_pipeline_state,
-            "guidance_ready",
-          ),
-        }));
+        const safeHint = sanitizeMarkdownText(hint);
+        const reason = meta?.reason ?? "offline";
+        const categoryLabel = meta?.categoryLabel?.trim() || null;
+        const isAiUnavailable = reason === "ai_unavailable";
+        set((s) => {
+          const errorMessage = isAiUnavailable
+            ? (meta?.errorMessage?.trim() ||
+              "AI unavailable — showing a category framework instead.")
+            : s.error_message;
+          const pipelineNext = isAiUnavailable
+            ? pipelineStateFromErrorMessage(errorMessage)
+            : ("guidance_ready" as OverlaySessionState);
+          return {
+            current_hint: safeHint,
+            streaming_buffer: "",
+            offline_fallback_category: categoryLabel,
+            offline_fallback_reason: reason,
+            hint_state: (isAiUnavailable ? "error" : "offline_fallback") as HintState,
+            error_message: errorMessage,
+            session_pipeline_state: transitionWithMode(
+              s.session_pipeline_state,
+              pipelineNext,
+            ),
+          };
+        });
       },
 
       setHintStyle: (hint_style) => set({ hint_style }),
@@ -963,6 +1029,50 @@ export const useOverlayStore = create<OverlayStore>()(
         return value;
       },
 
+      openAiHelpConfirm: (state) => {
+        if (!guardSessionMutation()) return;
+        set({
+          ai_help_confirm: {
+            question: state.question,
+            confidence: state.confidence,
+            confidenceScore: state.confidenceScore,
+            frozenInterviewerText: state.frozenInterviewerText,
+            editing: state.editing ?? false,
+          },
+          active_tab: "answer",
+          is_minimal_mode: false,
+          is_visible: true,
+        });
+      },
+      updateAiHelpConfirmQuestion: (question) => {
+        if (!guardSessionMutation()) return;
+        set((s) => {
+          if (!s.ai_help_confirm) return s;
+          return {
+            ai_help_confirm: {
+              ...s.ai_help_confirm,
+              question,
+            },
+          };
+        });
+      },
+      setAiHelpConfirmEditing: (editing) => {
+        if (!guardSessionMutation()) return;
+        set((s) => {
+          if (!s.ai_help_confirm) return s;
+          return {
+            ai_help_confirm: {
+              ...s.ai_help_confirm,
+              editing,
+            },
+          };
+        });
+      },
+      clearAiHelpConfirm: () => {
+        if (!guardSessionMutation()) return;
+        set({ ai_help_confirm: null });
+      },
+
       setResumeContext: (resume_context) => {
         if (!guardSessionMutation()) return;
         set({ resume_context });
@@ -1018,6 +1128,8 @@ export const useOverlayStore = create<OverlayStore>()(
           active_hint_session_id: null,
           active_hint_question_id: null,
           error_message: null,
+          offline_fallback_category: null,
+          offline_fallback_reason: null,
 
           hint_history: [],
           hint_history_index: -1,
@@ -1049,6 +1161,7 @@ export const useOverlayStore = create<OverlayStore>()(
           chat_attention: false,
           chat_attention_reason: null,
           chat_prefill: null,
+          ai_help_confirm: null,
 
           resume_context: null,
           resume_talking_points: null,

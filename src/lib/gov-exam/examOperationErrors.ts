@@ -174,7 +174,7 @@ export function formatGovExamOperationError(err: unknown): string {
   }
 
   if (code === "REGION_RESTRICTED") {
-    return "Government exams are available for India accounts.";
+    return "Government exams are temporarily unavailable for this account. Try again or contact support.";
   }
 
   if (code === "GENERATION_CONFLICT") {

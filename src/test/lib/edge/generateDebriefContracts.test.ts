@@ -61,20 +61,30 @@ describe("generate-debrief — idempotency contracts", () => {
 describe("generate-debrief — NOT_SCORED contracts", () => {
   const source = readFunction("generate-debrief");
 
-  it("returns 422 NOT_SCORED when no answers and no transcript", () => {
+  it("returns 422 eligibility codes when no answers and no transcript", () => {
     const handlerStart = source.indexOf("Deno.serve");
     const handler = source.slice(handlerStart);
-    expect(source).toContain('"NOT_SCORED"');
+    expect(source).toContain("classifyDebriefEligibility");
+    expect(source).toContain("NOT_SCORED");
     expect(source).toContain("hasScorableAnswers");
     expect(source).toContain("hasTranscriptContent");
-    const notScoredIdx = handler.indexOf('code: "NOT_SCORED"');
+    const eligibilityIdx = handler.indexOf("classifyDebriefEligibility");
     const enqueueIdx = handler.indexOf("insertSessionDebriefJob");
-    expect(notScoredIdx).toBeGreaterThan(0);
-    expect(enqueueIdx).toBeGreaterThan(notScoredIdx);
+    expect(eligibilityIdx).toBeGreaterThan(0);
+    expect(enqueueIdx).toBeGreaterThan(eligibilityIdx);
   });
 
   it("checks transcript content from session_transcripts", () => {
     expect(source).toContain('.from("session_transcripts")');
     expect(source).toContain("hasTranscriptContent");
+  });
+
+  it("fail-closed: deterministic and python runners return null", () => {
+    expect(source).toMatch(/runDeterministic:\s*async\s*\(\)\s*=>\s*null/);
+    expect(source).toMatch(/runPython:\s*async\s*\(\)\s*=>\s*null/);
+    expect(source).not.toContain("Stayed engaged through the practice session");
+    expect(source).not.toContain('overall_grade: sanitizeText(input.overall_grade, 10) || "C"');
+    expect(source).toContain("validateDebriefEvidence");
+    expect(source).toContain("evaluation_input_snapshot");
   });
 });

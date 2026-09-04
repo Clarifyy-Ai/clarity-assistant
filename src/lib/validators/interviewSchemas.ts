@@ -18,6 +18,7 @@
 // - Mock test submission flows
 
 import { z } from "zod";
+import { normalizeIanaTimezoneAlias } from "@/lib/interviews/schedulerTimezone";
 import { containsSuspiciousHTML, sanitizeAIOutput, sanitizeDocumentText, sanitizeText } from "@/lib/security";
 
 const MAX_SHORT_TEXT_LENGTH = 500;
@@ -512,6 +513,7 @@ export const schedulerTimezoneSchema = z
   .string()
   .trim()
   .min(1, "Timezone is required.")
+  .transform((value) => normalizeIanaTimezoneAlias(value))
   .refine(
     (value) => value === "local" || VALID_IANA_TIMEZONES.has(value),
     "Invalid timezone. Use IANA identifier (e.g., Asia/Kolkata) or 'local'."

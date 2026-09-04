@@ -1,18 +1,44 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  INTERVIEWER_VOICE_CATALOGUE,
+  describeVoiceDeliveryMode,
+  getInterviewerVoice,
+  getInterviewerVoiceTextFallback,
+  resolveBrowserVoiceForCatalogue,
+} from "@/lib/mock/interviewerVoiceCatalog";
+import {
+  getServerTtsClientStatus,
+  isServerTtsClientEnabled,
+  requestServerTts,
+} from "@/lib/mock/serverTts";
+import {
+  previewCatalogueVoice,
   questionTtsIdentity,
   resetTtsModuleStateForTests,
   shouldRestartQuestionTts,
+  speakInterviewerWithFallback,
   speakQuestionText,
   stopBrowserTts,
   TTS_KEEPALIVE_MS,
   unlockBrowserTts,
 } from "@/lib/mock/mockTts";
+import {
+  countScorableMockAnswers,
+  mockSessionHasScorecardEvidence,
+} from "@/lib/mock/durableMockTurns";
+
+const fetchEdgeJson = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/network/fetchEdge", () => ({
+  fetchEdgeJson: (...args: unknown[]) => fetchEdgeJson(...args),
+}));
 
 class FakeUtterance {
   text: string;
   volume = 1;
   rate = 1;
+  pitch = 1;
+  voice: SpeechSynthesisVoice | null = null;
   onstart: (() => void) | null = null;
   onend: (() => void) | null = null;
   onerror: ((ev: { error: string }) => void) | null = null;
@@ -32,7 +58,14 @@ function installSynth(overrides?: {
     paused: false,
     speaking: false,
     pending: false,
-    getVoices: overrides?.getVoices ?? (() => [{ name: "Test", lang: "en-IN" } as SpeechSynthesisVoice]),
+    getVoices:
+      overrides?.getVoices ??
+      (() =>
+        [
+          { name: "Microsoft David", lang: "en-US" },
+          { name: "Microsoft Zira", lang: "en-US" },
+          { name: "Google UK English Female", lang: "en-GB" },
+        ] as SpeechSynthesisVoice[]),
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
     resume,
@@ -64,6 +97,91 @@ function installSynth(overrides?: {
   return { synth, resume, cancel, spoken };
 }
 
+describe("interviewer voice catalogue", () => {
+  it("exposes the six controlled voices with preview + text fallback", () => {
+    const labels = INTERVIEWER_VOICE_CATALOGUE.map((v) => v.label);
+    expect(labels).toEqual([
+      "Classic Professional",
+      "Calm Mentor",
+      "Clear Interviewer",
+      "Warm Recruiter",
+      "Technical Panelist",
+      "Executive Formal",
+    ]);
+    for (const voice of INTERVIEWER_VOICE_CATALOGUE) {
+      expect(voice.previewText.trim().length).toBeGreaterThan(8);
+      expect(voice.textFallback.trim().length).toBeGreaterThan(8);
+      expect(getInterviewerVoiceTextFallback(voice.id)).toBe(voice.textFallback);
+    }
+    expect(getInterviewerVoice("missing").id).toBe("classic_professional");
+  });
+
+  it("maps browser voices with validated catalogue hints", () => {
+    installSynth();
+    const mapped = resolveBrowserVoiceForCatalogue("classic_professional");
+    expect(mapped).toBeTruthy();
+    expect(describeVoiceDeliveryMode(false)).toBe("browser_fallback_only");
+    expect(describeVoiceDeliveryMode(true)).toBe("server_available");
+  });
+});
+
+describe("server TTS honesty", () => {
+  const originalEnv = import.meta.env.VITE_ENABLE_SERVER_TTS;
+
+  afterEach(() => {
+    vi.stubEnv("VITE_ENABLE_SERVER_TTS", originalEnv ?? "");
+    fetchEdgeJson.mockReset();
+  });
+
+  it("reports disabled when VITE_ENABLE_SERVER_TTS is off", async () => {
+    vi.stubEnv("VITE_ENABLE_SERVER_TTS", "");
+    expect(isServerTtsClientEnabled()).toBe(false);
+    expect(getServerTtsClientStatus().enabled).toBe(false);
+    const res = await requestServerTts({
+      text: "Hello",
+      voice_id: "classic_professional",
+      playback_id: "p1",
+    });
+    expect(res.unavailable).toBe(true);
+    expect(res.source).toBe("unavailable");
+    expect(fetchEdgeJson).not.toHaveBeenCalled();
+  });
+
+  it("does not fake server audio when Edge returns unavailable", async () => {
+    vi.stubEnv("VITE_ENABLE_SERVER_TTS", "true");
+    fetchEdgeJson.mockResolvedValue({
+      unavailable: true,
+      message: "Server TTS not enabled",
+    });
+    const res = await requestServerTts({
+      text: "Tell me about yourself.",
+      voice_id: "calm_mentor",
+      playback_id: "p2",
+    });
+    expect(res.unavailable).toBe(true);
+    expect(res.source).toBe("unavailable");
+    expect(res.audio_url).toBeUndefined();
+    expect(res.audio_base64).toBeUndefined();
+  });
+
+  it("accepts real Edge audio only when provided", async () => {
+    vi.stubEnv("VITE_ENABLE_SERVER_TTS", "true");
+    fetchEdgeJson.mockResolvedValue({
+      unavailable: false,
+      audio_base64: "aaa",
+      audio_mime: "audio/mpeg",
+    });
+    const res = await requestServerTts({
+      text: "Why this role?",
+      voice_id: "warm_recruiter",
+      playback_id: "p3",
+    });
+    expect(res.unavailable).toBe(false);
+    expect(res.source).toBe("server");
+    expect(res.audio_base64).toBe("aaa");
+  });
+});
+
 describe("question TTS identity", () => {
   it("does not restart on rapid timer/transcript ticks with the same question", () => {
     const first = questionTtsIdentity({ id: "q1", question_text: "Tell me about yourself." }, 0);
@@ -85,10 +203,12 @@ describe("question TTS identity", () => {
   });
 });
 
-describe("mockTts playback", () => {
+describe("mockTts playback + fallback honesty", () => {
   beforeEach(() => {
     resetTtsModuleStateForTests();
     vi.useFakeTimers();
+    vi.stubEnv("VITE_ENABLE_SERVER_TTS", "");
+    fetchEdgeJson.mockReset();
   });
 
   afterEach(() => {
@@ -105,6 +225,7 @@ describe("mockTts playback", () => {
       isCurrent: () => true,
     });
     expect(outcome.status).toBe("unavailable");
+    expect(outcome.source).toBe("none");
     globalThis.window = original;
   });
 
@@ -126,9 +247,35 @@ describe("mockTts playback", () => {
     await vi.advanceTimersByTimeAsync(50);
     expect(spoken).toHaveLength(1);
     spoken[0].onend?.();
-    await expect(pending).resolves.toMatchObject({ status: "ended" });
+    await expect(pending).resolves.toMatchObject({ status: "ended", source: "browser" });
     expect(onStart).toHaveBeenCalledTimes(1);
     expect(onEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to browser when server TTS is unavailable", async () => {
+    const { spoken } = installSynth();
+    const pending = speakInterviewerWithFallback("Describe a conflict.", {
+      questionId: "q-fallback",
+      playbackId: "pb1",
+      catalogueVoiceId: "clear_interviewer",
+      isCurrent: () => true,
+    });
+    await vi.advanceTimersByTimeAsync(50);
+    expect(spoken).toHaveLength(1);
+    spoken[0].onend?.();
+    await expect(pending).resolves.toMatchObject({ status: "ended", source: "browser" });
+    expect(fetchEdgeJson).not.toHaveBeenCalled();
+  });
+
+  it("previewCatalogueVoice uses browser-only path", async () => {
+    vi.stubEnv("VITE_ENABLE_SERVER_TTS", "true");
+    const { spoken } = installSynth();
+    const pending = previewCatalogueVoice("calm_mentor");
+    await vi.advanceTimersByTimeAsync(50);
+    expect(spoken.length).toBeGreaterThan(0);
+    spoken[0].onend?.();
+    await expect(pending).resolves.toMatchObject({ source: "browser" });
+    expect(fetchEdgeJson).not.toHaveBeenCalled();
   });
 
   it("returns blocked when autoplay never starts", async () => {
@@ -205,5 +352,23 @@ describe("mockTts playback", () => {
     expect(resume).toHaveBeenCalled();
     stopBrowserTts();
     pending.catch(() => undefined);
+  });
+});
+
+describe("mock scorecard eligibility evidence", () => {
+  it("counts non-empty answers as evidence even when status is not answered", () => {
+    expect(
+      countScorableMockAnswers([
+        { skipped: false, status: "invalid", answer_text: "I led a migration for six months." },
+        { skipped: true, status: "skipped", answer_text: "" },
+        { skipped: false, status: "unanswered", answer_text: "" },
+      ]),
+    ).toBe(1);
+    expect(
+      mockSessionHasScorecardEvidence([
+        { skipped: false, status: "answered", answer_text: "Solid answer with detail." },
+      ]),
+    ).toBe(true);
+    expect(mockSessionHasScorecardEvidence([{ skipped: true, answer_text: "" }])).toBe(false);
   });
 });

@@ -124,7 +124,22 @@ export function OverlayToolbar({
 }: OverlayToolbarProps) {
   const isMuted = useAudioStore((s) => s.is_muted);
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
-  const hasSystemAudio = useAudioStore((s) => !!s.streams?.system_stream);
+  const interviewerHealthStatus = useAudioStore(
+    (s) => s.channel_health?.interviewer?.status ?? "disconnected",
+  );
+  const hasSystemAudio =
+    interviewerHealthStatus === "active" ||
+    interviewerHealthStatus === "connecting" ||
+    interviewerHealthStatus === "silent_source";
+  const systemAudioMenuLabel =
+    interviewerHealthStatus === "active"
+      ? "System audio ON"
+      : interviewerHealthStatus === "silent_source"
+        ? "System audio SILENT"
+        : interviewerHealthStatus === "connecting"
+          ? "System audio connecting"
+          : "System audio OFF";
+  const systemAudioMenuActive = interviewerHealthStatus === "active";
 
   const isStealth = useOverlayStore((s) => s.is_stealth_mode);
   const autoGenerate = useOverlayStore((s) => s.auto_generate);
@@ -598,8 +613,8 @@ export function OverlayToolbar({
               {onToggleSystemAudio && (
                 <MenuRow
                   icon={hasSystemAudio ? Volume2 : VolumeX}
-                  label={hasSystemAudio ? "System audio ON" : "System audio OFF"}
-                  active={hasSystemAudio}
+                  label={systemAudioMenuLabel}
+                  active={systemAudioMenuActive}
                   onClick={async () => {
                     try {
                       await onToggleSystemAudio();

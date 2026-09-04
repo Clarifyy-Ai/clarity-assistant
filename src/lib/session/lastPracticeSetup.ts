@@ -19,6 +19,8 @@ export type PracticeSetupDraft = {
   interviewStage?: string | null;
   focusCompetencies?: string[];
   topicsToAvoid?: string[];
+  skillsToEmphasize?: string[];
+  skillsNotToClaim?: string[];
   answerBankContextIds?: string[];
   textVoiceMode?: "text" | "voice";
   ttsVoice?: string | null;

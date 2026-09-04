@@ -1,11 +1,24 @@
 /**
- * Browser TTS helpers tied to question identity for mock interviews.
+ * TTS helpers tied to question identity for mock interviews.
+ *
+ * Delivery order (honesty):
+ *  1. Optional Edge/server TTS when enabled and audio is returned
+ *  2. Browser speechSynthesis as a basic fallback only
+ *  3. Text-on-screen when both are unavailable
+ *
+ * Never claim licensed server voices are working without real Edge audio.
  *
  * Chrome will silently drop utterances after cancel(), pause the synth after a
  * few seconds, and block speak() without a user gesture. Callers must:
  *  - unlock on an explicit click (Start / Play)
  *  - restart speak only when the question identity changes
  */
+
+import {
+  getInterviewerVoice,
+  resolveBrowserVoiceForCatalogue,
+} from "@/lib/mock/interviewerVoiceCatalog";
+import { requestServerTts } from "@/lib/mock/serverTts";
 
 export type TtsOutcomeStatus =
   | "playing"
@@ -18,6 +31,8 @@ export type TtsOutcomeStatus =
 export type TtsOutcome = {
   status: TtsOutcomeStatus;
   reason?: string;
+  /** Provenance for UI honesty. */
+  source?: "server" | "browser" | "none";
 };
 
 export type QuestionTtsIdentity = {
@@ -36,6 +51,7 @@ let voicesReady: Promise<void> | null = null;
 /** Test-only: drop cached voice waiters between cases. */
 export function resetTtsModuleStateForTests(): void {
   voicesReady = null;
+  stopServerTtsAudio();
 }
 
 function waitForVoices(): Promise<void> {
@@ -120,6 +136,7 @@ export function unlockBrowserTts(): void {
 }
 
 export function stopBrowserTts(): void {
+  stopServerTtsAudio();
   if (typeof window === "undefined") return;
   if (!window.speechSynthesis) return;
   try {
@@ -133,6 +150,90 @@ function isCancelError(error: string | undefined): boolean {
   return error === "canceled" || error === "cancelled" || error === "interrupted";
 }
 
+let activeServerAudio: HTMLAudioElement | null = null;
+
+export function stopServerTtsAudio(): void {
+  if (!activeServerAudio) return;
+  try {
+    activeServerAudio.pause();
+    activeServerAudio.removeAttribute("src");
+    activeServerAudio.load();
+  } catch {
+    /* ignore */
+  }
+  activeServerAudio = null;
+}
+
+/** Stop both server audio element and browser speechSynthesis. */
+export function stopAllTts(): void {
+  stopServerTtsAudio();
+  stopBrowserTts();
+}
+
+function playServerAudioUrl(
+  url: string,
+  options: {
+    questionId: string;
+    isCurrent: (questionId: string) => boolean;
+    onStart?: () => void;
+    onEnd?: () => void;
+  },
+): Promise<TtsOutcome> {
+  if (typeof window === "undefined" || typeof Audio === "undefined") {
+    return Promise.resolve({ status: "unavailable", source: "none", reason: "no_audio_api" });
+  }
+
+  stopServerTtsAudio();
+  stopBrowserTts();
+
+  return new Promise<TtsOutcome>((resolve) => {
+    if (!options.isCurrent(options.questionId)) {
+      resolve({ status: "cancelled", source: "server" });
+      return;
+    }
+
+    let settled = false;
+    const finish = (status: TtsOutcomeStatus, reason?: string) => {
+      if (settled) return;
+      settled = true;
+      resolve(reason ? { status, reason, source: "server" } : { status, source: "server" });
+    };
+
+    const audio = new Audio(url);
+    activeServerAudio = audio;
+    audio.onplay = () => {
+      if (!options.isCurrent(options.questionId)) {
+        stopServerTtsAudio();
+        finish("cancelled");
+        return;
+      }
+      options.onStart?.();
+    };
+    audio.onended = () => {
+      if (activeServerAudio === audio) activeServerAudio = null;
+      if (!options.isCurrent(options.questionId)) {
+        finish("cancelled");
+        return;
+      }
+      options.onEnd?.();
+      finish("ended");
+    };
+    audio.onerror = () => {
+      if (activeServerAudio === audio) activeServerAudio = null;
+      finish("error", "server_audio_failed");
+    };
+
+    void audio.play().catch((err) => {
+      const name = err instanceof Error ? err.name : "";
+      if (name === "NotAllowedError") {
+        finish("blocked", "autoplay");
+        return;
+      }
+      finish("error", err instanceof Error ? err.message : "play_failed");
+    });
+  });
+}
+
 export function speakQuestionText(
   text: string,
   options: {
@@ -143,10 +244,12 @@ export function speakQuestionText(
     autoplayDetectMs?: number;
     /** Optional voiceURI or voice name from the wizard TTS catalogue. */
     voice?: string | null;
+    /** Catalogue id — used for rate/pitch when mapping browser voices. */
+    catalogueVoiceId?: string | null;
   },
 ): Promise<TtsOutcome> {
   if (typeof window === "undefined" || !window.speechSynthesis) {
-    return Promise.resolve({ status: "unavailable" as const }).then((outcome) => {
+    return Promise.resolve({ status: "unavailable" as const, source: "none" }).then((outcome) => {
       queueMicrotask(() => {
         if (options.isCurrent(options.questionId)) options.onEnd?.();
       });
@@ -156,7 +259,11 @@ export function speakQuestionText(
 
   const trimmed = text.trim();
   if (!trimmed) {
-    return Promise.resolve({ status: "unavailable" as const, reason: "empty" }).then((outcome) => {
+    return Promise.resolve({
+      status: "unavailable" as const,
+      reason: "empty",
+      source: "none",
+    }).then((outcome) => {
       queueMicrotask(() => {
         if (options.isCurrent(options.questionId)) options.onEnd?.();
       });
@@ -167,12 +274,13 @@ export function speakQuestionText(
   stopBrowserTts();
 
   const autoplayDetectMs = options.autoplayDetectMs ?? AUTOPLAY_DETECT_MS;
+  const catalog = getInterviewerVoice(options.catalogueVoiceId);
 
   return waitForVoices().then(
     () =>
       new Promise<TtsOutcome>((resolve) => {
         if (!options.isCurrent(options.questionId)) {
-          resolve({ status: "cancelled" });
+          resolve({ status: "cancelled", source: "browser" });
           return;
         }
 
@@ -185,13 +293,21 @@ export function speakQuestionText(
           settled = true;
           stopKeepAlive();
           window.clearTimeout(autoplayTimer);
-          resolve(reason ? { status, reason } : { status });
+          resolve(
+            reason
+              ? { status, reason, source: "browser" }
+              : { status, source: "browser" },
+          );
         };
 
         const utterance = new SpeechSynthesisUtterance(trimmed);
-        utterance.rate = 1.0;
+        utterance.rate = catalog.browserRate;
+        utterance.pitch = catalog.browserPitch;
 
-        const preferred = (options.voice ?? "").trim();
+        const preferred =
+          (options.voice ?? "").trim() ||
+          resolveBrowserVoiceForCatalogue(options.catalogueVoiceId) ||
+          "";
         if (preferred) {
           const voices = window.speechSynthesis.getVoices();
           const match =
@@ -272,4 +388,91 @@ export function speakQuestionText(
         window.setTimeout(speakNow, SPEAK_AFTER_CANCEL_MS);
       }),
   );
+}
+
+/**
+ * Prefer Edge/server TTS when configured; otherwise validated browser mapping.
+ * Never fakes licensed server voices as working.
+ */
+export async function speakInterviewerWithFallback(
+  text: string,
+  options: {
+    questionId: string;
+    playbackId: string;
+    catalogueVoiceId: string | null | undefined;
+    isCurrent: (questionId: string) => boolean;
+    onStart?: () => void;
+    onEnd?: () => void;
+    autoplayDetectMs?: number;
+    /** Prefer browser only (e.g. wizard preview). */
+    browserOnly?: boolean;
+  },
+): Promise<TtsOutcome> {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return { status: "unavailable", reason: "empty", source: "none" };
+  }
+
+  if (!options.browserOnly) {
+    const voiceId = options.catalogueVoiceId ?? "classic_professional";
+    const server = await requestServerTts({
+      text: trimmed,
+      voice_id: voiceId,
+      playback_id: options.playbackId,
+      language: getInterviewerVoice(voiceId).language,
+    });
+
+    if (!options.isCurrent(options.questionId)) {
+      return { status: "cancelled", source: "server" };
+    }
+
+    if (!server.unavailable) {
+      let url = server.audio_url ?? "";
+      if (!url && server.audio_base64) {
+        const mime = server.audio_mime || "audio/mpeg";
+        url = `data:${mime};base64,${server.audio_base64}`;
+      }
+      if (url) {
+        const outcome = await playServerAudioUrl(url, options);
+        if (outcome.status === "ended" || outcome.status === "playing") {
+          return outcome;
+        }
+        if (outcome.status === "cancelled" || outcome.status === "blocked") {
+          return outcome;
+        }
+        // Server audio failed mid-flight — fall through to browser.
+      }
+    }
+  }
+
+  const browserVoice = resolveBrowserVoiceForCatalogue(options.catalogueVoiceId);
+  return speakQuestionText(trimmed, {
+    questionId: options.questionId,
+    isCurrent: options.isCurrent,
+    onStart: options.onStart,
+    onEnd: options.onEnd,
+    autoplayDetectMs: options.autoplayDetectMs,
+    voice: browserVoice,
+    catalogueVoiceId: options.catalogueVoiceId,
+  });
+}
+
+/** Preview a catalogue voice (browser mapping + text fallback identity). */
+export function previewCatalogueVoice(
+  voiceId: string | null | undefined,
+  options?: {
+    text?: string;
+    isCurrent?: (questionId: string) => boolean;
+  },
+): Promise<TtsOutcome> {
+  const catalog = getInterviewerVoice(voiceId);
+  const text = (options?.text ?? catalog.previewText).trim();
+  const questionId = `preview:${catalog.id}`;
+  return speakInterviewerWithFallback(text, {
+    questionId,
+    playbackId: `preview_${catalog.id}_${Date.now()}`,
+    catalogueVoiceId: catalog.id,
+    isCurrent: options?.isCurrent ?? (() => true),
+    browserOnly: true,
+  });
 }

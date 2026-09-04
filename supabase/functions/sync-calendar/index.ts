@@ -28,6 +28,8 @@ import {
   googleCalendarDeleteEvent,
   googleCalendarFetch,
   mapGoogleCalendarHttpStatus,
+  canStartCalendarOAuth,
+  calendarOauthAudienceStatus,
   GOOGLE_CALENDAR_OAUTH_SCOPES,
   type GoogleCalendarDomainCode,
 } from "../_shared/googleCalendar.ts";
@@ -308,7 +310,14 @@ Deno.serve(async (req) => {
     }>(req);
 
     if (body?.probe === true) {
-      return successResponse({ available: true, configured: true }, undefined, 200, req);
+      const audience = calendarOauthAudienceStatus(auth.email);
+      return successResponse({
+        available: true,
+        configured: true,
+        publicOauth: audience.publicOauth,
+        connectAllowed: audience.connectAllowed,
+        reason: audience.reason,
+      }, undefined, 200, req);
     }
 
     const action = typeof body?.action === "string" ? body.action.trim() : "";
@@ -328,6 +337,15 @@ Deno.serve(async (req) => {
           connected: true,
           status: "connected",
         }, undefined, 200, req);
+      }
+
+      if (!canStartCalendarOAuth(auth.email)) {
+        return errorResponse(
+          "Calendar sync not available yet (Google verification pending). You can still schedule interviews.",
+          "OAUTH_NOT_PUBLIC",
+          403,
+          req,
+        );
       }
 
       await db.from("calendar_oauth_states")

@@ -226,14 +226,16 @@ def gov_exam_cases() -> list[dict]:
            "1. Note credit balance.\n2. Choose Full Mock mode.\n3. Click Generate once.\n"
            "4. Wait for completion (note time) or honest failure.\n"
            "5. If completed, confirm Start Exam is enabled even if count is short of pattern (toast OK).\n"
-           "6. If Edge 404 / never completes, stop and classify Blocked — do not Fail for undeployed stack.",
+           "6. If Edge 404 / never completes, stop and classify Blocked — do not Fail for undeployed stack.\n"
+           "7. Prove return path: after login/onboarding from a generate deep link, land back on generate — not Dashboard alone.",
            "1. Balance recorded.\n2. Mode selected.\n3. Generating progress shown.\n"
            "4. Completes or clear failure ≤ timeout (CONTENT_INSUFFICIENT is Pass if bank is short).\n"
            "5. Start enabled when status=completed and mock_test_id exists.\n"
-           "6. BLK-EDGE / BLK-PY recorded if functions/worker not live.",
-           "Full Mock generates a startable paper or fails honestly.",
+           "6. BLK-EDGE / BLK-PY recorded if functions/worker not live.\n"
+           "7. Deep-link returnTo restored (page-open alone is not Pass).",
+           "Full Mock generates a startable paper or fails honestly; auth return path preserved.",
            priority="P0", severity="Critical", account="SUFFICIENT_CREDIT_01", sub="Generate",
-           notes="Credits reserved on create, finalized only when paper exists. Undeployed Edge/Python = Blocked."),
+           notes="Credits reserved on create, finalized only when paper exists. Undeployed Edge/Python = Blocked. Do not Pass on hub open alone."),
         tc("TC-GOV-008", "Government Exams", "Custom Practice generation",
            "1. Choose Custom Practice; set question count within allowed min/max.\n"
            "2. Generate.\n3. Verify count roughly matches request (Custom may reduce; Full Mock must not clamp this).\n"
@@ -249,10 +251,15 @@ def gov_exam_cases() -> list[dict]:
            "Question count boundaries are enforced in UI.",
            priority="P1", severity="Major", test_type="Boundary", account="PRO_USER_01", sub="Configure"),
         tc("TC-GOV-010", "Government Exams", "Refresh during generation",
-           "1. Start Generate.\n2. While Generating, refresh page.\n3. Observe restore/fail/retry — not infinite Generating.",
-           "1. Generating.\n2. Refresh.\n3. Recoverable state with truthful status.",
-           "Refresh during generation does not trap the user.",
-           priority="P0", severity="Critical", test_type="Negative", account="SUFFICIENT_CREDIT_01", sub="Generate"),
+           "1. Start Generate.\n2. While Generating, refresh page.\n3. Observe restore of same jobId (URL or hub Resume CTA).\n"
+           "4. Client poll soft-timeout must show Continue waiting — not permanent fail / credit loss.\n"
+           "5. Do not Pass on page-open alone without durability proof.",
+           "1. Generating.\n2. Refresh.\n3. Same job resumes or hub Resume generation banner.\n"
+           "4. Soft still-running advisory if poll window ends; durable status only from server.\n"
+           "5. Fail if invents failed_retryable solely from client timeout.",
+           "Refresh during generation restores durable job; poll timeout ≠ credit loss.",
+           priority="P0", severity="Critical", test_type="Negative", account="SUFFICIENT_CREDIT_01", sub="Generate",
+           notes="Prove jobId continuity + hub banner. Page-open alone is not Pass."),
         tc("TC-GOV-011", "Government Exams", "Generation failure / retry",
            "1. If failure occurs (or during induced outage), read error.\n2. Click Retry.\n3. Confirm no false 'insufficient credits' when balance remains.",
            "1. Clear failure text.\n2. Retry re-attempts.\n3. Credit message only if credits actually insufficient.",
@@ -607,10 +614,20 @@ def prep_lab_cases() -> list[dict]:
            "Coding hints work when enabled.",
            priority="P2", severity="Minor", account="SUFFICIENT_CREDIT_01", sub="Coding Hints"),
         tc("TC-PREP-007", "Prep Lab", "AI failure fallback",
-           "1. During AI-down window run STAR generate.\n2. Observe fallback/error.\n3. Confirm credits messaging truthful.",
-           "1. Down.\n2. Fallback/error.\n3. No false credit error.",
+           "1. Prerequisite (pick one): `npx playwright test e2e/star-builder.spec.ts` "
+           "(covers hard fail + soft input-based draft + no false credit error), OR Edge "
+           "`HYBRID_FORCE_AI_UNAVAILABLE=1` confirmed via Admin Diagnostics / hybrid-health.\n"
+           "2. On STAR Builder, run AI Polish.\n"
+           "3. Soft: Input-based draft + Draft ready (AI polish unavailable); "
+           "hard: temporarily unavailable + original restored.\n"
+           "4. Confirm credits messaging truthful (see also TC-FB-001 / TC-FB-005).",
+           "1. Harness ready.\n2. Polish attempted.\n3. Honest soft or hard AI-down UX.\n"
+           "4. No false credit error.",
            "Prep tools fail gracefully when AI is down.",
-           priority="P0", severity="Critical", test_type="Negative", account="SUFFICIENT_CREDIT_01"),
+           priority="P0", severity="Critical", test_type="Negative", account="SUFFICIENT_CREDIT_01",
+           notes="Same harness as TC-FB-001: Playwright star-builder mocks OR "
+                 "HYBRID_FORCE_AI_UNAVAILABLE. If neither available → Blocked (AI-down harness), "
+                 "not product Unavailable. Live outage window not required."),
         tc("TC-PREP-008", "Prep Lab", "Empty / very long input boundaries",
            "1. Submit empty required STAR fields.\n2. Paste a very long paragraph (10k+ chars if field allows).\n3. Try special chars/Unicode.",
            "1. Validation blocks empty.\n2. Long text handled or limited with message.\n3. Unicode accepted or clear rejection.",

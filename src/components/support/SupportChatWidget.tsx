@@ -31,8 +31,32 @@ import {
   type SupportPriority,
 } from "@/lib/support/triage";
 
-const GUEST_TOKEN_KEY = "clarify-support-guest-token";
-const THREAD_KEY = "clarify-support-thread-id";
+const GUEST_TOKEN_KEY = "career-pilot-support-guest-token";
+const THREAD_KEY = "career-pilot-support-thread-id";
+const LEGACY_GUEST_TOKEN_KEY = "clarify-support-guest-token";
+const LEGACY_THREAD_KEY = "clarify-support-thread-id";
+
+function readSupportStorage(primary: string, legacy: string): string | null {
+  try {
+    const value = localStorage.getItem(primary) ?? localStorage.getItem(legacy);
+    if (value && !localStorage.getItem(primary)) {
+      localStorage.setItem(primary, value);
+      localStorage.removeItem(legacy);
+    }
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+function writeSupportStorage(primary: string, legacy: string, value: string): void {
+  try {
+    localStorage.setItem(primary, value);
+    localStorage.removeItem(legacy);
+  } catch {
+    /* ignore */
+  }
+}
 
 type SenderType = "user" | "ai" | "agent" | "system";
 
@@ -85,6 +109,13 @@ type UiState =
   | "failed";
 
 function readStorage(key: string): string | null {
+  const legacy =
+    key === THREAD_KEY
+      ? LEGACY_THREAD_KEY
+      : key === GUEST_TOKEN_KEY
+        ? LEGACY_GUEST_TOKEN_KEY
+        : null;
+  if (legacy) return readSupportStorage(key, legacy);
   try {
     return localStorage.getItem(key);
   } catch {
@@ -93,9 +124,23 @@ function readStorage(key: string): string | null {
 }
 
 function writeStorage(key: string, value: string | null): void {
+  const legacy =
+    key === THREAD_KEY
+      ? LEGACY_THREAD_KEY
+      : key === GUEST_TOKEN_KEY
+        ? LEGACY_GUEST_TOKEN_KEY
+        : null;
   try {
-    if (value == null) localStorage.removeItem(key);
-    else localStorage.setItem(key, value);
+    if (value == null) {
+      localStorage.removeItem(key);
+      if (legacy) localStorage.removeItem(legacy);
+      return;
+    }
+    if (legacy) {
+      writeSupportStorage(key, legacy, value);
+      return;
+    }
+    localStorage.setItem(key, value);
   } catch {
     /* ignore */
   }

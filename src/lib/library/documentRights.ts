@@ -33,3 +33,18 @@ export function canCreatePracticeSet(opts: {
   if (requiresRightsConfirmation(opts.contentRights) && !opts.rightsConfirmed) return false;
   return true;
 }
+
+/** Practice generation requires a completed parse with normalized text. */
+export function canCreatePracticeSetFromParsedDoc(opts: {
+  ownerId: string;
+  viewerId: string;
+  rightsConfirmed: boolean;
+  contentRights: LicenseType;
+  processingStatus: string | null | undefined;
+  hasParsedContent: boolean;
+}): boolean {
+  if (!canCreatePracticeSet(opts)) return false;
+  const status = String(opts.processingStatus ?? "").trim().toLowerCase();
+  if (status !== "completed" && status !== "ready") return false;
+  return opts.hasParsedContent;
+}

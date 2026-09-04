@@ -3,6 +3,8 @@
 // Session API wrappers.
 
 import { invokeFunction } from "@/lib/api/functions";
+import { withLiveTransientRetry } from "@/lib/session/liveSessionRetry";
+import { ensureAuthSession } from "@/lib/focusRecovery/sessionRefresh";
 
 export type StartSessionRequest = {
   session_type?: "mock" | "live" | "warmup" | "rehearsal" | "room" | "practice";
@@ -78,20 +80,36 @@ export async function checkSessionStartEligibility(): Promise<StartSessionRespon
 export async function restoreOwnedSession(input?: {
   session_id?: string | null;
   session_type?: StartSessionRequest["session_type"];
+  signal?: AbortSignal;
 }): Promise<StartSessionResponse> {
-  return invokeFunction("start-session", {
-    action: "restore",
-    session_id: input?.session_id ?? undefined,
-    session_type: input?.session_type,
-    type: input?.session_type,
-  });
+  return withLiveTransientRetry(
+    async () => {
+      await ensureAuthSession({ forceRefresh: false });
+      return invokeFunction<StartSessionResponse, StartSessionRequest>("start-session", {
+        action: "restore",
+        session_id: input?.session_id ?? undefined,
+        session_type: input?.session_type,
+        type: input?.session_type,
+      });
+    },
+    { signal: input?.signal },
+  );
 }
 
-export async function heartbeatOwnedSession(sessionId: string): Promise<StartSessionResponse> {
-  return invokeFunction("start-session", {
-    action: "heartbeat",
-    session_id: sessionId,
-  });
+export async function heartbeatOwnedSession(
+  sessionId: string,
+  options?: { signal?: AbortSignal },
+): Promise<StartSessionResponse> {
+  return withLiveTransientRetry(
+    async () => {
+      await ensureAuthSession({ forceRefresh: false });
+      return invokeFunction<StartSessionResponse, StartSessionRequest>("start-session", {
+        action: "heartbeat",
+        session_id: sessionId,
+      });
+    },
+    { signal: options?.signal },
+  );
 }
 
 export async function endSession(input: {

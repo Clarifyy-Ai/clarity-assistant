@@ -163,17 +163,23 @@ test.describe("Government exam generation and submission UX", () => {
     await page.goto(
       `/app/mock-test/generate?examId=${EXAM_ID}&stageId=${STAGE_ID}&basis=full_sim`,
     );
-    await expect(page.getByRole("heading", { name: /Generate practice paper/i })).toBeVisible({
+    await expect(page.getByTestId("gov-generate-wizard")).toBeVisible({
       timeout: 30_000,
+    });
+    await expect(page.getByTestId("gov-generate-wizard")).toHaveAttribute("data-hydrating", "0", {
+      timeout: 20_000,
     });
     await expect(
       page.getByText(/23 \/ 100 questions available|23\/100 approved/i).first(),
     ).toBeVisible({
       timeout: 20_000,
     });
-    await page.getByRole("button", { name: "Continue" }).click();
-    await page.getByRole("button", { name: "Continue" }).click();
-    await page.getByRole("button", { name: "Continue" }).click();
+    await page.locator("[data-testid=gov-generate-wizard]").evaluate(() => {
+      (document.activeElement as HTMLElement | null)?.blur?.();
+    });
+    await page.getByTestId("gov-generate-continue").click({ force: true });
+    await page.getByTestId("gov-generate-continue").click({ force: true });
+    await page.getByTestId("gov-generate-continue").click({ force: true });
     await expect(
       page.getByText(/Only 23 approved questions are currently available/i).first(),
     ).toBeVisible();
@@ -196,13 +202,16 @@ test.describe("Government exam generation and submission UX", () => {
     await page.goto(
       `/app/mock-test/generate?examId=${EXAM_ID}&stageId=${STAGE_ID}&basis=quick`,
     );
-    await expect(page.getByRole("heading", { name: /Generate practice paper/i })).toBeVisible({
-      timeout: 30_000,
+    await expect(page.getByTestId("gov-generate-wizard")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("gov-generate-wizard")).toHaveAttribute("data-hydrating", "0", {
+      timeout: 20_000,
     });
-
-    await page.getByRole("button", { name: "Continue" }).click();
-    await page.getByRole("button", { name: "Continue" }).click();
-    await page.getByRole("button", { name: "Continue" }).click();
+    await page.locator("[data-testid=gov-generate-wizard]").evaluate((el) => {
+      (document.activeElement as HTMLElement | null)?.blur?.();
+    });
+    await page.getByTestId("gov-generate-continue").click({ force: true });
+    await page.getByTestId("gov-generate-continue").click({ force: true });
+    await page.getByTestId("gov-generate-continue").click({ force: true });
 
     await expect(page.getByRole("button", { name: "Generate Practice Paper" })).toBeVisible({
       timeout: 15_000,
@@ -218,11 +227,58 @@ test.describe("Government exam generation and submission UX", () => {
       ).first(),
     ).toBeVisible();
 
-    const startTimeErrors = pageErrors.filter((m) =>
-      /startTime|Cannot read properties of undefined/i.test(m),
-    );
+    const startTimeErrors = pageErrors.filter((m) => {
+      if (!/startTime|Cannot read properties of undefined \(reading ['"]startTime['"]\)/i.test(m)) {
+        return false;
+      }
+      // Ignore DevTools/web-vitals noise without app frames; fail on gov generate/review stacks.
+      return /govPaperReview|GenerateGovPaper|GovPaperReviewGenerationTimer/i.test(m);
+    });
     expect(startTimeErrors).toEqual([]);
     expect(pageErrors.filter((m) => !/ResizeObserver|Script error/i.test(m))).toEqual([]);
+  });
+
+  test("Continue enables after exam selection; deep link reaches Generate without stuck Checking credits", async ({
+    page,
+  }) => {
+    const pageErrors: { message: string; stack?: string }[] = [];
+    page.on("pageerror", (err) => pageErrors.push({ message: err.message, stack: err.stack }));
+
+    await loginAsTestUser(page, { credits: 50, planId: "pro" });
+    await mockGovExamGenerateRoutes(page);
+
+    await page.goto("/app/mock-test/generate");
+    await expect(page.getByTestId("gov-generate-wizard")).toBeVisible({ timeout: 30_000 });
+
+    const continueBtn = page.getByTestId("gov-generate-continue");
+    await expect(continueBtn).toBeDisabled();
+
+    await page.getByRole("combobox").fill("SSC");
+    await page.getByRole("option", { name: /SSC CGL/i }).click();
+    await expect(continueBtn).toBeEnabled({ timeout: 15_000 });
+
+    await page.goto(
+      `/app/mock-test/generate?examId=${EXAM_ID}&stageId=${STAGE_ID}&basis=quick`,
+    );
+    await expect(page.getByTestId("gov-generate-wizard")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("gov-generate-wizard")).toHaveAttribute("data-hydrating", "0", {
+      timeout: 20_000,
+    });
+    await expect(page.getByTestId("gov-generate-wizard")).toHaveAttribute("data-exam-ready", "1");
+    await expect(page.getByTestId("gov-generate-continue")).toBeEnabled({ timeout: 15_000 });
+
+    await navigateToGovExamReview(page, "quick");
+    await expect(page.getByRole("button", { name: "Generate Practice Paper" })).toBeEnabled({
+      timeout: 20_000,
+    });
+    await expect(page.getByRole("button", { name: /Checking credits/i })).toHaveCount(0);
+
+    const appStartTimeErrors = pageErrors.filter(({ message, stack }) => {
+      if (!/startTime/i.test(message)) return false;
+      const hay = `${message}\n${stack ?? ""}`;
+      return /govPaperReview|GenerateGovPaper|GovPaperReviewGenerationTimer/i.test(hay);
+    });
+    expect(appStartTimeErrors).toEqual([]);
   });
 
   test("TC-GOV-LIVE-06: poll timeout surfaces Retry UI", async ({ page }) => {
@@ -565,6 +621,44 @@ test.describe("Government exam generation and submission UX", () => {
     await expect.poll(() => polls.pollCalls(), { timeout: 45_000 }).toBeGreaterThanOrEqual(3);
     await expect(page).toHaveURL(new RegExp(`/app/mock-test/session/${GOV_MOCK_TEST_ID}`), {
       timeout: 60_000,
+    });
+  });
+
+  test("already-onboarded deep link returnTo restores generate URL", async ({ page }) => {
+    await loginAsTestUser(page);
+    const target = `/app/mock-test/generate?examId=${EXAM_ID}&stageId=${STAGE_ID}&basis=quick`;
+    await page.goto(`/onboarding?returnTo=${encodeURIComponent(target)}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(page).toHaveURL(new RegExp(`/app/mock-test/generate\\?.*examId=${EXAM_ID}`), {
+      timeout: 20_000,
+    });
+  });
+
+  test("hub shows resume CTA for in-flight paper job", async ({ page }) => {
+    await loginAsTestUser(page);
+    await page.evaluate(
+      ({ jobId, userId, examId }) => {
+        localStorage.setItem(
+          "clarify_gov_paper_job",
+          JSON.stringify({
+            jobId,
+            examId,
+            userId,
+            kind: "paper",
+            savedAt: Date.now(),
+          }),
+        );
+      },
+      { jobId: GOV_JOB_ID, userId: "e2e-user-0001-0001-0001-000000000001", examId: EXAM_ID },
+    );
+    await page.goto("/app/mock-test", { waitUntil: "domcontentloaded" });
+    await expect(page.getByTestId("gov-active-paper-job-banner")).toBeVisible({
+      timeout: 20_000,
+    });
+    await page.getByRole("button", { name: /Resume generation/i }).click();
+    await expect(page).toHaveURL(new RegExp(`/app/mock-test/generate\\?.*jobId=${GOV_JOB_ID}`), {
+      timeout: 15_000,
     });
   });
 });

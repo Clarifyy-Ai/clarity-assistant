@@ -36,6 +36,17 @@ import {
 import { supabase } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { userFacingDbError } from "@/lib/errors/userFacingDbError";
+import {
+  govExamDetailPath,
+  govExamGeneratePath,
+} from "@/lib/gov-exam/govExamRoutes";
+import { loadActivePaperJob } from "@/lib/gov-exam/paperJobStatus";
+
+const CTA_LINK_BASE =
+  "inline-flex items-center justify-center font-medium border transition-[color,background-color,border-color,box-shadow,transform] duration-150 ease-out active:scale-[0.98] motion-reduce:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background px-3 py-1.5 text-xs rounded-xl gap-1.5";
+const CTA_OUTLINE = `${CTA_LINK_BASE} bg-transparent hover:bg-secondary text-foreground border-border hover:border-primary/40`;
+const CTA_PRIMARY = `${CTA_LINK_BASE} bg-primary hover:bg-primary/90 text-primary-foreground border-transparent shadow-sm`;
+const CTA_SECONDARY = `${CTA_LINK_BASE} bg-secondary hover:bg-secondary/80 text-secondary-foreground border-border`;
 
 const FAMILY_FILTERS = [
   { id: "", label: "All" },
@@ -197,10 +208,20 @@ export default function MockTestHub(): React.ReactElement {
     Awaited<ReturnType<typeof fetchTopicMasteryForExam>>
   >([]);
   const [hubExamLabel, setHubExamLabel] = useState<string | null>(null);
+  const [activePaperJobId, setActivePaperJobId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user?.id) return;
     void loadData();
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setActivePaperJobId(null);
+      return;
+    }
+    const stored = loadActivePaperJob(user.id, "paper");
+    setActivePaperJobId(stored?.jobId ?? null);
   }, [user?.id]);
 
   useEffect(() => {
@@ -351,6 +372,29 @@ export default function MockTestHub(): React.ReactElement {
         </p>
       </div>
 
+      {activePaperJobId && (
+        <div
+          className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+          role="status"
+          data-testid="gov-active-paper-job-banner"
+        >
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">Paper generation in progress</p>
+            <p className="text-xs text-muted-foreground">
+              Resume the same job after refresh — credits stay reserved until the job finishes or you cancel.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            onClick={() =>
+              navigate(`/app/mock-test/generate?jobId=${encodeURIComponent(activePaperJobId)}`)
+            }
+          >
+            Resume generation
+          </Button>
+        </div>
+      )}
+
       <details className="group rounded-lg border border-border/60 bg-muted/20 open:bg-muted/30">
         <summary className="cursor-pointer list-none px-3 py-2 text-xs font-medium text-foreground flex items-center justify-between gap-2 min-h-11">
           <span>About official affiliation</span>
@@ -407,6 +451,7 @@ export default function MockTestHub(): React.ReactElement {
           onSelect={(exam) => {
             setSelectedExamId(exam.examId);
             setSearchQ(exam.name);
+            setSyncQuery(exam.name);
             rememberChip(exam.name);
             setGovResults((prev) => {
               if (prev.some((p) => p.examId === exam.examId)) return prev;
@@ -478,7 +523,7 @@ export default function MockTestHub(): React.ReactElement {
             </button>
           ))}
         </div>
-        <div className="space-y-2" aria-busy={searching} data-testid="gov-exam-search-results">
+        <div className="relative z-40 space-y-2" aria-busy={searching} data-testid="gov-exam-search-results">
           {/* Single outside banner — Combobox suppresses InlineErrorRetry when onResultsChange is set */}
           {searchState === "error" && !searching && (
             <InlineErrorRetry
@@ -577,42 +622,78 @@ export default function MockTestHub(): React.ReactElement {
                   </p>
                 )}
               </div>
-              <div className="flex flex-wrap gap-2 shrink-0">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => navigate(`/app/mock-test/exam/${exam.code}`)}
-                >
-                  View exam
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    navigate(
-                      `/app/mock-test/generate?examId=${exam.examId}&stageId=${exam.stage?.id ?? exam.stages[0]?.id ?? ""}&code=${exam.code}`,
-                    )
-                  }
-                >
-                  Generate mock
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  title={
-                    fullSimOk
-                      ? "Full pattern simulation"
-                      : bank
-                        ? `Bank ${formatBankCoverage(bank.approvedPublicCount, bank.requiredQuestions)} — custom set available`
-                        : "AI will generate remaining unique questions"
-                  }
-                  onClick={() =>
-                    navigate(
-                      `/app/mock-test/generate?examId=${exam.examId}&stageId=${exam.stage?.id ?? exam.stages[0]?.id ?? ""}&code=${exam.code}&basis=full_sim`,
-                    )
-                  }
-                >
-                  Full sim
-                </Button>
+              <div className="flex flex-wrap gap-2 shrink-0 relative z-40">
+                {(() => {
+                  const detailPath = govExamDetailPath(exam.code);
+                  const stageId = exam.stage?.id ?? exam.stages[0]?.id ?? "";
+                  const generatePath = govExamGeneratePath({
+                    examId: exam.examId,
+                    stageId,
+                    code: exam.code,
+                  });
+                  const fullSimPath = govExamGeneratePath({
+                    examId: exam.examId,
+                    stageId,
+                    code: exam.code,
+                    basis: "full_sim",
+                  });
+                  return (
+                    <>
+                      {detailPath ? (
+                        <Link
+                          to={detailPath}
+                          className={CTA_OUTLINE}
+                          data-testid="gov-exam-view"
+                        >
+                          View exam
+                        </Link>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled
+                          title="This exam is missing a registry code"
+                          data-testid="gov-exam-view"
+                        >
+                          View exam
+                        </Button>
+                      )}
+                      {generatePath ? (
+                        <Link
+                          to={generatePath}
+                          className={CTA_PRIMARY}
+                          data-testid="gov-exam-generate"
+                        >
+                          Generate mock
+                        </Link>
+                      ) : (
+                        <Button size="sm" disabled data-testid="gov-exam-generate">
+                          Generate mock
+                        </Button>
+                      )}
+                      {fullSimPath ? (
+                        <Link
+                          to={fullSimPath}
+                          className={CTA_SECONDARY}
+                          title={
+                            fullSimOk
+                              ? "Full pattern simulation"
+                              : bank
+                                ? `Bank ${formatBankCoverage(bank.approvedPublicCount, bank.requiredQuestions)} — custom set available`
+                                : "AI will generate remaining unique questions"
+                          }
+                          data-testid="gov-exam-full-sim"
+                        >
+                          Full sim
+                        </Link>
+                      ) : (
+                        <Button size="sm" variant="secondary" disabled data-testid="gov-exam-full-sim">
+                          Full sim
+                        </Button>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
             );
@@ -775,13 +856,21 @@ export default function MockTestHub(): React.ReactElement {
                     </span>
                     {test.status === "COMPLETED" && (
                       <Link
-                        to={`/app/mock-test/results/${test.id}`}
+                        to={
+                          (test.config as { source?: string } | null)?.source === "exam_template"
+                            ? `/app/assessments/results/${test.id}`
+                            : `/app/mock-test/results/${test.id}`
+                        }
                         className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                       >Results</Link>
                     )}
                     {test.status === "IN_PROGRESS" && (
                       <Link
-                        to={`/app/mock-test/session/${test.id}`}
+                        to={
+                          (test.config as { source?: string } | null)?.source === "exam_template"
+                            ? `/app/assessments/session/${test.id}`
+                            : `/app/mock-test/session/${test.id}`
+                        }
                         className="inline-flex items-center rounded-xl bg-primary/15 border border-primary/20 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/25 transition-colors"
                       >Resume</Link>
                     )}

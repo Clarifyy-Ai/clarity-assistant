@@ -505,6 +505,36 @@ export async function logAICost(
       was_fallback: params.wasFallback,
       cost_microcents: costMicrocents,
     });
+
+    const modelLower = params.model.toLowerCase();
+    const provider = modelLower.includes("gemini")
+      ? "gemini"
+      : modelLower.startsWith("gpt") || modelLower.startsWith("o1")
+        ? "openai"
+        : modelLower.includes("claude")
+          ? "anthropic"
+          : "unknown";
+
+    await supabaseAdmin.from("provider_usage").insert({
+      provider,
+      service: "ai",
+      operation: params.action,
+      user_id: params.userId,
+      feature: params.action,
+      usage_unit: "tokens",
+      input_tokens: params.inputTokens,
+      output_tokens: params.outputTokens,
+      duration_ms: params.latencyMs,
+      estimated_cost_microcents: costMicrocents,
+      currency: "USD",
+      cost_type: "estimated",
+      status: "success",
+      billing_mode: "charged",
+      metadata: {
+        model: params.model,
+        was_fallback: params.wasFallback,
+      },
+    });
   } catch (err) {
     console.error(
       "[aiProvider] Failed to log AI cost:",

@@ -10,6 +10,7 @@ import {
   collectCandidateAnswerText,
   finalizeMockAnswer,
   looksLikeInterviewerEcho,
+  streamListeningWatermarkMs,
 } from "@/lib/mock/mockAnswerCapture";
 import type { TranscriptUtterance } from "@/types/audio.types";
 
@@ -174,5 +175,101 @@ describe("mockAnswerCapture", () => {
       interimText: question,
     });
     expect(text).toBe("");
+  });
+
+  it("streamListeningWatermarkMs uses max utterance end_ms (not wall clock)", () => {
+    expect(streamListeningWatermarkMs([])).toBe(0);
+    expect(
+      streamListeningWatermarkMs([
+        utt({ text: "a", start_ms: 100, end_ms: 400 }),
+        utt({ text: "b", start_ms: 500, end_ms: 1200 }),
+      ]),
+    ).toBe(1200);
+  });
+
+  it("captures voice finals with stream-relative watermark (production path)", () => {
+    const watermark = 3_000;
+    const text = collectCandidateAnswerText({
+      utterances: [
+        utt({
+          text: "Previous question answer must not leak",
+          end_ms: 2_500,
+        }),
+        utt({
+          text: "I mediated the conflict and documented the outcome clearly.",
+          end_ms: 4_200,
+        }),
+      ],
+      listeningStartedAtMs: watermark,
+      questionText: question,
+      interimText: "",
+      preferTyped: false,
+    });
+    expect(text).toMatch(/mediated the conflict/i);
+    expect(text).not.toMatch(/Previous question/i);
+  });
+
+  it("uses interim when no finals yet in the listening window", () => {
+    const text = collectCandidateAnswerText({
+      utterances: [],
+      listeningStartedAtMs: 0,
+      questionText: question,
+      interimText: "I started by clarifying the requirements with the team",
+      preferTyped: false,
+    });
+    expect(text).toMatch(/clarifying the requirements/i);
+  });
+
+  it("finals replace interim when both exist", () => {
+    const text = collectCandidateAnswerText({
+      utterances: [
+        utt({
+          text: "I owned the migration and cut latency by forty percent.",
+          end_ms: 1500,
+        }),
+      ],
+      listeningStartedAtMs: 0,
+      questionText: question,
+      interimText: "partial draft that should be ignored",
+      preferTyped: false,
+    });
+    expect(text).toMatch(/owned the migration/i);
+    expect(text).not.toMatch(/partial draft/i);
+  });
+
+  it("regression: epoch listening start must not be used with stream utterance times", () => {
+    // Simulates the BUG 08 failure mode: Date.now() window vs Deepgram stream-ms.
+    const epochWindow = Date.now();
+    const streamFinal = utt({
+      text: "I shipped the feature in two weeks with clear metrics.",
+      start_ms: 1_200,
+      end_ms: 2_400,
+    });
+    const broken = collectCandidateAnswerText({
+      utterances: [streamFinal],
+      listeningStartedAtMs: epochWindow,
+      questionText: question,
+      preferTyped: false,
+    });
+    expect(broken).toBe("");
+
+    const fixed = collectCandidateAnswerText({
+      utterances: [streamFinal],
+      listeningStartedAtMs: streamListeningWatermarkMs([]),
+      questionText: question,
+      preferTyped: false,
+    });
+    expect(fixed).toMatch(/shipped the feature/i);
+  });
+
+  it("finalize uses snapshot interim even if live interim was cleared", () => {
+    const result = finalizeMockAnswer({
+      utterances: [],
+      listeningStartedAtMs: 0,
+      questionText: question,
+      interimText: "I clarified scope before writing any code with the team.",
+    });
+    expect(result.status).toBe("answered");
+    expect(result.answer_text).toMatch(/clarified scope/i);
   });
 });

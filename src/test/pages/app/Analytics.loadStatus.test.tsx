@@ -20,16 +20,6 @@ vi.mock("@/components/layout/PlanGate", () => ({
   PlanGate: ({ children }: { children: unknown }) => children,
 }));
 
-vi.mock("recharts", () => ({
-  ResponsiveContainer: ({ children }: { children: unknown }) => children,
-  BarChart: () => null,
-  Bar: () => null,
-  CartesianGrid: () => null,
-  Tooltip: () => null,
-  XAxis: () => null,
-  YAxis: () => null,
-}));
-
 import Analytics from "@/pages/app/Analytics";
 
 function baseMock(overrides: Record<string, unknown> = {}) {
@@ -134,6 +124,7 @@ describe("Analytics load status — BUG-029 / TC-AN-001", () => {
             wpm_avg: null,
             duration_minutes: 10,
             question_count: 3,
+            answered_count: 2,
           })),
         },
         sessionsInSelectedPeriod: 10,
@@ -153,7 +144,15 @@ describe("Analytics load status — BUG-029 / TC-AN-001", () => {
 
     expect(screen.getByTestId("analytics-kpi-sessions")).toHaveTextContent("10");
     expect(screen.getByText(/10 sessions in this period/i)).toBeInTheDocument();
-    expect(screen.getByText(/score trends appear once sessions are analyzed/i)).toBeInTheDocument();
+    expect(screen.getByText(/0 scored/i)).toBeInTheDocument();
+    expect(screen.getByText(/retry analysis/i)).toBeInTheDocument();
+    expect(screen.queryByText(/sessions are analyzed/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId("analytics-period-sessions")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /analyze/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId("analyze-unscored").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/analyze completed sessions with answers to populate/i),
+    ).toBeInTheDocument();
   });
 
   it("does not show a blank chart when KPI has sessions but trend series is empty", () => {

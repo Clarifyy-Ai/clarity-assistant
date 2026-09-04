@@ -90,7 +90,8 @@ export default function Pricing() {
       </section>
 
       <section className="pb-16 sm:pb-20 px-4 sm:px-6">
-        <div className={`${MARKETING_SHELL} grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5`}>
+        {/* pt-4: room for absolute “Most Popular” badge (-top-3) so it is not clipped */}
+        <div className={`${MARKETING_SHELL} grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 pt-4 overflow-visible`}>
           {DISPLAY_PLANS.map((planId, i) => {
             const plan = PLANS[planId];
             const inrPaise = razorpayPaiseForPlan(planId);

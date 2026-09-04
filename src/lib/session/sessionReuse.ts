@@ -27,9 +27,12 @@ export function shouldReuseExistingSession(opts: {
   return true;
 }
 
-export const SESSIONS_CHANGED_EVENT = "clarify-sessions-changed";
+export const SESSIONS_CHANGED_EVENT = "career-pilot-sessions-changed";
+/** @deprecated Legacy event name — still dispatched for older listeners. */
+export const LEGACY_SESSIONS_CHANGED_EVENT = "clarify-sessions-changed";
 
 export function notifySessionsChanged(): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new Event(SESSIONS_CHANGED_EVENT));
+  window.dispatchEvent(new Event(LEGACY_SESSIONS_CHANGED_EVENT));
 }

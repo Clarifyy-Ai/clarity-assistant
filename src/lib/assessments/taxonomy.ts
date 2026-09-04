@@ -11,6 +11,7 @@ export const ASSESSMENT_ROLE_SLUGS = [
   "react-assessment",
   "devops-assessment",
   "data-analyst",
+  "qa-engineer",
   "general-aptitude",
   "hr-interview",
 ] as const;
@@ -36,8 +37,10 @@ export const CATEGORY_DEFAULT_ROLES: Record<string, AssessmentRoleSlug[]> = {
   java: ["backend-developer", "java-developer"],
   python: ["python-assessment"],
   devops: ["devops-assessment"],
-  aptitude: ["general-aptitude", "data-analyst"],
+  aptitude: ["general-aptitude", "data-analyst", "qa-engineer"],
   hr: ["hr-interview"],
+  testing: ["qa-engineer"],
+  qa: ["qa-engineer"],
 };
 
 export type TaxonomyQuestion = {

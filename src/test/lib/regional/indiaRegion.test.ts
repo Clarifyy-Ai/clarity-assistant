@@ -18,9 +18,10 @@ describe("india region helpers", () => {
     expect(isIndiaLocale("en-US")).toBe(false);
   });
 
-  it("uses persisted profile region over browser locale", () => {
+  it("allows gov exam access worldwide regardless of profile region", () => {
     expect(resolveIsIndiaUser({ region: "IN", locale: "en-US", timezone: "America/New_York" })).toBe(true);
-    expect(resolveIsIndiaUser({ region: "US", locale: "en-IN", timezone: "Asia/Kolkata" })).toBe(false);
+    expect(resolveIsIndiaUser({ region: "US", locale: "en-US", timezone: "America/New_York" })).toBe(true);
+    expect(resolveIsIndiaUser(null)).toBe(true);
   });
 
   it("ignores the India force flag in production", () => {

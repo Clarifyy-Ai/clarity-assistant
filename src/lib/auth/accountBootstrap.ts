@@ -107,22 +107,34 @@ export function isTimeoutError(error: unknown): boolean {
 }
 
 /**
+ * Max times a timed-out session check may soft-keep an in-flight hydrate.
+ * Further timeouts fail closed to RECOVERY_REQUIRED instead of looping forever.
+ */
+export const MAX_SESSION_CHECK_SOFT_KEEPS = 1;
+
+/**
  * Session-check timeout must not clobber an in-flight hydrate from
  * onAuthStateChange (INITIAL_SESSION often races getSession()).
+ * Soft-keeps are budgeted so a hung hydrate cannot leave private routes
+ * spinning forever.
  */
 export function shouldKeepHydrateOnSessionCheckFailure(input: {
   hasUser: boolean;
   status: "idle" | "loading" | "authenticated" | "unauthenticated" | "error";
   isProfileLoaded: boolean;
   timedOut: boolean;
+  /** Prior soft-keeps for this bootstrap attempt (0 on first timeout). */
+  softKeepCount?: number;
 }): boolean {
   if (!input.hasUser) return false;
+  // Hydrate already completed — keep; no soft-loop risk.
   if (input.status === "authenticated" || input.isProfileLoaded) return true;
   if (
     input.timedOut &&
     (input.status === "loading" || input.status === "idle")
   ) {
-    return true;
+    const keeps = input.softKeepCount ?? 0;
+    return keeps < MAX_SESSION_CHECK_SOFT_KEEPS;
   }
   return false;
 }

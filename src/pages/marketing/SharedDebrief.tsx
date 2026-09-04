@@ -10,7 +10,7 @@ import { Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
-import { formatSessionScore } from "@/lib/analytics/scoreStatus";
+import { formatSessionScore, normalizeScoreStatus } from "@/lib/analytics/scoreStatus";
 import { cn } from "@/lib/utils";
 import type { DetailedReport } from "@/components/debrief/DebriefAnalyticsPanels";
 import { scorecardDimensionValues } from "@/types/scorecard.types";
@@ -107,10 +107,16 @@ export default function SharedDebrief() {
           avgDimensionScore ??
           null)
       : ((report.category_scores?.confidence as number | undefined) ?? null);
-  const scoreStatus = (scorecard?.score_status as string | undefined) ?? "scored";
+  // Prefer evaluation_status; never invent score_status. Infer "scored" from a real overall.
+  const scoreStatus = normalizeScoreStatus(
+    (scorecard?.evaluation_status as string | undefined) ??
+      (scorecard?.score_status as string | undefined) ??
+      null,
+    rawScore,
+  );
   const scoreLabel = formatSessionScore(rawScore, scoreStatus);
   const numericScore =
-    typeof rawScore === "number" && scoreLabel !== "Not scored" ? rawScore : null;
+    typeof rawScore === "number" && scoreStatus === "scored" ? rawScore : null;
 
   const summary =
     (debrief?.summary as string | undefined) ??

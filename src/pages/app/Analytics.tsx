@@ -25,15 +25,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import type { AnalyticsPeriod, AnalyticsSessionFilter } from "@/types/analytics.types";
 import { INTERVIEW_TYPE_OPTIONS } from "@/lib/constants/interviewTypes";
 import { cn } from "@/lib/utils";
@@ -48,7 +39,15 @@ import {
   sessionPickerLabel,
 } from "@/lib/analytics/sessionComparison";
 import { resolveSessionCountKpi } from "@/lib/analytics/sessionKpi";
+import { unscoredSessionsStatusCopy } from "@/lib/analytics/speechAggregates";
+import { getAnalyzableSessionIds } from "@/lib/analytics/analyzableSessions";
+import { enqueueSessionScorecard } from "@/lib/analytics/enqueueSessionScorecard";
+import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { getAiUserFacingError, openUpgradeIfInsufficientCredits } from "@/lib/network/aiErrorUx";
+import { toast } from "sonner";
 import { buildHeatmapWeekDayKeys, heatmapDaysForPeriod, heatmapPeriodTitle, scoreTrendBadgeLabel, SCORE_TREND_CHART_LIMIT } from "@/lib/analytics/dashboardDerivations";
+import { ErrorBoundary } from "@/components/layout/ErrorBoundary";
 
 // ─────────────────────────────────────────────────────────────────
 // Analytics — progress trends, filler analysis, category scores
@@ -62,6 +61,9 @@ export default function Analytics() {
     selectedIds: string[];
     comparableIds: string[];
   }>({ selectedIds: [], comparableIds: [] });
+  const [analyzeConfirmOpen, setAnalyzeConfirmOpen] = useState(false);
+  const [batchAnalyzing, setBatchAnalyzing] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<string | null>(null);
   const handleCompareSelection = useCallback(
     (selection: { selectedIds: string[]; comparableIds: string[] }) => {
       setCompareSelection((prev) => {
@@ -73,6 +75,49 @@ export default function Analytics() {
     },
     [],
   );
+
+  const analyzableIds = useMemo(
+    () => getAnalyzableSessionIds(analytics.data?.recent_sessions ?? []),
+    [analytics.data?.recent_sessions],
+  );
+
+  const runAnalyzeUnscored = useCallback(async () => {
+    const ids = getAnalyzableSessionIds(analytics.data?.recent_sessions ?? []);
+    if (ids.length === 0 || batchAnalyzing) return;
+    setBatchAnalyzing(true);
+    let succeeded = 0;
+    let failed = 0;
+    try {
+      for (let i = 0; i < ids.length; i += 1) {
+        setBatchProgress(`${i + 1} / ${ids.length}`);
+        const { error } = await enqueueSessionScorecard(ids[i]);
+        if (error) {
+          failed += 1;
+          if (/credit/i.test(error) || /upgrade/i.test(error)) {
+            toast.error(error);
+            break;
+          }
+          toast.error(error);
+        } else {
+          succeeded += 1;
+        }
+      }
+      if (succeeded > 0) {
+        toast.success(
+          succeeded === 1
+            ? "1 session analyzed — scores will appear in Analytics."
+            : `${succeeded} sessions analyzed — scores will appear in Analytics.`,
+        );
+        await analytics.reload();
+      } else if (failed > 0 && succeeded === 0) {
+        toast.message("No sessions were scored. Open a session Scorecard to retry.");
+      }
+    } finally {
+      setBatchAnalyzing(false);
+      setBatchProgress(null);
+      setAnalyzeConfirmOpen(false);
+    }
+  }, [analytics, batchAnalyzing]);
 
   if (analytics.loadStatus === "loading") {
     return (
@@ -256,14 +301,41 @@ export default function Analytics() {
         <TabsContent value="scores">
           <div className="space-y-4">
             <PlanGate requiredPlan="pro" featureFlag="analytics">
-              <ScoreTrendChart
-                data={analytics.scoreTrend ?? []}
-                scoreTrendSource={analytics.scoreTrendSource}
-                sessionsInPeriod={analytics.sessionsInSelectedPeriod}
-                sessionsScored={analytics.sessionsScored}
-              />
+              <ErrorBoundary
+                fallback={() => (
+                  <Card className="text-center py-6" data-testid="score-trend-fallback">
+                    <p className="text-sm text-muted-foreground">Score chart unavailable</p>
+                  </Card>
+                )}
+              >
+                <ScoreTrendChart
+                  data={analytics.scoreTrend ?? []}
+                  scoreTrendSource={analytics.scoreTrendSource}
+                  sessionsInPeriod={analytics.sessionsInSelectedPeriod}
+                  sessionsScored={analytics.sessionsScored}
+                  analyzableCount={analyzableIds.length}
+                  analyzing={batchAnalyzing}
+                  analyzeProgress={batchProgress}
+                  onAnalyzeUnscored={() => setAnalyzeConfirmOpen(true)}
+                />
+              </ErrorBoundary>
             </PlanGate>
-            <DimensionRadar dimensions={analytics.dimensionAverages as unknown as Record<string, number>} />
+            <PeriodSessionsList
+              sessions={analytics.data?.recent_sessions ?? []}
+              timeZone={analytics.displayTimeZone}
+              onAnalyzed={() => void analytics.reload()}
+              analyzableCount={analyzableIds.length}
+              analyzing={batchAnalyzing}
+              analyzeProgress={batchProgress}
+              onAnalyzeUnscored={() => setAnalyzeConfirmOpen(true)}
+            />
+            <DimensionRadar
+              dimensions={analytics.dimensionAverages as unknown as Record<string, number>}
+              analyzableCount={analyzableIds.length}
+              analyzing={batchAnalyzing}
+              analyzeProgress={batchProgress}
+              onAnalyzeUnscored={() => setAnalyzeConfirmOpen(true)}
+            />
           </div>
         </TabsContent>
 
@@ -297,6 +369,24 @@ export default function Analytics() {
           />
         </TabsContent>
       </Tabs>
+
+      <ConfirmDialog
+        open={analyzeConfirmOpen}
+        onOpenChange={setAnalyzeConfirmOpen}
+        title="Analyze unscored sessions?"
+        description={`This will generate scorecards for up to ${analyzableIds.length} session${analyzableIds.length === 1 ? "" : "s"} with answers (~${AI_CREDIT_COSTS.generate_scorecard} credits each). Dimension averages and score trends will update when analysis finishes.`}
+        confirmLabel={
+          batchAnalyzing
+            ? batchProgress
+              ? `Analyzing ${batchProgress}`
+              : "Analyzing…"
+            : `Analyze ${analyzableIds.length}`
+        }
+        cancelLabel="Cancel"
+        variant="info"
+        isLoading={batchAnalyzing}
+        onConfirm={() => void runAnalyzeUnscored()}
+      />
     </div>
   );
 }
@@ -438,7 +528,7 @@ function scoreTrendSummary(
   points: { score: number | null | undefined }[],
 ): string {
   const scored = points.filter((p) => isFiniteScore(p.score));
-  if (scored.length === 0) return "Not scored";
+  if (scored.length === 0) return "Not eligible";
 
   const first = scored[0].score;
   const last = scored[scored.length - 1].score;
@@ -461,7 +551,7 @@ function dimensionRadarSummary(
     isFiniteScore(v),
   ) as [string, number][];
 
-  if (scored.length === 0) return "Not scored";
+  if (scored.length === 0) return "Not eligible";
 
   const formatDim = (key: string) => key.charAt(0).toUpperCase() + key.slice(1);
   const list = scored
@@ -472,28 +562,84 @@ function dimensionRadarSummary(
   return `${list}. Weakest: ${formatDim(weakest[0])}.`;
 }
 
+function AnalyzeUnscoredButton({
+  count,
+  analyzing,
+  analyzeProgress,
+  onAnalyzeUnscored,
+  className,
+}: {
+  count: number;
+  analyzing?: boolean;
+  analyzeProgress?: string | null;
+  onAnalyzeUnscored?: () => void;
+  className?: string;
+}) {
+  if (count <= 0 || !onAnalyzeUnscored) return null;
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="primary"
+      className={className}
+      data-testid="analyze-unscored"
+      disabled={Boolean(analyzing)}
+      loading={Boolean(analyzing)}
+      onClick={onAnalyzeUnscored}
+    >
+      {analyzing
+        ? analyzeProgress
+          ? `Analyzing ${analyzeProgress}`
+          : "Analyzing…"
+        : `Analyze unscored (${count})`}
+    </Button>
+  );
+}
+
 function ScoreTrendChart({
   data,
   scoreTrendSource,
   sessionsInPeriod,
   sessionsScored,
+  analyzableCount = 0,
+  analyzing,
+  analyzeProgress,
+  onAnalyzeUnscored,
 }: {
   data: { date: string; score: number | null | undefined }[];
   scoreTrendSource: "scorecards" | "sessions";
   sessionsInPeriod: number;
   sessionsScored: number;
+  analyzableCount?: number;
+  analyzing?: boolean;
+  analyzeProgress?: string | null;
+  onAnalyzeUnscored?: () => void;
 }) {
+  const statusCopy = unscoredSessionsStatusCopy(sessionsInPeriod, sessionsScored);
+
   if (!data.length) {
     if (sessionsInPeriod > 0) {
       return (
-        <Card className="text-center py-6">
+        <Card className="text-center py-6" data-testid="score-trend-empty">
           <BarChart2 className="w-7 h-7 text-muted-foreground/40 mx-auto mb-2" />
           <p className="text-sm font-medium text-foreground">
             {sessionsInPeriod} session{sessionsInPeriod === 1 ? "" : "s"} in this period
           </p>
           <p className="text-muted-foreground text-sm mt-1">
-            Score trends appear once {sessionsScored === 0 ? "sessions are analyzed" : "more sessions are scored"}.
+            {sessionsScored === 0
+              ? statusCopy
+              : "Score trends appear once more sessions are scored."}
           </p>
+          {sessionsScored === 0 && (
+            <div className="mt-3 flex justify-center">
+              <AnalyzeUnscoredButton
+                count={analyzableCount}
+                analyzing={analyzing}
+                analyzeProgress={analyzeProgress}
+                onAnalyzeUnscored={onAnalyzeUnscored}
+              />
+            </div>
+          )}
         </Card>
       );
     }
@@ -510,14 +656,26 @@ function ScoreTrendChart({
 
   if (scoredPoints.length === 0) {
     return (
-      <Card className="text-center py-6">
+      <Card className="text-center py-6" data-testid="score-trend-empty">
         <BarChart2 className="w-7 h-7 text-muted-foreground/40 mx-auto mb-2" />
         <p className="text-sm font-medium text-foreground">
           {sessionsInPeriod} session{sessionsInPeriod === 1 ? "" : "s"} in this period
         </p>
         <p className="text-muted-foreground text-sm mt-1">
-          Score trends appear once {sessionsScored === 0 ? "sessions are analyzed" : "more sessions are scored"}.
+          {sessionsScored === 0
+            ? statusCopy
+            : "Score trends appear once more sessions are scored."}
         </p>
+        {sessionsScored === 0 && (
+          <div className="mt-3 flex justify-center">
+            <AnalyzeUnscoredButton
+              count={analyzableCount}
+              analyzing={analyzing}
+              analyzeProgress={analyzeProgress}
+              onAnalyzeUnscored={onAnalyzeUnscored}
+            />
+          </div>
+        )}
       </Card>
     );
   }
@@ -526,35 +684,40 @@ function ScoreTrendChart({
     .filter((d) => isFiniteScore(d.score))
     .map((d) => ({
       label: format(new Date(d.date), "MMM d"),
-      score: d.score,
+      score: d.score as number,
     }));
   const summary = scoreTrendSummary(scoredPoints);
 
   return (
-    <Card>
+    <Card data-testid="score-trend-chart">
       <div className="flex items-center justify-between mb-5">
         <h3 className="text-sm font-semibold text-foreground">Score over time</h3>
         <Badge variant="primary" size="sm">{scoreTrendBadgeLabel(scoreTrendSource)}</Badge>
       </div>
 
       <p className="sr-only">{summary}</p>
-      <div className="h-44 w-full" role="img" aria-label="Score trend chart">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} className="text-muted-foreground" />
-            <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} />
-            <Tooltip
-              contentStyle={{
-                background: "hsl(var(--popover))",
-                border: "1px solid hsl(var(--border))",
-                borderRadius: 8,
-                fontSize: 12,
-              }}
+      {/* CSS bars — avoid Recharts unmount startTime crash when leaving this tab */}
+      <div
+        className="flex h-44 w-full items-end gap-1.5"
+        role="img"
+        aria-label="Score trend chart"
+        data-testid="score-trend-bars"
+      >
+        {chartData.map((d, i) => (
+          <div
+            key={`${d.label}-${i}`}
+            className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1"
+            title={`${d.label}: ${formatSessionScore(d.score)}`}
+          >
+            <div
+              className="w-full max-w-[2rem] rounded-t-sm bg-primary"
+              style={{ height: `${Math.max(4, Math.min(100, d.score))}%` }}
             />
-            <Bar dataKey="score" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+            <span className="w-full truncate text-center text-[9px] leading-none text-muted-foreground">
+              {d.label}
+            </span>
+          </div>
+        ))}
       </div>
     </Card>
   );
@@ -566,8 +729,16 @@ function ScoreTrendChart({
 
 function DimensionRadar({
   dimensions,
+  analyzableCount = 0,
+  analyzing,
+  analyzeProgress,
+  onAnalyzeUnscored,
 }: {
   dimensions?: Record<string, number | null | undefined>;
+  analyzableCount?: number;
+  analyzing?: boolean;
+  analyzeProgress?: string | null;
+  onAnalyzeUnscored?: () => void;
 }) {
   const dims = dimensions ?? {};
   const summary = dimensionRadarSummary(dimensions);
@@ -582,7 +753,18 @@ function DimensionRadar({
       <h3 className="text-sm font-semibold text-foreground mb-3">Average by dimension</h3>
       <p className="sr-only">{summary}</p>
       {scoredEntries.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-2">No dimension scores yet.</p>
+        <div className="space-y-3 py-2">
+          <p className="text-sm text-muted-foreground">
+            No dimension scores yet. Analyze completed sessions with answers to populate
+            Communication, Technical, Problem solving, and Confidence.
+          </p>
+          <AnalyzeUnscoredButton
+            count={analyzableCount}
+            analyzing={analyzing}
+            analyzeProgress={analyzeProgress}
+            onAnalyzeUnscored={onAnalyzeUnscored}
+          />
+        </div>
       ) : (
       <div
         className="space-y-3"
@@ -799,11 +981,27 @@ function ActivityHeatmap({
 }) {
   const weeks = buildHeatmapWeekDayKeys(timeZone, heatmapDaysForPeriod(period));
   const title = heatmapPeriodTitle(period);
+  const totalActivity = Object.values(data).reduce(
+    (sum, n) => sum + (typeof n === "number" && Number.isFinite(n) ? n : 0),
+    0,
+  );
+
+  if (totalActivity <= 0) {
+    return (
+      <Card className="text-center py-8" data-testid="activity-heatmap-empty">
+        <Flame className="w-7 h-7 text-muted-foreground/40 mx-auto mb-2" />
+        <h3 className="text-sm font-semibold text-foreground mb-1">{title}</h3>
+        <p className="text-sm text-muted-foreground">
+          No practice activity in this period.
+        </p>
+      </Card>
+    );
+  }
 
   const maxVal = Math.max(...Object.values(data), 1);
 
   return (
-    <Card>
+    <Card data-testid="activity-heatmap">
       <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
         <Flame className="w-4 h-4 text-amber-400" />
         {title}
@@ -869,6 +1067,158 @@ function ActivityHeatmap({
 }
 
 // ─────────────────────────────────────────────────────────────────
+// PeriodSessionsList — visible rows for filter validation + analyze retry
+// ─────────────────────────────────────────────────────────────────
+
+type PeriodSessionRow = {
+  session_id: string;
+  date?: string | null;
+  started_at?: string | null;
+  title?: string | null;
+  mode?: string | null;
+  /** Interview company or assessment role label when present. */
+  company?: string | null;
+  role?: string | null;
+  objective?: string | null;
+  overall_score?: number | null;
+  score_status?: string | null;
+  answered_count?: number | null;
+  question_count?: number | null;
+  wpm_avg?: number | null;
+  duration_minutes?: number | null;
+};
+
+function PeriodSessionsList({
+  sessions,
+  timeZone,
+  onAnalyzed,
+  analyzableCount = 0,
+  analyzing,
+  analyzeProgress,
+  onAnalyzeUnscored,
+}: {
+  sessions: PeriodSessionRow[];
+  timeZone: string;
+  onAnalyzed: () => void;
+  analyzableCount?: number;
+  analyzing?: boolean;
+  analyzeProgress?: string | null;
+  onAnalyzeUnscored?: () => void;
+}) {
+  const navigate = useNavigate();
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+
+  if (sessions.length === 0) return null;
+
+  async function analyzeSession(sessionId: string) {
+    if (analyzingId || analyzing) return;
+    setAnalyzingId(sessionId);
+    try {
+      const { error } = await enqueueSessionScorecard(sessionId);
+      if (error) {
+        toast.error(
+          error ||
+            "Could not analyze this session. Open the scorecard page to retry.",
+        );
+        return;
+      }
+      toast.success("Session analyzed — scores will appear in Analytics.");
+      onAnalyzed();
+    } catch (err) {
+      openUpgradeIfInsufficientCredits(err);
+      toast.error(
+        getAiUserFacingError(err) ||
+          "Could not analyze this session. Open the scorecard page to retry.",
+      );
+    } finally {
+      setAnalyzingId(null);
+    }
+  }
+
+  return (
+    <div data-testid="analytics-period-sessions">
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <h3 className="text-sm font-semibold text-foreground">
+            Sessions in this period ({sessions.length})
+          </h3>
+          <AnalyzeUnscoredButton
+            count={analyzableCount}
+            analyzing={analyzing || Boolean(analyzingId)}
+            analyzeProgress={analyzeProgress}
+            onAnalyzeUnscored={onAnalyzeUnscored}
+          />
+        </div>
+        <ul className="divide-y divide-border">
+          {sessions.slice(0, 20).map((session) => {
+            const scored = session.score_status === "scored" || typeof session.overall_score === "number";
+            const canAnalyze =
+              !scored &&
+              typeof session.answered_count === "number" &&
+              session.answered_count > 0;
+            const when = formatSessionDateTime(
+              session.started_at ?? session.date ?? null,
+              timeZone,
+            );
+            return (
+              <li
+                key={session.session_id}
+                className="flex flex-wrap items-center justify-between gap-2 py-2.5"
+                data-testid={`analytics-period-session-${session.session_id}`}
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {session.title?.trim() || session.mode || "Session"}
+                  </p>
+                  {(session.role || session.objective || session.company) && (
+                    <p className="text-xs text-muted-foreground truncate" data-testid="analytics-session-context">
+                      {[session.role, session.objective?.replace(/_/g, " "), session.company]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {when}
+                    {typeof session.duration_minutes === "number"
+                      ? ` · ${session.duration_minutes} min`
+                      : ""}
+                    {typeof session.wpm_avg === "number" ? ` · ${session.wpm_avg} WPM` : ""}
+                    {" · "}
+                    {scored
+                      ? `Score ${formatSessionScore(session.overall_score, session.score_status)}`
+                      : formatSessionScore(session.overall_score, session.score_status ?? "not_scored")}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {canAnalyze && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      loading={analyzingId === session.session_id}
+                      disabled={analyzingId !== null || Boolean(analyzing)}
+                      onClick={() => void analyzeSession(session.session_id)}
+                    >
+                      Analyze
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => navigate(`/app/scorecard/${session.session_id}`)}
+                  >
+                    Open
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </Card>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
 // SessionComparePanel — side-by-side session comparison
 // ─────────────────────────────────────────────────────────────────
 
@@ -879,6 +1229,7 @@ function SessionComparePanel({
   analytics: ReturnType<typeof useAnalytics>;
   onSelectionChange?: (selection: { selectedIds: string[]; comparableIds: string[] }) => void;
 }) {
+  const navigate = useNavigate();
   const sessions = analytics.data?.recent_sessions ?? [];
   const { profile } = useAuthStore();
   const timeZone = resolveDisplayTimeZone(profile?.timezone);
@@ -917,13 +1268,25 @@ function SessionComparePanel({
   }, [sessionA, sessionB, comparableIds, onSelectionChange]);
 
   if (comparable.length < 2) {
+    const emptyCopy =
+      comparable.length === 1
+        ? "Complete one more scored interview to unlock comparison."
+        : "Complete another interview to compare sessions.";
     return (
-      <Card className="text-center py-6">
-        <GitCompare className="w-7 h-7 text-muted-foreground/40 mx-auto mb-2" />
-        <p className="text-muted-foreground text-sm">
-          Complete another interview to compare sessions.
-        </p>
-      </Card>
+      <div className="text-center" data-testid="compare-empty-state">
+        <Card className="text-center py-6">
+          <GitCompare className="w-7 h-7 text-muted-foreground/40 mx-auto mb-2" />
+          <p className="text-muted-foreground text-sm">{emptyCopy}</p>
+          <Button
+            variant="primary"
+            size="sm"
+            className="mt-4"
+            onClick={() => navigate("/app/mock")}
+          >
+            Start mock interview
+          </Button>
+        </Card>
+      </div>
     );
   }
 
@@ -1161,11 +1524,16 @@ function CompareSessionCard({
         <div className="flex justify-between">
           <span className="text-muted-foreground">Questions</span>
           <span>
-            {typeof session.question_count === "number"
-              ? typeof session.answered_count === "number"
-                ? `${session.answered_count} / ${session.question_count}`
-                : session.question_count
-              : "—"}
+            {typeof session.question_count === "number" &&
+            typeof session.answered_count === "number"
+              ? session.question_count === 0 && session.answered_count === 0
+                ? "Not available"
+                : `${session.answered_count} / ${session.question_count}`
+              : typeof session.question_count === "number"
+                ? session.question_count === 0
+                  ? "Not available"
+                  : session.question_count
+                : "—"}
           </span>
         </div>
       </div>

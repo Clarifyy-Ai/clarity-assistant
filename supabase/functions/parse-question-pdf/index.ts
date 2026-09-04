@@ -378,7 +378,7 @@ Deno.serve(async (req) => {
       idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
     });
     if (!creditResult.success) {
-      return errorResponse("Insufficient credits", "NO_CREDITS", 402, req);
+      return errorResponse("Insufficient credits", "INSUFFICIENT_CREDITS", 402, req);
     }
     charged = true;
 

@@ -8,7 +8,7 @@ import {
   MessageSquare, FileText, Database, ScrollText, LifeBuoy,
   ExternalLink, Upload, Menu, Tag, Settings2,
   Link2, BookOpen, ListChecks, FileStack, Languages, FileUp, Factory, ShieldCheck,
-  Mail,
+  Mail, ClipboardList, Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { COMMUNITY_MODULE_LABEL } from "@/lib/community/moderation";
@@ -28,6 +28,7 @@ type AdminNavSection = { label: string; items: AdminNavItem[] };
 const MODERATOR_PATHS = [
   "/app/admin/community",
   "/app/admin/questions",
+  "/app/admin/assessments",
   "/app/admin/gov/question-review",
 ];
 
@@ -50,6 +51,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
     label: "Content",
     items: [
       { to: "/app/admin/questions",      icon: FileText,       label: "Questions", staff: "staff" },
+      { to: "/app/admin/assessments",    icon: ClipboardList,  label: "Assessments", staff: "staff" },
       { to: "/app/admin/bulk-upload",    icon: Upload,         label: "Bulk Upload"   },
       { to: "/app/admin/seed-questions", icon: Database,       label: "Seed / Import" },
       { to: "/app/admin/community",      icon: MessageSquare,  label: COMMUNITY_MODULE_LABEL, staff: "staff" },
@@ -74,6 +76,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
   {
     label: "Billing",
     items: [
+      { to: "/app/admin/finance",          icon: Wallet,     label: "Finance" },
       { to: "/app/admin/revenue",          icon: DollarSign, label: "Revenue" },
       { to: "/app/admin/promo-codes",      icon: Tag,        label: "Offers"  },
       { to: "/app/admin/billing-settings", icon: Settings2,  label: "Billing" },

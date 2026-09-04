@@ -130,11 +130,13 @@ export function isAvailabilityChecking(session: GovPaperAvailabilitySession): bo
 }
 
 export function availabilityCheckingElapsedMs(
-  session: GovPaperAvailabilitySession,
+  session: GovPaperAvailabilitySession | null | undefined,
   nowMs = Date.now(),
 ): number | null {
-  if (session.phase !== "checking") return null;
-  return Math.max(0, nowMs - session.startTime);
+  if (!session || session.phase !== "checking") return null;
+  const startTime = session.startTime;
+  if (typeof startTime !== "number" || !Number.isFinite(startTime)) return null;
+  return Math.max(0, nowMs - startTime);
 }
 
 export function beginGenerationSession(
@@ -185,17 +187,22 @@ export function resetGenerationSession(): GovPaperGenerationSession {
   return initialGenerationSession();
 }
 
-export function isGenerationTimerActive(session: GovPaperGenerationSession): boolean {
-  return session.phase === "active";
+export function isGenerationTimerActive(
+  session: GovPaperGenerationSession | null | undefined,
+): boolean {
+  if (!session || session.phase !== "active") return false;
+  return typeof session.startTime === "number" && Number.isFinite(session.startTime);
 }
 
-/** Safe elapsed seconds for UI — never reads startTime unless phase is `active`. */
+/** Safe elapsed seconds for UI — never throws; never reads startTime unless phase is `active`. */
 export function generationElapsedSeconds(
-  session: GovPaperGenerationSession,
+  session: GovPaperGenerationSession | null | undefined,
   nowMs = Date.now(),
 ): number | null {
-  if (session.phase !== "active") return null;
-  return Math.max(0, Math.floor((nowMs - session.startTime) / 1000));
+  if (!session || session.phase !== "active") return null;
+  const startTime = session.startTime;
+  if (typeof startTime !== "number" || !Number.isFinite(startTime)) return null;
+  return Math.max(0, Math.floor((nowMs - startTime) / 1000));
 }
 
 export function formatGenerationElapsed(seconds: number | null): string | null {

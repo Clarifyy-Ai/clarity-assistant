@@ -95,8 +95,8 @@ Ops still required: Supabase Dashboard recovery OTP expiry = 3600s if catalog re
 ### T-Overlay stealth (Ctrl+Shift+H, screen-share invisibility)
 **Pre:** desktop build, active session, screen-share running (Zoom/Meet). **Steps:** trigger overlay, verify screen-share viewer sees nothing where overlay is rendered. **Expect:** overlay invisible to remote viewer.
 
-### T-Billing Stripe checkout
-**Pre:** logged in, free plan. **Steps:** click Upgrade → Pro. **Expect:** Stripe Checkout opens, test card `4242 4242 4242 4242` succeeds, redirected back, plan updated to Pro within 5s, `subscription_status` = `active`.
+### T-Billing Razorpay checkout
+**Pre:** logged in, free plan. **Steps:** click Upgrade → Pro. **Expect:** Razorpay Checkout opens; India sandbox card/UPI succeeds (not Stripe `4242`); plan/credits update after verify or webhook.
 
 ---
 

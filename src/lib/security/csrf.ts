@@ -14,8 +14,10 @@
 // this utility mainly protects accidental/malicious cross-context form actions
 // and standardizes secure form handling.
 
-const CSRF_STORAGE_KEY = "clarify-csrf-token-v1";
-const CSRF_CREATED_AT_KEY = "clarify-csrf-token-created-at-v1";
+const CSRF_STORAGE_KEY = "career-pilot-csrf-token-v1";
+const CSRF_CREATED_AT_KEY = "career-pilot-csrf-token-created-at-v1";
+const LEGACY_CSRF_STORAGE_KEY = "clarify-csrf-token-v1";
+const LEGACY_CSRF_CREATED_AT_KEY = "clarify-csrf-token-created-at-v1";
 
 const DEFAULT_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -110,14 +112,24 @@ export function storeCSRFToken(token: string): void {
  * Returns the current CSRF token from sessionStorage.
  */
 export function getCSRFToken(): string | null {
-  return safeGetSessionItem(CSRF_STORAGE_KEY);
+  const primary = safeGetSessionItem(CSRF_STORAGE_KEY);
+  if (primary) return primary;
+  const legacy = safeGetSessionItem(LEGACY_CSRF_STORAGE_KEY);
+  if (legacy) {
+    storeCSRFToken(legacy);
+    safeRemoveSessionItem(LEGACY_CSRF_STORAGE_KEY);
+    safeRemoveSessionItem(LEGACY_CSRF_CREATED_AT_KEY);
+  }
+  return legacy;
 }
 
 /**
  * Returns the current CSRF token creation timestamp.
  */
 export function getCSRFTokenCreatedAt(): number | null {
-  const raw = safeGetSessionItem(CSRF_CREATED_AT_KEY);
+  const raw =
+    safeGetSessionItem(CSRF_CREATED_AT_KEY) ??
+    safeGetSessionItem(LEGACY_CSRF_CREATED_AT_KEY);
 
   if (!raw) {
     return null;
@@ -138,6 +150,8 @@ export function getCSRFTokenCreatedAt(): number | null {
 export function clearCSRFToken(): void {
   safeRemoveSessionItem(CSRF_STORAGE_KEY);
   safeRemoveSessionItem(CSRF_CREATED_AT_KEY);
+  safeRemoveSessionItem(LEGACY_CSRF_STORAGE_KEY);
+  safeRemoveSessionItem(LEGACY_CSRF_CREATED_AT_KEY);
 }
 
 /**

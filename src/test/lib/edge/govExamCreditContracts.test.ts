@@ -213,6 +213,52 @@ describe("gov exam runner client contracts", () => {
     expect(setBusyIdx).toBeGreaterThan(creditCheckIdx);
   });
 
+  it("GenerateGovPaper releases credits on all terminal failures via cancel-paper-generation-job", () => {
+    const page = fs.readFileSync(
+      path.join(root, "src/pages/app/mock-test/GenerateGovPaper.tsx"),
+      "utf8",
+    );
+    const cancelFn = fs.readFileSync(
+      path.join(root, "supabase/functions/cancel-paper-generation-job/index.ts"),
+      "utf8",
+    );
+
+    const releaseFn = page.slice(
+      page.indexOf("function releaseCreditsOnTerminalFailure"),
+      page.indexOf("function examCategoryLabel"),
+    );
+    expect(releaseFn).toContain("cancelPaperGenerationJob(jobId)");
+    // Must not gate release on poll-timeout only.
+    expect(releaseFn).not.toContain("GENERATION_POLL_TIMEOUT");
+    expect(releaseFn).not.toContain("isPaperJobPollTimeoutError");
+    expect(releaseFn).not.toMatch(/if\s*\(\s*!timedOut\s*\)\s*return/);
+
+    const failedRetryable = page.slice(
+      page.indexOf('terminal === "failed_retryable"'),
+      page.indexOf('terminal === "failed_permanent"'),
+    );
+    expect(failedRetryable).toContain("releaseCreditsOnTerminalFailure(current)");
+
+    const failedPermanent = page.slice(
+      page.indexOf('terminal === "failed_permanent"'),
+      page.indexOf('terminal === "cancelled"'),
+    );
+    expect(failedPermanent).toContain("releaseCreditsOnTerminalFailure(current)");
+
+    // Soft client poll exit must not cancel solely because the browser stopped polling.
+    const stillRunningMarker =
+      "Client poll window ended — durable job may still be running. Do not cancel credits.";
+    expect(page).toContain(stillRunningMarker);
+    const stillRunning = page.slice(
+      page.indexOf(stillRunningMarker),
+      page.indexOf(stillRunningMarker) + 500,
+    );
+    expect(stillRunning).not.toContain("releaseCreditsOnTerminalFailure");
+
+    expect(cancelFn).toContain("refundClaimedPaperCredits");
+    expect(cancelFn).toContain("refund_cancel_already_");
+  });
+
   it("TestSession starts and autosaves through start-exam / save-test-answer", () => {
     const session = fs.readFileSync(path.join(root, "src/pages/app/mock-test/TestSession.tsx"), "utf8");
     const api = fs.readFileSync(path.join(root, "src/lib/gov-exam/api.ts"), "utf8");

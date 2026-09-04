@@ -289,6 +289,11 @@ export function ExamSearchCombobox({
           error: null,
           query: trimmed,
         });
+        // Parent renders actionable result rows — keep listbox from covering View/Generate/Full sim Links.
+        if (onResultsChangeRef.current && nextState === "success") {
+          setOpen(false);
+          setActiveIndex(-1);
+        }
       } catch (err) {
         const superseded = reqId !== reqIdRef.current;
         const aborted = ac.signal.aborted;
@@ -367,7 +372,7 @@ export function ExamSearchCombobox({
     setQuery(examDisplayName(exam));
     setOpen(false);
     setActiveIndex(-1);
-    inputRef.current?.focus();
+    inputRef.current?.blur();
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -462,7 +467,7 @@ export function ExamSearchCombobox({
           id={listId}
           role="listbox"
           aria-label="Government exam results"
-          className="absolute z-40 mt-1 w-full max-h-72 overflow-auto rounded-xl border border-border bg-popover shadow-md"
+          className="absolute z-30 mt-1 w-full max-h-72 overflow-auto rounded-xl border border-border bg-popover shadow-md"
         >
           {state === "loading" && results.length === 0 && (
             <p className="px-3 py-3 text-sm text-muted-foreground">Searching…</p>

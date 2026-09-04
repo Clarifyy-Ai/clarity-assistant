@@ -46,6 +46,10 @@ export {
   providerStatusToTranscription,
   sttHealthToTranscription,
 } from "./transcriptionStates";
+export {
+  resolvePostMicSttPipeline,
+  isTabAudioHonestlyConnected,
+} from "./interviewerChannelState";
 export type { DeepgramStreamOptions } from "./deepgramStream";
 
 // ─── Live transcription (Deepgram via LiveTranscriptionService) ───────────────

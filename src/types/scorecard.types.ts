@@ -33,6 +33,16 @@ export interface ScorecardDetails {
   scoring_source?: "ai" | "python" | "deterministic" | "database" | "fallback";
 }
 
+/** Durable evaluation_status on public.scorecards. */
+export type ScorecardEvaluationStatus =
+  | "not_requested"
+  | "not_eligible"
+  | "queued"
+  | "processing"
+  | "completed"
+  | "failed_retryable"
+  | "failed_permanent";
+
 /** Application-level scorecard used by hooks and UI. */
 export interface Scorecard {
   id: string;
@@ -44,20 +54,28 @@ export interface Scorecard {
   structure_score: number | null;
   relevance_score: number | null;
   question_scores: QuestionScore[];
-  filler_count: number;
-  filler_rate: number;
+  filler_count: number | null;
+  filler_rate: number | null;
   top_filler_words: Array<{ word: string; count: number }>;
-  wpm_avg: number;
-  wpm_trend: string;
+  wpm_avg: number | null;
+  wpm_trend: string | null;
   strengths: string[];
   improvements: string[];
   coach_note: string;
-  star_adherence: number;
+  star_adherence: number | null;
   is_shared: boolean;
   share_token: string | null;
   pdf_url: string | null;
   generated_at: string;
   scoring_source?: "ai" | "python" | "deterministic" | "database" | "fallback";
+  evaluation_status: ScorecardEvaluationStatus | null;
+  eligibility_reason: string | null;
+  question_count: number | null;
+  answer_count: number | null;
+  evaluated_answer_count: number | null;
+  rubric_version: string | null;
+  attempt_count: number | null;
+  last_error_code: string | null;
 }
 
 /** Row shape from public.scorecards (includes migration columns). */
@@ -78,6 +96,14 @@ export interface ScorecardRow {
   share_token?: string | null;
   is_shared?: boolean | null;
   generated_at?: string | null;
+  evaluation_status?: ScorecardEvaluationStatus | string | null;
+  eligibility_reason?: string | null;
+  question_count?: number | null;
+  answer_count?: number | null;
+  evaluated_answer_count?: number | null;
+  rubric_version?: string | null;
+  attempt_count?: number | null;
+  last_error_code?: string | null;
 }
 
 function parseDetails(raw: unknown): ScorecardDetails {
@@ -152,6 +178,29 @@ export function resolveDebriefCategoryScores(input: {
   };
 }
 
+function parseEvaluationStatus(
+  value: unknown,
+): ScorecardEvaluationStatus | null {
+  const raw = String(value ?? "").toLowerCase().trim();
+  switch (raw) {
+    case "not_requested":
+    case "not_eligible":
+    case "queued":
+    case "processing":
+    case "completed":
+    case "failed_retryable":
+    case "failed_permanent":
+      return raw;
+    default:
+      return null;
+  }
+}
+
+function finiteInt(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.max(0, Math.round(value));
+}
+
 export function mapRowToScorecard(row: ScorecardRow): Scorecard {
   const details = parseDetails(row.details);
 
@@ -165,20 +214,31 @@ export function mapRowToScorecard(row: ScorecardRow): Scorecard {
     structure_score: finiteScore(details.structure_score) ?? finiteScore(row.problem_solving),
     relevance_score: finiteScore(details.relevance_score) ?? finiteScore(row.technical),
     question_scores: Array.isArray(details.question_scores) ? details.question_scores : [],
-    filler_count: details.filler_count ?? 0,
-    filler_rate: details.filler_rate ?? 0,
+    filler_count: finiteScore(details.filler_count),
+    filler_rate: finiteScore(details.filler_rate),
     top_filler_words: details.top_filler_words ?? [],
-    wpm_avg: details.wpm_avg ?? 0,
-    wpm_trend: details.wpm_trend ?? "stable",
+    wpm_avg: finiteScore(details.wpm_avg),
+    wpm_trend: typeof details.wpm_trend === "string" ? details.wpm_trend : null,
     strengths: row.strengths ?? [],
     improvements: row.improvements ?? [],
     coach_note: details.coach_note ?? row.feedback ?? "",
-    star_adherence: details.star_adherence ?? 0,
+    star_adherence: finiteScore(details.star_adherence),
     is_shared: row.is_shared ?? false,
     share_token: row.share_token ?? null,
     pdf_url: details.pdf_url ?? null,
     generated_at: row.generated_at ?? row.created_at,
     scoring_source: details.scoring_source,
+    evaluation_status: parseEvaluationStatus(row.evaluation_status),
+    eligibility_reason:
+      typeof row.eligibility_reason === "string" ? row.eligibility_reason : null,
+    question_count: finiteInt(row.question_count),
+    answer_count: finiteInt(row.answer_count),
+    evaluated_answer_count: finiteInt(row.evaluated_answer_count),
+    rubric_version:
+      typeof row.rubric_version === "string" ? row.rubric_version : null,
+    attempt_count: finiteInt(row.attempt_count),
+    last_error_code:
+      typeof row.last_error_code === "string" ? row.last_error_code : null,
   };
 }
 
@@ -216,5 +276,13 @@ export function mapScorecardToInsert(scorecard: Scorecard): ScorecardRow {
     share_token: scorecard.share_token,
     is_shared: scorecard.is_shared,
     generated_at: scorecard.generated_at,
+    evaluation_status: scorecard.evaluation_status,
+    eligibility_reason: scorecard.eligibility_reason,
+    question_count: scorecard.question_count,
+    answer_count: scorecard.answer_count,
+    evaluated_answer_count: scorecard.evaluated_answer_count,
+    rubric_version: scorecard.rubric_version,
+    attempt_count: scorecard.attempt_count,
+    last_error_code: scorecard.last_error_code,
   };
 }

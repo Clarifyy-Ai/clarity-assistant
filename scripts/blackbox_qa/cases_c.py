@@ -75,18 +75,33 @@ def scheduler_cases() -> list[dict]:
 def sessions_cases() -> list[dict]:
     return [
         tc("TC-SES-001", "Sessions", "List sessions",
-           f"1. Open {B}/app/sessions as HISTORY_USER_01.\n2. Apply status filter if present.\n3. Search if present.",
-           "1. List shows sessions.\n2. Filters work.\n3. Search works or N/A.",
-           "Session list/filter/search usable.",
-           priority="P0", severity="Critical", account="HISTORY_USER_01"),
+           f"1. Open {B}/app/sessions as HISTORY_USER_01.\n"
+           "2. Confirm type chips include Live Copilot, Practice Coach, Mock, Government Exam, "
+           "Assessment, Practice Workspace, Coding Assessment.\n"
+           "3. Apply type + status filters; search; confirm URL query persists on refresh.\n"
+           "4. Automated: `npx playwright test e2e/session-history.spec.ts`.",
+           "1. Timeline loads (or honest error+Retry — not silent empty).\n"
+           "2. Multi-type filters present.\n"
+           "3. Filters/search reflected in URL and list.\n"
+           "4. Playwright green or equivalent.",
+           "Session list/filter/search usable across all session types.",
+           priority="P0", severity="Critical", account="HISTORY_USER_01",
+           notes="Authoritative source: get_session_history RPC (not client-only sessions array). "
+                 "Filtered empty ≠ global empty. Deploy migration 20260904120000_get_session_history."),
         tc("TC-SES-002", "Sessions", "Session detail — transcript/score",
-           "1. Open a completed session.\n2. Verify date, duration, status, transcript/answers/score sections.\n3. Refresh.",
-           "1. Detail opens.\n2. Key fields present or explicitly unavailable.\n3. Persists.",
+           "1. Open a completed interview session from history (View Details).\n"
+           "2. Verify date, duration, status, transcript/answers/score sections.\n"
+           "3. Open Debrief using debrief id when available (not wrong id).\n"
+           "4. Refresh.",
+           "1. Detail opens for interview rows.\n2. Key fields present or explicitly unavailable.\n"
+           "3. Debrief route resolves.\n4. Persists.",
            "Session detail shows durable session data.",
            priority="P0", severity="Critical", test_type="Persistence", account="HISTORY_USER_01"),
         tc("TC-SES-003", "Sessions", "Empty history",
-           f"1. As FREE_USER_02 open {B}/app/sessions.\n2. Confirm empty state CTA.",
-           "1. Opens.\n2. Empty state — not error.",
+           f"1. As FREE_USER_02 (or NO_HISTORY) open {B}/app/sessions with no filters.\n"
+           "2. Confirm empty copy: have not completed any practice sessions yet.\n"
+           "3. Apply impossible filter — expect “No sessions match these filters.”",
+           "1. Opens.\n2. Global empty CTA.\n3. Filtered empty distinct.",
            "Empty sessions state is clear.",
            priority="P2", severity="Minor", account="FREE_USER_02"),
         tc("TC-SES-004", "Sessions", "End active session from UI",
@@ -99,6 +114,15 @@ def sessions_cases() -> list[dict]:
            "1. A URL.\n2. B opens.\n3. No A transcript/score exposed.",
            "Session detail is owner-scoped.",
            priority="P0", severity="Critical", test_type="Security", account="USER_A_01"),
+        tc("TC-SES-006", "Sessions", "Gov / Assessment / Coding appear in history",
+           "1. Prerequisite: user with at least one mock_tests attempt and/or coding submission.\n"
+           "2. Open Session History; filter Government Exam / Assessment / Coding.\n"
+           "3. View Details uses module result route (not interview scorecard).",
+           "1. Rows appear with correct type labels.\n2. Filters isolate types.\n"
+           "3. detailRoute opens correct module page.",
+           "Non-interview sessions are on the authoritative timeline.",
+           priority="P1", severity="Major", account="HISTORY_USER_01",
+           notes="Blocked (seed) if fixtures lack gov/coding rows — not product Unavailable."),
     ]
 
 
@@ -115,11 +139,17 @@ def reports_cases() -> list[dict]:
            "Scorecard renders for completed sessions.",
            priority="P1", severity="Major", account="HISTORY_USER_01"),
         tc("TC-REP-003", "Reports", "Compare Session A vs B",
-           "1. If compare UI exists (analytics/compare), select two different sessions.\n2. View delta.\n3. Try same session twice — expect rejection.\n4. Try unscored session.",
-           "1. Two sessions selectable.\n2. Comparison metrics/delta shown.\n3. Same-session rejected.\n4. Unscored handled with message.",
+           "1. Prerequisite: run `npm run qa:seed-compare` (seeds HISTORY_USER / QA_HISTORY_EMAIL with 2 scored + 1 unscored sessions).\n"
+           "2. Open analytics/compare; select two different scored sessions.\n"
+           "3. View delta.\n"
+           "4. Try same session twice — expect rejection.\n"
+           "5. Confirm unscored session is not selectable (or rejected).",
+           "1. Two sessions selectable.\n2. Comparison metrics/delta shown.\n3. Same-session rejected.\n4. Unscored handled with message / hidden from pickers.",
            "Session compare validates selections and shows deltas.",
            priority="P1", severity="Major", account="HISTORY_USER_01",
-           notes="If compare UI absent, mark Unavailable."),
+           notes="Prerequisite: npm run qa:seed-compare for HISTORY_USER_01 (qa.history@clarify.ai.test). "
+                 "If still <2 comparable after seed → Blocked (seed), not product Unavailable. "
+                 "If compare UI absent, mark Unavailable."),
         tc("TC-REP-004", "Reports", "Export report",
            "1. Use Export if available.\n2. Open downloaded file.\n3. Confirm no secrets embedded.",
            "1. Export starts.\n2. File opens.\n3. Contains expected summary only.",
@@ -248,7 +278,7 @@ def settings_cases() -> list[dict]:
         ("TC-SET-003", "notifications", "Notification prefs save → refresh"),
         ("TC-SET-004", "audio", "Audio device prefs save → refresh"),
         ("TC-SET-005", "practice-coach", "Practice Coach prefs save → refresh"),
-        ("TC-SET-006", "hotkeys", "Hotkeys page loads / reset"),
+        ("TC-SET-006", "hotkeys", "Hotkeys assign → fire → persist"),
         ("TC-SET-007", "privacy", "Privacy prefs save → refresh"),
         ("TC-SET-008", "security", "Security / MFA controls visible"),
         ("TC-SET-009", "models", "Models / BYOK page loads"),
@@ -260,6 +290,32 @@ def settings_cases() -> list[dict]:
     ]
     out = []
     for tid, slug, feature in tabs:
+        if slug == "hotkeys":
+            out.append(
+                tc(
+                    tid, "Settings", feature,
+                    f"1. Open {B}/app/settings/hotkeys.\n"
+                    "2. Assign Open answer bank to a modifier combo (or confirm default Ctrl+Alt+A).\n"
+                    "3. Leave focus outside text fields; press the combo — expect /app/answers.\n"
+                    "4. Refresh the hotkeys page; confirm Custom binding (or default) still shown.\n"
+                    "5. Automated proof: `npx playwright test e2e/settings-hotkeys.spec.ts`.",
+                    "1. Hotkeys page loads.\n"
+                    "2. Binding accepted (modifiers required).\n"
+                    "3. Answer Bank opens — not a no-op.\n"
+                    "4. Binding retained after refresh.\n"
+                    "5. Playwright green or equivalent manual proof.",
+                    "Open Answer Bank hotkey fires and persists across refresh.",
+                    priority="P1",
+                    severity="Major",
+                    test_type="Persistence",
+                    account="PRO_USER_01",
+                    sub=slug,
+                    notes="Automated: e2e/settings-hotkeys.spec.ts (default Ctrl+Alt+A + custom Ctrl+Alt+B "
+                          "persist/fire). Do not Pass on page load alone. If answer_bank kill-switch "
+                          "shows unavailable after navigation, mark Blocked (feature flag), not hotkey Fail.",
+                )
+            )
+            continue
         out.append(
             tc(
                 tid, "Settings", feature,
@@ -402,8 +458,10 @@ def coding_lab_cases() -> list[dict]:
            "Coding Lab reachable.",
            priority="P1", severity="Major", account="PRO_USER_01"),
         tc("TC-COD-002", "Coding Lab", "Execute valid code",
-           "1. Select supported language.\n2. Write trivial valid solution/stub per problem.\n3. Run/Execute.",
-           "1. Language selectable.\n2. Code entered.\n3. Output/error panel shows real result — not stuck Running.",
+           "1. Confirm JavaScript is the only / pre-selected language (auto-scored on server).\n"
+           "2. Write trivial valid solution/stub per problem.\n3. Run/Execute.",
+           "1. JavaScript selected (no other langs required).\n2. Code entered.\n"
+           "3. Output/error panel shows real result — not stuck Running.",
            "Code execution returns observable output.",
            priority="P0", severity="Critical", account="PRO_USER_01"),
         tc("TC-COD-003", "Coding Lab", "Invalid code / timeout",
@@ -417,10 +475,23 @@ def coding_lab_cases() -> list[dict]:
            "Submit/score/reset lifecycle works.",
            priority="P1", severity="Major", account="PRO_USER_01"),
         tc("TC-COD-005", "Coding Lab", "Unsupported language",
-           "1. If language dropdown limited, attempt unsupported via UI only.\n2. Observe message.",
-           "1. Only supported langs or clear error.\n2. No silent failure.",
+           "1. Soft Pass (UI): open any coding assessment; confirm language control lists only "
+           "JavaScript with honest auto-scored label and is disabled/problem-locked — "
+           "do not require picking Python/TS.\n"
+           "2. Hard path proof: run `npx playwright test e2e/community-coding.spec.ts` "
+           "(TC-COD-005 mocks score-coding-submission 501 NOT_CONFIGURED).\n"
+           "3. Confirm panel shows not-configured / unsupported copy — not empty / endless Running.",
+           "1. Only JavaScript offered (that is Pass for “only supported langs”).\n"
+           "2. Playwright hard path green OR equivalent 501 message visible.\n"
+           "3. No silent failure.",
            "Unsupported languages handled clearly.",
-           priority="P2", severity="Minor", test_type="Negative", account="PRO_USER_01"),
+           priority="P2", severity="Minor", test_type="Negative", account="PRO_USER_01",
+           notes="Product is JS-only by design (APPROVED_CODING_LANGUAGES). "
+                 "Soft Pass = JS-only disabled selector with auto-scored label. "
+                 "Hard path: Playwright 501 mock in e2e/community-coding.spec.ts. "
+                 "If neither UI inspection nor Playwright harness is available → "
+                 "Blocked (language harness), not product Unavailable. "
+                 "Do not Block solely because Python/TS are absent from the dropdown."),
     ]
 
 
@@ -632,10 +703,23 @@ def api_network_cases() -> list[dict]:
 def ai_fallback_cases() -> list[dict]:
     return [
         tc("TC-FB-001", "AI / Fallback", "Prep STAR when AI down",
-           "1. AI-down window.\n2. Generate STAR.\n3. Observe fallback/error ≤ timeout.",
-           "1. Down.\n2. Attempt.\n3. Fallback or clear failure; not endless.",
+           "1. Prerequisite (pick one): run `npx playwright test e2e/star-builder.spec.ts` "
+           "(hard 502 + soft deterministic draft + provider≠credit), OR set Edge secret "
+           "`HYBRID_FORCE_AI_UNAVAILABLE=1` and confirm via Admin Diagnostics / hybrid-health.\n"
+           "2. On /app/prep/star-builder, run AI Polish with STAR fields filled.\n"
+           "3. Soft path: Input-based draft badge + honest toast (not “Answer polished”); "
+           "hard path: restore fields + temporarily unavailable.\n"
+           "4. Confirm no false insufficient-credits / upgrade messaging.",
+           "1. Harness ready (mock suite green or force-flag confirmed).\n"
+           "2. Polish attempted.\n"
+           "3. Soft: input-based draft kept; hard: original restored + unavailable copy.\n"
+           "4. Credits messaging truthful — not endless spinner.",
            "STAR falls back or fails honestly.",
-           priority="P0", severity="Critical", test_type="Negative", account="SUFFICIENT_CREDIT_01"),
+           priority="P0", severity="Critical", test_type="Negative", account="SUFFICIENT_CREDIT_01",
+           notes="Automated proof: npx playwright test e2e/star-builder.spec.ts. "
+                 "Optional live soft path: HYBRID_FORCE_AI_UNAVAILABLE=1 then polish STAR. "
+                 "If neither mock nor force-flag is available → Blocked (AI-down harness), "
+                 "not product Unavailable. Do not require a live production outage window."),
         tc("TC-FB-002", "AI / Fallback", "Gov generate when AI down",
            "1. AI-down window.\n2. Generate paper.\n3. Expect deterministic/Python fallback paper OR clear failure.\n4. No false credit error.",
            "1. Down.\n2. Generate.\n3. Paper or failure.\n4. Credits truthful.",

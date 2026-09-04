@@ -218,7 +218,60 @@ export interface AudioStoreState {
   token_state: DeepgramTokenState;
   mic_state: RuntimeMicState;
   pipeline_status: AudioPipelineStatus;
+  /**
+   * True only while interviewer (tab) STT channel is live.
+   * Do not treat system_stream alone as connected — failed STT can leave a stale stream.
+   */
+  interviewer_channel_active: boolean;
+  /** QA counters for interviewer tab capture (no PCM / raw audio). */
+  interviewer_capture_health: InterviewerCaptureHealth;
+  /** Normalized mic + interviewer health — never green from stream object alone. */
+  channel_health: DualChannelHealthState;
   setup: AudioSetupState;
   noise_level: number;             // 0.0 – 1.0 ambient noise
   is_muted: boolean;
+}
+
+export interface InterviewerCaptureHealth {
+  framesReceived: number;
+  framesSentToStt: number;
+  lastHeartbeatAt: number | null;
+}
+
+/** Live dual-channel health snapshots (see audioChannelHealth.ts). */
+export type AudioChannelHealthStatus =
+  | "disconnected"
+  | "connecting"
+  | "active"
+  | "silent_source"
+  | "unavailable";
+
+export interface AudioChannelHealthMetricsState {
+  hasStream: boolean;
+  trackReadyState: "live" | "ended" | "none";
+  trackEnabled: boolean;
+  trackMuted: boolean;
+  receivedFrameCount: number;
+  transmittedFrameCount: number;
+  queuedFrameCount: number;
+  rmsLevel: number;
+  lastEnergyAt: number | null;
+  sttSocketOpen: boolean;
+  sttStatus: "idle" | "connecting" | "connected" | "reconnecting" | "error" | "unavailable";
+  lastKeepAliveAt: number | null;
+  lastSttMessageAt: number | null;
+  lastTranscriptEventAt: number | null;
+  monitoringStartedAt: number | null;
+  connectFailed: boolean;
+  fatalError: boolean;
+}
+
+export interface AudioChannelHealthSnapshotState {
+  status: AudioChannelHealthStatus;
+  metrics: AudioChannelHealthMetricsState;
+}
+
+export interface DualChannelHealthState {
+  mic: AudioChannelHealthSnapshotState;
+  interviewer: AudioChannelHealthSnapshotState;
 }

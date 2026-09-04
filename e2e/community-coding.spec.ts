@@ -1,5 +1,7 @@
 /**
- * Community + Coding Lab regression for TC-COM-002/003 and TC-COD-004/005 UI contracts.
+ * Community + Coding Lab regression for TC-COM-002/003 and TC-COD-004/005/006 contracts.
+ * Language UI exposes JS/TS practice only; secure multi-language sandbox remains PARTIAL.
+ * TC-COD-005 hard path uses a 501 mock for non-executable languages.
  */
 import {
   test,
@@ -290,12 +292,16 @@ test.describe("Community + Coding Lab module regression", () => {
     expect(communityReportMetrics.postCount).toBeLessThanOrEqual(1);
   });
 
-  test("TC-COD-004/005: coding assessment exposes solve guidance and language labels", async ({
+  test("TC-COD-004: coding assessment exposes solve guidance and JS/TS language select", async ({
     page,
   }) => {
+    const pageErrors: string[] = [];
+    page.on("pageerror", (err) => pageErrors.push(err.message));
+
     await loginAsTestUser(page);
     await expectDashboardReady(page);
 
+    await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto(`/app/coding/${QUESTION_ID}`, { waitUntil: "domcontentloaded" });
     const editor = page.locator("#code-editor");
     await expect(editor).toBeVisible({ timeout: 20_000 });
@@ -305,25 +311,101 @@ test.describe("Community + Coding Lab module regression", () => {
     await expect(page.getByRole("button", { name: /Reset code/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /Submit assessment/i })).toBeVisible();
     await expect(page.getByText(/solve\(input\)/i).first()).toBeVisible();
+    await expect(page.getByTestId("coding-workspace")).toBeVisible();
+    await expect(page.getByTestId("coding-problem-panel")).toBeVisible();
+    await expect(page.getByTestId("coding-editor-panel")).toBeVisible();
 
     const lang = page.locator("#coding-language");
     await expect(lang).toBeVisible();
+    await expect(lang).toBeEnabled();
     const options = await lang.locator("option").allTextContents();
-    expect(options.some((t) => /TypeScript/i.test(t) && /pending review/i.test(t))).toBe(true);
-    expect(options.some((t) => /Python/i.test(t) && /pending review/i.test(t))).toBe(true);
-    expect(options.some((t) => /Java/i.test(t) && /pending review/i.test(t))).toBe(true);
+    expect(options).toHaveLength(2);
+    expect(options.some((t) => /JavaScript/i.test(t))).toBe(true);
+    expect(options.some((t) => /TypeScript/i.test(t))).toBe(true);
+    expect(options.some((t) => /Python|\bJava\b/i.test(t))).toBe(false);
+    expect(options.every((t) => /practice auto-scored|not a secure sandbox/i.test(t))).toBe(true);
+
+    await lang.selectOption("typescript");
+    await expect(lang).toHaveValue("typescript");
+    await expect
+      .poll(async () => editor.inputValue(), { timeout: 10_000 })
+      .toMatch(/function solve\(input\)/);
+
+    // Mobile: stacked workspace still usable
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.getByTestId("coding-editor-textarea")).toBeVisible();
+    const box = await page.getByTestId("coding-editor-textarea").boundingBox();
+    expect(box?.width ?? 0).toBeGreaterThan(200);
+
+    const startTimeNoise = pageErrors.filter((m) =>
+      /Cannot read properties of undefined \(reading ['"]startTime['"]\)|Cannot read property 'startTime' of undefined/i.test(
+        m,
+      ),
+    );
+    // DevTools/web-vitals startTime noise is ignored; fail only if coding frames appear.
+    expect(
+      startTimeNoise.filter((m) => /CodingAssessment|coding-language|score-coding/i.test(m)),
+    ).toEqual([]);
+  });
+
+  test("TC-COD-005: unsupported language 501 surfaces clear error (no silent hang)", async ({
+    page,
+  }) => {
+    await loginAsTestUser(page);
+    await expectDashboardReady(page);
+
+    await page.route("**/functions/v1/score-coding-submission**", async (route) => {
+      if (route.request().method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers: cors(route) });
+        return;
+      }
+      await fulfillJson(route, 501, {
+        success: false,
+        error: "This language is not configured for secure execution.",
+        code: "NOT_CONFIGURED",
+        execution_status: "unsupported",
+        approved_languages: ["javascript"],
+      });
+    });
+
+    await page.goto(`/app/coding/${QUESTION_ID}`, { waitUntil: "domcontentloaded" });
+    await expect(page.locator("#code-editor")).toBeVisible({ timeout: 20_000 });
+    await page.getByRole("button", { name: /Run sample/i }).click();
+
+    await expect(
+      page.getByText(/This language is not configured for secure execution/i),
+    ).toBeVisible({ timeout: 15_000 });
   });
 
   test("TC-COD-006: sample run shows per-case results from server", async ({ page }) => {
+    let sampleLanguage: string | null = null;
+    await page.route("**/functions/v1/score-coding-submission**", async (route) => {
+      if (route.request().method() === "OPTIONS") {
+        await route.fulfill({ status: 204, headers: cors(route) });
+        return;
+      }
+      try {
+        const body = route.request().postDataJSON() as { language?: string; sample_only?: boolean };
+        if (body.sample_only) sampleLanguage = String(body.language ?? "");
+      } catch {
+        /* ignore */
+      }
+      await route.fallback();
+    });
+
     await loginAsTestUser(page);
     await expectDashboardReady(page);
 
     await page.goto(`/app/coding/${QUESTION_ID}`, { waitUntil: "domcontentloaded" });
+    const lang = page.locator("#coding-language");
+    await expect(lang).toBeEnabled({ timeout: 20_000 });
+    await lang.selectOption("typescript");
     await page.getByRole("button", { name: /Run sample/i }).click();
     await expect(page.getByTestId("coding-sample-case-results")).toBeVisible({
       timeout: 20_000,
     });
     await expect(page.getByText("Pass")).toBeVisible();
+    expect(sampleLanguage).toBe("typescript");
   });
 
   test("TC-MOD-014: report marks post as REPORTED via moderate-content", async ({ page }) => {

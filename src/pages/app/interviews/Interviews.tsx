@@ -51,6 +51,15 @@ export default function Interviews() {
       toast.info("Google Calendar sync isn't configured on this deployment.");
       return;
     }
+    if (
+      calendar.connectionStatus === "verification_pending" ||
+      (!calendar.isConnected && !calendar.connectAllowed)
+    ) {
+      toast.info(
+        "Calendar sync not available yet (Google verification pending). You can still schedule interviews.",
+      );
+      return;
+    }
     if (!calendar.isConnected) {
       await calendar.connectGoogle();
       return;
@@ -101,11 +110,14 @@ export default function Interviews() {
               variant="ghost"
               size="sm"
               onClick={handleCalendarAction}
-              loading={calendar.isSyncing || calendar.isProbingSync}
+              loading={calendar.isSyncing || calendar.isProbingSync || calendar.isConnecting}
               disabled={
                 calendar.connectionStatus === "not_configured" ||
+                calendar.connectionStatus === "verification_pending" ||
+                (!calendar.isConnected && !calendar.connectAllowed) ||
                 calendar.isCheckingConnection ||
-                calendar.isProbingSync
+                calendar.isProbingSync ||
+                calendar.isConnecting
               }
               leftIcon={
                 calendar.isConnected && calendar.syncAvailable
@@ -115,15 +127,26 @@ export default function Interviews() {
               title={
                 calendar.connectionStatus === "not_configured"
                   ? "Calendar sync not configured"
+                  : calendar.connectionStatus === "verification_pending" ||
+                      (!calendar.isConnected && !calendar.connectAllowed)
+                    ? "Calendar sync not available yet (Google verification pending)"
                   : calendar.lastSynced
                     ? `Last synced ${format(calendar.lastSynced, "MMM d, h:mm a")}`
                     : undefined
               }
+              data-testid="interviews-calendar-cta"
             >
               {calendar.isCheckingConnection || calendar.isProbingSync
-                ? "Checking…"
+                ? "Checking Google Calendar…"
+                : calendar.isConnecting
+                  ? "Connecting Google Calendar…"
+                  : calendar.isSyncing
+                    ? "Syncing interview…"
                 : !calendar.syncAvailable && calendar.connectionStatus === "not_configured"
                 ? "Calendar: Not configured"
+                : calendar.connectionStatus === "verification_pending" ||
+                    (!calendar.isConnected && !calendar.connectAllowed)
+                ? "Calendar: Coming soon"
                 : calendar.isConnected
                   ? "Sync calendar"
                   : "Connect calendar"}

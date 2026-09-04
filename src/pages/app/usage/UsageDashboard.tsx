@@ -9,12 +9,14 @@ import {
   Clock,
   CreditCard,
   RefreshCw,
+  Sparkles,
   Zap,
   type LucideIcon,
 } from "lucide-react";
 
 import { creditsDB, sessionsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/authStore";
+import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageContent } from "@/components/layout/PageContent";
@@ -430,6 +432,46 @@ export default function UsageDashboard(): JSX.Element {
           icon={Clock}
         />
       </div>
+
+      <Card data-testid="credit-consume-smoke-path">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            Try a credit-consuming AI action
+          </CardTitle>
+          <CardDescription>
+            Free-plan path for credit deduction checks (TC-CR-002). Note your
+            balance above, run one action, then refresh — balance should drop by
+            the cost shown.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            className="min-h-11"
+            onClick={() => navigate("/app/prep")}
+          >
+            STAR polish ({AI_CREDIT_COSTS.polish_star} cr)
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="min-h-11"
+            onClick={() => navigate("/app/prep/rephraser")}
+          >
+            Rephraser ({AI_CREDIT_COSTS.rephraser} cr)
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="min-h-11"
+            onClick={() => void loadUsage()}
+          >
+            Refresh balance
+          </Button>
+        </CardContent>
+      </Card>
       </>
       )}
 

@@ -13,6 +13,8 @@ import { createExportIdempotencyKey, messageFromExportCaught } from "@/lib/expor
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 import { SettingsSaveBar } from "@/components/settings/SettingsSaveBar";
 import { Button } from "@/components/ui/Button";
+import { mergeUiPreferences } from "@/lib/settings/uiPreferences";
+import { brandExportBasename } from "@/lib/constants/brandStorage";
 
 type RetentionKey = "transcripts" | "ai_answers" | "debriefs" | "documents";
 type ChannelKey = "email" | "push" | "in_app";
@@ -58,7 +60,7 @@ function readPolishPrefs(uiPreferences: unknown): ExtendedPrefs {
 }
 
 function sessionsCsvFilename(date = new Date()): string {
-  return `clarify-sessions-${date.toISOString().slice(0, 10)}.csv`;
+  return `${brandExportBasename("sessions", date.toISOString().slice(0, 10))}.csv`;
 }
 
 export default function SettingsPolish() {
@@ -83,18 +85,13 @@ export default function SettingsPolish() {
     setSaved(false);
     setSaveFailed(false);
     try {
-      const base =
-        profile?.ui_preferences && typeof profile.ui_preferences === "object"
-          ? (profile.ui_preferences as Record<string, unknown>)
-          : {};
       await updateProfile({
-        ui_preferences: {
-          ...base,
+        ui_preferences: mergeUiPreferences(profile?.ui_preferences, {
           polish: {
             retention: prefs.retention,
             channels: prefs.channels,
           },
-        },
+        }),
       } as any);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -285,7 +282,7 @@ export default function SettingsPolish() {
         </div>
         <p className="text-xs text-muted-foreground mb-3">
           Exports include session dates, scores, and metadata. Files are named{" "}
-          <code className="font-mono text-[11px]">clarify-sessions-YYYY-MM-DD.csv</code>
+          <code className="font-mono text-[11px]">career-pilot-sessions-YYYY-MM-DD.csv</code>
           {" "}(today:{" "}
           <code className="font-mono text-[11px]">{csvFilename}</code>).
         </p>

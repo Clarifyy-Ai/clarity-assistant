@@ -55,6 +55,9 @@ jobs:
       - name: Billing catalog parity
         run: npm run billing:parity
 
+      - name: AI credit catalog parity
+        run: npm run billing:parity-ai
+
       - name: AI capability gates
         run: npm run release:capability-gates
 

@@ -3,6 +3,9 @@
  * Used by `submit-test` edge function and client `TestResults` display helpers.
  */
 
+/** Authoritative marks algorithm written to test_analyses.algorithm_version. */
+export const MOCK_TEST_SCORE_ALGORITHM_VERSION = "mock_test_score_v2";
+
 export type MockTestAnswerOutcome = "correct" | "wrong" | "unanswered";
 
 export type MockTestScoringConfig = {

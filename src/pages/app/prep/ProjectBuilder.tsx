@@ -21,6 +21,8 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { ProcessingStatus } from "@/components/async/ProcessingStatus";
+import { AI_OP_STAGES } from "@/lib/async/aiOpStages";
 import { answerBankDB, prepProjectsDB } from "@/lib/supabase/database";
 import type { Tables } from "@/integrations/supabase";
 import {
@@ -492,6 +494,12 @@ export default function ProjectBuilder() {
           >
             Generate project showcase ({credits.costs.project_build} credits)
           </Button>
+          {loading && (
+            <ProcessingStatus
+              message={AI_OP_STAGES.projectBuilder.generating}
+              stage="project_builder"
+            />
+          )}
 
           {showcase ? (
             <Card className="border-primary/20 bg-primary/5">

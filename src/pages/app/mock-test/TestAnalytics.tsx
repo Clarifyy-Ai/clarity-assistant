@@ -23,6 +23,7 @@ import { useAuthStore } from "@/store/userStore";
 import { Card, CardContent } from "@/components/ui/Card";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { clampMockTestDisplayScore } from "@/lib/gov-exam/mockTestScoring";
+import { finiteOrNull, formatPercentOrUnavailable, RESULT_UNAVAILABLE } from "@/lib/results/resultDisplay";
 import { cn } from "@/lib/utils";
 
 interface MockTestSummary {
@@ -164,26 +165,29 @@ export default function TestAnalytics() {
       .reverse()
       .slice(-10)
       .map((analysis, index) => {
+        const accuracy = finiteOrNull(analysis.accuracy);
+        const summaryPct = finiteOrNull(
+          analysis.time_analysis?.score_summary?.score_percentage,
+        );
+        const total = finiteOrNull(analysis.total_score);
+        const max = finiteOrNull(analysis.max_score);
+        const scorePct =
+          summaryPct != null
+            ? clampMockTestDisplayScore(summaryPct)
+            : total != null && max != null && max > 0
+              ? Math.round((clampMockTestDisplayScore(total) / max) * 100)
+              : null;
+
         const point: TrendDataPoint = {
           name: (testNameMap[analysis.test_id] ?? `Test ${index + 1}`).slice(0, 12),
-          accuracy: Number(analysis.accuracy ?? 0),
-          score_pct: Number.isFinite(
-            Number(analysis.time_analysis?.score_summary?.score_percentage),
-          )
-            ? clampMockTestDisplayScore(
-                Number(analysis.time_analysis?.score_summary?.score_percentage),
-              )
-            : Number(analysis.max_score ?? 0) > 0
-              ? Math.round(
-                  (clampMockTestDisplayScore(Number(analysis.total_score ?? 0)) /
-                    Number(analysis.max_score ?? 1)) *
-                    100
-                )
-              : 0,
+          // Charts need numbers; omit series points with no evidence via NaN filters below.
+          accuracy: accuracy ?? Number.NaN,
+          score_pct: scorePct ?? Number.NaN,
         };
 
         for (const subject of allSubjects) {
-          point[subject] = analysis.subject_breakdown?.[subject]?.accuracy ?? 0;
+          const subAcc = finiteOrNull(analysis.subject_breakdown?.[subject]?.accuracy);
+          point[subject] = subAcc ?? Number.NaN;
         }
 
         return point;
@@ -207,25 +211,27 @@ export default function TestAnalytics() {
   );
 
   const personalAverageAccuracy = useMemo(() => {
-    if (analyses.length === 0) return 0;
-    return Math.round(
-      analyses.reduce((sum, analysis) => sum + Number(analysis.accuracy ?? 0), 0) /
-        analyses.length
-    );
+    const values = analyses
+      .map((a) => finiteOrNull(a.accuracy))
+      .filter((n): n is number => n != null);
+    if (values.length === 0) return null;
+    return Math.round(values.reduce((sum, n) => sum + n, 0) / values.length);
   }, [analyses]);
 
-  const latestAccuracy = analyses[0]?.accuracy ?? 0;
+  const latestAccuracy = finiteOrNull(analyses[0]?.accuracy);
   const improvementVsAverage =
-    analyses.length > 1 ? Math.round(latestAccuracy - personalAverageAccuracy) : 0;
+    analyses.length > 1 && latestAccuracy != null && personalAverageAccuracy != null
+      ? Math.round(latestAccuracy - personalAverageAccuracy)
+      : null;
 
   const milestones = useMemo(() => {
     const items: string[] = [];
 
-    if (improvementVsAverage > 5) {
+    if (improvementVsAverage != null && improvementVsAverage > 5) {
       items.push(`Latest test is ${improvementVsAverage}% above your personal average.`);
     }
 
-    if (improvementVsAverage < -5) {
+    if (improvementVsAverage != null && improvementVsAverage < -5) {
       items.push(
         `Latest test is ${Math.abs(
           improvementVsAverage
@@ -268,7 +274,10 @@ export default function TestAnalytics() {
           },
           {
             label: "Personal Avg",
-            value: `${personalAverageAccuracy}%`,
+            value: formatPercentOrUnavailable(
+              personalAverageAccuracy,
+              personalAverageAccuracy != null,
+            ),
             icon: <Target className="h-5 w-5 text-green-400" />,
           },
           {
@@ -279,9 +288,11 @@ export default function TestAnalytics() {
           {
             label: "vs Avg",
             value:
-              improvementVsAverage >= 0
-                ? `+${improvementVsAverage}%`
-                : `${improvementVsAverage}%`,
+              improvementVsAverage == null
+                ? RESULT_UNAVAILABLE
+                : improvementVsAverage >= 0
+                  ? `+${improvementVsAverage}%`
+                  : `${improvementVsAverage}%`,
             icon: <TrendingUp className="h-5 w-5 text-primary" />,
           },
         ].map((item) => (

@@ -14,13 +14,29 @@ const PICKER_VALUES = new Set(
   SCHEDULER_TIMEZONE_OPTIONS.map((z) => z.value),
 );
 
+/** Legacy / OS aliases → canonical IANA ids we allowlist. */
+const IANA_TIMEZONE_ALIASES: Record<string, string> = {
+  "Asia/Calcutta": "Asia/Kolkata",
+  "Asia/Saigon": "Asia/Ho_Chi_Minh",
+  "Europe/Kyiv": "Europe/Kiev",
+  "America/Argentina/Buenos_Aires": "America/Buenos_Aires",
+};
+
+/** Map known aliases to canonical IANA; leave unknown values unchanged. */
+export function normalizeIanaTimezoneAlias(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === "local") return trimmed;
+  return IANA_TIMEZONE_ALIASES[trimmed] ?? trimmed;
+}
+
 /** Resolve stored DB timezone to a picker key (round wins over interview). */
 export function resolveSchedulerTimezoneKey(
   roundTimezone?: string | null,
   interviewTimezone?: string | null,
 ): SchedulerTimezoneKey {
-  const stored = roundTimezone ?? interviewTimezone;
-  if (!stored) return "local";
+  const storedRaw = roundTimezone ?? interviewTimezone;
+  if (!storedRaw) return "local";
+  const stored = normalizeIanaTimezoneAlias(storedRaw);
   if (PICKER_VALUES.has(stored as SchedulerTimezoneKey)) {
     return stored as SchedulerTimezoneKey;
   }
@@ -29,7 +45,8 @@ export function resolveSchedulerTimezoneKey(
 
 /** Map picker key to zonedWallTimeToUtc zoneOrOffset argument. */
 export function zoneOrOffsetForPicker(timeZoneKey: string): string {
-  const opt = SCHEDULER_TIMEZONE_OPTIONS.find((z) => z.value === timeZoneKey);
+  const key = normalizeIanaTimezoneAlias(timeZoneKey);
+  const opt = SCHEDULER_TIMEZONE_OPTIONS.find((z) => z.value === key);
   if (!opt) return "local";
   if (opt.offset !== "local") return opt.offset;
   if (opt.value === "local") return "local";
@@ -45,7 +62,8 @@ export function utcIsoToZonedWallParts(
   const when = new Date(iso);
   if (Number.isNaN(when.getTime())) return null;
 
-  if (timeZoneKey === "local") {
+  const key = normalizeIanaTimezoneAlias(timeZoneKey);
+  if (key === "local") {
     const y = when.getFullYear();
     const m = String(when.getMonth() + 1).padStart(2, "0");
     const day = String(when.getDate()).padStart(2, "0");
@@ -54,7 +72,7 @@ export function utcIsoToZonedWallParts(
     return { date: `${y}-${m}-${day}`, time: `${h}:${min}` };
   }
 
-  const ianaZone = timeZoneKey === "UTC" ? "UTC" : timeZoneKey;
+  const ianaZone = key === "UTC" ? "UTC" : key;
   return isoWallPartsFromDate(when, ianaZone);
 }
 
@@ -91,13 +109,14 @@ function isoWallPartsFromDate(
 }
 
 function calendarDateInZone(when: Date, timeZoneKey: string): string | null {
-  if (timeZoneKey === "local") {
+  const key = normalizeIanaTimezoneAlias(timeZoneKey);
+  if (key === "local") {
     const y = when.getFullYear();
     const m = String(when.getMonth() + 1).padStart(2, "0");
     const day = String(when.getDate()).padStart(2, "0");
     return `${y}-${m}-${day}`;
   }
-  const ianaZone = timeZoneKey === "UTC" ? "UTC" : timeZoneKey;
+  const ianaZone = key === "UTC" ? "UTC" : key;
   const wall = isoWallPartsFromDate(when, ianaZone);
   return wall?.date ?? null;
 }
@@ -118,9 +137,10 @@ export function isScheduledToday(
 
 /** Persist IANA timezone, never the picker sentinel `local`. */
 export function persistableIanaTimezone(key: string | null | undefined): string {
-  if (key && key !== "local") return key;
+  if (key && key !== "local") return normalizeIanaTimezoneAlias(key);
   try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
+    const browser = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
+    return normalizeIanaTimezoneAlias(browser);
   } catch {
     return "Asia/Kolkata";
   }

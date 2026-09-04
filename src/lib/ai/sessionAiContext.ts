@@ -21,6 +21,15 @@ export type SessionAiContextInput = {
   resumeContent?: string | null;
   resumeSummary?: string | null;
   jdSnippet?: string | null;
+  /**
+   * When set (Practice Coach freeze), fingerprint includes checksum so mid-session
+   * live doc edits cannot reuse a stale cache entry built from different material.
+   */
+  contextChecksum?: string | null;
+  /** Prefer frozen resume text over live document loaders when provided. */
+  frozenResumeText?: string | null;
+  /** Prefer frozen JD text / keywords snippet when provided. */
+  frozenJdText?: string | null;
 };
 
 export type SessionAiContextLoaders = {
@@ -36,6 +45,7 @@ export function sessionAiContextFingerprint(input: {
   resumeId?: string | null;
   jdId?: string | null;
   instructions?: string | null;
+  contextChecksum?: string | null;
 }): string {
   const instructionsKey = (input.instructions ?? "").trim().slice(0, 120);
   return [
@@ -43,6 +53,7 @@ export function sessionAiContextFingerprint(input: {
     input.resumeId ?? "",
     input.jdId ?? "",
     instructionsKey,
+    input.contextChecksum ?? "",
   ].join("|");
 }
 
@@ -106,18 +117,23 @@ export async function getOrBuildSessionAiContext(
   const hit = cache.get(fingerprint);
   if (hit) return hit;
 
-  const resumeBlock = await loaders.buildResumeBlock(input.userId, {
-    parsedResume: input.parsedResume,
-    resumeContent: input.resumeContent,
-    resumeSummary: input.resumeSummary,
-    jdSnippet: input.jdSnippet,
-    instructions: input.instructions ?? "",
-    role: input.role ?? null,
-    company: input.company ?? null,
-  });
+  const frozenResume = (input.frozenResumeText ?? "").trim();
+  const frozenJd = (input.frozenJdText ?? "").trim();
+
+  const resumeBlock = frozenResume
+    ? frozenResume
+    : await loaders.buildResumeBlock(input.userId, {
+        parsedResume: input.parsedResume,
+        resumeContent: input.resumeContent,
+        resumeSummary: input.resumeSummary,
+        jdSnippet: input.jdSnippet,
+        instructions: input.instructions ?? "",
+        role: input.role ?? null,
+        company: input.company ?? null,
+      });
 
   let jdKeywords: string[] = [];
-  if (input.jdId) {
+  if (!frozenJd && input.jdId) {
     try {
       jdKeywords = await loaders.loadJdKeywords(input.jdId);
     } catch {
@@ -126,14 +142,18 @@ export async function getOrBuildSessionAiContext(
   }
 
   let starStoriesBlock = "";
-  try {
-    starStoriesBlock = await loaders.loadStarStories(input.userId);
-  } catch {
-    starStoriesBlock = "";
+  // Frozen snapshots already embed selected Answer Bank snippets in preference_block.
+  if (!input.contextChecksum) {
+    try {
+      starStoriesBlock = await loaders.loadStarStories(input.userId);
+    } catch {
+      starStoriesBlock = "";
+    }
   }
 
-  const jdBlock =
-    jdKeywords.length > 0
+  const jdBlock = frozenJd
+    ? `\n\nJob description (frozen):\n${frozenJd}`
+    : jdKeywords.length > 0
       ? `\n\nJD keywords to weave in: ${jdKeywords.join(", ")}`
       : "";
 

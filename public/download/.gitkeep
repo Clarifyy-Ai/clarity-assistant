@@ -1,0 +1,2 @@
+# Placeholder so /download/ exists as a directory on static hosts.
+# Bytes are never served from here — Apache/Cloudflare rewrite to download-windows.php.

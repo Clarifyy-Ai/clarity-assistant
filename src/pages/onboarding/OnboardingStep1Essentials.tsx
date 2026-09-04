@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { normalizeRefCode } from "@/lib/referrals";
+import { getStoredRefCode, normalizeRefCode } from "@/lib/referrals";
 import type { StepProps } from "@/types/onboarding.types";
 import type { ProfileRow } from "@/types";
 import {
@@ -67,7 +67,7 @@ const YEARS_MAP: Record<string, number> = {
 export default function OnboardingStep1Essentials({ data, onNext, onChange }: StepProps) {
   const { user, profile, setProfile } = useAuthStore();
   const [searchParams] = useSearchParams();
-  const refCode = normalizeRefCode(searchParams.get("ref"));
+  const refCode = normalizeRefCode(searchParams.get("ref")) ?? getStoredRefCode();
 
   const matchedChip = ROLES.find((r) => r.value === data.targetRole)?.value;
   const [name,       setName]       = useState(profile?.full_name ?? "");

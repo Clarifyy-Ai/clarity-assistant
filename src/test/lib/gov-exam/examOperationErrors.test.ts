@@ -127,7 +127,7 @@ describe("gov exam operation error mapping", () => {
       formatGovExamOperationError(
         new ApiClientError({ message: "x", status: 403, code: "REGION_RESTRICTED" }),
       ),
-    ).toMatch(/india accounts/i);
+    ).toMatch(/temporarily unavailable/i);
     expect(
       formatGovExamOperationError(
         new ApiClientError({ message: "x", status: 409, code: "JOB_TERMINAL_FAILURE" }),

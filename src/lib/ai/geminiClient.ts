@@ -8,7 +8,8 @@
 // - Keeps ALL existing features (retry, model selection, screenshot support, etc.)
 
 import type { CoachingContext } from "@/types/ai.types";
-import { fetchEdge, fetchEdgeJson, getAuthHeaders } from "@/lib/network/fetchEdge";
+import { fetchEdgeJson, getAuthHeaders } from "@/lib/network/fetchEdge";
+import { fetchLiveEdgeWithRetry } from "@/lib/session/liveSessionRetry";
 import { createIdempotencyKey } from "@/lib/api/functions";
 import { ApiClientError } from "@/lib/api/apiClient";
 
@@ -98,7 +99,15 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
     // Zod optional strings reject `null` — always send strings or omit.
     target_company: context.target_company ?? "",
     transcript: context.last_transcript ?? "",
-    resume_context: context.resume_experience_summary ?? "",
+    resume_context: [
+      context.resume_experience_summary ?? "",
+      context.preference_context ?? "",
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+    preference_context: context.preference_context ?? "",
+    skills_not_to_claim: context.skills_not_to_claim ?? [],
+    experience_level: context.experience_level ?? "",
     simple_language: simpleLanguage ?? false,
     screenshot_base64: screenshotBase64 ?? null,
     session_id: sessionId ?? null,
@@ -122,32 +131,12 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
         : {}),
     });
 
-    const response = await fetchEdge("generate-hint", body, {
+    const response = await fetchLiveEdgeWithRetry("generate-hint", body, {
       method: "POST",
       headers,
       signal,
       timeoutMs: 60_000,
     });
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => `HTTP ${response.status}`);
-      let parsed: { error?: string; code?: string; message?: string } | null = null;
-      try {
-        parsed = JSON.parse(errText) as {
-          error?: string;
-          code?: string;
-          message?: string;
-        };
-      } catch {
-        parsed = null;
-      }
-      const code = parsed?.code ?? "";
-      throw new ApiClientError({
-        message: parsed?.error || parsed?.message || `Hint generation failed (${response.status}).`,
-        status: response.status,
-        code,
-      });
-    }
 
     if (!response.body) {
       throw new ApiClientError({
@@ -181,7 +170,15 @@ export async function streamFullAnswer(opts: GeminiStreamOptions): Promise<void>
     interview_type: context.session_type ?? "behavioral",
     target_company: context.target_company ?? "",
     transcript: context.last_transcript ?? "",
-    resume_context: context.resume_experience_summary ?? "",
+    resume_context: [
+      context.resume_experience_summary ?? "",
+      context.preference_context ?? "",
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+    preference_context: context.preference_context ?? "",
+    skills_not_to_claim: context.skills_not_to_claim ?? [],
+    experience_level: context.experience_level ?? "",
     screenshot_base64: screenshotBase64 ?? null,
     session_id: answerSessionId,
     ...(answerMode ? { mode: answerMode } : {}),
@@ -201,51 +198,12 @@ export async function streamFullAnswer(opts: GeminiStreamOptions): Promise<void>
       "x-idempotency-key": idempotencyKey,
     });
 
-    const response = await fetchEdge("generate-answer", body, {
+    const response = await fetchLiveEdgeWithRetry("generate-answer", body, {
       method: "POST",
       headers,
       signal,
       timeoutMs: 60_000, // full answers can legitimately exceed 30s
     });
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => `HTTP ${response.status}`);
-      let parsed: { error?: string; code?: string; message?: string } | null = null;
-      try {
-        parsed = JSON.parse(errText) as {
-          error?: string;
-          code?: string;
-          message?: string;
-        };
-      } catch {
-        parsed = null;
-      }
-      const code = String(parsed?.code ?? "").toUpperCase() || "API_ERROR";
-      const providerUnavailable =
-        response.status === 502 ||
-        response.status === 503 ||
-        code === "PROVIDER_UNAVAILABLE" ||
-        code === "AI_PROVIDER_UNAVAILABLE" ||
-        code === "PYTHON_SERVICE_UNAVAILABLE";
-      const insufficientCredits =
-        !providerUnavailable &&
-        (code === "INSUFFICIENT_CREDITS" ||
-          code === "NO_CREDITS" ||
-          response.status === 402);
-      const message =
-        parsed?.error ||
-        parsed?.message ||
-        (insufficientCredits
-          ? "Insufficient credits. Please top up to generate full answers."
-          : providerUnavailable
-            ? "AI Help is temporarily unavailable. Please try again."
-            : `AI Help failed (${response.status}).`);
-      throw new ApiClientError({
-        message,
-        status: providerUnavailable ? response.status : response.status,
-        code: providerUnavailable ? "AI_PROVIDER_UNAVAILABLE" : code,
-      });
-    }
 
     if (!response.body) {
       throw new ApiClientError({

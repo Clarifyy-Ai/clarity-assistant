@@ -1,11 +1,14 @@
-import { describe, expect, it, vi } from "vitest";import {
+import { describe, expect, it, vi } from "vitest";
+import {
   resolveSchedulerTimezoneKey,
   utcIsoToZonedWallParts,
   zoneOrOffsetForPicker,
   inferTimezoneKeyFromIso,
   persistableIanaTimezone,
   isScheduledToday,
+  normalizeIanaTimezoneAlias,
 } from "@/lib/interviews/schedulerTimezone";
+import { schedulerTimezoneSchema } from "@/lib/validators/interviewSchemas";
 import { zonedWallTimeToUtc } from "@/lib/schedule/zonedWallTime";
 
 describe("schedulerTimezone", () => {
@@ -46,6 +49,26 @@ describe("schedulerTimezone", () => {
     expect(persistableIanaTimezone("Asia/Kolkata")).toBe("Asia/Kolkata");
     expect(persistableIanaTimezone("local")).not.toBe("local");
     expect(persistableIanaTimezone("local").length).toBeGreaterThan(2);
+  });
+
+  it("normalizes Asia/Calcutta and related aliases to allowlisted IANA", () => {
+    expect(normalizeIanaTimezoneAlias("Asia/Calcutta")).toBe("Asia/Kolkata");
+    expect(normalizeIanaTimezoneAlias("Asia/Saigon")).toBe("Asia/Ho_Chi_Minh");
+    expect(normalizeIanaTimezoneAlias("Europe/Kyiv")).toBe("Europe/Kiev");
+    expect(persistableIanaTimezone("Asia/Calcutta")).toBe("Asia/Kolkata");
+    expect(resolveSchedulerTimezoneKey("Asia/Calcutta", null)).toBe("Asia/Kolkata");
+  });
+
+  it("persistableIanaTimezone(local) result is allowlist-compatible after normalize", () => {
+    const resolved = vi.spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions");
+    resolved.mockReturnValue({ timeZone: "Asia/Calcutta" } as Intl.ResolvedDateTimeFormatOptions);
+    try {
+      const persisted = persistableIanaTimezone("local");
+      expect(persisted).toBe("Asia/Kolkata");
+      expect(schedulerTimezoneSchema.safeParse(persisted).success).toBe(true);
+    } finally {
+      resolved.mockRestore();
+    }
   });
 
   it("isScheduledToday uses interview timezone calendar date", () => {

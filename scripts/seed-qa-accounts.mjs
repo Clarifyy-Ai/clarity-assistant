@@ -118,6 +118,17 @@ const QA_ACCOUNTS = [
     notes: "Analytics empty-state fixture — do not run sessions on this account",
   },
   {
+    key: "HISTORY",
+    email: "qa.history@clarify.ai.test",
+    fullName: "QA History User",
+    planId: "pro",
+    credits: 1400,
+    admin: false,
+    emailConfirm: true,
+    onboardingCompleted: true,
+    notes: "HISTORY_USER_01 / TC-REP-003 — run npm run qa:seed-compare after seed-accounts",
+  },
+  {
     key: "ONBOARDING",
     email: "qa.onboarding@clarify.ai.test",
     fullName: "QA Onboarding User",

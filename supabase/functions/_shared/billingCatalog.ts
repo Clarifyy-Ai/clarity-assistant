@@ -153,6 +153,13 @@ const ALIASES: Record<string, CanonicalPlanId> = {
   enterprise: "enterprise",
   team: "enterprise",
   max: "enterprise",
+  // Razorpay / checkout product ids sometimes leak into profiles.plan_id
+  pro_monthly: "pro",
+  pro_yearly: "pro",
+  elite_monthly: "elite",
+  elite_yearly: "elite",
+  enterprise_monthly: "enterprise",
+  enterprise_yearly: "enterprise",
 };
 
 export function normalizePlanId(

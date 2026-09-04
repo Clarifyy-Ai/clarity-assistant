@@ -54,24 +54,55 @@ export function looksLikeInterviewerEcho(
 }
 
 /**
+ * Stream-relative watermark for the current listening window.
+ *
+ * Deepgram utterance `start_ms` / `end_ms` are audio-stream offsets (not wall clock).
+ * Call this when candidate listening opens so filters share the same time domain.
+ * Do NOT use `Date.now()` here — that rejects every real Deepgram final.
+ */
+export function streamListeningWatermarkMs(
+  utterances: ReadonlyArray<Pick<TranscriptUtterance, "start_ms" | "end_ms">>,
+): number {
+  let max = 0;
+  for (const u of utterances) {
+    const end = typeof u.end_ms === "number" && Number.isFinite(u.end_ms) ? u.end_ms : null;
+    const start =
+      typeof u.start_ms === "number" && Number.isFinite(u.start_ms) ? u.start_ms : null;
+    const t = end ?? start;
+    if (t != null && t > max) max = t;
+  }
+  return Math.max(0, max);
+}
+
+/**
  * Collect candidate STT only from the current question's listening window.
  * Excludes interviewer utterances and TTS-echo fragments.
+ *
+ * `listeningStartedAtMs` must be stream-relative (see {@link streamListeningWatermarkMs}),
+ * matching `TranscriptUtterance.start_ms` / `end_ms` — never wall-clock epoch ms.
  */
 export function collectCandidateAnswerText(options: {
   utterances: ReadonlyArray<TranscriptUtterance>;
   interimText?: string | null;
+  /** Stream-relative watermark; same domain as utterance start_ms/end_ms. */
   listeningStartedAtMs: number | null;
   questionText: string;
   /** When true, ignore all mic content (TTS still playing). */
   interviewerAudioActive?: boolean;
   typedAnswer?: string | null;
+  /**
+   * When false, ignore typedAnswer and return voice-only draft (for live UI sync).
+   * Default true: typed answer wins over STT when present.
+   */
+  preferTyped?: boolean;
 }): string {
   if (options.interviewerAudioActive) {
     return (options.typedAnswer ?? "").trim();
   }
 
+  const preferTyped = options.preferTyped !== false;
   const typed = (options.typedAnswer ?? "").trim();
-  if (typed) return typed;
+  if (preferTyped && typed) return typed;
 
   // Listening window never opened (e.g. Next during TTS) → no candidate STT.
   if (options.listeningStartedAtMs == null) {

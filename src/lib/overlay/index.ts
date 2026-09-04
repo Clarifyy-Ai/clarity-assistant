@@ -14,6 +14,8 @@ export type { HotkeyDefinition } from "./hotkeys";
 export {
   composeHint,
   splitInlineCode,
+  splitInlineRich,
+  stripMarkdownEmphasis,
   highlightSTARComponents,
   truncateForStealth,
   calculateOverlaySize,
@@ -24,6 +26,7 @@ export {
 export type {
   ComposedHint,
   ComposedLine,
+  InlinePart,
   OverlaySizeConfig,
 } from "./overlayCompositor";
 
@@ -31,18 +34,25 @@ export type {
 export {
   STEALTH_ATTR,
   CAPTURE_ATTR,
+  CAPTURE_EXCLUSION_DISCLAIMER,
+  CAPTURE_EXCLUSION_STATUS_LABEL,
   applyStealthToElement,
   removeStealthFromElement,
   isStealthActive,
   toggleStealthOnElement,
   getSupportInfo,
+  getCaptureExclusionStatus,
   patchGetDisplayMedia,
   enableContentProtection,
   onCaptureStateChange,
   isElectron,
 } from "./screenCaptureEvasion";
 
-export type { SupportLevel, SupportInfo } from "./screenCaptureEvasion";
+export type {
+  SupportLevel,
+  SupportInfo,
+  CaptureExclusionStatus,
+} from "./screenCaptureEvasion";
 
 // ─── Stealth Mouse ────────────────────────────────────────────────────────────
 export {

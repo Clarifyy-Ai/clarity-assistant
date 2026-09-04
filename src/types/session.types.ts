@@ -91,6 +91,10 @@ export interface LiveSessionConfig {
   interview_stage?: string | null;
   focus_competencies?: string[];
   topics_to_avoid?: string[];
+  /** Skills the user wants highlighted in generated answers. */
+  skills_to_emphasize?: string[];
+  /** Skills the user explicitly must not be coached to claim. */
+  skills_not_to_claim?: string[];
   answer_bank_context_ids?: string[];
   text_voice_mode?: "text" | "voice";
   tts_voice?: string | null;
@@ -203,6 +207,14 @@ export interface ActiveSessionState {
   mode: SessionMode;
   status: SessionStatus;
   config: SessionConfig | LiveSessionConfig | null;
+  /** Server lease end (ISO). Wall-clock authority for live practice auto-end. */
+  expires_at: string | null;
+  /** Server/client session start (ISO) for wall-clock elapsed alignment. */
+  started_at: string | null;
+  /** ISO when the session entered pause; null while active. */
+  paused_at: string | null;
+  /** Accumulated pause duration across completed pause windows (ms). */
+  total_paused_ms: number;
   current_question_index: number;
   current_question: SessionQuestion | null;
   questions: SessionQuestion[];
