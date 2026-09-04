@@ -117,8 +117,9 @@ export function parseMockProgressNotes(
   const trimmed = notes.trim();
   if (!trimmed.startsWith("{")) return null;
   try {
-    const parsed = JSON.parse(trimmed) as Partial<MockSessionProgressV2 & MockSessionProgressV1>;
-    if (!parsed || parsed[MOCK_PROGRESS_MARKER] !== true) return null;
+    const raw = JSON.parse(trimmed) as Record<string, unknown>;
+    if (!raw || raw[MOCK_PROGRESS_MARKER] !== true) return null;
+    const parsed = raw as unknown as Partial<MockSessionProgressV2 & MockSessionProgressV1>;
     if (parsed.v !== 1 && parsed.v !== 2) return null;
     if (!Array.isArray(parsed.questions) || typeof parsed.current_question_index !== "number") {
       return null;

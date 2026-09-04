@@ -50,8 +50,8 @@ export async function fetchSessionHistory(
   }
   if (!payload.ok) {
     throw new SessionHistoryApiError(
-      payload.code || "QUERY_FAILED",
-      payload.message || "We couldn’t load your session history.",
+      (payload as { code?: string }).code || "QUERY_FAILED",
+      (payload as { message?: string }).message || "We couldn’t load your session history.",
       "detail" in payload ? payload.detail : undefined,
     );
   }
