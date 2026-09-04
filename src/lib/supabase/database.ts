@@ -788,7 +788,11 @@ export const sessionsDB = {
       ];
     }
 
-    const annotated = annotateSessionsWithContentFlags(rows as any, answerIds, transcriptIds);
+    const annotated = annotateSessionsWithContentFlags(
+      rows as any,
+      answerIds,
+      transcriptIds,
+    ) as any;
     const eligibility = countDebriefEligibility(annotated);
     const pending = filterPendingDebriefSessions(
       annotated,
@@ -796,7 +800,7 @@ export const sessionsDB = {
     );
 
     return {
-      pending: pending.slice(0, limit),
+      pending: pending.slice(0, limit) as any,
       eligibility,
     };
   },
