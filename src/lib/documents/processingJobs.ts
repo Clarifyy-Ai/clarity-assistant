@@ -109,7 +109,7 @@ export function userFacingJobError(job: Pick<DocumentJob, "error_code" | "error_
   if (code === "INSUFFICIENT_CREDITS") {
     return "Not enough credits to process this document.";
   }
-  if (isClientWaitElapsed(job)) {
+  if (isClientWaitElapsed(job as Parameters<typeof isClientWaitElapsed>[0])) {
     return userFacingDocumentFailureMessage(DOCUMENT_ERROR_CODES.CLIENT_WAIT_ELAPSED);
   }
   if (isKnownDocumentErrorCode(code)) {

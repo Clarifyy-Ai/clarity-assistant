@@ -123,7 +123,7 @@ export async function fetchLiveEdgeWithRetry(
 ): Promise<Response> {
   return withLiveTransientRetry(
     async () => {
-      const response = await fetchEdge(fnName, body, options);
+      const response = await fetchEdge(fnName, body as Record<string, unknown>, options);
       if (response.ok) return response;
 
       const errText = await response.text().catch(() => `HTTP ${response.status}`);

@@ -336,7 +336,7 @@ function runSingleCase(
           id: testCase.id,
           name: testCase.name,
           passed: false,
-          error: limited.error,
+          error: (limited as { error: string }).error,
           error_kind: "runtime",
           input_preview: inputPreview,
           stdout: joinCapture(capture.stdout, MAX_STDOUT_CHARS),

@@ -290,7 +290,7 @@ export function ExamSearchCombobox({
           query: trimmed,
         });
         // Parent renders actionable result rows — keep listbox from covering View/Generate/Full sim Links.
-        if (onResultsChangeRef.current && nextState === "success") {
+        if (onResultsChangeRef.current && (nextState as string) === "success") {
           setOpen(false);
           setActiveIndex(-1);
         }

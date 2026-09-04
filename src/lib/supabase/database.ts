@@ -735,7 +735,7 @@ export const sessionsDB = {
           .select("id, type, title, overall_score, created_at, questions_asked, status")
           .eq("user_id", userId)
           .eq("status", "completed")
-          .in("type", ["mock", "live", "practice", "rehearsal"])
+          .in("type", ["mock", "live", "practice", "rehearsal"] as any)
           .order("created_at", { ascending: false })
           .limit(Math.max(limit * 3, 50)),
       ]);
@@ -788,7 +788,11 @@ export const sessionsDB = {
       ];
     }
 
-    const annotated = annotateSessionsWithContentFlags(rows, answerIds, transcriptIds);
+    const annotated = annotateSessionsWithContentFlags(
+      rows as any,
+      answerIds,
+      transcriptIds,
+    ) as any;
     const eligibility = countDebriefEligibility(annotated);
     const pending = filterPendingDebriefSessions(
       annotated,
@@ -796,7 +800,7 @@ export const sessionsDB = {
     );
 
     return {
-      pending: pending.slice(0, limit),
+      pending: pending.slice(0, limit) as any,
       eligibility,
     };
   },

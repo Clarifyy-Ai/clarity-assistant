@@ -69,10 +69,10 @@ export default function CodingLabPage() {
       hiddenExpected,
     });
     if (!built.ok) {
-      toast.error(built.error);
+      toast.error((built as { error: string }).error);
       return;
     }
-    const { payload } = built;
+    const { payload } = built as Extract<typeof built, { ok: true }>;
 
     const { data, error } = await supabase
       .from("coding_questions")
@@ -106,7 +106,7 @@ export default function CodingLabPage() {
         expected_json: c.expected_json,
         is_hidden: c.is_hidden,
         sort_order: c.sort_order,
-      })),
+      })) as any,
     );
     toast.success("Coding question created. Hidden cases stay server-side.");
     void load();

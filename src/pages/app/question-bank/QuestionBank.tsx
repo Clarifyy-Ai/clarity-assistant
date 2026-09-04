@@ -228,7 +228,7 @@ export default function QuestionBankPage() {
       isAdmin: Boolean(isAdmin),
     });
     if (!built.ok) {
-      toast.error(built.reason);
+      toast.error((built as { reason?: string }).reason ?? "Could not update publish status.");
       return;
     }
 

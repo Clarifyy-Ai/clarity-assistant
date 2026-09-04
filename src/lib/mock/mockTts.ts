@@ -180,7 +180,7 @@ function playServerAudioUrl(
   },
 ): Promise<TtsOutcome> {
   if (typeof window === "undefined" || typeof Audio === "undefined") {
-    return Promise.resolve({ status: "unavailable", source: "none", reason: "no_audio_api" });
+    return Promise.resolve({ status: "unavailable", source: "none" as const, reason: "no_audio_api" });
   }
 
   stopServerTtsAudio();
@@ -249,7 +249,7 @@ export function speakQuestionText(
   },
 ): Promise<TtsOutcome> {
   if (typeof window === "undefined" || !window.speechSynthesis) {
-    return Promise.resolve({ status: "unavailable" as const, source: "none" }).then((outcome) => {
+    return Promise.resolve({ status: "unavailable" as const, source: "none" as const }).then((outcome) => {
       queueMicrotask(() => {
         if (options.isCurrent(options.questionId)) options.onEnd?.();
       });
@@ -262,7 +262,7 @@ export function speakQuestionText(
     return Promise.resolve({
       status: "unavailable" as const,
       reason: "empty",
-      source: "none",
+      source: "none" as const,
     }).then((outcome) => {
       queueMicrotask(() => {
         if (options.isCurrent(options.questionId)) options.onEnd?.();
@@ -410,7 +410,7 @@ export async function speakInterviewerWithFallback(
 ): Promise<TtsOutcome> {
   const trimmed = text.trim();
   if (!trimmed) {
-    return { status: "unavailable", reason: "empty", source: "none" };
+    return { status: "unavailable", reason: "empty", source: "none" as const };
   }
 
   if (!options.browserOnly) {
