@@ -467,7 +467,6 @@ type RuleQueryClient = {
     select(cols: string): RuleQueryChain;
   };
 };
-};
 
 /** Load the active auto-approval rule (enabled highest version, else latest). */
 export async function loadAutoApprovalRule(
