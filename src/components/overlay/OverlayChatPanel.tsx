@@ -1,5 +1,6 @@
 // src/components/overlay/OverlayChatPanel.tsx
 import { useRef, useEffect, useState, useMemo } from "react";
+import { cn } from "@/lib/utils";
 import { useOverlayStore } from "@/store/overlayStore";
 import { OverlayChatInput } from "./OverlayChatInput";
 import { AiFormattedOutput } from "@/components/common/AiFormattedOutput";

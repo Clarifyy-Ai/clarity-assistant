@@ -12,6 +12,7 @@ import {
 } from "@/lib/mock/mockContextBridge";
 import { AiFormattedOutput } from "@/components/common/AiFormattedOutput";
 import { useAudioSession } from "@/hooks/useAudioSession";
+import { useSessionOrchestrator } from "@/hooks/useSessionOrchestrator";
 import { useFillerWordDetection } from "@/hooks/useFillerWordDetection";
 import { useWPMTracker } from "@/hooks/useWPMTracker";
 import { useHotkeys } from "@/hooks/useHotkeys";
