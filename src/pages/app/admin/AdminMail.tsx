@@ -254,7 +254,7 @@ export default function AdminMail() {
     const sent = folders.find((f) => f.path.includes("Sent") || f.name === "Sent");
     const inboxUnread = inbox?.unreadCount ?? messages.filter((m) => m.unseen).length;
     const trackingUnread = folders
-      .filter((f) => isTrackingFolder(f.path))
+      .filter((f) => isTrackingFolder(f))
       .reduce((sum, f) => sum + (f.unreadCount ?? 0), 0);
     return {
       inboxUnread,
