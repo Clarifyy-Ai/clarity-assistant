@@ -111,10 +111,7 @@ export const OverlayListeningIndicator = memo(function OverlayListeningIndicator
   } else if (
     sessionStatus === "active" &&
     isChannelUiActive(micHealth) &&
-    (providerStatus === "connected" ||
-      audioPipeline === "receiving_audio" ||
-      audioPipeline === "transcribing" ||
-      pipeline === "listening")
+    (providerStatus === "connected" || pipeline === "listening")
   ) {
     state = "listening";
     label = "Listening";

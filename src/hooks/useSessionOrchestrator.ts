@@ -157,7 +157,7 @@ export function useSessionOrchestrator() {
           parsedResume: parsed,
           resumeContent: activeResume?.content ?? null,
           hintStyle: cfg?.hint_style ?? overlay.hint_style,
-          coachTone: overlay.coach_tone,
+          coachTone: (overlay as { coach_tone?: string }).coach_tone,
           transcript,
           model: overlay.active_model ?? "gemini-2.5-flash",
         })

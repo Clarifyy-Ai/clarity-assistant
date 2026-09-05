@@ -318,7 +318,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   useEffect(() => {
     if (resumeId || resumes.length === 0) return;
     const primary =
-      resumes.find((r) => r.is_primary) ??
+      resumes.find((r) => (r as { is_primary?: boolean }).is_primary) ??
       (activeResumeId ? resumes.find((r) => r.id === activeResumeId) : undefined) ??
       resumes[0];
     if (primary) setResumeId(primary.id);

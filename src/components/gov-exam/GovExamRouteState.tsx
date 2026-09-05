@@ -53,7 +53,7 @@ export function GovExamRouteState({
             {(resolution.phase === "TEMPORARY_BACKEND_FAILURE" ||
               resolution.phase === "UNSUPPORTED_EXAM") &&
               onRetry && (
-                <Button type="button" variant="default" onClick={onRetry}>
+                <Button type="button" variant="primary" onClick={onRetry}>
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Retry
                 </Button>
