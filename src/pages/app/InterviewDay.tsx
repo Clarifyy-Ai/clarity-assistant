@@ -4,7 +4,6 @@ import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
 import { useInterviewScheduler } from "@/hooks/useInterviewScheduler";
 import { useAuthStore } from "@/store/userStore";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PageContent } from "@/components/layout/PageContent";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { DesktopDownloadButton } from "@/components/common/DesktopDownloadButton";
@@ -35,25 +34,84 @@ import { stashPendingPracticeSetup } from "@/lib/session/lastPracticeSetup";
 import type { LiveSessionConfig } from "@/types/session.types";
 import { isElectronApp } from "@/lib/platform/isElectron";
 import {
+  isDailyChecklistScope,
   loadInterviewDayChecklist,
-  readLocalChecklist,
+  resolveChecklistScopeId,
   upsertInterviewDayChecklistItem,
   writeLocalChecklist,
 } from "@/lib/interview/interviewDayChecklist";
+import { PAGE_SHELL_NARROW } from "@/lib/ui/responsivePage";
+import { runLocalMicCheck } from "@/lib/audio/localMicPrecheck";
+import { runSpeakerTest } from "@/lib/audio/speakerTest";
+import { MicState, MIC_STATUS_COPY, SpeakerState, SPEAKER_STATUS_COPY } from "@/lib/audio/precheckStates";
 
 // ─────────────────────────────────────────────────────────────────
 // InterviewDay — focus mode for interview day
 // Countdown, final checklist, quick affirmations, launch co-pilot
 // ─────────────────────────────────────────────────────────────────
 
-const FINAL_CHECKLIST: Array<{ id: string; label: string; icon: LucideIcon }> = [
-  { id: "audio",    label: "Audio & mic working",           icon: Volume2 },
-  { id: "quiet",    label: "Quiet environment secured",     icon: VolumeX },
-  { id: "water",    label: "Water nearby",                  icon: Droplets },
-  { id: "notes",    label: "Quick notes printed/open",      icon: StickyNote },
-  { id: "browser",  label: "Meeting link ready to open",    icon: Monitor },
-  { id: "phone",    label: "Phone on silent",               icon: Smartphone },
+type ChecklistAction = "mic-test" | "meeting-link" | "documents" | "schedule";
+
+const FINAL_CHECKLIST: Array<{
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  hint?: string;
+  action?: ChecklistAction;
+  actionLabel?: string;
+}> = [
+  {
+    id: "audio",
+    label: "Audio & mic working",
+    icon: Volume2,
+    hint: "Run a quick mic and speaker check before you join.",
+    action: "mic-test",
+    actionLabel: "Test audio",
+  },
+  {
+    id: "quiet",
+    label: "Quiet environment secured",
+    icon: VolumeX,
+    hint: "Close doors, mute notifications, and reduce background noise.",
+  },
+  {
+    id: "water",
+    label: "Water nearby",
+    icon: Droplets,
+    hint: "Keep water within reach — no need to leave mid-call.",
+  },
+  {
+    id: "notes",
+    label: "Quick notes printed/open",
+    icon: StickyNote,
+    hint: "Open your resume, JD, and STAR stories in Documents.",
+    action: "documents",
+    actionLabel: "Open documents",
+  },
+  {
+    id: "browser",
+    label: "Meeting link ready to open",
+    icon: Monitor,
+    hint: "Confirm the video link opens in your browser.",
+    action: "meeting-link",
+    actionLabel: "Open link",
+  },
+  {
+    id: "phone",
+    label: "Phone on silent",
+    icon: Smartphone,
+    hint: "Silence calls and notifications on your phone and desktop.",
+  },
 ];
+
+const ACTIVE_TODAY_STATUSES = new Set(["scheduled", "in_progress"]);
+
+function isActiveTodayInterview(iv: Parameters<typeof isInterviewScheduledToday>[0]): boolean {
+  return (
+    isInterviewScheduledToday(iv) &&
+    ACTIVE_TODAY_STATUSES.has(String(getCurrentRoundStatus(iv)))
+  );
+}
 
 const AFFIRMATIONS = [
   "You've prepared hard for this. Trust your preparation.",
@@ -83,14 +141,12 @@ export default function InterviewDay() {
   const [breathing, setBreathing] = useState(false);
   const [breathPhase, setBreathPhase] = useState<"in" | "hold" | "out">("in");
   const [breathCount, setBreathCount] = useState(0);
+  const [audioTesting, setAudioTesting] = useState(false);
+  const [audioTestStatus, setAudioTestStatus] = useState<string | null>(null);
+  const [audioTestOk, setAudioTestOk] = useState(false);
 
   // All interviews scheduled for today
-  const todayInterviews = store.interviews.filter((iv) => {
-    return (
-      isInterviewScheduledToday(iv) &&
-      getCurrentRoundStatus(iv) === "scheduled"
-    );
-  }).sort(
+  const todayInterviews = store.interviews.filter(isActiveTodayInterview).sort(
     (a, b) =>
       new Date(getCurrentRoundDate(a)).getTime() -
       new Date(getCurrentRoundDate(b)).getTime(),
@@ -98,12 +154,7 @@ export default function InterviewDay() {
 
   useEffect(() => {
     const list = store.interviews
-      .filter((iv) => {
-        return (
-          isInterviewScheduledToday(iv) &&
-          getCurrentRoundStatus(iv) === "scheduled"
-        );
-      })
+      .filter(isActiveTodayInterview)
       .sort(
         (a, b) =>
           new Date(getCurrentRoundDate(a)).getTime() -
@@ -124,44 +175,115 @@ export default function InterviewDay() {
     null;
   const todayRound = todayIv ? getCurrentRound(todayIv) : null;
   const todayScheduledAt = todayIv ? getCurrentRoundDate(todayIv) : null;
+  const checklistScopeId = resolveChecklistScopeId(todayIv?.id ?? null);
+  const checklistUsesDailyScope = isDailyChecklistScope(checklistScopeId);
 
-  // Persist checklist per interview: Supabase first, localStorage fallback
+  // Persist checklist per interview (or per-day fallback): Supabase + localStorage
   useEffect(() => {
-    if (!todayIv?.id) {
-      setChecklist({});
-      return;
-    }
-    const interviewId = todayIv.id;
+    const scopeId = resolveChecklistScopeId(todayIv?.id ?? null);
     const gen = ++checklistLoadGen.current;
     void (async () => {
-      const next = user?.id
-        ? await loadInterviewDayChecklist(user.id, interviewId)
-        : readLocalChecklist(interviewId);
+      const next = await loadInterviewDayChecklist(user?.id, scopeId);
       if (checklistLoadGen.current !== gen) return;
       setChecklist(next);
     })();
   }, [todayIv?.id, user?.id]);
 
   function toggleChecklistItem(id: string) {
-    if (!todayIv?.id) return;
-    const interviewId = todayIv.id;
-    const userId = user?.id;
+    const scopeId = resolveChecklistScopeId(todayIv?.id ?? null);
     setChecklist((prev) => {
       const checked = !prev[id];
       const next = { ...prev, [id]: checked };
-      if (!userId) {
-        writeLocalChecklist(interviewId, next);
-        return next;
-      }
       void upsertInterviewDayChecklistItem({
-        userId,
-        interviewId,
+        userId: user?.id,
+        scopeId,
         itemId: id,
         checked,
         nextState: next,
       });
       return next;
     });
+  }
+
+  function resetChecklist() {
+    const scopeId = resolveChecklistScopeId(todayIv?.id ?? null);
+    const next: Record<string, boolean> = {};
+    setChecklist(next);
+    writeLocalChecklist(scopeId, next);
+    setAudioTestStatus(null);
+    setAudioTestOk(false);
+  }
+
+  const meetingLink = todayRound?.meeting_link ?? todayIv?.meeting_link ?? null;
+
+  async function runAudioChecklistTest() {
+    setAudioTesting(true);
+    setAudioTestStatus("Checking microphone…");
+    setAudioTestOk(false);
+    try {
+      const mic = await runLocalMicCheck({});
+      if (mic.state !== MicState.READY) {
+        setAudioTestStatus(MIC_STATUS_COPY[mic.state]);
+        return;
+      }
+      setAudioTestStatus("Microphone OK — playing speaker test…");
+      const speaker = await runSpeakerTest(null);
+      if (speaker.state !== SpeakerState.READY) {
+        setAudioTestStatus(SPEAKER_STATUS_COPY[speaker.state]);
+        return;
+      }
+      setAudioTestOk(true);
+      setAudioTestStatus("Mic and speaker passed — you're good to go.");
+      setChecklist((prev) => {
+        if (prev.audio) return prev;
+        const next = { ...prev, audio: true };
+        void upsertInterviewDayChecklistItem({
+          userId: user?.id,
+          scopeId: resolveChecklistScopeId(todayIv?.id ?? null),
+          itemId: "audio",
+          checked: true,
+          nextState: next,
+        });
+        return next;
+      });
+    } catch {
+      setAudioTestStatus("Audio check failed. Try again or use Practice Coach setup.");
+    } finally {
+      setAudioTesting(false);
+    }
+  }
+
+  function handleChecklistAction(action: ChecklistAction) {
+    switch (action) {
+      case "mic-test":
+        void runAudioChecklistTest();
+        break;
+      case "meeting-link":
+        if (meetingLink) {
+          window.open(meetingLink, "_blank", "noopener,noreferrer");
+          setChecklist((prev) => {
+            if (prev.browser) return prev;
+            const next = { ...prev, browser: true };
+            void upsertInterviewDayChecklistItem({
+              userId: user?.id,
+              scopeId: resolveChecklistScopeId(todayIv?.id ?? null),
+              itemId: "browser",
+              checked: true,
+              nextState: next,
+            });
+            return next;
+          });
+        } else {
+          navigate("/app/interviews/new");
+        }
+        break;
+      case "documents":
+        navigate("/app/documents");
+        break;
+      case "schedule":
+        navigate("/app/interviews/new");
+        break;
+    }
   }
 
   // Countdown timer
@@ -248,7 +370,7 @@ export default function InterviewDay() {
 
   if (store.is_loading) {
     return (
-      <PageContent className="max-w-2xl mx-auto space-y-5">
+      <div data-testid="page-width-root" className={cn(PAGE_SHELL_NARROW, "space-y-5")}>
         <PageHeader
           title={`You've got this, ${firstName}`}
           description="Focus mode for interview day — countdown, checklist, and calm prep"
@@ -261,12 +383,12 @@ export default function InterviewDay() {
         />
         <SkeletonCard />
         <SkeletonCard />
-      </PageContent>
+      </div>
     );
   }
 
   return (
-    <PageContent className="max-w-2xl mx-auto space-y-5">
+    <div data-testid="page-width-root" className={cn(PAGE_SHELL_NARROW, "space-y-5")}>
       <PageHeader
         title={`You've got this, ${firstName}`}
         description="Focus mode for interview day — countdown, checklist, and calm prep"
@@ -376,7 +498,7 @@ export default function InterviewDay() {
           <EmptyState
             icon={CalendarDays}
             title="No interview scheduled for today"
-            description="Schedule an interview to unlock countdown, checklist, and focus mode."
+            description="Schedule an interview to unlock countdown and focus mode. The checklist below still works for general day-of prep."
             actionLabel="Schedule interview"
             onAction={() => navigate("/app/interviews/new")}
             compact
@@ -490,45 +612,133 @@ export default function InterviewDay() {
       </Card>
 
       {/* Final checklist */}
-      <Card>
-        <div className="flex items-center justify-between mb-4">
+      <Card data-testid="interview-day-checklist">
+        <div className="flex items-center justify-between gap-3 mb-4">
           <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
             <CheckCircle className="w-4 h-4 text-emerald-400" />
             Final checklist
           </h3>
-          <span className="text-xs text-muted-foreground">
-            {checklistDone}/{FINAL_CHECKLIST.length}
-          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs text-muted-foreground">
+              {checklistDone}/{FINAL_CHECKLIST.length}
+            </span>
+            {checklistDone > 0 && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                data-testid="interview-day-checklist-reset"
+                onClick={resetChecklist}
+              >
+                Reset
+              </Button>
+            )}
+          </div>
         </div>
+        {checklistUsesDailyScope ? (
+          <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+            No interview scheduled for today — checklist saves on this device for today only.
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+            Checklist syncs with today&apos;s interview. Use the test actions below to verify your setup.
+          </p>
+        )}
         <div className="space-y-2">
-          {FINAL_CHECKLIST.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => toggleChecklistItem(item.id)}
-              className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-accent/5 transition-all text-left min-h-11"
-            >
-              <div className={cn(
-                "w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all",
-                checklist[item.id]
-                  ? "bg-emerald-500 border-emerald-500"
-                  : "border-border"
-              )}>
-                {checklist[item.id] && (
-                  <CheckCircle className="w-3 h-3 text-foreground" />
+          {FINAL_CHECKLIST.map((item) => {
+            const resolvedAction =
+              item.action === "meeting-link" && !meetingLink ? "schedule" : item.action;
+            const resolvedActionLabel =
+              resolvedAction === "schedule"
+                ? "Schedule interview"
+                : resolvedAction === "meeting-link"
+                  ? "Open link"
+                  : item.actionLabel;
+
+            return (
+              <div
+                key={item.id}
+                data-testid={`interview-day-checklist-${item.id}`}
+                className={cn(
+                  "rounded-xl border border-border/60 p-3 transition-all",
+                  checklist[item.id] && "bg-emerald-500/5 border-emerald-500/20",
                 )}
+              >
+                <div className="flex items-start gap-3">
+                  <button
+                    type="button"
+                    aria-label={`Mark ${item.label} as ${checklist[item.id] ? "incomplete" : "complete"}`}
+                    aria-pressed={Boolean(checklist[item.id])}
+                    onClick={() => toggleChecklistItem(item.id)}
+                    className="mt-0.5 shrink-0 min-h-11 min-w-11 flex items-center justify-center -m-2"
+                  >
+                    <div
+                      className={cn(
+                        "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all",
+                        checklist[item.id]
+                          ? "bg-emerald-500 border-emerald-500"
+                          : "border-border",
+                      )}
+                    >
+                      {checklist[item.id] && (
+                        <CheckCircle className="w-3 h-3 text-foreground" />
+                      )}
+                    </div>
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start gap-2">
+                      <item.icon className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" aria-hidden />
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className={cn(
+                            "text-sm font-medium",
+                            checklist[item.id]
+                              ? "text-muted-foreground line-through"
+                              : "text-foreground",
+                          )}
+                        >
+                          {item.label}
+                        </p>
+                        {item.hint && (
+                          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                            {item.hint}
+                          </p>
+                        )}
+                        {item.id === "audio" && audioTestStatus && (
+                          <p
+                            role="status"
+                            aria-live="polite"
+                            data-testid="interview-day-audio-test-status"
+                            className={cn(
+                              "text-xs mt-1.5 leading-relaxed",
+                              audioTestOk
+                                ? "text-emerald-700 dark:text-emerald-300"
+                                : "text-amber-800 dark:text-amber-200",
+                            )}
+                          >
+                            {audioTestStatus}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {resolvedAction && resolvedActionLabel && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="shrink-0 min-h-11"
+                      data-testid={`interview-day-checklist-action-${item.id}`}
+                      disabled={item.id === "audio" && audioTesting}
+                      onClick={() => handleChecklistAction(resolvedAction)}
+                    >
+                      {item.id === "audio" && audioTesting ? "Testing…" : resolvedActionLabel}
+                    </Button>
+                  )}
+                </div>
               </div>
-              <item.icon className="w-4 h-4 text-muted-foreground shrink-0" aria-hidden />
-              <span className={cn(
-                "text-sm",
-                checklist[item.id]
-                  ? "text-muted-foreground line-through"
-                  : "text-foreground"
-              )}>
-                {item.label}
-              </span>
-            </button>
-          ))}
+            );
+          })}
         </div>
         <ProgressBar
           value={checklistDone}
@@ -537,6 +747,15 @@ export default function InterviewDay() {
           size="sm"
           className="mt-4"
         />
+        {allDone && (
+          <p
+            role="status"
+            data-testid="interview-day-checklist-complete"
+            className="text-xs text-emerald-700 dark:text-emerald-300 mt-3 text-center font-medium"
+          >
+            All set — you&apos;re ready for your interview.
+          </p>
+        )}
       </Card>
 
       {/* Launch Practice Coach — web primary; no Retry for unpublished installer */}
@@ -576,6 +795,6 @@ export default function InterviewDay() {
           For interview rehearsal only — not for use during real interviews.
         </p>
       </div>
-    </PageContent>
+    </div>
   );
 }

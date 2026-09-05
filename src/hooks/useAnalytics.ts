@@ -109,6 +109,43 @@ export function useAnalytics() {
         hasDataRef.current = true;
         setIsStale(false);
       } catch (err) {
+        const retryable =
+          err instanceof ApiClientError
+            ? err.status === 503 || err.status === 504 || err.status === 429
+            : /timeout|network|fetch failed|failed to fetch/i.test(
+                err instanceof Error ? err.message : String(err ?? ""),
+              );
+
+        if (retryable && !hasDataRef.current) {
+          try {
+            const retryResult = normalizeAnalyticsDashboard(
+              await fetchEdgeJson<AnalyticsDashboardData>(
+                "analytics-dashboard",
+                {
+                  filter,
+                  timezone: resolveDisplayTimeZone(
+                    useAuthStore.getState().profile?.timezone,
+                  ),
+                },
+                { timeoutMs: 40_000 },
+              ),
+            );
+            if (retryResult?.recent_sessions) {
+              retryResult.recent_sessions = retryResult.recent_sessions.filter(
+                (s) => !(s as { tags?: string[] }).tags?.includes("private"),
+              );
+            }
+            setData(retryResult);
+            setComparison(null);
+            setCompareError(null);
+            hasDataRef.current = true;
+            setIsStale(false);
+            return;
+          } catch {
+            /* fall through to error state */
+          }
+        }
+
         // Keep last-known data so optional 503s do not blank the shell.
         setError(toSafeUiError(err, "We couldn't load your analytics."));
         setData((prev) => {

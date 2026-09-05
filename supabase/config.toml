@@ -213,6 +213,9 @@ verify_jwt = true
 [functions.billing-catalog]
 verify_jwt = false
 
+[functions.list-public-promos]
+verify_jwt = false
+
 [functions.contact-sales]
 verify_jwt = false
 

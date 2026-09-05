@@ -25,6 +25,10 @@ import {
   MOCK_TEST_SCORE_ALGORITHM_VERSION,
   scoreMockTest,
 } from "../_shared/mockTestScoring.ts";
+import {
+  evaluateCodingSubmission,
+  parseQuestionCodingMetadata,
+} from "../_shared/questionCodingMetadata.ts";
 
 /* -------------------------------------------------------------------------- */
 /*                                    TYPES                                   */
@@ -43,6 +47,7 @@ interface QuestionRow {
   topic: string | null;
   difficulty: string | null;
   exam_type: string | null;
+  metadata?: unknown;
 }
 
 interface ResponseRow {
@@ -375,7 +380,7 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
       db
         .from("questions")
         .select(
-          "id, question_text, question_type, options, correct_answer, explanation, marks_positive, marks_negative, subject, topic, difficulty, exam_type"
+          "id, question_text, question_type, options, correct_answer, explanation, marks_positive, marks_negative, subject, topic, difficulty, exam_type, metadata"
         )
         .in("id", questionIds),
       paperId
@@ -397,9 +402,11 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
     }
 
     const questionMap: Record<string, QuestionRow> = {};
+    const codingMetadataByQuestion: Record<string, ReturnType<typeof parseQuestionCodingMetadata>> = {};
     for (const row of questionResult.data ?? []) {
       const question = row as QuestionRow;
       questionMap[question.id] = question;
+      codingMetadataByQuestion[question.id] = parseQuestionCodingMetadata(question.metadata);
     }
 
     const frozenSnapshotByQuestion: Record<string, Record<string, unknown>> = {};
@@ -453,6 +460,10 @@ Deno.serve(withBrowserCors("submit-test", async (req: Request) => {
         isAttempted: response.is_attempted,
         timeSpentSeconds: response.time_spent_seconds,
       })),
+      {
+        codingEvaluator: ({ questionId, userAnswer }) =>
+          evaluateCodingSubmission(userAnswer, codingMetadataByQuestion[questionId]),
+      },
     );
     const {
       rawTotalScore: totalScore,

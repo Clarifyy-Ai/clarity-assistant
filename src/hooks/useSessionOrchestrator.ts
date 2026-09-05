@@ -13,7 +13,7 @@ import {
   lastTranscriptSlice,
 } from "@/lib/ai/sessionAiContext";
 import { parseResumeContentString } from "@/lib/documents/resumeParse";
-import { getLocalHintFallback } from "@/lib/mock/localHintFallback";
+import { useMockHintBridge } from "@/lib/mock/mockHintBridge";
 import {
   getAiUserFacingError,
   isInsufficientCreditsError,
@@ -115,6 +115,8 @@ export function useSessionOrchestrator() {
   const requestHint = useCallback(async (questionText: string) => {
     const overlay = useOverlayStore.getState();
     const session = store.getState();
+    const isMock = session.mode === "mock";
+    const mockHint = useMockHintBridge.getState();
     if (session.status === "completed" || session.status === "abandoned") {
       return;
     }
@@ -159,29 +161,41 @@ export function useSessionOrchestrator() {
       useAudioStore.getState().transcript?.full_transcript ?? "",
     );
 
-    // Record the user's question in chat history so it actually shows up
-    overlay.addChatMessage({
-      role: "user",
-      text: questionText,
-      timestamp: Date.now(),
-    });
+    // Record the user's question in chat history when overlay is active.
+    if (!isMock) {
+      overlay.addChatMessage({
+        role: "user",
+        text: questionText,
+        timestamp: Date.now(),
+      });
+    }
 
     hintAbortRef.current?.abort();
     const controller = new AbortController();
     hintAbortRef.current = controller;
     const hintSessionId = session.session_id;
     const operationId = hintIdempotencyKey(session.session_id, questionText);
-    overlay.beginHintOperation({
-      operationId,
-      sessionId: session.session_id,
-      questionId: operationId,
-      question: questionText,
-    });
+    if (isMock) {
+      mockHint.setHintState("generating");
+      mockHint.setHintError(null);
+      mockHint.setStreamingText("");
+    } else {
+      overlay.beginHintOperation({
+        operationId,
+        sessionId: session.session_id,
+        questionId: operationId,
+        question: questionText,
+      });
+    }
     markAnswerLatency("t1", { feature: "mock_hint" });
 
     try {
-      overlay.setHintState("generating");
-      overlay.setChatGenerating?.(true);
+      if (isMock) {
+        mockHint.setHintState("generating");
+      } else {
+        overlay.setHintState("generating");
+        overlay.setChatGenerating?.(true);
+      }
 
       const payload: GenerateHintRequest = {
         question: questionText,
@@ -209,7 +223,11 @@ export function useSessionOrchestrator() {
             markAnswerLatency("t5", { feature: "mock_hint" });
           }
           streamed += chunk;
-          overlay.appendStreamChunk(chunk, operationId);
+          if (isMock) {
+            mockHint.appendStreamingChunk(chunk);
+          } else {
+            overlay.appendStreamChunk(chunk, operationId);
+          }
         },
         onDone: () => {
           markAnswerLatency("t6", { feature: "mock_hint" });
@@ -225,14 +243,21 @@ export function useSessionOrchestrator() {
         return;
       }
 
-      overlay.commitStreamedHint(operationId);
-      overlay.setHintState("ready");
-      overlay.setError(null);
-      overlay.addChatMessage({
-        role: "assistant",
-        text: streamed,
-        timestamp: Date.now(),
-      });
+      if (isMock) {
+        mockHint.commitHint(streamed);
+        overlay.setCurrentQuestion(questionText);
+        overlay.setHintState("ready");
+        overlay.setError(null);
+      } else {
+        overlay.commitStreamedHint(operationId);
+        overlay.setHintState("ready");
+        overlay.setError(null);
+        overlay.addChatMessage({
+          role: "assistant",
+          text: streamed,
+          timestamp: Date.now(),
+        });
+      }
     } catch (err) {
       if (controller.signal.aborted) return;
       if (
@@ -246,29 +271,32 @@ export function useSessionOrchestrator() {
       const msg = getAiUserFacingError(err);
       console.error("[useSessionOrchestrator] requestHint failed:", err);
 
-      const interviewType =
-        (session.config as { interview_type?: string })?.interview_type ?? "behavioural";
-      const fallbackHint = getLocalHintFallback(questionText, interviewType);
+      if (isMock) {
+        const errorMsg = isInsufficientCreditsError(err)
+          ? msg
+          : msg.includes("temporarily unavailable")
+            ? "AI hint service is temporarily unavailable. Try again shortly."
+            : `Hint failed: ${msg}`;
+        mockHint.setHintState("error");
+        mockHint.setHintError(errorMsg);
+        overlay.setError(errorMsg);
+        return;
+      }
 
       overlay.setCurrentQuestion(questionText);
-      overlay.setOfflineFallback(fallbackHint);
+      overlay.setOfflineFallback(null);
       overlay.setError(
-        msg.includes("temporarily unavailable")
-          ? "AI hint service unavailable — showing offline coaching tips."
-          : isInsufficientCreditsError(err)
-            ? msg
+        isInsufficientCreditsError(err)
+          ? msg
+          : msg.includes("temporarily unavailable")
+            ? "AI hint service is temporarily unavailable. Try again shortly."
             : `Hint failed: ${msg}`,
       );
-      overlay.addChatMessage({
-        role: "assistant",
-        text: `${fallbackHint}\n\n_(Offline coaching tips — AI hint service unavailable.)_`,
-        timestamp: Date.now(),
-      });
     } finally {
       if (hintAbortRef.current === controller) {
         hintAbortRef.current = null;
       }
-      if (!controller.signal.aborted) {
+      if (!controller.signal.aborted && !isMock) {
         overlay.setChatGenerating?.(false);
       }
     }

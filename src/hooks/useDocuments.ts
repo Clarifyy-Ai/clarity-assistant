@@ -109,11 +109,12 @@ export function useDocuments(options?: UseDocumentsOptions) {
           updated_at: r.updated_at ?? r.created_at,
         }));
         docStore.setResumes(mapped as ResumeDocument[]);
+        const primaryResume = mapped.find((r) => r.is_primary) ?? mapped[0];
         const activeId = docStore.active_resume_id;
-        if (activeId) {
+        if (activeId && mapped.some((r) => r.id === activeId)) {
           docStore.setActiveResumeId(activeId);
-        } else if (mapped.length === 1) {
-          docStore.setActiveResumeId(mapped[0].id);
+        } else if (primaryResume) {
+          docStore.setActiveResumeId(primaryResume.id);
         }
       }
       {

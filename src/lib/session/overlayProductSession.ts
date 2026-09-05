@@ -4,6 +4,7 @@
  */
 
 import { useSessionStore } from "@/store/sessionStore";
+import { useAudioStore } from "@/store/audioStore";
 import {
   getOverlaySessionAuthority,
   type OverlayProductMode,
@@ -57,6 +58,26 @@ export function bindOverlayProductSessionId(
 /** Context ready — overlay may mount (loading → visible shell). */
 export function markOverlayProductSessionReady(generation: number): boolean {
   return getOverlaySessionAuthority().markReady(generation);
+}
+
+/** Promote session to active when audio pipeline is ready (or text-only mode). */
+export function promoteOverlayProductSessionWhenReady(
+  generation: number,
+  textOnly: boolean,
+): boolean {
+  if (!getOverlaySessionAuthority().matchesGeneration(generation)) return false;
+  if (textOnly) {
+    return markOverlayProductSessionActive(generation);
+  }
+  const audio = useAudioStore.getState();
+  const micActive = audio.channel_health?.mic?.status === "active";
+  const receiving =
+    audio.pipeline_status === "receiving_audio" ||
+    audio.pipeline_status === "transcribing";
+  if (micActive || receiving) {
+    return markOverlayProductSessionActive(generation);
+  }
+  return false;
 }
 
 /** Audio / interview loop running. */

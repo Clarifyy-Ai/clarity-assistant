@@ -34,15 +34,17 @@ export function buildDurableTurnsFromProgress(input: {
     is_follow_up?: boolean;
     parent_question_id?: string | null;
     timestamp: string;
+    answer_source?: "spoken" | "typed" | "mixed" | "skipped" | "unanswered";
   }>;
 }): DurableMockTurn[] {
   return input.answers.map((a) => {
     const q =
       input.questions.find((item) => item.id === a.question_id) ||
       input.questions[a.question_index];
-    let answer_source: DurableMockTurn["answer_source"] = "spoken";
-    if (a.skipped || !a.answer_text.trim()) answer_source = "unanswered";
-    else if (a.skipped) answer_source = "skipped";
+    let answer_source: DurableMockTurn["answer_source"] =
+      a.answer_source ?? "spoken";
+    if (a.skipped) answer_source = "skipped";
+    else if (!a.answer_text.trim()) answer_source = "unanswered";
     return {
       question_id: a.question_id || q?.id || `q-${a.question_index}`,
       sequence: a.question_index + 1,

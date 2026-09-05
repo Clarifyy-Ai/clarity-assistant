@@ -9,7 +9,9 @@ import {
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { ApiClientError } from "@/lib/api/apiClient";
+import { GovExamPageShell } from "@/components/gov-exam/GovExamPageShell";
+import { classifyGovExamLoadError, type GovExamRouteResolution } from "@/lib/gov-exam/routeResolution";
 import { GovExamReadinessPanel } from "@/components/gov-exam/GovExamReadinessPanel";
 import {
   analyzePaperTrends,
@@ -166,6 +168,7 @@ export default function GovExamDetail(): React.ReactElement {
   const [bankMessage, setBankMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [loadResolution, setLoadResolution] = useState<GovExamRouteResolution | null>(null);
   const [tab, setTab] = useState<DetailTab>("overview");
 
   const [patternDetail, setPatternDetail] = useState<GovExamPatternResponse | null>(null);
@@ -215,6 +218,7 @@ export default function GovExamDetail(): React.ReactElement {
   async function load() {
     setLoading(true);
     setError(null);
+    setLoadResolution(null);
     try {
       const data = await Promise.race([
         getExamDetails({ code: examCode }),
@@ -247,9 +251,18 @@ export default function GovExamDetail(): React.ReactElement {
         );
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to load exam.";
+      const resolution = classifyGovExamLoadError(e);
+      setLoadResolution(resolution);
+      const msg =
+        "message" in resolution
+          ? resolution.message
+          : e instanceof Error
+            ? e.message
+            : "Failed to load exam.";
       setError(msg);
-      toast.error(msg);
+      if (!(e instanceof ApiClientError && e.status === 404)) {
+        toast.error(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -694,6 +707,7 @@ export default function GovExamDetail(): React.ReactElement {
       : null;
 
   return (
+    <GovExamPageShell loadResolution={loadResolution} onRetry={() => void load()}>
     <div className="space-y-6 pb-24" data-testid="gov-exam-detail">
       <PageHeader
         title={exam?.name ?? "Government exam"}
@@ -1416,6 +1430,7 @@ export default function GovExamDetail(): React.ReactElement {
         </>
       )}
     </div>
+    </GovExamPageShell>
   );
 }
 

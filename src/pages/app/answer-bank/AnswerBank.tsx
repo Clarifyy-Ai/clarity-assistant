@@ -75,12 +75,15 @@ function formatCreatedAt(value: string | null | undefined): string {
 }
 
 function validateAnswer(question: string, answer: string, existingAnswers: string[]): string | null {
-  const normalized = answer.trim().toLowerCase().replace(/\s+/g, " ");
+  const trimmedAnswer = answer.trim();
+  const normalized = trimmedAnswer.toLowerCase().replace(/\s+/g, " ");
   if (question.trim().length < 5) return "Enter a question of at least 5 characters.";
-  if (answer.trim().length < 10) return "Your answer must be at least 10 characters.";
+  if (trimmedAnswer.length < 10) return "Your answer must be at least 10 characters.";
   if (answer.length > MAX_ANSWER_LENGTH) return `Your answer must be no more than ${MAX_ANSWER_LENGTH} characters.`;
-  if (/^(.)\1{7,}$/s.test(answer.trim())) return "Please enter a meaningful answer, not repeated characters.";
-  if (new Set(normalized.replace(/\s/g, "")).size < 3) return "Please enter a meaningful answer, not repeated characters.";
+  if (/^(.)\1{7,}$/s.test(trimmedAnswer)) return "Please enter a meaningful answer, not repeated characters.";
+  if (trimmedAnswer.replace(/[^a-z0-9]/gi, "").length < 3) {
+    return "Please enter a meaningful answer, not repeated characters.";
+  }
   if (existingAnswers.some((entry) => entry.trim().toLowerCase().replace(/\s+/g, " ") === normalized)) {
     return "This answer is already saved for your account.";
   }
@@ -869,7 +872,7 @@ function AddAnswerModal({
             size="sm"
             fullWidth
             loading={saving}
-            disabled={!question.trim() || !answer.trim() || generating}
+            disabled={!question.trim() || answer.trim().length < 10 || generating}
             onClick={handleSave}
             leftIcon={<Star className="w-3.5 h-3.5" />}
           >

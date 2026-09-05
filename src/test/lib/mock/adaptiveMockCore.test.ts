@@ -81,6 +81,20 @@ describe("silencePolicy", () => {
     ).toBe("no_answer_prompt");
   });
 
+  it("waits while VAD reports active speech", () => {
+    expect(
+      decideSilenceAdvance({
+        silenceMs: DEFAULT_SILENCE_POLICY.silenceMaxMs + 500,
+        hasSpoken: true,
+        answerDurationMs: 5000,
+        transcriptLooksComplete: true,
+        interviewerSpeaking: false,
+        paused: false,
+        isSpeechActive: true,
+      }),
+    ).toBe("wait");
+  });
+
   it("detects complete transcripts", () => {
     expect(transcriptLooksComplete("I led a migration for six months.")).toBe(true);
     expect(transcriptLooksComplete("um")).toBe(false);

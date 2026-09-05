@@ -2,6 +2,8 @@
  * Strip answer keys from question payloads used during a live attempt.
  */
 
+import { stripQuestionMetadataForPlay } from "@/lib/question-bank/codingMetadata";
+
 export const PLAYABLE_QUESTION_COLUMNS = [
   "id",
   "question_text",
@@ -18,6 +20,7 @@ export const PLAYABLE_QUESTION_COLUMNS = [
   "has_image",
   "image_url",
   "latex_present",
+  "metadata",
 ] as const;
 
 export const ANSWER_KEY_FIELDS = [
@@ -54,12 +57,18 @@ export type PlayableQuestion = {
   has_image?: boolean | null;
   image_url?: string | null;
   latex_present?: boolean | null;
+  metadata?: unknown;
 };
 
 export function stripAnswerKeys<T extends Record<string, unknown>>(row: T): PlayableQuestion {
   const next = { ...row };
   for (const field of ANSWER_KEY_FIELDS) {
     delete next[field];
+  }
+  if ("metadata" in next) {
+    const stripped = stripQuestionMetadataForPlay(next.metadata);
+    if (stripped) next.metadata = stripped;
+    else delete next.metadata;
   }
   return next as unknown as PlayableQuestion;
 }

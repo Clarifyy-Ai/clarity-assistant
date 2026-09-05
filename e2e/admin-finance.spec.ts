@@ -99,6 +99,8 @@ test.describe("Admin Finance dashboard", () => {
     await expect(page.getByRole("heading", { name: /^Finance$/i })).toBeVisible({
       timeout: 20_000,
     });
+    await expect(page.getByText(/Profit & Loss Statement/i)).toBeVisible();
+    await expect(page.getByText(/Profit \/ Loss by Feature/i)).toBeVisible();
     await expect(page.getByText(/COST UNKNOWN/i).first()).toBeVisible();
     await expect(page.getByText(/Reconciliation issues/i)).toBeVisible();
     await expect(page.getByText(/REC-PAYMENT-FEES/)).toBeVisible();

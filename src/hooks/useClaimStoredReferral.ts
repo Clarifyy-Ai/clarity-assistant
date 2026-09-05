@@ -2,31 +2,101 @@ import { useEffect } from "react";
 import { toast } from "sonner";
 import {
   getPendingReferralFromUserMetadata,
+  getStoredRefCode,
   recordReferral,
+  resolveReferralCodeForClaim,
 } from "@/lib/referrals";
 import { refreshCredits } from "@/lib/billing/creditsManager";
+import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
+import { logger } from "@/lib/logger";
 import { useAuthStore } from "@/store/authStore";
+
+const MAX_CLAIM_ATTEMPTS = 5;
+const RETRY_DELAYS_MS = [0, 2_000, 5_000, 10_000, 30_000] as const;
 
 /**
  * After login, claim a referral code from Auth user_metadata (signup) or
- * assistive localStorage (?ref=). Kept out of authStore to avoid a cycle.
+ * assistive storage (?ref=). Retries transient failures per attribution policy.
  */
 export function useClaimStoredReferral(userId: string | undefined): void {
+  const status = useAuthStore((s) => s.status);
+  const isProfileLoaded = useAuthStore((s) => s.isProfileLoaded);
+  const user = useAuthStore((s) => s.user);
+  const profile = useAuthStore((s) => s.profile);
   const pendingFromMeta = useAuthStore((s) =>
     getPendingReferralFromUserMetadata(s.user),
   );
 
   useEffect(() => {
-    if (!userId) return;
-    const user = useAuthStore.getState().user;
-    void recordReferral(userId, null, user).then(async (outcome) => {
-      if (!outcome.applied) return;
-      await refreshCredits().catch(() => undefined);
-      if (outcome.refereeCredits) {
-        toast.success(
-          `Referral applied — ${outcome.refereeCredits} bonus credits added to your account.`,
-        );
+    if (!userId || status !== "authenticated" || !isProfileLoaded) return;
+    if (!isUserEmailConfirmed(user)) return;
+    if (profile?.referred_by) return;
+
+    const pendingCode = resolveReferralCodeForClaim(null, user);
+    if (!pendingCode) return;
+
+    let cancelled = false;
+    let attempt = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleRetry = (fn: () => void) => {
+      const delay = RETRY_DELAYS_MS[Math.min(attempt, RETRY_DELAYS_MS.length - 1)];
+      retryTimer = setTimeout(fn, delay);
+    };
+
+    const runClaim = async (): Promise<void> => {
+      if (cancelled) return;
+
+      const currentUser = useAuthStore.getState().user;
+      const currentProfile = useAuthStore.getState().profile;
+      if (currentProfile?.referred_by) return;
+
+      const code = resolveReferralCodeForClaim(null, currentUser);
+      if (!code) return;
+
+      const outcome = await recordReferral(userId, null, currentUser);
+      if (cancelled) return;
+
+      if (outcome.applied) {
+        await refreshCredits().catch(() => undefined);
+        if (outcome.refereeCredits) {
+          toast.success(
+            `Referral applied — ${outcome.refereeCredits} bonus credits added to your account.`,
+          );
+        }
+        return;
       }
-    });
-  }, [userId, pendingFromMeta]);
+
+      if (outcome.alreadyRecorded) return;
+
+      if (outcome.retryable && attempt < MAX_CLAIM_ATTEMPTS - 1) {
+        attempt += 1;
+        logger.warn("referral.claim.retry", {
+          attempt,
+          reason: outcome.reason ?? "unknown",
+          hasMetadata: Boolean(getPendingReferralFromUserMetadata(currentUser)),
+          hasStorage: Boolean(getStoredRefCode()),
+        });
+        scheduleRetry(() => {
+          void runClaim();
+        });
+        return;
+      }
+
+      if (outcome.reason) {
+        logger.warn("referral.claim.failed", {
+          reason: outcome.reason,
+          retryable: outcome.retryable ?? false,
+          attempts: attempt + 1,
+        });
+      }
+    };
+
+    void runClaim();
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [userId, status, isProfileLoaded, user, profile?.referred_by, pendingFromMeta]);
 }

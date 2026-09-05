@@ -41,7 +41,7 @@ import {
 
 import { deductCreditsAtomic, createServiceClient } from "../_shared/supabase.ts";
 import { bannedResponse, isUserBanned } from "../_shared/banCheck.ts";
-import { resolveActionCost } from "../_shared/creditEconomics.ts";
+import { resolveActionCost, mockSessionCreditCost } from "../_shared/creditEconomics.ts";
 import {
   buildCreditDenialBody,
   classifyCreditFailure,
@@ -82,6 +82,13 @@ const deductCreditsRequestSchema = z.object({
     .string()
     .uuid("Invalid reference ID.")
     .nullable()
+    .optional(),
+
+  question_count: z
+    .number()
+    .int("Question count must be a whole number.")
+    .min(1, "Question count must be at least 1.")
+    .max(20, "Question count is too large.")
     .optional(),
 });
 
@@ -266,7 +273,15 @@ Deno.serve(async (req: Request) => {
 
   const { data, idempotencyKey } = validation;
 
-  const serverCost = resolveActionCost(data.action);
+  const normalizedAction = data.action.trim().toLowerCase();
+  let serverCost = resolveActionCost(data.action);
+
+  if (
+    normalizedAction === "mock_session" &&
+    typeof data.question_count === "number"
+  ) {
+    serverCost = mockSessionCreditCost(data.question_count);
+  }
 
   if (serverCost === undefined) {
     return json(corsHeaders, 422, {

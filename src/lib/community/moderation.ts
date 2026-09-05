@@ -49,6 +49,37 @@ export function canPublicRead(status: ModerationState, isOwner: boolean, isAdmin
   return status === "PUBLISHED" || status === "REPORTED" || status === "RESOLVED";
 }
 
+export function isPublicCommunityStatus(status: string): boolean {
+  const normalized = status.toUpperCase() as ModerationState;
+  return normalized === "PUBLISHED" || normalized === "REPORTED" || normalized === "RESOLVED";
+}
+
+export function moderationStatusLabel(status: string): string {
+  return status.replace(/_/g, " ");
+}
+
+export type ModerationBadgeVariant = "default" | "emerald" | "amber" | "red" | "gray";
+
+export function moderationStatusBadgeVariant(status: string): ModerationBadgeVariant {
+  switch (status.toUpperCase()) {
+    case "PUBLISHED":
+      return "emerald";
+    case "REPORTED":
+      return "amber";
+    case "HIDDEN":
+      return "red";
+    case "RESOLVED":
+      return "default";
+    case "PENDING":
+      return "gray";
+    default:
+      return "gray";
+  }
+}
+
+export const COMMUNITY_REPORT_STATUSES = ["open", "reviewed", "dismissed"] as const;
+export type CommunityReportStatus = (typeof COMMUNITY_REPORT_STATUSES)[number];
+
 export const ALLOWED_ATTACHMENT_TYPES = [
   "application/pdf",
   "text/plain",

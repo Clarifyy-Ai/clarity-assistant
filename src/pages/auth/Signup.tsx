@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
 import {
   setPendingPlan,
 } from "@/lib/billing/pendingPlan";
-import { getStoredRefCode, normalizeRefCode, storeRefCode } from "@/lib/referrals";
+import { extractRefCodeFromSearchParams, getStoredRefCode, storeRefCode } from "@/lib/referrals";
 import { formatSupabaseAuthError } from "@/lib/errors";
 import { trackGoogleAdsSignup } from "@/lib/ads/googleAds";
 
@@ -141,8 +141,10 @@ export default function Signup(): JSX.Element {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const rawRefCode = searchParams.get("ref");
-  const refCode = useMemo(() => normalizeRefCode(rawRefCode), [rawRefCode]);
+  const refCode = useMemo(
+    () => extractRefCodeFromSearchParams(searchParams),
+    [searchParams],
+  );
 
   const authStatus = useAuthStore((state) => state.status);
   const signUpWithEmail = useAuthStore((state) => state.signUpWithEmail);
@@ -522,6 +524,11 @@ export default function Signup(): JSX.Element {
               className="text-primary font-medium hover:opacity-80 transition-opacity"
             >
               Sign in
+            </Link>
+          </p>
+          <p className="text-center text-xs text-muted-foreground mt-3">
+            <Link to="/pricing#offers" className="text-primary hover:underline">
+              View current offers
             </Link>
           </p>
     </AuthShell>

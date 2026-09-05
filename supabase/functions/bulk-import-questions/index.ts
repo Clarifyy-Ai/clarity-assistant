@@ -22,13 +22,10 @@ import {
   conflictsWithSelected,
 } from "../_shared/govMcqValidator.ts";
 import { MIN_BANK_QUESTION_QUALITY, scoreQuestionQuality } from "../_shared/govQualityScore.ts";
+import type { QuestionValidationInput } from "../_shared/govAutoApproval.ts";
 import {
-  evaluateAutoApproval,
-  parseRuleRow,
-  buildIdempotencyKey,
-  DEFAULT_QUESTION_RULE,
-  type QuestionValidationInput,
-} from "../_shared/govAutoApproval.ts";
+  evaluateAndApplyQuestionBatch,
+} from "../_shared/govAutoApprovalPipeline.ts";
 import {
   createRateLimitKey,
   enforceRateLimitAsync,
@@ -393,19 +390,11 @@ Deno.serve(async (req) => {
   }
 
   // ── Auto-approval pipeline (deterministic, rule-based, fail-closed) ───────
-  const { data: ruleRow } = await db
-    .from("gov_auto_approval_rules")
-    .select("*")
-    .eq("entity_type", "question")
-    .order("rule_version", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const rule = ruleRow
-    ? parseRuleRow(ruleRow as Record<string, unknown>)
-    : DEFAULT_QUESTION_RULE;
-
-  const autoApprovalResults: Array<{ id: string; outcome: string }> = [];
+  const autoApprovalItems: Array<{
+    id: string;
+    validation: QuestionValidationInput;
+    provenance: Record<string, unknown>;
+  }> = [];
 
   for (let i = 0; i < (inserted?.length ?? 0); i++) {
     const qRow = validatedNovel[i];
@@ -419,57 +408,36 @@ Deno.serve(async (req) => {
       sourceConfidence: 0.9,
     });
 
-    const validation: QuestionValidationInput = {
-      entityType: "question",
-      questionId: qId,
-      sourceType: String(qRow.source_type ?? "official_verified"),
-      qualityScore: quality.score,
-      qualityHardFail: quality.hardFail,
-      hardFailCodes: quality.hardFailCodes,
-      duplicateStatus: "unique",
-      hasProvenance: true,
-      hasValidExam: Boolean(examType),
-      hasValidStage: true,
-      hasValidSection: true,
-      hasValidSubject: Boolean(qRow.subject),
-      hasValidLanguage: true,
-      hasValidOptions: true,
-      hasValidAnswer: !quality.hardFailCodes.includes("MCQ_STRUCTURE_INVALID"),
-      hasValidDifficulty: VALID_DIFFICULTY.includes(qRow.difficulty as typeof VALID_DIFFICULTY[number]),
-      ocrUncertainty: false,
-      answerKeyConflict: quality.hardFailCodes.includes("ANSWER_VERIFICATION_FAILED"),
-      policyViolation: false,
-      unresolvedReviewFlag: false,
-      sourceApproved: true,
-    };
-
-    const evaluation = evaluateAutoApproval(validation, rule);
-    const idempotencyKey = buildIdempotencyKey("question", qId, null, rule.ruleVersion);
-
-    try {
-      await db.rpc("apply_auto_approval_event", {
-        p_entity_type: "question",
-        p_entity_id: qId,
-        p_outcome: evaluation.outcome,
-        p_approval_mode: evaluation.approvalMode,
-        p_rule_version: evaluation.ruleVersion,
-        p_rule_evaluation: { flags: evaluation.flags, ruleResults: evaluation.ruleResults },
-        p_source_type: evaluation.sourceType,
-        p_quality_score: evaluation.qualityScore,
-        p_duplicate_result: evaluation.duplicateResult,
-        p_provenance: { source: qRow.source, source_year: sourceYear },
-        p_previous_status: evaluation.previousStatus,
-        p_new_status: evaluation.newStatus,
-        p_publish_status: evaluation.publishStatus,
-        p_idempotency_key: idempotencyKey,
-        p_auto_publish: evaluation.autoPublish,
-      });
-      autoApprovalResults.push({ id: qId, outcome: evaluation.outcome });
-    } catch (aaErr) {
-      console.error("[bulk-import-questions] auto-approval failed for", qId, aaErr);
-      autoApprovalResults.push({ id: qId, outcome: "AUTO_APPROVAL_FAILED" });
-    }
+    autoApprovalItems.push({
+      id: qId,
+      validation: {
+        entityType: "question",
+        questionId: qId,
+        sourceType: String(qRow.source_type ?? "official_verified"),
+        qualityScore: quality.score,
+        qualityHardFail: quality.hardFail,
+        hardFailCodes: quality.hardFailCodes,
+        duplicateStatus: "unique",
+        hasProvenance: true,
+        hasValidExam: Boolean(examType),
+        hasValidStage: true,
+        hasValidSection: true,
+        hasValidSubject: Boolean(qRow.subject),
+        hasValidLanguage: true,
+        hasValidOptions: true,
+        hasValidAnswer: !quality.hardFailCodes.includes("MCQ_STRUCTURE_INVALID"),
+        hasValidDifficulty: VALID_DIFFICULTY.includes(qRow.difficulty as typeof VALID_DIFFICULTY[number]),
+        ocrUncertainty: false,
+        answerKeyConflict: quality.hardFailCodes.includes("ANSWER_VERIFICATION_FAILED"),
+        policyViolation: false,
+        unresolvedReviewFlag: false,
+        sourceApproved: true,
+      },
+      provenance: { source: qRow.source, source_year: sourceYear },
+    });
   }
+
+  const autoApprovalResults = await evaluateAndApplyQuestionBatch(db, autoApprovalItems);
 
   return json(
     {

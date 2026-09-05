@@ -15,6 +15,16 @@ import {
 import type { TranscriptUtterance } from "@/types/audio.types";
 
 describe("answerNextFsm", () => {
+  it("Q1 boot enters loading → question_generating → question_ready", () => {
+    let s = reduceAnswerNext("ready", { type: "RESET" });
+    expect(s).toBe("loading");
+    s = reduceAnswerNext(s, { type: "START_GENERATING" });
+    expect(s).toBe("question_generating");
+    expect(isAnswerNextBusy(s)).toBe(true);
+    s = reduceAnswerNext(s, { type: "QUESTION_READY" });
+    expect(s).toBe("question_ready");
+  });
+
   it("does not auto-complete on answer_detected", () => {
     let s = reduceAnswerNext("ready", { type: "START_LISTENING" });
     expect(s).toBe("listening");
@@ -185,6 +195,16 @@ describe("mockAnswerCapture", () => {
         utt({ text: "b", start_ms: 500, end_ms: 1200 }),
       ]),
     ).toBe(1200);
+  });
+
+  it("ignores wall-clock injected interviewer utterances when watermarking", () => {
+    const epochMs = Date.now();
+    expect(
+      streamListeningWatermarkMs([
+        utt({ text: "Q1", start_ms: epochMs, end_ms: epochMs }),
+        utt({ text: "answer", start_ms: 1200, end_ms: 2400 }),
+      ]),
+    ).toBe(2400);
   });
 
   it("captures voice finals with stream-relative watermark (production path)", () => {

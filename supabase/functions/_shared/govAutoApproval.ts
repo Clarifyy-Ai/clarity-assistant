@@ -442,3 +442,64 @@ export function buildIdempotencyKey(
   const jobPart = processingJobId ?? "no-job";
   return `${entityType}:${entityId}:${jobPart}:v${ruleVersion}`;
 }
+
+/** Pick the rule row pipelines should use: highest enabled version, else latest. */
+export function pickActiveRuleRow<
+  T extends { entity_type: string; rule_version: number; enabled: boolean },
+>(rows: T[], entityType: "question" | "paper"): T | null {
+  const sorted = rows
+    .filter((r) => r.entity_type === entityType)
+    .sort((a, b) => b.rule_version - a.rule_version);
+  return sorted.find((r) => r.enabled) ?? sorted[0] ?? null;
+}
+
+type RuleQueryClient = {
+  from(table: string): {
+    select(cols: string): {
+      eq(col: string, val: string | boolean): {
+        order(col: string, opts: { ascending: boolean }): {
+          limit(n: number): {
+            maybeSingle(): Promise<{ data: Record<string, unknown> | null }>;
+          };
+        };
+      } & {
+        order(col: string, opts: { ascending: boolean }): {
+          limit(n: number): {
+            maybeSingle(): Promise<{ data: Record<string, unknown> | null }>;
+          };
+        };
+      };
+    };
+  };
+};
+
+/** Load the active auto-approval rule (enabled highest version, else latest). */
+export async function loadAutoApprovalRule(
+  db: RuleQueryClient,
+  entityType: "question" | "paper",
+): Promise<AutoApprovalRuleConfig> {
+  const { data: enabled } = await db
+    .from("gov_auto_approval_rules")
+    .select("*")
+    .eq("entity_type", entityType)
+    .eq("enabled", true)
+    .order("rule_version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (enabled) return parseRuleRow(enabled);
+
+  const { data: latest } = await db
+    .from("gov_auto_approval_rules")
+    .select("*")
+    .eq("entity_type", entityType)
+    .order("rule_version", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return latest
+    ? parseRuleRow(latest)
+    : entityType === "paper"
+      ? DEFAULT_PAPER_RULE
+      : DEFAULT_QUESTION_RULE;
+}

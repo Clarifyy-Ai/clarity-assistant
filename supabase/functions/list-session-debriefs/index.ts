@@ -17,9 +17,9 @@ import {
   hasCapability,
   requireCapabilityForFunction,
 } from "../_shared/requireCapability.ts";
+import { DEBRIEF_SESSION_DB_TYPES } from "../_shared/debriefSessionTypes.ts";
 
-const INTERVIEW_TYPES = new Set(["mock", "live", "practice", "rehearsal"]);
-const DEBRIEF_SESSION_TYPE_FILTER = ["mock", "live", "practice", "rehearsal"];
+const INTERVIEW_TYPES = new Set<string>([...DEBRIEF_SESSION_DB_TYPES, "practice"]);
 
 function json(req: Request, payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
         .select("id, type, title, overall_score, created_at, questions_asked, status")
         .eq("user_id", user.id)
         .eq("status", "completed")
-        .in("type", DEBRIEF_SESSION_TYPE_FILTER)
+        .in("type", [...DEBRIEF_SESSION_DB_TYPES])
         .order("created_at", { ascending: false })
         .limit(150),
       db

@@ -37,6 +37,29 @@ import {
   buildQuestionPublishPatch,
 } from "@/lib/question-bank/questionPublishPatch";
 import { userFacingDbError } from "@/lib/errors/userFacingDbError";
+import {
+  mcqFieldsFromOptions,
+  optionsForQuestionType,
+  parseOptionText,
+  trueFalseLabelFromAnswer,
+} from "@/lib/question-bank/questionBankForm";
+import {
+  isUsableQuestionImageUrl,
+  resolveQuestionImageUrl,
+  uniqueImageUrls,
+} from "@/lib/mock-test/questionMedia";
+import {
+  CodingQuestionFields,
+  validateCodingQuestionFields,
+  type CodingQuestionFieldValues,
+} from "@/components/coding/CodingQuestionFields";
+import {
+  CODING_AUTO_CORRECT_ANSWER,
+  codingFieldsFromMetadata,
+  DEFAULT_CODING_FORM_FIELDS,
+  parseQuestionCodingMetadata,
+  wrapQuestionMetadata,
+} from "@/lib/question-bank/codingMetadata";
 import { cn } from "@/lib/utils";
 
 type BankRow = {
@@ -56,18 +79,33 @@ type BankRow = {
   options: Array<{ label: string; text: string }> | null;
   correct_answer: string;
   explanation: string | null;
+  image_url?: string | null;
+  has_image?: boolean | null;
+  metadata?: unknown;
   eligible_roles?: string[] | null;
   cross_functional?: boolean | null;
   review_status?: string | null;
 };
 
+const MCQ_OPTION_KEYS = [
+  { text: "option_a", image: "option_a_image", label: "A" },
+  { text: "option_b", image: "option_b_image", label: "B" },
+  { text: "option_c", image: "option_c_image", label: "C" },
+  { text: "option_d", image: "option_d_image", label: "D" },
+] as const;
+
 const EMPTY_FORM = {
   question_text: "",
   question_type: "MCQ",
+  image_url: "",
   option_a: "",
   option_b: "",
   option_c: "",
   option_d: "",
+  option_a_image: "",
+  option_b_image: "",
+  option_c_image: "",
+  option_d_image: "",
   correct_answer: "A",
   category: "",
   topic: "",
@@ -79,6 +117,7 @@ const EMPTY_FORM = {
   eligible_roles: [] as string[],
   cross_functional: false,
   review_status: "unreviewed" as const,
+  ...DEFAULT_CODING_FORM_FIELDS,
 };
 
 export default function QuestionBankPage() {
@@ -106,7 +145,7 @@ export default function QuestionBankPage() {
     let query = supabase
       .from("questions")
       .select(
-        "id,question_text,question_type,category,subject,topic,difficulty,tags,license_type,publish_status,source,created_at,uploaded_by,options,correct_answer,explanation,eligible_roles,cross_functional,review_status",
+        "id,question_text,question_type,category,subject,topic,difficulty,tags,license_type,publish_status,source,created_at,uploaded_by,options,correct_answer,explanation,image_url,has_image,metadata,eligible_roles,cross_functional,review_status",
       )
       .order("created_at", { ascending: false })
       .limit(200);
@@ -146,6 +185,22 @@ export default function QuestionBankPage() {
     [rows],
   );
 
+  function handleQuestionTypeChange(nextType: string) {
+    setForm((prev) => {
+      const next = { ...prev, question_type: nextType };
+      if (nextType === "TRUE_FALSE") {
+        next.correct_answer = trueFalseLabelFromAnswer(prev.correct_answer);
+      } else if (nextType === "MCQ") {
+        next.correct_answer = ["A", "B", "C", "D"].includes(prev.correct_answer.toUpperCase())
+          ? prev.correct_answer.toUpperCase()
+          : "A";
+      } else if (nextType === "CODING") {
+        next.correct_answer = CODING_AUTO_CORRECT_ANSWER;
+      }
+      return next;
+    });
+  }
+
   async function saveQuestion() {
     if (!user?.id) return;
     if (!form.question_text.trim() || !form.category.trim()) {
@@ -155,28 +210,55 @@ export default function QuestionBankPage() {
     if (!canPublishLicense(form.license_type) && editingId) {
       toast.error("UNKNOWN license content cannot be published.");
     }
-    setSaving(true);
+
     const isMcq = form.question_type === "MCQ";
-    const options = [
-      { label: "A", text: form.option_a },
-      { label: "B", text: form.option_b },
-      { label: "C", text: form.option_c },
-      { label: "D", text: form.option_d },
-    ].filter((o) => o.text.trim());
-    if (isMcq && (options.length < 2 || !options.some((option) => option.label === form.correct_answer))) {
-      toast.error("MCQ questions need at least two options and a matching correct option.");
+    const isTrueFalse = form.question_type === "TRUE_FALSE";
+    const isCoding = form.question_type === "CODING";
+    const built = optionsForQuestionType({
+      question_type: form.question_type,
+      mcq: form,
+      correct_answer: form.correct_answer,
+    });
+
+    let codingMetadataPayload: Record<string, unknown> | null = null;
+    let correctAnswer = built.correct_answer;
+
+    if (isMcq) {
+      if (
+        built.options.length < 2
+        || !built.options.some((option) => option.label === built.correct_answer)
+      ) {
+        toast.error("MCQ questions need at least two options and a matching correct option.");
+        return;
+      }
+    } else if (isTrueFalse) {
+      if (!built.correct_answer) {
+        toast.error("Select True or False as the correct answer.");
+        return;
+      }
+    } else if (isCoding) {
+      const codingBuilt = validateCodingQuestionFields(form as CodingQuestionFieldValues);
+      if (!codingBuilt.ok) {
+        toast.error((codingBuilt as { error: string }).error);
+        return;
+      }
+      codingMetadataPayload = wrapQuestionMetadata(codingBuilt.metadata);
+      correctAnswer = CODING_AUTO_CORRECT_ANSWER;
+    } else if (!form.correct_answer.trim()) {
+      toast.error("Enter the expected answer for this question type.");
       return;
     }
-    if (!isMcq && !form.correct_answer.trim()) {
-      toast.error("Enter the expected answer for this short-answer question.");
-      return;
-    }
+
+    const imageUrl = form.image_url.trim();
     const payload = {
       question_text: form.question_text.trim(),
       question_type: form.question_type,
-      options: isMcq ? options : [],
-      correct_answer: form.correct_answer,
+      options: isCoding ? [] : built.options,
+      correct_answer: correctAnswer,
       explanation: form.explanation || null,
+      image_url: imageUrl || null,
+      has_image: Boolean(imageUrl),
+      metadata: codingMetadataPayload ?? {},
       subject: form.category,
       category: form.category,
       topic: form.topic || form.category,
@@ -199,18 +281,23 @@ export default function QuestionBankPage() {
           }
         : {}),
     };
-    const { error } = editingId
-      ? await supabase.from("questions").update(payload).eq("id", editingId)
-      : await supabase.from("questions").insert(payload);
-    setSaving(false);
-    if (error) {
-      toast.error(userFacingDbError(error, "save"));
-      return;
+
+    setSaving(true);
+    try {
+      const { error } = editingId
+        ? await supabase.from("questions").update(payload).eq("id", editingId)
+        : await supabase.from("questions").insert(payload);
+      if (error) {
+        toast.error(userFacingDbError(error, "save"));
+        return;
+      }
+      toast.success(editingId ? "Question updated." : "Question created.");
+      setForm(EMPTY_FORM);
+      setEditingId(null);
+      void load();
+    } finally {
+      setSaving(false);
     }
-    toast.success(editingId ? "Question updated." : "Question created.");
-    setForm(EMPTY_FORM);
-    setEditingId(null);
-    void load();
   }
 
   async function setStatusFor(id: string, publish_status: "draft" | "published" | "archived") {
@@ -248,6 +335,9 @@ export default function QuestionBankPage() {
       options: row.options,
       correct_answer: row.correct_answer,
       explanation: row.explanation,
+      image_url: row.image_url ?? null,
+      has_image: Boolean(row.has_image ?? row.image_url),
+      metadata: row.metadata ?? {},
       subject: row.subject,
       category: row.category ?? row.subject,
       topic: row.topic,
@@ -351,18 +441,80 @@ export default function QuestionBankPage() {
               placeholder="Question"
               className="min-h-[88px]"
             />
-            {form.question_type === "MCQ" ? <>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {(["option_a", "option_b", "option_c", "option_d"] as const).map((key) => (
-                <Input
-                  key={key}
-                  value={form[key]}
-                  placeholder={key.replace("option_", "Option ").toUpperCase()}
-                  onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+            <div className="space-y-1">
+              <Input
+                value={form.image_url}
+                placeholder="Question image URL (optional)"
+                onChange={(e) => setForm({ ...form, image_url: e.target.value })}
+              />
+              {isUsableQuestionImageUrl(form.image_url) && (
+                <img
+                  src={resolveQuestionImageUrl(form.image_url)}
+                  alt="Question preview"
+                  className="max-h-36 rounded-lg border border-border object-contain"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                 />
-              ))}
+              )}
+              <p className="text-xs text-muted-foreground">
+                Paste a direct image URL for diagrams or figures in the question stem.
+              </p>
             </div>
-            </> : (
+            {form.question_type === "MCQ" ? (
+            <div className="space-y-3">
+              {MCQ_OPTION_KEYS.map(({ text, image, label }) => (
+                <div key={text} className="space-y-1 rounded-lg border border-border/60 p-2">
+                  <Input
+                    value={form[text]}
+                    placeholder={`Option ${label}`}
+                    onChange={(e) => setForm({ ...form, [text]: e.target.value })}
+                  />
+                  <Input
+                    value={form[image]}
+                    placeholder={`Option ${label} image URL (optional)`}
+                    onChange={(e) => setForm({ ...form, [image]: e.target.value })}
+                    className="text-xs"
+                  />
+                  {isUsableQuestionImageUrl(form[image]) && (
+                    <img
+                      src={resolveQuestionImageUrl(form[image])}
+                      alt={`Option ${label} preview`}
+                      className="max-h-24 rounded border border-border object-contain"
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                    />
+                  )}
+                </div>
+              ))}
+              <p className="text-xs text-muted-foreground">
+                Option images use the URL field; text and image can be combined.
+              </p>
+            </div>
+            ) : form.question_type === "TRUE_FALSE" ? (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Correct answer</p>
+                <div className="flex gap-3">
+                  {(["True", "False"] as const).map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setForm({ ...form, correct_answer: value })}
+                      className={cn(
+                        "rounded-lg border px-4 py-1.5 text-sm font-medium transition-colors",
+                        form.correct_answer === value
+                          ? "border-green-500 bg-green-500/10 text-green-600"
+                          : "border-border text-muted-foreground hover:border-green-400",
+                      )}
+                    >
+                      {value}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : form.question_type === "CODING" ? (
+              <CodingQuestionFields
+                value={form as CodingQuestionFieldValues}
+                onChange={(next) => setForm({ ...form, ...next })}
+              />
+            ) : (
               <Textarea
                 value={form.correct_answer}
                 placeholder="Expected answer"
@@ -375,7 +527,7 @@ export default function QuestionBankPage() {
               <Input value={form.topic} placeholder="Topic" onChange={(e) => setForm({ ...form, topic: e.target.value })} />
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <Select value={form.question_type} onValueChange={(v) => setForm({ ...form, question_type: v })}>
+              <Select value={form.question_type} onValueChange={handleQuestionTypeChange}>
                 <SelectTrigger><SelectValue placeholder="Type" /></SelectTrigger>
                 <SelectContent>
                   {QUESTION_TYPES.map((t) => (
@@ -551,22 +703,30 @@ export default function QuestionBankPage() {
                     <p className="text-sm font-medium break-words">{row.question_text}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {row.category ?? row.subject} · {row.topic} · {row.difficulty} · {row.question_type} · {row.license_type} · {row.publish_status}
+                      {row.has_image || row.image_url ? " · has image" : ""}
+                      {row.question_type === "CODING" ? " · coding" : ""}
                       {row.review_status ? ` · ${row.review_status}` : ""}
                       {(row.eligible_roles ?? []).length > 0 ? ` · ${row.eligible_roles?.join(", ")}` : ""}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Button size="xs" variant="outline" onClick={() => setPreview(row)}>Preview</Button>
                       <Button size="xs" variant="outline" onClick={() => {
-                        const opts = row.options ?? [];
+                        const mcq = mcqFieldsFromOptions(row.options);
+                        const isTrueFalse = row.question_type === "TRUE_FALSE";
+                        const isCoding = row.question_type === "CODING";
+                        const codingFields = isCoding ? codingFieldsFromMetadata(row.metadata) : {};
                         setEditingId(row.id);
                         setForm({
                           question_text: row.question_text,
                           question_type: row.question_type,
-                          option_a: opts.find((o) => o.label === "A")?.text ?? "",
-                          option_b: opts.find((o) => o.label === "B")?.text ?? "",
-                          option_c: opts.find((o) => o.label === "C")?.text ?? "",
-                          option_d: opts.find((o) => o.label === "D")?.text ?? "",
-                          correct_answer: row.correct_answer,
+                          image_url: row.image_url ?? "",
+                          ...mcq,
+                          ...codingFields,
+                          correct_answer: isTrueFalse
+                            ? trueFalseLabelFromAnswer(row.correct_answer)
+                            : isCoding
+                              ? CODING_AUTO_CORRECT_ANSWER
+                              : row.correct_answer,
                           category: row.category ?? row.subject,
                           topic: row.topic,
                           difficulty: row.difficulty ?? "MEDIUM",
@@ -580,10 +740,10 @@ export default function QuestionBankPage() {
                         });
                       }}>Edit</Button>
                       <Button size="xs" variant="outline" leftIcon={<Copy className="h-3 w-3" />} onClick={() => void duplicate(row)}>Duplicate</Button>
-                      {row.publish_status !== "published" && (
+                      {isAdmin && row.publish_status !== "published" && (
                         <Button size="xs" onClick={() => void setStatusFor(row.id, "published")}>Publish</Button>
                       )}
-                      {row.publish_status === "published" && (
+                      {isAdmin && row.publish_status === "published" && (
                         <Button size="xs" variant="outline" onClick={() => void setStatusFor(row.id, "draft")}>Unpublish</Button>
                       )}
                       {isAdmin && row.review_status !== "approved" && (
@@ -615,14 +775,92 @@ export default function QuestionBankPage() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-3 sm:items-center" onClick={() => setPreview(null)}>
           <div className={cn("w-full max-w-lg min-w-0")} onClick={(e) => e.stopPropagation()}>
           <Card>
-            <h3 className="text-base font-semibold">Preview</h3>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-base font-semibold">Preview</h3>
+              <span className="rounded bg-muted px-2 py-0.5 text-xs font-medium">{preview.question_type}</span>
+            </div>
             <p className="mt-2 text-sm break-words">{preview.question_text}</p>
-            <ul className="mt-3 space-y-1 text-sm">
-              {(preview.options ?? []).map((o) => (
-                <li key={o.label}>{o.label}. {o.text}</li>
-              ))}
-            </ul>
-            <p className="mt-3 text-xs text-muted-foreground">Answer is hidden in candidate exams. Shown here because you own this item.</p>
+            {uniqueImageUrls(preview.image_url, preview.question_text).map((src) => (
+              <img
+                key={src}
+                src={src}
+                alt="Question figure"
+                className="mt-3 max-h-48 w-full rounded-lg border border-border object-contain"
+              />
+            ))}
+            {(preview.question_type === "MCQ" || preview.question_type === "TRUE_FALSE") && (
+              <ul className="mt-3 space-y-2 text-sm">
+                {(preview.question_type === "TRUE_FALSE" && (preview.options ?? []).length < 2
+                  ? [
+                      { label: "A", text: "True" },
+                      { label: "B", text: "False" },
+                    ]
+                  : preview.options ?? []
+                ).map((o) => {
+                  const parsed = parseOptionText(o.text);
+                  const isCorrect =
+                    preview.question_type === "TRUE_FALSE"
+                      ? o.label === (["A", "TRUE", "T"].includes(preview.correct_answer.toUpperCase()) ? "A" : "B")
+                      : o.label === preview.correct_answer.toUpperCase();
+                  return (
+                    <li
+                      key={o.label}
+                      className={cn(
+                        "rounded-lg border px-3 py-2",
+                        isCorrect && "border-green-500/50 bg-green-500/5",
+                      )}
+                    >
+                      <span className="font-medium">{o.label}.</span>{" "}
+                      {parsed.text || (preview.question_type === "TRUE_FALSE" ? o.text : "")}
+                      {isUsableQuestionImageUrl(parsed.imageUrl) && (
+                        <img
+                          src={resolveQuestionImageUrl(parsed.imageUrl)}
+                          alt={`Option ${o.label}`}
+                          className="mt-2 max-h-28 rounded border border-border object-contain"
+                        />
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {preview.question_type === "CODING" && (() => {
+              const coding = parseQuestionCodingMetadata(preview.metadata);
+              if (!coding) {
+                return (
+                  <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">
+                    Coding configuration is incomplete. Add starter code and test cases, then save again.
+                  </p>
+                );
+              }
+              return (
+                <div className="mt-3 space-y-2 rounded-lg border border-violet-500/30 bg-violet-500/5 p-3 text-xs">
+                  <p><span className="font-medium">Language:</span> {coding.language}</p>
+                  <p><span className="font-medium">Sample I/O:</span> {coding.sample_input} → {coding.sample_output}</p>
+                  <pre className="overflow-x-auto rounded bg-background p-2 font-mono text-[11px]">{coding.starter_code}</pre>
+                  <p className="text-muted-foreground">
+                    {coding.test_cases.filter((c) => !c.is_hidden).length} visible and{" "}
+                    {coding.test_cases.filter((c) => c.is_hidden).length} hidden judge case(s).
+                  </p>
+                </div>
+              );
+            })()}
+            {preview.explanation && (
+              <p className="mt-3 text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">Explanation:</span> {preview.explanation}
+              </p>
+            )}
+            <p className="mt-3 text-sm">
+              <span className="font-medium">Correct answer:</span>{" "}
+              {preview.question_type === "TRUE_FALSE"
+                ? trueFalseLabelFromAnswer(preview.correct_answer)
+                : preview.question_type === "CODING"
+                  ? "Auto-scored against hidden test cases in mock tests"
+                  : preview.correct_answer}
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Answer keys stay on your own items only — live exams never read them from this list.
+            </p>
             <Button className="mt-4" variant="outline" onClick={() => setPreview(null)}>Close</Button>
           </Card>
           </div>

@@ -42,3 +42,9 @@ export function hasHotkeyOverrides(hotkeys: HotkeyOverridesRecord | null): boole
   if (!hotkeys) return false;
   return Object.keys(hotkeys).length > 0;
 }
+
+/** Account-backed completion flag for the first-run app walkthrough. */
+export function readAppWalkthroughCompleted(prefs: unknown): boolean {
+  const record = asUiPreferencesRecord(prefs);
+  return record?.app_walkthrough_completed === true;
+}

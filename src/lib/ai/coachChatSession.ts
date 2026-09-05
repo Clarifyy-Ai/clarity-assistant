@@ -6,7 +6,6 @@ import {
   checkCreditsForAction,
   refreshCredits,
 } from "@/lib/billing/creditsManager";
-import { formatTalkingPointsAsHint } from "@/lib/ai/resumeFallback";
 import { getAiUserFacingError, openUpgradeIfInsufficientCredits } from "@/lib/network/aiErrorUx";
 import { ApiClientError } from "@/lib/api/apiClient";
 import { generateId } from "@/lib/utils";
@@ -82,15 +81,13 @@ export async function submitCoachChatMessage(
 
   const creditCheck = checkCreditsForAction("coachMessage");
   if (!creditCheck.canProceed) {
-    const tp = overlay.resume_talking_points;
     overlay.addChatMessage({
       role: "assistant",
-      text: tp
-        ? formatTalkingPointsAsHint(tp)
-        : creditCheck.reason ?? "Out of credits",
+      text: creditCheck.reason ?? "Insufficient credits for coach chat. Add credits or upgrade your plan to continue.",
       timestamp: Date.now(),
+      error: true,
     });
-    return true;
+    return false;
   }
 
   const assistantId = generateId();

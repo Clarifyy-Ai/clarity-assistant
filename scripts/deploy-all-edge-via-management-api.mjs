@@ -20,11 +20,13 @@ const NO_JWT = new Set([
   "support-chat",
   "bulk-import-questions",
   "process-paper-generation-job",
+  "evaluate-auto-approval",
   "run-daily-exam-scrape",
-  "cancel-document-processing-job",
-  "create-document-processing-job",
-  "get-document-processing-job",
-  "retry-document-processing-job",
+  "send-interview-reminders",
+  "billing-catalog",
+  "list-public-promos",
+  "contact-sales",
+  "validate-referral-code",
 ]);
 
 const only = process.argv.slice(2).filter((a) => !a.startsWith("-"));

@@ -5,9 +5,11 @@ import { fileURLToPath } from "node:url";
 
 import {
   clearStoredRefCode,
+  extractRefCodeFromSearchParams,
   getPendingReferralFromUserMetadata,
   getStoredRefCode,
   normalizeRefCode,
+  REFERRAL_SESSION_STORAGE_KEY,
   REFERRAL_STORAGE_KEY,
   resolveReferralCodeForClaim,
   shouldClearStoredReferral,
@@ -33,19 +35,45 @@ describe("normalizeRefCode", () => {
   });
 });
 
+describe("extractRefCodeFromSearchParams", () => {
+  it("reads canonical ref and legacy r params", () => {
+    expect(extractRefCodeFromSearchParams(new URLSearchParams("ref=friend01"))).toBe(
+      "FRIEND01",
+    );
+    expect(extractRefCodeFromSearchParams(new URLSearchParams("r=legacy01"))).toBe(
+      "LEGACY01",
+    );
+    expect(extractRefCodeFromSearchParams(new URLSearchParams("ref=bad"))).toBeNull();
+    expect(extractRefCodeFromSearchParams(new URLSearchParams(""))).toBeNull();
+  });
+
+  it("prefers ref over r when both are present", () => {
+    expect(
+      extractRefCodeFromSearchParams(new URLSearchParams("ref=CANON01&r=OTHER01")),
+    ).toBe("CANON01");
+  });
+});
+
 describe("referral storage", () => {
   afterEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
   });
 
   it("stores only normalized codes", () => {
     expect(storeRefCode("friend01")).toBe("FRIEND01");
     expect(localStorage.getItem(REFERRAL_STORAGE_KEY)).toBe("FRIEND01");
+    expect(sessionStorage.getItem(REFERRAL_SESSION_STORAGE_KEY)).toBe("FRIEND01");
     expect(getStoredRefCode()).toBe("FRIEND01");
     expect(storeRefCode("bad_code")).toBeNull();
     expect(getStoredRefCode()).toBe("FRIEND01");
     clearStoredRefCode();
     expect(getStoredRefCode()).toBeNull();
+  });
+
+  it("falls back to sessionStorage when localStorage is empty", () => {
+    sessionStorage.setItem(REFERRAL_SESSION_STORAGE_KEY, "SESS001");
+    expect(getStoredRefCode()).toBe("SESS001");
   });
 });
 
@@ -149,6 +177,8 @@ describe("recordReferral", () => {
     const { recordReferral, getStoredRefCode: stored } = await import("@/lib/referrals");
     const outcome = await recordReferral("user-1", null);
     expect(outcome.applied).toBe(false);
+    expect(outcome.retryable).toBe(true);
+    expect(outcome.reason).toBe("network_error");
     expect(stored()).toBe("FRIEND01");
   });
 
@@ -180,7 +210,22 @@ describe("recordReferral", () => {
     const { recordReferral, getStoredRefCode: stored } = await import("@/lib/referrals");
     const outcome = await recordReferral("user-1", null);
     expect(outcome.applied).toBe(false);
+    expect(outcome.retryable).toBe(false);
+    expect(outcome.reason).toBe("self_referral");
     expect(stored()).toBeNull();
+  });
+
+  it("marks transport failures as retryable", async () => {
+    localStorage.setItem(REFERRAL_STORAGE_KEY, "FRIEND01");
+    vi.resetModules();
+    vi.doMock("@/lib/api/payments", () => ({
+      recordReferralViaEdge: vi.fn().mockResolvedValue({ success: false }),
+    }));
+    const { recordReferral } = await import("@/lib/referrals");
+    const outcome = await recordReferral("user-1", null);
+    expect(outcome.applied).toBe(false);
+    expect(outcome.retryable).toBe(true);
+    expect(outcome.reason).toBe("transport_failure");
   });
 
   it("claims from user_metadata when localStorage is empty", async () => {

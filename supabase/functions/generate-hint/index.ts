@@ -63,6 +63,11 @@ import { createSseStreamResponse, requestWantsSse, sseFromText } from "../_share
 import { streamGeminiContent } from "../_shared/geminiStream.ts";
 import { FACTUAL_INTEGRITY_SYSTEM_RULE, assertLiveCoachOutputGrounded } from "../_shared/factualIntegrity.ts";
 import { DomainError } from "../_shared/domainErrors.ts";
+import {
+  buildToneStyleSystemAddon,
+  sanitizeCoachTone,
+  sanitizeHintStyle,
+} from "../_shared/practiceCoachContract.ts";
 
 const FUNCTION_NAME = "generate-hint";
 const CREDIT_COST = creditCost("live_hint");
@@ -175,6 +180,31 @@ const generateHintSchema = z.object({
     (v) => (v == null ? "" : v),
     z.string().trim().max(100, "Model name is too long.").default(""),
   ),
+
+  hint_style: z.preprocess(
+    (v) => (v == null ? undefined : v),
+    z.string().trim().max(40).optional(),
+  ),
+
+  coach_tone: z.preprocess(
+    (v) => (v == null ? undefined : v),
+    z.string().trim().max(40).optional(),
+  ),
+
+  answer_mode: z.preprocess(
+    (v) => (v == null ? undefined : v),
+    z.string().trim().max(40).optional(),
+  ),
+
+  simple_language: z.preprocess(
+    (v) => v === true || v === "true",
+    z.boolean().optional().default(false),
+  ),
+
+  preference_context: z.preprocess(
+    (v) => (v == null ? "" : v),
+    z.string().trim().max(8_000).default(""),
+  ),
 });
 
 type GenerateHintRequest = z.infer<typeof generateHintSchema>;
@@ -279,8 +309,21 @@ function buildPrompt(input: GenerateHintRequest): string {
   const question = sanitizeText(input.question, 2_000);
   const transcript =
     sanitizeText(input.transcript, 4_000) || "Nothing yet";
-  const resumeContext =
-    sanitizeText(input.resume_context, 4_000) || "None provided";
+  const preferenceContext = sanitizeText(input.preference_context, 4_000);
+  const resumeContext = [
+    sanitizeText(input.resume_context, 4_000),
+    preferenceContext,
+  ]
+    .filter(Boolean)
+    .join("\n\n") || "None provided";
+  const hintStyle = sanitizeHintStyle(input.hint_style);
+
+  const outputInstruction =
+    hintStyle === "full_answer"
+      ? "Write a complete 2-3 paragraph sample answer the candidate could adapt. Ground every claim in resume context only."
+      : hintStyle === "keywords_only"
+        ? "Return 5-8 keyword phrases or short cues only (comma-separated on one line). No full sentences or bullet lists."
+        : "Give exactly 3 short hint bullets to guide the candidate. Do not write the full answer for them.";
 
   return `
 The following content is untrusted user-provided interview context.
@@ -292,32 +335,54 @@ Question being asked: "${question}"
 Candidate's answer so far: "${transcript}"
 Resume context: ${resumeContext}
 
-Give exactly 3 short hint bullets to guide the candidate.
-Do not write the answer for them.
+${outputInstruction}
 Never invent employers, metrics, or technologies.
 If resume context is thin or missing, guide with a structure scaffold and note what information is still needed.
 `.trim();
 }
 
-function normalizeHints(raw: string): string {
-  const cleanedLines = raw
+function buildSystemPrompt(input: GenerateHintRequest): string {
+  const hintStyle = sanitizeHintStyle(input.hint_style);
+  const coachTone = sanitizeCoachTone(input.coach_tone);
+  const interviewType = sanitizeText(input.interview_type, 80) || "behavioral";
+  const styleAddon = buildToneStyleSystemAddon(coachTone, hintStyle, interviewType);
+  const simpleLanguageAddon = input.simple_language
+    ? "Language: use plain, jargon-free wording suitable for non-native speakers. Avoid acronyms unless defined."
+    : "";
+  return `${SYSTEM_PROMPT}\n\n${styleAddon}${simpleLanguageAddon ? `\n\n${simpleLanguageAddon}` : ""}`;
+}
+
+function normalizeHints(raw: string, hintStyle?: string): string {
+  const style = sanitizeHintStyle(hintStyle);
+  const cleaned = raw
     .split("\n")
-    .map((line) => sanitizeText(line, 200))
+    .map((line) => sanitizeText(line, 400))
     .filter((line) => line.length > 0)
-    .map((line) => line.replace(/^[-*\d.•·)\s]+/, "").trim())
-    .filter((line) => line.length > 0)
+    .map((line) => line.replace(/^[-*\d.•·#]+\s*/, "").trim())
+    .filter((line) => line.length > 0);
+
+  if (style === "keywords_only") {
+    const joined = cleaned.join(", ").replace(/\s+/g, " ").trim();
+    return joined.slice(0, 600);
+  }
+
+  if (style === "full_answer") {
+    return cleaned.join("\n\n").slice(0, 4_000);
+  }
+
+  const bulletLines = cleaned
     .slice(0, 3)
     .map((line) => {
       const shortened = line.split(/\s+/).slice(0, 15).join(" ");
       return `• ${shortened}`;
     });
 
-  while (cleanedLines.length < 3) {
-    const fallbackLine = FALLBACK_HINTS.split("\n")[cleanedLines.length];
-    cleanedLines.push(fallbackLine ?? "• Focus on a clear, measurable result");
+  while (bulletLines.length < 3) {
+    const fallbackLine = FALLBACK_HINTS.split("\n")[bulletLines.length];
+    bulletLines.push(fallbackLine ?? "• Focus on a clear, measurable result");
   }
 
-  return cleanedLines.join("\n");
+  return bulletLines.join("\n");
 }
 
 type HintHybridData = {
@@ -612,7 +677,7 @@ Deno.serve(async (req: Request) => {
           for await (
             const delta of streamGeminiContent({
               model: resolvedModel,
-              systemPrompt: SYSTEM_PROMPT,
+              systemPrompt: buildSystemPrompt(body),
               userPrompt: prompt,
               maxTokens: maxHintTokens,
               temperature: 0.5,
@@ -628,6 +693,7 @@ Deno.serve(async (req: Request) => {
           const moderated = moderateOutput(full);
           const storedHints = normalizeHints(
             moderated.safe ? moderated.filtered : full,
+            body.hint_style,
           );
           assertLiveCoachOutputGrounded(
             `${body.resume_context ?? ""}\n${body.question ?? ""}`,
@@ -690,7 +756,7 @@ Deno.serve(async (req: Request) => {
             try {
               assertLiveCoachOutputGrounded(
                 `${body.resume_context ?? ""}\n${body.question ?? ""}`,
-                normalizeHints(full),
+                normalizeHints(full, body.hint_style),
               );
             } catch {
               await prepared.refundOnFailure("AI_INVALID_OUTPUT");
@@ -702,7 +768,7 @@ Deno.serve(async (req: Request) => {
               writer.sendDone();
               return;
             }
-            const storedHints = normalizeHints(full);
+            const storedHints = normalizeHints(full, body.hint_style);
             writer.sendText(storedHints);
             await prepared.finalizeSuccess(
               {
@@ -749,7 +815,7 @@ Deno.serve(async (req: Request) => {
     runAi: async () => {
       const aiResult = await generateWithFallback({
         prompt,
-        systemPrompt: SYSTEM_PROMPT,
+        systemPrompt: buildSystemPrompt(body),
         maxTokens: maxHintTokens,
         temperature: 0.5,
         userId: user.id,
@@ -766,7 +832,7 @@ Deno.serve(async (req: Request) => {
         throw new Error("AI returned empty hints");
       }
 
-      const hints = normalizeHints(rawHints);
+      const hints = normalizeHints(rawHints, body.hint_style);
       assertLiveCoachOutputGrounded(
         `${body.resume_context ?? ""}\n${body.question ?? ""}`,
         hints,

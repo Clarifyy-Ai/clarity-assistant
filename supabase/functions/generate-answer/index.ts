@@ -59,7 +59,12 @@ import { resolveModel, isGeminiModel } from "../_shared/resolveModel.ts";
 import type { ModelId } from "../_shared/types.ts";
 import { creditCost, resolveActionCost } from "../_shared/creditEconomics.ts";
 import { callPythonProcess, livePythonTimeoutMs } from "../_shared/pythonClient.ts";
-import { normalizePythonCoachData } from "../_shared/practiceCoachContract.ts";
+import {
+  normalizePythonCoachData,
+  buildToneStyleSystemAddon,
+  sanitizeCoachTone,
+  sanitizeHintStyle,
+} from "../_shared/practiceCoachContract.ts";
 import {
   executeHybridOperation,
   prepareHybridStreamOperation,
@@ -134,10 +139,22 @@ Rules:
 
 ${FACTUAL_INTEGRITY_SYSTEM_RULE}`;
 
-function systemPromptForInterviewType(interviewType: string, hasScreenshot: boolean): string {
+function systemPromptForInterviewType(
+  interviewType: string,
+  hasScreenshot: boolean,
+  hintStyleRaw?: string,
+  coachToneRaw?: string,
+  simpleLanguage?: boolean,
+): string {
   const t = interviewType.toLowerCase();
-  if (t === "coding" || hasScreenshot) return SYSTEM_PROMPT_CODING;
-  return SYSTEM_PROMPT_BEHAVIORAL;
+  const base = t === "coding" || hasScreenshot ? SYSTEM_PROMPT_CODING : SYSTEM_PROMPT_BEHAVIORAL;
+  const hintStyle = sanitizeHintStyle(hintStyleRaw);
+  const coachTone = sanitizeCoachTone(coachToneRaw);
+  const styleAddon = buildToneStyleSystemAddon(coachTone, hintStyle, interviewType);
+  const simpleAddon = simpleLanguage
+    ? "Language: use plain, jargon-free wording suitable for non-native speakers."
+    : "";
+  return `${base}\n\n${styleAddon}${simpleAddon ? `\n\n${simpleAddon}` : ""}`;
 }
 
 const PROMPT_INJECTION_PATTERNS = [
@@ -231,6 +248,13 @@ const requestSchema = z.object({
     .max(4_000_000, "Screenshot payload is too large.")
     .nullable()
     .optional(),
+
+  hint_style: z.string().trim().max(40).optional(),
+  coach_tone: z.string().trim().max(40).optional(),
+  simple_language: z.preprocess(
+    (v) => v === true || v === "true",
+    z.boolean().optional().default(false),
+  ),
 });
 
 type GenerateAnswerRequest = z.infer<typeof requestSchema>;
@@ -578,7 +602,13 @@ Deno.serve(async (req: Request) => {
     sanitizeModelInput(body.model, DEFAULT_MODEL),
   );
 
-  const systemPrompt = systemPromptForInterviewType(body.interview_type, hasScreenshot);
+  const systemPrompt = systemPromptForInterviewType(
+    body.interview_type,
+    hasScreenshot,
+    body.hint_style,
+    body.coach_tone,
+    body.simple_language,
+  );
 
   const userPrompt = buildPrompt({
     interviewType: body.interview_type,

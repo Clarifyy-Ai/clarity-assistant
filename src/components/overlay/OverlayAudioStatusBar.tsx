@@ -32,6 +32,7 @@ function micBarCopy(input: {
   permissionDenied: boolean;
   isCapturing: boolean;
   isMuted: boolean;
+  micHealth: AudioChannelHealthStatus;
 }): { key: keyof typeof MIC_STATUS_COPY; label: string } {
   if (input.permissionDenied) {
     return { key: "permission_denied", label: MIC_STATUS_COPY.permission_denied };
@@ -45,7 +46,14 @@ function micBarCopy(input: {
   if (input.isMuted) {
     return { key: "paused", label: MIC_STATUS_COPY.paused };
   }
-  return { key: "active", label: MIC_STATUS_COPY.active };
+  // Only claim "Mic active" when channel health confirms real audio flow.
+  if (input.micHealth === "active") {
+    return { key: "active", label: MIC_STATUS_COPY.active };
+  }
+  if (input.micHealth === "connecting") {
+    return { key: "connecting", label: MIC_STATUS_COPY.connecting };
+  }
+  return { key: "disconnected", label: MIC_STATUS_COPY.disconnected };
 }
 
 function transcriptionBarFromHealth(
@@ -172,6 +180,7 @@ export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
     permissionDenied,
     isCapturing,
     isMuted,
+    micHealth: micHealthStatus,
   });
   const dualExpected =
     systemAudioExpected ||

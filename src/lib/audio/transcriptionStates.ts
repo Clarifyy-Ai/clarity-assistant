@@ -33,6 +33,7 @@ export const TRANSCRIPTION_STATUS_COPY: Record<TranscriptionState, string> = {
 
 export const MIC_STATUS_COPY = {
   active: "Mic active",
+  connecting: "Mic connecting…",
   paused: "Mic paused",
   disconnected: "Mic disconnected",
   permission_denied: "Mic permission denied",

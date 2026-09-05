@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/common/EmptyState";
+import { GovExamPageShell } from "@/components/gov-exam/GovExamPageShell";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { LazyMotion, domAnimation } from "framer-motion";
@@ -329,6 +330,7 @@ export default function MockTestHub(): React.ReactElement {
   };
 
   return (
+    <GovExamPageShell>
     <div className="w-full min-w-0 space-y-4 sm:space-y-6">
       <PageHeader
         title={PRODUCT_NAMES.govExamPrep}
@@ -935,5 +937,6 @@ export default function MockTestHub(): React.ReactElement {
       </section>
       </div>
     </div>
+    </GovExamPageShell>
   );
 }

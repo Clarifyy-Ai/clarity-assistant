@@ -105,12 +105,20 @@ export function DesktopDownloadButton({
             </div>
           )}
           {!loading && compact && (
-            <p
-              className="text-[11px] text-muted-foreground"
-              data-testid="desktop-installer-unavailable"
-            >
-              Desktop app not available yet
-            </p>
+            <div className="space-y-1.5">
+              <p
+                className="text-[11px] text-muted-foreground"
+                data-testid="desktop-installer-unavailable"
+              >
+                Desktop app not available yet
+              </p>
+              <Link
+                to={installGuidePath}
+                className="text-xs text-primary hover:underline"
+              >
+                View install guide
+              </Link>
+            </div>
           )}
           {loading && (
             <p className="text-xs text-muted-foreground inline-flex items-center gap-2">

@@ -440,6 +440,7 @@ export type AssessmentAvailabilityItem = {
   resumable_test_id?: string | null;
   startable?: boolean;
   code?: string | null;
+  retryable?: boolean;
 };
 
 export async function checkAssessmentAvailability(

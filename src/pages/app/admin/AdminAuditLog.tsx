@@ -10,13 +10,19 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Search, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, RotateCcw, ChevronLeft, ChevronRight, ScrollText, Calendar, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { logger } from "@/lib/logger";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { EmptyState } from "@/components/common/EmptyState";
 import { toAdminUserMessage } from "@/lib/admin/adminErrors";
+import { profilesDB } from "@/lib/supabase/database";
+import { AdminSectionDashboard } from "@/components/admin/AdminSectionDashboard";
+import { AdminRecentActivityList } from "@/components/admin/AdminRecentActivityList";
+import { fetchAuditLogDashboardStats } from "@/lib/admin/sectionDashboardStats";
+import { AUDIT_QUICK_LINKS } from "@/lib/admin/adminSectionNav";
+import { daysAgoIsoDate, isLast7DaysRange, isTodayRange, todayIsoDate } from "@/lib/admin/dateFilters";
 
 interface AuditRow {
   id: string;
@@ -69,6 +75,21 @@ const AUDIT_ACTIONS = [
   "delete",
 ] as const;
 
+type AdminProfileLite = { id: string; full_name: string | null; email: string | null };
+
+function formatAuditSummary(row: AuditRow): string {
+  const parts: string[] = [];
+  if (row.target_type) parts.push(`Target: ${row.target_type}`);
+  if (row.target_id) parts.push(`ID: ${row.target_id.slice(0, 12)}…`);
+  if (row.ip_address) parts.push(`IP: ${row.ip_address}`);
+  const nv = row.new_value as Record<string, unknown> | null;
+  if (nv && typeof nv === "object") {
+    if (typeof nv.actorRole === "string") parts.push(`Role: ${nv.actorRole}`);
+    if (typeof nv.reason === "string") parts.push(`Reason: ${nv.reason}`);
+  }
+  return parts.length ? parts.join(" · ") : "No summary metadata";
+}
+
 function isValidDateRange(from: string, to: string): boolean {
   if (!from || !to) return true;
   const fromMs = new Date(from).getTime();
@@ -79,6 +100,7 @@ function isValidDateRange(from: string, to: string): boolean {
 
 export default function AdminAuditLog() {
   const [rows, setRows] = useState<AuditRow[]>([]);
+  const [adminProfiles, setAdminProfiles] = useState<Record<string, AdminProfileLite>>({});
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -92,6 +114,36 @@ export default function AdminAuditLog() {
   const [from, setFrom] = useState<string>("");
   const [to, setTo] = useState<string>("");
   const [dateRangeError, setDateRangeError] = useState<string | null>(null);
+  const [dashStats, setDashStats] = useState<{ total: number; today: number; last7d: number } | null>(null);
+  const [dashLoading, setDashLoading] = useState(true);
+  const [recentEvents, setRecentEvents] = useState<Pick<AuditRow, "id" | "action" | "target_type" | "created_at">[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchAuditLogDashboardStats()
+      .then((stats) => { if (!cancelled) setDashStats(stats); })
+      .catch(() => { if (!cancelled) setDashStats(null); })
+      .finally(() => { if (!cancelled) setDashLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data, error } = await (supabase as any)
+          .from("admin_audit_log")
+          .select("id, action, target_type, created_at")
+          .order("created_at", { ascending: false })
+          .limit(5);
+        if (error) throw error;
+        if (!cancelled) setRecentEvents((data ?? []) as typeof recentEvents);
+      } catch {
+        if (!cancelled) setRecentEvents([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -137,6 +189,16 @@ export default function AdminAuditLog() {
         if (error) throw error;
         setRows((data ?? []) as AuditRow[]);
         setTotal(count ?? 0);
+
+        const adminIds = [...new Set(((data ?? []) as AuditRow[]).map((r) => r.admin_id).filter(Boolean))];
+        if (adminIds.length > 0) {
+          const profs = await profilesDB.listLiteByIds(adminIds);
+          const map: Record<string, AdminProfileLite> = {};
+          for (const p of profs) map[p.id] = p;
+          if (!cancelled) setAdminProfiles(map);
+        } else if (!cancelled) {
+          setAdminProfiles({});
+        }
       } catch (err) {
         if (!cancelled) {
           logger.error("admin.audit_log.load.failed", { error: err });
@@ -163,7 +225,48 @@ export default function AdminAuditLog() {
     setPage(0);
   };
 
+  const applyTodayFilter = () => {
+    const today = todayIsoDate();
+    setActionQuery("");
+    setDebouncedQuery("");
+    setActionPreset("all");
+    setTargetType("all");
+    setFrom(today);
+    setTo(today);
+    setDateRangeError(null);
+    setPage(0);
+  };
+
+  const apply7dFilter = () => {
+    setActionQuery("");
+    setDebouncedQuery("");
+    setActionPreset("all");
+    setTargetType("all");
+    setFrom(daysAgoIsoDate(7));
+    setTo(todayIsoDate());
+    setDateRangeError(null);
+    setPage(0);
+  };
+
+  const hasActiveFilters =
+    debouncedQuery.length >= SEARCH_MIN_LENGTH ||
+    actionPreset !== "all" ||
+    targetType !== "all" ||
+    Boolean(from || to);
+
   const maxPage = Math.max(0, Math.ceil(total / PAGE_SIZE) - 1);
+
+  function adminLabel(adminId: string | null | undefined): { primary: string; secondary?: string } {
+    if (!adminId) return { primary: "—" };
+    const p = adminProfiles[adminId];
+    if (p?.full_name || p?.email) {
+      return {
+        primary: p.full_name ?? p.email ?? adminId.slice(0, 8),
+        secondary: p.email && p.full_name ? p.email : undefined,
+      };
+    }
+    return { primary: `${adminId.slice(0, 8)}…`, secondary: adminId };
+  }
 
   return (
     <div data-testid="dd-layout-root" className="space-y-4">
@@ -176,6 +279,62 @@ export default function AdminAuditLog() {
         </div>
         <Badge variant="red" size="sm">{total.toLocaleString()} events</Badge>
       </div>
+
+      <AdminSectionDashboard
+        loading={dashLoading}
+        quickLinks={AUDIT_QUICK_LINKS}
+        activityTitle="Latest admin actions"
+        activity={
+          <AdminRecentActivityList
+            emptyMessage="No audit events yet."
+            items={recentEvents.map((row) => ({
+              id: row.id,
+              title: row.action.replace(/_/g, " "),
+              subtitle: row.target_type ?? undefined,
+              meta: format(new Date(row.created_at), "MMM d, HH:mm"),
+              onClick: () => setExpanded((prev) => (prev === row.id ? null : row.id)),
+              badge: row.target_type ?? undefined,
+            }))}
+          />
+        }
+        stats={[
+          {
+            id: "total",
+            label: "All time",
+            value: (dashStats?.total ?? total).toLocaleString(),
+            description: "Click to clear filters",
+            icon: ScrollText,
+            onClick: resetFilters,
+            active: !hasActiveFilters,
+          },
+          {
+            id: "today",
+            label: "Today",
+            value: (dashStats?.today ?? 0).toLocaleString(),
+            description: "Filter to today (UTC)",
+            icon: Calendar,
+            onClick: applyTodayFilter,
+            active: isTodayRange(from, to) && actionPreset === "all" && targetType === "all" && !debouncedQuery,
+          },
+          {
+            id: "7d",
+            label: "Last 7 days",
+            value: (dashStats?.last7d ?? 0).toLocaleString(),
+            description: "Filter to past week",
+            icon: Clock,
+            onClick: apply7dFilter,
+            active: isLast7DaysRange(from, to) && actionPreset === "all" && targetType === "all" && !debouncedQuery,
+          },
+          {
+            id: "filtered",
+            label: "Filtered view",
+            value: total.toLocaleString(),
+            description: hasActiveFilters ? "Active filters applied" : "Apply filters below",
+            icon: Search,
+            active: hasActiveFilters,
+          },
+        ]}
+      />
 
       {loadError && (
         <InlineErrorRetry
@@ -298,8 +457,13 @@ export default function AdminAuditLog() {
                             </span>
                           ) : null}
                         </TableCell>
-                        <TableCell className="text-xs font-mono text-muted-foreground">
-                          {row.admin_id?.slice(0, 8) ?? "—"}…
+                        <TableCell className="text-xs">
+                          <div className="font-medium text-foreground">{adminLabel(row.admin_id).primary}</div>
+                          {adminLabel(row.admin_id).secondary && (
+                            <div className="text-[10px] text-muted-foreground truncate max-w-[160px]">
+                              {adminLabel(row.admin_id).secondary}
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="text-right text-xs text-muted-foreground">
                           {expanded === row.id ? "Hide" : "Show"}
@@ -308,13 +472,23 @@ export default function AdminAuditLog() {
                       {expanded === row.id && (
                         <TableRow>
                           <TableCell colSpan={5} className="bg-muted/20">
-                            <pre className="text-[11px] overflow-x-auto max-h-48 p-2">
-                              {JSON.stringify(
-                                { old_value: row.old_value, new_value: row.new_value, ip: row.ip_address },
-                                null,
-                                2,
-                              )}
-                            </pre>
+                            <div className="space-y-2 p-2">
+                              <p className="text-xs text-muted-foreground">{formatAuditSummary(row)}</p>
+                              <div className="grid gap-2 md:grid-cols-2">
+                                <div>
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Previous value</p>
+                                  <pre className="text-[11px] overflow-x-auto max-h-40 rounded-lg bg-background/60 p-2">
+                                    {JSON.stringify(row.old_value ?? null, null, 2)}
+                                  </pre>
+                                </div>
+                                <div>
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">New value</p>
+                                  <pre className="text-[11px] overflow-x-auto max-h-40 rounded-lg bg-background/60 p-2">
+                                    {JSON.stringify(row.new_value ?? null, null, 2)}
+                                  </pre>
+                                </div>
+                              </div>
+                            </div>
                           </TableCell>
                         </TableRow>
                       )}

@@ -146,7 +146,6 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const {
     loadError: documentsLoadError,
     reload: reloadDocuments,
-    allAnswers,
     isLoading: documentsLoading,
     retryJobDescriptionParse,
   } = useDocuments();
@@ -207,7 +206,9 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const [hintStyle,        setHintStyle]        = useState<HintStyle>(
     typedProfile?.hint_style ?? "short_hints"
   );
-  const [textVoiceMode, setTextVoiceMode] = useState<"text" | "voice">("voice");
+  const [textVoiceMode, setTextVoiceMode] = useState<"text" | "voice">(
+    sessionType === "live" ? "text" : "voice",
+  );
   const [ttsVoice, setTtsVoice] = useState<string | null>(null);
   const [availableTtsVoices, setAvailableTtsVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [followUpDepth, setFollowUpDepth] = useState<"none" | "light" | "deep">("light");
@@ -313,6 +314,15 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   useEffect(() => {
     if (!showWizard) setResumeId(activeResumeId);
   }, [activeResumeId, showWizard]);
+
+  useEffect(() => {
+    if (resumeId || resumes.length === 0) return;
+    const primary =
+      resumes.find((r) => r.is_primary) ??
+      (activeResumeId ? resumes.find((r) => r.id === activeResumeId) : undefined) ??
+      resumes[0];
+    if (primary) setResumeId(primary.id);
+  }, [resumes, activeResumeId, resumeId]);
   useEffect(() => {
     if (!showWizard) setJdId(activeJdId);
   }, [activeJdId, showWizard]);
@@ -447,7 +457,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     setAnswerBankContextIds([]);
     setEnableSystemAudio(systemAudioSupported);
     setStealthMode(false);
-    setTextVoiceMode("voice");
+    setTextVoiceMode(sessionType === "live" ? "text" : "voice");
     setTtsVoice(null);
     setFollowUpDepth("light");
     setFeedbackStyle("balanced");
@@ -611,8 +621,8 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       skills_to_emphasize: skillsToEmphasize,
       skills_not_to_claim: skillsNotToClaim,
       answer_bank_context_ids: answerBankContextIds,
-      text_voice_mode: textVoiceMode,
-      tts_voice: textVoiceMode === "voice" ? ttsVoice : null,
+      text_voice_mode: sessionType === "live" ? "text" : textVoiceMode,
+      tts_voice: sessionType === "live" || textVoiceMode === "text" ? null : ttsVoice,
       follow_up_depth: followUpDepth,
       feedback_style: feedbackStyle,
       difficulty,
@@ -981,21 +991,6 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             </div>
-            {allAnswers.length > 0 && (
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Answer Bank context</label>
-                <select
-                  multiple
-                  value={answerBankContextIds}
-                  onChange={(e) => setAnswerBankContextIds(Array.from(e.target.selectedOptions).map((option) => option.value).slice(0, 10))}
-                  className="w-full min-h-20 bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm"
-                >
-                  {allAnswers.slice(0, 50).map((answer) => (
-                    <option key={answer.id} value={answer.id}>{answer.question || answer.title || "Saved answer"}</option>
-                  ))}
-                </select>
-              </div>
-            )}
           </div>
         )}
 
@@ -1210,10 +1205,11 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 <label className="block text-xs font-medium text-muted-foreground mb-1.5">Extra Context / Instructions</label>
                 <textarea
                   value={instructions}
-                  onChange={(e) => setInstructions(e.target.value)}
+                  onChange={(e) => setInstructions(e.target.value.slice(0, 2000))}
                   placeholder="e.g. Focus on STAR method, emphasise leadership examples…"
-                  rows={2}
-                  className="w-full bg-secondary/40 border border-border text-foreground placeholder:text-muted-foreground/60 rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500 text-sm resize-none"
+                  rows={3}
+                  maxLength={2000}
+                  className="w-full bg-secondary/40 border border-border text-foreground placeholder:text-muted-foreground/60 rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500 text-sm resize-y min-h-[5rem]"
                 />
               </div>
 
@@ -1288,12 +1284,14 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 )}
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">Response mode</label>
-                  <select value={textVoiceMode} onChange={(e) => setTextVoiceMode(e.target.value as "text" | "voice")} className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm">
-                    <option value="voice">Voice</option><option value="text">Text only</option>
-                  </select>
-                </div>
+                {sessionType !== "live" && (
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1.5">Response mode</label>
+                    <select value={textVoiceMode} onChange={(e) => setTextVoiceMode(e.target.value as "text" | "voice")} className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm">
+                      <option value="voice">Voice</option><option value="text">Text only</option>
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1.5">Follow-up depth</label>
                   <select value={followUpDepth} onChange={(e) => setFollowUpDepth(e.target.value as typeof followUpDepth)} className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm">
@@ -1525,14 +1523,6 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                   <input value={skillsNotToClaim.join(", ")} onChange={(e) => setSkillsNotToClaim(e.target.value.split(",").map((v) => v.trim()).filter(Boolean).slice(0, 8))} placeholder="Never invent experience with these" className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm" />
                 </div>
               </div>
-              {allAnswers.length > 0 && (
-                <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">Answer Bank context</label>
-                  <select multiple value={answerBankContextIds} onChange={(e) => setAnswerBankContextIds(Array.from(e.target.selectedOptions).map((option) => option.value).slice(0, 10))} className="w-full min-h-20 bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 text-sm">
-                    {allAnswers.slice(0, 50).map((answer) => <option key={answer.id} value={answer.id}>{answer.question || answer.title || "Saved answer"}</option>)}
-                  </select>
-                </div>
-              )}
 
               {/* Extra documents (all resumes + JDs as additional context) */}
               {(resumes.length > 1 || jds.length > 1) && (

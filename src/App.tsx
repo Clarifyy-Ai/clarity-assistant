@@ -39,6 +39,7 @@ import { IndiaRegionGate } from "@/components/layout/IndiaRegionGate";
 import { NetworkBanner } from "@/components/layout/NetworkBanner";
 import { SessionTimeoutBanner } from "@/components/layout/SessionTimeoutBanner";
 import { PageContent } from "@/components/layout/PageContent";
+import { prefetchCommonRoutesIdle } from "@/lib/navigation/routePrefetch";
 import { SetupChecklist } from "@/components/layout/SetupChecklist";
 import { AppWalkthrough, InstallPromptModal, ElectronFirstRunModal } from "@/components/onboarding";
 import { ErrorBoundary } from "@/components/layout/ErrorBoundary";
@@ -156,6 +157,9 @@ const MockTestAnalytics = lazy(() => import("@/pages/app/mock-test/TestAnalytics
 const MockTestPapers = lazy(() => import("@/pages/app/mock-test/ExamPapers"));
 const GovExamDetail = lazy(() => import("@/pages/app/mock-test/GovExamDetail"));
 const GenerateGovPaper = lazy(() => import("@/pages/app/mock-test/GenerateGovPaper"));
+const GovExamGenerateJobRedirect = lazy(
+  () => import("@/pages/app/mock-test/GovExamGenerateJobRedirect"),
+);
 const InterviewPracticePlan = lazy(() => import("@/pages/app/plan/InterviewPracticePlan"));
 const QuestionBank = lazy(() => import("@/pages/app/question-bank/QuestionBank"));
 const AssessmentTemplates = lazy(() => import("@/pages/app/assessments/AssessmentTemplates"));
@@ -323,6 +327,8 @@ const AdminAssessmentsPreview = lazy(
 const AdminCommunity = lazy(() => import("@/pages/app/admin/AdminCommunity"));
 const AdminLearning = lazy(() => import("@/pages/app/admin/AdminLearning"));
 const AdminAuditLog = lazy(() => import("@/pages/app/admin/AdminAuditLog"));
+const AdminComplianceLogs = lazy(() => import("@/pages/app/admin/AdminComplianceLogs"));
+const AdminSecurity = lazy(() => import("@/pages/app/admin/AdminSecurity"));
 const AdminDiagnostics = lazy(
   () => import("@/pages/app/admin/AdminDiagnostics"),
 );
@@ -397,8 +403,10 @@ function ShellPageLoader(): JSX.Element {
 }
 
 function Page({ component: Component }: { component: ComponentType }): JSX.Element {
+  const location = useLocation();
+
   return (
-    <Suspense fallback={<ShellPageLoader />}>
+    <Suspense key={location.pathname} fallback={<ShellPageLoader />}>
       <Component />
     </Suspense>
   );
@@ -495,6 +503,10 @@ function AppShell(): JSX.Element {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    prefetchCommonRoutesIdle();
+  }, []);
+
   if (IS_ELECTRON || hideChromeForLiveSession) {
     return (
       <div
@@ -516,9 +528,7 @@ function AppShell(): JSX.Element {
         <NetworkBanner />
         <AppHotkeyListener />
         <main id="main-content" className="flex-1 overflow-y-auto min-w-0">
-          <Suspense fallback={<ShellPageLoader />}>
-            <Outlet />
-          </Suspense>
+          <Outlet />
         </main>
       </div>
     );
@@ -559,9 +569,7 @@ function AppShell(): JSX.Element {
             )}
 
             <PageContent>
-              <Suspense fallback={<ShellPageLoader />}>
-                <Outlet />
-              </Suspense>
+              <Outlet />
             </PageContent>
           </div>
         </main>
@@ -765,6 +773,10 @@ const routes = [
           { path: "mock-test/configure", element: <IndiaAppPage component={MockTestConfigure} /> },
           { path: "mock-test/exam/:examCode", element: <IndiaAppPage component={GovExamDetail} /> },
           { path: "mock-test/generate", element: <IndiaAppPage component={GenerateGovPaper} /> },
+          {
+            path: "mock-test/generate/job/:jobId",
+            element: <IndiaAppPage component={GovExamGenerateJobRedirect} />,
+          },
           { path: "mock-test/results/:testId", element: <IndiaAppPage component={MockTestResults} /> },
           { path: "mock-test/my-questions", element: <IndiaAppPage component={MockTestMyQuestions} /> },
           { path: "mock-test/upload", element: <IndiaAppPage component={MockTestUpload} /> },
@@ -1054,11 +1066,13 @@ const routes = [
             element: <Page component={AdminQuestionEditor} />,
           },
           { path: "audit-log", element: <Page component={AdminAuditLog} /> },
+          { path: "compliance-logs", element: <Page component={AdminComplianceLogs} /> },
           {
             path: "qa-checklist",
             element: <Navigate to="/app/admin/diagnostics" replace />,
           },
           { path: "diagnostics", element: <Page component={AdminDiagnostics} /> },
+          { path: "security", element: <Page component={AdminSecurity} /> },
           { path: "blog/preview/:id", element: <Page component={AdminBlogPreview} /> },
           { path: "blog", element: <Page component={AdminBlog} /> },
           {
@@ -1100,7 +1114,7 @@ const routes = [
           { path: "learning", element: <Page component={AdminLearning} /> },
           {
             path: "security-config",
-            element: <Navigate to="/app/admin/diagnostics" replace />,
+            element: <Navigate to="/app/admin/security" replace />,
           },
             ],
           },

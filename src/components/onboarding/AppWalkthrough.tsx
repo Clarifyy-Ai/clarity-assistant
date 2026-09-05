@@ -19,6 +19,10 @@ import {
   hasCompletedAppWalkthrough,
   markAppWalkthroughCompleted,
 } from "@/lib/onboarding/appWalkthroughStorage";
+import {
+  mergeUiPreferences,
+  readAppWalkthroughCompleted,
+} from "@/lib/settings/uiPreferences";
 import { Button } from "@/components/ui/Button";
 
 type TourPlacement = "center" | "right" | "bottom";
@@ -273,7 +277,9 @@ function cardPosition(
 
 export function AppWalkthrough(): JSX.Element | null {
   const userId = useAuthStore((s) => s.user?.id);
-  const onboardingCompleted = useAuthStore((s) => s.profile?.onboarding_completed);
+  const profile = useAuthStore((s) => s.profile);
+  const onboardingCompleted = profile?.onboarding_completed;
+  const updateProfile = useAuthStore((s) => s.updateProfile);
   const location = useLocation();
   const hideOnSettings = location.pathname.includes("/settings");
 
@@ -288,24 +294,45 @@ export function AppWalkthrough(): JSX.Element | null {
   const targetRect = useTargetRect(step.target, open);
 
   const finish = useCallback(() => {
-    if (userId) markAppWalkthroughCompleted(userId);
-    try {
-      sessionStorage.setItem("clarify:walkthrough-done-session", "1");
-    } catch {
-      /* ignore */
+    if (userId) {
+      markAppWalkthroughCompleted(userId);
+      void updateProfile({
+        ui_preferences: mergeUiPreferences(profile?.ui_preferences, {
+          app_walkthrough_completed: true,
+        }),
+      }).catch(() => {
+        /* localStorage remains the device fallback */
+      });
     }
     setActiveTourStep(null);
     setOpen(false);
     setMobileNavOpen(false);
-  }, [userId, setActiveTourStep, setMobileNavOpen]);
+  }, [userId, profile?.ui_preferences, updateProfile, setActiveTourStep, setMobileNavOpen]);
+
+  const walkthroughCompleted =
+    hasCompletedAppWalkthrough(userId) || readAppWalkthroughCompleted(profile?.ui_preferences);
 
   useEffect(() => {
-    if (!userId || !onboardingCompleted || hideOnSettings) return;
-    if (hasCompletedAppWalkthrough(userId)) return;
+    if (!userId || !readAppWalkthroughCompleted(profile?.ui_preferences)) return;
+    if (!hasCompletedAppWalkthrough(userId)) {
+      markAppWalkthroughCompleted(userId);
+    }
+  }, [userId, profile?.ui_preferences]);
 
-    const timer = window.setTimeout(() => setOpen(true), 700);
+  useEffect(() => {
+    if (!userId || !onboardingCompleted || hideOnSettings || walkthroughCompleted) return;
+
+    const timer = window.setTimeout(() => {
+      if (
+        hasCompletedAppWalkthrough(userId) ||
+        readAppWalkthroughCompleted(profile?.ui_preferences)
+      ) {
+        return;
+      }
+      setOpen(true);
+    }, 700);
     return () => window.clearTimeout(timer);
-  }, [userId, onboardingCompleted, hideOnSettings]);
+  }, [userId, onboardingCompleted, hideOnSettings, walkthroughCompleted, profile?.ui_preferences]);
 
   useEffect(() => {
     if (!open) {

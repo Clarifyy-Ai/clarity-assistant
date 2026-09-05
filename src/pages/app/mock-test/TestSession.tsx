@@ -34,7 +34,12 @@ import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { InlineSaveStatus } from "@/components/async/InlineSaveStatus";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { cn } from "@/lib/utils";
+import { MockTestCodingPanel } from "@/components/coding/MockTestCodingPanel";
+import {
+  parseQuestionCodingMetadata,
+  stripCodingMetadataForPlay,
+  type PlayableQuestionCoding,
+} from "@/lib/question-bank/codingMetadata";
 import { isUsableQuestionImageUrl, resolveQuestionImageUrl, uniqueImageUrls } from "@/lib/mock-test/questionMedia";
 import { dedupeExactQuestionCopies } from "@/lib/mock-test/dedupeQuestions";
 import { resolvePaperClassPresentation } from "@/lib/gov-exam/disclaimers";
@@ -64,6 +69,9 @@ import {
   playableQuestionSelect,
   stripAnswerKeys,
 } from "@/lib/gov-exam/playableQuestions";
+import { cn } from "@/lib/utils";
+import { GovExamPageShell } from "@/components/gov-exam/GovExamPageShell";
+import { classifyGovExamLoadError, type GovExamRouteResolution } from "@/lib/gov-exam/routeResolution";
 
 function resultsPathForTest(testId: string, config: unknown): string {
   const source =
@@ -177,6 +185,8 @@ interface Question {
   marks_negative: number;
   image_url?: string | null;
   latex_present?: boolean | null;
+  metadata?: unknown;
+  coding?: PlayableQuestionCoding | null;
   section_code?: string | null;
   section_name?: string | null;
 }
@@ -203,6 +213,7 @@ function questionFromSnapshot(
     });
   }
   const qType = String(snap.question_type ?? "MCQ").toUpperCase();
+  const coding = stripCodingMetadataForPlay(parseQuestionCodingMetadata(snap.metadata));
   return {
     id: questionId,
     question_text: text,
@@ -210,6 +221,8 @@ function questionFromSnapshot(
       ? qType
       : "MCQ") as Question["question_type"],
     options,
+    coding,
+    metadata: snap.metadata,
     subject: String(snap.subject ?? sectionCode ?? "General"),
     topic: String(snap.topic ?? "General"),
     difficulty: (["EASY", "MEDIUM", "HARD"].includes(String(snap.difficulty ?? "").toUpperCase())
@@ -753,7 +766,11 @@ export default function TestSession() {
       const questionMap: Record<string, Question> = {};
       for (const row of playable.data ?? []) {
         const stripped = stripAnswerKeys(row as unknown as Record<string, unknown>);
-        questionMap[stripped.id] = stripped as unknown as Question;
+        const coding = stripCodingMetadataForPlay(parseQuestionCodingMetadata(stripped.metadata));
+        questionMap[stripped.id] = {
+          ...(stripped as unknown as Question),
+          coding,
+        };
       }
 
       const uniqueIds = [...new Set(loadedTest.question_ids)];
@@ -1335,39 +1352,27 @@ export default function TestSession() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
+      <GovExamPageShell>
+        <div className="flex h-screen items-center justify-center bg-background">
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        </div>
+      </GovExamPageShell>
     );
   }
 
   if (loadFailure) {
+    const resolution: GovExamRouteResolution =
+      loadFailure.kind === "not_found"
+        ? { phase: "INVALID_IDENTIFIER", message: loadFailure.message }
+        : {
+            phase: "TEMPORARY_BACKEND_FAILURE",
+            message: loadFailure.message,
+            retryable: true,
+          };
     return (
-      <div className="flex h-screen items-center justify-center bg-background p-6">
-        <div className="max-w-md text-center space-y-4">
-          <p className="text-foreground font-semibold">
-            {loadFailure.kind === "not_found" ? "Exam not found" : "Couldn’t load this exam"}
-          </p>
-          <p className="text-sm text-muted-foreground">{loadFailure.message}</p>
-          <div className="flex flex-wrap justify-center gap-2">
-            {loadFailure.kind === "temporary" && (
-              <Button
-                onClick={() => {
-                  void loadTest();
-                }}
-              >
-                Retry
-              </Button>
-            )}
-            <Button
-              variant="secondary"
-              onClick={() => navigate(catalogHref)}
-            >
-              {catalogLabel}
-            </Button>
-          </div>
-        </div>
-      </div>
+      <GovExamPageShell loadResolution={resolution} onRetry={() => void loadTest()}>
+        <span className="sr-only">Load failure</span>
+      </GovExamPageShell>
     );
   }
 
@@ -1536,6 +1541,7 @@ export default function TestSession() {
   }
 
   return (
+    <GovExamPageShell>
     <div className="flex h-screen flex-col overflow-hidden bg-background font-sans">
       <div
         className="sr-only"
@@ -1824,6 +1830,17 @@ export default function TestSession() {
                     </button>
                   ))}
                 </div>
+              ) : currentQuestion.question_type === "CODING" && currentQuestion.coding ? (
+                <MockTestCodingPanel
+                  config={currentQuestion.coding}
+                  value={currentResponse?.answer ?? ""}
+                  onChange={(serialized) => updateAnswer(serialized)}
+                  disabled={paused}
+                />
+              ) : currentQuestion.question_type === "CODING" ? (
+                <p className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+                  This coding question is missing playground configuration. Edit it in Question Bank and add starter code plus test cases.
+                </p>
               ) : (
                 <div className="pt-2">
                   <input
@@ -2077,5 +2094,6 @@ export default function TestSession() {
         onConfirm={() => handleSubmit(false)}
       />
     </div>
+    </GovExamPageShell>
   );
 }

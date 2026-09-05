@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
@@ -12,9 +12,13 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Search, RotateCcw, MessageSquare, ExternalLink } from "lucide-react";
+import { Search, RotateCcw, MessageSquare, ExternalLink, Inbox, Clock, AlertCircle, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { AdminSectionDashboard } from "@/components/admin/AdminSectionDashboard";
+import { AdminRecentActivityList } from "@/components/admin/AdminRecentActivityList";
+import { fetchSupportDashboardStats } from "@/lib/admin/sectionDashboardStats";
+import { SUPPORT_QUICK_LINKS } from "@/lib/admin/adminSectionNav";
 
 interface ThreadRow {
   id: string;
@@ -47,6 +51,17 @@ export default function AdminSupport() {
   const [status, setStatus] = useState<string>("all");
   const [priority, setPriority] = useState<string>("all");
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const [dashStats, setDashStats] = useState<Awaited<ReturnType<typeof fetchSupportDashboardStats>> | null>(null);
+  const [dashLoading, setDashLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchSupportDashboardStats()
+      .then((stats) => { if (!cancelled) setDashStats(stats); })
+      .catch(() => { if (!cancelled) setDashStats(null); })
+      .finally(() => { if (!cancelled) setDashLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedSearch(sanitizeAdminSearch(search)), 350);
@@ -92,6 +107,18 @@ export default function AdminSupport() {
 
   const unreadCount = rows.filter((r) => r.unread_for_admin).length;
 
+  const recentThreads = useMemo(
+    () =>
+      [...rows]
+        .sort((a, b) => {
+          const aTs = a.last_message_at ?? a.updated_at;
+          const bTs = b.last_message_at ?? b.updated_at;
+          return new Date(bTs).getTime() - new Date(aTs).getTime();
+        })
+        .slice(0, 5),
+    [rows],
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -113,6 +140,74 @@ export default function AdminSupport() {
           </Link>
         </div>
       </div>
+
+      <AdminSectionDashboard
+        loading={dashLoading}
+        columns={5}
+        quickLinks={SUPPORT_QUICK_LINKS}
+        activityTitle="Latest threads"
+        activity={
+          <AdminRecentActivityList
+            emptyMessage="No threads match current filters."
+            items={recentThreads.map((thread) => ({
+              id: thread.id,
+              title: thread.subject || "(no subject)",
+              subtitle: thread.last_message_preview ?? undefined,
+              badge: thread.unread_for_admin ? "Unread" : thread.status,
+              badgeVariant: thread.unread_for_admin ? "danger" : thread.status === "open" ? "warning" : "default",
+              meta: thread.last_message_at
+                ? format(new Date(thread.last_message_at), "MMM d, HH:mm")
+                : undefined,
+              href: `/app/admin/live-chat?thread=${thread.id}`,
+            }))}
+          />
+        }
+        stats={[
+          {
+            id: "open",
+            label: "Open",
+            value: (dashStats?.open ?? 0).toLocaleString(),
+            variant: "warning",
+            icon: Inbox,
+            onClick: () => { setStatus("open"); setUnreadOnly(false); setPriority("all"); },
+            active: status === "open" && !unreadOnly && priority === "all",
+          },
+          {
+            id: "pending",
+            label: "Pending",
+            value: (dashStats?.pending ?? 0).toLocaleString(),
+            icon: Clock,
+            onClick: () => { setStatus("pending"); setUnreadOnly(false); setPriority("all"); },
+            active: status === "pending" && !unreadOnly,
+          },
+          {
+            id: "resolved",
+            label: "Resolved",
+            value: (dashStats?.resolved ?? 0).toLocaleString(),
+            variant: "success",
+            icon: CheckCircle2,
+            onClick: () => { setStatus("resolved"); setUnreadOnly(false); setPriority("all"); },
+            active: status === "resolved" && !unreadOnly,
+          },
+          {
+            id: "unread",
+            label: "Unread",
+            value: (dashStats?.unread ?? unreadCount).toLocaleString(),
+            variant: "danger",
+            icon: AlertCircle,
+            onClick: () => { setUnreadOnly(true); setStatus("all"); setPriority("all"); },
+            active: unreadOnly,
+          },
+          {
+            id: "high",
+            label: "High priority",
+            value: (dashStats?.highPriority ?? 0).toLocaleString(),
+            icon: MessageSquare,
+            onClick: () => { setPriority("high"); setStatus("all"); setUnreadOnly(false); },
+            active: priority === "high" && !unreadOnly,
+          },
+        ]}
+      />
 
       <Card className="border-primary/20 bg-primary/5">
         <CardContent className="py-4 flex flex-wrap items-center justify-between gap-3">

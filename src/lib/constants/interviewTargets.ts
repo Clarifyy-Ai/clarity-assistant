@@ -9,6 +9,7 @@ export const INTERVIEW_COMPANIES = [
   "Accenture", "Deloitte", "Infosys", "TCS", "Wipro",
   "Flipkart", "Swiggy", "Zomato", "Razorpay", "PhonePe",
   "Byju's", "Freshworks", "Zoho", "Atlassian", "Databricks",
+  "Startup", "Early-stage startup", "Scale-up", "Consulting firm", "Other",
 ] as const;
 
 export const INTERVIEW_ROLES = [
@@ -31,5 +32,8 @@ export const INTERVIEW_ROLES = [
   "Security Engineer",
   "Mobile Engineer",
   "Marketing Manager",
+  "Startup Founder",
+  "Growth Manager",
+  "Operations Manager",
   "Other",
 ] as const;

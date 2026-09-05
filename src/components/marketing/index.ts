@@ -5,3 +5,4 @@ export { ProductDemoHero } from "./ProductDemoHero";
 export { PracticeCoachWalkthrough } from "./PracticeCoachWalkthrough";
 export { FeatureShowcase } from "./FeatureShowcase";
 export { GovExamShowcase } from "./GovExamShowcase";
+export { PublicOffersSection } from "./PublicOffersSection";

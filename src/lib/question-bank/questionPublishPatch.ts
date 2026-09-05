@@ -19,6 +19,7 @@ export type PublishableQuestionRow = {
   topic?: string | null;
   category?: string | null;
   license_type?: string | null;
+  metadata?: unknown;
 };
 
 export type QuestionPublishPatch = {
@@ -93,6 +94,38 @@ export function assertPublishableForTrigger(
     const answer = String(row.correct_answer ?? "").trim().toUpperCase();
     if (!answer || !labels.includes(answer)) {
       return "Correct answer must reference an existing option (A–D).";
+    }
+  }
+
+  if (type === "TRUE_FALSE") {
+    const options = asLabeledOptions(row.options);
+    if (options.length < 2) {
+      return "True/False questions need True and False options.";
+    }
+    const answer = String(row.correct_answer ?? "").trim().toUpperCase();
+    const normalized =
+      ["TRUE", "T", "YES", "A"].includes(answer) ? "A"
+      : ["FALSE", "F", "NO", "B"].includes(answer) ? "B"
+      : answer;
+    if (!["A", "B"].includes(normalized)) {
+      return "True/False correct answer must be True or False (stored as A or B).";
+    }
+  }
+
+  if (type === "CODING") {
+    const meta = row.metadata && typeof row.metadata === "object"
+      ? (row.metadata as { coding?: unknown }).coding
+      : row.metadata;
+    const coding = meta && typeof meta === "object" ? meta : null;
+    const starter = coding && "starter_code" in coding ? String((coding as { starter_code?: unknown }).starter_code ?? "") : "";
+    const cases = coding && "test_cases" in coding && Array.isArray((coding as { test_cases?: unknown }).test_cases)
+      ? (coding as { test_cases: unknown[] }).test_cases
+      : [];
+    if (!starter.trim()) {
+      return "Coding questions require starter code in metadata.";
+    }
+    if (cases.length < 1) {
+      return "Coding questions require at least one test case.";
     }
   }
 

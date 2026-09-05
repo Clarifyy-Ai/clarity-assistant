@@ -28,6 +28,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { answerBankDB } from "@/lib/supabase/database";
+import { buildRephraserAnswerBankPayload } from "@/lib/answer-bank/answerBankDisplay";
 import {
   readPersistedRephraserState,
   writePersistedRephraserState,
@@ -199,19 +200,26 @@ export default function Rephraser() {
       concise:   "Concise",
     };
     try {
-      const inserted = await answerBankDB.create(user.id, {
-        question_text: `Rephrased answer (${styleLabels[style]})`,
-        answer_text: text,
-        source: "prep_lab",
+      const contentHash = await sha256(original.trim());
+      await upsertPrepRephraseHistory({
+        userId: user.id,
+        inputHash: contentHash,
+        originalText: original.trim(),
+        alternatives,
+        status: "completed",
+        creditOpId: inflightKeyRef.current,
       });
+      const inserted = await answerBankDB.create(
+        user.id,
+        buildRephraserAnswerBankPayload(original.trim(), style, text),
+      );
       setSavedAnswerId(inserted.id);
+      setSaved(style);
+      toast.success(`${styleLabels[style]} version saved to Answer Bank`);
+      setTimeout(() => setSaved(null), 2500);
     } catch {
       toast.error("Failed to save — please try again");
-      return;
     }
-    setSaved(style);
-    toast.success(`${styleLabels[style]} version saved to Answer Bank`);
-    setTimeout(() => setSaved(null), 2500);
   }
 
   // ── Render ────────────────────────────────────────────────────────────────

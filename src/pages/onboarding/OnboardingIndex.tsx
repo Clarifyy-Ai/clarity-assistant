@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store";
-import { recordReferral, getStoredRefCode, normalizeRefCode } from "@/lib/referrals";
+import { recordReferral, extractRefCodeFromSearchParams, getStoredRefCode } from "@/lib/referrals";
 import { getPostOnboardingPath } from "@/lib/auth/postAuthRedirect";
 import { preferredReturnToFromNavigation } from "@/lib/auth/safeReturnTo";
 import { saveLastPracticeSetup } from "@/lib/session/lastPracticeSetup";
@@ -116,7 +116,7 @@ export default function OnboardingIndex() {
   const loadProfile = useAuthStore((s) => s.loadProfile);
 
   const isRerun = searchParams.get("rerun") === "1";
-  const refCode = normalizeRefCode(searchParams.get("ref")) ?? getStoredRefCode();
+  const refCode = extractRefCodeFromSearchParams(searchParams) ?? getStoredRefCode();
   const completionPath = useMemo(
     () =>
       getPostOnboardingPath(
@@ -298,7 +298,7 @@ export default function OnboardingIndex() {
 
     try {
       if (user?.id && refCode) {
-        await recordReferral(user.id, refCode);
+        await recordReferral(user.id, refCode, user);
       }
 
       const experienceYears =

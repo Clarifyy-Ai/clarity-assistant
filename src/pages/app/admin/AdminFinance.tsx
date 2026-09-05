@@ -107,6 +107,169 @@ function MoneyCell({
   );
 }
 
+function statusBadgeVariant(
+  status: "PROFITABLE" | "BREAK_EVEN" | "LOSS_MAKING" | "UNKNOWN",
+): "default" | "secondary" | "destructive" | "outline" {
+  switch (status) {
+    case "PROFITABLE":
+      return "default";
+    case "LOSS_MAKING":
+      return "destructive";
+    case "BREAK_EVEN":
+      return "secondary";
+    default:
+      return "outline";
+  }
+}
+
+function ProfitLossStatement({
+  overview,
+}: {
+  overview: NonNullable<AdminFinanceReport["overview"]>;
+}) {
+  const netRevenuePaise = overview.grossRevenuePaise - overview.refundsPaise;
+  const contribution = overview.contribution;
+  const isLoss =
+    contribution.contributionProfitPaise != null &&
+    contribution.contributionProfitPaise < 0;
+
+  const rows: Array<{
+    label: string;
+    paise: number | null;
+    quality?: string;
+    emphasis?: "subtotal" | "total";
+    sign?: "+" | "−" | "=";
+  }> = [
+    { label: "Gross revenue", paise: overview.grossRevenuePaise, quality: "actual", sign: "+" },
+    { label: "Refunds", paise: overview.refundsPaise, quality: "actual", sign: "−" },
+    { label: "Net revenue", paise: netRevenuePaise, quality: "actual", emphasis: "subtotal", sign: "=" },
+    {
+      label: "API / AI costs",
+      paise: overview.apiCost.amountPaise,
+      quality: overview.apiCost.quality,
+      sign: "−",
+    },
+    {
+      label: "Payment processing fees",
+      paise: overview.paymentFees.amountPaise,
+      quality: overview.paymentFees.quality,
+      sign: "−",
+    },
+    {
+      label: isLoss ? "Contribution loss" : "Contribution profit",
+      paise: contribution.contributionProfitPaise,
+      quality: contribution.contributionProfitPaise == null ? "unknown" : "derived",
+      emphasis: "total",
+      sign: "=",
+    },
+  ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Profit &amp; Loss Statement</CardTitle>
+        <CardDescription>
+          Contribution P&amp;L for the selected period — net revenue minus variable delivery
+          costs. Fixed operating expenses are not included.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Line item</TableHead>
+              <TableHead className="text-right">Amount</TableHead>
+              <TableHead className="text-right w-[140px]">Quality</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => (
+              <TableRow
+                key={row.label}
+                className={
+                  row.emphasis === "total"
+                    ? "bg-muted/40 font-semibold"
+                    : row.emphasis === "subtotal"
+                      ? "border-t font-medium"
+                      : undefined
+                }
+              >
+                <TableCell>
+                  {row.sign ? `${row.sign} ` : ""}
+                  {row.label}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {row.paise == null ? (
+                    <span className="text-muted-foreground text-sm">—</span>
+                  ) : (
+                    <span className="font-semibold">{formatPaiseInr(row.paise)}</span>
+                  )}
+                </TableCell>
+                <TableCell className="text-right">
+                  {row.quality ? <QualityBadge quality={row.quality} /> : null}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+
+        <div className="grid gap-3 sm:grid-cols-2 text-sm">
+          <div className="rounded-lg border border-border/60 bg-secondary/30 p-3 space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Contribution margin
+            </p>
+            <p className="text-lg font-semibold tabular-nums">
+              {contribution.contributionMarginPercent == null
+                ? "—"
+                : `${contribution.contributionMarginPercent}%`}
+            </p>
+          </div>
+          <div className="rounded-lg border border-border/60 bg-secondary/30 p-3 space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Formula
+            </p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {contribution.formulaLabel}: Net revenue − known API costs − known payment fees
+            </p>
+          </div>
+        </div>
+
+        {contribution.excludedReasons.length > 0 && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground space-y-1">
+            <p className="font-medium text-foreground">Excluded or incomplete costs</p>
+            <ul className="list-disc pl-4 space-y-0.5">
+              {contribution.excludedReasons.map((reason) => (
+                <li key={reason}>{reason.replace(/:/g, ": ")}</li>
+              ))}
+              <li>Fixed operating expenses — not configured (net profit unavailable)</li>
+            </ul>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function FeatureProfitLossSummary({
+  features,
+}: {
+  features: AdminFinanceReport["featureEconomics"];
+}) {
+  const profitable = features.filter((f) => f.status === "PROFITABLE").length;
+  const lossMaking = features.filter((f) => f.status === "LOSS_MAKING").length;
+  const breakEven = features.filter((f) => f.status === "BREAK_EVEN").length;
+  const unknown = features.filter((f) => f.status === "UNKNOWN").length;
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Badge variant="default">Profitable: {profitable}</Badge>
+      <Badge variant="destructive">Loss-making: {lossMaking}</Badge>
+      <Badge variant="secondary">Break-even: {breakEven}</Badge>
+      <Badge variant="outline">Unknown: {unknown}</Badge>
+    </div>
+  );
+}
+
 export default function AdminFinance(): JSX.Element {
   const [period, setPeriod] = useState<AdminFinancePeriod>("30d");
   const [fromIso, setFromIso] = useState("");
@@ -324,6 +487,8 @@ export default function AdminFinance(): JSX.Element {
         </div>
       )}
 
+      {o && <ProfitLossStatement overview={o} />}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Revenue vs API cost</CardTitle>
@@ -421,14 +586,20 @@ export default function AdminFinance(): JSX.Element {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Feature economics</CardTitle>
+          <CardTitle className="text-base">Profit / Loss by Feature</CardTitle>
           <CardDescription>
-            Revenue attribution UNKNOWN unless payment maps a feature. Status is textual (not color-only).
+            Per-feature contribution when API cost and revenue attribution are known.
           </CardDescription>
+          {report?.featureEconomics.length ? (
+            <FeatureProfitLossSummary features={report.featureEconomics} />
+          ) : null}
         </CardHeader>
         <CardContent className="overflow-x-auto">
           {!report?.featureEconomics.length ? (
-            <EmptyState title="No data for this period." />
+            <EmptyState
+              title="No feature P&L for this period."
+              description="Usage and payments in this window will populate profitable vs loss-making features."
+            />
           ) : (
             <Table>
               <TableHeader>
@@ -438,7 +609,7 @@ export default function AdminFinance(): JSX.Element {
                   <TableHead className="text-right">Credits</TableHead>
                   <TableHead className="text-right">API cost</TableHead>
                   <TableHead className="text-right">Revenue</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead>P&amp;L status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -458,7 +629,7 @@ export default function AdminFinance(): JSX.Element {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{f.status}</Badge>
+                      <Badge variant={statusBadgeVariant(f.status)}>{f.status.replace(/_/g, " ")}</Badge>
                     </TableCell>
                   </TableRow>
                 ))}

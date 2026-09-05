@@ -134,9 +134,50 @@ export function normalizePythonCoachData(data: unknown): NormalizedPythonCoachDa
   };
 }
 
+export const ANSWER_MODES = ["hint", "full_answer"] as const;
+export type AnswerMode = (typeof ANSWER_MODES)[number];
+
+export function sanitizeAnswerMode(input: unknown, fallback: AnswerMode = "hint"): AnswerMode {
+  const value = String(input ?? "").trim().toLowerCase();
+  return (ANSWER_MODES as readonly string[]).includes(value)
+    ? (value as AnswerMode)
+    : fallback;
+}
+
+/** Shared request fields for generate-hint / generate-answer / ai-coach-chat. */
+export type PracticeCoachRequestFields = {
+  hint_style?: HintStyle;
+  coach_tone?: CoachTone;
+  answer_mode?: AnswerMode;
+  latest_interviewer_question?: string;
+  context_hash?: string;
+};
+
+export function interviewTypeStyleAddon(interviewType: string): string {
+  const t = String(interviewType ?? "").trim().toLowerCase();
+  if (t.includes("coding") || t.includes("algorithm") || t.includes("leetcode")) {
+    return [
+      "Interview focus: CODING.",
+      "Prioritize approach, algorithm choice, time/space complexity, implementation steps, and edge cases.",
+      "Use concise code-oriented language when appropriate.",
+    ].join("\n");
+  }
+  if (t.includes("technical") || t.includes("system") || t.includes("design")) {
+    return [
+      "Interview focus: TECHNICAL.",
+      "Prioritize technical approach, reasoning, architecture, trade-offs, implementation, and edge cases.",
+    ].join("\n");
+  }
+  return [
+    "Interview focus: BEHAVIORAL / STAR.",
+    "Guide the candidate using Situation, Task, Action, Result structure naturally (do not label sections unless asked).",
+  ].join("\n");
+}
+
 export function buildToneStyleSystemAddon(
   coachTone: CoachTone,
   hintStyle: HintStyle,
+  interviewType?: string,
 ): string {
   const toneLine: Record<CoachTone, string> = {
     encouraging:
@@ -158,7 +199,8 @@ export function buildToneStyleSystemAddon(
       "Style: more detailed coaching with structure; still do not invent facts.",
   };
 
-  return `${toneLine[coachTone]}\n${styleLine[hintStyle]}`;
+  const typeAddon = interviewType ? interviewTypeStyleAddon(interviewType) : "";
+  return [toneLine[coachTone], styleLine[hintStyle], typeAddon].filter(Boolean).join("\n");
 }
 
 /** Offline notice only — never use as a successful conversational coach reply. */

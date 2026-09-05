@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Mail, RefreshCw, Reply, Send } from "lucide-react";
+import { Mail, RefreshCw, Reply, Send, Inbox, HardDrive } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
@@ -13,6 +13,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
+import { AdminSectionDashboard } from "@/components/admin/AdminSectionDashboard";
+import { AdminRecentActivityList } from "@/components/admin/AdminRecentActivityList";
+import { MAIL_QUICK_LINKS } from "@/lib/admin/adminSectionNav";
 import { HOSTINGER_TRACKING_FOLDERS, isTrackingFolder, trackingFolderLabel } from "@/lib/mail/hostingerTrackingFolders";
 import { cn } from "@/lib/utils";
 
@@ -246,6 +249,31 @@ export default function AdminMail() {
     ? formatDistanceToNow(new Date(status.fetchedAt), { addSuffix: true })
     : "—";
 
+  const mailDashStats = useMemo(() => {
+    const inbox = folders.find((f) => f.path === "INBOX" || f.name === "INBOX");
+    const sent = folders.find((f) => f.path.includes("Sent") || f.name === "Sent");
+    const inboxUnread = inbox?.unreadCount ?? messages.filter((m) => m.unseen).length;
+    const trackingUnread = folders
+      .filter((f) => isTrackingFolder(f.path))
+      .reduce((sum, f) => sum + (f.unreadCount ?? 0), 0);
+    return {
+      inboxUnread,
+      sentCount: sent?.messageCount ?? 0,
+      folderCount: folders.length,
+      quota: status?.quotaPercent ?? null,
+      trackingUnread,
+      sentPath: sent?.path ?? "INBOX.Sent",
+    };
+  }, [folders, messages, status?.quotaPercent]);
+
+  const recentMessages = useMemo(
+    () =>
+      [...messages]
+        .sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime())
+        .slice(0, 5),
+    [messages],
+  );
+
   if (statusLoading && !status) {
     return (
       <div className="space-y-4">
@@ -296,6 +324,67 @@ export default function AdminMail() {
           </Button>
         </div>
       </div>
+
+      <AdminSectionDashboard
+        loading={statusLoading}
+        columns={4}
+        quickLinks={MAIL_QUICK_LINKS}
+        activityTitle={`Recent in ${folder}`}
+        activity={
+          <AdminRecentActivityList
+            emptyMessage="No messages in this folder."
+            items={recentMessages.map((msg) => ({
+              id: String(msg.uid),
+              title: msg.subject || "(no subject)",
+              subtitle: formatFrom(msg.from),
+              badge: msg.unseen ? "Unread" : undefined,
+              badgeVariant: msg.unseen ? "warning" : "default",
+              meta: msg.date ? formatDistanceToNow(new Date(msg.date), { addSuffix: true }) : undefined,
+              onClick: () => void openMessage(msg),
+            }))}
+          />
+        }
+        stats={[
+          {
+            id: "inbox",
+            label: "Inbox unread",
+            value: mailDashStats.inboxUnread.toLocaleString(),
+            description: folder === "INBOX" ? `${messages.length} in current view` : "Open inbox",
+            icon: Inbox,
+            variant: mailDashStats.inboxUnread > 0 ? "warning" : "default",
+            onClick: () => setFolder("INBOX"),
+            active: folder === "INBOX",
+          },
+          {
+            id: "sent",
+            label: "Sent folder",
+            value: mailDashStats.sentCount.toLocaleString(),
+            description: "View sent messages",
+            icon: Send,
+            onClick: () => setFolder(mailDashStats.sentPath),
+            active: folder === mailDashStats.sentPath,
+          },
+          {
+            id: "quota",
+            label: "Mailbox quota",
+            value: mailDashStats.quota != null ? `${mailDashStats.quota}%` : "—",
+            description: status?.address ?? "hello@trycareerpilot.com",
+            icon: HardDrive,
+            variant: (mailDashStats.quota ?? 0) > 85 ? "danger" : "default",
+          },
+          {
+            id: "sync",
+            label: "Last sync",
+            value: lastFetch === "—" ? "Never" : "Recent",
+            description: lastFetch,
+            icon: RefreshCw,
+            onClick: () => {
+              void loadStatus();
+              if (status?.configured) void loadMessages(folder);
+            },
+          },
+        ]}
+      />
 
       {error && <InlineErrorRetry message={error} onRetry={() => void loadStatus()} />}
 

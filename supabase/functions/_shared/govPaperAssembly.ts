@@ -9,7 +9,10 @@
  * `allowDeterministicFill`).
  */
 
-import { createServiceClient } from "./supabase.ts";
+import {
+  parseQuestionCodingMetadata,
+  stripCodingMetadataForPlay,
+} from "./questionCodingMetadata.ts";
 import { withTimeout } from "./withTimeout.ts";
 import { PROFILE_LOOKUP_TIMEOUT_MS } from "./indiaRegion.ts";
 import { finalizePaperJobCredits, refundClaimedPaperCredits } from "./claimJobCredits.ts";
@@ -36,12 +39,10 @@ import {
   scoreQuestionQuality,
 } from "./govQualityScore.ts";
 import {
-  evaluateAutoApproval,
-  parseRuleRow,
-  buildIdempotencyKey,
-  DEFAULT_PAPER_RULE,
+  loadAutoApprovalRule,
   type PaperValidationInput,
 } from "./govAutoApproval.ts";
+import { evaluateAndApplyPaperAutoApproval } from "./govAutoApprovalPipeline.ts";
 import { clampGovQuestionCount, GOV_QUESTION_COUNT_ABS_MAX } from "./govQuestionCount.ts";
 import { DEDUP_ALGORITHM_VERSION } from "./algorithmCatalog.ts";
 import {
@@ -555,7 +556,7 @@ export async function assembleClaimedPaperJob(
       let bankQuery = db
         .from("questions")
         .select(
-          "id, question_text, options, correct_answer, subject, topic, difficulty, source, source_type, source_year, is_public, is_verified",
+          "id, question_text, question_type, options, correct_answer, subject, topic, difficulty, source, source_type, source_year, is_public, is_verified, metadata",
         )
         .eq("is_public", true)
         .eq("publish_status", "published")
@@ -892,7 +893,7 @@ export async function assembleClaimedPaperJob(
           const { data: pyRows } = await db
             .from("questions")
             .select(
-              "id, question_text, options, correct_answer, subject, topic, difficulty, source, source_type, source_year, is_public, is_verified",
+              "id, question_text, question_type, options, correct_answer, subject, topic, difficulty, source, source_type, source_year, is_public, is_verified, metadata",
             )
             .in("id", pySel.data.question_ids)
             .eq("is_public", true)
@@ -1264,6 +1265,8 @@ export async function assembleClaimedPaperJob(
     const linkRows = questionIds.map((qid, idx) => {
       const row = selectedRows[idx] as Record<string, unknown> | undefined;
       const options = normalizeMcqOptions(row?.options);
+      const qType = String(row?.question_type ?? "MCQ");
+      const codingPlay = stripCodingMetadataForPlay(parseQuestionCodingMetadata(row?.metadata));
       return {
         paper_id: paper.id,
         question_id: qid,
@@ -1282,7 +1285,7 @@ export async function assembleClaimedPaperJob(
           question_text: String(row?.question_text ?? ""),
           options: options.map((text, i) => ({ label: String.fromCharCode(65 + i), text })),
           correct_answer: row?.correct_answer ?? null,
-          question_type: String(row?.question_type ?? "MCQ"),
+          question_type: qType,
           subject: String(row?.subject ?? ""),
           topic: String(row?.topic ?? ""),
           difficulty: String(row?.difficulty ?? "MEDIUM"),
@@ -1291,6 +1294,7 @@ export async function assembleClaimedPaperJob(
           marks_negative: Number(row?.marks_negative ?? blueprint.negative_mark),
           section_code: blueprint.slots[idx]?.section_code ?? null,
           source_type: questionSourceTypes[idx],
+          ...(codingPlay ? { metadata: { coding: codingPlay } } : {}),
         },
       };
     });
@@ -1301,17 +1305,7 @@ export async function assembleClaimedPaperJob(
 
     // Auto-approval rule engine (deterministic; separate APPROVED from PUBLISHED)
     try {
-      const { data: ruleRow } = await db
-        .from("gov_auto_approval_rules")
-        .select("*")
-        .eq("entity_type", "paper")
-        .order("rule_version", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      const rule = ruleRow
-        ? parseRuleRow(ruleRow as Record<string, unknown>)
-        : DEFAULT_PAPER_RULE;
+      const rule = await loadAutoApprovalRule(db, "paper");
 
       const paperValidation: PaperValidationInput = {
         entityType: "paper",
@@ -1332,30 +1326,16 @@ export async function assembleClaimedPaperJob(
         negativeMarkingValid: blueprint.negative_mark >= 0,
         allQuestionsValidated: paperQuality.hardFailCount === 0,
         hardFailCount: paperQuality.hardFailCount,
-        reviewQueueLength: reviewQueue.length,
+        reviewQueueLength: 0,
         examId: job.exam_id,
         language: blueprint.language,
         processingJobId: job.id,
       };
 
-      const evaluation = evaluateAutoApproval(paperValidation, rule);
-      await db.rpc("apply_auto_approval_event", {
-        p_entity_type: "paper",
-        p_entity_id: paper.id,
-        p_outcome: evaluation.outcome,
-        p_approval_mode: evaluation.approvalMode,
-        p_rule_version: evaluation.ruleVersion,
-        p_rule_evaluation: { flags: evaluation.flags, ruleResults: evaluation.ruleResults },
-        p_source_type: evaluation.sourceType,
-        p_quality_score: evaluation.qualityScore,
-        p_duplicate_result: evaluation.duplicateResult,
-        p_provenance: { assembly: aiFilledCount > 0 ? "bank_plus_ai_fill_v1" : "bank_select_v1" },
-        p_processing_job_id: job.id,
-        p_previous_status: evaluation.previousStatus,
-        p_new_status: evaluation.newStatus,
-        p_publish_status: evaluation.publishStatus,
-        p_idempotency_key: buildIdempotencyKey("paper", paper.id, job.id, rule.ruleVersion),
-        p_auto_publish: evaluation.autoPublish,
+      await evaluateAndApplyPaperAutoApproval(db, paper.id, paperValidation, {
+        rule,
+        processingJobId: job.id,
+        provenance: { assembly: aiFilledCount > 0 ? "bank_plus_ai_fill_v1" : "bank_select_v1" },
       });
     } catch (aaErr) {
       console.error("[govPaperAssembly] auto-approval failed (fail-closed):", aaErr);

@@ -15,7 +15,9 @@ const STAFF_ACTIONS = new Set([
   "lock_post",
   "unlock_post",
   "delete_post",
+  "delete_answer",
   "resolve_report",
+  "dismiss_report",
   "hide_question",
   "restore_question",
 ]);
@@ -59,10 +61,24 @@ Deno.serve(async (req) => {
     if (staffGate) return staffGate;
   }
 
+  async function resolveOpenReportsForTarget(targetType: string, targetIdForReports: string) {
+    const { error } = await db
+      .from("community_reports")
+      .update({ status: "reviewed" })
+      .eq("target_type", targetType)
+      .eq("target_id", targetIdForReports)
+      .eq("status", "open");
+    if (error) throw new Error(error.message);
+  }
+
+  try {
   if (action === "hide_post" || action === "restore_post") {
     const status = action === "hide_post" ? "HIDDEN" : "PUBLISHED";
     const { error } = await db.from("community_posts").update({ status }).eq("id", targetId);
     if (error) return errorResponse(error.message, "DB_ERROR", 500, req);
+    if (action === "hide_post") {
+      await resolveOpenReportsForTarget("post", targetId);
+    }
   } else if (action === "lock_post" || action === "unlock_post") {
     const { error } = await db
       .from("community_posts")
@@ -70,7 +86,19 @@ Deno.serve(async (req) => {
       .eq("id", targetId);
     if (error) return errorResponse(error.message, "DB_ERROR", 500, req);
   } else if (action === "delete_post") {
+    await resolveOpenReportsForTarget("post", targetId);
     const { error } = await db.from("community_posts").delete().eq("id", targetId);
+    if (error) return errorResponse(error.message, "DB_ERROR", 500, req);
+  } else if (action === "delete_answer") {
+    const { data: answer, error: fetchError } = await db
+      .from("community_answers")
+      .select("id")
+      .eq("id", targetId)
+      .maybeSingle();
+    if (fetchError) return errorResponse(fetchError.message, "DB_ERROR", 500, req);
+    if (!answer) return errorResponse("Answer not found.", "NOT_FOUND", 404, req);
+    await resolveOpenReportsForTarget("answer", targetId);
+    const { error } = await db.from("community_answers").delete().eq("id", targetId);
     if (error) return errorResponse(error.message, "DB_ERROR", 500, req);
   } else if (action === "mark_post_reported") {
     const { data: post, error: fetchError } = await db
@@ -93,12 +121,69 @@ Deno.serve(async (req) => {
       .update({ status: "RESOLVED" })
       .eq("id", targetId);
     if (error) return errorResponse(error.message, "DB_ERROR", 500, req);
+    await resolveOpenReportsForTarget("post", targetId);
   } else if (action === "resolve_report") {
+    const { data: report, error: fetchError } = await db
+      .from("community_reports")
+      .select("id,target_type,target_id,status")
+      .eq("id", targetId)
+      .maybeSingle();
+    if (fetchError) return errorResponse(fetchError.message, "DB_ERROR", 500, req);
+    if (!report) return errorResponse("Report not found.", "NOT_FOUND", 404, req);
     const { error } = await db
       .from("community_reports")
       .update({ status: "reviewed" })
       .eq("id", targetId);
     if (error) return errorResponse(error.message, "DB_ERROR", 500, req);
+    if (report.target_type === "post") {
+      const { data: post } = await db
+        .from("community_posts")
+        .select("status")
+        .eq("id", report.target_id)
+        .maybeSingle();
+      if (post?.status === "REPORTED") {
+        const { error: postError } = await db
+          .from("community_posts")
+          .update({ status: "RESOLVED" })
+          .eq("id", report.target_id);
+        if (postError) return errorResponse(postError.message, "DB_ERROR", 500, req);
+      }
+    }
+  } else if (action === "dismiss_report") {
+    const { data: report, error: fetchError } = await db
+      .from("community_reports")
+      .select("id,target_type,target_id")
+      .eq("id", targetId)
+      .maybeSingle();
+    if (fetchError) return errorResponse(fetchError.message, "DB_ERROR", 500, req);
+    if (!report) return errorResponse("Report not found.", "NOT_FOUND", 404, req);
+    const { error } = await db
+      .from("community_reports")
+      .update({ status: "dismissed" })
+      .eq("id", targetId);
+    if (error) return errorResponse(error.message, "DB_ERROR", 500, req);
+    if (report.target_type === "post") {
+      const { data: openReports } = await db
+        .from("community_reports")
+        .select("id")
+        .eq("target_type", "post")
+        .eq("target_id", report.target_id)
+        .eq("status", "open")
+        .limit(1);
+      if (!openReports?.length) {
+        const { data: post } = await db
+          .from("community_posts")
+          .select("status")
+          .eq("id", report.target_id)
+          .maybeSingle();
+        if (post?.status === "REPORTED") {
+          await db
+            .from("community_posts")
+            .update({ status: "PUBLISHED" })
+            .eq("id", report.target_id);
+        }
+      }
+    }
   } else if (action === "hide_question" || action === "restore_question") {
     const publish = action === "restore_question" ? "published" : "hidden";
     const { error } = await db
@@ -109,6 +194,10 @@ Deno.serve(async (req) => {
       })
       .eq("id", targetId);
     if (error) return errorResponse(error.message, "DB_ERROR", 500, req);
+  }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Moderation action failed.";
+    return errorResponse(message, "DB_ERROR", 500, req);
   }
 
   return applyCors(

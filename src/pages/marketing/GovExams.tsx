@@ -11,7 +11,7 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
-import { GovExamShowcase } from "@/components/marketing/GovExamShowcase";
+import { GovExamShowcase, PublicOffersSection } from "@/components/marketing";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { seoPageByPath } from "@/lib/seo/publicPages";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
@@ -171,6 +171,8 @@ export default function GovExams() {
           </div>
         </div>
       </section>
+
+      <PublicOffersSection className="pb-10" compact />
 
       <section className="py-14 px-4 sm:px-6 border-t border-border">
         <div className="max-w-3xl mx-auto text-center">

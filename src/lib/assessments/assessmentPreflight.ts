@@ -7,11 +7,36 @@ import {
   checkAssessmentAvailability,
   type AssessmentAvailabilityItem,
 } from "@/lib/gov-exam/api";
+import { ApiClientError } from "@/lib/api/apiClient";
 import {
   userMessageForAssessmentError,
   type AssessmentStartErrorCode,
   isAssessmentStartErrorCode,
 } from "@/lib/assessments/assessmentStart";
+
+export const RETRYABLE_AVAILABILITY_CODES = new Set([
+  "PROVIDER_UNAVAILABLE",
+  "DATABASE_FAILURE",
+  "ASSESSMENT_START_FAILED",
+]);
+
+export const AVAILABILITY_RETRY_MESSAGE =
+  "Availability check is temporarily unavailable. Please retry in a moment.";
+
+function isRetryableAvailabilityCode(code: string | null | undefined): boolean {
+  if (!code) return false;
+  return RETRYABLE_AVAILABILITY_CODES.has(code);
+}
+
+function messageFromAvailabilityFailure(
+  code: string | null | undefined,
+  fallback?: string,
+): string {
+  if (code === "PROVIDER_UNAVAILABLE" || code === "DATABASE_FAILURE") {
+    return AVAILABILITY_RETRY_MESSAGE;
+  }
+  return fallback ?? AVAILABILITY_RETRY_MESSAGE;
+}
 
 export type AssessmentPreflightStatus = "ok" | "blocked" | "unknown";
 
@@ -81,6 +106,10 @@ export function mapAvailabilityItem(
     item.requested_count ?? item.requested ?? opts?.requestedFallback ?? null;
   const startable = item.startable === true;
   const code = item.code ?? null;
+  const itemRetryable =
+    typeof (item as { retryable?: boolean }).retryable === "boolean"
+      ? Boolean((item as { retryable?: boolean }).retryable)
+      : isRetryableAvailabilityCode(code);
 
   if (startable) {
     return {
@@ -111,7 +140,7 @@ export function mapAvailabilityItem(
     templateId,
     status: "blocked",
     startable: false,
-    retryable: false,
+    retryable: itemRetryable,
     code: inventoryShort && !code ? "INSUFFICIENT_QUESTION_INVENTORY" : code,
     available,
     requested,
@@ -123,7 +152,10 @@ export function mapAvailabilityItem(
         inventoryShort && !code ? "INSUFFICIENT_QUESTION_INVENTORY" : code,
         item,
         opts?.requestedFallback,
-      ) ?? "This assessment cannot be started right now.",
+      ) ??
+      (itemRetryable
+        ? messageFromAvailabilityFailure(code)
+        : "This assessment cannot be started right now."),
     raw: item,
   };
 }
@@ -156,17 +188,26 @@ export async function preflightAssessmentTemplates(
     }
     return { ok: true, byTemplateId, errorMessage: null };
   } catch (err) {
+    const apiErr = err instanceof ApiClientError ? err : null;
+    const code =
+      typeof apiErr?.code === "string" && apiErr.code.trim()
+        ? apiErr.code
+        : "ASSESSMENT_START_FAILED";
+    const retryable =
+      apiErr?.status === 503 || isRetryableAvailabilityCode(code);
     const message =
-      err instanceof Error && err.message.trim()
-        ? err.message
-        : "Could not verify question inventory. Retry before starting.";
+      retryable
+        ? messageFromAvailabilityFailure(code, AVAILABILITY_RETRY_MESSAGE)
+        : err instanceof Error && err.message.trim()
+          ? err.message
+          : "Could not verify question inventory. Retry before starting.";
     for (const id of ids) {
       byTemplateId[id] = {
         templateId: id,
         status: "unknown",
         startable: false,
-        retryable: true,
-        code: "ASSESSMENT_START_FAILED",
+        retryable,
+        code,
         available: null,
         requested: opts?.requestedByTemplateId?.[id] ?? null,
         attemptsUsed: null,

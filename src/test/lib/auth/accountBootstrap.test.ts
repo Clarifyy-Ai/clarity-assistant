@@ -314,10 +314,28 @@ describe("classifyAccountLoadFailure extra kinds", () => {
 
 describe("soft-fail helpers", () => {
   it("exports PROFILE_COLD_RETRY_DELAY_MS for cold PostgREST retry pause", async () => {
-    const { PROFILE_COLD_RETRY_DELAY_MS } = await import(
+    const { PROFILE_COLD_RETRY_DELAY_MS, profileLoadRetryDelayMs } = await import(
       "@/lib/auth/accountBootstrap"
     );
     expect(PROFILE_COLD_RETRY_DELAY_MS).toBe(1_500);
+    expect(profileLoadRetryDelayMs(1)).toBe(1_500);
+    expect(profileLoadRetryDelayMs(2)).toBe(3_000);
+  });
+
+  it("runWithBootstrapGuard releases lock on early return", async () => {
+    const { runWithBootstrapGuard } = await import("@/lib/auth/accountBootstrap");
+    let locked = false;
+    const result = await runWithBootstrapGuard(
+      () => locked,
+      (v) => {
+        locked = v;
+      },
+      async () => {
+        return "ok";
+      },
+    );
+    expect(result).toBe("ok");
+    expect(locked).toBe(false);
   });
 
   it("keeps in-flight hydrate on session-check timeout within budget", async () => {

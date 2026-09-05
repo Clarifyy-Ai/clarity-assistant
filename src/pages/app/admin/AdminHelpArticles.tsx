@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -14,6 +14,8 @@ import { adminActionFailedMessage, toAdminUserMessage } from "@/lib/admin/adminE
 import { sanitizeAdminSearch } from "@/lib/admin/searchFilter";
 import { isValidHelpSlug, slugifyHelpQuestion } from "@/lib/admin/helpArticleSlug";
 import { invalidatePublicContentCache } from "@/lib/cms/publicContentCache";
+import { AdminStatGrid } from "@/components/admin/AdminStatGrid";
+import { BookOpen, Eye, EyeOff, FolderOpen } from "lucide-react";
 
 type HelpArticle = {
   id: string;
@@ -248,6 +250,13 @@ export default function AdminHelpArticles() {
     }
   }
 
+  const helpDash = useMemo(() => ({
+    total: articles.length,
+    published: articles.filter((a) => a.published).length,
+    drafts: articles.filter((a) => !a.published).length,
+    categories: new Set(articles.map((a) => a.category_slug)).size,
+  }), [articles]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -259,6 +268,16 @@ export default function AdminHelpArticles() {
           New article
         </Button>
       </div>
+
+      <AdminStatGrid
+        loading={loading}
+        stats={[
+          { id: "total", label: "Total articles", value: helpDash.total.toLocaleString(), icon: BookOpen },
+          { id: "published", label: "Published", value: helpDash.published.toLocaleString(), variant: "success", icon: Eye },
+          { id: "drafts", label: "Drafts", value: helpDash.drafts.toLocaleString(), icon: EyeOff },
+          { id: "categories", label: "Categories", value: helpDash.categories.toLocaleString(), icon: FolderOpen },
+        ]}
+      />
 
       {editing && (
         <Card className="space-y-3 p-4 min-w-0" data-testid="help-article-editor">

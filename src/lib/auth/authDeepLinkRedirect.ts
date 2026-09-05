@@ -25,13 +25,31 @@ function paramValue(search: string, hash: string, key: string): string | null {
   return fromSearch.get(key) || fromHash.get(key);
 }
 
+/** Supabase auth `type` values — not app filters like Session History `?type=mock_interview`. */
+const SUPABASE_AUTH_TYPE_VALUES = new Set([
+  "recovery",
+  "signup",
+  "magiclink",
+  "invite",
+  "email",
+  "email_change",
+  "email_change_current",
+  "email_change_new",
+  "reauthentication",
+]);
+
+function hasSupabaseAuthTypeParam(search: string, hash: string): boolean {
+  const type = (paramValue(search, hash, "type") ?? "").toLowerCase();
+  return SUPABASE_AUTH_TYPE_VALUES.has(type);
+}
+
 /** True when the URL carries Supabase auth tokens or errors that need a dedicated route. */
 export function urlHasAuthDeepLinkParams(search = "", hash = ""): boolean {
   return (
     hasParam(search, hash, "code") ||
     hasParam(search, hash, "access_token") ||
     hasParam(search, hash, "token_hash") ||
-    hasParam(search, hash, "type") ||
+    hasSupabaseAuthTypeParam(search, hash) ||
     hasParam(search, hash, "error_code") ||
     (hasParam(search, hash, "error") &&
       Boolean(paramValue(search, hash, "error_description") || paramValue(search, hash, "error_code")))

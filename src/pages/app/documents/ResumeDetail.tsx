@@ -41,6 +41,8 @@ import { ApiClientError } from "@/lib/api/apiClient";
 import { userFacingDocumentError } from "@/lib/documents/processingJobs";
 import { clearSessionAiContext } from "@/lib/ai/sessionAiContext";
 import { HybridSourceLine } from "@/components/hybrid/HybridSourceLine";
+import { DocumentPreviewCard } from "@/components/documents/DocumentPreviewCard";
+import { isTextFallbackResume } from "@/lib/documents/documentPreviewFormat";
 
 interface ResumeVersionRow {
   id: string;
@@ -455,6 +457,7 @@ export default function ResumeDetail() {
 
   const skills = normalizeSkillList(parsed?.skills ?? []);
   const summary = parsed?.summary ?? "";
+  const textFallbackResume = isTextFallbackResume(parsed);
   const fileName = doc.file_path?.split("/").pop() ?? "—";
   const showParseFailure =
     parseStatus === "error" ||
@@ -660,59 +663,65 @@ export default function ResumeDetail() {
           </Card>
         </div>
 
-        {summary && (
-          <Card>
-            <h3 className="text-sm font-semibold text-foreground mb-2">AI Summary</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed">{summary}</p>
-          </Card>
-        )}
+        {textFallbackResume ? (
+          <DocumentPreviewCard parsed={parsed} />
+        ) : (
+          <>
+            {summary && (
+              <Card>
+                <h3 className="text-sm font-semibold text-foreground mb-2">AI Summary</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{summary}</p>
+              </Card>
+            )}
 
-        {skills.length > 0 && (
-          <Card>
-            <h3 className="text-sm font-semibold text-foreground mb-2">Skills</h3>
-            <div className="flex flex-wrap gap-1.5">
-              {skills.map((s: string) => (
-                <span
-                  key={s}
-                  className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/15 text-primary dark:text-primary/80"
-                >
-                  {s}
-                </span>
-              ))}
-            </div>
-          </Card>
-        )}
-
-        {parsed?.experience && parsed.experience.length > 0 && (
-          <Card>
-            <h3 className="text-sm font-semibold text-foreground mb-2">Experience</h3>
-            <div className="space-y-2">
-              {parsed.experience.map((exp, i) => (
-                <p key={i} className="text-sm text-muted-foreground">
-                  <span className="font-medium text-foreground">{exp.title}</span>
-                  {exp.company && <span> @ {exp.company}</span>}
-                  {exp.duration && <span className="text-xs"> · {exp.duration}</span>}
-                </p>
-              ))}
-            </div>
-          </Card>
-        )}
-
-        {parsed?.education && parsed.education.length > 0 && (
-          <Card>
-            <h3 className="text-sm font-semibold text-foreground mb-2">Education</h3>
-            <div className="space-y-2">
-              {parsed.education.map((edu, i) => (
-                <div key={i} className="text-sm">
-                  <p className="font-medium text-foreground">{edu.institution}</p>
-                  <p className="text-muted-foreground text-xs">
-                    {[edu.degree, edu.field].filter(Boolean).join(" · ")}
-                    {edu.graduation_year ? ` · ${edu.graduation_year}` : ""}
-                  </p>
+            {skills.length > 0 && (
+              <Card>
+                <h3 className="text-sm font-semibold text-foreground mb-2">Skills</h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {skills.map((s: string) => (
+                    <span
+                      key={s}
+                      className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary/15 text-primary dark:text-primary/80"
+                    >
+                      {s}
+                    </span>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </Card>
+              </Card>
+            )}
+
+            {parsed?.experience && parsed.experience.length > 0 && (
+              <Card>
+                <h3 className="text-sm font-semibold text-foreground mb-2">Experience</h3>
+                <div className="space-y-2">
+                  {parsed.experience.map((exp, i) => (
+                    <p key={i} className="text-sm text-muted-foreground">
+                      <span className="font-medium text-foreground">{exp.title}</span>
+                      {exp.company && <span> @ {exp.company}</span>}
+                      {exp.duration && <span className="text-xs"> · {exp.duration}</span>}
+                    </p>
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {parsed?.education && parsed.education.length > 0 && (
+              <Card>
+                <h3 className="text-sm font-semibold text-foreground mb-2">Education</h3>
+                <div className="space-y-2">
+                  {parsed.education.map((edu, i) => (
+                    <div key={i} className="text-sm">
+                      <p className="font-medium text-foreground">{edu.institution}</p>
+                      <p className="text-muted-foreground text-xs">
+                        {[edu.degree, edu.field].filter(Boolean).join(" · ")}
+                        {edu.graduation_year ? ` · ${edu.graduation_year}` : ""}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+          </>
         )}
 
         <Card id="gap-analysis-panel">

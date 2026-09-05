@@ -28,6 +28,7 @@ import {
   ProductDemoHero,
   PracticeCoachWalkthrough,
   FeatureShowcase,
+  PublicOffersSection,
   GovExamShowcase,
 } from "@/components/marketing";
 
@@ -650,6 +651,7 @@ export default function Landing() {
       </section>
 
       {/* ── Pricing Teaser ──────────────────────────────────────────────────── */}
+      <PublicOffersSection className="pb-10" />
       <section className="pb-14 px-4 sm:px-6 bg-secondary/20">
         <div className="max-w-4xl mx-auto py-14">
           <m.div className="text-center mb-10" {...fadeUp()}>

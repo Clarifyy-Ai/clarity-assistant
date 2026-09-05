@@ -6,6 +6,11 @@ import { useState } from "react";
 import { AlertTriangle, Volume2, X } from "lucide-react";
 import { useAudioStore } from "@/store/audioStore";
 import { isChannelUiActive } from "@/lib/audio/audioChannelHealth";
+import {
+  deriveShareAudioState,
+  shouldShowShareAudioPrompt,
+  shareAudioStateLabel,
+} from "@/lib/audio/shareAudioState";
 
 interface Props {
   /** True if the active session opted into system audio. */
@@ -22,9 +27,20 @@ export function OverlaySystemAudioBanner({ enabled, onRetry }: Props) {
   );
   const tabActive = isChannelUiActive(interviewerStatus);
   const silent = interviewerStatus === "silent_source";
+  const shareState = deriveShareAudioState({
+    requested: false,
+    hasStream: Boolean(useAudioStore.getState().streams?.system_stream),
+    channelActive: tabActive,
+    channelConnecting: interviewerStatus === "connecting",
+    channelSilent: silent,
+    denied: false,
+    unsupported: false,
+    failed: interviewerStatus === "unavailable",
+    paused: false,
+  });
 
   if (!enabled || !isCapturing || dismissed) return null;
-  if (tabActive) return null;
+  if (shareState === "ACTIVE" && !silent) return null;
   if (interviewerStatus === "connecting") return null;
 
   const silentCopy = silent
@@ -45,14 +61,14 @@ export function OverlaySystemAudioBanner({ enabled, onRetry }: Props) {
         <p className="text-[10px] text-amber-200/70 leading-snug mt-0.5">{silentCopy}</p>
       </div>
       <div className="flex shrink-0 items-center gap-1">
-        {onRetry && (
+        {onRetry && shouldShowShareAudioPrompt(shareState) && (
           <button
             type="button"
             onClick={onRetry}
             className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md bg-amber-500/20 hover:bg-amber-500/30 text-amber-100 transition-colors"
           >
             <Volume2 className="w-3 h-3" />
-            Share audio
+            {shareAudioStateLabel(shareState)}
           </button>
         )}
         <button

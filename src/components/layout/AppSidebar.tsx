@@ -89,29 +89,10 @@ type SidebarLinkProps = {
   exact?: boolean;
   stealth?: boolean;
   onClick?: () => void;
-  onMouseEnter?: () => void;
+  prefetch?: boolean;
 };
 
-/** Prefetch heavy route chunks on sidebar hover / focus. */
-const ROUTE_PREFETCH: Record<string, () => Promise<unknown>> = {
-  "/app/dashboard": () => import("@/pages/app/Dashboard"),
-  "/app/live": () => import("@/pages/app/live/LiveRehearsal"),
-  "/app/mock": () => import("@/pages/app/mock/MockInterview"),
-  "/app/prep": () => import("@/pages/app/prep/PrepLab"),
-  "/app/mock-test": () => import("@/pages/app/mock-test/MockTestHub"),
-  "/app/mock-test/generate": () => import("@/pages/app/mock-test/GenerateGovPaper"),
-  "/app/assessments": () => import("@/pages/app/assessments/AssessmentTemplates"),
-  "/app/learn": () => import("@/pages/app/learn/LearningHub"),
-  "/app/practice-workspace": () => import("@/pages/app/practice/PracticeWorkspace"),
-  "/app/plan": () => import("@/pages/app/plan/InterviewPracticePlan"),
-  "/app/analytics": () => import("@/pages/app/Analytics"),
-  "/app/companies": () => import("@/pages/app/company-research/CompanyResearch"),
-  "/app/answers": () => import("@/pages/app/answer-bank/AnswerBank"),
-  "/app/settings": () => import("@/pages/app/settings/Settings"),
-  "/app/admin": () => import("@/pages/app/admin/AdminDashboard"),
-  "/app/admin/mail": () => import("@/pages/app/admin/AdminMail"),
-  "/app/admin/live-chat": () => import("@/pages/app/admin/AdminLiveChat"),
-};
+import { prefetchRoute, routePrefetchHandlers } from "@/lib/navigation/routePrefetch";
 
 interface AppSidebarProps {
   onNavClick?: () => void;
@@ -472,9 +453,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
                     title={visuallyCollapsed ? item.label : undefined}
                     data-tour={item.tourId}
                     onClick={onNavClick}
-                    onMouseEnter={() => {
-                      ROUTE_PREFETCH[item.to]?.();
-                    }}
+                    {...routePrefetchHandlers(item.to)}
                     className={({ isActive }) => {
                       const active =
                         isActive &&
@@ -515,6 +494,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
           collapsed={visuallyCollapsed}
           stealth={stealthMode}
           onClick={onNavClick}
+          prefetch
         />
 
         <SidebarLink
@@ -524,6 +504,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
           collapsed={visuallyCollapsed}
           stealth={stealthMode}
           onClick={onNavClick}
+          prefetch
         />
 
         <SidebarLink
@@ -533,6 +514,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
           collapsed={visuallyCollapsed}
           stealth={stealthMode}
           onClick={onNavClick}
+          prefetch
         />
 
         {isStaff && (
@@ -543,6 +525,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
             collapsed={visuallyCollapsed}
             stealth={stealthMode}
             onClick={onNavClick}
+            prefetch
           />
         )}
 
@@ -621,6 +604,7 @@ function SidebarLink({
   exact,
   stealth,
   onClick,
+  prefetch,
 }: SidebarLinkProps): JSX.Element {
   return (
     <NavLink
@@ -628,6 +612,7 @@ function SidebarLink({
       end={exact}
       title={collapsed ? label : undefined}
       onClick={onClick}
+      {...(prefetch ? routePrefetchHandlers(to) : {})}
       className={({ isActive }) =>
         cn(
           "mx-1 flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-all",

@@ -193,6 +193,7 @@ function PerfTab({ period }: { period: Period }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
+  const [dataSource, setDataSource] = useState<"request_metrics" | "ai_usage_logs" | "none">("none");
 
   useEffect(() => {
     let cancelled = false;
@@ -200,13 +201,22 @@ function PerfTab({ period }: { period: Period }) {
       setLoading(true);
       setLoadError(null);
       try {
-        const next = await adminAnalyticsDB.getPerfStats(period);
+        const primary = await adminAnalyticsDB.getPerfStats(period);
         if (cancelled) return;
-        setRows(next);
+        if (primary.length > 0) {
+          setRows(primary);
+          setDataSource("request_metrics");
+        } else {
+          const fallback = await adminAnalyticsDB.getAiUsageLatencyByAction(period);
+          if (cancelled) return;
+          setRows(fallback as PerfRow[]);
+          setDataSource(fallback.length > 0 ? "ai_usage_logs" : "none");
+        }
       } catch (err) {
         if (cancelled) return;
         setLoadError(toAdminUserMessage(err, undefined, "AdminAnalytics.perf"));
         setRows([]);
+        setDataSource("none");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -229,6 +239,16 @@ function PerfTab({ period }: { period: Period }) {
       {loadError && (
         <InlineErrorRetry message={loadError} onRetry={() => setReloadTick((n) => n + 1)} />
       )}
+      {dataSource === "ai_usage_logs" && (
+        <p className="text-xs text-amber-600 dark:text-amber-400 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+          Edge request_metrics is empty — showing AI action latency from ai_usage_logs as a fallback.
+        </p>
+      )}
+      {dataSource === "none" && !loadError && (
+        <p className="text-xs text-muted-foreground rounded-lg border border-border bg-muted/20 px-3 py-2">
+          No latency data yet. request_metrics is not instrumented and ai_usage_logs has no latency rows for this period.
+        </p>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat label="Total calls" value={totalCalls.toLocaleString()} sub={`last ${period}d`} />
         <Stat label="Avg p95 latency" value={`${avgP95} ms`} />
@@ -238,7 +258,9 @@ function PerfTab({ period }: { period: Period }) {
 
       <Card padding="none" className="overflow-hidden">
         <div className="p-4 border-b border-border flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Edge function performance</h3>
+          <h3 className="text-sm font-semibold">
+            {dataSource === "ai_usage_logs" ? "AI action latency (fallback)" : "Edge function performance"}
+          </h3>
           <Button size="xs" variant="secondary" onClick={() => setReloadTick((n) => n + 1)} leftIcon={<RefreshCw className="w-3 h-3" />}>Refresh</Button>
         </div>
         {rows.length === 0 ? (
@@ -299,6 +321,7 @@ function AITab({ period }: { period: Period }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
+  const [dataSource, setDataSource] = useState<"ai_usage_logs" | "model_cost_logs" | "none">("none");
 
   useEffect(() => {
     let cancelled = false;
@@ -307,25 +330,44 @@ function AITab({ period }: { period: Period }) {
       setLoadError(null);
       try {
         const since = new Date(Date.now() - period * 86400_000).toISOString();
-        const data = await adminAnalyticsDB.getModelCostLogsSince(since);
-        const map: Record<string, AIModelRow> = {};
-        data.forEach((r) => {
-          const model = r.model ?? "unknown";
-          if (!map[model]) {
-            map[model] = { model, calls: 0, tokens_in: 0, tokens_out: 0, cost: 0, credits: 0 };
-          }
-          map[model].calls++;
-          map[model].tokens_in += Number(r.tokens_in ?? 0);
-          map[model].tokens_out += Number(r.tokens_out ?? 0);
-          map[model].cost += Number(r.cost_usd ?? 0);
-          map[model].credits += Number(r.credits_charged ?? 0);
-        });
+        const aiRows = await adminAnalyticsDB.getAiUsageLogsSince(since);
         if (cancelled) return;
+
+        const map: Record<string, AIModelRow> = {};
+        if (aiRows.length > 0) {
+          aiRows.forEach((r) => {
+            const model = r.model ?? "unknown";
+            if (!map[model]) {
+              map[model] = { model, calls: 0, tokens_in: 0, tokens_out: 0, cost: 0, credits: 0 };
+            }
+            map[model].calls++;
+            map[model].tokens_in += Number(r.input_tokens ?? 0);
+            map[model].tokens_out += Number(r.output_tokens ?? 0);
+            map[model].cost += Number(r.cost_microcents ?? 0) / 1_000_000;
+          });
+          setDataSource("ai_usage_logs");
+        } else {
+          const legacy = await adminAnalyticsDB.getModelCostLogsSince(since);
+          if (cancelled) return;
+          legacy.forEach((r) => {
+            const model = r.model ?? "unknown";
+            if (!map[model]) {
+              map[model] = { model, calls: 0, tokens_in: 0, tokens_out: 0, cost: 0, credits: 0 };
+            }
+            map[model].calls++;
+            map[model].tokens_in += Number(r.tokens_in ?? 0);
+            map[model].tokens_out += Number(r.tokens_out ?? 0);
+            map[model].cost += Number(r.cost_usd ?? 0);
+            map[model].credits += Number(r.credits_charged ?? 0);
+          });
+          setDataSource(legacy.length > 0 ? "model_cost_logs" : "none");
+        }
         setRows(Object.values(map).sort((a, b) => b.cost - a.cost));
       } catch (err) {
         if (cancelled) return;
         setLoadError(toAdminUserMessage(err, undefined, "AdminAnalytics.ai"));
         setRows([]);
+        setDataSource("none");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -345,6 +387,16 @@ function AITab({ period }: { period: Period }) {
     <div className="space-y-4">
       {loadError && (
         <InlineErrorRetry message={loadError} onRetry={() => setReloadTick((n) => n + 1)} />
+      )}
+      {dataSource === "ai_usage_logs" && (
+        <p className="text-xs text-muted-foreground rounded-lg border border-border bg-muted/20 px-3 py-2">
+          Sourced from <code className="text-[11px]">ai_usage_logs</code> (live edge telemetry).
+        </p>
+      )}
+      {dataSource === "none" && !loadError && (
+        <p className="text-xs text-muted-foreground rounded-lg border border-border bg-muted/20 px-3 py-2">
+          No AI usage in this period. Data appears after users run AI features (coach, mock, prep tools).
+        </p>
       )}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <Stat label="Total AI cost" value={formatUsdAmountAsInr(totalCost)} sub={`last ${period}d`} />

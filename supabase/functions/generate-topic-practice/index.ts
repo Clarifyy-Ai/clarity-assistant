@@ -55,6 +55,7 @@ import {
   newWorkerId,
   setJobIfActive,
 } from "../_shared/govPaperJobLease.ts";
+import { evaluateAndApplyPaperAutoApproval } from "../_shared/govAutoApprovalPipeline.ts";
 import { examBankTypeKeys, mapExamType } from "../_shared/examTypeMap.ts";
 import { type GapFillRow } from "../_shared/govAiGapFill.ts";
 import {
@@ -703,6 +704,43 @@ Deno.serve(async (req) => {
       }));
       if (linkRows.length) {
         await db.from("gov_generated_paper_questions").insert(linkRows);
+      }
+
+      try {
+        await evaluateAndApplyPaperAutoApproval(
+          db,
+          paper.id as string,
+          {
+            entityType: "paper",
+            paperId: paper.id as string,
+            sourceType: aiFilled > 0 ? "ai_generated_practice" : "approved_bank",
+            qualityScore: 80,
+            qualityHardFail: false,
+            hardFailCodes: [],
+            duplicateStatus: "unique",
+            hasProvenance: true,
+            blueprintValid: true,
+            questionCountMatch: questionIds.length >= finalCount,
+            sectionQuotasMet: true,
+            topicQuotasMet: true,
+            difficultyValid: true,
+            languageValid: Boolean(language),
+            marksValid: totalMarks > 0,
+            negativeMarkingValid: negativeMark >= 0,
+            allQuestionsValidated: true,
+            hardFailCount: 0,
+            reviewQueueLength: 0,
+            examId,
+            language,
+            processingJobId: jobId,
+          },
+          {
+            processingJobId: jobId,
+            provenance: { assembly: "topic_practice_v2", ai_filled_count: aiFilled },
+          },
+        );
+      } catch (aaErr) {
+        console.error("[generate-topic-practice] auto-approval failed (fail-closed):", aaErr);
       }
 
       const { data: completedJob } = await db

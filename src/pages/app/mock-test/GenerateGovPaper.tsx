@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Check, Loader2 } from "lucide-react";
+import { GovExamPageShell } from "@/components/gov-exam/GovExamPageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { ExamSearchCombobox } from "@/components/gov-exam/ExamSearchCombobox";
@@ -1688,6 +1689,7 @@ export default function GenerateGovPaper(): React.ReactElement {
   );
 
   return (
+    <GovExamPageShell>
     <div
       className="space-y-6 max-w-3xl"
       data-testid="gov-generate-wizard"
@@ -2460,5 +2462,6 @@ export default function GenerateGovPaper(): React.ReactElement {
         </aside>
       </div>
     </div>
+    </GovExamPageShell>
   );
 }

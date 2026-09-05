@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useDocumentStore } from "@/store/documentStore";
+import { useSessionStore } from "@/store/sessionStore";
 import {
   FileText,
   Briefcase,
@@ -24,6 +25,11 @@ export function OverlayResumePanel() {
   const activeJdId = useDocumentStore((s) => s.active_jd_id);
   const setActiveResumeId = useDocumentStore((s) => s.setActiveResumeId);
   const setActiveJDId = useDocumentStore((s) => s.setActiveJDId);
+  const sessionStatus = useSessionStore((s) => s.status);
+  const sessionFrozen =
+    sessionStatus === "active" ||
+    sessionStatus === "warming_up" ||
+    sessionStatus === "paused";
 
   const [showDocs, setShowDocs] = useState(false);
 
@@ -32,6 +38,11 @@ export function OverlayResumePanel() {
 
   return (
     <div className="space-y-3 p-3 text-xs overflow-y-auto">
+      {sessionFrozen && (
+        <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200/90">
+          Context frozen at session start. AI coaching uses this snapshot — document switches below are disabled until the session ends.
+        </p>
+      )}
       {/* Document selector */}
       <div>
         <button
@@ -56,6 +67,12 @@ export function OverlayResumePanel() {
 
         {showDocs && (
           <div className="mt-2 space-y-2 p-2.5 bg-white/[0.03] border border-white/[0.06] rounded-xl">
+            {sessionFrozen ? (
+              <p className="text-[11px] text-white/40 italic">
+                Resume and JD were locked when this session started.
+              </p>
+            ) : (
+              <>
             {/* Resume */}
             <div>
               <p className="text-[10px] text-white/25 uppercase tracking-widest mb-1.5 flex items-center gap-1 font-bold">
@@ -96,6 +113,8 @@ export function OverlayResumePanel() {
                 ))}
               </select>
             </div>
+              </>
+            )}
           </div>
         )}
       </div>

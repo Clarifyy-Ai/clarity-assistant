@@ -13,6 +13,7 @@ export {
   parseRuleRow,
   evaluateAutoApproval,
   buildIdempotencyKey,
+  pickActiveRuleRow,
 } from "../../../supabase/functions/_shared/govAutoApproval.ts";
 
 export type {

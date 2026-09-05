@@ -543,13 +543,17 @@ ${input}
 `,
 
   project_build: (input) => `
-Create a polished project showcase with:
-- overview
-- key achievements
-- tech rationale
-- challenges overcome
-- STAR-format version
-- 3 follow-up questions + answers
+Create a polished project showcase using plain text only — NO markdown, NO asterisks, NO hash headings, NO bullet symbols.
+
+Use these exact section labels on their own lines:
+Overview:
+Key achievements:
+Tech rationale:
+Challenges overcome:
+STAR story:
+Follow-up Q&A:
+
+Keep each section concise (2-4 sentences). Use only facts from the user input — do not invent employers, metrics, or technologies.
 
 ${input}
 `,

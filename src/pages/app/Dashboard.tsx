@@ -25,7 +25,7 @@ import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import {
   Mic, ClipboardList, FlaskConical, BarChart2, Landmark,
-  CalendarDays, Flame, Zap, Coins, ChevronRight, ChevronDown,
+  CalendarDays, Flame, Zap, Coins, ChevronRight,
   TrendingUp, Trophy, Clock,
   Building2, AlertTriangle, Info,
   ListTodo, PenTool, FolderOpen, BarChart3, FileSpreadsheet,
@@ -173,8 +173,6 @@ export default function Dashboard() {
   useDocuments();
   const { reload: reloadInterviews } = useInterviewScheduler();
 
-  const [showMore, setShowMore] = useState(false);
-
   const userId = profile?.id ?? user?.id;
   const dashboardData = useDashboardData(userId);
   const {
@@ -232,9 +230,7 @@ export default function Dashboard() {
   const isFreeOrStarter = planId === "free";
   const showSecondary = isNewUser
     ? false
-    : isReturningUser
-      ? showMore
-      : sessionCountLoaded;
+    : sessionCountLoaded;
 
   return (
     <div className="space-y-6">
@@ -392,18 +388,6 @@ export default function Dashboard() {
             </Link>
           </div>
         </Card>
-      )}
-
-      {isReturningUser && (
-        <button
-          type="button"
-          onClick={() => setShowMore((v) => !v)}
-          className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          aria-expanded={showMore}
-        >
-          <ChevronDown className={cn("w-4 h-4 transition-transform", showMore && "rotate-180")} />
-          {showMore ? "Less" : "More"}
-        </button>
       )}
 
       {showSecondary && (
@@ -779,7 +763,7 @@ function RecentActivityFeed({
               <Link
                 key={s.id}
                 to={s.detailRoute || `/app/sessions/${s.id}`}
-                className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-accent/5 transition-all group"
+                className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-accent/5 transition-all group min-w-0"
               >
                 <div className={cn(
                   "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
@@ -792,17 +776,17 @@ function RecentActivityFeed({
                     : <FlaskConical  className="w-3.5 h-3.5" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-foreground font-medium capitalize">
+                  <p className="text-sm text-foreground font-medium capitalize truncate">
                     {s.type ?? "Session"}{s.title ? ` — ${s.title}` : ""}
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground truncate">
                     {s.contextLine ? `${s.contextLine} · ` : ""}
                     {format(new Date(s.created_at), "MMM d, h:mm a")}
                   </p>
                 </div>
                 {score != null && (
                   <span className={cn(
-                    "text-xs font-bold px-2 py-0.5 rounded-lg",
+                    "text-xs font-bold px-2 py-0.5 rounded-lg shrink-0",
                     score >= 75
                       ? "bg-emerald-500/10 text-emerald-400"
                       : score >= 50
@@ -812,7 +796,7 @@ function RecentActivityFeed({
                     {score}
                   </span>
                 )}
-                <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
+                <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
               </Link>
             );
           })}

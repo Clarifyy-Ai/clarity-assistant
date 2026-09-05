@@ -23,7 +23,7 @@ import {
   isOAuthProviderEnabled,
   type OAuthProviderId,
 } from "@/lib/auth/oauthProviders";
-import { storeRefCode } from "@/lib/referrals";
+import { extractRefCodeFromSearchParams, storeRefCode } from "@/lib/referrals";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -176,7 +176,7 @@ export const OAuthButton = ({
         throw new Error("Unsupported OAuth provider.");
       }
 
-      storeRefCode(searchParams.get("ref"));
+      storeRefCode(extractRefCodeFromSearchParams(searchParams));
 
       await signInWithOAuth(provider.name);
 

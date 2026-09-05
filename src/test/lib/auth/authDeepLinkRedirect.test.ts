@@ -97,4 +97,21 @@ describe("authDeepLinkRedirect", () => {
     );
     expect(sessionStorage.getItem(AUTH_RECOVERY_FLAG_KEY)).toBe("1");
   });
+
+  it("does not treat Session History ?type=mock_interview as auth deep link", () => {
+    expect(
+      detectAuthDeepLinkKind({
+        pathname: "/app/sessions",
+        search: "?type=mock_interview",
+        hash: "",
+      }),
+    ).toBeNull();
+    expect(
+      resolveAuthDeepLinkRedirect({
+        pathname: "/app/sessions",
+        search: "?type=mock_interview",
+        hash: "",
+      }),
+    ).toBeNull();
+  });
 });

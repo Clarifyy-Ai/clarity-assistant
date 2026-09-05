@@ -20,7 +20,8 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { CodeScratchpad } from "@/components/prep/CodeScratchpad";
-import { CodeHighlight, renderTextWithCodeBlocks } from "@/components/prep/CodeHighlight";
+import { CodeHighlight } from "@/components/prep/CodeHighlight";
+import { AiFormattedOutput } from "@/components/common/AiFormattedOutput";
 import { supabase } from "@/lib/supabase/client";
 import { prepCodingHistoryDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/userStore";
@@ -490,7 +491,7 @@ export default function CodingHints() {
                       <Copy className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <div className="space-y-2">{renderTextWithCodeBlocks(solutionText)}</div>
+                  <AiFormattedOutput text={solutionText} />
                 </Card>
               )}
 

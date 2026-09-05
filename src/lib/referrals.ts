@@ -3,6 +3,7 @@ import { PUBLIC_WEBSITE_URL } from "@/lib/constants/contact";
 import { logger } from "@/lib/logger";
 
 export const REFERRAL_STORAGE_KEY = "clarify_ref";
+export const REFERRAL_SESSION_STORAGE_KEY = "clarify_ref_session";
 export const PENDING_REFERRAL_METADATA_KEY = "pending_referral_code";
 export const REF_CODE_PATTERN = /^[A-Z0-9]{6,16}$/;
 
@@ -19,7 +20,20 @@ export type RecordReferralOutcome = {
   alreadyRecorded: boolean;
   refereeCredits?: number;
   promoCode?: string;
+  /** Edge/RPC reason when claim did not apply. */
+  reason?: string;
+  /** True when a later attempt may succeed (network/auth timing). */
+  retryable?: boolean;
 };
+
+/** Read ?ref= or legacy ?r= from URL search params. */
+export function extractRefCodeFromSearchParams(
+  params: URLSearchParams | { get: (key: string) => string | null },
+): string | null {
+  return (
+    normalizeRefCode(params.get("ref")) ?? normalizeRefCode(params.get("r"))
+  );
+}
 
 export function normalizeRefCode(raw: string | null | undefined): string | null {
   const upper = (raw ?? "").toUpperCase().trim();
@@ -56,7 +70,10 @@ export function resolveReferralCodeForClaim(
 
 export function getStoredRefCode(): string | null {
   try {
-    return normalizeRefCode(localStorage.getItem(REFERRAL_STORAGE_KEY));
+    return (
+      normalizeRefCode(localStorage.getItem(REFERRAL_STORAGE_KEY)) ??
+      normalizeRefCode(sessionStorage.getItem(REFERRAL_SESSION_STORAGE_KEY))
+    );
   } catch {
     return null;
   }
@@ -70,6 +87,11 @@ export function storeRefCode(raw: string | null | undefined): string | null {
   } catch {
     // Storage can be blocked (private mode / quota). Claim still works via ?ref= on onboarding.
   }
+  try {
+    sessionStorage.setItem(REFERRAL_SESSION_STORAGE_KEY, code);
+  } catch {
+    // sessionStorage may be blocked; localStorage/metadata remain primary.
+  }
   return code;
 }
 
@@ -79,6 +101,21 @@ export function clearStoredRefCode(): void {
   } catch {
     // ignore
   }
+  try {
+    sessionStorage.removeItem(REFERRAL_SESSION_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function emptyReferralOutcome(
+  extra: Partial<RecordReferralOutcome> = {},
+): RecordReferralOutcome {
+  return { applied: false, alreadyRecorded: false, ...extra };
+}
+
+function isTerminalReferralReason(reason: string | undefined): boolean {
+  return typeof reason === "string" && TERMINAL_REFERRAL_REASONS.has(reason);
 }
 
 /** Public signup URL with attribution query for sharing. */
@@ -108,11 +145,10 @@ export async function recordReferral(
   codeRaw: string | null | undefined,
   user?: { user_metadata?: Record<string, unknown> | null } | null,
 ): Promise<RecordReferralOutcome> {
-  const empty: RecordReferralOutcome = { applied: false, alreadyRecorded: false };
-  if (!userId) return empty;
+  if (!userId) return emptyReferralOutcome();
 
   const code = resolveReferralCodeForClaim(codeRaw, user);
-  if (!code) return empty;
+  if (!code) return emptyReferralOutcome();
 
   try {
     const result = await recordReferralViaEdge(code);
@@ -120,17 +156,29 @@ export async function recordReferral(
       clearStoredRefCode();
     }
     if (result.result?.ok === true && result.result.reason === "already_recorded") {
-      return { applied: false, alreadyRecorded: true };
+      return emptyReferralOutcome({
+        alreadyRecorded: true,
+        reason: "already_recorded",
+        retryable: false,
+      });
     }
     if (result.success && result.result?.ok !== false) {
       return {
         applied: true,
         alreadyRecorded: false,
+        retryable: false,
         refereeCredits: result.result?.referee_credits,
         promoCode: result.result?.promo_code,
       };
     }
-    return empty;
+
+    const reason =
+      result.result?.reason ??
+      (result.success ? "unknown" : "transport_failure");
+    return emptyReferralOutcome({
+      reason,
+      retryable: !isTerminalReferralReason(reason),
+    });
   } catch (e) {
     logger.warn("referral.record.failed", {
       operation: "referral.record",
@@ -138,6 +186,9 @@ export async function recordReferral(
       retryable: true,
       error: e instanceof Error ? e.message : "unknown",
     });
-    return empty;
+    return emptyReferralOutcome({
+      reason: "network_error",
+      retryable: true,
+    });
   }
 }

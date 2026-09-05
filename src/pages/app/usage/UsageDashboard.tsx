@@ -9,14 +9,12 @@ import {
   Clock,
   CreditCard,
   RefreshCw,
-  Sparkles,
   Zap,
   type LucideIcon,
 } from "lucide-react";
 
 import { creditsDB, sessionsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/authStore";
-import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageContent } from "@/components/layout/PageContent";
@@ -40,7 +38,66 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+
+type UsagePeriod = "7d" | "30d" | "90d" | "all";
+type TransactionTypeFilter = "all" | "usage" | "added";
+
+const PERIOD_LABELS: Record<UsagePeriod, string> = {
+  "7d": "Last 7 days",
+  "30d": "Last 30 days",
+  "90d": "Last 90 days",
+  all: "All time",
+};
+
+const STATS_TX_LIMIT = 200;
+const TX_PAGE = 20;
+
+function periodToDays(period: UsagePeriod): number | null {
+  switch (period) {
+    case "7d":
+      return 7;
+    case "30d":
+      return 30;
+    case "90d":
+      return 90;
+    default:
+      return null;
+  }
+}
+
+function periodStartMs(period: UsagePeriod): number | null {
+  const days = periodToDays(period);
+  if (days === null) {
+    return null;
+  }
+  return Date.now() - days * 24 * 60 * 60 * 1000;
+}
+
+function isWithinPeriod(
+  value: string | null | undefined,
+  period: UsagePeriod
+): boolean {
+  if (!value) {
+    return false;
+  }
+  const start = periodStartMs(period);
+  if (start === null) {
+    return true;
+  }
+  return new Date(value).getTime() >= start;
+}
+
+function chartDayCount(period: UsagePeriod): number {
+  return periodToDays(period) ?? 90;
+}
 
 type CreditTransaction = {
   id: string;
@@ -64,9 +121,9 @@ type SessionSummary = {
 };
 
 type UsageStats = {
-  creditsUsed30d: number;
-  creditsAdded30d: number;
-  sessions30d: number;
+  creditsUsed: number;
+  creditsAdded: number;
+  sessions: number;
   avgSessionMinutes: number;
 };
 
@@ -111,11 +168,15 @@ function getDayKey(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-function buildUsageTrend(transactions: CreditTransaction[]): UsageDay[] {
+function buildUsageTrend(
+  transactions: CreditTransaction[],
+  period: UsagePeriod
+): UsageDay[] {
+  const dayCount = chartDayCount(period);
   const days = new Map<string, UsageDay>();
   const now = new Date();
 
-  for (let index = 13; index >= 0; index -= 1) {
+  for (let index = dayCount - 1; index >= 0; index -= 1) {
     const date = new Date(now);
     date.setDate(now.getDate() - index);
 
@@ -129,6 +190,10 @@ function buildUsageTrend(transactions: CreditTransaction[]): UsageDay[] {
   }
 
   for (const transaction of transactions) {
+    if (!isWithinPeriod(transaction.created_at, period)) {
+      continue;
+    }
+
     const key = getDayKey(new Date(transaction.created_at));
     const day = days.get(key);
 
@@ -150,29 +215,27 @@ function buildUsageTrend(transactions: CreditTransaction[]): UsageDay[] {
 
 function calculateStats(
   transactions: CreditTransaction[],
-  sessions: SessionSummary[]
+  sessions: SessionSummary[],
+  period: UsagePeriod
 ): UsageStats {
-  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-
-  const recentTransactions = transactions.filter(
-    (transaction) =>
-      new Date(transaction.created_at).getTime() >= thirtyDaysAgo
+  const recentTransactions = transactions.filter((transaction) =>
+    isWithinPeriod(transaction.created_at, period)
   );
 
-  const creditsUsed30d = recentTransactions.reduce((total, transaction) => {
+  const creditsUsed = recentTransactions.reduce((total, transaction) => {
     const amount = transaction.amount ?? 0;
 
     return amount < 0 ? total + Math.abs(amount) : total;
   }, 0);
 
-  const creditsAdded30d = recentTransactions.reduce((total, transaction) => {
+  const creditsAdded = recentTransactions.reduce((total, transaction) => {
     const amount = transaction.amount ?? 0;
 
     return amount > 0 ? total + amount : total;
   }, 0);
 
-  const recentSessions = sessions.filter(
-    (session) => new Date(session.created_at).getTime() >= thirtyDaysAgo
+  const recentSessions = sessions.filter((session) =>
+    isWithinPeriod(session.created_at, period)
   );
 
   const totalDuration = recentSessions.reduce(
@@ -181,14 +244,26 @@ function calculateStats(
   );
 
   return {
-    creditsUsed30d,
-    creditsAdded30d,
-    sessions30d: recentSessions.length,
+    creditsUsed,
+    creditsAdded,
+    sessions: recentSessions.length,
     avgSessionMinutes:
       recentSessions.length > 0
         ? Math.round(totalDuration / recentSessions.length / 60)
         : 0,
   };
+}
+
+function matchesTransactionFilter(
+  transaction: CreditTransaction,
+  filter: TransactionTypeFilter
+): boolean {
+  if (filter === "all") {
+    return true;
+  }
+
+  const amount = transaction.amount ?? 0;
+  return filter === "usage" ? amount < 0 : amount > 0;
 }
 
 function StatCard({
@@ -223,15 +298,27 @@ function StatCard({
   );
 }
 
-function UsageTrend({ data }: { data: UsageDay[] }) {
+function UsageTrend({
+  data,
+  period,
+}: {
+  data: UsageDay[];
+  period: UsagePeriod;
+}) {
   const chartData = data.map((day) => ({
     label: day.date.slice(5),
     used: day.used,
     added: day.added,
   }));
 
+  const dayCount = chartDayCount(period);
+
   return (
-    <div className="h-44 w-full" role="img" aria-label="Credits used and added over 14 days">
+    <div
+      className="h-44 w-full"
+      role="img"
+      aria-label={`Credits used and added over ${dayCount} days`}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
@@ -254,6 +341,69 @@ function UsageTrend({ data }: { data: UsageDay[] }) {
   );
 }
 
+function UsageFilterControls({
+  period,
+  transactionFilter,
+  onPeriodChange,
+  onTransactionFilterChange,
+  onClearFilters,
+  filtersActive,
+}: {
+  period: UsagePeriod;
+  transactionFilter: TransactionTypeFilter;
+  onPeriodChange: (period: UsagePeriod) => void;
+  onTransactionFilterChange: (filter: TransactionTypeFilter) => void;
+  onClearFilters: () => void;
+  filtersActive: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Select
+        value={period}
+        onValueChange={(value) => onPeriodChange(value as UsagePeriod)}
+      >
+        <SelectTrigger
+          className="w-[130px] h-9"
+          data-testid="usage-filter-period"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="7d">Last 7 days</SelectItem>
+          <SelectItem value="30d">Last 30 days</SelectItem>
+          <SelectItem value="90d">Last 90 days</SelectItem>
+          <SelectItem value="all">All time</SelectItem>
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={transactionFilter}
+        onValueChange={(value) =>
+          onTransactionFilterChange(value as TransactionTypeFilter)
+        }
+      >
+        <SelectTrigger
+          className="w-[130px] h-9"
+          data-testid="usage-filter-transaction-type"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="all">All activity</SelectItem>
+          <SelectItem value="usage">Usage only</SelectItem>
+          <SelectItem value="added">Added only</SelectItem>
+        </SelectContent>
+      </Select>
+
+      {filtersActive && (
+        <Button variant="ghost" size="sm" onClick={onClearFilters}>
+          Clear filters
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export default function UsageDashboard(): JSX.Element {
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
@@ -262,8 +412,9 @@ export default function UsageDashboard(): JSX.Element {
   const planId = useAuthStore((state) => state.planId);
   const refreshCredits = useAuthStore((state) => state.refreshCredits);
 
-  const TX_PAGE = 20;
-
+  const [period, setPeriod] = useState<UsagePeriod>("30d");
+  const [transactionFilter, setTransactionFilter] =
+    useState<TransactionTypeFilter>("all");
   const [transactions, setTransactions] = useState<CreditTransaction[]>([]);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -283,15 +434,15 @@ export default function UsageDashboard(): JSX.Element {
     try {
       const [txData, sessionRows] = await Promise.all([
         creditsDB.listByUserIdWithBalancePage(user.id, {
-          limit: TX_PAGE,
+          limit: STATS_TX_LIMIT,
           offset: 0,
         }),
-        sessionsDB.listSummariesByUserId(user.id, 50),
+        sessionsDB.listSummariesByUserId(user.id, 100),
       ]);
 
       setTransactions((txData ?? []) as CreditTransaction[]);
       setTxOffset(txData.length);
-      setTxHasMore(txData.length >= TX_PAGE);
+      setTxHasMore(txData.length >= STATS_TX_LIMIT);
       setSessions(
         sessionRows.map((s) => ({
           id: s.id,
@@ -349,11 +500,36 @@ export default function UsageDashboard(): JSX.Element {
   }, [user?.id]);
 
   const stats = useMemo(
-    () => calculateStats(transactions, sessions),
-    [transactions, sessions]
+    () => calculateStats(transactions, sessions, period),
+    [transactions, sessions, period]
   );
 
-  const trend = useMemo(() => buildUsageTrend(transactions), [transactions]);
+  const trend = useMemo(
+    () => buildUsageTrend(transactions, period),
+    [transactions, period]
+  );
+
+  const filteredSessions = useMemo(
+    () => sessions.filter((session) => isWithinPeriod(session.created_at, period)),
+    [sessions, period]
+  );
+
+  const filteredTransactions = useMemo(
+    () =>
+      transactions.filter(
+        (transaction) =>
+          isWithinPeriod(transaction.created_at, period) &&
+          matchesTransactionFilter(transaction, transactionFilter)
+      ),
+    [transactions, period, transactionFilter]
+  );
+
+  const filtersActive = period !== "30d" || transactionFilter !== "all";
+  const periodLabel = PERIOD_LABELS[period];
+  const chartTitle =
+    period === "all"
+      ? "90-day credit activity"
+      : `${periodLabel.toLowerCase()} credit activity`;
 
   return (
     <PageContent className="space-y-6 max-w-7xl mx-auto">
@@ -365,7 +541,19 @@ export default function UsageDashboard(): JSX.Element {
           { label: "Usage & Credits" },
         ]}
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <UsageFilterControls
+              period={period}
+              transactionFilter={transactionFilter}
+              onPeriodChange={setPeriod}
+              onTransactionFilterChange={setTransactionFilter}
+              filtersActive={filtersActive}
+              onClearFilters={() => {
+                setPeriod("30d");
+                setTransactionFilter("all");
+              }}
+            />
+
             <Button
               variant="outline"
               onClick={() => void loadUsage()}
@@ -413,72 +601,32 @@ export default function UsageDashboard(): JSX.Element {
 
         <StatCard
           title="Credits used"
-          value={stats.creditsUsed30d}
-          description="Last 30 days"
+          value={stats.creditsUsed}
+          description={periodLabel}
           icon={BarChart3}
         />
 
         <StatCard
           title="Credits added"
-          value={stats.creditsAdded30d}
+          value={stats.creditsAdded}
           description="Purchases, refunds, renewals"
           icon={CreditCard}
         />
 
         <StatCard
           title="Sessions"
-          value={stats.sessions30d}
-          description={`Avg duration: ${stats.avgSessionMinutes} min`}
+          value={stats.sessions}
+          description={`Avg duration: ${stats.avgSessionMinutes} min · ${periodLabel.toLowerCase()}`}
           icon={Clock}
         />
       </div>
-
-      <Card data-testid="credit-consume-smoke-path">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            Try a credit-consuming AI action
-          </CardTitle>
-          <CardDescription>
-            Free-plan path for credit deduction checks (TC-CR-002). Note your
-            balance above, run one action, then refresh — balance should drop by
-            the cost shown.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            className="min-h-11"
-            onClick={() => navigate("/app/prep")}
-          >
-            STAR polish ({AI_CREDIT_COSTS.polish_star} cr)
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="min-h-11"
-            onClick={() => navigate("/app/prep/rephraser")}
-          >
-            Rephraser ({AI_CREDIT_COSTS.rephraser} cr)
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="min-h-11"
-            onClick={() => void loadUsage()}
-          >
-            Refresh balance
-          </Button>
-        </CardContent>
-      </Card>
       </>
       )}
 
       <div className="grid gap-6 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <CardHeader>
-            <CardTitle>14-day credit activity</CardTitle>
+            <CardTitle>{chartTitle}</CardTitle>
             <CardDescription>
               Red bars show usage; green bars show added credits.
             </CardDescription>
@@ -490,7 +638,7 @@ export default function UsageDashboard(): JSX.Element {
                 Loading usage trend…
               </div>
             ) : (
-              <UsageTrend data={trend} />
+              <UsageTrend data={trend} period={period} />
             )}
           </CardContent>
         </Card>
@@ -498,7 +646,7 @@ export default function UsageDashboard(): JSX.Element {
         <Card>
           <CardHeader>
             <CardTitle>Recent sessions</CardTitle>
-            <CardDescription>Latest interview activity</CardDescription>
+            <CardDescription>{periodLabel}</CardDescription>
           </CardHeader>
 
           <CardContent>
@@ -508,16 +656,20 @@ export default function UsageDashboard(): JSX.Element {
                   <SkeletonCard key={i} />
                 ))}
               </div>
-            ) : sessions.length === 0 ? (
+            ) : filteredSessions.length === 0 ? (
               <EmptyState
                 icon={Clock}
-                title="No sessions yet"
-                description="Start a mock interview or practice session to see activity here."
+                title="No sessions in this period"
+                description={
+                  filtersActive
+                    ? "Try widening the date range or clearing filters."
+                    : "Start a mock interview or practice session to see activity here."
+                }
                 compact
               />
             ) : (
             <div className="space-y-3">
-              {sessions.slice(0, 6).map((session) => (
+              {filteredSessions.slice(0, 6).map((session) => (
                 <div
                   key={session.id}
                   className="rounded-xl border border-border p-3"
@@ -551,9 +703,12 @@ export default function UsageDashboard(): JSX.Element {
 
       <Card>
         <CardHeader>
-          <CardTitle>Recent credit transactions</CardTitle>
+          <CardTitle>Credit transactions</CardTitle>
           <CardDescription>
-            Usage, purchases, refunds, and subscription credit events.
+            {periodLabel}
+            {transactionFilter !== "all"
+              ? ` · ${transactionFilter === "usage" ? "Usage only" : "Added only"}`
+              : ""}
           </CardDescription>
         </CardHeader>
 
@@ -564,11 +719,19 @@ export default function UsageDashboard(): JSX.Element {
                 <SkeletonCard key={i} />
               ))}
             </div>
-          ) : transactions.length === 0 ? (
+          ) : filteredTransactions.length === 0 ? (
             <EmptyState
               icon={CreditCard}
-              title="No transactions yet"
-              description="Credit purchases, usage, and subscription events will appear here."
+              title={
+                transactions.length === 0
+                  ? "No transactions yet"
+                  : "No transactions match these filters"
+              }
+              description={
+                transactions.length === 0
+                  ? "Credit purchases, usage, and subscription events will appear here."
+                  : "Try widening the date range or changing the activity filter."
+              }
               compact
             />
           ) : (
@@ -586,7 +749,7 @@ export default function UsageDashboard(): JSX.Element {
               </thead>
 
               <tbody>
-                {transactions.map((transaction) => {
+                {filteredTransactions.map((transaction) => {
                   const amount = transaction.amount ?? 0;
                   const isPositive = amount >= 0;
 

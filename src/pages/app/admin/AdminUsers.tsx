@@ -30,9 +30,13 @@ import {
 import { sanitizeAdminSearch } from "@/lib/admin/searchFilter";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { toast } from "sonner";
-import { Search, Users, Shield, Zap, Ban, MoreHorizontal } from "lucide-react";
+import { Search, Users, Shield, Zap, Ban, MoreHorizontal, UserPlus, Crown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { AdminSectionDashboard } from "@/components/admin/AdminSectionDashboard";
+import { AdminRecentActivityList } from "@/components/admin/AdminRecentActivityList";
+import { fetchUsersDashboardStats } from "@/lib/admin/sectionDashboardStats";
+import { USERS_QUICK_LINKS } from "@/lib/admin/adminSectionNav";
 const PAGE_SIZE = 25;
 interface UserRow {
   id: string;
@@ -56,8 +60,38 @@ export default function AdminUsers() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [selected, setSelected] = useState<UserRow | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [dashStats, setDashStats] = useState<Awaited<ReturnType<typeof fetchUsersDashboardStats>> | null>(null);
+  const [dashLoading, setDashLoading] = useState(true);
+  const [recentSignups, setRecentSignups] = useState<Pick<UserRow, "id" | "full_name" | "email" | "created_at" | "plan_id">[]>([]);
   const requestSequence = useRef(0);
   const fetchAbortRef = useRef<AbortController | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void fetchUsersDashboardStats()
+      .then((stats) => { if (!cancelled) setDashStats(stats); })
+      .catch(() => { if (!cancelled) setDashStats(null); })
+      .finally(() => { if (!cancelled) setDashLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("id, full_name, email, created_at, plan_id")
+          .order("created_at", { ascending: false })
+          .limit(5);
+        if (error) throw error;
+        if (!cancelled) setRecentSignups((data ?? []) as typeof recentSignups);
+      } catch {
+        if (!cancelled) setRecentSignups([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedSearch(sanitizeAdminSearch(search)), 350);
     return () => window.clearTimeout(t);
@@ -95,6 +129,12 @@ export default function AdminUsers() {
       }
       if (filter === "free") {
         q = q.eq("plan_id", "free");
+      }
+      if (filter === "banned") {
+        q = q.eq("is_banned", true);
+      }
+      if (filter === "new7d") {
+        q = q.gte("created_at", new Date(Date.now() - 7 * 86400_000).toISOString());
       }
       const { data, count, error } = await q;
       if (error) throw error;
@@ -232,6 +272,75 @@ export default function AdminUsers() {
           <Badge variant="default" size="sm">{total.toLocaleString()}</Badge>
         </h1>
       </div>
+
+      <AdminSectionDashboard
+        loading={dashLoading}
+        columns={5}
+        quickLinks={USERS_QUICK_LINKS}
+        activityTitle="Recent signups"
+        activity={
+          <AdminRecentActivityList
+            emptyMessage="No recent signups."
+            items={recentSignups.map((user) => ({
+              id: user.id,
+              title: user.full_name || user.email || user.id.slice(0, 8),
+              subtitle: user.email ?? undefined,
+              badge: user.plan_id && user.plan_id !== "free" ? user.plan_id : "free",
+              badgeVariant: user.plan_id && user.plan_id !== "free" ? "success" : "default",
+              meta: format(new Date(user.created_at), "MMM d"),
+              onClick: () => {
+                setSearch(user.email ?? user.full_name ?? "");
+                setPage(0);
+              },
+            }))}
+          />
+        }
+        stats={[
+          {
+            id: "total",
+            label: "Total users",
+            value: (dashStats?.total ?? total).toLocaleString(),
+            icon: Users,
+            onClick: () => { setFilter("all"); setPage(0); },
+            active: filter === "all",
+          },
+          {
+            id: "pro",
+            label: "Pro",
+            value: (dashStats?.pro ?? 0).toLocaleString(),
+            icon: Crown,
+            variant: "success",
+            onClick: () => { setFilter("pro"); setPage(0); },
+            active: filter === "pro",
+          },
+          {
+            id: "free",
+            label: "Free",
+            value: (dashStats?.free ?? 0).toLocaleString(),
+            icon: Users,
+            onClick: () => { setFilter("free"); setPage(0); },
+            active: filter === "free",
+          },
+          {
+            id: "banned",
+            label: "Banned",
+            value: (dashStats?.banned ?? 0).toLocaleString(),
+            icon: Ban,
+            variant: "danger",
+            onClick: () => { setFilter("banned"); setPage(0); },
+            active: filter === "banned",
+          },
+          {
+            id: "new",
+            label: "New (7d)",
+            value: (dashStats?.new7d ?? 0).toLocaleString(),
+            icon: UserPlus,
+            onClick: () => { setFilter("new7d"); setPage(0); },
+            active: filter === "new7d",
+          },
+        ]}
+      />
+
       <div className="flex gap-3 flex-wrap">
         <Input
           placeholder="Search by name or email…"
@@ -245,7 +354,7 @@ export default function AdminUsers() {
           fullWidth={false}
         />
         <div className="flex gap-1.5">
-          {["all", "pro", "free"].map((f) => (
+          {["all", "pro", "free", "banned", "new7d"].map((f) => (
             <button
               key={f}
               type="button"
@@ -260,7 +369,7 @@ export default function AdminUsers() {
                   : "bg-secondary/50 border-border text-muted-foreground hover:text-foreground"
               )}
             >
-              {f}
+              {f === "new7d" ? "New (7d)" : f}
             </button>
           ))}
         </div>
@@ -334,6 +443,9 @@ export default function AdminUsers() {
                       <Badge variant="default" size="sm">
                         moderator
                       </Badge>
+                    )}
+                    {!u.is_admin && !u.is_moderator && (
+                      <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </TableCell>
                   <TableCell className="text-muted-foreground text-xs">

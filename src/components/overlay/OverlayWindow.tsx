@@ -1009,6 +1009,13 @@ export function OverlayWindow({
                               onConfirmRetryListening={onConfirmRetryListening}
                               onConfirmTypeManually={onConfirmTypeManually}
                               onConfirmCancel={onConfirmCancel}
+                              onRequestModeChange={(mode) => {
+                                const store = useOverlayStore.getState();
+                                store.setHintStyle(mode);
+                                store.setAnswerMode(
+                                  mode === "full_answer" ? "full_answer" : "hint",
+                                );
+                              }}
                             />
                           </div>
                         )}

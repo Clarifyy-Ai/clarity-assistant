@@ -10,9 +10,11 @@ import {
   Link2, BookOpen, ListChecks, FileStack, Languages, FileUp, Factory, ShieldCheck,
   Mail, ClipboardList, Wallet, LogOut,
 } from "lucide-react";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { cn } from "@/lib/utils";
 import { COMMUNITY_MODULE_LABEL } from "@/lib/community/moderation";
 import { AppLoadingFallback } from "@/components/layout/AppLoadingFallback";
+import { routePrefetchHandlers } from "@/lib/navigation/routePrefetch";
 import {
   Sheet,
   SheetContent,
@@ -36,14 +38,6 @@ function isModeratorAllowedPath(pathname: string): boolean {
   return MODERATOR_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-const ADMIN_ROUTE_PREFETCH: Record<string, () => Promise<unknown>> = {
-  "/app/admin": () => import("@/pages/app/admin/AdminDashboard"),
-  "/app/admin/mail": () => import("@/pages/app/admin/AdminMail"),
-  "/app/admin/live-chat": () => import("@/pages/app/admin/AdminLiveChat"),
-  "/app/admin/users": () => import("@/pages/app/admin/AdminUsers"),
-  "/app/admin/gov/exams": () => import("@/pages/app/admin/AdminGovExamRegistry"),
-};
-
 const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
   {
     label: "Users & Support",
@@ -53,6 +47,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { to: "/app/admin/support",   icon: LifeBuoy,      label: "Support"   },
       { to: "/app/admin/mail",      icon: Mail,          label: "Mail"      },
       { to: "/app/admin/audit-log", icon: ScrollText,    label: "Audit Log" },
+      { to: "/app/admin/compliance-logs", icon: Shield,   label: "Compliance Logs" },
     ],
   },
   {
@@ -97,6 +92,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { to: "/app/admin/analytics",       icon: BarChart2,       label: "Analytics"       },
       { to: "/app/admin/feature-flags",   icon: Flag,            label: "Feature Flags"   },
       { to: "/app/admin/diagnostics",     icon: Shield,          label: "Diagnostics"     },
+      { to: "/app/admin/security",        icon: ShieldCheck,     label: "Security"        },
       { to: "/app/admin/model-costs",     icon: Cpu,             label: "Model Costs"     },
       { to: "/app/admin/ai-hub",          icon: Bot,             label: "AI Hub"          },
     ],
@@ -123,12 +119,7 @@ function AdminNavLinks({
               to={item.to}
               end={item.to === "/app/admin"}
               onClick={onNavigate}
-              onMouseEnter={() => {
-                void ADMIN_ROUTE_PREFETCH[item.to]?.();
-              }}
-              onFocus={() => {
-                void ADMIN_ROUTE_PREFETCH[item.to]?.();
-              }}
+              {...routePrefetchHandlers(item.to)}
               className={({ isActive }) =>
                 cn(
                   "flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all duration-150",
@@ -281,7 +272,7 @@ export default function AdminLayout() {
             </div>
           </SheetContent>
         </Sheet>
-        <div className="flex flex-col min-w-0">
+        <div className="flex flex-col min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <Shield className="w-4 h-4 text-red-400 shrink-0" aria-hidden="true" />
             <span className="text-sm font-semibold truncate">
@@ -289,18 +280,24 @@ export default function AdminLayout() {
             </span>
           </div>
         </div>
+        <ThemeToggle className="shrink-0" />
       </header>
 
       {/* Desktop sidebar */}
       <aside className="hidden md:flex w-56 shrink-0 border-r border-border flex-col h-full min-h-0">
         <div className="p-4 border-b border-border shrink-0">
-          <div className="flex items-center gap-2">
-            <Shield className="w-5 h-5 text-red-400" aria-hidden="true" />
-            <span className="text-sm font-bold text-foreground">{isAdmin ? "Career Pilot Admin" : "Moderation"}</span>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <Shield className="w-5 h-5 text-red-400" aria-hidden="true" />
+                <span className="text-sm font-bold text-foreground">{isAdmin ? "Career Pilot Admin" : "Moderation"}</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                {isAdmin ? "Career Pilot Administration" : "Content moderation"}
+              </p>
+            </div>
+            <ThemeToggle className="shrink-0" />
           </div>
-          <p className="text-[10px] text-muted-foreground mt-0.5">
-            {isAdmin ? "Career Pilot Administration" : "Content moderation"}
-          </p>
         </div>
 
         <nav className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3" aria-label="Admin navigation">

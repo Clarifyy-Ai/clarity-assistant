@@ -23,7 +23,7 @@ import {
   MARKETING_FOOTER_COMPANY_LINKS,
   type MarketingFooterLink,
 } from "@/lib/routes/publicMarketing";
-import { storeRefCode } from "@/lib/referrals";
+import { extractRefCodeFromSearchParams, storeRefCode } from "@/lib/referrals";
 
 type NavItem = MarketingFooterLink;
 
@@ -31,6 +31,7 @@ type NavItem = MarketingFooterLink;
 const NAV_LINKS: NavItem[] = [
   { to: "/", hash: "features", label: "Features" },
   { to: "/gov-exams", label: "Gov Exams" },
+  { to: "/pricing", hash: "offers", label: "Offers" },
   { to: "/pricing", label: "Pricing" },
   { to: "/shortcuts", label: "Shortcuts" },
   { to: "/blog", label: "Blog" },
@@ -47,6 +48,7 @@ const FOOTER_COLUMNS: Array<{
     links: [
       { to: "/", hash: "features", label: "Features" },
       { to: "/gov-exams", label: PRODUCT_NAMES.govExams },
+      { to: "/pricing", hash: "offers", label: "Offers" },
       { to: "/pricing", label: "Pricing" },
       { to: "/download", label: PUBLIC_CTAS.downloadDesktop },
       { to: "/shortcuts", label: "Shortcuts" },
@@ -145,7 +147,7 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
   }, [pathname]);
 
   useEffect(() => {
-    storeRefCode(new URLSearchParams(search).get("ref"));
+    storeRefCode(extractRefCodeFromSearchParams(new URLSearchParams(search)));
   }, [search]);
 
   useEffect(() => {
@@ -165,7 +167,7 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
   // Hash deep-links (e.g. /#features) are handled by ScrollToTop + the effect below.
   // Honor deep links like /#features after SPA navigation.
   useEffect(() => {
-    if (pathname === "/" && hash) {
+    if (hash && (pathname === "/" || pathname === "/pricing")) {
       scrollToHash(hash);
     }
   }, [pathname, hash]);

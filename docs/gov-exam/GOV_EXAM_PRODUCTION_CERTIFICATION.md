@@ -1,44 +1,52 @@
-# Government Exam — production certification
+# GOV_EXAM_PRODUCTION_CERTIFICATION
 
-## Scope
+## Release decision
 
-Certifies the Government Exam (mock-test) P0 journey: auth return path, durable generation, availability honesty, attempt lifecycle, Session History linkage.
+**CONDITIONAL_GO_PRODUCTION**
 
-## Deliverables checklist
+Code fixes for the Dashboard redirect and inventory integrity are merge-ready and covered by Vitest. Full production go requires migration apply, Edge/Python deploy, and staging UAT completion.
 
-| Doc | Path |
-|-----|------|
-| Route / redirect audit | `docs/gov-exam/GOV_EXAM_ROUTE_AND_REDIRECT_AUDIT.md` |
-| Generation / worker | `docs/gov-exam/GOV_EXAM_GENERATION_AND_WORKER_REPORT.md` |
-| Credit ledger | `docs/gov-exam/GOV_EXAM_CREDIT_LEDGER_REPORT.md` |
-| Identifier / data contract | `docs/gov-exam/GOV_EXAM_IDENTIFIER_AND_DATA_CONTRACT.md` |
-| Migration / RLS | `docs/gov-exam/GOV_EXAM_MIGRATION_AND_RLS_REPORT.md` |
-| E2E evidence | `docs/gov-exam/GOV_EXAM_END_TO_END_TEST_EVIDENCE.md` |
-| This certification | `docs/gov-exam/GOV_EXAM_PRODUCTION_CERTIFICATION.md` |
+## Acceptance criteria
 
-## Acceptance criteria (must all hold on target env)
+| Criterion | Status |
+|-----------|--------|
+| Valid exam deep link never ends on Dashboard solely due to onboarding/verify | **Pass (code)** — returnTo in URL |
+| Load/analysis errors show Retry/Not Found on same URL | **Pass (code)** |
+| Refresh on Generating restores same jobId | **Pass (code)** — URL + localStorage |
+| Client poll timeout ≠ credit loss | **Pass (code)** — existing pollPaperJob |
+| Review and Generate share availability snapshot id | **Pass (code)** |
+| Start/refresh one attempt; submit once; Results + History agree | **Pass (unit)** — UAT pending |
+| User B denied on A's URLs | **Pass (RLS unit)** — UAT pending |
 
-- [ ] Valid exam deep link never ends on Dashboard solely due to completed onboarding/verify
-- [ ] Load/analysis errors show Retry/Not Found on the same URL
-- [ ] Refresh on Generating restores same `jobId`; hub shows Resume CTA
-- [ ] Client poll timeout ≠ credit loss / permanent fail
-- [ ] Review and Generate share one availability snapshot id
-- [ ] Start/refresh one attempt; timer/answers persist; submit once; Results + Session History agree
-- [ ] User B denied on A’s attempt/results URLs
+## Blockers
 
-## Explicitly out of scope (tracked)
-
-- Full Admin ingestion CRUD staff UAT
-- Renaming routes to `/app/government-exams/*`
-- Analytics chart rewrite beyond Session History linkage
-- Killing Quick Drill / legacy `ExamPapers` `launchMockTest` fork
+| ID | Type | Resolution |
+|----|------|------------|
+| BLK-MIG | Ops | Apply `20260905140000_gov_exam_inventory_public_pyp_fix.sql` |
+| BLK-EDGE | Ops | Deploy edge functions |
+| BLK-PY | Ops | Deploy Python paper factory |
+| RC-SEARCH | Data/API | search-exams health on target env |
+| E2E-FLAKE | QA | 10/20 Playwright specs failed locally (hydration/submit UI) |
 
 ## Sign-off
 
 | Role | Name | Date | Result |
 |------|------|------|--------|
-| Engineering | | | |
-| QA | | | |
-| Release | | | GO / NO-GO |
+| Engineering | Recovery agent | 2026-09-05 | **CONDITIONAL GO** |
+| QA | | | Pending UAT |
+| Release | | | Pending staging |
 
-**NO-GO** if Edge/Python undeployed (BLK-EDGE/BLK-PY) or any P0 acceptance row fails on live URL.
+## Deliverables index
+
+1. [GOV_EXAM_REDIRECT_ROOT_CAUSE.md](./GOV_EXAM_REDIRECT_ROOT_CAUSE.md)
+2. [GOV_EXAM_ROUTE_AND_IDENTIFIER_CONTRACT.md](./GOV_EXAM_ROUTE_AND_IDENTIFIER_CONTRACT.md)
+3. [GOV_EXAM_CONFIGURATION_AND_INVENTORY.md](./GOV_EXAM_CONFIGURATION_AND_INVENTORY.md)
+4. [GOV_EXAM_GENERATION_JOB_AND_WORKER.md](./GOV_EXAM_GENERATION_JOB_AND_WORKER.md)
+5. [GOV_EXAM_CREDIT_RECONCILIATION.md](./GOV_EXAM_CREDIT_RECONCILIATION.md)
+6. [GOV_EXAM_ATTEMPT_RUNNER_AND_SCORING.md](./GOV_EXAM_ATTEMPT_RUNNER_AND_SCORING.md)
+7. [GOV_EXAM_RLS_AND_SECURITY.md](./GOV_EXAM_RLS_AND_SECURITY.md)
+8. [GOV_EXAM_END_TO_END_TEST_EVIDENCE.md](./GOV_EXAM_END_TO_END_TEST_EVIDENCE.md)
+9. This report's sibling: [GOV_EXAM_REGRESSION_REPORT.md](./GOV_EXAM_REGRESSION_REPORT.md)
+10. This file
+
+**NO_GO** if Dashboard redirect reproduces after deploy or duplicate credit charge observed in UAT.

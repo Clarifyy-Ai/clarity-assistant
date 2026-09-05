@@ -28,6 +28,7 @@ import {
 import {
   annotateSessionsWithContentFlags,
   countDebriefEligibility,
+  DEBRIEF_SESSION_DB_TYPES,
   filterPendingDebriefSessions,
 } from "@/lib/debrief/debriefList";
 
@@ -735,7 +736,7 @@ export const sessionsDB = {
           .select("id, type, title, overall_score, created_at, questions_asked, status")
           .eq("user_id", userId)
           .eq("status", "completed")
-          .in("type", ["mock", "live", "practice", "rehearsal"] as any)
+          .in("type", [...DEBRIEF_SESSION_DB_TYPES] as any)
           .order("created_at", { ascending: false })
           .limit(Math.max(limit * 3, 50)),
       ]);
@@ -2948,6 +2949,73 @@ export const adminAnalyticsDB = {
       });
     }
     return data ?? [];
+  },
+
+  /** Primary AI telemetry source — edge functions write here via aiProvider.ts. */
+  async getAiUsageLogsSince(sinceIso: string) {
+    const { data, error } = await supabase
+      .from("ai_usage_logs" as "profiles")
+      .select("model, input_tokens, output_tokens, cost_microcents, latency_ms, action, created_at")
+      .gte("created_at", sinceIso);
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "ai_usage_logs",
+        operation: "getAiUsageLogsSince",
+      });
+    }
+    return (data ?? []) as Array<{
+      model: string;
+      input_tokens: number | null;
+      output_tokens: number | null;
+      cost_microcents: number | null;
+      latency_ms: number | null;
+      action: string;
+      created_at: string | null;
+    }>;
+  },
+
+  /** Fallback perf stats from ai_usage_logs when request_metrics is empty. */
+  async getAiUsageLatencyByAction(days: number) {
+    const since = new Date(Date.now() - days * 86400_000).toISOString();
+    const { data, error } = await supabase
+      .from("ai_usage_logs" as "profiles")
+      .select("action, latency_ms")
+      .gte("created_at", since);
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "ai_usage_logs",
+        operation: "getAiUsageLatencyByAction",
+      });
+    }
+    const rows = (data ?? []) as Array<{ action: string; latency_ms: number | null }>;
+    const buckets = new Map<string, number[]>();
+    for (const row of rows) {
+      const ms = Number(row.latency_ms);
+      if (!Number.isFinite(ms) || ms <= 0) continue;
+      const key = String(row.action ?? "unknown");
+      const list = buckets.get(key) ?? [];
+      list.push(ms);
+      buckets.set(key, list);
+    }
+    const percentile = (values: number[], p: number) => {
+      if (!values.length) return 0;
+      const sorted = [...values].sort((a, b) => a - b);
+      const idx = Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length));
+      return sorted[idx] ?? 0;
+    };
+    return [...buckets.entries()].map(([action, values]) => {
+      const avg = values.reduce((s, v) => s + v, 0) / values.length;
+      return {
+        function_name: action,
+        call_count: values.length,
+        avg_ms: avg,
+        p50_ms: percentile(values, 50),
+        p95_ms: percentile(values, 95),
+        p99_ms: percentile(values, 99),
+        error_count: 0,
+        error_rate: 0,
+      };
+    });
   },
 
   async countMockTestsCreatedSince(sinceIso: string): Promise<number> {

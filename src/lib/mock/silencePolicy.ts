@@ -47,10 +47,13 @@ export function decideSilenceAdvance(input: {
   transcriptLooksComplete: boolean;
   interviewerSpeaking: boolean;
   paused: boolean;
+  /** VAD or STT indicates the candidate is still speaking — block finalize. */
+  isSpeechActive?: boolean;
   policy?: SilencePolicy;
 }): SilenceDecision {
   const policy = input.policy ?? DEFAULT_SILENCE_POLICY;
   if (input.paused || input.interviewerSpeaking) return "ignore";
+  if (input.isSpeechActive) return "wait";
   if (!input.hasSpoken) {
     return input.silenceMs >= policy.noAnswerMs ? "no_answer_prompt" : "ignore";
   }

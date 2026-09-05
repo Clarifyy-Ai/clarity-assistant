@@ -37,10 +37,6 @@ import {
   saveLastPracticeSetup,
 } from "@/lib/session/lastPracticeSetup";
 import { saveLastSessionSummary } from "@/lib/session/lastSessionSummary";
-import {
-  assessAiHelpQuestion,
-  confidenceTierLabel,
-} from "@/lib/session/aiHelpConfirm";
 import { restoreOwnedSession, heartbeatOwnedSession } from "@/lib/api/sessions";
 import { handleSessionStartError } from "@/lib/billing/sessionStartErrors";
 import {
@@ -453,50 +449,8 @@ function LiveOverlaySession() {
 
   // ── Generate hint (Manual AI Help confirm — never auto-generate on low confidence)
   const handleGenerate = useCallback(() => {
-    const store = useOverlayStore.getState();
-    store.setActiveTab("answer");
-    store.setMinimalMode(false);
-    store.showOverlay();
-
-    const frozen =
-      copilot.snapshotRecentInterviewerTranscript?.({ maxChars: 2_000 }) ?? "";
-    const utterances = useAudioStore.getState().transcript?.utterances ?? [];
-    const micOnly = !config.enable_system_audio;
-    const minMedium = useAudioStore.getState().question_confidence_min ?? 0.45;
-
-    const assessment = assessAiHelpQuestion({
-      utterances,
-      currentQuestion: store.current_question,
-      chatPrefill: store.chat_prefill,
-      allowMicOnlyFallback: micOnly,
-      frozenInterviewerText: frozen,
-      minMedium,
-    });
-
-    if (!assessment.question) {
-      store.clearAiHelpConfirm();
-      store.setSessionPipelineState("listening");
-      store.setChatAttention(true, "manual_needed");
-      toast.info(
-        "Listening for the interviewer. Share tab audio, or open Chat to type the question.",
-      );
-      return;
-    }
-
-    // Always confirm before spending credits — do not auto-generate (esp. low confidence).
-    store.openAiHelpConfirm({
-      question: assessment.question,
-      confidence: assessment.confidence,
-      confidenceScore: assessment.confidenceScore,
-      frozenInterviewerText: frozen,
-      editing: assessment.confidence === "low",
-    });
-    if (assessment.confidence === "low") {
-      toast.message(
-        `Detected question confidence: ${confidenceTierLabel(assessment.confidence)}. Edit or confirm before generating.`,
-      );
-    }
-  }, [copilot, config.enable_system_audio]);
+    copilot.triggerManualAiHelp();
+  }, [copilot]);
 
   const handleConfirmGenerateAnswer = useCallback(() => {
     const store = useOverlayStore.getState();

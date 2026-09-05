@@ -1,3 +1,4 @@
+import { format } from "date-fns";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 
@@ -14,29 +15,29 @@ export type InterviewDayChecklistItem = {
 
 export type ChecklistState = Record<string, boolean>;
 
-type ChecklistQueryClient = {
-  from: (relation: string) => {
-    select: (columns: string) => {
-      eq: (column: string, value: string) => {
-        eq: (
-          column: string,
-          value: string,
-        ) => Promise<{ data: Array<{ item_id: string; checked: boolean }> | null; error: { message: string } | null }>;
-      };
-    };
-    upsert: (
-      rows: InterviewDayChecklistItem | InterviewDayChecklistItem[],
-      options: { onConflict: string },
-    ) => Promise<{ error: { message: string } | null }>;
-  };
-};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const checklistDb = supabase as any;
 
-function checklistClient(): ChecklistQueryClient {
-  return supabase as unknown as ChecklistQueryClient;
+const DAILY_SCOPE_PREFIX = "daily:";
+
+export function localChecklistStorageKey(scopeId: string): string {
+  return `clarify:interview-day-checklist:${scopeId}`;
 }
 
-export function localChecklistStorageKey(interviewId: string): string {
-  return `clarify:interview-day-checklist:${interviewId}`;
+/** Local-only scope when no interview is scheduled for today. */
+export function dailyChecklistScopeId(when: Date = new Date()): string {
+  return `${DAILY_SCOPE_PREFIX}${format(when, "yyyy-MM-dd")}`;
+}
+
+export function isDailyChecklistScope(scopeId: string): boolean {
+  return scopeId.startsWith(DAILY_SCOPE_PREFIX);
+}
+
+export function resolveChecklistScopeId(
+  interviewId: string | null | undefined,
+  when: Date = new Date(),
+): string {
+  return interviewId?.trim() ? interviewId : dailyChecklistScopeId(when);
 }
 
 export function parseLocalChecklist(raw: string | null): ChecklistState {
@@ -64,17 +65,24 @@ export function rowsToChecklistState(
   return next;
 }
 
-export function readLocalChecklist(interviewId: string): ChecklistState {
+export function mergeChecklistState(
+  local: ChecklistState,
+  remote: ChecklistState,
+): ChecklistState {
+  return { ...local, ...remote };
+}
+
+export function readLocalChecklist(scopeId: string): ChecklistState {
   try {
-    return parseLocalChecklist(localStorage.getItem(localChecklistStorageKey(interviewId)));
+    return parseLocalChecklist(localStorage.getItem(localChecklistStorageKey(scopeId)));
   } catch {
     return {};
   }
 }
 
-export function writeLocalChecklist(interviewId: string, state: ChecklistState): void {
+export function writeLocalChecklist(scopeId: string, state: ChecklistState): void {
   try {
-    localStorage.setItem(localChecklistStorageKey(interviewId), JSON.stringify(state));
+    localStorage.setItem(localChecklistStorageKey(scopeId), JSON.stringify(state));
   } catch {
     /* quota / private mode */
   }
@@ -93,44 +101,51 @@ function toastPersistFallbackOnce(): void {
 }
 
 export async function loadInterviewDayChecklist(
-  userId: string,
-  interviewId: string,
+  userId: string | null | undefined,
+  scopeId: string,
 ): Promise<ChecklistState> {
+  const local = readLocalChecklist(scopeId);
+  if (!userId || isDailyChecklistScope(scopeId)) {
+    return local;
+  }
+
   try {
-    const { data, error } = await checklistClient()
+    const { data, error } = await checklistDb
       .from(INTERVIEW_DAY_CHECKLISTS_TABLE)
       .select("item_id, checked")
       .eq("user_id", userId)
-      .eq("interview_id", interviewId);
+      .eq("interview_id", scopeId);
     if (error) throw error;
-    const remote = rowsToChecklistState(data);
-    if (Object.keys(remote).length === 0) {
-      return readLocalChecklist(interviewId);
-    }
-    writeLocalChecklist(interviewId, remote);
-    return remote;
+    const remote = rowsToChecklistState(data as Array<{ item_id: string; checked: boolean }>);
+    const merged = mergeChecklistState(local, remote);
+    writeLocalChecklist(scopeId, merged);
+    return merged;
   } catch {
-    return readLocalChecklist(interviewId);
+    return local;
   }
 }
 
 export async function upsertInterviewDayChecklistItem(input: {
-  userId: string;
-  interviewId: string;
+  userId: string | null | undefined;
+  scopeId: string;
   itemId: string;
   checked: boolean;
   nextState: ChecklistState;
 }): Promise<{ persistedRemote: boolean }> {
-  writeLocalChecklist(input.interviewId, input.nextState);
+  writeLocalChecklist(input.scopeId, input.nextState);
+  if (!input.userId || isDailyChecklistScope(input.scopeId)) {
+    return { persistedRemote: false };
+  }
+
   const row: InterviewDayChecklistItem = {
     user_id: input.userId,
-    interview_id: input.interviewId,
+    interview_id: input.scopeId,
     item_id: input.itemId,
     checked: input.checked,
     updated_at: new Date().toISOString(),
   };
   try {
-    const { error } = await checklistClient()
+    const { error } = await checklistDb
       .from(INTERVIEW_DAY_CHECKLISTS_TABLE)
       .upsert(row, { onConflict: "user_id,interview_id,item_id" });
     if (error) throw error;

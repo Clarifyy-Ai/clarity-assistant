@@ -7,6 +7,7 @@ import {
 import { ElectronOpenInBrowser } from "@/components/layout/ElectronOpenInBrowser";
 import { CookieConsent } from "@/components/common/CookieConsent";
 import { ScrollToTop } from "@/components/layout/ScrollToTop";
+import { NavigationProgress } from "@/components/layout/NavigationProgress";
 import { AuthDeepLinkGuard } from "@/components/auth/AuthDeepLinkGuard";
 
 /**
@@ -20,6 +21,7 @@ export function ElectronRouteGate(): JSX.Element {
     return (
       <>
         <ScrollToTop />
+        <NavigationProgress />
         <AuthDeepLinkGuard />
         <Outlet />
         <CookieConsent />
@@ -37,6 +39,7 @@ export function ElectronRouteGate(): JSX.Element {
     return (
       <>
         <ScrollToTop />
+        <NavigationProgress />
         <AuthDeepLinkGuard />
         <Outlet />
         <CookieConsent />

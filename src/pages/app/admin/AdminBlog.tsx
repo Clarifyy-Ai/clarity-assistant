@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -13,6 +13,8 @@ import { writeAdminAudit } from "@/lib/admin/writeAdminAudit";
 import { adminActionFailedMessage, toAdminUserMessage } from "@/lib/admin/adminErrors";
 import { sanitizeAdminSearch } from "@/lib/admin/searchFilter";
 import { invalidatePublicContentCache } from "@/lib/cms/publicContentCache";
+import { AdminStatGrid } from "@/components/admin/AdminStatGrid";
+import { FileText, Eye, EyeOff, Layers } from "lucide-react";
 
 type BlogPost = {
   id: string;
@@ -195,6 +197,13 @@ export default function AdminBlog() {
     await load();
   }
 
+  const blogDash = useMemo(() => ({
+    total: posts.length,
+    published: posts.filter((p) => p.published).length,
+    drafts: posts.filter((p) => !p.published).length,
+    categories: new Set(posts.map((p) => p.category)).size,
+  }), [posts]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -204,6 +213,16 @@ export default function AdminBlog() {
         </div>
         <Button type="button" onClick={() => setEditing(emptyForm())}>New post</Button>
       </div>
+
+      <AdminStatGrid
+        loading={loading}
+        stats={[
+          { id: "total", label: "Total posts", value: blogDash.total.toLocaleString(), icon: FileText },
+          { id: "published", label: "Published", value: blogDash.published.toLocaleString(), variant: "success", icon: Eye },
+          { id: "drafts", label: "Drafts", value: blogDash.drafts.toLocaleString(), icon: EyeOff },
+          { id: "categories", label: "Categories", value: blogDash.categories.toLocaleString(), icon: Layers },
+        ]}
+      />
 
       <Input
         placeholder="Search title or slug…"

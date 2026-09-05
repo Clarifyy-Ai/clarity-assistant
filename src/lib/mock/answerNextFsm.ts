@@ -250,6 +250,26 @@ export function isAnswerNextBusy(state: AnswerNextState): boolean {
   );
 }
 
+import type { OverlaySessionState } from "@/lib/overlay/overlaySessionStates";
+
+/** Map answer-next FSM states to mock overlay pipeline states. */
+export function overlayPipelineForAnswerNext(
+  state: AnswerNextState,
+): OverlaySessionState | null {
+  switch (state) {
+    case "answer_finalizing":
+    case "answer_finalized":
+    case "answer_saved":
+      return "answer_finalizing";
+    case "next_question_pending":
+    case "question_generating":
+    case "follow_up_pending":
+      return "next_question_pending";
+    default:
+      return null;
+  }
+}
+
 /** Status copy for the mock chrome. */
 export function answerNextStatusLabel(state: AnswerNextState): string | null {
   switch (state) {

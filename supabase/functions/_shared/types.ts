@@ -96,6 +96,7 @@ export type FeatureKey =
   | "schedule_interview"
   | "polish_star";
 
+/** @deprecated Use resolveActionCost() from creditEconomics.ts — kept for legacy imports only. */
 export const CREDIT_COSTS: Record<FeatureKey, number> = {
   generate_answer:    8,
   generate_hint:      2,

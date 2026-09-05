@@ -40,6 +40,7 @@ import {
 } from "@/lib/session/sessionShareability";
 import { ApiClientError } from "@/lib/api/apiClient";
 import { buildShareUrl } from "@/lib/utils";
+import { parseMockProgressNotes } from "@/lib/mock/mockSessionProgress";
 
 export default function SessionDetail() {
   const { id }   = useParams<{ id: string }>();
@@ -163,6 +164,31 @@ export default function SessionDetail() {
             star_breakdown: null,
           })),
       );
+
+      if (detail.answers.length === 0 && detail.session?.notes) {
+        const progress = parseMockProgressNotes(detail.session.notes);
+        if (progress?.answers?.length) {
+          setAnswers(
+            [...progress.answers]
+              .sort((a, b) => a.question_index - b.question_index)
+              .map((row, index) => ({
+                id: row.question_id ?? `mock-progress-${index}`,
+                question_text: row.question_text,
+                transcript: row.skipped ? "" : row.answer_text,
+                score: null,
+                ai_feedback: null,
+                question_index: row.question_index,
+                question_tags: [],
+                content_score: null,
+                structure_score: null,
+                communication_score: null,
+                confidence_score: null,
+                session_id: id,
+                star_breakdown: null,
+              })),
+          );
+        }
+      }
     } catch (err) {
       if (requestId !== fetchRequestRef.current) return;
       const raw = err instanceof Error ? err.message : String(err ?? "");

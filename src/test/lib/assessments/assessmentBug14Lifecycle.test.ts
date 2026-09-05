@@ -6,7 +6,9 @@ import { ApiClientError } from "@/lib/api/apiClient";
 import {
   mapAvailabilityItem,
   preflightAssessmentTemplates,
+  AVAILABILITY_RETRY_MESSAGE,
 } from "@/lib/assessments/assessmentPreflight";
+import { ApiClientError } from "@/lib/api/apiClient";
 import {
   ASSESSMENT_START_HTTP,
   assessmentStartIdempotencyKey,
@@ -83,6 +85,21 @@ describe("BUG-14 assessment preflight (fail-closed)", () => {
     expect(result.ok).toBe(false);
     expect(result.byTemplateId.a?.startable).toBe(false);
     expect(result.byTemplateId.b?.status).toBe("unknown");
+  });
+
+  it("preflightAssessmentTemplates surfaces retry copy for 503 availability failures", async () => {
+    vi.mocked(checkAssessmentAvailability).mockRejectedValue(
+      new ApiClientError({
+        message: "Availability could not be checked.",
+        status: 503,
+        code: "DATABASE_FAILURE",
+      }),
+    );
+    const result = await preflightAssessmentTemplates(["tpl-503"]);
+    expect(result.ok).toBe(false);
+    expect(result.byTemplateId["tpl-503"]?.retryable).toBe(true);
+    expect(result.byTemplateId["tpl-503"]?.message).toBe(AVAILABILITY_RETRY_MESSAGE);
+    expect(result.byTemplateId["tpl-503"]?.code).toBe("DATABASE_FAILURE");
   });
 
   it("preflightAssessmentTemplates maps Edge items by template id", async () => {

@@ -118,31 +118,63 @@ Deno.serve(async (req: Request) => {
     let sessionsQuery = db
       .from("sessions")
       .select(
-        "id,user_id,title,type,interview_type,status,lifecycle_status,deleted_at,started_at,ended_at,created_at,questions_asked,answers_generated,avg_wpm,filler_words,tags",
+        "id,user_id,title,type,status,lifecycle_status,deleted_at,started_at,ended_at,created_at,questions_asked,answers_generated,avg_wpm,filler_words,tags",
       )
       .eq("user_id", user.id)
       .is("deleted_at", null)
-      .or("status.eq.completed,lifecycle_status.eq.COMPLETED,lifecycle_status.eq.ANALYZED")
       .order("created_at", { ascending: false });
+
+    let { data: sessions, error: sessErr } = await sessionsQuery.or(
+      "status.eq.completed,lifecycle_status.eq.COMPLETED,lifecycle_status.eq.ANALYZED",
+    );
+
+    if (sessErr && /lifecycle_status|column.*does not exist/i.test(String(sessErr.message ?? ""))) {
+      console.warn(
+        "[analytics-dashboard] lifecycle_status filter unavailable, falling back to status=completed",
+        sessErr.message,
+      );
+      ({ data: sessions, error: sessErr } = await db
+        .from("sessions")
+        .select(
+          "id,user_id,title,type,status,deleted_at,started_at,ended_at,created_at,questions_asked,answers_generated,avg_wpm,filler_words,tags",
+        )
+        .eq("user_id", user.id)
+        .is("deleted_at", null)
+        .eq("status", "completed")
+        .order("created_at", { ascending: false }));
+    }
+
     if (filter.period !== "all") {
-      sessionsQuery = sessionsQuery.gte("started_at", since.toISOString());
+      const sinceIso = since.toISOString();
+      sessions = (sessions ?? []).filter((s) => {
+        const anchor = s.started_at ?? s.created_at;
+        return anchor && anchor >= sinceIso;
+      });
     }
-    // interview_type is category (behavioural/technical/…); sessions.type is mode (mock/live/…).
-    if (filter.interview_type && filter.interview_type !== "all") {
-      sessionsQuery = sessionsQuery.eq("interview_type", filter.interview_type);
-    }
-    const { data: sessions, error: sessErr } =
-      await sessionsQuery;
 
     if (sessErr) throw sessErr;
 
     const sessionListRaw = (sessions ?? []).filter((s) => {
       if (Array.isArray(s.tags) && s.tags.includes("private")) return false;
-      if (!filter.session_filter || filter.session_filter === "all") return true;
+      if (!filter.session_filter || filter.session_filter === "all") {
+        if (filter.interview_type && filter.interview_type !== "all") {
+          const tagMatch = Array.isArray(s.tags) &&
+            s.tags.some((t) => String(t).toLowerCase() === String(filter.interview_type).toLowerCase());
+          if (!tagMatch) return false;
+        }
+        return true;
+      }
       const type = String(s.type ?? "").toLowerCase();
-      return filter.session_filter === "real_interview"
+      const modeMatch = filter.session_filter === "real_interview"
         ? type === "real_interview"
         : type === filter.session_filter;
+      if (!modeMatch) return false;
+      if (filter.interview_type && filter.interview_type !== "all") {
+        const tagMatch = Array.isArray(s.tags) &&
+          s.tags.some((t) => String(t).toLowerCase() === String(filter.interview_type).toLowerCase());
+        if (!tagMatch) return false;
+      }
+      return true;
     });
 
     // Deduplicate by session id (defensive against duplicate query rows).
@@ -436,7 +468,13 @@ Deno.serve(async (req: Request) => {
         ended_at: s.ended_at ?? null,
         title: s.title ?? null,
         mode: s.type ?? "mock",
-        interview_type: (s as { interview_type?: string | null }).interview_type ?? null,
+        interview_type: (() => {
+          const tags = Array.isArray(s.tags) ? s.tags : [];
+          const hit = tags.find((t) =>
+            /^(behavioural|behavioral|technical|system_design|case|general)$/i.test(String(t))
+          );
+          return hit ? String(hit).toLowerCase() : null;
+        })(),
         company: companyFromTitle(s.title),
         status,
         completion_state,

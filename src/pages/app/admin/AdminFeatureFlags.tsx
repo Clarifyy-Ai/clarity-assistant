@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { featureFlagsDB } from "@/lib/supabase/database";
 import { useGlobalStore }       from "@/store";
 import { FEATURE_FLAGS, FEATURE_PLAN_GATES, isKillOnlyFlag } from "@/lib/constants/features";
@@ -22,8 +22,10 @@ import { toast }    from "sonner";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
+import { AdminSectionDashboard } from "@/components/admin/AdminSectionDashboard";
+import { FEATURE_FLAGS_QUICK_LINKS } from "@/lib/admin/adminSectionNav";
 import {
-  Flag, Search, RotateCcw, Save, ShieldCheck, Beaker, Lock,
+  Flag, Search, RotateCcw, Save, ShieldCheck, Beaker, Lock, ToggleRight, AlertTriangle,
 } from "lucide-react";
 
 import type { FeatureFlagId, PlanId } from "@/types";
@@ -76,6 +78,7 @@ export default function AdminFeatureFlags() {
   const [search,     setSearch]     = useState("");
   const [filterPlan, setFilterPlan] = useState<DisplayTier | "all">("all");
   const [filterCat,  setFilterCat]  = useState<string>("all");
+  const [visibilityFilter, setVisibilityFilter] = useState<"all" | "enabled" | "disabled" | "beta">("all");
   const [isDirty,        setIsDirty]        = useState(false);
   const [isSaving,       setIsSaving]       = useState(false);
   const [dbFlagsLoading, setDbFlagsLoading] = useState(true);
@@ -121,21 +124,27 @@ export default function AdminFeatureFlags() {
     setRows(built);
   }, [dbFlags]);
 
+  const effectiveValue = (row: FlagRow): boolean =>
+    overrides[row.id] !== undefined ? (overrides[row.id] as boolean) : row.enabled;
+
   const filtered = rows.filter((row) => {
     const matchSearch = search.trim() === "" ||
       row.id.toLowerCase().includes(search.toLowerCase());
     const matchPlan = filterPlan === "all" || launchPlanKey(row.minPlan) === filterPlan;
     const matchCat  = filterCat  === "all" || row.category === filterCat;
-    return matchSearch && matchPlan && matchCat;
+    const enabled = effectiveValue(row);
+    const matchVisibility =
+      visibilityFilter === "all" ||
+      (visibilityFilter === "enabled" && enabled) ||
+      (visibilityFilter === "disabled" && !enabled) ||
+      (visibilityFilter === "beta" && row.isBeta);
+    return matchSearch && matchPlan && matchCat && matchVisibility;
   });
 
   const toggleFlag = (id: FeatureFlagId, current: boolean) => {
     setOverrides((prev) => ({ ...prev, [id]: !current }));
     setIsDirty(true);
   };
-
-  const effectiveValue = (row: FlagRow): boolean =>
-    overrides[row.id] !== undefined ? (overrides[row.id] as boolean) : row.enabled;
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -176,6 +185,8 @@ export default function AdminFeatureFlags() {
 
   const enabledCount  = rows.filter((r) => effectiveValue(r)).length;
   const overrideCount = Object.keys(overrides).length;
+  const betaCount = rows.filter((r) => r.isBeta).length;
+  const disabledCount = rows.length - enabledCount;
 
   return (
     <div className="space-y-6">
@@ -201,6 +212,55 @@ export default function AdminFeatureFlags() {
           </div>
         )}
       </div>
+
+      <AdminSectionDashboard
+        loading={dbFlagsLoading}
+        columns={4}
+        quickLinks={FEATURE_FLAGS_QUICK_LINKS}
+        stats={[
+          {
+            id: "total",
+            label: "Total flags",
+            value: rows.length.toLocaleString(),
+            icon: Flag,
+            onClick: () => setVisibilityFilter("all"),
+            active: visibilityFilter === "all",
+          },
+          {
+            id: "enabled",
+            label: "Enabled",
+            value: enabledCount.toLocaleString(),
+            variant: "success",
+            icon: ToggleRight,
+            onClick: () => setVisibilityFilter("enabled"),
+            active: visibilityFilter === "enabled",
+          },
+          {
+            id: "disabled",
+            label: "Kill-switched",
+            value: disabledCount.toLocaleString(),
+            variant: disabledCount > 0 ? "danger" : "default",
+            icon: Lock,
+            onClick: () => setVisibilityFilter("disabled"),
+            active: visibilityFilter === "disabled",
+          },
+          {
+            id: "beta",
+            label: "Beta flags",
+            value: betaCount.toLocaleString(),
+            icon: Beaker,
+            onClick: () => setVisibilityFilter("beta"),
+            active: visibilityFilter === "beta",
+          },
+        ]}
+      />
+
+      {overrideCount > 0 && (
+        <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          {overrideCount} unsaved override{overrideCount !== 1 ? "s" : ""} pending save
+        </p>
+      )}
 
       <div
         role="status"

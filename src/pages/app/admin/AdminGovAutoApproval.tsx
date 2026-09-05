@@ -15,6 +15,8 @@ import {
   createAutoApprovalRuleVersion,
   type AutoApprovalRuleRow,
 } from "@/lib/gov-exam/adminOps";
+import { pickActiveRuleRow } from "@/lib/gov-exam/autoApproval";
+import { MIN_BANK_QUESTION_QUALITY } from "@/lib/gov-exam/algorithmCatalog";
 
 function RuleCard({ rule, onSaved }: { rule: AutoApprovalRuleRow; onSaved: () => void }) {
   const [busy, setBusy] = useState(false);
@@ -24,6 +26,14 @@ function RuleCard({ rule, onSaved }: { rule: AutoApprovalRuleRow; onSaved: () =>
   const [allowVerifiedPublic, setAllowVerifiedPublic] = useState(rule.allow_verified_public);
   const [allowAiPractice, setAllowAiPractice] = useState(rule.allow_ai_generated_practice);
 
+  useEffect(() => {
+    setEnabled(rule.enabled);
+    setAutoPublish(rule.auto_publish);
+    setMinQuality(String(rule.min_quality_score));
+    setAllowVerifiedPublic(rule.allow_verified_public);
+    setAllowAiPractice(rule.allow_ai_generated_practice);
+  }, [rule.id, rule.enabled, rule.auto_publish, rule.min_quality_score, rule.allow_verified_public, rule.allow_ai_generated_practice]);
+
   async function save() {
     setBusy(true);
     const { error } = await updateAutoApprovalRule(
@@ -31,7 +41,10 @@ function RuleCard({ rule, onSaved }: { rule: AutoApprovalRuleRow; onSaved: () =>
       {
         enabled,
         auto_publish: autoPublish,
-        min_quality_score: Number(minQuality) || 0.72,
+        min_quality_score: Math.min(
+          100,
+          Math.max(0, Number(minQuality) || MIN_BANK_QUESTION_QUALITY),
+        ),
         allow_verified_public: allowVerifiedPublic,
         allow_ai_generated_practice: allowAiPractice,
       },
@@ -88,11 +101,14 @@ function RuleCard({ rule, onSaved }: { rule: AutoApprovalRuleRow; onSaved: () =>
             id={`quality-${rule.id}`}
             type="number"
             min={0}
-            max={1}
-            step={0.01}
+            max={100}
+            step={1}
             value={minQuality}
             onChange={(e) => setMinQuality(e.target.value)}
           />
+          <p className="text-[11px] text-muted-foreground">
+            Score threshold 0–100 (default {MIN_BANK_QUESTION_QUALITY}). Questions below this route to manual review.
+          </p>
         </div>
       </div>
 
@@ -128,7 +144,7 @@ export default function AdminGovAutoApproval() {
     setCreating(entityType);
     const latest = rules.find((r) => r.entity_type === entityType);
     const { id, error } = await createAutoApprovalRuleVersion(entityType, {
-      min_quality_score: latest?.min_quality_score ?? 0.72,
+      min_quality_score: latest?.min_quality_score ?? 40,
       duplicate_threshold: latest?.duplicate_threshold ?? 0.92,
       allowed_source_types: latest?.allowed_source_types,
       allow_verified_public: latest?.allow_verified_public ?? false,
@@ -146,8 +162,10 @@ export default function AdminGovAutoApproval() {
     return id;
   }
 
-  const questionRule = rules.find((r) => r.entity_type === "question");
-  const paperRule = rules.find((r) => r.entity_type === "paper");
+  const questionRule = pickActiveRuleRow(rules, "question");
+  const paperRule = pickActiveRuleRow(rules, "paper");
+  const questionVersions = rules.filter((r) => r.entity_type === "question").length;
+  const paperVersions = rules.filter((r) => r.entity_type === "paper").length;
 
   return (
     <div className="space-y-6 max-w-4xl">
@@ -162,6 +180,11 @@ export default function AdminGovAutoApproval() {
         <strong>Policy:</strong> Auto-approval is deterministic and rule-based. AI never decides
         approval. APPROVED ≠ PUBLISHED unless auto-publish is explicitly enabled. Engine failures
         route to manual review — never silently approved.
+        {(questionVersions > 1 || paperVersions > 1) && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Pipelines use the highest <strong>enabled</strong> rule version. Newer disabled versions do not override an enabled rule.
+          </p>
+        )}
       </div>
 
       {loading ? (

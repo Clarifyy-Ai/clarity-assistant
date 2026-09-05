@@ -1,18 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/Badge";
+import { EmptyState } from "@/components/common/EmptyState";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 import {
   COMMUNITY_MODULE_DESCRIPTION,
   COMMUNITY_MODULE_LABEL,
+  canPublicRead,
+  moderationStatusBadgeVariant,
+  moderationStatusLabel,
 } from "@/lib/community/moderation";
+import { runCommunityModeration } from "@/lib/community/moderationActions";
+import { adminActionFailedMessage } from "@/lib/admin/adminErrors";
 import { submitCommunityReport } from "@/lib/community/reportContent";
 
 type Post = {
@@ -38,6 +44,7 @@ const REPORT_REASONS = [
 
 export default function CommunityPostPage() {
   const { postId } = useParams<{ postId: string }>();
+  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const isAdmin = useAuthStore((s) => s.isAdmin);
   const isModerator = useAuthStore((s) => s.isModerator);
@@ -49,6 +56,7 @@ export default function CommunityPostPage() {
   const [reportNotes, setReportNotes] = useState("");
   const [replyBusy, setReplyBusy] = useState(false);
   const [reportBusy, setReportBusy] = useState(false);
+  const [modBusy, setModBusy] = useState(false);
   const reportInFlightRef = useRef(false);
 
   const load = useCallback(async () => {
@@ -65,9 +73,34 @@ export default function CommunityPostPage() {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    if (!post) return;
-  }, [post, answers.length]);
+  const canViewPost =
+    post &&
+    canPublicRead(
+      post.status as Parameters<typeof canPublicRead>[0],
+      !!user?.id && post.user_id === user.id,
+      isStaff,
+    );
+
+  async function moderatePost(
+    action: "hide_post" | "restore_post" | "resolve_post" | "lock_post" | "unlock_post" | "delete_post",
+  ) {
+    if (!post?.id || modBusy) return;
+    if (action === "delete_post" && !window.confirm("Delete this post permanently?")) return;
+    setModBusy(true);
+    try {
+      await runCommunityModeration(action, post.id);
+      toast.success("Moderation action applied.");
+      if (action === "delete_post") {
+        navigate("/app/community");
+        return;
+      }
+      void load();
+    } catch (err) {
+      toast.error(adminActionFailedMessage(err));
+    } finally {
+      setModBusy(false);
+    }
+  }
 
   async function submitReply() {
     if (!user?.id || !postId || !post) return;
@@ -122,10 +155,24 @@ export default function CommunityPostPage() {
       }
       toast.success("Report submitted for moderation.");
       setReportNotes("");
+      void load();
     } finally {
       reportInFlightRef.current = false;
       setReportBusy(false);
     }
+  }
+
+  if (post && !canViewPost) {
+    return (
+      <div className={PAGE_SHELL}>
+        <EmptyState
+          title="Post unavailable"
+          description="This post has been hidden or removed."
+          actionLabel="Back to Community"
+          onAction={() => navigate("/app/community")}
+        />
+      </div>
+    );
   }
 
   return (
@@ -138,6 +185,50 @@ export default function CommunityPostPage() {
         ]}
         description={COMMUNITY_MODULE_DESCRIPTION}
       />
+
+      {isStaff && post && (
+        <Card className="mb-4 space-y-3 border-amber-500/30 bg-amber-500/5 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold">Staff moderation</p>
+            <Badge variant={moderationStatusBadgeVariant(post.status)} size="sm">
+              {moderationStatusLabel(post.status)}
+            </Badge>
+            {post.locked && <Badge variant="gray" size="sm">Locked</Badge>}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {post.status !== "HIDDEN" && (
+              <Button size="xs" variant="outline" loading={modBusy} onClick={() => void moderatePost("hide_post")}>
+                Hide
+              </Button>
+            )}
+            {post.status !== "PUBLISHED" && (
+              <Button size="xs" variant="outline" loading={modBusy} onClick={() => void moderatePost("restore_post")}>
+                Restore
+              </Button>
+            )}
+            {post.status === "REPORTED" && (
+              <Button size="xs" variant="outline" loading={modBusy} onClick={() => void moderatePost("resolve_post")}>
+                Mark resolved
+              </Button>
+            )}
+            <Button
+              size="xs"
+              variant="outline"
+              loading={modBusy}
+              onClick={() => void moderatePost(post.locked ? "unlock_post" : "lock_post")}
+            >
+              {post.locked ? "Unlock" : "Lock"}
+            </Button>
+            <Button size="xs" variant="danger" loading={modBusy} onClick={() => void moderatePost("delete_post")}>
+              Delete
+            </Button>
+            <Button size="xs" variant="ghost" onClick={() => navigate("/app/admin/community")}>
+              Open moderation queue
+            </Button>
+          </div>
+        </Card>
+      )}
+
       <Card className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           {post?.status === "REPORTED" &&
@@ -165,6 +256,25 @@ export default function CommunityPostPage() {
               <Card>
                 {item.is_accepted && <p className="text-xs font-semibold text-emerald-600">Accepted answer</p>}
                 <p className="whitespace-pre-wrap text-sm">{item.body}</p>
+                {isStaff && (
+                  <Button
+                    size="xs"
+                    variant="danger"
+                    className="mt-2"
+                    loading={modBusy}
+                    onClick={() => {
+                      if (!window.confirm("Delete this answer?")) return;
+                      void runCommunityModeration("delete_answer", item.id)
+                        .then(() => {
+                          toast.success("Answer deleted.");
+                          void load();
+                        })
+                        .catch((err) => toast.error(adminActionFailedMessage(err)));
+                    }}
+                  >
+                    Delete answer
+                  </Button>
+                )}
               </Card>
             </li>
           ))}

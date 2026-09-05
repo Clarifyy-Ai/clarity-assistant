@@ -164,15 +164,17 @@ export async function runAdminHealthChecks(): Promise<HealthCheck[]> {
     });
   }
 
-  // Admin RPC smoke
+  // Admin RPC smoke + data sanity
   try {
-    const { error } = await supabase.rpc("get_admin_dau_mau", { p_days: 1 });
+    const { data, error } = await supabase.rpc("get_admin_dau_mau", { p_days: 7 });
     if (error) throw error;
+    const series = (data ?? []) as Array<{ dau?: number }>;
+    const latestDau = series.length ? Number(series[series.length - 1]?.dau ?? 0) : 0;
     checks.push({
       id: "rpc",
       label: "Admin analytics RPC",
       status: "PASS",
-      detail: "get_admin_dau_mau ok",
+      detail: `get_admin_dau_mau ok · latest DAU ${latestDau} (zero may mean no session activity)`,
     });
   } catch (e) {
     checks.push({
@@ -618,6 +620,87 @@ export async function runAdminHealthChecks(): Promise<HealthCheck[]> {
     });
   }
 
+  // Analytics instrumentation — ai_usage_logs (what Platform Analytics reads)
+  try {
+    const since = new Date(Date.now() - 7 * 86400_000).toISOString();
+    const { count, error } = await supabase
+      .from("ai_usage_logs" as "profiles")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", since);
+    if (error) throw error;
+    const n = count ?? 0;
+    checks.push({
+      id: "ai_telemetry",
+      label: "AI usage telemetry (7d)",
+      status: n > 0 ? "PASS" : "WARNING",
+      detail:
+        n > 0
+          ? `${n.toLocaleString()} ai_usage_logs rows — Platform Analytics AI tab should show data`
+          : "No ai_usage_logs in 7d — AI Analytics will show zero until users run AI features",
+    });
+  } catch (e) {
+    checks.push({
+      id: "ai_telemetry",
+      label: "AI usage telemetry (7d)",
+      status: "WARNING",
+      detail: toAdminUserMessage(e, undefined, "diagnostics.ai_telemetry"),
+    });
+  }
+
+  // request_metrics instrumentation (Response times tab)
+  try {
+    const since = new Date(Date.now() - 7 * 86400_000).toISOString();
+    const { count, error } = await supabase
+      .from("request_metrics")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", since);
+    if (error) throw error;
+    const n = count ?? 0;
+    checks.push({
+      id: "perf_metrics",
+      label: "Edge request_metrics (7d)",
+      status: n > 0 ? "PASS" : "WARNING",
+      detail:
+        n > 0
+          ? `${n.toLocaleString()} rows — Response times tab uses request_metrics`
+          : "request_metrics empty — Response times tab falls back to ai_usage_logs latency or shows zero",
+    });
+  } catch (e) {
+    checks.push({
+      id: "perf_metrics",
+      label: "Edge request_metrics (7d)",
+      status: "WARNING",
+      detail: toAdminUserMessage(e, undefined, "diagnostics.perf_metrics"),
+    });
+  }
+
+  // Sessions activity (Overview analytics sanity)
+  try {
+    const since = new Date(Date.now() - 7 * 86400_000).toISOString();
+    const { count, error } = await supabase
+      .from("sessions")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", since);
+    if (error) throw error;
+    const n = count ?? 0;
+    checks.push({
+      id: "session_activity",
+      label: "User sessions (7d)",
+      status: n > 0 ? "PASS" : "WARNING",
+      detail:
+        n > 0
+          ? `${n.toLocaleString()} sessions — DAU/Overview analytics derive from sessions`
+          : "No sessions in 7d — Overview DAU will show zero (may be legitimate for staging)",
+    });
+  } catch (e) {
+    checks.push({
+      id: "session_activity",
+      label: "User sessions (7d)",
+      status: "WARNING",
+      detail: toAdminUserMessage(e, undefined, "diagnostics.sessions"),
+    });
+  }
+
   // Manual dashboard items (never fake PASS)
   checks.push({
     id: "hibp",
@@ -650,6 +733,12 @@ export default function AdminDiagnostics() {
     void run();
   }, [run]);
 
+  const liveChecks = checks.filter((c) => c.status !== "MANUAL");
+  const passCount = liveChecks.filter((c) => c.status === "PASS").length;
+  const warnCount = liveChecks.filter((c) => c.status === "WARNING" || c.status === "NOT_CONFIGURED").length;
+  const failCount = liveChecks.filter((c) => c.status === "FAIL").length;
+  const overallHealthy = failCount === 0 && warnCount === 0;
+
   return (
     <div className="mx-auto max-w-3xl space-y-6" data-testid="admin-diagnostics">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -659,7 +748,7 @@ export default function AdminDiagnostics() {
             Admin Diagnostics
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Live health probes and manual Dashboard checklist. This is not a security control panel.
+            Live health probes and manual Dashboard checklist. PASS means the probe succeeded — not that every product feature works.
           </p>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={() => void run()} disabled={loading}>
@@ -667,6 +756,30 @@ export default function AdminDiagnostics() {
           Re-run
         </Button>
       </div>
+
+      {!loading && liveChecks.length > 0 && (
+        <div
+          className={cn(
+            "rounded-xl border px-4 py-3 text-sm",
+            overallHealthy
+              ? "border-emerald-500/30 bg-emerald-500/5"
+              : failCount > 0
+                ? "border-red-500/30 bg-red-500/5"
+                : "border-amber-500/30 bg-amber-500/5",
+          )}
+        >
+          <p className="font-medium">
+            {overallHealthy
+              ? "All automated probes passed"
+              : failCount > 0
+                ? `${failCount} check(s) failed — investigate before trusting green badges elsewhere`
+                : `${warnCount} warning(s) — partial outages or missing instrumentation`}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {passCount} pass · {warnCount} warning · {failCount} fail · Diagnostics does not test user journeys (mock tests, gov exams, billing checkout).
+          </p>
+        </div>
+      )}
 
       {error && <InlineErrorRetry message={error} onRetry={() => void run()} />}
 

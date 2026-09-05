@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { PLANS, type PlanId } from "@/lib/billing/subscriptionManager";
 import { Check, X, ArrowRight, Zap } from "lucide-react";
-import { ComplianceBanner } from "@/components/marketing";
+import { ComplianceBanner, PublicOffersSection } from "@/components/marketing";
 import { LazyMotion, domAnimation, m } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
@@ -88,6 +88,8 @@ export default function Pricing() {
           <ComplianceBanner />
         </div>
       </section>
+
+      <PublicOffersSection className="pb-10" compact />
 
       <section className="pb-16 sm:pb-20 px-4 sm:px-6">
         {/* pt-4: room for absolute “Most Popular” badge (-top-3) so it is not clipped */}

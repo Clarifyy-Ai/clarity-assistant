@@ -131,15 +131,19 @@ export function answersMatch(questionType: unknown, actual: unknown, expected: u
 export function scoreMockTest(
   questions: MockTestQuestion[],
   responses: MockTestResponse[],
+  options?: {
+    codingEvaluator?: (input: { questionId: string; userAnswer: unknown }) => boolean;
+  },
 ): AuthoritativeMockTestScore {
   const responseByQuestion = new Map(responses.map((response) => [response.questionId, response]));
   const perQuestion: ScoredMockTestQuestion[] = questions.map((question) => {
     const response = responseByQuestion.get(question.id);
     const attempted = Boolean(response?.isAttempted) && !emptyAnswer(response?.userAnswer);
-    const correct = attempted && answersMatch(
-      question.questionType,
-      response?.userAnswer,
-      question.correctAnswer,
+    const qType = String(question.questionType ?? "SHORT_ANSWER").trim().toUpperCase();
+    const correct = attempted && (
+      qType === "CODING" && options?.codingEvaluator
+        ? options.codingEvaluator({ questionId: question.id, userAnswer: response?.userAnswer })
+        : answersMatch(question.questionType, response?.userAnswer, question.correctAnswer)
     );
     const positive = Math.max(0, finiteNumber(question.marksPositive));
     const negative = Math.max(0, finiteNumber(question.marksNegative));

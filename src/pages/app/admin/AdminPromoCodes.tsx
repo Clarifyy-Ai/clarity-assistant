@@ -1,14 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { toast } from "sonner";
-import { Plus, Tag } from "lucide-react";
+import { Plus, Tag, Percent, Gift, Hash } from "lucide-react";
 import type { Tables } from "@/integrations/supabase/types";
 import { writeAdminAudit } from "@/lib/admin/writeAdminAudit";
 import { adminActionFailedMessage, toAdminUserMessage } from "@/lib/admin/adminErrors";
+import { AdminStatGrid } from "@/components/admin/AdminStatGrid";
 
 type PromoRow = Tables<"promo_codes">;
 
@@ -144,12 +145,29 @@ export default function AdminPromoCodes() {
     }
   }
 
+  const promoDash = useMemo(() => {
+    const now = Date.now();
+    const active = rows.filter((r) => r.is_active && (!r.valid_until || new Date(r.valid_until).getTime() > now));
+    const redemptions = rows.reduce((sum, r) => sum + Number(r.redemption_count ?? 0), 0);
+    return { total: rows.length, active: active.length, redemptions };
+  }, [rows]);
+
   return (
     <div className="space-y-6 max-w-4xl">
       <PageHeader
         title="Promo codes"
-        description="Manage checkout discounts and bonus credits. Redemption is Edge-only."
+        description="Manage checkout discounts and bonus credits. Active codes appear on the public landing, pricing, and gov exam pages."
         icon={<Tag className="w-5 h-5 text-red-400" />}
+      />
+
+      <AdminStatGrid
+        loading={loading}
+        columns={3}
+        stats={[
+          { id: "total", label: "Total codes", value: promoDash.total.toLocaleString(), icon: Hash },
+          { id: "active", label: "Active", value: promoDash.active.toLocaleString(), variant: "success", icon: Percent },
+          { id: "redemptions", label: "Redemptions", value: promoDash.redemptions.toLocaleString(), icon: Gift },
+        ]}
       />
 
       {loadError && <InlineErrorRetry message={loadError} onRetry={() => void load()} />}

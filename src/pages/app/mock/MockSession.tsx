@@ -5,7 +5,8 @@ import {
   questionFingerprint,
 } from "@/lib/ai/questionDetection";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
-import { useSessionOrchestrator } from "@/hooks/useSessionOrchestrator";
+import { useMockHintBridge } from "@/lib/mock/mockHintBridge";
+import { AiFormattedOutput } from "@/components/common/AiFormattedOutput";
 import { useAudioSession } from "@/hooks/useAudioSession";
 import { useFillerWordDetection } from "@/hooks/useFillerWordDetection";
 import { useWPMTracker } from "@/hooks/useWPMTracker";
@@ -19,9 +20,9 @@ import { useSessionStore } from "@/store/sessionStore";
 import { useAuthStore } from "@/store/authStore";
 import { parsePrivacyPrefs } from "@/lib/privacy/privacyPrefs";
 import { useAudioStore } from "@/store/audioStore";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { OverlayWindow } from "@/components/overlay/OverlayWindow";
 import { OverlayKeyboardHandler } from "@/components/overlay/OverlayKeyboardHandler";
+import { MockConversationPanel } from "@/components/mock/MockConversationPanel";
 import { MockSessionController } from "@/components/mock/MockSessionController";
 import {
   PostSessionSummary,
@@ -102,6 +103,7 @@ import { isOverlayGhostClickSuppressed } from "@/lib/overlay/ghostClickGuard";
 import {
   answerNextStatusLabel,
   isAnswerNextBusy,
+  overlayPipelineForAnswerNext,
   reduceAnswerNext,
   type AnswerFinalizationOutcome,
   type AnswerNextState,
@@ -146,6 +148,7 @@ import { toDbModel } from "@/lib/ai/modelMapping";
 import { finalizeSession as finalizeSessionApi } from "@/lib/api/sessions";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { Switch } from "@/components/ui/switch";
 import { Modal } from "@/components/ui/Modal";
 import { Skeleton } from "@/components/ui/SkeletonLoader";
 import { FullPageProcessingState } from "@/components/async/FullPageProcessingState";
@@ -163,7 +166,6 @@ import {
   Square,
   ChevronRight,
   SkipForward,
-  Eye,
   EyeOff,
   Timer,
   RefreshCw,
@@ -174,6 +176,7 @@ import {
   Play,
   BarChart2,
   AlertTriangle,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -205,6 +208,7 @@ interface QuestionAnswer {
   skipped: boolean;
   status: MockAnswerStatus;
   outcome: AnswerFinalizationOutcome;
+  answer_source?: "spoken" | "typed" | "mixed" | "skipped" | "unanswered";
   filler_count: number;
   wpm: number;
   duration_seconds: number;
@@ -323,6 +327,10 @@ export default function MockSession() {
   const { checkPostSessionAchievements } = useGamification();
 
   const orchestrator = useSessionOrchestrator();
+  const mockHintText = useMockHintBridge((s) => s.hintText);
+  const mockHintStreaming = useMockHintBridge((s) => s.streamingText);
+  const mockHintState = useMockHintBridge((s) => s.hintState);
+  const mockHintError = useMockHintBridge((s) => s.hintError);
   const interimText = useAudioStore((s) => s.transcript?.interim_text ?? "");
   const transcriptUtterances = useAudioStore((s) => s.transcript?.utterances ?? []);
   const candidateTranscript = useAudioStore((s) =>
@@ -333,7 +341,6 @@ export default function MockSession() {
   );
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
   const isMuted = useAudioStore((s) => s.is_muted ?? false);
-  const isMobile = useIsMobile();
   const deepgramStatus = useAudioStore((s) => s.deepgram_status ?? "disconnected");
 
   const fillerHook = useFillerWordDetection(interimText);
@@ -423,6 +430,7 @@ export default function MockSession() {
   );
   const [nextQuestionError, setNextQuestionError] = useState<string | null>(null);
   const [overlayInitState, setOverlayInitState] = useState<OverlayInitState>("waiting_session");
+  const [mockOverlayOpen, setMockOverlayOpen] = useState(false);
   const [ttsState, setTtsState] = useState<TtsOutcomeStatus | "idle">("idle");
   const [canReplayTts, setCanReplayTts] = useState(false);
   const [pendingTtsQuestion, setPendingTtsQuestion] = useState<{ qId: string; qText: string } | null>(
@@ -450,6 +458,7 @@ export default function MockSession() {
   const lastSpeechAtRef = useRef<number | null>(null);
   const hasSpokenRef = useRef(false);
   const vadRef = useRef<VADDetector | null>(null);
+  const isSpeechActiveRef = useRef(false);
   const [noAnswerPrompt, setNoAnswerPrompt] = useState(false);
   const [silenceHint, setSilenceHint] = useState<string | null>(null);
   const speakingQuestionIdRef = useRef<string | null>(null);
@@ -531,11 +540,11 @@ export default function MockSession() {
         const overlay = useOverlayStore.getState();
         overlay.setMinimalMode(false);
         overlay.setActiveTab("transcript");
-        overlay.showOverlay();
         setOverlayInitState("ready");
       }
     }
     if (phase === "completed" || phase === "idle") {
+      setMockOverlayOpen(false);
       useOverlayStore.getState().hideOverlay();
       overlayMountedSessionRef.current = null;
       setOverlayInitState(phase === "completed" ? "ended" : "waiting_session");
@@ -546,6 +555,25 @@ export default function MockSession() {
       }
     };
   }, [phase, canMountOverlay]);
+
+  // Keep overlay pipeline aligned with answer-next FSM during finalize / next-Q.
+  useEffect(() => {
+    if (phase !== "active") return;
+    const pipeline = overlayPipelineForAnswerNext(answerNextState);
+    if (!pipeline) return;
+    if (!getOverlaySessionAuthority().canAcceptSessionMutations()) return;
+    useOverlayStore.getState().setSessionPipelineState(pipeline);
+  }, [phase, answerNextState]);
+
+  useEffect(() => {
+    if (!mockOverlayOpen) {
+      useOverlayStore.getState().hideOverlay();
+      return;
+    }
+    if (phase === "active" && overlayInitState === "ready") {
+      useOverlayStore.getState().showOverlay();
+    }
+  }, [mockOverlayOpen, phase, overlayInitState]);
 
   const handleTogglePause = useCallback(async () => {
     if (phase !== "active") return;
@@ -581,14 +609,16 @@ export default function MockSession() {
       const utteranceId = `mock-q-${index}`;
       if (store.transcript.utterances.some((u) => u.id === utteranceId)) return;
 
-      const now = Date.now();
+      const streamMs = streamListeningWatermarkMs(store.transcript.utterances);
+      const startMs = streamMs;
+      const endMs = streamMs + 500;
       store.addUtterance({
         id: utteranceId,
         text: qText.trim(),
         speaker: "interviewer",
         words: [],
-        start_ms: now,
-        end_ms: now,
+        start_ms: startMs,
+        end_ms: endMs,
         is_final: true,
         is_interviewer_question: true,
         confidence: 1,
@@ -1102,6 +1132,16 @@ export default function MockSession() {
     const elapsed = Math.round((Date.now() - questionStartRef.current) / 1000);
     const existingIdx = answersRef.current.findIndex((a) => a.question_index === qIndex);
     const audioState = useAudioStore.getState();
+    const typed = (typedAnswerRef.current ?? "").trim();
+    const voiceText = collectCandidateAnswerText({
+      utterances: snapshot?.utterances ?? audioState.transcript?.utterances ?? [],
+      interimText: snapshot?.interimText ?? audioState.transcript?.interim_text ?? "",
+      listeningStartedAtMs: listeningStreamWatermarkRef.current,
+      questionText: qText,
+      interviewerAudioActive: interviewerAudioActiveRef.current,
+      typedAnswer: null,
+      preferTyped: false,
+    });
     const captured = finalizeMockAnswer({
       skipped,
       utterances: snapshot?.utterances ?? audioState.transcript?.utterances ?? [],
@@ -1111,6 +1151,11 @@ export default function MockSession() {
       interviewerAudioActive: interviewerAudioActiveRef.current,
       typedAnswer: typedAnswerRef.current,
     });
+    let answer_source: "spoken" | "typed" | "mixed" | "skipped" | "unanswered" = "spoken";
+    if (captured.skipped) answer_source = "skipped";
+    else if (!captured.answer_text.trim()) answer_source = "unanswered";
+    else if (typed && voiceText.trim()) answer_source = "mixed";
+    else if (typed) answer_source = "typed";
     const entry: QuestionAnswer = {
       question_id: qId,
       question_text: qText,
@@ -1119,6 +1164,7 @@ export default function MockSession() {
       skipped: captured.skipped,
       status: captured.status,
       outcome: captured.outcome,
+      answer_source,
       filler_count: fillerHook.totalCount ?? 0,
       wpm: wpmHook.wpm ?? 0,
       duration_seconds: elapsed,
@@ -1185,6 +1231,7 @@ export default function MockSession() {
           wpm: a.wpm,
           duration_seconds: a.duration_seconds,
           timestamp: a.timestamp,
+          answer_source: a.answer_source,
           parent_question_id: parentQuestionIdRef.current,
           is_follow_up: Boolean(
             (a as { is_follow_up?: boolean }).is_follow_up,
@@ -1213,6 +1260,7 @@ export default function MockSession() {
           is_follow_up: Boolean((a as { is_follow_up?: boolean }).is_follow_up),
           parent_question_id: parentQuestionIdRef.current,
           timestamp: a.timestamp,
+          answer_source: a.answer_source,
         })),
       }),
     });
@@ -1234,34 +1282,40 @@ export default function MockSession() {
     const store = useAudioStore.getState();
     store.clearTranscript();
     const byIndex = new Map(answers.map((a) => [a.question_index, a]));
-    const now = Date.now();
+    let streamMs = 0;
     questions.forEach((q, index) => {
       const qText = q.question_text?.trim();
       if (!qText) return;
+      const qStart = streamMs;
       store.addUtterance({
         id: `mock-q-${index}`,
         text: qText,
         speaker: "interviewer",
         words: [],
-        start_ms: now + index * 2000,
-        end_ms: now + index * 2000 + 500,
+        start_ms: qStart,
+        end_ms: qStart + 500,
         is_final: true,
         is_interviewer_question: true,
         confidence: 1,
       });
+      streamMs = qStart + 600;
       const ans = byIndex.get(index);
       if (ans && !ans.skipped && (ans.answer_text ?? "").trim()) {
+        const aStart = streamMs;
         store.addUtterance({
           id: `mock-a-${index}`,
           text: ans.answer_text.trim(),
           speaker: "candidate",
           words: [],
-          start_ms: now + index * 2000 + 600,
-          end_ms: now + index * 2000 + 1500,
+          start_ms: aStart,
+          end_ms: aStart + 900,
           is_final: true,
           is_interviewer_question: false,
           confidence: 1,
         });
+        streamMs = aStart + 1000;
+      } else {
+        streamMs += 400;
       }
     });
     const current = questions[useSessionStore.getState().current_question_index];
@@ -1442,7 +1496,16 @@ export default function MockSession() {
     usedTexts: string[];
     forceFallback?: boolean;
     isFollowUp?: boolean;
+    /** When set, abort if a newer Next op superseded this generation. */
+    expectedOpId?: number;
   }): Promise<SessionQuestion> {
+    if (
+      options.expectedOpId != null &&
+      options.expectedOpId !== answerNextOpRef.current
+    ) {
+      throw new DOMException("Aborted", "AbortError");
+    }
+
     const { interviewType, role, company, difficulty } = resolveMockConfigFields(
       options.config,
     );
@@ -1543,6 +1606,12 @@ export default function MockSession() {
       if (activeOperationIdRef.current !== operationId) {
         throw new DOMException("Aborted", "AbortError");
       }
+      if (
+        options.expectedOpId != null &&
+        options.expectedOpId !== answerNextOpRef.current
+      ) {
+        throw new DOMException("Aborted", "AbortError");
+      }
 
       setUsedLocalQuestions(
         result.source === "fallback" || result.questionSource === "fallback_bank",
@@ -1596,6 +1665,8 @@ export default function MockSession() {
     const { questionCount } = resolveMockConfigFields(config);
     setTargetQuestionCount(questionCount);
     setOverlayInitState("initializing");
+    setAnswerNextState((s) => reduceAnswerNext(s, { type: "RESET" }));
+    setAnswerNextState((s) => reduceAnswerNext(s, { type: "START_GENERATING" }));
 
     try {
       const first = await runQuestionGeneration({
@@ -1610,12 +1681,14 @@ export default function MockSession() {
       }
       orchestrator.setQuestions([first]);
       questionsCacheRef.current = useSessionStore.getState().questions;
+      setAnswerNextState((s) => reduceAnswerNext(s, { type: "QUESTION_READY" }));
       if (useSessionStore.getState().questions[0]?.tags?.includes("fallback_bank")) {
         toast.message("Using built-in practice questions — AI generation was unavailable.");
       }
       await writeMockProgress();
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
+      setAnswerNextState((s) => reduceAnswerNext(s, { type: "FAIL" }));
       console.warn("[MockSession] question generation failed:", err);
       const message =
         err instanceof Error && err.message.includes("couldn't generate")
@@ -1654,6 +1727,7 @@ export default function MockSession() {
     lastSpeechAtRef.current = null;
     setNoAnswerPrompt(false);
     setSilenceHint(null);
+    useMockHintBridge.getState().reset();
 
     sessionConfigRef.current = config;
     const mockConfigEarly = config as MockConfig;
@@ -1811,7 +1885,6 @@ export default function MockSession() {
       markOverlayProductSessionActive(generation);
       setPhase("active");
       setOverlayInitState("ready");
-      useOverlayStore.getState().showOverlay();
       // audio.start() clears transcript — re-apply restored utterances after start.
       if (answersRef.current.length || questionsCacheRef.current?.length) {
         rebuildMockTranscriptFromProgress(
@@ -1834,7 +1907,6 @@ export default function MockSession() {
         markOverlayProductSessionActive(generation);
         setPhase("active");
         setOverlayInitState("ready");
-        useOverlayStore.getState().showOverlay();
         if (answersRef.current.length || questionsCacheRef.current?.length) {
           rebuildMockTranscriptFromProgress(
             useSessionStore.getState().questions,
@@ -2206,6 +2278,7 @@ export default function MockSession() {
             questionNumber: nextNumber,
             usedTexts,
             isFollowUp: wantFollowUp,
+            expectedOpId: opId,
           });
         }
       } else {
@@ -2215,6 +2288,7 @@ export default function MockSession() {
           questionNumber: nextNumber,
           usedTexts,
           isFollowUp: wantFollowUp,
+          expectedOpId: opId,
         });
       }
 
@@ -2307,6 +2381,7 @@ export default function MockSession() {
       },
       onSpeechStart: () => {
         if (interviewerAudioActiveRef.current) return;
+        isSpeechActiveRef.current = true;
         hasSpokenRef.current = true;
         lastSpeechAtRef.current = Date.now();
         setNoAnswerPrompt(false);
@@ -2314,6 +2389,7 @@ export default function MockSession() {
         setAnswerNextState((s) => reduceAnswerNext(s, { type: "ANSWER_DETECTED" }));
       },
       onSpeechEnd: () => {
+        isSpeechActiveRef.current = false;
         lastSpeechAtRef.current = Date.now();
       },
     });
@@ -2370,6 +2446,8 @@ export default function MockSession() {
         transcriptLooksComplete: transcriptLooksComplete(answerText),
         interviewerSpeaking: interviewerAudioActiveRef.current,
         paused: isPausedRef.current,
+        isSpeechActive:
+          isSpeechActiveRef.current || vadRef.current?.speaking === true,
       });
 
       if (decision === "confirm_incomplete") {
@@ -2549,7 +2627,7 @@ export default function MockSession() {
                     })
                     .then(() => {
                       setPhase("active");
-                      useOverlayStore.getState().showOverlay();
+                      setOverlayInitState("ready");
                     })
                     .catch((err: unknown) => {
                       setQuestionsError(getAiUserFacingError(err));
@@ -2805,13 +2883,15 @@ export default function MockSession() {
           void handleEndSessionRef.current?.();
         }}
       />
-      <OverlayKeyboardHandler
-        enabled={phase === "active"}
-        onToggleMute={audio.toggleMute}
-        onGenerate={() => void handleRequestHint()}
-      />
+      {mockOverlayOpen && (
+        <OverlayKeyboardHandler
+          enabled={phase === "active"}
+          onToggleMute={audio.toggleMute}
+          onGenerate={() => void handleRequestHint()}
+        />
+      )}
 
-      {/* Compact mock chrome — speaking/transcript live only in the overlay */}
+      {/* Compact mock chrome — transcript on page; overlay optional */}
       <header
         data-mock-chrome
         className="fixed top-0 inset-x-0 z-[1200] border-b border-border bg-background/95 backdrop-blur"
@@ -2859,6 +2939,16 @@ export default function MockSession() {
           </div>
 
           <div className="flex items-center gap-1.5 flex-wrap justify-end">
+            <Button
+              variant="ghost"
+              size="xs"
+              data-testid="mock-request-hint"
+              disabled={phase !== "active" || mockHintState === "generating"}
+              onClick={() => void handleRequestHint()}
+              leftIcon={<Sparkles className="w-3 h-3" />}
+            >
+              {mockHintState === "generating" ? "Hint…" : "Get hint"}
+            </Button>
             <Button
               variant="ghost"
               size="xs"
@@ -2930,21 +3020,16 @@ export default function MockSession() {
 
       <div className="flex min-h-screen items-center justify-center px-4 pt-20 pb-28">
         <div className="w-full max-w-md text-center space-y-4">
-          <p className="text-lg font-semibold text-foreground">Mock overlay active</p>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            {isMobile
-              ? "Speech, transcript, and AI hints appear in the overlay. Desktop keyboard shortcuts are not available on this device — use on-screen controls."
-              : (
-                <>
-                  Speech, transcript, fillers, and AI hints appear in the floating overlay — not on this
-                  page. Use{" "}
-                  <kbd className="px-1.5 py-0.5 rounded bg-secondary text-[10px] font-mono">
-                    Ctrl+Shift+U
-                  </kbd>{" "}
-                  to show or hide it.
-                </>
-              )}
-          </p>
+          <div className="rounded-2xl border border-border bg-card/60 px-4 py-3 text-left">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+              Conversation
+            </p>
+            <MockConversationPanel
+              currentQuestion={questionText}
+              answerStatus={currentAnswerStatus}
+              answerStatusLabel={answerStatusLabel ?? undefined}
+            />
+          </div>
 
           <div className="rounded-2xl border border-border bg-card/60 px-4 py-3 text-left min-h-[7.5rem]">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
@@ -3020,6 +3105,29 @@ export default function MockSession() {
               >
                 No answer detected yet. Speak, type a response, Skip, or press Next.
               </p>
+            )}
+            {(mockHintState === "generating" ||
+              mockHintStreaming ||
+              mockHintText ||
+              mockHintError) && (
+              <div
+                className="mt-3 rounded-xl border border-border bg-card/60 p-3 space-y-2"
+                data-testid="mock-inline-hint"
+              >
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  AI coaching hint
+                </p>
+                {mockHintError ? (
+                  <p className="text-xs text-amber-600 dark:text-amber-400">{mockHintError}</p>
+                ) : mockHintState === "generating" && !mockHintStreaming ? (
+                  <p className="text-xs text-muted-foreground italic">Generating hint…</p>
+                ) : (
+                  <AiFormattedOutput
+                    text={mockHintStreaming || mockHintText}
+                    className="text-sm text-foreground"
+                  />
+                )}
+              </div>
             )}
             {nextQuestionError && (
               <div className="mt-3 space-y-2" data-testid="mock-generation-error">
@@ -3111,14 +3219,17 @@ export default function MockSession() {
             >
               {isMuted ? "Unmute" : "Mute mic"}
             </Button>
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={() => useOverlayStore.getState().showOverlay()}
-              leftIcon={<Eye className="w-3 h-3" />}
+            <label
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card/40 px-2.5 py-1.5 text-xs text-muted-foreground cursor-pointer"
+              data-testid="mock-overlay-toggle"
             >
-              Show overlay
-            </Button>
+              <Switch
+                checked={mockOverlayOpen}
+                onCheckedChange={setMockOverlayOpen}
+                aria-label="Open overlay"
+              />
+              Open overlay
+            </label>
           </div>
 
           <details className="rounded-xl border border-border bg-card/40 text-left">
@@ -3138,8 +3249,9 @@ export default function MockSession() {
         </div>
       </div>
 
-      {/* Overlay — one instance per session; ErrorBoundary prevents blank app crash */}
-      {phase === "active" &&
+      {/* Optional overlay — mounted only when user opts in */}
+      {mockOverlayOpen &&
+        phase === "active" &&
         overlayInitState === "ready" &&
         Boolean(sessionIdFromStore) && (
           <ErrorBoundary

@@ -7,9 +7,10 @@ import { PostSessionSummary } from "@/components/session/PostSessionSummary";
 import {
   Monitor,
 } from "lucide-react";
-import { SessionTrustBanner } from "@/components/session/SessionTrustBanner";
+import { PracticeDisclaimerModal } from "@/components/session/PracticeDisclaimerModal";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { useAuthStore } from "@/store/authStore";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useOverlaySessionAuthorityStore } from "@/store/overlaySessionAuthorityStore";
@@ -32,6 +33,7 @@ import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 
 export default function LiveRehearsal() {
   const navigate = useNavigate();
+  const userId = useAuthStore((s) => s.user?.id);
   const [searchParams, setSearchParams] = useSearchParams();
   const endedSessionId = searchParams.get("ended");
   const practiceContextId = searchParams.get("context");
@@ -105,7 +107,7 @@ export default function LiveRehearsal() {
         ]}
       />
 
-      <SessionTrustBanner variant="live" />
+      <PracticeDisclaimerModal userId={userId} />
 
       {isMobile && !dismissMobileNotice && (
         <div
@@ -143,8 +145,7 @@ export default function LiveRehearsal() {
         <p className="flex-1 text-foreground">
           Starting a session opens <strong className="text-primary">Overlay mode</strong> — the
           focused {PRODUCT_NAMES.practiceCoach} window without the app sidebar. Complete the
-          setup wizard below; voice mode includes microphone and speaker checks, while text mode
-          remains available when audio is unavailable.
+          setup wizard below. Practice Coach uses text mode by default — no microphone required.
         </p>
       </div>
 
@@ -159,7 +160,7 @@ export default function LiveRehearsal() {
               Floating overlay, global hotkeys, and tab-audio capture work best in the desktop app.
               Browser Overlay sessions remain fully available.
             </p>
-            <DesktopDownloadButton compact fullWidth showGuideLink={false} />
+            <DesktopDownloadButton compact fullWidth showGuideLink />
           </div>
         </div>
       )}

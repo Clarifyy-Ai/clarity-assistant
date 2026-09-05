@@ -3,6 +3,13 @@
  * sessions that still need generation, plus in-flight jobs.
  */
 
+import {
+  DEBRIEF_SESSION_DB_TYPES,
+  type DebriefSessionDbType,
+} from "@/lib/debrief/debriefSessionTypes";
+
+export { DEBRIEF_SESSION_DB_TYPES, type DebriefSessionDbType };
+
 export type DebriefListDebrief = {
   id: string;
   created_at: string;
@@ -71,12 +78,13 @@ export type DebriefListItem =
       session: DebriefListSession | null;
     };
 
-/** Interview session types eligible for debrief — includes Practice Coach `rehearsal`. */
+/**
+ * Client-side eligibility — includes UI alias `practice` (maps to rehearsal/warmup in DB).
+ * Do not pass to PostgREST `.in("type", …)`; use DEBRIEF_SESSION_DB_TYPES instead.
+ */
 export const DEBRIEF_ELIGIBLE_SESSION_TYPES = [
-  "mock",
-  "live",
+  ...DEBRIEF_SESSION_DB_TYPES,
   "practice",
-  "rehearsal",
 ] as const;
 
 const INTERVIEW_SESSION_TYPES = new Set<string>(DEBRIEF_ELIGIBLE_SESSION_TYPES);

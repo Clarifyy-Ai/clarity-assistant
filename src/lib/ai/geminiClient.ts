@@ -12,6 +12,8 @@ import { fetchEdgeJson, getAuthHeaders } from "@/lib/network/fetchEdge";
 import { fetchLiveEdgeWithRetry } from "@/lib/session/liveSessionRetry";
 import { createIdempotencyKey } from "@/lib/api/functions";
 import { ApiClientError } from "@/lib/api/apiClient";
+import { practiceCoachStylePayload } from "@/lib/ai/practiceCoachContract";
+import { useOverlayStore } from "@/store/overlayStore";
 
 export type GeminiModel =
   | "gemini-2.5-flash"
@@ -92,6 +94,12 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
         ? "rehearsal"
         : "practice");
 
+  const styleFields = practiceCoachStylePayload({
+    hintStyle: context.hint_style ?? useOverlayStore.getState().hint_style,
+    coachTone: context.coach_tone,
+    answerMode: useOverlayStore.getState().answer_mode,
+  });
+
   const body = {
     question,
     model: model ?? "gemini-2.5-flash",
@@ -112,6 +120,7 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
     screenshot_base64: screenshotBase64 ?? null,
     session_id: sessionId ?? null,
     question_id: questionId ?? null,
+    ...styleFields,
     // Sessionless calls must declare mode; with session_id, Edge uses session type.
     ...(resolvedMode ? { mode: resolvedMode } : {}),
   };
@@ -164,6 +173,12 @@ export async function streamFullAnswer(opts: GeminiStreamOptions): Promise<void>
     opts.mode ??
     (answerSessionId ? undefined : opts.isLive ? "rehearsal" : "practice");
 
+  const styleFields = practiceCoachStylePayload({
+    hintStyle: context.hint_style ?? useOverlayStore.getState().hint_style,
+    coachTone: context.coach_tone,
+    answerMode: "full_answer",
+  });
+
   const body = {
     question,
     model: model ?? "gemini-2.5-flash",
@@ -181,6 +196,7 @@ export async function streamFullAnswer(opts: GeminiStreamOptions): Promise<void>
     experience_level: context.experience_level ?? "",
     screenshot_base64: screenshotBase64 ?? null,
     session_id: answerSessionId,
+    ...styleFields,
     ...(answerMode ? { mode: answerMode } : {}),
   };
 

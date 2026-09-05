@@ -85,7 +85,7 @@ export default function AdminGovQuestionReview() {
   const [topic, setTopic] = useState("");
   const [topicQuery, setTopicQuery] = useState("");
   const [missingSourceOnly, setMissingSourceOnly] = useState(false);
-  const [status, setStatus] = useState<QuestionReviewFilterStatus>("public_unverified");
+  const [status, setStatus] = useState<QuestionReviewFilterStatus>("pending");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [override, setOverride] = useState<
     { row: QuestionReviewRow; action: AdminOverrideAction } | null

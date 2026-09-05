@@ -30,6 +30,7 @@ import { COMMUNITY_MODULE_LABEL } from "@/lib/community/moderation";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { notifyOverlayVisibilityOnMobile } from "@/lib/overlay/overlayVisibilityNotice";
 import { assignLoginWithReturnTo } from "@/lib/auth/safeReturnTo";
+import { routePrefetchHandlers } from "@/lib/navigation/routePrefetch";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { useIndiaRegion } from "@/hooks/useIndiaRegion";
@@ -168,6 +169,7 @@ export function MobileNav(): JSX.Element {
             key={tab.to}
             to={tab.to}
             end={tab.exact}
+            {...routePrefetchHandlers(tab.to)}
             onClick={() => {
               if (tab.to === "/app/live") notifyOverlayVisibilityOnMobile();
             }}
@@ -213,6 +215,7 @@ export function MobileNav(): JSX.Element {
                   <Link
                     key={link.to}
                     to={link.to}
+                    {...routePrefetchHandlers(link.to)}
                     onClick={() => setMoreOpen(false)}
                     className="flex items-center gap-3 rounded-xl border border-border px-4 py-3 text-sm font-medium hover:bg-secondary/60 transition-colors"
                   >

@@ -37,6 +37,43 @@ export const AUTH_SESSION_TIMEOUT_MS_ELECTRON = 18_000;
 /** Delay before a cold-start profile retry after consecutive timeouts. */
 export const PROFILE_COLD_RETRY_DELAY_MS = 1_500;
 
+/** Profile read attempts including the first try. */
+export const PROFILE_LOAD_MAX_ATTEMPTS = 2;
+
+/**
+ * Exponential backoff between profile load retries.
+ * attempt 1 → base, attempt 2 → 2× base, etc.
+ */
+export function profileLoadRetryDelayMs(
+  attempt: number,
+  baseMs = PROFILE_COLD_RETRY_DELAY_MS,
+): number {
+  const n = Math.max(1, Math.floor(attempt));
+  return baseMs * 2 ** (n - 1);
+}
+
+/**
+ * Run work under a bootstrap lock. Skips when already locked.
+ * Always releases the lock in `finally`.
+ */
+export async function runWithBootstrapGuard<T>(
+  isLocked: () => boolean,
+  setLocked: (locked: boolean) => void,
+  fn: () => Promise<T>,
+  opts?: { onSkipped?: () => void },
+): Promise<T | undefined> {
+  if (isLocked()) {
+    opts?.onSkipped?.();
+    return undefined;
+  }
+  setLocked(true);
+  try {
+    return await fn();
+  } finally {
+    setLocked(false);
+  }
+}
+
 export const MAX_ACCOUNT_RECOVERY_ATTEMPTS = 3;
 
 export type AccountBootstrapPhase =

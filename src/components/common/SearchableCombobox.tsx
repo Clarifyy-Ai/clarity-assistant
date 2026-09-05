@@ -42,7 +42,11 @@ export function SearchableCombobox({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return options;
-    return options.filter((o) => o.toLowerCase().includes(q));
+    const tokens = q.split(/\s+/).filter(Boolean);
+    return options.filter((option) => {
+      const haystack = option.toLowerCase();
+      return tokens.every((token) => haystack.includes(token));
+    });
   }, [options, query]);
 
   const showCustom =

@@ -29,6 +29,9 @@ import {
 } from "@/lib/mock/interviewBlueprint";
 import { encodeMockProgressNotes } from "@/lib/mock/mockSessionProgress";
 import { sessionsDB, resumesDB, jobDescriptionsDB } from "@/lib/supabase/database";
+import { mockSessionCreditCost } from "@/lib/constants/creditEconomics";
+import { deductMockSessionCredits } from "@/lib/billing/creditsManager";
+import { useSessionStore } from "@/store/sessionStore";
 
 const DIFFICULTY_LEVELS = [
   { value: "easy",   label: "Easy",   desc: "Warm-up, foundational" },
@@ -163,6 +166,21 @@ export default function MockInterview() {
 
       if (reused) toast.message("Resuming your in-progress session");
 
+      if (!warmup && !reused) {
+        const creditResult = await deductMockSessionCredits(
+          reviewSnapshot.planned_question_count,
+          session.id,
+        );
+        if (!creditResult.success) {
+          toast.error(
+            creditResult.error ??
+              `This mock needs ${mockSessionCreditCost(reviewSnapshot.planned_question_count)} credits.`,
+          );
+          return;
+        }
+        useSessionStore.getState().consumeCredit(creditResult.creditsDeducted);
+      }
+
       const progressNotes = encodeMockProgressNotes({
         current_question_index: 0,
         elapsed_seconds: 0,
@@ -221,6 +239,11 @@ export default function MockInterview() {
         <MockReviewScreen
           snapshot={reviewSnapshot}
           warmup={warmup}
+          creditCostLabel={
+            warmup
+              ? "Free warmup — no credits charged"
+              : `${mockSessionCreditCost(reviewSnapshot.planned_question_count)} credits (${reviewSnapshot.planned_question_count} questions)`
+          }
           loading={loading}
           onBack={() => {
             setReviewSnapshot(null);
@@ -254,7 +277,8 @@ export default function MockInterview() {
       >
         <ClipboardList className="w-4 h-4 text-emerald-800 dark:text-emerald-300 shrink-0 mt-0.5" />
         <p className="text-sm text-emerald-950 dark:text-emerald-100 min-w-0 break-words leading-relaxed">
-          Mock sessions are <strong>free</strong> within your daily plan allowance. Each session runs for 5 minutes.
+          Mock sessions cost credits based on question count (
+          {mockSessionCreditCost(5)} cr for 5 questions). Warmup mode is free.
           Adaptive follow-ups use your frozen Resume/JD context.
         </p>
       </div>
@@ -265,7 +289,7 @@ export default function MockInterview() {
           <h3 className="text-sm font-semibold text-foreground">Mock session options</h3>
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Timer className="w-3.5 h-3.5" aria-hidden="true" />
-            5 min · Free
+            5 min · {mockSessionCreditCost(numQ)} cr
           </span>
         </div>
 

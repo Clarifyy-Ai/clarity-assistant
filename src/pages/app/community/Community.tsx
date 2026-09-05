@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/Badge";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
-import { COMMUNITY_CATEGORIES, COMMUNITY_MODULE_DESCRIPTION, COMMUNITY_MODULE_LABEL, type CommunityCategory } from "@/lib/community/moderation";
+import { COMMUNITY_CATEGORIES, COMMUNITY_MODULE_DESCRIPTION, COMMUNITY_MODULE_LABEL, canPublicRead, type CommunityCategory } from "@/lib/community/moderation";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 import { EmptyState } from "@/components/common/EmptyState";
 import { MessageSquare } from "lucide-react";
@@ -63,7 +63,11 @@ export default function CommunityPage() {
       setLoaded(true);
       return;
     }
-    setPosts((data as Post[]) ?? []);
+    setPosts(
+      ((data as Post[]) ?? []).filter((post) =>
+        canPublicRead(post.status as Parameters<typeof canPublicRead>[0], post.user_id === user?.id, isStaff),
+      ),
+    );
     setLoaded(true);
   }
 
@@ -148,7 +152,7 @@ export default function CommunityPage() {
                 Sign in to ask
               </Button>
             )}
-            {isAdmin ? (
+            {isStaff ? (
               <Button size="sm" variant="outline" onClick={() => navigate("/app/admin/community")}>
                 Moderation
               </Button>

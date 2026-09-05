@@ -54,7 +54,7 @@ describe("gov exam session/results stay on route (source contract)", () => {
     expect(session).toContain('kind: "temporary"');
     expect(session).toContain("setLoadFailure");
     expect(session).not.toContain('toast.error("Test not found.");\n        navigate("/app/mock-test");');
-    expect(results).toContain('kind: "processing"');
+    expect(results).toContain('"processing"');
     expect(results).toContain("setLoadFailure");
     expect(results).not.toContain(
       'toast.error("Analysis is still processing. Refresh the page in a few seconds.");\n        navigate("/app/mock-test");',

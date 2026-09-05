@@ -15,11 +15,10 @@ function readSrc(relative: string): string {
 }
 
 describe("list-session-debriefs contracts (BUG-21)", () => {
-  it("includes rehearsal in interview type eligibility", () => {
+  it("edge list filter uses valid session_type enum values", () => {
     const source = readFunction("list-session-debriefs");
-    expect(source).toContain('"rehearsal"');
-    expect(source).toMatch(/INTERVIEW_TYPES[\s\S]*rehearsal/);
-    expect(source).toMatch(/DEBRIEF_SESSION_TYPE_FILTER[\s\S]*rehearsal/);
+    expect(source).toContain("DEBRIEF_SESSION_DB_TYPES");
+    expect(source).not.toMatch(/DEBRIEF_SESSION_TYPE_FILTER[\s\S]*"practice"/);
   });
 
   it("returns retryable failed jobs alongside processing", () => {
@@ -29,17 +28,21 @@ describe("list-session-debriefs contracts (BUG-21)", () => {
     expect(source).toContain("failedJobs");
   });
 
-  it("client pending query includes rehearsal", () => {
+  it("client pending query uses valid session_type enum values (not UI alias practice)", () => {
     const db = readSrc("src/lib/supabase/database.ts");
     expect(db).toMatch(
-      /listDebriefPendingWithEligibility[\s\S]*?\.in\("type",\s*\["mock",\s*"live",\s*"practice",\s*"rehearsal"\]/,
+      /listDebriefPendingWithEligibility[\s\S]*?DEBRIEF_SESSION_DB_TYPES/,
+    );
+    expect(db).not.toMatch(
+      /listDebriefPendingWithEligibility[\s\S]*?"practice"/,
     );
   });
 
   it("client eligibility helper exports rehearsal-capable types", () => {
     const list = readSrc("src/lib/debrief/debriefList.ts");
+    const types = readSrc("src/lib/debrief/debriefSessionTypes.ts");
     expect(list).toContain("DEBRIEF_ELIGIBLE_SESSION_TYPES");
-    expect(list).toContain('"rehearsal"');
+    expect(types).toContain('"rehearsal"');
     expect(list).toContain('kind: "failed"');
   });
 });

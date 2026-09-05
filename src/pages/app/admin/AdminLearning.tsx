@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -13,6 +13,8 @@ import { writeAdminAudit } from "@/lib/admin/writeAdminAudit";
 import { adminActionFailedMessage, toAdminUserMessage } from "@/lib/admin/adminErrors";
 import { validateCourseForPublish } from "@/lib/learning/publishValidation";
 import { invalidatePublicContentCache } from "@/lib/cms/publicContentCache";
+import { AdminStatGrid } from "@/components/admin/AdminStatGrid";
+import { BookOpen, Eye, EyeOff, Layers, HelpCircle } from "lucide-react";
 
 type Course = {
   id: string;
@@ -391,6 +393,14 @@ export default function AdminLearningPage() {
       ? validateCourseForPublish(modules, lessons)
       : null;
 
+  const learningDash = useMemo(() => ({
+    courses: courses.length,
+    published: courses.filter((c) => c.publish_status === "published").length,
+    drafts: courses.filter((c) => c.publish_status !== "published").length,
+    lessons: lessons.length,
+    quizzes: quizzes.length,
+  }), [courses, lessons, quizzes]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -399,6 +409,18 @@ export default function AdminLearningPage() {
           Manage courses, modules, and lessons. Publish only after every lesson has content.
         </p>
       </div>
+
+      <AdminStatGrid
+        loading={loading}
+        columns={5}
+        stats={[
+          { id: "courses", label: "Courses", value: learningDash.courses.toLocaleString(), icon: BookOpen },
+          { id: "published", label: "Published", value: learningDash.published.toLocaleString(), variant: "success", icon: Eye },
+          { id: "drafts", label: "Drafts", value: learningDash.drafts.toLocaleString(), icon: EyeOff },
+          { id: "lessons", label: "Lessons (selected)", value: learningDash.lessons.toLocaleString(), icon: Layers },
+          { id: "quizzes", label: "Quizzes (selected)", value: learningDash.quizzes.toLocaleString(), icon: HelpCircle },
+        ]}
+      />
 
       {error && <InlineErrorRetry message={error} onRetry={() => void loadCourses()} />}
 

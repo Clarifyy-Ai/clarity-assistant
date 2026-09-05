@@ -56,13 +56,29 @@ export interface RouteAnswerGenerationOptions {
   signal?: AbortSignal;
 }
 
+function isLiveCoachPath(isLive?: boolean, mode?: string): boolean {
+  return Boolean(isLive) || mode === "rehearsal";
+}
+
 function applyCategoryFallback(
   question: string,
   sessionType: InterviewType | string | undefined,
   hintStyle: HintStyle,
   reason: "offline" | "ai_unavailable",
   errorMessage?: string | null,
+  opts?: { isLive?: boolean; mode?: string },
 ): void {
+  if (isLiveCoachPath(opts?.isLive, opts?.mode)) {
+    const overlayStore = useOverlayStore.getState();
+    overlayStore.setError(
+      errorMessage ??
+        (reason === "offline"
+          ? "You are offline. Reconnect to get AI coaching."
+          : "Coach AI is temporarily unavailable. Try again in a moment."),
+    );
+    overlayStore.setHintState("idle");
+    return;
+  }
   const overlayStore = useOverlayStore.getState();
   const built = buildOfflineCategoryHint({
     question,
@@ -205,6 +221,7 @@ export async function routeAnswerGeneration(opts: RouteAnswerGenerationOptions):
           opts.context.hint_style,
           "ai_unavailable",
           err instanceof Error ? err.message : String(err),
+          { mode: opts.mode },
         );
         opts.onError?.(err);
       },
@@ -218,6 +235,7 @@ export async function routeAnswerGeneration(opts: RouteAnswerGenerationOptions):
       opts.context.hint_style,
       "ai_unavailable",
       error.message,
+      { mode: opts.mode },
     );
     opts.onError?.(error);
   }
@@ -257,6 +275,8 @@ export async function routeHint(opts: RouteHintOptions): Promise<void> {
       interviewType,
       opts.context.hint_style,
       "offline",
+      undefined,
+      { isLive: opts.isLive },
     );
     networkStore.setQueuedHintRequest(true);
     return;
@@ -286,6 +306,7 @@ export async function routeHint(opts: RouteHintOptions): Promise<void> {
           opts.context.hint_style,
           "ai_unavailable",
           error.message,
+          { isLive: opts.isLive },
         );
         opts.onError(error);
       }
@@ -298,6 +319,7 @@ export async function routeHint(opts: RouteHintOptions): Promise<void> {
         opts.context.hint_style,
         "ai_unavailable",
         error.message,
+        { isLive: opts.isLive },
       );
       opts.onError(error);
     }

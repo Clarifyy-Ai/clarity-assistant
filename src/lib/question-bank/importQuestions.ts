@@ -213,6 +213,13 @@ export function validateImportRow(
     return { index: 0, status: "invalid", code: "malformed", message: "MCQ records need at least options A and B." };
   }
 
+  if (questionType === "TRUE_FALSE" && options.length < 2) {
+    options.push(
+      { label: "A", text: "True" },
+      { label: "B", text: "False" },
+    );
+  }
+
   const fingerprint = questionFingerprint(
     question,
     options.map((o) => o.text),

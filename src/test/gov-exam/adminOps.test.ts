@@ -5,6 +5,7 @@ import {
   canSetRegistryReviewState,
   canSetSourceReviewState,
   deriveQuestionQueueStatus,
+  govLicenseTypeFromMetadata,
   mapExtractQuestionPaperInvokeError,
   questionPatchForStatus,
   questionPatchForVerifyAction,
@@ -46,20 +47,35 @@ describe("gov exam adminOps helpers", () => {
     expect(deriveQuestionQueueStatus({ is_verified: true, is_public: false })).toBe("retired");
   });
 
+  it("maps gov license_class metadata to publishable license_type", () => {
+    expect(govLicenseTypeFromMetadata({ license_class: "official_public" })).toBe("PUBLIC_DOMAIN");
+    expect(govLicenseTypeFromMetadata({ license_class: "licensed" })).toBe("LICENSED");
+    expect(govLicenseTypeFromMetadata({ provenance: "pdf_extract" })).toBe("PUBLIC_DOMAIN");
+    expect(govLicenseTypeFromMetadata(null, "ORIGINAL")).toBe("ORIGINAL");
+  });
+
   it("maps review actions to question patches", () => {
     expect(questionPatchForStatus("approved", { needs_review: true })).toEqual({
-      is_verified: true,
+      publish_status: "published",
       is_public: true,
+      review_status: "approved",
+      is_verified: true,
+      validation_status: "valid",
+      license_type: "PUBLIC_DOMAIN",
+      approval_mode: "MANUAL",
       metadata: { needs_review: false },
     });
     expect(questionPatchForStatus("rejected")).toEqual({
       is_verified: false,
       is_public: false,
+      publish_status: "draft",
+      review_status: "rejected",
       metadata: { needs_review: false },
     });
     expect(questionPatchForStatus("retired")).toEqual({
       is_verified: true,
       is_public: false,
+      publish_status: "draft",
       metadata: { needs_review: false },
     });
   });
@@ -95,8 +111,13 @@ describe("gov exam adminOps helpers", () => {
 
   it("maps verify / unpublish patches (explicit admin actions only)", () => {
     expect(questionPatchForVerifyAction("verify", { metadata: { needs_review: true } })).toEqual({
-      is_verified: true,
+      publish_status: "published",
       is_public: true,
+      review_status: "approved",
+      is_verified: true,
+      validation_status: "valid",
+      license_type: "PUBLIC_DOMAIN",
+      approval_mode: "MANUAL",
       metadata: { needs_review: false },
     });
     expect(
@@ -107,6 +128,7 @@ describe("gov exam adminOps helpers", () => {
       }),
     ).toEqual({
       is_public: false,
+      publish_status: "draft",
       metadata: { source: "pyq", unpublished_via: "admin_verify_queue" },
     });
   });

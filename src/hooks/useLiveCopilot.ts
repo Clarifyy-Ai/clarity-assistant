@@ -26,10 +26,10 @@ import { answerBankDB } from "@/lib/supabase/database";
 import { checkCreditsForAction, refreshCredits } from "@/lib/billing/creditsManager";
 import { captureCodingQuestionAndGenerateAnswer } from "@/lib/audio/screenshotCapture";
 import { assertOnlineForCapture } from "@/lib/overlay/captureGating";
+import { parseResumeContentString, formatParsedResumeForAI } from "@/lib/documents/resumeParse";
 import {
   buildResumeContext,
   generateResumeTalkingPoints,
-  formatTalkingPointsAsHint,
 } from "@/lib/ai/resumeFallback";
 import {
   loadPrimaryCoverLetterText,
@@ -48,7 +48,6 @@ import {
   getPracticeCoachContextSnapshot,
   setPracticeCoachContextSnapshot,
 } from "@/lib/session/practiceCoachContextStore";
-import { parseResumeContentString } from "@/lib/documents/resumeParse";
 import { getPrivateMode } from "@/hooks/usePrivateMode";
 import { parsePrivacyPrefs } from "@/lib/privacy/privacyPrefs";
 import { createDragHandler } from "@/lib/overlay/stealthMouse";
@@ -70,6 +69,8 @@ import {
   saveLiveSessionCheckpoint,
 } from "@/lib/session/liveSessionCheckpoint";
 import { notifySessionsChanged } from "@/lib/session/sessionReuse";
+import { supabase } from "@/lib/supabase/client";
+import { useGamificationStore } from "@/hooks/useGamification";
 import {
   activateSession,
   aiModeForSessionType,
@@ -105,12 +106,18 @@ import {
   beginOverlayProductSession,
   bindOverlayProductSessionId,
   markOverlayProductSessionActive,
+  promoteOverlayProductSessionWhenReady,
   markOverlayProductSessionReady,
   markOverlayProductSessionTerminal,
   teardownOverlayProductSession,
 } from "@/lib/session/overlayProductSession";
 import { practiceCoachStartIdempotencyKey } from "@/lib/network/idempotency";
 import { getOverlaySessionAuthority } from "@/store/overlaySessionAuthorityStore";
+import { getLatestInterviewerQuestion } from "@/lib/audio/interviewerQuestions";
+import {
+  assessAiHelpQuestion,
+  confidenceTierLabel,
+} from "@/lib/session/aiHelpConfirm";
 
 interface UseLiveCopilotOptions {
   config: LiveSessionConfig;
@@ -142,6 +149,10 @@ export function useLiveCopilot({
   const overlayGenerationRef = useRef<number>(0);
   /** When true, ignore late question / transcript / hint events. */
   const sessionEndedRef = useRef(false);
+  const docFreezeRef = useRef<{ resumeText: string; jdText: string }>({
+    resumeText: "",
+    jdText: "",
+  });
   const hintOperationIdRef = useRef<string | null>(null);
   const startAbortRef = useRef<AbortController | null>(null);
   const pendingCaptureMetaRef = useRef<{
@@ -422,6 +433,7 @@ export function useLiveCopilot({
 
     let jdRequiredSkills: string[] = [];
     let jdSeniority: string[] = [];
+    let jdFullText = "";
     if (cfg.jd_id) {
       try {
         const jd = await jobDescriptionsDB.getByIdMaybe(cfg.jd_id);
@@ -434,10 +446,33 @@ export function useLiveCopilot({
         if (Array.isArray(seniority)) {
           jdSeniority = seniority.filter((s): s is string => typeof s === "string");
         }
+        const desc =
+          (typeof raw?.description === "string" && raw.description.trim()) ||
+          (typeof raw?.raw_text === "string" && raw.raw_text.trim()) ||
+          (typeof raw?.content === "string" && raw.content.trim()) ||
+          "";
+        const roleLine = cfg.role ? `Role: ${cfg.role}` : "";
+        const companyLine = cfg.company ? `Company: ${cfg.company}` : "";
+        jdFullText = [roleLine, companyLine, desc].filter(Boolean).join("\n");
       } catch (err) {
         console.warn("[useLiveCopilot] JD load failed:", err);
       }
+    } else {
+      const jdParts: string[] = [];
+      if (cfg.role) jdParts.push(`Role: ${cfg.role}`);
+      if (cfg.company) jdParts.push(`Company: ${cfg.company}`);
+      jdFullText = jdParts.join("\n");
     }
+
+    docFreezeRef.current = {
+      resumeText: formatParsedResumeForAI(parsed, {
+        role: cfg.role,
+        company: cfg.company,
+        coverLetter: coverText,
+        instructions: cfg.instructions,
+      }),
+      jdText: jdFullText,
+    };
 
     const overlay = useOverlayStore.getState();
     overlay.setResumeContext(resumeCtx);
@@ -647,9 +682,8 @@ export function useLiveCopilot({
     );
 
     if (!creditCheck.canProceed) {
-      const tp = overlay.resume_talking_points;
-      if (tp) overlay.setOfflineFallback(formatTalkingPointsAsHint(tp));
-      else overlay.setError(creditCheck.reason ?? "Out of credits");
+      overlay.setError(creditCheck.reason ?? "Insufficient credits for a full answer.");
+      overlay.setSessionPipelineState("insufficient_credits");
       overlay.setHintState("idle");
       return;
     }
@@ -764,9 +798,7 @@ export function useLiveCopilot({
       if (!creditCheck.canProceed) {
         const overlay = useOverlayStore.getState();
         overlay.setSessionPipelineState("insufficient_credits");
-        const tp = overlay.resume_talking_points;
-        if (tp) overlay.setOfflineFallback(formatTalkingPointsAsHint(tp));
-        else overlay.setError(creditCheck.reason ?? "Out of credits");
+        overlay.setError(creditCheck.reason ?? "Insufficient credits for this action.");
         return;
       }
 
@@ -897,6 +929,56 @@ export function useLiveCopilot({
     },
     [requestLiveHint],
   );
+
+  /** Manual AI Help — prefer live interviewer transcript over typing when available. */
+  const triggerManualAiHelp = useCallback(() => {
+    const store = useOverlayStore.getState();
+    store.setActiveTab("answer");
+    store.setMinimalMode(false);
+    store.showOverlay();
+
+    const latestFromAudio = getLatestInterviewerQuestion();
+    const frozen =
+      audio.snapshotRecentInterviewerTranscript?.({ maxChars: 2_000 }) ?? "";
+    const utterances = useAudioStore.getState().transcript?.utterances ?? [];
+    const micOnly = !configRef.current.enable_system_audio;
+    const minMedium = useAudioStore.getState().question_confidence_min ?? 0.45;
+
+    const assessment = assessAiHelpQuestion({
+      utterances,
+      currentQuestion:
+        store.current_question?.trim() ||
+        latestFromAudio?.question ||
+        null,
+      chatPrefill: store.chat_prefill,
+      allowMicOnlyFallback: micOnly,
+      frozenInterviewerText: frozen,
+      minMedium,
+    });
+
+    if (!assessment.question) {
+      store.clearAiHelpConfirm();
+      store.setSessionPipelineState("listening");
+      store.setChatAttention(true, "manual_needed");
+      toast.info(
+        "Listening for the interviewer. Share tab audio, or open Chat to type the question.",
+      );
+      return;
+    }
+
+    store.openAiHelpConfirm({
+      question: assessment.question,
+      confidence: assessment.confidence,
+      confidenceScore: assessment.confidenceScore,
+      frozenInterviewerText: frozen,
+      editing: assessment.confidence === "low",
+    });
+    if (assessment.confidence === "low") {
+      toast.message(
+        `Detected question confidence: ${confidenceTierLabel(assessment.confidence)}. Edit or confirm before generating.`,
+      );
+    }
+  }, [audio]);
 
   // keep latest ref for audio callback usage
   useEffect(() => {
@@ -1149,10 +1231,8 @@ export function useLiveCopilot({
           if (!snap) {
             const overlayNow = useOverlayStore.getState();
             const cfgSnap = configRef.current;
-            const jdParts: string[] = [];
-            if (cfgSnap.role) jdParts.push(`Role: ${cfgSnap.role}`);
-            if (cfgSnap.company) jdParts.push(`Company: ${cfgSnap.company}`);
-            const liveResume =
+            const freeze = docFreezeRef.current;
+            const liveResumeFallback =
               typeof overlayNow.resume_context === "object"
                 ? overlayNow.resume_context?.summary ?? ""
                 : String(overlayNow.resume_context ?? "");
@@ -1177,8 +1257,8 @@ export function useLiveCopilot({
             }
             snap = buildPracticeCoachContextSnapshot({
               config: cfgSnap,
-              resumeText: liveResume,
-              jdText: jdParts.join("\n"),
+              resumeText: freeze.resumeText || liveResumeFallback,
+              jdText: freeze.jdText,
               answerBankSnippets,
             });
             setPracticeCoachContextSnapshot(sid, snap);
@@ -1218,7 +1298,19 @@ export function useLiveCopilot({
         audio.stop();
         return;
       }
-      markOverlayProductSessionActive(generation);
+      const textOnlyMode =
+        (configRef.current as { text_voice_mode?: string }).text_voice_mode === "text";
+      if (!promoteOverlayProductSessionWhenReady(generation, textOnlyMode)) {
+        const promoteIv = window.setInterval(() => {
+          if (
+            promoteOverlayProductSessionWhenReady(generation, textOnlyMode) ||
+            !getOverlaySessionAuthority().matchesGeneration(generation)
+          ) {
+            window.clearInterval(promoteIv);
+          }
+        }, 250);
+        window.setTimeout(() => window.clearInterval(promoteIv), 20_000);
+      }
       markFirstListening();
       cancelSessionOnFailure = null;
 
@@ -1409,6 +1501,27 @@ export function useLiveCopilot({
         toast.success("Session saved");
         notifySessionsChanged();
 
+        try {
+          const { data: streakData, error: streakError } = await supabase.rpc(
+            "record_practice_activity",
+            { p_user_id: userId },
+          );
+          if (!streakError && streakData && typeof streakData === "object") {
+            const row = streakData as {
+              streak_current?: number;
+              streak_longest?: number;
+              last_activity?: string | null;
+            };
+            useGamificationStore.getState().setStreak(
+              row.streak_current ?? 0,
+              row.streak_longest ?? 0,
+              row.last_activity ?? null,
+            );
+          }
+        } catch {
+          /* streak update is best-effort */
+        }
+
         // Populate Analytics scorecards when answers exist (non-blocking).
         if (answersRecorded > 0 && session.session_id) {
           const sid = session.session_id;
@@ -1574,6 +1687,7 @@ export function useLiveCopilot({
     snapshotRecentInterviewerTranscript: audio.snapshotRecentInterviewerTranscript,
     getFrozenInterviewerTranscript: audio.getFrozenInterviewerTranscript,
     requestLiveHint,
+    triggerManualAiHelp,
     requestAnswerModification,
     submitManualQuestion,
     startLiveSession,

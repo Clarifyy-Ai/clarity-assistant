@@ -8,9 +8,67 @@ import { createServiceClient } from "../_shared/supabase.ts";
 import { enforceSessionRateLimitAsync } from "../_shared/rateLimit.ts";
 import { requireCapabilityAsync } from "../_shared/requireCapability.ts";
 import { isUserBanned, bannedResponse } from "../_shared/banCheck.ts";
+import { isRetryable } from "../_shared/domainErrors.ts";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+type AvailabilityFailureCode =
+  | "DATABASE_FAILURE"
+  | "PROVIDER_UNAVAILABLE"
+  | "ASSESSMENT_START_FAILED";
+
+function classifyAvailabilityFailure(error: {
+  message?: string;
+  code?: string;
+  details?: string | null;
+}): { code: AvailabilityFailureCode; retryable: boolean } {
+  const msg = String(error.message ?? "").toLowerCase();
+  const pgCode = String(error.code ?? "").toUpperCase();
+
+  if (pgCode === "42501" || msg.includes("not authenticated")) {
+    return { code: "ASSESSMENT_START_FAILED", retryable: false };
+  }
+
+  if (
+    msg.includes("fetch failed") ||
+    msg.includes("upstream") ||
+    msg.includes("provider") ||
+    msg.includes("service unavailable")
+  ) {
+    return { code: "PROVIDER_UNAVAILABLE", retryable: true };
+  }
+
+  if (
+    pgCode.startsWith("PGRST") ||
+    pgCode.startsWith("08") ||
+    pgCode === "57014" ||
+    msg.includes("connection") ||
+    msg.includes("timeout") ||
+    msg.includes("database") ||
+    msg.includes("postgres") ||
+    msg.includes("could not connect")
+  ) {
+    return { code: "DATABASE_FAILURE", retryable: true };
+  }
+
+  return { code: "DATABASE_FAILURE", retryable: isRetryable("DATABASE_FAILURE") };
+}
+
+function availabilityFailureResponse(
+  req: Request,
+  classified: { code: AvailabilityFailureCode; retryable: boolean },
+): Response {
+  return json(
+    req,
+    {
+      error: "Availability could not be checked.",
+      code: classified.code,
+      retryable: classified.retryable,
+    },
+    503,
+  );
+}
 
 function json(req: Request, payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -78,10 +136,7 @@ Deno.serve(withBrowserCors("check-assessment-availability", async (req) => {
 
     if (error) {
       console.error("[check-assessment-availability]", error.message);
-      return json(req, {
-        error: "Availability could not be checked.",
-        code: "ASSESSMENT_START_FAILED",
-      }, 500);
+      return availabilityFailureResponse(req, classifyAvailabilityFailure(error));
     }
 
     const payload = (data ?? {}) as {
@@ -114,9 +169,11 @@ Deno.serve(withBrowserCors("check-assessment-availability", async (req) => {
     });
   } catch (err) {
     console.error("[check-assessment-availability]", err);
-    return json(req, {
-      error: "Availability could not be checked.",
-      code: "ASSESSMENT_START_FAILED",
-    }, 500);
+    const classified = classifyAvailabilityFailure(
+      err instanceof Error
+        ? { message: err.message }
+        : { message: String(err ?? "") },
+    );
+    return availabilityFailureResponse(req, classified);
   }
 }));

@@ -78,17 +78,21 @@ describe("coach chat continuity", () => {
     expect(toolbar).toContain("chatAttention");
     expect(toolbar).toContain("animate-pulse");
     const live = read("src/pages/app/live/LiveOverlay.tsx");
-    expect(live).toContain("setChatAttention(true, \"manual_needed\")");
-    expect(live).toContain("requestLiveHint(trimmed)");
+    const copilot = read("src/hooks/useLiveCopilot.ts");
+    expect(live).toContain("triggerManualAiHelp");
+    expect(copilot).toContain('setChatAttention(true, "manual_needed")');
+    expect(copilot).toContain("requestLiveHint");
   });
 
   it("AI Help recovers unclear STT then falls back to Chat attention", () => {
     const live = read("src/pages/app/live/LiveOverlay.tsx");
-    expect(live).toContain("assessAiHelpQuestion");
-    expect(live).toContain("openAiHelpConfirm");
-    expect(live).toContain("chat_prefill");
-    expect(live).toContain('setChatAttention(true, "manual_needed")');
-    expect(live).toContain("snapshotRecentInterviewerTranscript");
+    const copilot = read("src/hooks/useLiveCopilot.ts");
+    expect(live).toContain("triggerManualAiHelp");
+    expect(copilot).toContain("assessAiHelpQuestion");
+    expect(copilot).toContain("openAiHelpConfirm");
+    expect(copilot).toContain("chatPrefill");
+    expect(copilot).toContain('setChatAttention(true, "manual_needed")');
+    expect(copilot).toContain("getLatestInterviewerQuestion");
     const resolve = read("src/lib/session/liveQuestionFromTranscript.ts");
     expect(resolve).toContain("aiHelpRecovery");
     const hint = read("src/components/overlay/OverlayHintPanel.tsx");

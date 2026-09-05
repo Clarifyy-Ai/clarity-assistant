@@ -16,6 +16,12 @@ import {
   type AdminAuditPayload,
 } from "@/lib/admin/writeAdminAudit";
 import { QUALITY_ALGORITHM_VERSION } from "@/lib/gov-exam/algorithmCatalog";
+import { canPublishLicense } from "@/lib/content/license";
+import {
+  assertPublishableForTrigger,
+  buildQuestionPublishPatch,
+  type PublishableQuestionRow,
+} from "@/lib/question-bank/questionPublishPatch";
 
 export { writeAdminAudit };
 export type { AdminAuditPayload };
@@ -104,28 +110,68 @@ export function verificationRunwayNeeded(
   return Math.max(0, required - approved);
 }
 
+/** Map gov source license_class (metadata) to questions.license_type for publication. */
+export function govLicenseTypeFromMetadata(
+  metadata?: Record<string, unknown> | null,
+  existing?: string | null,
+): string {
+  if (existing && canPublishLicense(existing)) return existing;
+  const lc = String(metadata?.license_class ?? "").trim().toLowerCase();
+  switch (lc) {
+    case "official_public":
+      return "PUBLIC_DOMAIN";
+    case "licensed":
+      return "LICENSED";
+    case "institution":
+      return "INTERNAL";
+    case "user_upload":
+      return "USER_OWNED";
+    case "ai_generated":
+      return "ORIGINAL";
+    default:
+      if (metadata?.provenance === "pdf_extract") return "PUBLIC_DOMAIN";
+      return "PUBLIC_DOMAIN";
+  }
+}
+
+function govQuestionPublishLifecyclePatch(
+  previousMetadata?: Record<string, unknown> | null,
+  existingLicenseType?: string | null,
+): Record<string, unknown> {
+  const publish = buildQuestionPublishPatch({ targetStatus: "published", isAdmin: true });
+  if (!publish.ok) return {};
+  return {
+    ...publish.patch,
+    license_type: govLicenseTypeFromMetadata(previousMetadata, existingLicenseType),
+    approval_mode: "MANUAL",
+  };
+}
+
 export function questionPatchForStatus(
   status: "approved" | "rejected" | "retired",
   previousMetadata?: Record<string, unknown> | null,
-): { is_verified: boolean; is_public: boolean; metadata: Record<string, unknown> } {
+  existingLicenseType?: string | null,
+): Record<string, unknown> {
   const base = { ...(previousMetadata ?? {}) };
   switch (status) {
     case "approved":
       return {
-        is_verified: true,
-        is_public: true,
+        ...govQuestionPublishLifecyclePatch(previousMetadata, existingLicenseType),
         metadata: { ...base, needs_review: false },
       };
     case "rejected":
       return {
         is_verified: false,
         is_public: false,
+        publish_status: "draft",
+        review_status: "rejected",
         metadata: { ...base, needs_review: false },
       };
     case "retired":
       return {
         is_verified: true,
         is_public: false,
+        publish_status: "draft",
         metadata: { ...base, needs_review: false },
       };
   }
@@ -138,20 +184,48 @@ export function questionPatchForVerifyAction(
     is_verified?: boolean | null;
     is_public?: boolean | null;
     metadata?: Record<string, unknown> | null;
+    license_type?: string | null;
   },
 ): Record<string, unknown> {
   const base = { ...(previous?.metadata ?? {}) };
   if (action === "verify") {
     return {
-      is_verified: true,
-      is_public: true,
+      ...govQuestionPublishLifecyclePatch(previous?.metadata, previous?.license_type),
       metadata: { ...base, needs_review: false },
     };
   }
   return {
     is_public: false,
+    publish_status: "draft",
     metadata: { ...base, unpublished_via: "admin_verify_queue" },
   };
+}
+
+const QUESTION_PUBLISH_SELECT =
+  "id, question_text, question_type, options, correct_answer, explanation, difficulty, subject, topic, category, license_type, metadata";
+
+async function fetchQuestionForPublish(id: string): Promise<PublishableQuestionRow | null> {
+  const { data, error } = await db()
+    .from("questions")
+    .select(QUESTION_PUBLISH_SELECT)
+    .eq("id", id)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as PublishableQuestionRow;
+}
+
+async function assertQuestionPublishable(
+  id: string,
+  previousMetadata?: Record<string, unknown> | null,
+): Promise<{ error: string | null; row: PublishableQuestionRow | null }> {
+  const row = await fetchQuestionForPublish(id);
+  if (!row) return { error: "Question not found.", row: null };
+  const license =
+    row.license_type && canPublishLicense(row.license_type)
+      ? row.license_type
+      : govLicenseTypeFromMetadata(previousMetadata ?? (row.metadata as Record<string, unknown>), row.license_type);
+  const block = assertPublishableForTrigger({ ...row, license_type: license });
+  return { error: block, row: { ...row, license_type: license } };
 }
 
 export function canSetRegistryReviewState(
@@ -192,6 +266,17 @@ export function summarizeBlueprint(blueprint: unknown): string {
   return parts.length ? parts.join(" · ") : "blueprint present";
 }
 
+/** User-facing message when gov tables/RPCs are missing on the connected database. */
+function friendlyGovDataError(raw: string, feature: string): string {
+  if (/relation .* does not exist|42P01|Could not find the .* function|42883/i.test(raw)) {
+    return `${feature} is unavailable — apply the latest gov exam migrations and retry.`;
+  }
+  if (/permission|rls|not authorized|42501/i.test(raw)) {
+    return `You are not authorized to access ${feature}.`;
+  }
+  return raw;
+}
+
 async function mutateWithAudit(params: {
   table: string;
   id: string;
@@ -207,7 +292,19 @@ async function mutateWithAudit(params: {
     .select("id")
     .maybeSingle();
 
-  if (error) return { error: error.message };
+  if (error) {
+    const raw = error.message || "Update failed";
+    if (/Question must be approved and verified|Question must pass validation|provenance\/license is required/i.test(raw)) {
+      return { error: raw };
+    }
+    if (/Question text and explanation|Subject, topic, and valid difficulty|MCQ questions require|Correct answer must reference/i.test(raw)) {
+      return { error: raw };
+    }
+    if (/permission|rls|not authorized|42501/i.test(raw)) {
+      return { error: "You are not authorized to perform this action." };
+    }
+    return { error: raw };
+  }
   if (!data) {
     return { error: "Update matched 0 rows (missing id or insufficient permissions)" };
   }
@@ -266,7 +363,7 @@ export async function listOfficialSources(filters: {
   const { data, error } = await q;
   return {
     data: (data ?? []) as OfficialSourceRow[],
-    error: error?.message ?? null,
+    error: error?.message ? friendlyGovDataError(error.message, "Gov exam sources") : null,
   };
 }
 
@@ -362,7 +459,10 @@ export async function listGovExamsAdmin(filters: {
   }
 
   const { data, error } = await q;
-  return { data: (data ?? []) as GovExamRow[], error: error?.message ?? null };
+  return {
+    data: (data ?? []) as GovExamRow[],
+    error: error?.message ? friendlyGovDataError(error.message, "Exam registry") : null,
+  };
 }
 
 export async function listExamStages(examId: string) {
@@ -486,7 +586,12 @@ export async function listGovExamBankReadiness(examId?: string): Promise<{
     ? await db().rpc("get_gov_exam_bank_readiness", { p_exam_id: examId })
     : await db().rpc("get_gov_exam_bank_readiness");
 
-  if (error) return { data: [], error: error.message };
+  if (error) {
+    return {
+      data: [],
+      error: friendlyGovDataError(error.message, "Exam bank readiness"),
+    };
+  }
 
   const rows = ((data ?? []) as Record<string, unknown>[]).map((row) => {
     const statusRaw = String(row.status ?? "empty");
@@ -690,7 +795,13 @@ export async function setQuestionReviewStatus(
     metadata?: Record<string, unknown> | null;
   },
 ): Promise<{ error: string | null }> {
-  const patch = questionPatchForStatus(status, previous?.metadata);
+  let licenseType: string | null = null;
+  if (status === "approved") {
+    const check = await assertQuestionPublishable(id, previous?.metadata);
+    if (check.error) return { error: check.error };
+    licenseType = check.row?.license_type ?? null;
+  }
+  const patch = questionPatchForStatus(status, previous?.metadata, licenseType);
   return mutateWithAudit({
     table: "questions",
     id,
@@ -712,9 +823,16 @@ export async function applyQuestionVerifyAction(
     is_verified?: boolean | null;
     is_public?: boolean | null;
     metadata?: Record<string, unknown> | null;
+    license_type?: string | null;
   },
 ): Promise<{ error: string | null }> {
-  const patch = questionPatchForVerifyAction(action, previous);
+  let licenseType = previous?.license_type ?? null;
+  if (action === "verify") {
+    const check = await assertQuestionPublishable(id, previous?.metadata);
+    if (check.error) return { error: check.error };
+    licenseType = check.row?.license_type ?? licenseType;
+  }
+  const patch = questionPatchForVerifyAction(action, { ...previous, license_type: licenseType });
   return mutateWithAudit({
     table: "questions",
     id,
@@ -973,7 +1091,7 @@ export async function listGeneratedPapers(filters: {
   const { data, error } = await q;
   return {
     data: (data ?? []) as GeneratedPaperRow[],
-    error: error?.message ?? null,
+    error: error?.message ? friendlyGovDataError(error.message, "Generated papers") : null,
   };
 }
 
@@ -1393,19 +1511,18 @@ export async function adminOverrideQuestion(
   let auditAction: string;
 
   switch (action) {
-    case "approve":
+    case "approve": {
+      const check = await assertQuestionPublishable(id, previous?.metadata);
+      if (check.error) return { error: check.error };
       patch = {
-        ...questionPatchForStatus("approved", previous?.metadata),
-        review_status: "approved",
-        approval_mode: "MANUAL",
-        publish_status: previous?.publish_status ?? "draft",
+        ...questionPatchForStatus("approved", previous?.metadata, check.row?.license_type),
       };
       auditAction = "gov_question.manual_approve";
       break;
+    }
     case "reject":
       patch = {
         ...questionPatchForStatus("rejected", previous?.metadata),
-        review_status: "rejected",
         approval_mode: null,
       };
       auditAction = "gov_question.manual_reject";
@@ -1428,22 +1545,27 @@ export async function adminOverrideQuestion(
       };
       auditAction = "gov_question.unpublish";
       break;
-    case "restore":
+    case "restore": {
+      const check = await assertQuestionPublishable(id, previous?.metadata);
+      if (check.error) return { error: check.error };
       patch = {
-        is_public: true,
-        publish_status: "published",
+        ...govQuestionPublishLifecyclePatch(previous?.metadata, check.row?.license_type),
         metadata: { ...(previous?.metadata ?? {}), restored_via: "admin_override" },
       };
       auditAction = "gov_question.restore";
       break;
+    }
     case "publish":
       if (previous?.review_status !== "approved" && !previous?.is_verified) {
         return { error: "Cannot publish unapproved content." };
       }
-      patch = {
-        is_public: true,
-        publish_status: "published",
-      };
+      {
+        const check = await assertQuestionPublishable(id, previous?.metadata);
+        if (check.error) return { error: check.error };
+        patch = {
+          ...govQuestionPublishLifecyclePatch(previous?.metadata, check.row?.license_type),
+        };
+      }
       auditAction = "gov_question.publish";
       break;
     default:

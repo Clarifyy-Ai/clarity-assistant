@@ -332,7 +332,14 @@ export const ProtectedRoute = memo(function ProtectedRoute({
       outcome: "succeeded",
       recoveryAction: "redirect_mfa_enroll",
     });
-    return <Navigate to={AUTH_PATHS.mfaEnroll} state={{ from: location }} replace />;
+    const returnTo = `${location.pathname}${location.search}${location.hash}`;
+    return (
+      <Navigate
+        to={pathWithReturnTo(AUTH_PATHS.mfaEnroll, returnTo)}
+        state={{ from: location }}
+        replace
+      />
+    );
   }
 
   // 3b) Billing suspension — past_due beyond 3-day grace (stripe-webhook sets payment_failed_at)
@@ -485,7 +492,14 @@ export const ProtectedRoute = memo(function ProtectedRoute({
         outcome: "succeeded",
         recoveryAction: "redirect_onboarding",
       });
-      return <Navigate to="/onboarding" state={{ from: location }} replace />;
+      const returnTo = `${location.pathname}${location.search}${location.hash}`;
+      return (
+        <Navigate
+          to={pathWithReturnTo("/onboarding", returnTo)}
+          state={{ from: location }}
+          replace
+        />
+      );
     }
   }
 

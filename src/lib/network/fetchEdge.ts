@@ -23,6 +23,7 @@ const ANON_OK_EDGE_FNS = new Set([
   "hybrid-ping",
   "ai-key-check",
   "billing-catalog",
+  "list-public-promos",
   "contact-sales",
   // Public support/live-chat widget: guests chat without an account.
   "support-chat",
@@ -58,18 +59,19 @@ const PRIVATE_MODE_ALLOWLIST = new Set([
   "save-test-answer",
   "save-attempt-answer",
   "billing-catalog",
+  "list-public-promos",
   "contact-sales",
-  "hostinger-mail",
   "send-email",
   "mfa-recovery",
+  "admin-finance-report",
 ]);
 
 /** Edge functions that do not deduct credits — skip balance refresh. */
 const CREDIT_REFRESH_SKIP = new Set([
   "ping",
   "billing-catalog",
+  "list-public-promos",
   "contact-sales",
-  "schedule-interview",
   "sync-calendar",
   "disconnect-calendar",
   "deepgram-token",
@@ -116,6 +118,7 @@ const CREDIT_REFRESH_SKIP = new Set([
   "send-email",
   "mfa-recovery",
   "get-user-storage-usage",
+  "admin-finance-report",
 ]);
 
 /** Non-AI functions should not blame an "AI request" on CORS / network failure. */

@@ -69,6 +69,7 @@ import {
   AUTH_SESSION_TIMEOUT_MS_WEB,
   PROFILE_COLD_RETRY_DELAY_MS,
   PROFILE_FETCH_TIMEOUT_MS,
+  PROFILE_LOAD_MAX_ATTEMPTS,
   ROLE_CHECK_TIMEOUT_MS,
   asLoginCredentials,
   canRetryAccountRecovery,
@@ -76,6 +77,8 @@ import {
   createInFlightMap,
   deriveAccountPhase,
   isTimeoutError,
+  profileLoadRetryDelayMs,
+  runWithBootstrapGuard,
   shouldKeepHydrateOnSessionCheckFailure,
   shouldLoadAccountOnAuthEvent,
   shouldSkipSoftProfileRefresh,
@@ -615,15 +618,12 @@ export const useAuthStore = create<AuthStore>()(
           ...INITIAL_STATE,
 
           initialize: async () => {
-            if (_bootstrapping) {
-              logger.warn(LogEvents.BOOTSTRAP_DUPLICATE_PREVENTED, {
-                operation: "initialize",
-                outcome: "skipped",
-              });
-              console.warn("[authStore] initialize() called while already bootstrapping — skipped (StrictMode guard)");
-              return;
-            }
-            _bootstrapping = true;
+            await runWithBootstrapGuard(
+              () => _bootstrapping,
+              (locked) => {
+                _bootstrapping = locked;
+              },
+              async () => {
             sessionCheckSoftKeepCount = 0;
             logger.info(LogEvents.BOOTSTRAP_STARTED, {
               operation: "initialize",
@@ -987,9 +987,20 @@ export const useAuthStore = create<AuthStore>()(
                   });
                 }
               }
-            } finally {
-              _bootstrapping = false;
             }
+              },
+              {
+                onSkipped: () => {
+                  logger.warn(LogEvents.BOOTSTRAP_DUPLICATE_PREVENTED, {
+                    operation: "initialize",
+                    outcome: "skipped",
+                  });
+                  console.warn(
+                    "[authStore] initialize() called while already bootstrapping — skipped (StrictMode guard)",
+                  );
+                },
+              },
+            );
           },
 
           signInWithEmail: async (email, password) => {
@@ -1400,55 +1411,53 @@ export const useAuthStore = create<AuthStore>()(
             };
 
             try {
-              let profile: Awaited<ReturnType<typeof profilesDB.getByIdMaybe>>;
+              let profile: Awaited<ReturnType<typeof profilesDB.getByIdMaybe>> | undefined;
 
               await ensureSupabaseWarmed();
 
-              try {
-                profile = await fetchProfile();
-              } catch (firstErr) {
-                if (abort.signal.aborted) {
-                  throw firstErr;
-                }
-                // Non-retryable auth errors must not be retried — they will fail
-                // immediately again and waste another PROFILE_FETCH_TIMEOUT_MS.
-                if (isNonRetryableAuthError(firstErr)) {
-                  throw firstErr;
-                }
-                const timedOut = isTimeoutError(firstErr);
-                if (timedOut) {
-                  logger.warn(LogEvents.AUTH_PROFILE_LOAD_TIMED_OUT, {
-                    operation: "profile.load",
-                    attempt: 1,
-                    durationMs: Date.now() - profileStartedAt,
-                    outcome: "timed_out",
-                    retryable: true,
-                  });
-                } else {
-                  logger.warn(LogEvents.NETWORK_RETRY, {
-                    operation: "profile.load",
-                    attempt: 1,
-                    retryable: true,
-                  });
-                }
-                console.warn(
-                  "[authStore] Profile load failed; retrying once:",
-                  firstErr,
-                );
-                // Cold PostgREST often needs a pause between back-to-back 15s budgets.
-                if (timedOut) {
+              for (let attempt = 1; attempt <= PROFILE_LOAD_MAX_ATTEMPTS; attempt++) {
+                try {
+                  profile = await fetchProfile();
+                  break;
+                } catch (loadErr) {
+                  if (abort.signal.aborted) {
+                    throw loadErr;
+                  }
+                  if (isNonRetryableAuthError(loadErr)) {
+                    throw loadErr;
+                  }
+                  const timedOut = isTimeoutError(loadErr);
+                  if (timedOut) {
+                    logger.warn(LogEvents.AUTH_PROFILE_LOAD_TIMED_OUT, {
+                      operation: "profile.load",
+                      attempt,
+                      durationMs: Date.now() - profileStartedAt,
+                      outcome: "timed_out",
+                      retryable: attempt < PROFILE_LOAD_MAX_ATTEMPTS,
+                    });
+                  } else {
+                    logger.warn(LogEvents.NETWORK_RETRY, {
+                      operation: "profile.load",
+                      attempt,
+                      retryable: attempt < PROFILE_LOAD_MAX_ATTEMPTS,
+                    });
+                  }
+                  if (attempt >= PROFILE_LOAD_MAX_ATTEMPTS) {
+                    throw loadErr;
+                  }
+                  console.warn(
+                    `[authStore] Profile load failed; retrying (attempt ${attempt}/${PROFILE_LOAD_MAX_ATTEMPTS}):`,
+                    loadErr,
+                  );
                   const delayMs =
-                    import.meta.env.MODE === "test" ? 0 : PROFILE_COLD_RETRY_DELAY_MS;
+                    import.meta.env.MODE === "test"
+                      ? 0
+                      : profileLoadRetryDelayMs(attempt);
                   try {
                     await sleepMs(delayMs, abort.signal);
                   } catch {
-                    throw firstErr;
+                    throw loadErr;
                   }
-                }
-                try {
-                  profile = await fetchProfile();
-                } catch (secondErr) {
-                  throw secondErr;
                 }
               }
 

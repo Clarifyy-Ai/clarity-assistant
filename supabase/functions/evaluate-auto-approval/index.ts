@@ -8,7 +8,7 @@ import { authenticateRequest, enforceAdmin } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import {
   evaluateAutoApproval,
-  parseRuleRow,
+  loadAutoApprovalRule,
   buildIdempotencyKey,
   type QuestionValidationInput,
   type PaperValidationInput,
@@ -28,34 +28,6 @@ function uuidOrNull(v: unknown): string | null {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
     ? s
     : null;
-}
-
-async function loadActiveRule(
-  db: ReturnType<typeof createServiceClient>,
-  entityType: "question" | "paper",
-) {
-  const { data } = await db
-    .from("gov_auto_approval_rules")
-    .select("*")
-    .eq("entity_type", entityType)
-    .eq("enabled", true)
-    .order("rule_version", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (data) return parseRuleRow(data as Record<string, unknown>);
-
-  const { data: latest } = await db
-    .from("gov_auto_approval_rules")
-    .select("*")
-    .eq("entity_type", entityType)
-    .order("rule_version", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  return latest
-    ? parseRuleRow(latest as Record<string, unknown>)
-    : undefined;
 }
 
 async function persistEvaluation(
@@ -145,10 +117,7 @@ Deno.serve(async (req) => {
     }
 
     const db = createServiceClient();
-    const rule = await loadActiveRule(db, entityType);
-    if (!rule) {
-      return json(req, { error: "No auto-approval rule configured", code: "NO_RULE" }, 404);
-    }
+    const rule = await loadAutoApprovalRule(db, entityType);
 
     const v = validation as Record<string, unknown>;
     const input = entityType === "question"

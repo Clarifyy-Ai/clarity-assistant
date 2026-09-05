@@ -70,6 +70,17 @@ export function creditCost(key: AICreditCostKey): number {
   return AI_CREDIT_COSTS[key];
 }
 
+/** Baseline question count for flat `mock_session` (15 cr) pricing. */
+export const MOCK_SESSION_BASELINE_QUESTIONS = 5;
+
+/** Scales mock session credits with selected question count (5 → 15 cr). */
+export function mockSessionCreditCost(questionCount: number): number {
+  const count = Math.max(1, Math.floor(questionCount));
+  return Math.ceil(
+    (count / MOCK_SESSION_BASELINE_QUESTIONS) * AI_CREDIT_COSTS.mock_session,
+  );
+}
+
 /** Premium over live_answer for long-form overlay answers (matches creditsManager). */
 const LIVE_ANSWER_LONG_PREMIUM = 4;
 

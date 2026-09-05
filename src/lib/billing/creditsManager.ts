@@ -1,4 +1,4 @@
-import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
+import { AI_CREDIT_COSTS, mockSessionCreditCost } from "@/lib/constants/creditEconomics";
 import { creditsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/userStore";
 import { useUIStore } from "@/store/uiStore";
@@ -289,6 +289,96 @@ export async function deductCreditsForAction(
       creditsDeducted:  0,
       creditsRemaining: useAuthStore.getState().profile?.credits ?? 0,
       error:            err instanceof Error ? err.message : "Unknown error",
+    };
+  } finally {
+    deductInflightKeys.delete(flight);
+  }
+}
+
+/** Charge mock session upfront based on selected question count (server validates cost). */
+export async function deductMockSessionCredits(
+  questionCount: number,
+  sessionId: string,
+): Promise<CreditDeductionResult> {
+  const { profile } = useAuthStore.getState();
+  if (!profile) {
+    return {
+      success: false,
+      creditsDeducted: 0,
+      creditsRemaining: 0,
+      error: "Not authenticated",
+    };
+  }
+
+  const cost = mockSessionCreditCost(questionCount);
+  if ((profile.credits ?? 0) < cost) {
+    return {
+      success: false,
+      creditsDeducted: 0,
+      creditsRemaining: profile.credits ?? 0,
+      error: `Insufficient credits. Need ${cost}, have ${profile.credits ?? 0}.`,
+      code: "INSUFFICIENT_CREDITS",
+    };
+  }
+
+  const flight = `dc:mock_session:${questionCount}:${sessionId}`;
+  try {
+    const { fetchEdge } = await import("@/lib/network/fetchEdge");
+    const idempotencyKey =
+      deductInflightKeys.get(flight) ??
+      `mock-session-${sessionId}-${questionCount}`;
+    deductInflightKeys.set(flight, idempotencyKey);
+
+    const response = await fetchEdge(
+      "deduct-credits",
+      {
+        action: "mock_session",
+        cost,
+        session_id: sessionId,
+        question_count: questionCount,
+      },
+      { headers: { "Idempotency-Key": idempotencyKey } },
+    );
+
+    if (!response.ok) {
+      const errBody = await response.json().catch(() => null);
+      const errCode =
+        typeof errBody?.code === "string" ? errBody.code.trim().toUpperCase() : "";
+
+      if (response.status === 402 || errCode === "INSUFFICIENT_CREDITS") {
+        await refreshCredits();
+        return {
+          success: false,
+          creditsDeducted: 0,
+          creditsRemaining: useAuthStore.getState().profile?.credits ?? 0,
+          error: errBody?.error ?? "Insufficient credits",
+          code: errCode || "INSUFFICIENT_CREDITS",
+        };
+      }
+
+      throw new Error(errBody?.error ?? `Credit deduction failed: ${response.status}`);
+    }
+
+    const data = (await response.json()) as { credits_remaining: number };
+    const remaining = data.credits_remaining ?? 0;
+    syncLocalCreditFields({ credits: remaining });
+
+    if (remaining < LOW_CREDIT_THRESHOLD) {
+      showLowCreditWarning(remaining);
+    }
+
+    return {
+      success: true,
+      creditsDeducted: cost,
+      creditsRemaining: remaining,
+      error: null,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      creditsDeducted: 0,
+      creditsRemaining: useAuthStore.getState().profile?.credits ?? 0,
+      error: err instanceof Error ? err.message : "Unknown error",
     };
   } finally {
     deductInflightKeys.delete(flight);

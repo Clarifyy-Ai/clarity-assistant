@@ -15,7 +15,7 @@ import {
   RATE_LIMIT_PRESETS,
 } from "../_shared/rateLimit.ts";
 import { isUserBanned, bannedResponse } from "../_shared/banCheck.ts";
-import { countEligibleGovQuestions } from "../_shared/govQuestionInventory.ts";
+import { countEligibleGovQuestions, sourcePolicyForMode } from "../_shared/govQuestionInventory.ts";
 import { hasCapability } from "../_shared/requireCapability.ts";
 import {
   decideGenerationPlan,
@@ -200,7 +200,7 @@ Deno.serve(withBrowserCors("check-exam-paper-availability", async (req) => {
       language,
       topics: topics.length ? topics : null,
       difficulty,
-      sourcePolicy: mode === "official_previous" ? "public_pyp" : "approved_bank",
+      sourcePolicy: sourcePolicyForMode(mode),
     });
     let available = inventory.available;
     let examTypeKeys = inventory.examTypeKeys;

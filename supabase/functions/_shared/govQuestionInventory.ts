@@ -34,6 +34,13 @@ const TOPIC_MATCH = (topics: string[]) =>
 const OFFICIAL_SOURCE_FILTER =
   "is_verified.eq.true,source_type.in.(official_verified,verified_public_source),source.eq.OFFICIAL_PYP,source.eq.PYP,source.eq.previous_year";
 
+/** Single source for inventory policy — must match check-exam-paper-availability. */
+export function sourcePolicyForMode(
+  mode: string,
+): "public_pyp" | "approved_bank" {
+  return mode === "official_previous" ? "public_pyp" : "approved_bank";
+}
+
 export async function countEligibleGovQuestions(
   db: SupabaseClient,
   input: ExamInventoryInput,
@@ -43,11 +50,7 @@ export async function countEligibleGovQuestions(
   const sourcePolicy =
     input.sourcePolicy === "public_pyp" ? "public_pyp" : "approved_bank";
 
-  // The deployed v1 RPC treats `public_pyp` as a wider policy than
-  // `approved_bank`. Until that database implementation is corrected, use the
-  // explicit verified-source query below for official/PYQ requests so a mock
-  // bank can never be reported as official inventory.
-  if (examId && sourcePolicy !== "public_pyp") {
+  if (examId) {
     const { data, error } = await db.rpc("count_gov_exam_eligible_questions", {
       p_exam_id: examId,
       p_language: input.language ?? "en",
@@ -63,16 +66,18 @@ export async function countEligibleGovQuestions(
       return {
         available: Number(row.available) || 0,
         examTypeKeys: keys,
-        inventoryVersion: String(row.inventory_version ?? "gov_inventory_v1"),
+        inventoryVersion: String(row.inventory_version ?? "gov_inventory_v2"),
         inventorySnapshot: row as Record<string, unknown>,
       };
     }
     if (error) {
-      console.warn("[govQuestionInventory] RPC fallback:", error.message);
+      console.error("[govQuestionInventory] RPC failed:", error.message);
+      throw new Error(error.message);
     }
   }
 
-  // Fallback when RPC unavailable (pre-migration) — aligned with assembly filters.
+  // Legacy row scan only when examId is absent (pre-registry wizard paths).
+  console.warn("[govQuestionInventory] missing examId — legacy row scan");
   const examTypeKeys = examBankTypeKeys({
     code: input.exam.code,
     name: input.exam.name,

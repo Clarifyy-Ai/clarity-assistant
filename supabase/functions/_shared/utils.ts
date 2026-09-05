@@ -20,7 +20,7 @@ import type {
   CreditDeductionResult, FeatureKey,
   ValidationResult, ValidationError
 } from "./types.ts";
-import { CREDIT_COSTS } from "./types.ts";
+import { resolveActionCost } from "./creditEconomics.ts";
 import { providerForModel } from "./modelCatalog.ts";
 
 /* -------------------------------------------------------------------------- */
@@ -332,7 +332,7 @@ export async function deductCredits(
   feature: FeatureKey | string,
   overrideCost?: number
 ): Promise<CreditDeductionResult> {
-  const cost = overrideCost ?? CREDIT_COSTS[feature as FeatureKey] ?? 1;
+  const cost = overrideCost ?? resolveActionCost(String(feature)) ?? 1;
 
   if (cost < 0) {
     const refund = await refundCredits({

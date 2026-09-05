@@ -2,7 +2,9 @@
 import { memo, useMemo, useState, useCallback, useEffect, useRef } from "react";
 import type { HintStyle } from "@/types/user.types";
 import { cn } from "@/lib/utils";
+import { AiFormattedOutput } from "@/components/common/AiFormattedOutput";
 import { useAuthStore } from "@/store/authStore";
+import { useAudioStore } from "@/store/audioStore";
 import { answerBankDB } from "@/lib/supabase/database";
 import { markFirstHint } from "@/lib/analytics/uxMetrics";
 import {
@@ -40,6 +42,7 @@ import type { HintState } from "@/store/overlayStore";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { chatAttentionBannerCopy } from "@/lib/overlay/sessionConversation";
 import { confidenceTierLabel } from "@/lib/session/aiHelpConfirm";
+import { hasValidInterviewerQuestion } from "@/lib/audio/interviewerQuestions";
 import { speakAiGeneratedText, stopAiTextSpeech } from "@/lib/audio/speakAiText";
 
 const LISTENING_NO_SPEECH_MS = 12_000;
@@ -491,10 +494,11 @@ function OverlayHintPanelInner({
       {/* ── Answer / Hint content ─────────────────────────────────────── */}
       {isStreaming && liveText.trim().length > 0 && (composed?.lines?.length ?? 0) === 0 && (
         <div className="space-y-1 rounded-xl border border-white/[0.06] bg-black/20 p-3">
-          <p className="whitespace-pre-wrap break-words font-mono text-[12px] leading-relaxed text-indigo-100/90">
-            {liveText}
-            <span className="stream-cursor text-[13px]" aria-hidden="true" />
-          </p>
+          <AiFormattedOutput
+            text={liveText}
+            className="font-mono text-[12px] leading-relaxed text-indigo-100/90 break-words"
+          />
+          <span className="stream-cursor text-[13px]" aria-hidden="true" />
         </div>
       )}
 
@@ -1115,14 +1119,24 @@ function IdleStateContent() {
 
 function ListeningTimeoutHelp() {
   const [showMicHelp, setShowMicHelp] = useState(false);
+  const utterances = useAudioStore((s) => s.transcript?.utterances ?? []);
+  const interimText = useAudioStore((s) => s.transcript?.interim_text ?? "");
+  const hasInterviewerQuestion = useMemo(
+    () => hasValidInterviewerQuestion({ utterances, interimText }),
+    [utterances, interimText],
+  );
 
   useEffect(() => {
     const id = window.setTimeout(() => {
       setShowMicHelp(true);
-      useOverlayStore.getState().setChatAttention(true, "listening_timeout");
+      if (!hasValidInterviewerQuestion()) {
+        useOverlayStore.getState().setChatAttention(true, "listening_timeout");
+      }
     }, LISTENING_NO_SPEECH_MS);
     return () => window.clearTimeout(id);
   }, []);
+
+  if (hasInterviewerQuestion) return null;
 
   return (
     <div className="space-y-1.5">

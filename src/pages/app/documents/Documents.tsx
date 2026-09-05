@@ -4,12 +4,13 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { toast } from "sonner";
 import { jobDescriptionsDB, documentsDB, resumesDB } from "@/lib/supabase/database";
-import { getSignedUrl, STORAGE_BUCKETS } from "@/lib/supabase/client";
+import { supabase, STORAGE_BUCKETS } from "@/lib/supabase/client";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { documentParseIdempotencyKey } from "@/lib/network/idempotency";
 import { useDocumentStore } from "@/store/documentStore";
 import { useDocumentManager } from "@/hooks/useDocumentManager";
 import { sanitizeFileName } from "@/lib/security/sanitizer";
+import { downloadBlob } from "@/lib/utils/fileUtils";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
@@ -38,6 +39,18 @@ import {
   RESUME_ACCEPT_LABEL,
   validateDocumentFile,
 } from "@/lib/documents/uploadValidation";
+import { format } from "date-fns";
+import {
+  getResumeParseStatus,
+  parseResumeContentString,
+} from "@/lib/documents/resumeParse";
+import {
+  looksLikeBinaryDump,
+  looksLikeUploadedFilenameStub,
+} from "@/lib/documents/parseNormalize";
+import type { ParsedResume } from "@/types/ai.types";
+import { DocumentPreviewCard } from "@/components/documents/DocumentPreviewCard";
+import { DocumentTextPanel } from "@/components/documents/DocumentTextPanel";
 
 const MAX_UPLOAD_QUEUE = 5;
 const DOCUMENT_MAX_MB = Math.floor(DOCUMENT_MAX_BYTES / (1024 * 1024));
@@ -59,16 +72,6 @@ function formatFileSize(bytes: number | null | undefined): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
-import { format } from "date-fns";
-import {
-  getResumeParseStatus,
-  parseResumeContentString,
-} from "@/lib/documents/resumeParse";
-import {
-  looksLikeBinaryDump,
-  looksLikeUploadedFilenameStub,
-} from "@/lib/documents/parseNormalize";
-import type { ParsedResume } from "@/types/ai.types";
 
 // ─── File validation (category caps ≤ DOCUMENT_MAX_BYTES / Edge) ─────────────
 
@@ -416,21 +419,25 @@ function ResumeManager() {
     }
   }
 
-  async function handleDownload(resumeId: string, filePath: string) {
+  async function handleDownload(
+    resumeId: string,
+    filePath: string,
+    displayName: string,
+  ) {
     setDownloadingId(resumeId);
     try {
-      const url = await getSignedUrl(STORAGE_BUCKETS.RESUMES, filePath);
-      if (!url) {
-        toast.error("Could not generate download link.");
+      const { data, error } = await supabase.storage
+        .from(STORAGE_BUCKETS.RESUMES)
+        .download(filePath);
+      if (error || !data) {
+        toast.error(error?.message ?? "Could not download file.");
         return;
       }
-      const fileName = filePath.split("/").pop() ?? "resume";
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = fileName;
-      anchor.target = "_blank";
-      anchor.rel = "noopener noreferrer";
-      anchor.click();
+      const filename =
+        sanitizeFileName(displayName) ||
+        filePath.split("/").pop() ||
+        "document";
+      downloadBlob(data, filename);
       toast.success("Download started.");
     } catch {
       toast.error("Download failed.");
@@ -744,17 +751,21 @@ function ResumeManager() {
                       {format(new Date(r.created_at), "MMM d, yyyy")}
                       {parsed?.skills?.length ? ` · ${parsed.skills.length} skills` : ""}
                     </p>
-                    {isReady && parsed?.summary && (
-                      <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">
-                        {parsed.summary}
-                      </p>
+                    {isReady && parsed && (
+                      <DocumentPreviewCard parsed={parsed} compact className="mt-2 border-0 bg-transparent p-0" />
                     )}
                   </button>
 
                   <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                     {row.file_path && (
                       <button
-                        onClick={() => void handleDownload(r.id, row.file_path!)}
+                        onClick={() =>
+                          void handleDownload(
+                            r.id,
+                            row.file_path!,
+                            row.title || row.name || "document",
+                          )
+                        }
                         disabled={downloadingId === r.id}
                         className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/5 transition-all disabled:opacity-40"
                         title="Download original file"
@@ -841,34 +852,8 @@ function ResumeManager() {
         size="xl"
       >
         {previewParsed ? (
-          <div className="max-h-96 overflow-y-auto bg-secondary rounded-xl p-4 space-y-3">
-            {previewParsed.full_name && (
-              <p className="text-sm font-semibold text-foreground">{previewParsed.full_name}</p>
-            )}
-            {previewParsed.summary && (
-              <p className="text-xs text-muted-foreground leading-relaxed">{previewParsed.summary}</p>
-            )}
-            {previewParsed.skills?.length > 0 && (
-              <div className="flex flex-wrap gap-1.5">
-                {previewParsed.skills.slice(0, 12).map((s: string) => (
-                  <span key={s} className="px-2 py-0.5 bg-primary/10 text-primary text-[11px] rounded-md border border-primary/20">
-                    {s}
-                  </span>
-                ))}
-              </div>
-            )}
-            {previewParsed.experience?.length > 0 && (
-              <div className="space-y-1.5">
-                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Experience</p>
-                {previewParsed.experience.slice(0, 3).map((exp, i) => (
-                  <p key={i} className="text-xs text-foreground">
-                    <span className="font-medium">{exp.title}</span>
-                    {exp.company && <span className="text-muted-foreground"> @ {exp.company}</span>}
-                    {exp.duration && <span className="text-muted-foreground"> · {exp.duration}</span>}
-                  </p>
-                ))}
-              </div>
-            )}
+          <div className="max-h-96 overflow-y-auto space-y-3">
+            <DocumentPreviewCard parsed={previewParsed} />
             <Link
               to={`/app/documents/resume/${previewId}`}
               className="inline-block text-xs text-primary hover:underline"
@@ -1408,12 +1393,16 @@ function CoverLetterManager() {
     looksLikeUploadedFilenameStub(parsedPreview) ||
     looksLikeBinaryDump(summaryPreview);
   const parseFailed = Boolean(coverDoc && (!parsedPreview || previewLooksBad));
-  const displayPreview = previewLooksBad
-    ? ""
-    : summaryPreview || parsedPreview.slice(0, 400);
 
   return (
     <div className="space-y-4">
+      <Card padding="sm" className="border-violet-500/20 bg-violet-500/5">
+        <p className="text-sm font-medium text-foreground">Cover letter workspace</p>
+        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+          Upload a letter tailored to a role — not your resume. Content is parsed as opening, body,
+          and closing paragraphs for AI context.
+        </p>
+      </Card>
       <UploadZone
         title="Drop cover letter here or browse"
         description={RESUME_ACCEPT_LABEL}
@@ -1431,60 +1420,61 @@ function CoverLetterManager() {
         }}
       />
 
-      {coverDoc ? (
-        <Card padding="sm" className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-semibold text-foreground">{coverDoc.title}</p>
-            <Badge variant={parseFailed ? "amber" : "emerald"} size="sm">
-              {parseFailed ? "Parse failed" : "Active for AI"}
-            </Badge>
-          </div>
-          <p className="text-xs text-muted-foreground line-clamp-4">
-            {parseFailed
-              ? (summaryPreview && !previewLooksBad
-                  ? summaryPreview
-                  : "Parsing failed. Retry or upload another file — raw binary is not shown.")
-              : displayPreview}
-          </p>
-          <p className="text-[10px] text-muted-foreground">
-            Used in Practice Coach and mock interviews with your resume.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {coverDoc.id && parseFailed && (
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={retrying}
-                onClick={async () => {
-                  setRetrying(true);
-                  const { error } = await docMgr.retryCoverLetterParse(coverDoc.id!);
-                  setRetrying(false);
-                  if (error) toast.error(error);
-                  else toast.success("Cover letter re-parsed");
-                  await reloadCover();
-                }}
-              >
-                {retrying ? "Retrying…" : "Retry parse"}
-              </Button>
-            )}
-            {coverDoc.id && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={async () => {
-                  const { error } = await docMgr.deleteCoverLetter(coverDoc.id!);
-                  if (error) toast.error(error);
-                  else {
-                    toast.success("Cover letter deleted");
-                    setCoverDoc(null);
-                  }
-                }}
-              >
-                Delete
-              </Button>
-            )}
-          </div>
-        </Card>
+      {coverDoc?.id ? (
+        <>
+          <DocumentTextPanel
+            variant="cover_letter"
+            title={coverDoc.title}
+            documentId={coverDoc.id}
+            rawText={
+              parseFailed && previewLooksBad
+                ? null
+                : summaryPreview || parsedPreview || null
+            }
+            statusBadge={{
+              label: parseFailed ? "Parse failed" : "Active for AI",
+              variant: parseFailed ? "amber" : "emerald",
+            }}
+            footerNote="Used in Practice Coach and mock interviews alongside your resume."
+            onUpdated={() => void reloadCover()}
+            onDelete={() => {
+              void (async () => {
+                const { error } = await docMgr.deleteCoverLetter(coverDoc.id!);
+                if (error) toast.error(error);
+                else {
+                  toast.success("Cover letter deleted");
+                  setCoverDoc(null);
+                }
+              })();
+            }}
+            extraActions={
+              parseFailed ? (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={retrying}
+                  onClick={async () => {
+                    setRetrying(true);
+                    const { error } = await docMgr.retryCoverLetterParse(coverDoc.id!);
+                    setRetrying(false);
+                    if (error) toast.error(error);
+                    else toast.success("Cover letter re-parsed");
+                    await reloadCover();
+                  }}
+                >
+                  {retrying ? "Retrying…" : "Retry parse"}
+                </Button>
+              ) : undefined
+            }
+          />
+          {parseFailed && (
+            <p className="text-xs text-muted-foreground px-1">
+              {summaryPreview && !previewLooksBad
+                ? summaryPreview
+                : "Parsing failed. Retry upload, use Retry parse, or edit the text manually."}
+            </p>
+          )}
+        </>
       ) : !file ? (
         <Card className="bg-secondary/30">
           <EmptyState
@@ -1603,6 +1593,13 @@ function PortfolioManager() {
 
   return (
     <div className="space-y-4">
+      <Card padding="sm" className="border-amber-500/20 bg-amber-500/5">
+        <p className="text-sm font-medium text-foreground">Portfolio workspace</p>
+        <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+          Showcase projects with a saved file or public URL. Portfolio content is formatted for
+          projects and highlights — separate from your resume and cover letter.
+        </p>
+      </Card>
       <p className="text-xs text-muted-foreground">
         Upload a PDF/DOCX/TXT or save a public URL. Files are stored on your account and extracted text-only — we do not invent companies, titles, or metrics.
       </p>
@@ -1687,46 +1684,32 @@ function PortfolioManager() {
       )}
 
       {items.length > 0 ? (
-        <div className="space-y-2">
-          {items.map((item) => (
-            <Card key={item.id} padding="sm" className="space-y-2">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-primary/10 rounded-xl flex items-center justify-center shrink-0">
-                  <FileText className="w-4 h-4 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-foreground truncate">{item.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {item.file_name ?? "Saved file"} · {format(new Date(item.updated_at), "MMM d, yyyy")}
-                  </p>
-                </div>
-                <Badge variant="emerald" size="sm">Saved</Badge>
-                <button
-                  type="button"
-                  onClick={() => setDeleteId(item.id)}
-                  className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-accent/5 transition-all"
-                  aria-label={`Delete ${item.title}`}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-              {(item.parsed_summary || item.content) && (() => {
-                const preview = (item.parsed_summary ?? item.content?.slice(0, 280) ?? "").trim();
-                if (!preview || looksLikeBinaryDump(preview) || looksLikeUploadedFilenameStub(preview)) {
-                  return (
-                    <p className="text-xs text-muted-foreground line-clamp-3">
-                      Extracted text is not available for this file yet.
-                    </p>
-                  );
+        <div className="space-y-3">
+          {items.map((item) => {
+            const preview = (item.parsed_summary ?? item.content ?? "").trim();
+            const previewBad =
+              !preview ||
+              looksLikeBinaryDump(preview) ||
+              looksLikeUploadedFilenameStub(preview);
+
+            return (
+              <DocumentTextPanel
+                key={item.id}
+                variant="portfolio"
+                title={item.title}
+                documentId={item.id}
+                rawText={previewBad ? null : preview}
+                statusBadge={{ label: "Saved", variant: "emerald" }}
+                footerNote={
+                  item.file_name
+                    ? `${item.file_name} · ${format(new Date(item.updated_at), "MMM d, yyyy")}`
+                    : format(new Date(item.updated_at), "MMM d, yyyy")
                 }
-                return (
-                  <p className="text-xs text-muted-foreground line-clamp-3">
-                    {preview}
-                  </p>
-                );
-              })()}
-            </Card>
-          ))}
+                onUpdated={() => void reloadPortfolios()}
+                onDelete={() => setDeleteId(item.id)}
+              />
+            );
+          })}
         </div>
       ) : (
         <Card className="bg-secondary/30">

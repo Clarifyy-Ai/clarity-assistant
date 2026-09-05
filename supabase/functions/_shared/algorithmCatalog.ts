@@ -2,7 +2,7 @@
  * Authoritative algorithm catalog — keep in lockstep with
  * shared/algorithm-catalog.json (copied values; Deno cannot import repo-root JSON).
  */
-export const CREDIT_CATALOG_VERSION = "credit_catalog_v2";
+export const CREDIT_CATALOG_VERSION = "credit_catalog_v3";
 export const QUALITY_ALGORITHM_VERSION = "gov_question_quality_v2";
 export const DEDUP_ALGORITHM_VERSION = "gov_question_dedup_v2";
 export const MASTERY_ALGORITHM_VERSION = "mastery_v1";

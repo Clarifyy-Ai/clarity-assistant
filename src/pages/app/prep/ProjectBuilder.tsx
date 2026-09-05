@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { AiFormattedOutput } from "@/components/common/AiFormattedOutput";
 import { ProcessingStatus } from "@/components/async/ProcessingStatus";
 import { AI_OP_STAGES } from "@/lib/async/aiOpStages";
 import { answerBankDB, prepProjectsDB } from "@/lib/supabase/database";
@@ -525,7 +525,7 @@ export default function ProjectBuilder() {
                   </button>
                 </div>
               </div>
-              <div className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{showcase}</div>
+              <AiFormattedOutput text={showcase} className="text-sm" />
             </Card>
           ) : (
             <Card className="text-center py-16">
@@ -564,5 +564,20 @@ function getOfflineShowcase(
   impact: string
 ): string {
   const techList = stack.length > 0 ? stack.join(", ") : "various technologies";
-  return `## ${name}\n**Role:** ${role}\n**Tech Stack:** ${techList}\n\n### Overview\n${desc}\n\n### Key Achievements\n${impact ? `• ${impact.split(/[,\n]/).filter(Boolean).join("\n• ")}` : "• [Add specific metrics when AI is available]"}\n\n### Interview Talking Points\n1. **Challenge:** What was the hardest part of this project?\n2. **Decision:** What was a key technical decision you made and why?\n3. **Impact:** How did this project affect the team/company/users?\n4. **Learning:** What would you do differently if you started over?\n\n### Suggested STAR Response\n- **Situation:** Set the context — team size, timeline, business need\n- **Task:** Your specific responsibility on this project\n- **Action:** The concrete steps YOU took (use "I", not "we")\n- **Result:** Quantified outcomes — performance gains, user impact, cost savings\n\n*AI-enhanced version will be available when the service is online.*`;
+  return [
+    `Overview:`,
+    desc || `${name} project overview.`,
+    ``,
+    `Key achievements:`,
+    impact || "Add specific metrics when AI is available.",
+    ``,
+    `Tech rationale:`,
+    `Built with ${techList}.`,
+    ``,
+    `STAR story:`,
+    `Situation: Set the team and business context.`,
+    `Task: Your responsibility as ${role}.`,
+    `Action: Concrete steps you took.`,
+    `Result: Quantified outcomes where possible.`,
+  ].join("\n");
 }

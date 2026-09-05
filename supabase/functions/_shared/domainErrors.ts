@@ -8,6 +8,13 @@
 
 export type DomainErrorCode =
   | "AI_PROVIDER_UNAVAILABLE"
+  | "PROVIDER_NOT_CONFIGURED"
+  | "PROVIDER_UNAVAILABLE"
+  | "MODEL_NOT_AVAILABLE"
+  | "RATE_LIMITED"
+  | "TIMEOUT"
+  | "INVALID_REQUEST"
+  | "PLAN_NOT_ALLOWED"
   | "AI_TIMEOUT"
   | "AI_INVALID_OUTPUT"
   | "PYTHON_SERVICE_UNAVAILABLE"
@@ -40,7 +47,15 @@ export class DomainError extends Error {
 export function defaultMessage(code: DomainErrorCode): string {
   switch (code) {
     case "AI_PROVIDER_UNAVAILABLE":
+    case "PROVIDER_UNAVAILABLE":
       return "The AI provider is temporarily unavailable. Please try again.";
+    case "PROVIDER_NOT_CONFIGURED":
+      return "AI is not configured on the server. Contact support.";
+    case "MODEL_NOT_AVAILABLE":
+      return "The requested AI model is not available.";
+    case "RATE_LIMITED":
+      return "Too many requests. Please wait and try again.";
+    case "TIMEOUT":
     case "AI_TIMEOUT":
       return "The AI request timed out. Please try again.";
     case "AI_INVALID_OUTPUT":
@@ -54,7 +69,10 @@ export function defaultMessage(code: DomainErrorCode): string {
     case "INSUFFICIENT_CREDITS":
       return "Insufficient credits.";
     case "CAPABILITY_REQUIRED":
+    case "PLAN_NOT_ALLOWED":
       return "This feature requires a supported plan.";
+    case "INVALID_REQUEST":
+      return "The request was invalid.";
     case "UNKNOWN_OPERATION":
       return "Unknown or unregistered AI operation.";
     default:
@@ -67,15 +85,21 @@ export function httpStatusForDomainCode(code: DomainErrorCode | string): number 
     case "INSUFFICIENT_CREDITS":
       return 402;
     case "CAPABILITY_REQUIRED":
+    case "PLAN_NOT_ALLOWED":
       return 403;
     case "UNKNOWN_OPERATION":
+    case "INVALID_REQUEST":
       return 400;
     case "AI_INVALID_OUTPUT":
     case "PYTHON_PROCESSING_FAILED":
+    case "MODEL_NOT_AVAILABLE":
       return 422;
     case "AI_TIMEOUT":
+    case "TIMEOUT":
     case "AI_PROVIDER_UNAVAILABLE":
-    case "PROVIDER_UNAVAILABLE": // legacy Edge envelope alias
+    case "PROVIDER_UNAVAILABLE":
+    case "PROVIDER_NOT_CONFIGURED":
+    case "RATE_LIMITED":
     case "PYTHON_SERVICE_UNAVAILABLE":
     case "DATABASE_FAILURE":
       return 503;
@@ -87,8 +111,11 @@ export function httpStatusForDomainCode(code: DomainErrorCode | string): number 
 export function isRetryable(code: DomainErrorCode | string): boolean {
   switch (code) {
     case "AI_TIMEOUT":
+    case "TIMEOUT":
     case "AI_PROVIDER_UNAVAILABLE":
-    case "PROVIDER_UNAVAILABLE": // legacy Edge envelope alias
+    case "PROVIDER_UNAVAILABLE":
+    case "PROVIDER_NOT_CONFIGURED":
+    case "RATE_LIMITED":
     case "PYTHON_SERVICE_UNAVAILABLE":
     case "DATABASE_FAILURE":
       return true;

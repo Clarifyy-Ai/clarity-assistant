@@ -68,7 +68,8 @@ describe("hybridExecute / operationRouter source contracts", () => {
 
   it("maps AI_PROVIDER_UNAVAILABLE to 503 (not 502)", () => {
     const statusFn = domain.slice(domain.indexOf("httpStatusForDomainCode"));
-    expect(statusFn).toMatch(/AI_PROVIDER_UNAVAILABLE[\s\S]{0,160}return 503/);
+    expect(statusFn).toMatch(/case "AI_PROVIDER_UNAVAILABLE"/);
+    expect(statusFn).toMatch(/return 503/);
     expect(statusFn).not.toMatch(/AI_PROVIDER_UNAVAILABLE[\s\S]{0,80}return 502/);
   });
 

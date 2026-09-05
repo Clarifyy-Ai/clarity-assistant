@@ -25,7 +25,7 @@ export function MockReviewScreen({
   const voice = getInterviewerVoice(snapshot.voice_id);
   const cost =
     creditCostLabel ??
-    `Free within daily mock allowance · ${AI_CREDIT_COSTS.mock_session} cr if billed`;
+    `${AI_CREDIT_COSTS.mock_session} credits (5 questions)`;
 
   const rows: Array<{ label: string; value: string }> = [
     { label: "Role", value: snapshot.role || "—" },

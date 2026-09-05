@@ -22,7 +22,9 @@ import {
 import { toast } from "sonner";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 
-import { Button } from "@/components/ui/Button";
+import { GovExamPageShell } from "@/components/gov-exam/GovExamPageShell";
+import type { GovExamRouteResolution } from "@/lib/gov-exam/routeResolution";
+import { AiFormattedOutput } from "@/components/common/AiFormattedOutput";
 import { Card, CardContent } from "@/components/ui/Card";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
@@ -584,36 +586,18 @@ export default function TestResults() {
   }
 
   if (loadFailure) {
-    const hubPath =
-      test?.config?.source === "exam_template" || location.pathname.startsWith("/app/assessments")
-        ? "/app/assessments"
-        : "/app/mock-test";
-    const hubLabel = hubPath === "/app/assessments" ? "Back to assessments" : "Back to Hub";
+    const resolution: GovExamRouteResolution =
+      loadFailure.kind === "not_found"
+        ? { phase: "INVALID_IDENTIFIER", message: loadFailure.message }
+        : {
+            phase: "TEMPORARY_BACKEND_FAILURE",
+            message: loadFailure.message,
+            retryable: true,
+          };
     return (
-      <div className="py-20 px-4 text-center space-y-4 max-w-md mx-auto">
-        <p className="text-foreground font-semibold">
-          {loadFailure.kind === "not_found"
-            ? "Results not found"
-            : loadFailure.kind === "processing"
-              ? "Results still processing"
-              : "Couldn’t load results"}
-        </p>
-        <p className="text-sm text-muted-foreground">{loadFailure.message}</p>
-        <div className="flex flex-wrap justify-center gap-2">
-          {(loadFailure.kind === "temporary" || loadFailure.kind === "processing") && (
-            <Button
-              onClick={() => {
-                void loadResults();
-              }}
-            >
-              Retry
-            </Button>
-          )}
-          <Button variant="secondary" onClick={() => navigate(hubPath)}>
-            {hubLabel}
-          </Button>
-        </div>
-      </div>
+      <GovExamPageShell loadResolution={resolution} onRetry={() => void loadResults()}>
+        <span className="sr-only">Results load failure</span>
+      </GovExamPageShell>
     );
   }
 

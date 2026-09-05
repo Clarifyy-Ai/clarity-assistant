@@ -21,6 +21,13 @@ export type CapturedMockAnswer = {
   skipped: boolean;
 };
 
+/** Deepgram stream offsets stay well below one day; wall-clock ms (Date.now()) must be ignored. */
+export const MAX_STREAM_OFFSET_MS = 86_400_000;
+
+function isStreamRelativeTimestampMs(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= MAX_STREAM_OFFSET_MS;
+}
+
 function normalizeForCompare(text: string): string {
   return normalizeQuestionText(text).toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, "");
 }
@@ -65,9 +72,8 @@ export function streamListeningWatermarkMs(
 ): number {
   let max = 0;
   for (const u of utterances) {
-    const end = typeof u.end_ms === "number" && Number.isFinite(u.end_ms) ? u.end_ms : null;
-    const start =
-      typeof u.start_ms === "number" && Number.isFinite(u.start_ms) ? u.start_ms : null;
+    const end = isStreamRelativeTimestampMs(u.end_ms) ? u.end_ms : null;
+    const start = isStreamRelativeTimestampMs(u.start_ms) ? u.start_ms : null;
     const t = end ?? start;
     if (t != null && t > max) max = t;
   }
@@ -117,8 +123,10 @@ export function collectCandidateAnswerText(options: {
     if (u.speaker !== "candidate") continue;
     if (u.is_interviewer_question) continue;
     // Prefer end_ms; fall back to start_ms. Drop anything before listening opened.
-    const t = typeof u.end_ms === "number" ? u.end_ms : u.start_ms;
-    if (typeof t === "number" && t < windowStart) continue;
+    const end = isStreamRelativeTimestampMs(u.end_ms) ? u.end_ms : null;
+    const start = isStreamRelativeTimestampMs(u.start_ms) ? u.start_ms : null;
+    const t = end ?? start;
+    if (t == null || t < windowStart) continue;
     const text = (u.text ?? "").trim();
     if (!text) continue;
     if (looksLikeInterviewerEcho(text, options.questionText)) continue;
@@ -148,6 +156,7 @@ export function finalizeMockAnswer(options: {
   interviewerAudioActive?: boolean;
   typedAnswer?: string | null;
   timedOut?: boolean;
+  preferTyped?: boolean;
 }): CapturedMockAnswer {
   if (options.skipped) {
     return {

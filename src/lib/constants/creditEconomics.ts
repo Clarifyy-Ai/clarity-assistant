@@ -119,6 +119,17 @@ export function subscriptionCentsPerCredit(planId: keyof typeof PLAN_MONTHLY_CRE
   return Math.round(price / credits);
 }
 
+/** Baseline question count for flat `mock_session` (15 cr) pricing. */
+export const MOCK_SESSION_BASELINE_QUESTIONS = 5;
+
+/** Scales mock session credits with selected question count (5 → 15 cr). */
+export function mockSessionCreditCost(questionCount: number): number {
+  const count = Math.max(1, Math.floor(questionCount));
+  return Math.ceil(
+    (count / MOCK_SESSION_BASELINE_QUESTIONS) * AI_CREDIT_COSTS.mock_session,
+  );
+}
+
 /** Estimated gross margin % on subscription credits at blended API cost. */
 export function estimatedSubscriptionMargin(planId: "pro" | "enterprise"): number {
   const retail = subscriptionCentsPerCredit(planId);

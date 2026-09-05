@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
+import { Code2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { EmptyState } from "@/components/common/EmptyState";
 import { supabase } from "@/lib/supabase/client";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { ApiClientError } from "@/lib/api/apiClient";
@@ -23,6 +25,7 @@ import {
   languageLabel,
   languageOptionLabel,
 } from "@/lib/coding/languages";
+import { displayQuestionTitle } from "@/lib/coding/catalog";
 import { PAGE_SHELL } from "@/lib/ui/responsivePage";
 import { cn } from "@/lib/utils";
 
@@ -72,8 +75,10 @@ function formatSubmissionAt(submittedAt: string | null | undefined): string {
 }
 
 export default function CodingAssessmentPage() {
+  const navigate = useNavigate();
   const { questionId } = useParams<{ questionId: string }>();
   const user = useAuthStore((s) => s.user);
+  const profile = useAuthStore((s) => s.profile);
   const [question, setQuestion] = useState<Question | null>(null);
   const [code, setCode] = useState("");
   const [language, setLanguage] = useState("javascript");
@@ -88,11 +93,13 @@ export default function CodingAssessmentPage() {
   const [seconds, setSeconds] = useState(0);
   const [busy, setBusy] = useState(false);
   const [sampleBusy, setSampleBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const loadedQuestionRef = useRef<string | null>(null);
   const starterSnapshotRef = useRef<string>("");
 
   const load = useCallback(async () => {
     if (!questionId || !user?.id) return;
+    setLoaded(false);
     const { data } = await supabase
       .from("coding_questions")
       .select("id,title,description,constraints,sample_input,sample_output,starter_code,language,time_limit_ms,max_submissions,evaluation_mode")
@@ -101,12 +108,18 @@ export default function CodingAssessmentPage() {
     setQuestion(data as Question | null);
     const qLang = String(data?.language ?? "javascript").toLowerCase();
     const stored = readStoredLanguage(questionId);
+    const profileLang = String(profile?.preferred_language ?? "").trim().toLowerCase();
+    const profilePreferred =
+      profileLang &&
+      (APPROVED_CODING_LANGUAGES as readonly string[]).includes(profileLang) &&
+      isPracticeLanguageFamilyMatch(profileLang, qLang)
+        ? profileLang
+        : null;
     const initialLang =
       stored && isPracticeLanguageFamilyMatch(stored, qLang)
         ? stored
-        : (APPROVED_CODING_LANGUAGES as readonly string[]).includes(qLang)
-          ? qLang
-          : "javascript";
+        : profilePreferred ??
+          ((APPROVED_CODING_LANGUAGES as readonly string[]).includes(qLang) ? qLang : "javascript");
 
     // Refreshing history after a submit must not wipe the user's draft.
     if (loadedQuestionRef.current !== questionId) {
@@ -117,29 +130,35 @@ export default function CodingAssessmentPage() {
     }
     setLanguage(initialLang);
 
-    const { data: cases } = await supabase
-      .from("coding_test_cases")
-      .select("id,name,input_json,expected_json,is_hidden")
-      .eq("question_id", questionId)
-      .eq("is_hidden", false);
-    const publicCases = stripHiddenTestCases(
-      ((cases ?? []) as Array<{ id: string; name: string; input_json: unknown; expected_json: unknown; is_hidden: boolean }>).map((c) => ({
-        id: c.id,
-        name: c.name,
-        input: c.input_json,
-        expected: c.expected_json,
-        is_hidden: c.is_hidden,
-      })),
-    );
-    setSample(publicCases);
-    const { data: subs } = await supabase
-      .from("coding_submissions")
-      .select("id,submitted_at,status,score")
-      .eq("user_id", user.id)
-      .eq("question_id", questionId)
-      .order("submitted_at", { ascending: false });
-    setHistory((subs as HistoryRow[]) ?? []);
-  }, [questionId, user?.id]);
+    if (data?.id) {
+      const { data: cases } = await supabase
+        .from("coding_test_cases")
+        .select("id,name,input_json,expected_json,is_hidden")
+        .eq("question_id", questionId)
+        .eq("is_hidden", false);
+      const publicCases = stripHiddenTestCases(
+        ((cases ?? []) as Array<{ id: string; name: string; input_json: unknown; expected_json: unknown; is_hidden: boolean }>).map((c) => ({
+          id: c.id,
+          name: c.name,
+          input: c.input_json,
+          expected: c.expected_json,
+          is_hidden: c.is_hidden,
+        })),
+      );
+      setSample(publicCases);
+      const { data: subs } = await supabase
+        .from("coding_submissions")
+        .select("id,submitted_at,status,score")
+        .eq("user_id", user.id)
+        .eq("question_id", questionId)
+        .order("submitted_at", { ascending: false });
+      setHistory((subs as HistoryRow[]) ?? []);
+    } else {
+      setSample([]);
+      setHistory([]);
+    }
+    setLoaded(true);
+  }, [questionId, user?.id, profile?.preferred_language]);
 
   useEffect(() => {
     void load();
@@ -328,15 +347,35 @@ export default function CodingAssessmentPage() {
     setSubmitInfraError(false);
   }
 
+  const pageTitle = question ? displayQuestionTitle(question.title, question.id) : "Coding assessment";
+
+  if (loaded && !question) {
+    return (
+      <div className={PAGE_SHELL}>
+        <PageHeader
+          title="Problem not found"
+          breadcrumbs={[{ label: "Coding Assessment", href: "/app/coding" }, { label: "Not found" }]}
+        />
+        <EmptyState
+          icon={Code2}
+          title="This coding problem is unavailable"
+          description="It may have been removed or is not published yet."
+          actionLabel="Back to Coding Assessment"
+          onAction={() => navigate("/app/coding")}
+        />
+      </div>
+    );
+  }
+
   return (
     <div
       data-testid="dd-layout-root"
       className={cn(PAGE_SHELL, "flex flex-col gap-4 min-h-[calc(100vh-7.5rem)]")}
     >
       <PageHeader
-        title={question?.title ?? "Coding assessment"}
+        title={pageTitle}
         description={`Practice JS/TS solve(input) — ${CODING_SANDBOX_STATUS} sandbox (not Docker isolation).`}
-        breadcrumbs={[{ label: "Coding", href: "/app/coding" }, { label: question?.title ?? "Problem" }]}
+        breadcrumbs={[{ label: "Coding Assessment", href: "/app/coding" }, { label: pageTitle }]}
         actions={<span className="text-sm tabular-nums">Timer {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}</span>}
         className="mb-0 shrink-0"
       />

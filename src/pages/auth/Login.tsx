@@ -62,7 +62,7 @@ import {
   MFA_AAL_START_FAILED_MESSAGE,
   MFA_REQUIRED_REASON,
 } from "@/hooks/useAuth";
-import { getStoredRefCode, normalizeRefCode, storeRefCode } from "@/lib/referrals";
+import { extractRefCodeFromSearchParams, getStoredRefCode, storeRefCode } from "@/lib/referrals";
 
 type LocationState = {
   from?: {
@@ -154,10 +154,9 @@ export default function Login(): JSX.Element {
   const explicitReturnTo = returnToFromQuery ?? returnToFromState;
   const planFromQuery = searchParams.get("plan");
   const intervalFromQuery = searchParams.get("interval");
-  const rawRefCode = searchParams.get("ref");
   const refCode = useMemo(
-    () => normalizeRefCode(rawRefCode) ?? getStoredRefCode(),
-    [rawRefCode],
+    () => extractRefCodeFromSearchParams(searchParams) ?? getStoredRefCode(),
+    [searchParams],
   );
   const signupHref = isPaidSignupPlan(planFromQuery)
     ? `/signup?plan=${planFromQuery}${
@@ -224,10 +223,10 @@ export default function Login(): JSX.Element {
   }, [searchParams]);
 
   useEffect(() => {
-    if (rawRefCode) {
-      storeRefCode(rawRefCode);
+    if (refCode) {
+      storeRefCode(refCode);
     }
-  }, [rawRefCode]);
+  }, [refCode]);
 
   useEffect(() => {
     const message = searchParams.get("message");
@@ -494,8 +493,8 @@ export default function Login(): JSX.Element {
     setAccountSuspended(false);
     setMfaGateResolved(false);
 
-    if (rawRefCode) {
-      storeRefCode(rawRefCode);
+    if (refCode) {
+      storeRefCode(refCode);
     }
 
     try {

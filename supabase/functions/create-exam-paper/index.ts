@@ -27,7 +27,7 @@ import {
   preflightSpendableCredits,
   refundClaimedPaperCredits,
 } from "../_shared/claimJobCredits.ts";
-import { countEligibleGovQuestions } from "../_shared/govQuestionInventory.ts";
+import { countEligibleGovQuestions, sourcePolicyForMode } from "../_shared/govQuestionInventory.ts";
 import {
   blockedPlanPayload,
   decideGenerationPlan,
@@ -334,6 +334,7 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
       language,
       topics: topics.length ? topics : null,
       difficulty,
+      sourcePolicy: sourcePolicyForMode(mode),
     });
     available = inventory.available;
     inventorySnapshot = inventory.inventorySnapshot ?? {
@@ -355,7 +356,7 @@ Deno.serve(withBrowserCors("create-exam-paper", async (req) => {
       };
     }
 
-    if (isPythonGovExamConfigured()) {
+    if (mode !== "official_previous" && isPythonGovExamConfigured()) {
       const py = await pythonGovAvailability({
         exam_id: examId,
         stage_id: stageId,

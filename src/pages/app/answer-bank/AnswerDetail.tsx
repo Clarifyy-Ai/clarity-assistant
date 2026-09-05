@@ -14,6 +14,13 @@ import {
   draftFromAnswerBankEntry,
   practiceContextLaunchPath,
 } from "@/lib/session/practiceContext";
+import {
+  answerBankDetailTitle,
+  isLegacyRephraserEntry,
+  questionSectionLabel,
+  shouldShowQuestionSection,
+} from "@/lib/answer-bank/answerBankDisplay";
+
 import type { Tables } from "@/integrations/supabase";
 
 type Answer = Tables<"answer_bank">;
@@ -140,7 +147,7 @@ export default function AnswerDetail() {
   return (
     <div>
       <PageHeader
-        title={answer.question_text ?? "Saved answer"}
+        title={answerBankDetailTitle(answer)}
         description={`${answer.category ?? "General"} · ${answer.source === "prep_lab" ? "Prep Lab" : "Manual"}`}
         icon={<BookOpen className="w-5 h-5 text-primary" />}
         breadcrumbs={[
@@ -177,6 +184,25 @@ export default function AnswerDetail() {
       />
 
       <div className="space-y-4">
+        {shouldShowQuestionSection(answer) && (
+          <Card>
+            <h3 className="text-sm font-semibold text-foreground mb-3">
+              {questionSectionLabel(answer)}
+            </h3>
+            <div className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+              {answer.question_text}
+            </div>
+          </Card>
+        )}
+
+        {isLegacyRephraserEntry(answer) && (
+          <Card className="border-amber-500/20 bg-amber-500/5">
+            <p className="text-sm text-muted-foreground">
+              The original answer text was not saved for this entry. Re-save from Prep Lab → Rephraser to keep both the original and improved versions.
+            </p>
+          </Card>
+        )}
+
         <Card>
           <h3 className="text-sm font-semibold text-foreground mb-3">Answer</h3>
           {editing ? (

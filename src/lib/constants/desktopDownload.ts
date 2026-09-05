@@ -395,17 +395,23 @@ export async function resolveAvailableWindowsInstallerHref(
   preferredHref?: string | null,
   fetchImpl: typeof fetch = fetch,
 ): Promise<string | null> {
+  const storageUrl = publicDesktopInstallerUrl(DESKTOP_INSTALLER_WIN_OBJECT);
   const candidates = [
     preferredHref,
     SAME_ORIGIN_WINDOWS_INSTALLER_PATH,
     SAME_ORIGIN_WINDOWS_INSTALLER_PROXY,
+    storageUrl.startsWith("http") ? storageUrl : null,
   ].filter((u, i, arr): u is string => Boolean(u) && arr.indexOf(u) === i);
 
   for (const href of candidates) {
     const probe = await probeDesktopInstaller(href, fetchImpl);
-    if (probe.ok) return href.startsWith("/") || href.startsWith("http")
-      ? sameOriginInstallerHref(href, "windows")
-      : href;
+    if (probe.ok) {
+      // External storage is a valid fallback when Hostinger rewrite/PHP proxy is broken.
+      if (href.startsWith("http")) return href;
+      return href.startsWith("/") || href.startsWith("http")
+        ? sameOriginInstallerHref(href, "windows")
+        : href;
+    }
   }
   return null;
 }

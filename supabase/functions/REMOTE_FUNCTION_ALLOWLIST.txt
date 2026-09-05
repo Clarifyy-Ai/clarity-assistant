@@ -54,6 +54,7 @@ hybrid-ping
 ingest-source-document
 issue-course-certificate
 list-previous-papers
+list-public-promos
 moderate-content
 mfa-recovery
 mock-tts

@@ -35,6 +35,10 @@ import {
   type ExtractPayloadOk,
 } from "../_shared/pdfQuestionExtract.ts";
 import { callPythonProcess, isPythonConfigured } from "../_shared/pythonClient.ts";
+import { scoreQuestionQuality } from "../_shared/govQualityScore.ts";
+import { normalizeMcqOptions, resolveCorrectIndex } from "../_shared/govMcqValidator.ts";
+import type { QuestionValidationInput } from "../_shared/govAutoApproval.ts";
+import { evaluateAndApplyQuestionBatch } from "../_shared/govAutoApprovalPipeline.ts";
 
 type JobStatus =
   | "queued"
@@ -503,6 +507,23 @@ Deno.serve(async (req) => {
         (exam.legacy_exam_type as string | null) ||
         (exam.code as string);
 
+      const licenseTypeFromClass = (licenseClass: string): string => {
+        switch (licenseClass) {
+          case "official_public":
+            return "PUBLIC_DOMAIN";
+          case "licensed":
+            return "LICENSED";
+          case "institution":
+            return "INTERNAL";
+          case "user_upload":
+            return "USER_OWNED";
+          case "ai_generated":
+            return "ORIGINAL";
+          default:
+            return "PUBLIC_DOMAIN";
+        }
+      };
+
       const rows = validatedQs.questions.map((q, i) => {
         const conf = confidence[i];
         const rawItem = rawQuestions[i];
@@ -524,6 +545,10 @@ Deno.serve(async (req) => {
           source_paper: payload.title.slice(0, 200),
           is_verified: false,
           is_public: false, // never auto-publish OCR
+          review_status: "review_required",
+          validation_status: "valid",
+          license_type: licenseTypeFromClass(payload.licenseClass),
+          publish_status: "draft",
           uploaded_by: auth.userId,
           marks_positive: 1,
           marks_negative: 0,
@@ -572,6 +597,67 @@ Deno.serve(async (req) => {
           req,
         );
       }
+
+      const autoApprovalItems: Array<{
+        id: string;
+        validation: QuestionValidationInput;
+        provenance: Record<string, unknown>;
+        processingJobId: string;
+      }> = [];
+
+      for (let i = 0; i < insertedQs.length; i++) {
+        const qRow = validatedQs.questions[i];
+        const qId = insertedQs[i]?.id as string | undefined;
+        if (!qId || !qRow) continue;
+        const conf = confidence[i];
+        const options = qRow.options;
+        const quality = scoreQuestionQuality({
+          question_text: qRow.question_text,
+          options,
+          correct_index: resolveCorrectIndex(qRow.correct_letter, options.length) ?? 0,
+          sourceConfidence: conf?.score ?? 0.7,
+        });
+        const ocrUncertain = answerUncertain || (conf?.score ?? 1) < 0.7;
+        autoApprovalItems.push({
+          id: qId,
+          processingJobId: jobId,
+          validation: {
+            entityType: "question",
+            questionId: qId,
+            sourceType: payload.licenseClass === "official_public"
+              ? "verified_public_source"
+              : "official_verified",
+            qualityScore: quality.score,
+            qualityHardFail: quality.hardFail,
+            hardFailCodes: quality.hardFailCodes,
+            duplicateStatus: "unique",
+            hasProvenance: true,
+            hasValidExam: Boolean(examType),
+            hasValidStage: Boolean(payload.stageId),
+            hasValidSection: Boolean(qRow.section_code),
+            hasValidSubject: Boolean(qRow.subject),
+            hasValidLanguage: Boolean(payload.language),
+            hasValidOptions: options.length >= 2,
+            hasValidAnswer: !quality.hardFailCodes.includes("MCQ_STRUCTURE_INVALID"),
+            hasValidDifficulty: ["EASY", "MEDIUM", "HARD"].includes(String(qRow.difficulty).toUpperCase()),
+            ocrUncertainty: ocrUncertain,
+            answerKeyConflict: answerKeyStatus === "needs_review",
+            policyViolation: false,
+            unresolvedReviewFlag: true,
+            sourceApproved: payload.licenseClass === "official_public" || payload.licenseClass === "licensed",
+            examId: payload.examId,
+            language: payload.language ?? null,
+            processingJobId: jobId,
+          },
+          provenance: {
+            provenance: "pdf_extract",
+            job_id: jobId,
+            license_class: payload.licenseClass,
+          },
+        });
+      }
+
+      const autoApprovalResults = await evaluateAndApplyQuestionBatch(db, autoApprovalItems);
 
       let paperId: string | null = null;
       if (payload.createPaper && payload.year != null) {
@@ -635,6 +721,7 @@ Deno.serve(async (req) => {
           normalized_count: validatedQs.questions.length,
           auto_publish: false,
           needs_review: true,
+          auto_approval: autoApprovalResults,
         },
       });
 

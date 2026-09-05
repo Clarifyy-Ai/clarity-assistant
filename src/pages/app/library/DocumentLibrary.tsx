@@ -49,6 +49,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { downloadBlob } from "@/lib/utils/fileUtils";
+import { sanitizeFileName } from "@/lib/security/sanitizer";
 
 type Doc = {
   id: string;
@@ -479,9 +481,23 @@ export default function DocumentLibraryPage() {
 
   async function download(doc: Doc) {
     if (!doc.storage_path) return;
-    const { data, error } = await supabase.storage.from(STORAGE_BUCKETS.DOCUMENTS).createSignedUrl(doc.storage_path, 60);
-    if (error || !data?.signedUrl) toast.error(error?.message ?? "Download failed.");
-    else window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    try {
+      const { data, error } = await supabase.storage
+        .from(STORAGE_BUCKETS.DOCUMENTS)
+        .download(doc.storage_path);
+      if (error || !data) {
+        toast.error(error?.message ?? "Download failed.");
+        return;
+      }
+      const filename =
+        sanitizeFileName(doc.document_name) ||
+        doc.storage_path.split("/").pop() ||
+        "document";
+      downloadBlob(data, filename);
+      toast.success("Download started.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Download failed.");
+    }
   }
 
   async function remove(doc: Doc) {

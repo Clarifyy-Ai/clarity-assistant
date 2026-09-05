@@ -4,6 +4,7 @@ import {
   DEFAULT_QUESTION_RULE,
   DEFAULT_PAPER_RULE,
   buildIdempotencyKey,
+  pickActiveRuleRow,
   type QuestionValidationInput,
   type PaperValidationInput,
   type AutoApprovalRuleConfig,
@@ -43,6 +44,24 @@ const VALID_QUESTION: QuestionValidationInput = {
   unresolvedReviewFlag: false,
   sourceApproved: true,
 };
+
+describe("pickActiveRuleRow", () => {
+  it("prefers highest enabled version over newer disabled version", () => {
+    const rows = [
+      { entity_type: "paper", rule_version: 2, enabled: false, id: "b" },
+      { entity_type: "paper", rule_version: 1, enabled: true, id: "a" },
+    ];
+    expect(pickActiveRuleRow(rows, "paper")?.id).toBe("a");
+  });
+
+  it("falls back to latest when none enabled", () => {
+    const rows = [
+      { entity_type: "question", rule_version: 2, enabled: false, id: "v2" },
+      { entity_type: "question", rule_version: 1, enabled: false, id: "v1" },
+    ];
+    expect(pickActiveRuleRow(rows, "question")?.id).toBe("v2");
+  });
+});
 
 describe("auto-approval rule engine — acceptance scenarios", () => {
   // 1. Valid official source → auto-approved (when enabled)
