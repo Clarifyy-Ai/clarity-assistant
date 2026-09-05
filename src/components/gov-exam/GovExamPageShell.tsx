@@ -43,7 +43,7 @@ export function GovExamPageShell({
   if (authResolution.phase === "UNAUTHENTICATED") {
     return (
       <Navigate
-        to={buildLoginUrl(authResolution.returnTo)}
+        to={buildLoginUrl({ returnTo: authResolution.returnTo ?? undefined })}
         replace
       />
     );

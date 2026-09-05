@@ -10,12 +10,20 @@ function isoStartOfToday(): string {
   return d.toISOString();
 }
 
+/** Minimal chainable filter surface used by the dashboard count helpers. */
+type CountFilterChain = {
+  eq(col: string, val: unknown): CountFilterChain;
+  neq(col: string, val: unknown): CountFilterChain;
+  gte(col: string, val: unknown): CountFilterChain;
+  is(col: string, val: unknown): CountFilterChain;
+};
+
 async function countWhere(
   table: string,
-  apply?: (q: ReturnType<typeof supabase.from>) => ReturnType<typeof supabase.from>,
+  apply?: (q: CountFilterChain) => CountFilterChain,
 ): Promise<number> {
   let q = (supabase as any).from(table).select("*", { count: "exact", head: true });
-  if (apply) q = apply(q);
+  if (apply) q = apply(q as CountFilterChain);
   const { count, error } = await q;
   if (error) throw error;
   return count ?? 0;

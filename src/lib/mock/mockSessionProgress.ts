@@ -31,6 +31,7 @@ export type MockProgressAnswer = {
   timestamp: string;
   parent_question_id?: string | null;
   is_follow_up?: boolean;
+  answer_source?: "spoken" | "typed" | "mixed" | "skipped" | "unanswered";
 };
 
 export type MockSessionProgressV1 = {

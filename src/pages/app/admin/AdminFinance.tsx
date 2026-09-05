@@ -109,12 +109,12 @@ function MoneyCell({
 
 function statusBadgeVariant(
   status: "PROFITABLE" | "BREAK_EVEN" | "LOSS_MAKING" | "UNKNOWN",
-): "default" | "secondary" | "destructive" | "outline" {
+): "default" | "secondary" | "red" | "outline" {
   switch (status) {
     case "PROFITABLE":
       return "default";
     case "LOSS_MAKING":
-      return "destructive";
+      return "red";
     case "BREAK_EVEN":
       return "secondary";
     default:
@@ -263,7 +263,7 @@ function FeatureProfitLossSummary({
   return (
     <div className="flex flex-wrap gap-2">
       <Badge variant="default">Profitable: {profitable}</Badge>
-      <Badge variant="destructive">Loss-making: {lossMaking}</Badge>
+      <Badge variant="red">Loss-making: {lossMaking}</Badge>
       <Badge variant="secondary">Break-even: {breakEven}</Badge>
       <Badge variant="outline">Unknown: {unknown}</Badge>
     </div>

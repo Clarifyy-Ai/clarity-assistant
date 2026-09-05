@@ -19,7 +19,10 @@ export function useGovExamAuthResolution(): GovExamRouteResolution {
   const isProfileLoaded = useAuthStore((s) => s.isProfileLoaded);
 
   return useMemo(() => {
-    const returnTo = preferredReturnToFromNavigation(location);
+    const returnTo = preferredReturnToFromNavigation({
+      searchParams: new URLSearchParams(location.search),
+      locationState: location.state,
+    });
     return resolveGovExamAuthPhase({
       status,
       hasUser: Boolean(user?.id),

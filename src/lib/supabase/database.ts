@@ -2963,7 +2963,7 @@ export const adminAnalyticsDB = {
         operation: "getAiUsageLogsSince",
       });
     }
-    return (data ?? []) as Array<{
+    return (data ?? []) as unknown as Array<{
       model: string;
       input_tokens: number | null;
       output_tokens: number | null;
@@ -2987,7 +2987,7 @@ export const adminAnalyticsDB = {
         operation: "getAiUsageLatencyByAction",
       });
     }
-    const rows = (data ?? []) as Array<{ action: string; latency_ms: number | null }>;
+    const rows = (data ?? []) as unknown as Array<{ action: string; latency_ms: number | null }>;
     const buckets = new Map<string, number[]>();
     for (const row of rows) {
       const ms = Number(row.latency_ms);

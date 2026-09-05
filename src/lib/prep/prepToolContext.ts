@@ -12,7 +12,7 @@ export function getPrepToolProfileContext(): Record<string, unknown> {
     | { content?: string | null }
     | null
     | undefined;
-  const jd = docStore.active_context?.job_description as
+  const jd = (docStore.active_context as unknown as Record<string, unknown> | undefined)?.job_description as
     | { content?: string | null; description?: string | null }
     | null
     | undefined;
@@ -20,7 +20,7 @@ export function getPrepToolProfileContext(): Record<string, unknown> {
   return buildPrepProfileContext({
     role: profile?.target_role,
     experienceLevel: profile?.experience_level,
-    company: profile?.target_company,
+    company: (profile as { target_company?: string | null } | null)?.target_company,
     industry: profile?.industry,
     resumeSummary: resume?.content?.slice(0, 2_000) ?? null,
     jdText: (jd?.content ?? jd?.description ?? "").slice(0, 2_000) || null,

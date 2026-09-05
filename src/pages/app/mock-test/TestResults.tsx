@@ -26,6 +26,7 @@ import { GovExamPageShell } from "@/components/gov-exam/GovExamPageShell";
 import type { GovExamRouteResolution } from "@/lib/gov-exam/routeResolution";
 import { AiFormattedOutput } from "@/components/common/AiFormattedOutput";
 import { Card, CardContent } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
 import {

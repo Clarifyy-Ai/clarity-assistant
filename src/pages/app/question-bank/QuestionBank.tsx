@@ -286,8 +286,8 @@ export default function QuestionBankPage() {
     setSaving(true);
     try {
       const { error } = editingId
-        ? await supabase.from("questions").update(payload).eq("id", editingId)
-        : await supabase.from("questions").insert(payload);
+        ? await supabase.from("questions").update(payload as never).eq("id", editingId)
+        : await supabase.from("questions").insert(payload as never);
       if (error) {
         toast.error(userFacingDbError(error, "save"));
         return;
@@ -356,7 +356,7 @@ export default function QuestionBankPage() {
       explanation: row.explanation,
       image_url: row.image_url ?? null,
       has_image: Boolean(row.has_image ?? row.image_url),
-      metadata: row.metadata ?? {},
+      metadata: (row.metadata ?? {}) as never,
       subject: row.subject,
       category: row.category ?? row.subject,
       topic: row.topic,
@@ -735,7 +735,8 @@ export default function QuestionBankPage() {
                         const isCoding = row.question_type === "CODING";
                         const codingFields = isCoding ? codingFieldsFromMetadata(row.metadata) : {};
                         setEditingId(row.id);
-                        setForm({
+                        setForm((prev) => ({
+                          ...prev,
                           question_text: row.question_text,
                           question_type: row.question_type,
                           image_url: row.image_url ?? "",
@@ -756,7 +757,7 @@ export default function QuestionBankPage() {
                           eligible_roles: row.eligible_roles ?? [],
                           cross_functional: Boolean(row.cross_functional),
                           review_status: (row.review_status as typeof EMPTY_FORM.review_status) ?? "unreviewed",
-                        });
+                        }));
                       }}>Edit</Button>
                       <Button size="xs" variant="outline" leftIcon={<Copy className="h-3 w-3" />} onClick={() => void duplicate(row)}>Duplicate</Button>
                       {isAdmin && row.publish_status !== "published" && (

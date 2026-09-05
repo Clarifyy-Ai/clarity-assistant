@@ -352,7 +352,8 @@ export function useLiveCopilot({
         buildLivePreferencePromptBlock(cfg, answerBankSnippets);
 
       let companyResearchBlock = "";
-      const targetCompany = frozen?.company ?? cfg.company ?? base.target_company ?? null;
+      const targetCompany =
+        (frozen?.company ?? cfg.company ?? (base as { target_company?: string | null }).target_company ?? null) as string | null;
       if (targetCompany) {
         try {
           const brief = await loadCompanyResearchBriefBlock(userId, targetCompany);
