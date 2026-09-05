@@ -12,7 +12,7 @@ export function getPrepToolProfileContext(): Record<string, unknown> {
     | { content?: string | null }
     | null
     | undefined;
-  const jd = (docStore.active_context as Record<string, unknown> | undefined)?.job_description as
+  const jd = (docStore.active_context as unknown as Record<string, unknown> | undefined)?.job_description as
     | { content?: string | null; description?: string | null }
     | null
     | undefined;
