@@ -117,6 +117,8 @@ export interface ChatMessage {
   pending?: boolean;
   /** Hybrid route for coach replies (ai | python | deterministic). */
   source?: string;
+  /** Marks the message as an error notice rendered in the chat stream. */
+  error?: boolean;
 }
 
 export interface CaptureAnswerRecord {

@@ -61,7 +61,7 @@ export type PlayableQuestion = {
 };
 
 export function stripAnswerKeys<T extends Record<string, unknown>>(row: T): PlayableQuestion {
-  const next = { ...row };
+  const next: Record<string, unknown> = { ...row };
   for (const field of ANSWER_KEY_FIELDS) {
     delete next[field];
   }
